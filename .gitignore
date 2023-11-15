@@ -161,3 +161,4 @@ cython_debug/
 
 output.wav
 config.yaml
+.vscode/settings.json
