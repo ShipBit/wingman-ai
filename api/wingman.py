@@ -1,10 +1,11 @@
+import json
+from typing import Literal
 from api.audio_player import AudioPlayer
 from api.open_ai import OpenAi
-import json
 
 
 class WingmanBase:
-    def __init__(self, name, config) -> None:
+    def __init__(self, name: str, config: dict[str, any]):
         if config:
             self.config = config
             self.name = name
@@ -17,10 +18,10 @@ class WingmanBase:
                 },
             ]
 
-    def get_record_key(self):
+    def get_record_key(self) -> str:
         return self.config.get("record_key", None)
 
-    def get_tools(self):
+    def get_tools(self) -> list[dict[str, any]]:
         tools = [
             {
                 "type": "function",
@@ -44,10 +45,9 @@ class WingmanBase:
                 },
             },
         ]
-
         return tools
 
-    def process(self, audio_input_wav):
+    def process(self, audio_input_wav: str):
         transcript = self.openai.transcribe(audio_input_wav)
         print(f" >> {transcript.text}")
 
@@ -96,16 +96,13 @@ class WingmanBase:
             self.messages.append(second_response.choices[0].message)
             self.play_audio(second_content)
 
-        print(content)
-
         if content:
             self.play_audio(content)
 
-    def play_audio(self, text):
+    def play_audio(self, text: str):
         response = self.openai.speak(text)
         self.audio_player.stream(response.content)
 
-    def execute_command(self, command_name):
+    def execute_command(self, command_name) -> Literal["Ok"]:
         print(f">>>{command_name}<<<")
-
         return "Ok"

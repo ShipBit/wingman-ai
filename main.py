@@ -1,19 +1,17 @@
-import yaml
 import threading
-from api.audio_recorder import AudioRecorder
 from pynput import keyboard
-
+import yaml
+from api.audio_recorder import AudioRecorder
 from api.tower import Tower
 
 
-def read_config(file_name="config.yaml"):
-    with open(file_name, "r") as stream:
+def read_config(file_name="config.yaml") -> dict[str, any]:
+    with open(file_name, "r", encoding="UTF-8") as stream:
         try:
-            config = yaml.safe_load(stream)
+            cfg = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             print(exc)
-
-    return config
+    return cfg
 
 
 def on_press(key):
@@ -32,8 +30,6 @@ def on_release(key):
         )
         play_thread.start()
 
-
-is_recording = False
 
 config = read_config()
 tower = Tower(config)

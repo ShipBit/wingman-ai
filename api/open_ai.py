@@ -1,4 +1,3 @@
-from typing import List, Dict, Any
 from openai import OpenAI
 
 
@@ -24,17 +23,16 @@ class OpenAi:
                 file=audio_input,
                 **params,
             )
-
             return transcript
 
     def ask(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         model: str = "gpt-4-1106-preview",
         stream: bool = False,
-        tools: List[Dict[str, Any]] = None,
+        tools: list[dict[str, any]] = None,
     ):
-        # TODO: Maybe this could be done better?!
+        # TODO: Maybe this could be done better? Passing None to tools doesn't work as expected
         if not tools:
             completion = self.client.chat.completions.create(
                 stream=stream,
@@ -49,7 +47,6 @@ class OpenAi:
                 tools=tools,
                 tool_choice="auto",
             )
-
         return completion
 
     def speak(self, text: str, voice: str = "nova"):
@@ -58,5 +55,4 @@ class OpenAi:
             voice=voice,
             input=text,
         )
-
         return response

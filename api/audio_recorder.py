@@ -18,7 +18,7 @@ class AudioRecorder:
             samplerate=samplerate,
         )
 
-    def __handle_input_stream(self, indata, frames, time, status):
+    def __handle_input_stream(self, indata, _frames, _time, _status):
         if self.is_recording:
             if self.recording is None:
                 self.recording = indata.copy()
@@ -33,7 +33,7 @@ class AudioRecorder:
         self.is_recording = True
         print("Recording started")
 
-    def stop_recording(self):
+    def stop_recording(self) -> str:
         self.recstream.stop()
         self.is_recording = False
         soundfile.write(self.filename, self.recording, self.samplerate)
