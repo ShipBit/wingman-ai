@@ -1,8 +1,8 @@
 import threading
 from pynput import keyboard
 import yaml
-from api.audio_recorder import AudioRecorder
-from api.tower import Tower
+from services.audio_recorder import AudioRecorder
+from services.tower import Tower
 
 
 def read_config(file_name="config.yaml") -> dict[str, any]:

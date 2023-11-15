@@ -1,25 +1,23 @@
-from api.wingman import WingmanBase
+from wingmen.wingman import Wingman
 
 
 class Tower:
     def __init__(self, config: dict[str, any]):
         self.config = config
-        self.key_wingman_map: dict[str, WingmanBase] = {}
+        self.key_wingman_map: dict[str, Wingman] = {}
         self.wingmen = self.__get_wingmen()
 
         for wingman in self.wingmen:
             self.key_wingman_map[wingman.get_record_key()] = wingman
 
-    def __get_wingmen(self) -> list[WingmanBase]:
+    def __get_wingmen(self) -> list[Wingman]:
         wingmen = []
         for wingman_name in self.config["wingmen"]:
-            wingman = WingmanBase(
-                wingman_name, self.config["wingmen"].get(wingman_name)
-            )
+            wingman = Wingman(wingman_name, self.config["wingmen"].get(wingman_name))
             wingmen.append(wingman)
         return wingmen
 
-    def get_wingman_from_key(self, key: any) -> WingmanBase | None:
+    def get_wingman_from_key(self, key: any) -> Wingman | None:
         if hasattr(key, "char"):
             wingman = self.key_wingman_map.get(key.char, None)
         else:

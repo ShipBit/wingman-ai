@@ -1,10 +1,11 @@
 import json
+from importlib import import_module
 from typing import Literal
-from api.audio_player import AudioPlayer
-from api.open_ai import OpenAi
+from services.audio_player import AudioPlayer
+from services.open_ai import OpenAi
 
 
-class WingmanBase:
+class Wingman:
     def __init__(self, name: str, config: dict[str, any]):
         if config:
             self.config = config
@@ -17,6 +18,13 @@ class WingmanBase:
                     "content": self.config["system_prompt"],
                 },
             ]
+
+    @staticmethod
+    def create_dynamically(module_path, class_name, **kwargs):
+        module = import_module(module_path)
+        DerivedWingmanClass = getattr(module, class_name)
+        instance = DerivedWingmanClass(**kwargs)
+        return instance
 
     def get_record_key(self) -> str:
         return self.config.get("record_key", None)

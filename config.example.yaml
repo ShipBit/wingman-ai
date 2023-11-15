@@ -44,3 +44,8 @@ wingmen:
       - name: RequestDeparture
         modifier: alt
         key: n
+
+  groot:
+    class_name: wingmen.groot.Groot # ([package].[module]).[class]
+    class_args: # passed to the class constructor as list
+      - one_liner: I. Am. Groot.
