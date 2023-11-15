@@ -1,3 +1,4 @@
+import asyncio
 import threading
 from pynput import keyboard
 import yaml
@@ -24,10 +25,16 @@ def on_release(key):
     wingman = tower.get_wingman_from_key(key)
     if wingman:
         recorded_audio_wav = audio_recorder.stop_recording()
-        play_thread = threading.Thread(
-            target=wingman.process,
-            args=(recorded_audio_wav,),
-        )
+
+        def run_async_process():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(wingman.process(recorded_audio_wav))
+            finally:
+                loop.close()
+
+        play_thread = threading.Thread(target=run_async_process)
         play_thread.start()
 
 

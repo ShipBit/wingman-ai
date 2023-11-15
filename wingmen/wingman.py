@@ -20,7 +20,7 @@ class Wingman:
     def get_record_key(self) -> str:
         return self.config.get("record_key", None)
 
-    def process(self, audio_input_wav: str):
+    async def process(self, audio_input_wav: str):
         transcript = self._transcribe(audio_input_wav)
         print(f" >> {transcript}")
 

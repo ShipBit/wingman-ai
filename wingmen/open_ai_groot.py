@@ -6,5 +6,5 @@ class OpenAiGroot(OpenAiWingman):
         super().__init__(name, config)
         self.one_liner = kwargs.get("one_liner", "I am Groot!")
 
-    def process(self, _audio_input_wav: str):
+    async def process(self, _audio_input_wav: str):
         super()._play_audio(self.one_liner)
