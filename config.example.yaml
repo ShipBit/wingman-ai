@@ -58,3 +58,9 @@ wingmen:
       name: OpenAIGroot
       args: # passed to the class constructor as **kwargs dict - optional
         one_liner: I. Am. Groot.
+
+  edge-tts-groot:
+    record_key: right
+    class:
+      module: wingmen.edge_tts_groot
+      name: EdgeTTSGroot
