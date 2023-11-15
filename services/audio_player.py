@@ -15,7 +15,9 @@ class AudioPlayer:
     def stream_with_effects(self, stream: bytes):
         audio = self.get_audio_from_stream(stream)
         audio.export("output_generated.wav", format="wav")
-        audio = self.add_radio_effect_with_beep("output_generated.wav", delete_source=True)
+        audio = self.add_radio_effect_with_beep(
+            "output_generated.wav", delete_source=True
+        )
         play(audio)
 
     def get_audio_from_stream(self, stream: bytes) -> AudioSegment:
@@ -51,10 +53,8 @@ class AudioPlayer:
         wavfile.write(filtered_wav, samplerate, filtered.astype(numpy.int16))
         filtered_sound = AudioSegment.from_wav(filtered_wav)
 
-        noise = AudioSegment.from_mp3(
-            "audio_samples/noise.mp3"
-        )
-        noise_sound = noise - 20
+        noise = AudioSegment.from_mp3("audio_samples/noise.wav")
+        noise_sound = noise - 30
 
         # Calculate the durations
         main_duration = len(filtered_sound)
@@ -72,14 +72,10 @@ class AudioPlayer:
         combined = filtered_sound.overlay(looped_noise)
 
         # Load the audio to be added at the beginning and end
-        intro_audio = AudioSegment.from_mp3(
-            "audio_samples/nasa.mp3"
-        )
+        intro_audio = AudioSegment.from_mp3("audio_samples/beep.wav")
         intro_audio = intro_audio + 3
 
-        outro_audio = AudioSegment.from_mp3(
-            "audio_samples/walkie-talkie.mp3"
-        )
+        outro_audio = AudioSegment.from_mp3("audio_samples/beep.wav")
 
         # Concatenate the audio
         final_audio = intro_audio + combined + outro_audio
