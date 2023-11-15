@@ -9,7 +9,7 @@ wingmen:
   board-computer:
     openai:
       api_key: YOUR_API_KEY
-    system_prompt: You are the board-computer of the USS Enterprise. You are in the year 2265.
+      context: You are the board-computer of the USS Enterprise. You are in the year 2265.
     record_key: end
     tts_voice: nova
     features:
@@ -28,7 +28,7 @@ wingmen:
   atc:
     openai:
       api_key: YOUR_API_KEY
-    system_prompt: You are an ATC of a space station.
+      context: You are an ATC of a space station.
     record_key: delete
     tts_voice: onyx
     features:
