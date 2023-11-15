@@ -10,3 +10,13 @@ class AudioPlayer:
         # Read the audio data from the byte stream
         audio = AudioSegment.from_file(byte_stream, format="mp3")
         play(audio)
+
+    def play(self, filename: str):
+        audio = None
+        if filename.endswith(".wav"):
+            audio = AudioSegment.from_wav(filename)
+        elif filename.endswith(".mp3"):
+            audio = AudioSegment.from_mp3(filename)
+
+        if audio:
+            play(audio)
