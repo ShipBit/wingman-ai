@@ -12,7 +12,6 @@ wingmen:
     system_prompt: You are the board-computer of the USS Enterprise. You are in the year 2265.
     record_key: end
     tts_voice: nova
-    debug_mode: false
     features:
       play_beep_on_sending: false
       play_beep_on_receiving: false
@@ -32,7 +31,6 @@ wingmen:
     system_prompt: You are an ATC of a space station.
     record_key: delete
     tts_voice: onyx
-    debug_mode: false
     features:
       play_beep_on_sending: true
       play_beep_on_receiving: true
@@ -46,6 +44,17 @@ wingmen:
         key: n
 
   groot:
-    class_name: wingmen.groot.Groot # ([package].[module]).[class]
-    class_args: # passed to the class constructor as list
-      - one_liner: I. Am. Groot.
+    record_key: up
+    class:
+      module: wingmen.groot # where your custom wingman is located. Use '.' as path separator
+      name: Groot # the name of your class within the file/module
+
+  openai-groot:
+    openai:
+      api_key: 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
+    record_key: down
+    class:
+      module: wingmen.open_ai_groot
+      name: OpenAIGroot
+      args: # passed to the class constructor as **kwargs dict - optional
+        one_liner: I. Am. Groot.
