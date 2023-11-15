@@ -66,8 +66,8 @@ class OpenAiWingman(Wingman):
             self._play_audio(text)
 
     def _play_audio(self, text: str):
-        response = self.openai.speak(text)
-        self.audio_player.stream(response.content)
+        response = self.openai.speak(text, self.config.get("tts_voice"))
+        self.audio_player.stream_with_effects(response.content)
 
     def __get_tools(self) -> list[dict[str, any]]:
         tools = [
