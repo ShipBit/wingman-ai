@@ -40,7 +40,6 @@ class AudioPlayer:
         if audio:
             play(audio)
 
-    def add_radio_effect_with_beep(self, filename: str, delete_source: bool = False):
     def add_radio_effect_with_beep(
         self,
         filename: str,
