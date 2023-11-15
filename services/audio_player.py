@@ -12,11 +12,16 @@ class AudioPlayer:
         audio = self.get_audio_from_stream(stream)
         play(audio)
 
-    def stream_with_effects(self, stream: bytes):
+    def stream_with_effects(
+        self, stream: bytes, play_beep: bool = False, play_noise: bool = False
+    ):
         audio = self.get_audio_from_stream(stream)
         audio.export("output_generated.wav", format="wav")
         audio = self.add_radio_effect_with_beep(
-            "output_generated.wav", delete_source=True
+            "output_generated.wav",
+            play_beep,
+            play_noise,
+            delete_source=True,
         )
         play(audio)
 
@@ -36,6 +41,13 @@ class AudioPlayer:
             play(audio)
 
     def add_radio_effect_with_beep(self, filename: str, delete_source: bool = False):
+    def add_radio_effect_with_beep(
+        self,
+        filename: str,
+        play_beep: bool = False,
+        play_noise: bool = False,
+        delete_source: bool = False,
+    ):
         file, extension = os.path.splitext(filename)
         wav_file = file + ".wav"
 
@@ -47,41 +59,47 @@ class AudioPlayer:
         nyquist = 0.5 * samplerate
         low, high = 500 / nyquist, 5000 / nyquist
 
-        b, a = scipy.signal.butter(5, [low, high], btype="band")
-        filtered = scipy.signal.lfilter(b, a, data)
-        filtered_wav = file + "_filtered.wav"
-        wavfile.write(filtered_wav, samplerate, filtered.astype(numpy.int16))
-        filtered_sound = AudioSegment.from_wav(filtered_wav)
+        filtered_sound = AudioSegment.from_wav(wav_file)
 
-        noise = AudioSegment.from_mp3("audio_samples/noise.wav")
-        noise_sound = noise - 30
+        if play_noise:
+            b, a = scipy.signal.butter(5, [low, high], btype="band")
+            filtered = scipy.signal.lfilter(b, a, data)
+            filtered_wav = file + "_filtered.wav"
+            wavfile.write(filtered_wav, samplerate, filtered.astype(numpy.int16))
+            filtered_sound = AudioSegment.from_wav(filtered_wav)
+            filtered_sound = filtered_sound + 10
 
-        # Calculate the durations
-        main_duration = len(filtered_sound)
+            noise = AudioSegment.from_mp3("audio_samples/noise.wav")
+            noise_sound = noise - 30
 
-        # Loop the noise until it matches or exceeds the duration of the main audio
-        looped_noise = noise_sound
-        while len(looped_noise) < main_duration:
-            looped_noise += noise_sound
+            # Calculate the durations
+            main_duration = len(filtered_sound)
 
-        # If looped noise is longer than the main audio, cut it down to the correct length
-        if len(looped_noise) > main_duration:
-            looped_noise = looped_noise[:main_duration]
+            # Loop the noise until it matches or exceeds the duration of the main audio
+            looped_noise = noise_sound
+            while len(looped_noise) < main_duration:
+                looped_noise += noise_sound
 
-        filtered_sound = filtered_sound + 10
-        combined = filtered_sound.overlay(looped_noise)
+            # If looped noise is longer than the main audio, cut it down to the correct length
+            if len(looped_noise) > main_duration:
+                looped_noise = looped_noise[:main_duration]
 
-        # Load the audio to be added at the beginning and end
-        intro_audio = AudioSegment.from_mp3("audio_samples/beep.wav")
-        intro_audio = intro_audio + 3
+            filtered_sound = filtered_sound.overlay(looped_noise)
 
-        outro_audio = AudioSegment.from_mp3("audio_samples/beep.wav")
+        intro_audio = AudioSegment.empty()
+        outro_audio = AudioSegment.empty()
+        if play_beep:
+            # Load the audio to be added at the beginning and end
+            intro_audio = AudioSegment.from_mp3("audio_samples/beep.wav")
+            intro_audio = intro_audio + 3
+
+            outro_audio = AudioSegment.from_mp3("audio_samples/beep.wav")
 
         # Concatenate the audio
-        final_audio = intro_audio + combined + outro_audio
+        final_audio = intro_audio + filtered_sound + outro_audio
 
-        os.remove(filtered_wav)
+        """ os.remove(filtered_wav)
         if delete_source:
-            os.remove(filename)
+            os.remove(filename) """
 
         return final_audio
