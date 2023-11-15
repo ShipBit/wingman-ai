@@ -1,0 +1,46 @@
+# Available voices: alloy, echo, fable, onyx, nova, shimmer
+# Command structure:
+#   - name: NameOfCommand
+#     modifier: alt
+#     key: n
+#     hold: 0.8
+
+wingmen:
+  board-computer:
+    openai:
+      api_key: YOUR_API_KEY
+    system_prompt: You are the board-computer of the USS Enterprise. You are in the year 2265.
+    record_key: end
+    tts_voice: nova
+    debug_mode: false
+    features:
+      play_beep_on_sending: false
+      play_beep_on_receiving: false
+      enable_radio_sound_effect: false
+    commands:
+      - name: DeployLandingGear
+        key: n
+      - name: JumpWithQuantumDrive
+        key: b
+        hold: 0.8
+      - name: OpenDoors
+        modifier: alt
+        key: ;
+  atc:
+    openai:
+      api_key: YOUR_API_KEY
+    system_prompt: You are an ATC of a space station.
+    record_key: delete
+    tts_voice: onyx
+    debug_mode: false
+    features:
+      play_beep_on_sending: true
+      play_beep_on_receiving: true
+      enable_radio_sound_effect: true
+    commands:
+      - name: RequestLandingPermission
+        modifier: alt
+        key: n
+      - name: RequestDeparture
+        modifier: alt
+        key: n
