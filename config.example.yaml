@@ -54,10 +54,7 @@ wingmen:
       #api_key: ANOTHER_API_KEY
       #tts_voice: echo
       #...
-    #
-    # The "push-to-talk" key for this wingman. Keep it pressed while talking.
-    #
-    record_key: end
+    record_key: end # The "push-to-talk" key for this wingman. Keep it pressed while talking.
     #
     # Commands are keypresses that the wingmen can execute.
     # These are global keypresses on your system and therefore also work in games.
@@ -72,22 +69,13 @@ wingmen:
       # We're currently looking into how we can provide more control over this.
       #
       - name: DeployLandingGear
-        #
-        # The key the wingman will press when executing the command
-        #
-        key: n
+        key: n # The key the wingman will press when executing the command
       - name: JumpWithQuantumDrive
         key: b
-        #
-        # Optional: The duration the key will be pressed in seconds.
-        #
-        hold: 0.8
+        hold: 0.8 # Optional: The duration the key will be pressed in seconds.
+        # This will press "Alt + ;" instead of just ";":
       - name: OpenDoors
-        #
-        # Optional: The modifier key to press while executing the command.
-        # This will press "Alt + ;" instead of just ";".
-        #
-        modifier: alt
+        modifier: alt # Optional: The modifier key to press while executing the command.
         key: ;
 
   #
