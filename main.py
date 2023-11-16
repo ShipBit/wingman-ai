@@ -2,11 +2,15 @@ import asyncio
 import threading
 from pynput import keyboard
 import yaml
+from os import path
 from services.audio_recorder import AudioRecorder
 from services.tower import Tower
 
 
-def read_config(file_name="config.yaml") -> dict[str, any]:
+def read_config(file_name=None) -> dict[str, any]:
+    if not file_name:
+        bundle_dir = path.abspath(path.dirname(__file__))
+        file_name = path.join(bundle_dir, "config.yaml")
     with open(file_name, "r", encoding="UTF-8") as stream:
         try:
             cfg = yaml.safe_load(stream)
@@ -43,4 +47,5 @@ tower = Tower(config)
 audio_recorder = AudioRecorder()
 
 with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+    print("Ready to listen!")
     listener.join()

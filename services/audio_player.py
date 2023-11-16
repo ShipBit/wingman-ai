@@ -4,6 +4,7 @@ from pydub import AudioSegment
 from pydub.playback import play
 from scipy.io import wavfile
 import scipy.signal
+from os import path
 import numpy
 
 
@@ -47,6 +48,8 @@ class AudioPlayer:
         play_noise: bool = False,
         delete_source: bool = False,
     ):
+        bundle_dir = path.abspath(path.dirname(__file__))
+
         file, extension = os.path.splitext(filename)
         wav_file = file + ".wav"
 
@@ -68,7 +71,9 @@ class AudioPlayer:
             filtered_sound = AudioSegment.from_wav(filtered_wav)
             filtered_sound = filtered_sound + 10
 
-            noise = AudioSegment.from_mp3("audio_samples/noise.wav")
+            noise = AudioSegment.from_mp3(
+                path.join(bundle_dir, "../audio_samples/noise.wav")
+            )
             noise_sound = noise - 30
 
             # Calculate the durations
@@ -89,10 +94,14 @@ class AudioPlayer:
         outro_audio = AudioSegment.empty()
         if play_beep:
             # Load the audio to be added at the beginning and end
-            intro_audio = AudioSegment.from_mp3("audio_samples/beep.wav")
+            intro_audio = AudioSegment.from_mp3(
+                path.join(bundle_dir, "../audio_samples/beep.wav")
+            )
             intro_audio = intro_audio + 3
 
-            outro_audio = AudioSegment.from_mp3("audio_samples/beep.wav")
+            outro_audio = AudioSegment.from_mp3(
+                path.join(bundle_dir, "../audio_samples/beep.wav")
+            )
 
         # Concatenate the audio
         final_audio = intro_audio + filtered_sound + outro_audio

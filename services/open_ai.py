@@ -32,7 +32,6 @@ class OpenAi:
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):
-        # TODO: Maybe this could be done better? Passing None to tools doesn't work as expected
         if not tools:
             completion = self.client.chat.completions.create(
                 stream=stream,
@@ -50,6 +49,8 @@ class OpenAi:
         return completion
 
     def speak(self, text: str, voice: str = "nova"):
+        if not voice:
+            voice = "nova"
         response = self.client.audio.speech.create(
             model="tts-1",
             voice=voice,

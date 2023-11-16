@@ -53,7 +53,7 @@ wingmen:
     record_key: down
     class:
       module: wingmen.open_ai_groot
-      name: OpenAIGroot
+      name: OpenAiGroot
       args: # passed to the class constructor as **kwargs dict - optional
         one_liner: I. Am. Groot.
 
