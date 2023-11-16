@@ -2,6 +2,8 @@ import json
 from typing import Literal
 from wingmen.wingman import Wingman
 from services.open_ai import OpenAi
+import pydirectinput
+import time
 
 
 class OpenAiWingman(Wingman):
@@ -66,8 +68,12 @@ class OpenAiWingman(Wingman):
             self._play_audio(text)
 
     def _play_audio(self, text: str):
-        response = self.openai.speak(text)
-        self.audio_player.stream(response.content)
+        response = self.openai.speak(text, self.config.get("tts_voice"))
+        self.audio_player.stream_with_effects(
+            response.content,
+            self.config.get("features", {}).get("play_beep_on_receiving"),
+            self.config.get("features", {}).get("enable_radio_sound_effect"),
+        )
 
     def __get_tools(self) -> list[dict[str, any]]:
         tools = [
@@ -97,4 +103,33 @@ class OpenAiWingman(Wingman):
 
     def __execute_command(self, command_name) -> Literal["Ok"]:
         print(f">>>{command_name}<<<")
+
+        if self.config.get("debug_mode"):
+            return "OK"
+
+        # Get the command from the list of commands
+        command = next(
+            (
+                item
+                for item in self.config.get("commands")
+                if item["name"] == command_name
+            ),
+            None,
+        )
+
+        if not command:
+            return "Command not found"
+
+        if not command.get("modifier") and command.get("key"):
+            if not command.get("hold"):
+                pydirectinput.press(command["key"])
+            else:
+                pydirectinput.keyDown(command["key"])
+                time.sleep(command["hold"])
+                pydirectinput.keyUp(command["key"])
+        elif command.get("modifier") and command.get("key"):
+            pydirectinput.keyDown(command["modifier"])
+            pydirectinput.press(command["key"])
+            pydirectinput.keyUp(command["modifier"])
+
         return "Ok"
