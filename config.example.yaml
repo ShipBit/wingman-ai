@@ -88,7 +88,7 @@ wingmen:
     #disabled: true
     openai:
       context: You are an ATC of a space station.
-      tts_voice: onyx # overrides the GLOBAL settings
+      tts_voice: onyx # overrides the GLOBAL setting
     record_key: delete
     features: # overrides the GLOBAL settings
       play_beep_on_receiving: true
