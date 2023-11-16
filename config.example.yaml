@@ -49,7 +49,7 @@ wingmen:
 
   openai-groot:
     openai:
-      api_key: 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
+      api_key: YOUR_API_KEY
     record_key: down
     class:
       module: wingmen.open_ai_groot
