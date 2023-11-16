@@ -13,7 +13,7 @@
 #
 openai:
   #
-  # Your OpenAI API key. You have to provide one
+  # Your OpenAI API key. You have to provide one for the "default" Wingmen to work.
   #
   api_key: YOUR_API_KEY
   #
@@ -39,7 +39,7 @@ wingmen:
   # You can change its context and commands below but you can't really change its capabilities besides that.
   # If you're a developer and want to get crazy with your own wingmen, check out the "groot" examples below!
   #
-  # The internal name of the wingman. Has to be unique within this file.
+  # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
   #
   board-computer:
     openai:
@@ -114,7 +114,7 @@ wingmen:
   #
   # You made it until here - wow! You're probably a developer and want to create your own wingman.
   # So meet Groot!
-  # He's a custom wingman who lives in its own python file that you can find in the /wingmen directory.
+  # He's a custom wingman who lives in its own Python file that you can find in the /wingmen directory.
   # Groot is pretty dumb. Whatever you tell him, he'll print - well guess you know what - to the console.
   # First, checkout Groot's code in /wingmen/groot.py.
   #
