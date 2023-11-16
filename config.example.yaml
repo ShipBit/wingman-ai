@@ -1,36 +1,106 @@
-# Available voices: alloy, echo, fable, onyx, nova, shimmer
-# Command structure:
-#   - name: NameOfCommand
-#     modifier: alt
-#     key: n
-#     hold: 0.8
-
+#
+# Questions?
+# Join us on our Discord server (https://discord.com/invite/k8tTBar3gZ) and ask us!
+#
+# Found a mistake? Missing something?
+# Please feel free to open a Pull Request on GitHub instead of asking us to change it for you. Thanks!
+#
+# ===================================================================================================
+#
+# GLOBAL configuration:
+# You can override these settings per wingman if necessary (unless specified otherwise).
+# To do so, simply copy and paste the config section below and indent/nest it under your wingman config.
+#
+openai:
+  #
+  # Your OpenAI API key. You have to provide one
+  #
+  api_key: YOUR_API_KEY
+  #
+  # The voice to use for text-to-speech.
+  # Other choices are: alloy, echo, fable, onyx, shimmer
+  #
+  tts_voice: nova
+  #
+  # These are currently "post-processing" audio effects for the text-to-speech conversion.
+  # You can find the audio files in the /audio_samples directory. Feel free to replace them with your own.
+  #
+  features:
+    play_beep_on_receiving: false
+    enable_radio_sound_effect: false # adds noise to messages
+#
+# ===================================================================================================
+#
+# WIGMEN configuration:
+#
 wingmen:
+  #
+  # "board-computer" is a "default" wingman that you can roleplay with and that can execute commands (=keypresses).
+  # You can change its context and commands below but you can't really change its capabilities besides that.
+  # If you're a developer and want to get crazy with your own wingmen, check out the "groot" examples below!
+  #
+  # The internal name of the wingman. Has to be unique within this file.
+  #
   board-computer:
     openai:
-      api_key: YOUR_API_KEY
+      #
+      # The "context" for the wingman.
+      # This is probably what you want to play around with the most.
+      #
       context: You are the board-computer of the USS Enterprise. You are in the year 2265.
+      #
+      # In case you want to use different settings for different wingmen, these will override the settings above:
+      #
+      #api_key: ANOTHER_API_KEY
+      #tts_voice: echo
+      #...
+    #
+    # The "push-to-talk" key for this wingman. Keep it pressed while talking.
+    #
     record_key: end
-    tts_voice: nova
-    features:
-      play_beep_on_receiving: false
-      enable_radio_sound_effect: false
+    #
+    # Commands are keypresses that the wingmen can execute.
+    # These are global keypresses on your system and therefore also work in games.
+    #
     commands:
+      #
+      # This is where the magic happens!
+      # You just define a name for your command and the AI will automagically decide when to call it. Not kidding!
+      # We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
+      # If the Wingman doesn't call your command, try to rephrase the name here.
+      #
+      # We're currently looking into how we can provide more control over this.
+      #
       - name: DeployLandingGear
+        #
+        # The key the wingman will press when executing the command
+        #
         key: n
       - name: JumpWithQuantumDrive
         key: b
+        #
+        # Optional: The duration the key will be pressed in seconds.
+        #
         hold: 0.8
       - name: OpenDoors
+        #
+        # Optional: The modifier key to press while executing the command.
+        # This will press "Alt + ;" instead of just ";".
+        #
         modifier: alt
         key: ;
+
+  #
+  # "atc" is another default wingman like "board-computer" above.
+  # We wanted to show you how you can override the global settings for a specific wingman
+  # and that you can have multiple wingmen defined in your config.
+  #
   atc:
     openai:
-      api_key: YOUR_API_KEY
       context: You are an ATC of a space station.
+      tts_voice: onyx # overrides the GLOBAL settings
     record_key: delete
-    tts_voice: onyx
-    features:
+    features: # overrides the GLOBAL settings
       play_beep_on_receiving: true
       enable_radio_sound_effect: true
     commands:
@@ -41,22 +111,65 @@ wingmen:
         modifier: alt
         key: n
 
+  #
+  # You made it until here - wow! You're probably a developer and want to create your own wingman.
+  # So meet Groot!
+  # He's a custom wingman who lives in its own python file that you can find in the /wingmen directory.
+  # Groot is pretty dumb. Whatever you tell him, he'll print - well guess you know what - to the console.
+  # First, checkout Groot's code in /wingmen/groot.py.
+  #
   groot:
     record_key: up
+    #
+    # Custom wingmen are defined by a "class" section. We'll need that to create an instance of your Python class.
+    #
     class:
-      module: wingmen.groot # where your custom wingman is located. Use '.' as path separator
-      name: Groot # the name of your class within the file/module
+      #
+      # Basically where your code is located. Use '.' as path separator!
+      # We advise you to put all your custom wingmen into the /wingmen directory.
+      # "wingmen" is the directory and "groot" is the name of the Python file (without the .py extension).
+      #
+      module: wingmen.groot
+      #
+      # The name of your class within your file/module.
+      #
+      name: Groot
 
+  #
+  # Let's see if we can make Groot a bit smarter. We'll use OpenAI's API to make him talk.
+  # The config is like dumb Groot's but here we'll pass a parameter to your class constructor.
+  #
+  # Check out the code in /wingmen/open_ai_groot.py.
+  # Note that OpenAiGroot inherits from 'OpenAiWingman' instead of 'Wingman' which gives him the _play_audio method.
+  #
+  # The OpenAiWingman not only gives you access to our OpenAI wrapper but also handles the whole "command" magic.
+  # So we could add commands like ATC's "RequestLandingPermission" to Groot as well and it would "just work".
+  #
+  # Currently, we only have a specific base class for OpenAI but we'll probably add more in the future.
+  #
   openai-groot:
-    openai:
-      api_key: YOUR_API_KEY
     record_key: down
     class:
       module: wingmen.open_ai_groot
       name: OpenAiGroot
       args: # passed to the class constructor as **kwargs dict - optional
-        one_liner: I. Am. Groot.
+        one_liner: Groot? # you can pass any base type here, in this case a string
+        #... you can have as many as you want here
 
+  #
+  # But what if we want to use EdgeTTS instead of OpenAI to make Groot talk?
+  # You know the config drill already, so jump into /wingmen/edge_tts_groot.py.
+  # EdgeTTSGroot just inherits from our base Wingman class and overrides the _play_audio method doing his own thing.
+  #
+  # If you want to replace OpenAI at any point of the processing queue, this is where you'd start.
+  #
+  # Read through /wingmen/wingman.py to see what's going on in the base.
+  # Overriding the `process` function is basically saying "I'll do everything myself, thanks!".
+  # You'll get the raw audio data recorded from your mic and then can do whatever you want with it.
+  #
+  # Usually, you do want to transcribe the audio, then process it and then maybe add post-processing.
+  # In these cases, you can just override the (virtual) methods that the base is calling inside of `process`.
+  #
   edge-tts-groot:
     record_key: right
     class:
