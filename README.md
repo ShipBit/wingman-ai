@@ -46,13 +46,21 @@ The easiest way for now is to setup your development environment like described 
 
 ## Configure Wingmen
 
-All user-specific settings are stored in [config.yaml](https://github.com/ShipBit/wingman-ai/blob/documentation/config.example.yaml). We added several preconfigured Wingmen to show you a wide variety of examples and to get you started quickly. Read the documentation in the file for more information.
+All relevant settings are stored in [config.yaml](https://github.com/ShipBit/wingman-ai/blob/documentation/config.example.yaml).
+
+If you're running our executable, you'll find your config file linked in the same directory as the executable.
+
+If you're on MacOS or running from source, you'll find it as `config.example.yaml` in the repository root. Rename that file to `config.yaml`.
+
+We added several preconfigured Wingmen to show you a wide variety of examples and to get you started quickly. Read the documentation in the file for more information.
 
 The minimal change you have to make is to provide your [OpenAI API key](https://platform.openai.com/account/api-keys) for the preconfigured Wingmen. Search for `YOUR_API_KEY` in the config file and replace all occurences with your key.
 
 ## Set up your development environment
 
-Are you ready to build your own Wingman or to bring a new feature to the framework? Great! We really appreciate your help. Please follow our guides to get started:
+Are you ready to build your own Wingman or to bring a new feature to the framework? Great! We really appreciate your help.
+
+Please follow our guides to get started:
 
 - [Windows](docs/develop-windows.md)
 - [MacOS](docs/develop-macos.md)
