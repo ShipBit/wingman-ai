@@ -13,7 +13,7 @@
 #
 openai:
   #
-  # Your OpenAI API key. You have to provide one for the "default" Wingmen to work.
+  # Your OpenAI API key. You have to provide one for the "default" OpenAI Wingmen to work.
   #
   api_key: YOUR_API_KEY
   #
@@ -96,6 +96,8 @@ wingmen:
   # and that you can have multiple wingmen defined in your config.
   #
   atc:
+    # Oh yeah, that's a thing, too. We added this because we think you'll collect Wingmen like Pokemon ;)
+    #disabled: true
     openai:
       context: You are an ATC of a space station.
       tts_voice: onyx # overrides the GLOBAL settings
