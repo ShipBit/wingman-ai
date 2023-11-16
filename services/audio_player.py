@@ -17,9 +17,13 @@ class AudioPlayer:
         self, stream: bytes, play_beep: bool = False, play_noise: bool = False
     ):
         audio = self.get_audio_from_stream(stream)
-        audio.export("output_generated.wav", format="wav")
+
+        if not os.path.exists("audio_output"):
+            os.makedirs("audio_output")
+
+        audio.export("audio_output/output_generated.wav", format="wav")
         audio = self.add_radio_effect_with_beep(
-            "output_generated.wav",
+            "audio_output/output_generated.wav",
             play_beep,
             play_noise,
             delete_source=True,

@@ -1,11 +1,15 @@
 import numpy
 import sounddevice
 import soundfile
+import os
 
 
 class AudioRecorder:
     def __init__(
-        self, filename: str = "output.wav", samplerate: int = 44100, channels: int = 1
+        self,
+        filename: str = "audio_output/output.wav",
+        samplerate: int = 44100,
+        channels: int = 1,
     ):
         self.filename = filename
         self.samplerate = samplerate
@@ -36,6 +40,10 @@ class AudioRecorder:
     def stop_recording(self) -> str:
         self.recstream.stop()
         self.is_recording = False
+
+        if not os.path.exists("audio_output"):
+            os.makedirs("audio_output")
+
         soundfile.write(self.filename, self.recording, self.samplerate)
         self.recording = None
         print("Recording stopped")
