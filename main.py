@@ -5,6 +5,7 @@ import yaml
 from os import path
 from services.audio_recorder import AudioRecorder
 from services.tower import Tower
+from exceptions import MissingApiKeyException
 
 
 def read_config(file_name=None) -> dict[str, any]:
@@ -42,10 +43,14 @@ def on_release(key):
         play_thread.start()
 
 
-config = read_config()
-tower = Tower(config)
-audio_recorder = AudioRecorder()
+try:
+    config = read_config()
+    tower = Tower(config)
+    audio_recorder = AudioRecorder()
 
-with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-    print("Ready to listen!")
-    listener.join()
+    with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
+        print("Ready to listen!")
+        listener.join()
+except MissingApiKeyException:
+    print("Please set your OpenAI API key in config.yaml.")
+    
