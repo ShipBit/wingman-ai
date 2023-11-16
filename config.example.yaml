@@ -149,7 +149,7 @@ wingmen:
   #
   # But what if we want to use EdgeTTS instead of OpenAI to make Groot talk?
   # You know the config drill already, so jump into /wingmen/edge_tts_groot.py.
-  # EdgeTTSGroot just inherits from our base Wingman class and overrides the _play_audio method doing his own thing.
+  # EdgeTtsGroot just inherits from our base Wingman class and overrides the _play_audio method doing his own thing.
   #
   # If you want to replace OpenAI at any point of the processing queue, this is where you'd start.
   #
@@ -164,4 +164,4 @@ wingmen:
     record_key: right
     class:
       module: wingmen.edge_tts_groot
-      name: EdgeTTSGroot
+      name: EdgeTtsGroot
