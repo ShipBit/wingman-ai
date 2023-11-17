@@ -3,8 +3,9 @@ from typing import Literal
 from exceptions import MissingApiKeyException
 from wingmen.wingman import Wingman
 from services.open_ai import OpenAi
-import pydirectinput
-import time
+
+# import pydirectinput
+# import time
 
 
 class OpenAiWingman(Wingman):
@@ -125,16 +126,16 @@ class OpenAiWingman(Wingman):
         if not command:
             return "Command not found"
 
-        if not command.get("modifier") and command.get("key"):
-            if not command.get("hold"):
-                pydirectinput.press(command["key"])
-            else:
-                pydirectinput.keyDown(command["key"])
-                time.sleep(command["hold"])
-                pydirectinput.keyUp(command["key"])
-        elif command.get("modifier") and command.get("key"):
-            pydirectinput.keyDown(command["modifier"])
-            pydirectinput.press(command["key"])
-            pydirectinput.keyUp(command["modifier"])
+        # if not command.get("modifier") and command.get("key"):
+        #     if not command.get("hold"):
+        #         pydirectinput.press(command["key"])
+        #     else:
+        #         pydirectinput.keyDown(command["key"])
+        #         time.sleep(command["hold"])
+        #         pydirectinput.keyUp(command["key"])
+        # elif command.get("modifier") and command.get("key"):
+        #     pydirectinput.keyDown(command["modifier"])
+        #     pydirectinput.press(command["key"])
+        #     pydirectinput.keyUp(command["modifier"])
 
         return "Ok"
