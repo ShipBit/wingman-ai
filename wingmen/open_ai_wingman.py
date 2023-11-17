@@ -4,9 +4,6 @@ from exceptions import MissingApiKeyException
 from wingmen.wingman import Wingman
 from services.open_ai import OpenAi
 
-import pydirectinput
-import time
-
 
 class OpenAiWingman(Wingman):
     def __init__(self, name: str, config: dict[str, any]):
@@ -126,16 +123,25 @@ class OpenAiWingman(Wingman):
         if not command:
             return "Command not found"
 
-        if not command.get("modifier") and command.get("key"):
-            if not command.get("hold"):
+        try:
+            # TODO: pydirectinput only works on Windows. We need to find a better way to do this.
+            # pylint:disable=import-outside-toplevel
+            import pydirectinput
+            import time
+
+            if not command.get("modifier") and command.get("key"):
+                if not command.get("hold"):
+                    pydirectinput.press(command["key"])
+                else:
+                    pydirectinput.keyDown(command["key"])
+                    time.sleep(command["hold"])
+                    pydirectinput.keyUp(command["key"])
+            elif command.get("modifier") and command.get("key"):
+                pydirectinput.keyDown(command["modifier"])
                 pydirectinput.press(command["key"])
-            else:
-                pydirectinput.keyDown(command["key"])
-                time.sleep(command["hold"])
-                pydirectinput.keyUp(command["key"])
-        elif command.get("modifier") and command.get("key"):
-            pydirectinput.keyDown(command["modifier"])
-            pydirectinput.press(command["key"])
-            pydirectinput.keyUp(command["modifier"])
+                pydirectinput.keyUp(command["modifier"])
+        except Exception:
+            print("Keypresses are currently only supported on Windows.")
+            return "Fail"  # this will currently always happen on non-Windows systems.
 
         return "Ok"
