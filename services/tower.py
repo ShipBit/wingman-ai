@@ -11,23 +11,33 @@ class Tower:
         for wingman in self.wingmen:
             self.key_wingman_dict[wingman.get_record_key()] = wingman
 
+    def merge_configs(self, general, overrides):
+        merged = overrides.copy()
+        if not merged.get("openai"):
+            merged["openai"] = {}
+        merged["openai"].update(general["openai"])
+        return merged
+
     def __get_wingmen(self) -> list[Wingman]:
         wingmen = []
         for wingman_name, wingman_config in self.config["wingmen"].items():
-            class_config = wingman_config.get("class")
+            if self.config.get("disabled") == True:
+                continue
+            merged_config = self.merge_configs(self.config, wingman_config)
+            class_config = merged_config.get("class")
             if class_config:
                 kwargs = class_config.get("args", {})
                 wingmen.append(
                     Wingman.create_dynamically(
                         name=wingman_name,
-                        config=wingman_config,
+                        config=merged_config,
                         module_path=class_config.get("module"),
                         class_name=class_config.get("name"),
                         **kwargs
                     )
                 )
             else:
-                wingmen.append(OpenAiWingman(wingman_name, wingman_config))
+                wingmen.append(OpenAiWingman(wingman_name, merged_config))
         return wingmen
 
     def get_wingman_from_key(self, key: any) -> Wingman | None:

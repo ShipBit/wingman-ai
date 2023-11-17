@@ -1,7 +1,9 @@
 import json
 from typing import Literal
+from exceptions import MissingApiKeyException
 from wingmen.wingman import Wingman
 from services.open_ai import OpenAi
+
 import pydirectinput
 import time
 
@@ -9,6 +11,10 @@ import time
 class OpenAiWingman(Wingman):
     def __init__(self, name: str, config: dict[str, any]):
         super().__init__(name, config)
+
+        if not self.config.get("openai").get("api_key"):
+            raise MissingApiKeyException
+
         self.openai = OpenAi(self.config["openai"]["api_key"])
         self.messages = [
             {
@@ -68,11 +74,11 @@ class OpenAiWingman(Wingman):
             self._play_audio(text)
 
     def _play_audio(self, text: str):
-        response = self.openai.speak(text, self.config.get("tts_voice"))
+        response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
         self.audio_player.stream_with_effects(
             response.content,
-            self.config.get("features", {}).get("play_beep_on_receiving"),
-            self.config.get("features", {}).get("enable_radio_sound_effect"),
+            self.config["openai"].get("features", {}).get("play_beep_on_receiving"),
+            self.config["openai"].get("features", {}).get("enable_radio_sound_effect"),
         )
 
     def __get_tools(self) -> list[dict[str, any]]:
