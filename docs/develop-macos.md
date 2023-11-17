@@ -13,7 +13,7 @@ pyenv install 3.11.6                        # install Python with pyenv
 pyenv global 3.11.6                         # set your global Python version
 ```
 
-Then add `eval "$(pyenv init --path)"` to your `.zshrc` or `.bashrc` file so that you can just run `python` instead of `python3` in your terminal.
+Then add `eval "$(pyenv init --path)"` to your `~/.zshrc` or `~/.bashrc` so that you can just run `python` instead of `python3` in your terminal.
 
 Restart the terminal. Test with `python --version` and `python3 --version`.
 
