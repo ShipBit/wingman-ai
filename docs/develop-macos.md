@@ -43,3 +43,13 @@ Open `main.py` and run it. You should see the Wingman AI window should pop up. I
 - you have `main.py` active in the editor when you hit `F5` to run it
 
 We also suggest to install the recommended extensions if you haven't already. We're not forcing any strict syntactic coding styles right now but that might (have to) change in the future. If that will happen, `pylint` will certainly be used to enforce the style and it can help you with some basic stuff already if you aren't super familiar with Python (like us).
+
+### Allow access to microphone and input event monitoring
+
+VSCode will ask you to give it access to your mic and to monitor your input events. You have to allow both for Wingman to work. If you start the app from the terminal and see the message
+
+```bash
+This process is not trusted! Input event monitoring will not be possible until it is added to accessibility clients.
+```
+
+Go to `System Settings > Privacy & Security > Accessibility` and enable VSCode there, too.
