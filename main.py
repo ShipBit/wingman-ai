@@ -3,15 +3,25 @@ import threading
 from os import path
 from pynput import keyboard
 import yaml
+import sys
 from services.audio_recorder import AudioRecorder
 from services.tower import Tower
 from exceptions import MissingApiKeyException
 
 
+
 def read_config(file_name=None) -> dict[str, any]:
-    if not file_name:
-        bundle_dir = path.abspath(path.dirname(__file__))
-        file_name = path.join(bundle_dir, "config.yaml")
+    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+        # running in a PyInstaller bundle'
+        if not file_name:
+            bundle_dir = path.abspath(path.dirname(__file__))
+            file_name = path.join(bundle_dir, "../config.yaml")
+    else:
+        # running in a normal Python process'
+        if not file_name:
+            bundle_dir = path.abspath(path.dirname(__file__))
+            file_name = path.join(bundle_dir, "config.yaml")
+
     with open(file_name, "r", encoding="UTF-8") as stream:
         try:
             cfg = yaml.safe_load(stream)
