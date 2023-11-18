@@ -22,17 +22,4 @@ cmd = [
 ]
 subprocess.call(cmd)
 
-shutil.copy2("config.example.yaml", "dist/WingmanAI/_internal/config.yaml")
-
-try:
-    os.symlink(
-        os.path.abspath("dist/WingmanAI/_internal/wingmen"),
-        os.path.abspath("dist/WingmanAI/Wingmen"),
-        True,
-    )
-    os.symlink(
-        os.path.abspath("dist/WingmanAI/_internal/config.yaml"),
-        os.path.abspath("dist/WingmanAI/Config.yaml"),
-    )
-except OSError as e:
-    print(f"Error creating symlinks: {e}")
+shutil.copy2("config.example.yaml", "dist/WingmanAI/config.yaml")

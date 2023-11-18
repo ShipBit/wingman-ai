@@ -77,6 +77,12 @@ wingmen:
       - name: OpenDoors
         modifier: alt # Optional: The modifier key to press while executing the command.
         key: ;
+      - name: FireTorpedo
+        key: t
+        instant_activation: # Provide phrases that will instantly activate the command, without asking GPT (saves time).
+          - Fire Torpedo
+          - Fire
+          - Torpedo
 
   #
   # "atc" is another default wingman like "board-computer" above.

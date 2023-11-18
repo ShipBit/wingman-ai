@@ -3,6 +3,7 @@ from typing import Literal
 from exceptions import MissingApiKeyException
 from wingmen.wingman import Wingman
 from services.open_ai import OpenAi
+from difflib import SequenceMatcher
 
 
 class OpenAiWingman(Wingman):
@@ -26,6 +27,24 @@ class OpenAiWingman(Wingman):
 
     def _process_transcript(self, transcript: str) -> str:
         self.messages.append({"role": "user", "content": transcript})
+
+        # all instant activation commands
+        commands = [
+            command
+            for command in self.config["commands"]
+            if command.get("instant_activation")
+        ]
+
+        # check if transcript matches any instant activation command. Each command has a list of possible phrases
+        for command in commands:
+            for phrase in command.get("instant_activation"):
+                ratio = SequenceMatcher(
+                    None,
+                    transcript.lower(),
+                    phrase.lower(),
+                ).ratio()
+                if ratio > 0.8:
+                    return self.__execute_command(command["name"])
 
         completion = self.openai.ask(
             messages=self.messages,
@@ -79,6 +98,12 @@ class OpenAiWingman(Wingman):
         )
 
     def __get_tools(self) -> list[dict[str, any]]:
+        # all commands which do not have to property instant_activation
+        commands = [
+            command["name"]
+            for command in self.config["commands"]
+            if not command.get("instant_activation")
+        ]
         tools = [
             {
                 "type": "function",
@@ -91,10 +116,7 @@ class OpenAiWingman(Wingman):
                             "command_name": {
                                 "type": "string",
                                 "description": "The command to execute",
-                                "enum": [
-                                    command["name"]
-                                    for command in self.config["commands"]
-                                ],
+                                "enum": commands,
                             },
                         },
                         "required": ["command_name"],
