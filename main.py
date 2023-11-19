@@ -2,18 +2,17 @@ from os import path
 import sys
 import asyncio
 import threading
-from os import path
-from pynput import keyboard
 import yaml
-import sys
+from pynput import keyboard
+from exceptions import MissingApiKeyException
 from services.audio_recorder import AudioRecorder
 from services.tower import Tower
-from exceptions import MissingApiKeyException
-
+from services.splashscreen import Splashscreen
+from services.printr import Printr
 
 
 def read_config(file_name=None) -> dict[str, any]:
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # running in a PyInstaller bundle'
         if not file_name:
             bundle_dir = path.abspath(path.dirname(__file__))
@@ -60,13 +59,17 @@ try:
     tower = Tower(config)
     audio_recorder = AudioRecorder()
 
-    if __name__ == '__main__':
+    if __name__ == "__main__":
         Splashscreen.show(tower)
 
         with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
-            print(f"{Printr.clr('⌬', Printr.CYAN)} Press an assigned key to talk to the respective wingman")
+            print(
+                f"{Printr.clr('⌬', Printr.CYAN)} Press an assigned key to talk to the respective wingman"
+            )
             print("")
-            print(f"{Printr.clr('⌬', Printr.CYAN)} Exit this program by pressing [{Printr.clr('Ctrl', Printr.BLUE)}] + [{Printr.clr('C', Printr.BLUE)}]")
+            print(
+                f"{Printr.clr('⌬', Printr.CYAN)} Exit this program by pressing [{Printr.clr('Ctrl', Printr.BLUE)}] + [{Printr.clr('C', Printr.BLUE)}]"
+            )
             print("")
             listener.join()
 
