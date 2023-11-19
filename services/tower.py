@@ -46,3 +46,6 @@ class Tower:
         else:
             wingman = self.key_wingman_dict.get(key.name, None)
         return wingman
+
+    def get_wingmen(self):
+        return self.wingmen
