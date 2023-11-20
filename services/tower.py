@@ -11,28 +11,40 @@ class Tower:
         for wingman in self.wingmen:
             self.key_wingman_dict[wingman.get_record_key()] = wingman
 
-    def merge_configs(self, general, overrides):
-        def recursive_update(d, u):
-            for k, v in u.items():
-                if isinstance(v, dict):
-                    d[k] = recursive_update(d.get(k, {}), v)
-                else:
-                    d[k] = v
-            return d
+    def __deep_merge(self, source, updates):
+        """Recursively merges updates into source."""
+        for key, value in updates.items():
+            if isinstance(value, dict):
+                node = source.setdefault(key, {})
+                self.__deep_merge(node, value)
+            else:
+                source[key] = value
+        return source
 
-        # Copy the general configuration and update with overrides recursively
-        merged_config = recursive_update(general.copy(), overrides)
-        return merged_config
+    def __merge_configs(self, general, wingman):
+        """Merge general settings with a specific wingman's overrides, for the 'openai' and 'features' sections."""
+        # Start with a copy of the wingman's specific config to keep it intact.
+        merged = wingman.copy()
+        # Update 'openai' and 'features' sections from general config into wingman's config.
+        for key in ["openai", "features"]:
+            if key in general:
+                merged[key] = self.__deep_merge(
+                    general[key].copy(), wingman.get(key, {})
+                )
+
+        return merged
 
     def __get_wingmen(self) -> list[Wingman]:
         wingmen = []
         for wingman_name, wingman_config in self.config["wingmen"].items():
             if self.config.get("disabled") is True:
                 continue
-            merged_config = self.merge_configs(
-                {"openai": self.config["openai"], "features": self.config["features"]},
-                wingman_config,
-            )
+
+            global_config = {
+                "openai": self.config["openai"],
+                "features": self.config["features"],
+            }
+            merged_config = self.__merge_configs(global_config, wingman_config)
             class_config = merged_config.get("class")
             if class_config:
                 kwargs = class_config.get("args", {})

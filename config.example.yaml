@@ -1,3 +1,4 @@
+version: 0.1.ea # don't touch this!
 #
 # Questions?
 # Join us on our Discord server (https://discord.com/invite/k8tTBar3gZ) and ask us!
@@ -51,7 +52,7 @@ wingmen:
       #
       context: |
         You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
-        permission. You are the ship's computer, and you are in charge of all the ship's systems. 
+        permission. You are the ship's computer, and you are in charge of all the ship's systems.
         You can execute commands and even if you don't recognize a command, always respond with a full sentence
         acknowledging the execution.
         Always answer as quick as possible. No more than 1-2 sentences per response.
@@ -247,5 +248,3 @@ wingmen:
         responses:
           - Jump sequence initiated
           - Jumping now
-
-version: 0.1.ea # don't touch this!
