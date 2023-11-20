@@ -1,6 +1,7 @@
 import json
 from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
+from services.printr import Printr
 from wingmen.wingman import Wingman
 
 
@@ -11,7 +12,11 @@ class OpenAiWingman(Wingman):
         if not self.config.get("openai").get("api_key"):
             raise MissingApiKeyException
 
-        self.openai = OpenAi(self.config["openai"]["api_key"])
+        api_key = self.config["openai"]["api_key"]
+        if api_key == "YOUR_API_KEY":
+            raise MissingApiKeyException
+
+        self.openai = OpenAi(api_key)
         self.messages = [
             {
                 "role": "system",
@@ -22,7 +27,7 @@ class OpenAiWingman(Wingman):
     def _transcribe(self, audio_input_wav: str) -> str:
         super()._transcribe(audio_input_wav)
         transcript = self.openai.transcribe(audio_input_wav)
-        return transcript.text
+        return transcript.text if transcript else None
 
     def _process_transcript(self, transcript: str) -> str:
         self.messages.append({"role": "user", "content": transcript})
@@ -41,6 +46,9 @@ class OpenAiWingman(Wingman):
             messages=self.messages,
             tools=self.__get_tools(),
         )
+
+        if completion is None:
+            return None
 
         response_message = completion.choices[0].message
         tool_calls = response_message.tool_calls
@@ -81,6 +89,9 @@ class OpenAiWingman(Wingman):
                 messages=self.messages,
                 model="gpt-3.5-turbo-1106",
             )
+            if second_response is None:
+                return None
+
             second_content = second_response.choices[0].message.content
             self.messages.append(second_response.choices[0].message)
             self._play_audio(second_content)
@@ -93,11 +104,12 @@ class OpenAiWingman(Wingman):
 
     def _play_audio(self, text: str):
         response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
-        self.audio_player.stream_with_effects(
-            response.content,
-            self.config.get("features", {}).get("play_beep_on_receiving"),
-            self.config.get("features", {}).get("enable_radio_sound_effect"),
-        )
+        if response is not None:
+            self.audio_player.stream_with_effects(
+                response.content,
+                self.config.get("features", {}).get("play_beep_on_receiving"),
+                self.config.get("features", {}).get("enable_radio_sound_effect"),
+            )
 
     def __get_tools(self) -> list[dict[str, any]]:
         # all commands that are NOT instant_activation

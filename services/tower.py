@@ -70,3 +70,6 @@ class Tower:
 
     def get_wingmen(self):
         return self.wingmen
+
+    def get_config(self):
+        return self.config

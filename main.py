@@ -78,15 +78,22 @@ try:
             listener.join()
 
 except FileNotFoundError:
-    print("Missing config.yaml")
-    print("Rename config.yaml.example to config.yaml if you're running from source.")
-    print(
-        "Make sure that your VSCode terminal executed main.py from the root directory. Sometimes you have to 'cd' into it first, then press F5 again."
-    )
+    Printr.err_print("Missing config.yaml")
+    Printr.err_print("Rename config.yaml.example to config.yaml if you're running from source.", False)
+    Printr.err_print("Make sure that your VSCode terminal executed main.py from the root directory.", False)
+    Printr.err_print("Sometimes you have to 'cd' into it first, then press F5 again.", False)
+
 except MissingApiKeyException:
-    print("Please set your OpenAI API key in config.yaml")
+    Printr.err_print("Please set your OpenAI API key in config.yaml")
+
 except KeyboardInterrupt:
-    print("")
+    # Nothing bad. Just exit the application
+    Printr.override_print("")
     print("Shutdown requested...")
     print("Goodbye, Commander! o7")
+
+except Exception as e:
+    # Everything else...
+    Printr.err_print(str(e))
+
 sys.exit(0)

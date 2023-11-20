@@ -20,8 +20,11 @@ def check_version(local_version, url):
             )
 
     except requests.RequestException as e:
-        print(f"Error fetching version information: {e}")
+        Printr.err_print(f"Error fetching version information: {e}")
+        print("")
     except ValueError as e:
-        print(f"Error with version information: {e}")
+        Printr.err_print(f"Error with version information: {e}")
+        print("")
     except FileNotFoundError as e:
-        print(f"Error: The local version file was not found: {e}")
+        Printr.err_print(f"Error: The local version file was not found: {e}")
+        print("")

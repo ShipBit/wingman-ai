@@ -7,6 +7,7 @@ class Splashscreen:
         github_link = Printr.clr('https://github.com/shipbit/wingman-ai', Printr.CYAN)
         patreon_link = Printr.clr('https://www.patreon.com/ShipBit', Printr.CYAN)
 
+        version = tower.get_config().get("version")
         wingmen = tower.get_wingmen()
         count = len(wingmen)
         ea = 'e' if count > 1 else 'a'
@@ -18,8 +19,8 @@ class Splashscreen:
         print("{:^38} {:<80}".format(Printr.clr('/     \\\\‾‾‾‾//     \\', Printr.RED), Printr.clr('__ |/ |/ / _  / _  / / /  /_/ /_  / / / / / /_/ /_  / / /     _  ___ |_/ /', Printr.BLUE)))
         print("{:^38} {:<80}".format(Printr.clr('/       \\\\  //       \\', Printr.RED), Printr.clr('____/|__/  /_/  /_/ /_/_\\__, / /_/ /_/ /_/\\__,_/ /_/ /_/      /_/  |_/___/', Printr.BLUE)))
         print("{:^38} {:<80}".format(Printr.clr('/_________\\\\//_________\\', Printr.RED), Printr.clr('                       /____/', Printr.BLUE)))
-        print("{:^46} {:<80}".format(Printr.clr(f'\\{Printr.UNDERLINE}‾‾‾‾‾‾‾‾‾‾‾‾{Printr.END_UNDERLINE}/', Printr.RED), Printr.clr('', Printr.BLUE)))
-        print("{:^38} {:<10} {:<60}".format(Printr.clr('\\‾‾‾‾‾‾‾‾‾‾/', Printr.RED), 'Discord:', discord_link))
+        print("{:^46} {:>82}".format(Printr.clr(f'\\{Printr.UNDERLINE}⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺{Printr.END_UNDERLINE}/', Printr.RED), f"Version: {Printr.clr(version, Printr.RED)}"))
+        print("{:^38} {:<10} {:<60}".format(Printr.clr('\\⎺⎺⎺⎺⎺⎺⎺⎺⎺⎺/', Printr.RED), 'Discord:', discord_link))
         print("{:^38} {:<10} {:<60}".format(Printr.clr('\\________/', Printr.RED), 'GitHub:', github_link))
         print("{:^38} {:<10} {:<60}".format(Printr.clr('', Printr.RED), 'Patreon:', patreon_link))
         print("")

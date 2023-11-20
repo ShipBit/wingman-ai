@@ -15,6 +15,7 @@ class Printr:
     END_OVERLINE = '\033[55m'
     FRAMED = '\033[51m'
     ENCIRCLED = '\033[52m'
+    DELETE_LINE = '\033[2K\033[1G'
 
     @staticmethod
     def clr(text, color_format):
@@ -23,6 +24,17 @@ class Printr:
     @staticmethod
     def clr_print(text, color_format):
         print(Printr.clr(text, color_format))
+
+    @staticmethod
+    def err_print(text, first_message = True):
+        if (first_message):
+            print("")
+            print(Printr.clr(f"{Printr.BOLD}Something went wrong!{Printr.NORMAL_WEIGHT}", Printr.RED))
+        print(Printr.clr(f"⎢ {text}", Printr.RED))
+
+    @staticmethod
+    def override_print(text):
+        print(f"{Printr.DELETE_LINE}{text}")
 
     @staticmethod
     def box_start():
