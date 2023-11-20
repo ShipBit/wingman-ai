@@ -235,6 +235,7 @@ wingmen:
       module: wingmen.edge_tts_groot
       name: EdgeTtsGroot
 
+  # IMPORTANT: This is disabled for now because we're still working on it.
   #
   # This is an all-free wingman using Open Source Whisper, instant commands and responses and Edge TTS.
   # Open Source Whisper runs locally and will download a model on first use. This may take some time, but after
@@ -244,21 +245,21 @@ wingmen:
   # it's even faster than OpenAI TTS and it's also free. Downside of this: Right now it's not detecting the language
   # and automatically changes the output, but we could implement this in a future release.
   #
-  free-wingman:
-    record_key: left
-    class:
-      module: wingmen.free_wingman
-      name: FreeWingman
-    debug_mode: false # If this is set to true, no hotkey will be actually pressed (you'll just see a console output) and the processing time is shown
-    commands:
-      - name: InitiateJump
-        keys:
-          - key: b
-            hold: 0.8
-        instant_activation:
-          - Initiate jump
-          - Initiate jump sequence
-          - jump
-        responses:
-          - Jump sequence initiated
-          - Jumping now
+  #free-wingman:
+  #  record_key: left
+  #  class:
+  #    module: wingmen.free_wingman
+  #    name: FreeWingman
+  #  debug_mode: false # If this is set to true, no hotkey will be actually pressed (you'll just see a console output) and the processing time is shown
+  #  commands:
+  #    - name: InitiateJump
+  #      keys:
+  #        - key: b
+  #          hold: 0.8
+  #      instant_activation:
+  #        - Initiate jump
+  #        - Initiate jump sequence
+  #        - jump
+  #      responses:
+  #        - Jump sequence initiated
+  #        - Jumping now

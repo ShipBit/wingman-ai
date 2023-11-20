@@ -1,4 +1,4 @@
-from wingmen.wingman import Wingman
+""" from wingmen.wingman import Wingman
 from services.edge import EdgeTTS
 from services.printr import Printr
 import whisper
@@ -37,3 +37,4 @@ class FreeWingman(Wingman):
         if instant_activation_command:
             return self._get_exact_response(instant_activation_command)
         return None
+ """
