@@ -32,22 +32,28 @@ We try to make it as easy as possible for both groups to get started. If you're 
 
 ## Run Wingman on your Computer / Mac
 
-Get the latest release of Wingman AI in the [releases](https://github.com/ShipBit/wingman-ai/releases) section. Make sure to download the correct one for your system (PC / Mac).
+Get the latest release of Wingman AI in the [releases](https://github.com/ShipBit/wingman-ai/releases) section. Make sure to download the correct one for your operating system.
 
 Unzip it and "just run" Wingman AI. It's a bundled executable that has all the required dependencies included.
 
-There could be a Windows Security Warning: IMAGE
-This is because it's not propperly signed yet. We are working on it. In the meantime just DO THIS
+There will be a Windows SmartScreen security warning: IMAGE
+
+The problem is that our package is currently _unsigned_ which triggers pretty aggressive Windows SmartScreen warnings when you try to run the executable from our package. Windows is not wrong here. We have to buy an expensive EV certificate that contains a hardware key that is sent via... physical mail. This will take a while, of course, and we didn't want to delay the first test iteration for this.
+So if you're not comfortable with running a fairly random executable from the internet on your Windows machine, please wait for a later version. Or try running our application directly in Python from code, like your fellow developers should. Or just trust us.
 
 Before you get too excited and see it fail on first attempt, open `config.yaml` and fill in your API key(s). Please read the [config section](#configure-wingmen)!
 
 ### Running Wingman AI
 
-First wait for the welcome screen to appear. It will show you the available Wingmen and their activation keys.
+First wait until the welcome screen appears. It shows you the available wingmen and their activation keys.
 
-![Wingman Welcome Screen](assets/welcome-screen.png)
+![Wingman welcome screen](assets/welcome-screen.png)
 
-This means you can have multiple Wingmen active at the same time. Each is bound to a different activation key. If you see the welcome screen, you're good to go. So start by pressing a specific activation key and hold it down while you talk to your Wingman. Let go of the key when you're done talking. The Wingman AI console do not need to have the focus, so you can just have it running in the background, while you are playing your game. After this you'll see the Wingman's response and other helpful output in the console. To close Wingman AI, just press `CTRL+C` in the console or close the whole console window.
+You can have several wingmen active at the same time. Each one is bound to a different activation key. When you see the welcome screen, you're ready to go. So start by pressing a specific activation key and hold it down while talking to your wingman (push-to-talk). Release the key when you're done talking.
+
+The Wingman AI console doesn't need to be focused, so you can just leave it running in the background while you play your game. You will then see the Wingman's response and other helpful output in the console.
+
+To exit Wingman AI, simply press `CTRL+C` in the console or close the console window.
 
 ## Default Wingmen
 
@@ -55,41 +61,51 @@ We provide several pre-built Wingmen to get you started quickly.
 
 ### OpenAI Wingmen
 
-The next two Wingmen are based on OpenAI API's. The basic process looks like this: Your speech will be recognized by the Whisper API, it then sends the text to the GPT-4 Turbo API, the API responds with a text, which is then read out to you by the Text to speech API. It's literally chatting with ChatGPT. That also means you can customize the Wingmen's behavior by providing your own GPT prompt (in the `config.yaml`).
+Our first two Wingmen are based on OpenAI APIs. The basic process is as follows:
 
-The magic happens if you configure commands / key-bindings in the `config.yaml`. GPT will then try to match your request with the configured commands and trigger them for you. It will automatically select the best matching command based on the name of the command. So make sure to give it a good name (e.g. `RequestLandingPermission`).
+- Your speech is transcribed by the **Whisper API**.
+- The transcript is then sent as text to the **GPT-4 Turbo API**, which responds with a text
+- The response is then read to you by the **Text-to-Speech API**.
 
-You can find more information about the API in the [OpenAI API documentation](https://beta.openai.com/docs/introduction).
+This is literally a chat with ChatGPT. This also means that you can customize the wingmen's behavior by giving the wingman a context (or `system message`) with your own GPT prompt in the `config.yaml`.
 
-#### Board-computer
+The magic happens when you configure _commands_ or key bindings in the `config.yaml`. GPT will then try to match your request with the configured commands and trigger them for you. It will automatically select the best matching command based only on its name, so make sure you give it a good one (e.g. `RequestLandingPermission`).
 
-The board-computer is your AI companion helping you with all kinds of things. Basically you can talk to it and it will respond to you via GPT. It can also trigger commands / keypresses for you. These are defined in the `config.yaml`. It's a good starting point to get to know Wingman AI.
+More information about the API can be found in the [OpenAI API documentation](https://beta.openai.com/docs/introduction).
+
+#### Board computer
+
+The board computer is your AI companion that helps you with all kinds of things. You can talk to it and it answers you via GPT. It can also trigger [commands](#commands) / button presses for you. These are defined in the `config.yaml`. It is a good starting point to get to know Wingman AI.
 
 #### ATC
 
-The ATC wingman is basically the same as the board-computer, but it's specialized on ATC chatter. This is a showcase in how you can build specialized Wingmen for specific use cases / scenarios. The main difference is that it uses a different GPT prompt and a different set of commands.
+The ATC Wingman is basically the same as the board computer, but it specializes in ATC chatter. This is a showcase example of how to build specialized wingmen for specific use cases/scenarios. The main difference is that it uses a different GPT prompt and a different set of commands.
 
 ### Free-Wingman
 
-This is an example of a Wingman that does not use OpenAI online API's and just relies on free to use tools. It's a good starting point if you want to build your own Wingman with different AI services / models. It uses [Open-Source Whisper](https://github.com/openai/whisper) from OpenAI, which runs locally on your machine. On the first start it will download a basic model. This will take some time, based on your internet connection, so be patient. If you say something, it will recognize your speech, but will not send it to GPT. It will try to match your phrases with the ones defined in the `config.yaml` and trigger the configured commands for you. It will also read out the response to you via [Edge-TTS](https://github.com/rany2/edge-tts). Please read the [commands](#commands) section for more information on how to define commands.
+This is an example of a wingman that **does not** use OpenAI's online APIs and only relies on freely available tools instead. It is a good starting point if you want to create your own wingman with different AI services or models. It uses [Open-Source Whisper](https://github.com/openai/whisper) from OpenAI, which runs **locally on your machine**.
 
-### Groot
+The first time you start it, a base model is downloaded. This may take some time depending on your internet connection, so be patient. When you say something, it will recognize your language but will not send it to GPT. It will try to match your phrases with the ones defined in the `config.yaml` and trigger the configured commands for you. It will also read you the response via [Edge-TTS](https://github.com/rany2/edge-tts).
 
-The groot wingmen are more targeting developers who want to dive deeper in creating their own wingmen implementations. More on that later. For now, just know that it's a good starting point for developers.
+Please refer to the [commands](#commands) section for more information on how to define commands.
+
+### Groot (Custom)
+
+The _Groot_ wingmen are aimed at **developers** who want to dive deeper into creating their own fully custom wingmen implementations. If you are interested, start by reading the comments in `config.yaml` and work your way through the classes and functions mentioned in the config.
 
 ## Commands
 
-Commands are the core of Wingman AI. They define what your Wingman can do for you. They are defined in the `config.yaml` and can be triggered by your Wingman. In the first version they are mainly used to trigger keypresses, but they can also be used to trigger other actions, like calling an API or running a script.
+Commands are the heart of the Wingman AI, as they add "functions" in addition to pure conversations. Commands are defined in `config.yaml` and are activated by the corresponding Wingman as a result of a conversation with you. In the first version, they are mainly used to trigger keystrokes, but they can also be used for other actions such as calling external APIs or executing complex scripts.
 
-Here are the main properties of a command:
+Here are the most important properties of a command:
 
-- name: The name of the command. This is used to match your request with the command. So make sure to give it a good name (e.g. `RequestLandingPermission`).
-- keys: A list of keys to press. They will be triggered in the order they are defined. Each key can have these properties:
-  - key: The key to press.
-  - modifier: A modifier key to press with the key. This is optional.
-  - hold: The time to hold the key in milliseconds. This is optional.
-- instant_activation: A list of phrases that will trigger the command instantly (without AI roundtripping). This is optional.
-- responses: A list of responses. If the command is executed, a random response is picked and read out to you. This is optional.
+- `name`: This is used to match your request with the command. So make sure to give it a good name (e.g. `RequestLandingPermission`). This where Wingman commands are "better" than VoiceAttack: You don't have to say a specific phrase to trigger it. This is a very powerful concept.
+- `keys`: A list of keys to press. They will be triggered in the order they are defined. Each key can have these properties:
+  - `key`: The key to press.
+  - `modifier`: A modifier key to press with the key. _(optional)_
+  - `hold`: The time to hold the key in milliseconds. _(optional)_
+- `instant_activation`: A list of phrases that will trigger the command instantly (without AI roundtripping). _(optional)_
+- `responses`: A list of responses. If the command is executed, a random response is picked and read out to you. _(optional)_
 
 ## Configure Wingmen
 

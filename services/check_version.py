@@ -1,4 +1,3 @@
-import json
 import requests
 from packaging import version
 from services.printr import Printr

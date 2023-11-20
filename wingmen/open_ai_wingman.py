@@ -2,7 +2,6 @@ import json
 from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
 from wingmen.wingman import Wingman
-from services.open_ai import OpenAi
 
 
 class OpenAiWingman(Wingman):
@@ -28,8 +27,8 @@ class OpenAiWingman(Wingman):
     def _process_transcript(self, transcript: str) -> str:
         self.messages.append({"role": "user", "content": transcript})
 
-        # check if the transcript is an instant activation command. If so, it will
-        # be executed immediately and no further processing is needed.
+        # Check if the transcript is an instant activation command.
+        # If so, it will be executed immediately and no further processing is needed.
         instant_activation_command = self._process_instant_activation_command(
             transcript
         )
@@ -37,7 +36,7 @@ class OpenAiWingman(Wingman):
             self._play_audio(self._get_exact_response(instant_activation_command))
             return None
 
-        # this is the main GPT call inkl. tools / functions
+        # This is the main GPT call including tools / functions
         completion = self.openai.ask(
             messages=self.messages,
             tools=self.__get_tools(),
@@ -75,8 +74,9 @@ class OpenAiWingman(Wingman):
                         }
                     )
 
-            # make a second GPT call to process the function responses. This basically summarizes the function responses
-            # for this we don't need GPT-4 Turbo, GPT-3.5 is enough
+            # Make a second GPT call to process the function responses.
+            # This basically summarizes the function responses.
+            # We don't need GPT-4-Turbo for this, GPT-3.5 is enough
             second_response = self.openai.ask(
                 messages=self.messages,
                 model="gpt-3.5-turbo-1106",
@@ -100,7 +100,7 @@ class OpenAiWingman(Wingman):
         )
 
     def __get_tools(self) -> list[dict[str, any]]:
-        # all commands which do not have to property instant_activation
+        # all commands that are NOT instant_activation
         commands = [
             command["name"]
             for command in self.config["commands"]

@@ -1,9 +1,9 @@
-from importlib import import_module
-from services.audio_player import AudioPlayer
-from difflib import SequenceMatcher
-from services.printr import Printr
 import random
 import time
+from difflib import SequenceMatcher
+from importlib import import_module
+from services.audio_player import AudioPlayer
+from services.printr import Printr
 
 
 class Wingman:
@@ -97,7 +97,9 @@ class Wingman:
         if self.config.get("debug_mode"):
             return command_response
 
-        # Try to import pydirectinput and fall back to pyautogui if necessary
+        # PyDirectInput uses SIGEVENTS to send keypresses to the OS.
+        # This is the only way to send keypresses to games reliably.
+        # It only works on Windows, though. For MacOS, we fall back to PyAutoGUI.
         try:
             import pydirectinput as module
         except ModuleNotFoundError:
