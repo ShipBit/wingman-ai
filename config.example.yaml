@@ -80,17 +80,24 @@ wingmen:
         keys:
           # see https://github.com/learncodebygaming/pydirectinput/blob/master/pydirectinput/__init__.py for all available keys
           - key: n # The key the wingman will press when executing the command
+      - name: EnableQuantumDrive
+        keys:
+          - key: b
+      - name: DisableQuantumDrive
+        keys:
+          - key: b
       - name: JumpWithQuantumDrive
         keys:
           - key: b
             hold: 0.8 # Optional: The duration the key will be pressed in seconds.
-      - name: OpenDoors
+      - name: HoldCurrentSpeed
         keys:
-          - key: ;
-            modifier: alt # This will press "Alt + ;" instead of just ";"
-      - name: FireTorpedo
+          - key: c
+            modifier: alt # This will press "Alt + c" instead of just "c"
+      - name: ScanArea
         keys:
-          - key: t
+          - key: v
+            hold: 0.6
         #
         # Provide phrases that will instantly activate the command (without AI roundtripping).
         # This reduces execution time from ~2-3 seconds to ~1 second and is basically "VoiceAtack Light".
@@ -99,21 +106,28 @@ wingmen:
         # We are currently looking into ways to make this faster.
         #
         instant_activation:
-          - Fire Torpedo
-          - Fire
-          - Torpedo
-      - name: InitiateFlightReady
+          - Scan Area
+          - Scan the area
+          - Initiate scan
+      - name: FlightReady
         keys:
           - key: r
             modifier: alt
         instant_activation:
-          - Initiate start sequence
           - Power up the ship
           - Start the ship
           - Flight Ready
         responses: # Provide responses that will be used when the command is executed. A random one will be chosen.
           - Powering up the ship. All systems online. Ready for takeoff.
           - Start sequence initiated. All systems online. Ready for takeoff.
+      - name: InitiateStartSequence
+        keys: # You can have multiple keys per command!
+          - key: r
+            modifier: altright
+            wait: 2 # wait 2 second before pressing the next key
+          - key: n
+            modifier: alt
+          - key: s
 
   #
   # "atc" is another default wingman like "board-computer" above.
@@ -149,15 +163,6 @@ wingmen:
         keys:
           - key: n
             modifier: alt
-      - name: TypeSOS
-        keys: # You can have multiple keys per command!
-          - key: S
-            modifier: shift
-          - key: o
-            modifier: shift
-          - key: s
-            modifier: shift
-            wait: 0.5 # wait 0.5 seconds before pressing the next key
 
   #
   # You made it until here - wow! You're probably a developer and want to create your own wingman.
@@ -238,7 +243,7 @@ wingmen:
     class:
       module: wingmen.free_wingman
       name: FreeWingman
-    debug_mode: true # If this is set to true, no hotkey will be pressed (you'll just see a console output) and the processing time is shown
+    debug_mode: true # If this is set to true, no hotkey will be actually pressed (you'll just see a console output) and the processing time is shown
     commands:
       - name: InitiateJump
         instant_activation:
