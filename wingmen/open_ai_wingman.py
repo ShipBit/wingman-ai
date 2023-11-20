@@ -1,9 +1,10 @@
+import time
 import json
-from typing import Literal
-from exceptions import MissingApiKeyException
-from wingmen.wingman import Wingman
-from services.open_ai import OpenAi
 from difflib import SequenceMatcher
+from exceptions import MissingApiKeyException
+from services.printr import Printr
+from services.open_ai import OpenAi
+from wingmen.wingman import Wingman
 
 
 class OpenAiWingman(Wingman):
@@ -126,17 +127,17 @@ class OpenAiWingman(Wingman):
         ]
         return tools
 
-    def __execute_command(self, command_name) -> Literal["Ok"]:
-        print(f">>>{command_name}<<<")
+    def __execute_command(self, command_name) -> str:
+        print(f"{Printr.clr('❖ Executing command: ', Printr.BLUE)} {command_name}")
 
         if self.config.get("debug_mode"):
             return "OK"
 
-        # Get the command from the list of commands
+        # Retrieve the command from the config
         command = next(
             (
                 item
-                for item in self.config.get("commands")
+                for item in self.config.get("commands", [])
                 if item["name"] == command_name
             ),
             None,
@@ -145,25 +146,34 @@ class OpenAiWingman(Wingman):
         if not command:
             return "Command not found"
 
+        # Try to import pydirectinput and fall back to pyautogui if necessary
         try:
-            # TODO: pydirectinput only works on Windows. We need to find a better way to do this.
-            # pylint:disable=import-outside-toplevel
-            import pydirectinput
-            import time
+            import pydirectinput as module
+        except ModuleNotFoundError:
+            print(
+                f"{Printr.clr('pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.', Printr.YELLOW)}"
+            )
+            import pyautogui as module
 
-            if not command.get("modifier") and command.get("key"):
-                if not command.get("hold"):
-                    pydirectinput.press(command["key"])
+        # Process the 'keys' or 'write' part of the command
+        keys = command.get("keys")
+        write = command.get("write")
+
+        if keys:
+            for entry in keys:
+                if entry.get("modifier"):
+                    module.keyDown(entry["modifier"])
+                if entry.get("hold"):
+                    module.keyDown(entry["key"])
+                    time.sleep(entry["hold"])
+                    module.keyUp(entry["key"])
                 else:
-                    pydirectinput.keyDown(command["key"])
-                    time.sleep(command["hold"])
-                    pydirectinput.keyUp(command["key"])
-            elif command.get("modifier") and command.get("key"):
-                pydirectinput.keyDown(command["modifier"])
-                pydirectinput.press(command["key"])
-                pydirectinput.keyUp(command["modifier"])
-        except Exception:
-            print("Keypresses are currently only supported on Windows.")
-            return "Fail"  # this will currently always happen on non-Windows systems.
+                    module.press(entry["key"])
+                if entry.get("modifier"):
+                    module.keyUp(entry["modifier"])
+                if entry.get("wait"):
+                    time.sleep(entry["wait"])
+        elif write:
+            module.write(write, command.get("interval", 0))
 
         return "Ok"
