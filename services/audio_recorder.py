@@ -1,7 +1,8 @@
+import os
 import numpy
 import sounddevice
 import soundfile
-import os
+from services.printr import Printr
 
 
 class AudioRecorder:
@@ -35,7 +36,7 @@ class AudioRecorder:
 
         self.recstream.start()
         self.is_recording = True
-        print("Recording started")
+        Printr.override_print("Recording started")
 
     def stop_recording(self) -> str:
         self.recstream.stop()
@@ -46,8 +47,8 @@ class AudioRecorder:
         try:
             soundfile.write(self.filename, self.recording, self.samplerate)
             self.recording = None
-            print("Recording stopped")
+            Printr.override_print("Recording stopped")
             return self.filename
         except IndexError:
-            print("Ignored empty recording")
+            Printr.clr_print("Ignored empty recording", Printr.YELLOW)
             return None
