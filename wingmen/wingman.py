@@ -1,9 +1,9 @@
-from importlib import import_module
-from services.audio_player import AudioPlayer
-from difflib import SequenceMatcher
-from services.printr import Printr
 import random
 import time
+from difflib import SequenceMatcher
+from importlib import import_module
+from services.audio_player import AudioPlayer
+from services.printr import Printr
 
 
 class Wingman:
@@ -67,8 +67,10 @@ class Wingman:
                     transcript.lower(),
                     phrase.lower(),
                 ).ratio()
-                if ratio > 0.8:
-                    self._execute_command(command)
+                if (
+                    ratio > 0.8
+                ):  # if the ratio is higher than 0.8, we assume that the command was spoken
+                    self._execute_command(command)  # execute the command immediately
                     if command.get("responses"):
                         return command
                     return None
@@ -95,7 +97,9 @@ class Wingman:
         if self.config.get("debug_mode"):
             return command_response
 
-        # Try to import pydirectinput and fall back to pyautogui if necessary
+        # PyDirectInput uses SIGEVENTS to send keypresses to the OS.
+        # This is the only way to send keypresses to games reliably.
+        # It only works on Windows, though. For MacOS, we fall back to PyAutoGUI.
         try:
             import pydirectinput as module
         except ModuleNotFoundError:

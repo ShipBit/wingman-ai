@@ -1,8 +1,8 @@
-# wingman-ai
+# Wingman AI
 
 Wingman AI allows you to talk to various AI providers and LLMs (like ChatGPT) via your voice, process your conversations and finally trigger actions.
 
-![Wingman Flow](wingman-flow.png)
+![Wingman Flow](assets/wingman-flow.png)
 
 The idea is pretty simple but the possibilities are endless. You could for example:
 
@@ -30,31 +30,94 @@ The projects targets two different groups of users:
 
 We try to make it as easy as possible for both groups to get started. If you're a developer, you can just clone the repository and start building your own Wingman. If you're not a developer, you can start with pre-built Wingman from us or the community and [tweak them](#configure-wingmen) to your needs.
 
-## Run Wingman on your computer
+## Run Wingman on your Computer / Mac
 
-### Windows
+Get the latest release of Wingman AI in the [releases](https://github.com/ShipBit/wingman-ai/releases) section. Make sure to download the correct one for your operating system.
 
-You can "just run" Wingman AI on Windows using the release package we provide. It's a bundled executable that has all the required dependencies included.
+Unzip it and "just run" Wingman AI. It's a bundled executable that has all the required dependencies included.
+
+There will be a Windows SmartScreen security warning: IMAGE
+
+The problem is that our package is currently _unsigned_ which triggers pretty aggressive Windows SmartScreen warnings when you try to run the executable from our package. Windows is not wrong here. We have to buy an expensive EV certificate that contains a hardware key that is sent via... physical mail. This will take a while, of course, and we didn't want to delay the first test iteration for this.
+So if you're not comfortable with running a fairly random executable from the internet on your Windows machine, please wait for a later version. Or try running our application directly in Python from code, like your fellow developers should. Or just trust us.
 
 Before you get too excited and see it fail on first attempt, open `config.yaml` and fill in your API key(s). Please read the [config section](#configure-wingmen)!
 
-### MacOS
+### Running Wingman AI
 
-We don't have a ready-to-go package for you yet, sorry. It **does** run on MacOS though, most of us even develop on MacOS.
+First wait until the welcome screen appears. It shows you the available wingmen and their activation keys.
 
-The easiest way for now is to setup your development environment like described below and to run it from source.
+![Wingman welcome screen](assets/welcome-screen.png)
+
+You can have several wingmen active at the same time. Each one is bound to a different activation key. When you see the welcome screen, you're ready to go. So start by pressing a specific activation key and hold it down while talking to your wingman (push-to-talk). Release the key when you're done talking.
+
+The Wingman AI console doesn't need to be focused, so you can just leave it running in the background while you play your game. You will then see the Wingman's response and other helpful output in the console.
+
+To exit Wingman AI, simply press `CTRL+C` in the console or close the console window.
+
+## Default Wingmen
+
+We provide several pre-built Wingmen to get you started quickly.
+
+### OpenAI Wingmen
+
+Our first two Wingmen are based on OpenAI APIs. The basic process is as follows:
+
+- Your speech is transcribed by the **Whisper API**.
+- The transcript is then sent as text to the **GPT-4 Turbo API**, which responds with a text
+- The response is then read to you by the **Text-to-Speech API**.
+
+This is literally a chat with ChatGPT. This also means that you can customize the wingmen's behavior by giving the wingman a context (or `system message`) with your own GPT prompt in the `config.yaml`.
+
+The magic happens when you configure _commands_ or key bindings in the `config.yaml`. GPT will then try to match your request with the configured commands and trigger them for you. It will automatically select the best matching command based only on its name, so make sure you give it a good one (e.g. `RequestLandingPermission`).
+
+More information about the API can be found in the [OpenAI API documentation](https://beta.openai.com/docs/introduction).
+
+#### Board computer
+
+The board computer is your AI companion that helps you with all kinds of things. You can talk to it and it answers you via GPT. It can also trigger [commands](#commands) / button presses for you. These are defined in the `config.yaml`. It is a good starting point to get to know Wingman AI.
+
+#### ATC
+
+The ATC Wingman is basically the same as the board computer, but it specializes in ATC chatter. This is a showcase example of how to build specialized wingmen for specific use cases/scenarios. The main difference is that it uses a different GPT prompt and a different set of commands.
+
+### Free-Wingman
+
+This is an example of a wingman that **does not** use OpenAI's online APIs and only relies on freely available tools instead. It is a good starting point if you want to create your own wingman with different AI services or models. It uses [Open-Source Whisper](https://github.com/openai/whisper) from OpenAI, which runs **locally on your machine**.
+
+The first time you start it, a base model is downloaded. This may take some time depending on your internet connection, so be patient. When you say something, it will recognize your language but will not send it to GPT. It will try to match your phrases with the ones defined in the `config.yaml` and trigger the configured commands for you. It will also read you the response via [Edge-TTS](https://github.com/rany2/edge-tts).
+
+Please refer to the [commands](#commands) section for more information on how to define commands.
+
+### Groot (Custom)
+
+The _Groot_ wingmen are aimed at **developers** who want to dive deeper into creating their own fully custom wingmen implementations. If you are interested, start by reading the comments in `config.yaml` and work your way through the classes and functions mentioned in the config.
+
+## Commands
+
+Commands are the heart of the Wingman AI, as they add "functions" in addition to pure conversations. Commands are defined in `config.yaml` and are activated by the corresponding Wingman as a result of a conversation with you. In the first version, they are mainly used to trigger keystrokes, but they can also be used for other actions such as calling external APIs or executing complex scripts.
+
+Here are the most important properties of a command:
+
+- `name`: This is used to match your request with the command. So make sure to give it a good name (e.g. `RequestLandingPermission`). This where Wingman commands are "better" than VoiceAttack: You don't have to say a specific phrase to trigger it. This is a very powerful concept.
+- `keys`: A list of keys to press. They will be triggered in the order they are defined. Each key can have these properties:
+  - `key`: The key to press.
+  - `modifier`: A modifier key to press with the key. _(optional)_
+  - `hold`: The time to hold the key in milliseconds. _(optional)_
+- `instant_activation`: A list of phrases that will trigger the command instantly (without AI roundtripping). _(optional)_
+- `responses`: A list of responses. If the command is executed, a random response is picked and read out to you. _(optional)_
 
 ## Configure Wingmen
 
-All relevant settings are stored in [config.yaml](https://github.com/ShipBit/wingman-ai/blob/documentation/config.example.yaml).
+All relevant settings are stored in [config.yaml](https://github.com/ShipBit/wingman-ai/blob/main/config.example.yaml).
 
-If you're running our executable, you'll find your config file linked in the same directory as the executable.
+If you're running our executable, you'll find your config file next to the executable in the same directory.
 
-If you're on MacOS or running from source, you'll find it as `config.example.yaml` in the repository root. Rename that file to `config.yaml`.
+If you're running from source, you'll find it as `config.example.yaml` in the repository root. Rename that file to `config.yaml`.
 
 We added several preconfigured Wingmen to show you a wide variety of examples and to get you started quickly. Read the documentation in the file for more information.
 
-The minimal change you have to make is to provide your [OpenAI API key](https://platform.openai.com/account/api-keys) for the preconfigured Wingmen. Search for `YOUR_API_KEY` in the config file and replace all occurences with your key.
+The minimal change you have to make is to provide your [OpenAI API key](https://platform.openai.com/account/api-keys) for the preconfigured Wingmen. There is a global setting for this in the `config.yaml`. Replace `YOUR_API_KEY` with your key.
 
 ## Set up your development environment
 
