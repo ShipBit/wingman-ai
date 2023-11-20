@@ -70,6 +70,7 @@ wingmen:
       #
       - name: DeployLandingGear
         keys:
+          # see https://github.com/learncodebygaming/pydirectinput/blob/master/pydirectinput/__init__.py for all available keys
           - key: n # The key the wingman will press when executing the command
       - name: JumpWithQuantumDrive
         keys:
@@ -127,11 +128,6 @@ wingmen:
           - key: s
             modifier: shift
             wait: 0.5 # wait 0.5 seconds before pressing the next key
-          - key: "!"
-      - name: WriteTelegram
-        # instead of "keys" you can also use "write" to write longer strings at the current keyboard cursor position
-        write: "SOS. We need help!"
-        interval: 0.25 # optional but recommended: the interval in seconds between each keypress
 
   #
   # You made it until here - wow! You're probably a developer and want to create your own wingman.

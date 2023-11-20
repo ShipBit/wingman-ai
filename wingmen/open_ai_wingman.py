@@ -128,7 +128,7 @@ class OpenAiWingman(Wingman):
         return tools
 
     def __execute_command(self, command_name) -> str:
-        print(f"{Printr.clr('❖ Executing command: ', Printr.BLUE)} {command_name}")
+        print(f"{Printr.clr('❖ Executing command:', Printr.BLUE)} {command_name}")
 
         if self.config.get("debug_mode"):
             return "OK"
@@ -155,25 +155,18 @@ class OpenAiWingman(Wingman):
             )
             import pyautogui as module
 
-        # Process the 'keys' or 'write' part of the command
-        keys = command.get("keys")
-        write = command.get("write")
-
-        if keys:
-            for entry in keys:
-                if entry.get("modifier"):
-                    module.keyDown(entry["modifier"])
-                if entry.get("hold"):
-                    module.keyDown(entry["key"])
-                    time.sleep(entry["hold"])
-                    module.keyUp(entry["key"])
-                else:
-                    module.press(entry["key"])
-                if entry.get("modifier"):
-                    module.keyUp(entry["modifier"])
-                if entry.get("wait"):
-                    time.sleep(entry["wait"])
-        elif write:
-            module.write(write, command.get("interval", 0))
+        for entry in command.get("keys"):
+            if entry.get("modifier"):
+                module.keyDown(entry["modifier"])
+            if entry.get("hold"):
+                module.keyDown(entry["key"])
+                time.sleep(entry["hold"])
+                module.keyUp(entry["key"])
+            else:
+                module.press(entry["key"])
+            if entry.get("modifier"):
+                module.keyUp(entry["modifier"])
+            if entry.get("wait"):
+                time.sleep(entry["wait"])
 
         return "Ok"
