@@ -6,6 +6,7 @@ import yaml
 from pynput import keyboard
 from exceptions import MissingApiKeyException
 from services.audio_recorder import AudioRecorder
+from services.check_version import check_version
 from services.tower import Tower
 from services.splashscreen import Splashscreen
 from services.printr import Printr
@@ -61,6 +62,8 @@ try:
 
     if __name__ == "__main__":
         Splashscreen.show(tower)
+
+        check_version(config.get("version"), "https://shipbit.de/wingman.json")
 
         with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
             print(

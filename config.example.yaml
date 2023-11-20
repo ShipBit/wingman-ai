@@ -247,3 +247,5 @@ wingmen:
         responses:
           - Jump sequence initiated
           - Jumping now
+
+version: 0.1.ea # don't touch this!
