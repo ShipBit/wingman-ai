@@ -5,6 +5,7 @@ from exceptions import MissingApiKeyException
 from services.printr import Printr
 from services.open_ai import OpenAi
 from wingmen.wingman import Wingman
+from services.open_ai import OpenAi
 
 
 class OpenAiWingman(Wingman):
@@ -23,29 +24,19 @@ class OpenAiWingman(Wingman):
         ]
 
     def _transcribe(self, audio_input_wav: str) -> str:
+        super()._transcribe(audio_input_wav)
         transcript = self.openai.transcribe(audio_input_wav)
         return transcript.text
 
     def _process_transcript(self, transcript: str) -> str:
         self.messages.append({"role": "user", "content": transcript})
 
-        # all instant activation commands
-        commands = [
-            command
-            for command in self.config["commands"]
-            if command.get("instant_activation")
-        ]
-
-        # check if transcript matches any instant activation command. Each command has a list of possible phrases
-        for command in commands:
-            for phrase in command.get("instant_activation"):
-                ratio = SequenceMatcher(
-                    None,
-                    transcript.lower(),
-                    phrase.lower(),
-                ).ratio()
-                if ratio > 0.8:
-                    return self.__execute_command(command["name"])
+        instant_activation_command = self._process_instant_activation_command(
+            transcript
+        )
+        if instant_activation_command:
+            self._play_audio(self._get_exact_response(instant_activation_command))
+            return None
 
         completion = self.openai.ask(
             messages=self.messages,
@@ -63,7 +54,10 @@ class OpenAiWingman(Wingman):
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
                 if function_name == "execute_command":
-                    function_response = self.__execute_command(**function_args)
+                    command = self._get_command(function_args["command_name"])
+                    function_response = self._execute_command(command)
+                    if command.get("responses"):
+                        self._play_audio(self._get_exact_response(command))
 
                 if function_response:
                     self.messages.append(
@@ -80,9 +74,9 @@ class OpenAiWingman(Wingman):
                 model="gpt-3.5-turbo-1106",
             )
             second_content = second_response.choices[0].message.content
-            print(second_content)
             self.messages.append(second_response.choices[0].message)
-            self._play_audio(second_content)
+            if not command.get("responses"):
+                self._play_audio(second_content)
 
         return content
 

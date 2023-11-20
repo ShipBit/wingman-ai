@@ -47,7 +47,12 @@ wingmen:
       # The "context" for the wingman.
       # This is probably what you want to play around with the most.
       #
-      context: You are the board-computer of the USS Enterprise. You are in the year 2265.
+      context: |
+        You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
+        permission. You are the ship's computer, and you are in charge of all the ship's systems. 
+        You can execute commands and even if you don't recognize a command, always respond with a full sentence
+        acknowledging the execution.
+        Always answer as quick as possible. No more than 1-2 sentences per response.
       #
       # In case you want to use different settings for different wingmen, these will override the settings above:
       #
@@ -94,6 +99,17 @@ wingmen:
           - Fire Torpedo
           - Fire
           - Torpedo
+      - name: InitiateFlightReady
+        key: r
+        modifier: alt
+        instant_activation:
+          - Initiate start sequence
+          - Power up the ship
+          - Start the ship
+          - Flight Ready
+        responses: # Provide responses that will be used when the command is executed. A random one will be chosen.
+          - Powering up the ship. All systems online. Ready for takeoff.
+          - Start sequence initiated. All systems online. Ready for takeoff.
 
   #
   # "atc" is another default wingman like "board-computer" above.
@@ -104,7 +120,17 @@ wingmen:
     # Oh yeah, that's a thing, too. We added this because we think you'll collect Wingmen like Pokemon ;)
     #disabled: true
     openai:
-      context: You are an ATC of a space station.
+      context: |
+        You are an advanced AI embodying an Air Traffic Controller (ATC) at a bustling space station in the Star Citizen universe. Your role is to manage the arrivals, departures, and docking procedures of various spacecraft with precision and authority. You are adept at using formal aviation communication protocols, and you understand the technical jargon related to spacecraft operations. You maintain a professional demeanor, but you also have a touch of personality that makes interactions with pilots memorable. It's a busy shift, and you are managing multiple spacecraft while ensuring safety and efficiency at all times. Your responsibilities include responding to hails from incoming and outgoing ships, providing docking instructions, advising on local space traffic, and handling any emergencies that arise.
+        Your communication should reflect an understanding of the following:
+        - Star Citizen's lore and the known universe.
+        - Identifying ships by their designated call signs.
+        - Issuing precise landing pad assignments.
+        - Clearing ships for take-off with attention to surrounding traffic.
+        - Managing flight paths to avoid collisions or space hazards.
+        - Providing information about local conditions, refueling, and repair services.
+        - Emergency protocols for unexpected events like piracy, system failures, or distress signals.
+        Always answer as quick as possible. No more than 1-2 sentences per response.
       tts_voice: onyx # overrides the GLOBAL setting
     record_key: delete
     features: # overrides the GLOBAL settings
@@ -193,3 +219,28 @@ wingmen:
     class:
       module: wingmen.edge_tts_groot
       name: EdgeTtsGroot
+
+  #
+  # This is an all-free wingman using Open Source Whisper, instant commands and responses and Edge TTS.
+  # Open Source Whisper runs locally and will download a model on first use. This may take some time, but after
+  # this, it's of course faster. It might not be as fast as the online OpenAI Whisper service, but it's free.
+  # This wingman skips the GPT Part (because it costs) and is just relaying on the instant activation phrases and
+  # responses you have to provide in this config. For text to speech the Edge TTS Service is used. Right now
+  # it's even faster than OpenAI TTS and it's also free. Downside of this: Right now it's not detecting the language
+  # and automatically changes the output, but we could implement this in a future release.
+  #
+  free-wingman:
+    record_key: left
+    class:
+      module: wingmen.free_wingman
+      name: FreeWingman
+    debug_mode: true # If this is set to true, no hotkey will be pressed (you'll just see a console output) and the processing time is shown
+    commands:
+      - name: InitiateJump
+        instant_activation:
+          - Initiate jump
+          - Initiate jump sequence
+          - jump
+        responses:
+          - Jump sequence initiated
+          - Jumping now
