@@ -73,9 +73,23 @@ The ATC wingman is basically the same as the board-computer, but it's specialize
 
 This is an example of a Wingman that does not use OpenAI online API's and just relies on free to use tools. It's a good starting point if you want to build your own Wingman with different AI services / models. It uses [Open-Source Whisper](https://github.com/openai/whisper) from OpenAI, which runs locally on your machine. On the first start it will download a basic model. This will take some time, based on your internet connection, so be patient. If you say something, it will recognize your speech, but will not send it to GPT. It will try to match your phrases with the ones defined in the `config.yaml` and trigger the configured commands for you. It will also read out the response to you via [Edge-TTS](https://github.com/rany2/edge-tts). Please read the [commands](#commands) section for more information on how to define commands.
 
+### Groot
+
+The groot wingmen are more targeting developers who want to dive deeper in creating their own wingmen implementations. More on that later. For now, just know that it's a good starting point for developers.
+
 ## Commands
 
-tbd
+Commands are the core of Wingman AI. They define what your Wingman can do for you. They are defined in the `config.yaml` and can be triggered by your Wingman. In the first version they are mainly used to trigger keypresses, but they can also be used to trigger other actions, like calling an API or running a script.
+
+Here are the main properties of a command:
+
+- name: The name of the command. This is used to match your request with the command. So make sure to give it a good name (e.g. `RequestLandingPermission`).
+- keys: A list of keys to press. They will be triggered in the order they are defined. Each key can have these properties:
+  - key: The key to press.
+  - modifier: A modifier key to press with the key. This is optional.
+  - hold: The time to hold the key in milliseconds. This is optional.
+- instant_activation: A list of phrases that will trigger the command instantly (without AI roundtripping). This is optional.
+- responses: A list of responses. If the command is executed, a random response is picked and read out to you. This is optional.
 
 ## Configure Wingmen
 
