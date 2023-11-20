@@ -28,6 +28,8 @@ class OpenAiWingman(Wingman):
     def _process_transcript(self, transcript: str) -> str:
         self.messages.append({"role": "user", "content": transcript})
 
+        # check if the transcript is an instant activation command. If so, it will
+        # be executed immediately and no further processing is needed.
         instant_activation_command = self._process_instant_activation_command(
             transcript
         )
@@ -35,6 +37,7 @@ class OpenAiWingman(Wingman):
             self._play_audio(self._get_exact_response(instant_activation_command))
             return None
 
+        # this is the main GPT call inkl. tools / functions
         completion = self.openai.ask(
             messages=self.messages,
             tools=self.__get_tools(),
@@ -44,18 +47,24 @@ class OpenAiWingman(Wingman):
         tool_calls = response_message.tool_calls
         content = response_message.content
 
+        # add the response message to the messages list so that it can be used in the next GPT call
         self.messages.append(response_message)
 
+        # if there are tool calls, we have to process them
         if tool_calls:
-            for tool_call in tool_calls:
+            for tool_call in tool_calls:  # there could be multiple tool calls at once
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
                 if function_name == "execute_command":
+                    # get the command based on the argument passed by GPT
                     command = self._get_command(function_args["command_name"])
+                    # execute the command
                     function_response = self._execute_command(command)
+                    # if the command has responses, we have to play one of them
                     if command.get("responses"):
                         self._play_audio(self._get_exact_response(command))
 
+                # add the response of the function to the messages list so that it can be used in the next GPT call
                 if function_response:
                     self.messages.append(
                         {
@@ -66,14 +75,15 @@ class OpenAiWingman(Wingman):
                         }
                     )
 
+            # make a second GPT call to process the function responses. This basically summarizes the function responses
+            # for this we don't need GPT-4 Turbo, GPT-3.5 is enough
             second_response = self.openai.ask(
                 messages=self.messages,
                 model="gpt-3.5-turbo-1106",
             )
             second_content = second_response.choices[0].message.content
             self.messages.append(second_response.choices[0].message)
-            if not command.get("responses"):
-                self._play_audio(second_content)
+            self._play_audio(second_content)
 
         return content
 

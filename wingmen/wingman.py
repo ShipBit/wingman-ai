@@ -67,8 +67,10 @@ class Wingman:
                     transcript.lower(),
                     phrase.lower(),
                 ).ratio()
-                if ratio > 0.8:
-                    self._execute_command(command)
+                if (
+                    ratio > 0.8
+                ):  # if the ratio is higher than 0.8, we assume that the command was spoken
+                    self._execute_command(command)  # execute the command immediately
                     if command.get("responses"):
                         return command
                     return None
