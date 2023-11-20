@@ -16,6 +16,9 @@ class Tower:
         if not merged.get("openai"):
             merged["openai"] = {}
         merged["openai"].update(general["openai"])
+        if not merged.get("features"):
+            merged["features"] = {}
+        merged["features"].update(general["features"])
         return merged
 
     def __get_wingmen(self) -> list[Wingman]:
