@@ -1,14 +1,14 @@
 from importlib import import_module
 from services.audio_player import AudioPlayer
 from difflib import SequenceMatcher
-from typing import Literal
+from services.printr import Printr
 import random
 import time
 
 
 class Wingman:
     start_time = None
-    
+
     def __init__(self, name: str, config: dict[str, any]):
         self.config = config
         self.name = name
@@ -46,7 +46,7 @@ class Wingman:
             None,
         )
         return command
-    
+
     def _process_instant_activation_command(self, transcript) -> bool | None:
         # all instant activation commands
         instant_activation_commands = [
@@ -69,44 +69,50 @@ class Wingman:
                         return command
                     return None
         return None
-    
+
     def _get_exact_response(self, command):
         response = random.choice(command.get("responses"))
         return response
-    
-    def _execute_command(self, command) -> Literal["Ok"]:
+
+    def _execute_command(self, command) -> str:
         if not command:
             return "Command not found"
 
         if self.config.get("debug_mode") and self.start_time:
             end_time = time.perf_counter()
             print(f"Execution Time: {end_time - self.start_time}")
-        print(f">>>{command.get('name')}<<<")
+
+        print(
+            f"{Printr.clr('❖ Executing command:', Printr.BLUE)} {command.get('name')}"
+        )
 
         command_response = "Ok"
 
         if self.config.get("debug_mode"):
             return command_response
 
+        # Try to import pydirectinput and fall back to pyautogui if necessary
         try:
-            # TODO: pydirectinput only works on Windows. We need to find a better way to do this.
-            # pylint:disable=import-outside-toplevel
-            import pydirectinput
+            import pydirectinput as module
+        except ModuleNotFoundError:
+            print(
+                f"{Printr.clr('pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.', Printr.YELLOW)}"
+            )
+            import pyautogui as module
 
-            if not command.get("modifier") and command.get("key"):
-                if not command.get("hold"):
-                    pydirectinput.press(command["key"])
-                else:
-                    pydirectinput.keyDown(command["key"])
-                    time.sleep(command["hold"])
-                    pydirectinput.keyUp(command["key"])
-            elif command.get("modifier") and command.get("key"):
-                pydirectinput.keyDown(command["modifier"])
-                pydirectinput.press(command["key"])
-                pydirectinput.keyUp(command["modifier"])
-        except Exception:
-            print("Keypresses are currently only supported on Windows.")
-            return "Fail"  # this will currently always happen on non-Windows systems.
+        for entry in command.get("keys"):
+            if entry.get("modifier"):
+                module.keyDown(entry["modifier"])
+            if entry.get("hold"):
+                module.keyDown(entry["key"])
+                time.sleep(entry["hold"])
+                module.keyUp(entry["key"])
+            else:
+                module.press(entry["key"])
+            if entry.get("modifier"):
+                module.keyUp(entry["modifier"])
+            if entry.get("wait"):
+                time.sleep(entry["wait"])
 
         return command_response
 
