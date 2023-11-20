@@ -12,21 +12,27 @@ class Tower:
             self.key_wingman_dict[wingman.get_record_key()] = wingman
 
     def merge_configs(self, general, overrides):
-        merged = overrides.copy()
-        if not merged.get("openai"):
-            merged["openai"] = {}
-        merged["openai"].update(general["openai"])
-        if not merged.get("features"):
-            merged["features"] = {}
-        merged["features"].update(general["features"])
-        return merged
+        def recursive_update(d, u):
+            for k, v in u.items():
+                if isinstance(v, dict):
+                    d[k] = recursive_update(d.get(k, {}), v)
+                else:
+                    d[k] = v
+            return d
+
+        # Copy the general configuration and update with overrides recursively
+        merged_config = recursive_update(general.copy(), overrides)
+        return merged_config
 
     def __get_wingmen(self) -> list[Wingman]:
         wingmen = []
         for wingman_name, wingman_config in self.config["wingmen"].items():
-            if self.config.get("disabled") == True:
+            if self.config.get("disabled") is True:
                 continue
-            merged_config = self.merge_configs(self.config, wingman_config)
+            merged_config = self.merge_configs(
+                {"openai": self.config["openai"], "features": self.config["features"]},
+                wingman_config,
+            )
             class_config = merged_config.get("class")
             if class_config:
                 kwargs = class_config.get("args", {})
