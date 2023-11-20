@@ -51,8 +51,9 @@ def on_release(key):
             finally:
                 loop.close()
 
-        play_thread = threading.Thread(target=run_async_process)
-        play_thread.start()
+        if recorded_audio_wav:
+            play_thread = threading.Thread(target=run_async_process)
+            play_thread.start()
 
 
 try:

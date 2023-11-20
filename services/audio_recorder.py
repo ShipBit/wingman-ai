@@ -43,8 +43,11 @@ class AudioRecorder:
 
         if not os.path.exists("audio_output"):
             os.makedirs("audio_output")
-
-        soundfile.write(self.filename, self.recording, self.samplerate)
-        self.recording = None
-        print("Recording stopped")
-        return self.filename
+        try:
+            soundfile.write(self.filename, self.recording, self.samplerate)
+            self.recording = None
+            print("Recording stopped")
+            return self.filename
+        except IndexError:
+            print("Ignored empty recording")
+            return None
