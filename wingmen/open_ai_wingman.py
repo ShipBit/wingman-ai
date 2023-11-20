@@ -1,8 +1,5 @@
-import time
 import json
-from difflib import SequenceMatcher
 from exceptions import MissingApiKeyException
-from services.printr import Printr
 from services.open_ai import OpenAi
 from wingmen.wingman import Wingman
 from services.open_ai import OpenAi

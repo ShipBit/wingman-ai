@@ -28,10 +28,10 @@ class Wingman:
 
     async def process(self, audio_input_wav: str):
         transcript = self._transcribe(audio_input_wav)
-        print(f" >> {transcript}")
+        print(f"{Printr.clr('>>', Printr.LILA)} {Printr.clr(transcript, Printr.LILA)}")
 
         response = self._process_transcript(transcript)
-        print(f" << {response}")
+        print(f"{Printr.clr('<<', Printr.GREEN)} {Printr.clr(response, Printr.GREEN)}")
 
         self._finish_processing(response)
 

@@ -1,17 +1,18 @@
 from wingmen.wingman import Wingman
 from services.edge import EdgeTTS
+from services.printr import Printr
 import whisper
 
 
 class FreeWingman(Wingman):
     async def process(self, _audio_input_wav: str):
         transcript = self._transcribe(_audio_input_wav)
-        print(f" >> {transcript}")
+        print(f"{Printr.clr('>>', Printr.LILA)} {Printr.clr(transcript, Printr.LILA)}")
 
         response = self._process_transcript(transcript)
         if response is None:
             return
-        print(f" << {response}")
+        print(f"{Printr.clr('<<', Printr.GREEN)} {Printr.clr(response, Printr.GREEN)}")
 
         edge_tts = EdgeTTS()
         random_voice = await edge_tts.get_random_voice()

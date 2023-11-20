@@ -100,8 +100,9 @@ wingmen:
           - Fire
           - Torpedo
       - name: InitiateFlightReady
-        key: r
-        modifier: alt
+        keys:
+          - key: r
+            modifier: alt
         instant_activation:
           - Initiate start sequence
           - Power up the ship
