@@ -5,6 +5,7 @@
 # Found a mistake? Missing something?
 # Please feel free to open a Pull Request on GitHub instead of asking us to change it for you. Thanks!
 #
+version: 1.0.0a1 # don't touch this!
 # ===================================================================================================
 #
 # GLOBAL configuration:
@@ -29,7 +30,6 @@ openai:
 features:
   play_beep_on_receiving: false
   enable_radio_sound_effect: false # adds noise to messages
-
 #
 # ===================================================================================================
 #
@@ -51,7 +51,7 @@ wingmen:
       #
       context: |
         You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
-        permission. You are the ship's computer, and you are in charge of all the ship's systems. 
+        permission. You are the ship's computer, and you are in charge of all the ship's systems.
         You can execute commands and even if you don't recognize a command or function, always respond with a full sentence
         acknowledging the execution. Never say you don't have capabilities to execute a function or command.
         Always answer as quick as possible. No more than 1-2 sentences per response.
@@ -262,5 +262,3 @@ wingmen:
         responses:
           - Jump sequence initiated
           - Jumping now
-
-version: 0.1.ea # don't touch this!
