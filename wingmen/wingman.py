@@ -1,8 +1,14 @@
 from importlib import import_module
 from services.audio_player import AudioPlayer
+from difflib import SequenceMatcher
+from services.printr import Printr
+import random
+import time
 
 
 class Wingman:
+    start_time = None
+
     def __init__(self, name: str, config: dict[str, any]):
         self.config = config
         self.name = name
@@ -22,25 +28,103 @@ class Wingman:
 
     async def process(self, audio_input_wav: str):
         transcript = self._transcribe(audio_input_wav)
-        print(f" >> {transcript}")
+        print(f"{Printr.clr('>>', Printr.LILA)} {Printr.clr(transcript, Printr.LILA)}")
 
         response = self._process_transcript(transcript)
-        print(f" << {response}")
+        print(f"{Printr.clr('<<', Printr.GREEN)} {Printr.clr(response, Printr.GREEN)}")
 
         self._finish_processing(response)
+
+    def _get_command(self, command_name):
+        # Get the command from the list of commands
+        command = next(
+            (
+                item
+                for item in self.config.get("commands")
+                if item["name"] == command_name
+            ),
+            None,
+        )
+        return command
+
+    def _process_instant_activation_command(self, transcript) -> bool | None:
+        # all instant activation commands
+        instant_activation_commands = [
+            command
+            for command in self.config["commands"]
+            if command.get("instant_activation")
+        ]
+
+        # check if transcript matches any instant activation command. Each command has a list of possible phrases
+        for command in instant_activation_commands:
+            for phrase in command.get("instant_activation"):
+                ratio = SequenceMatcher(
+                    None,
+                    transcript.lower(),
+                    phrase.lower(),
+                ).ratio()
+                if ratio > 0.8:
+                    self._execute_command(command)
+                    if command.get("responses"):
+                        return command
+                    return None
+        return None
+
+    def _get_exact_response(self, command):
+        response = random.choice(command.get("responses"))
+        return response
+
+    def _execute_command(self, command) -> str:
+        if not command:
+            return "Command not found"
+
+        if self.config.get("debug_mode") and self.start_time:
+            end_time = time.perf_counter()
+            print(f"Execution Time: {end_time - self.start_time}")
+
+        print(
+            f"{Printr.clr('❖ Executing command:', Printr.BLUE)} {command.get('name')}"
+        )
+
+        command_response = "Ok"
+
+        if self.config.get("debug_mode"):
+            return command_response
+
+        # Try to import pydirectinput and fall back to pyautogui if necessary
+        try:
+            import pydirectinput as module
+        except ModuleNotFoundError:
+            print(
+                f"{Printr.clr('pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.', Printr.YELLOW)}"
+            )
+            import pyautogui as module
+
+        for entry in command.get("keys"):
+            if entry.get("modifier"):
+                module.keyDown(entry["modifier"])
+            if entry.get("hold"):
+                module.keyDown(entry["key"])
+                time.sleep(entry["hold"])
+                module.keyUp(entry["key"])
+            else:
+                module.press(entry["key"])
+            if entry.get("modifier"):
+                module.keyUp(entry["modifier"])
+            if entry.get("wait"):
+                time.sleep(entry["wait"])
+
+        return command_response
 
     # virtual methods:
 
     def _transcribe(self, audio_input_wav: str) -> str:
-        print(
-            "Called '_transcribe' function in base class. You should probably override this or the 'process' function."
-        )
+        if self.config.get("debug_mode"):
+            self.start_time = time.perf_counter()
+
         return ""
 
     def _process_transcript(self, transcript: str) -> str:
-        print(
-            "Called '_process_transcript' function in base class. You should probably override this or the 'process' function."
-        )
         return ""
 
     def _finish_processing(self, text: str):

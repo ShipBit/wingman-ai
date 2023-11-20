@@ -1,4 +1,5 @@
-from edge_tts import Communicate
+from edge_tts import Communicate, VoicesManager
+import random
 
 # List available voices in your terminal using 'edge-tts --list-voices'.
 #
@@ -22,3 +23,9 @@ class EdgeTTS:
         await communicate.save(filename)
 
         return communicate
+
+    async def get_random_voice(self, gender: str = "Male", language: str = "en") -> str:
+        voices = await VoicesManager.create()
+        voice = voices.find(Gender=gender, Language=language)
+        random_voice = random.choice(voice)
+        return random_voice.get("Name")

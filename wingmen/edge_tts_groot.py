@@ -5,5 +5,5 @@ from services.edge import EdgeTTS
 class EdgeTtsGroot(Wingman):
     async def process(self, _audio_input_wav: str):
         edge_tts = EdgeTTS()
-        await edge_tts.generate_speech("I am Groot", filename="groot.mp3")
-        self.audio_player.play("groot.mp3")
+        await edge_tts.generate_speech("I am Groot", filename="audio_output/groot.mp3")
+        self.audio_player.play("audio_output/groot.mp3")
