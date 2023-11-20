@@ -69,17 +69,28 @@ wingmen:
       # We're currently looking into how we can provide more control over this.
       #
       - name: DeployLandingGear
-        key: n # The key the wingman will press when executing the command
+        keys:
+          # see https://github.com/learncodebygaming/pydirectinput/blob/master/pydirectinput/__init__.py for all available keys
+          - key: n # The key the wingman will press when executing the command
       - name: JumpWithQuantumDrive
-        key: b
-        hold: 0.8 # Optional: The duration the key will be pressed in seconds.
-        # This will press "Alt + ;" instead of just ";":
+        keys:
+          - key: b
+            hold: 0.8 # Optional: The duration the key will be pressed in seconds.
       - name: OpenDoors
-        modifier: alt # Optional: The modifier key to press while executing the command.
-        key: ;
+        keys:
+          - key: ;
+            modifier: alt # This will press "Alt + ;" instead of just ";"
       - name: FireTorpedo
-        key: t
-        instant_activation: # Provide phrases that will instantly activate the command, without asking GPT (saves time).
+        keys:
+          - key: t
+        #
+        # Provide phrases that will instantly activate the command (without AI roundtripping).
+        # This reduces execution time from ~2-3 seconds to ~1 second and is basically "VoiceAtack Light".
+        # You have to say one exact phrases for this to work.
+        #
+        # We are currently looking into ways to make this faster.
+        #
+        instant_activation:
           - Fire Torpedo
           - Fire
           - Torpedo
@@ -101,11 +112,22 @@ wingmen:
       enable_radio_sound_effect: true
     commands:
       - name: RequestLandingPermission
-        modifier: alt
-        key: n
+        keys:
+          - key: n
+            modifier: alt
       - name: RequestDeparture
-        modifier: alt
-        key: n
+        keys:
+          - key: n
+            modifier: alt
+      - name: TypeSOS
+        keys: # You can have multiple keys per command!
+          - key: S
+            modifier: shift
+          - key: o
+            modifier: shift
+          - key: s
+            modifier: shift
+            wait: 0.5 # wait 0.5 seconds before pressing the next key
 
   #
   # You made it until here - wow! You're probably a developer and want to create your own wingman.
