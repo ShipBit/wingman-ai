@@ -74,16 +74,16 @@ class OpenAiWingman(Wingman):
                     if command.get("responses"):
                         self._play_audio(self._get_exact_response(command))
 
-                # add the response of the function to the messages list so that it can be used in the next GPT call
-                if function_response:
-                    self.messages.append(
-                        {
-                            "tool_call_id": tool_call.id,
-                            "role": "tool",
-                            "name": function_name,
-                            "content": function_response,
-                        }
-                    )
+                    # add the response of the function to the messages list so that it can be used in the next GPT call
+                    if function_response:
+                        self.messages.append(
+                            {
+                                "tool_call_id": tool_call.id,
+                                "role": "tool",
+                                "name": function_name,
+                                "content": function_response,
+                            }
+                        )
 
             # Make a second GPT call to process the function responses.
             # This basically summarizes the function responses.
@@ -93,6 +93,7 @@ class OpenAiWingman(Wingman):
                 messages=self.messages,
                 model=summarize_model,
             )
+
             if second_response is None:
                 return None
 
