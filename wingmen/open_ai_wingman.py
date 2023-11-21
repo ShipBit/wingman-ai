@@ -1,4 +1,5 @@
 import json
+import requests
 from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
 from services.printr import Printr
@@ -23,6 +24,49 @@ class OpenAiWingman(Wingman):
                 "content": self.config["openai"].get("context"),
             },
         ]
+
+        self.__init_star_head()        
+
+    def __init_star_head(self):
+        # Setup StarHead
+        # The API endpoint URL
+        self.star_head_url = "https://api-test.star-head.de"
+
+        # GET all ships
+        response = requests.get(f"{self.star_head_url}/vehicle")
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Parse the JSON response
+            self.vehicles = response.json()
+            
+            # Extract a list of ship names
+            self.ship_names = [vehicle['model'] + ' ' + vehicle['name'] if vehicle['model'] != vehicle['name'] else vehicle['name'] for vehicle in self.vehicles if vehicle['type'] == 'Ship']
+        else:
+            print(f'Failed to retrieve vehicles. Status code: {response.status_code}')
+
+        # Get all celestial objects
+        response = requests.get(f"{self.star_head_url}/celestialobject")
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Parse the JSON response
+            self.celestial_objects = response.json()
+            
+            # Extract a list of celestial object names
+            self.celestial_object_names = [celestial_object['name'] for celestial_object in self.celestial_objects]
+        else:
+            print(f'Failed to retrieve celestial objects. Status code: {response.status_code}')
+
+        # Get all quantum drives
+        params = {
+            'typeFilter': '8',
+        }
+        response = requests.get(f"{self.star_head_url}/vehiclecomponent")
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Parse the JSON response
+            self.quantum_drives = response.json()
+        else:
+            print(f'Failed to retrieve quantum drives. Status code: {response.status_code}')
 
     def _transcribe(self, audio_input_wav: str) -> str:
         super()._transcribe(audio_input_wav)
@@ -75,6 +119,12 @@ class OpenAiWingman(Wingman):
                     if command and command.get("responses"):
                         self._play_audio(self._get_exact_response(command))
 
+                if function_name == "get_best_trading_route":
+                    # get the best trading route based on the arguments passed by GPT
+                    function_response = self.__get_best_trading_route(
+                        function_args["ship"], function_args["position"]
+                    )
+
                 # add the response of the function to the messages list so that it can be used in the next GPT call
                 self.messages.append(
                     {
@@ -116,6 +166,61 @@ class OpenAiWingman(Wingman):
                 self.config.get("features", {}).get("enable_radio_sound_effect"),
             )
 
+    def __get_best_trading_route(self, ship, position):
+        print(f"Call StarHead - Ship: {ship}, Position: {position}")
+        cargo, qd = self.__get_ship_details(ship)
+        celestial_object_id = self.__get_celestial_object_id(position)
+
+        data = {
+            "startCelestialObjectId": celestial_object_id,
+            "quantumDriveId": qd.get('id'),
+            "maxAvailablScu": cargo,
+            "maxAvailableMoney": 50000,
+            "useOnlyWeaponFreeZones": False,
+            "onlySingleSections": True,
+        }
+
+        response = requests.post(f"{self.star_head_url}/trading", json=data)
+
+        section = response.json()[0]
+
+        print(section)
+        return json.dumps(section)
+    
+    def __get_celestial_object_id(self, name):
+        for celestial_object in self.celestial_objects:
+            if celestial_object['name'].lower() == name.lower():
+                return celestial_object['id']
+        return None
+    
+    def __get_ship_details(self, ship_name):        
+        for vehicle in self.vehicles:
+            # Construct a ship identifier that includes both model and name if they're different
+            constructed_name = f"{vehicle['model']} {vehicle['name']}" if vehicle['model'] != vehicle['name'] else vehicle['name']
+            if constructed_name.lower() == ship_name.lower():
+                cargo = vehicle.get('scuCargo')
+                loadouts = self.__get_ship_loadout(vehicle.get('id'))
+                if loadouts:
+                    loadout = next((l for l in loadouts.get("loadouts") if l['isDefaultLayout']), None)
+                    if loadout:
+                        for qd in self.quantum_drives:
+                            for item in loadout.get('data'):
+                                if item.get('componentId') == qd.get('id'):
+                                    return cargo, qd
+        return None, None
+    
+    def __get_ship_loadout(self, ship_id):
+        if not ship_id:
+            return None
+
+        response = requests.get(f"{self.star_head_url}/vehicle/{ship_id}/loadout")
+        # Check if the request was successful
+        if response.status_code == 200:
+            # Parse the JSON response
+            return response.json()
+        else:
+            return None
+
     def __get_tools(self) -> list[dict[str, any]]:
         # all commands that are NOT instant_activation
         commands = [
@@ -142,5 +247,28 @@ class OpenAiWingman(Wingman):
                     },
                 },
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_best_trading_route",
+                    "description": "Determines the (best) trade route for a spaceship and its current position.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "ship": {
+                                "type": "string",
+                                "description": "The spaceship for which the trade route is to be determined.",
+                                "enum": self.ship_names,
+                            },
+                            "position": {
+                                "type": "string",
+                                "description": "The current position of the spaceship.",
+                                "enum": self.celestial_object_names,
+                            },
+                        },
+                        "required": ["ship", "position"],
+                    },
+                }
+            }
         ]
         return tools
