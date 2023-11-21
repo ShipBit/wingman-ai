@@ -122,7 +122,7 @@ class OpenAiWingman(Wingman):
                 if function_name == "get_best_trading_route":
                     # get the best trading route based on the arguments passed by GPT
                     function_response = self.__get_best_trading_route(
-                        function_args["ship"], function_args["position"]
+                        **function_args
                     )
 
                 # add the response of the function to the messages list so that it can be used in the next GPT call
@@ -166,8 +166,8 @@ class OpenAiWingman(Wingman):
                 self.config.get("features", {}).get("enable_radio_sound_effect"),
             )
 
-    def __get_best_trading_route(self, ship, position):
-        print(f"Call StarHead - Ship: {ship}, Position: {position}")
+    def __get_best_trading_route(self, ship, position, moneyToSpend):
+        print(f"Call StarHead - Ship: {ship}, Position: {position} - Money to spend: {moneyToSpend}")
         cargo, qd = self.__get_ship_details(ship)
         celestial_object_id = self.__get_celestial_object_id(position)
 
@@ -175,7 +175,7 @@ class OpenAiWingman(Wingman):
             "startCelestialObjectId": celestial_object_id,
             "quantumDriveId": qd.get('id'),
             "maxAvailablScu": cargo,
-            "maxAvailableMoney": 50000,
+            "maxAvailableMoney": moneyToSpend,
             "useOnlyWeaponFreeZones": False,
             "onlySingleSections": True,
         }
@@ -265,8 +265,12 @@ class OpenAiWingman(Wingman):
                                 "description": "The current position of the spaceship.",
                                 "enum": self.celestial_object_names,
                             },
+                            "moneyToSpend": {
+                                "type": "number",
+                                "description": "The maximum amount of money to spend on the trade route.",
+                            },
                         },
-                        "required": ["ship", "position"],
+                        "required": ["ship", "position", "moneyToSpend"],
                     },
                 }
             }
