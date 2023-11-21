@@ -16,6 +16,7 @@ class Printr:
     FRAMED = '\033[51m'
     ENCIRCLED = '\033[52m'
     DELETE_LINE = '\033[2K\033[1G'
+    PREVIOUS_LINE = '\033[2F'
 
     @staticmethod
     def clr(text, color_format):
@@ -26,11 +27,27 @@ class Printr:
         print(Printr.clr(text, color_format))
 
     @staticmethod
-    def err_print(text, first_message = True):
+    def sys_print(text, headline = "", color = RED, first_message = True):
         if (first_message):
             print("")
-            print(Printr.clr(f"{Printr.BOLD}Something went wrong!{Printr.NORMAL_WEIGHT}", Printr.RED))
-        print(Printr.clr(f"⎢ {text}", Printr.RED))
+            if headline.strip():
+                print(Printr.clr(f"{Printr.BOLD}{headline}{Printr.NORMAL_WEIGHT}", color))
+        else:
+            print(Printr.PREVIOUS_LINE)
+        print(Printr.clr(f"⎢ {text}", color))
+        print("")
+
+    @staticmethod
+    def err_print(text, first_message = True):
+        Printr.sys_print(text, "Something went wrong!", first_message = first_message)
+
+    @staticmethod
+    def warn_print(text, first_message = True):
+        Printr.sys_print(text, "Please note:", Printr.YELLOW, first_message)
+
+    @staticmethod
+    def info_print(text, first_message = True):
+        Printr.sys_print(text, "", Printr.BLUE, first_message)
 
     @staticmethod
     def override_print(text):
