@@ -90,11 +90,13 @@ class OpenAi:
     def _handle_api_error(self, api_response):
         Printr.err_print(f"The OpenAI API send the following error code {Printr.BOLD}{api_response.status_code}{Printr.NORMAL_WEIGHT} ({Printr.FAINT}{api_response.type}{Printr.NORMAL_WEIGHT})")
         # get API message from appended JSON object in the "message" part of the exception
-        m = re.search(r"'message': '(?P<message>.+?)'", api_response.message)
+        m = re.search(r"'message': (?P<quote>['\"])(?P<message>.+?)(?P=quote)", api_response.message)
         if m is not None:
             message_lines = m['message'].split('. ')
             for line in message_lines:
                 Printr.err_print(line, False)
+        else if api_response.message:
+            Printr.err_print(api_response.message, False)
         else:
             Printr.err_print('The API did not provide further information.', False)
 
