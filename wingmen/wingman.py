@@ -4,7 +4,14 @@ from difflib import SequenceMatcher
 from importlib import import_module
 from services.audio_player import AudioPlayer
 from services.printr import Printr
-
+# PyDirectInput uses SIGEVENTS to send keypresses to the OS.
+# This is the only way to send keypresses to games reliably.
+# It only works on Windows, though. For MacOS, we fall back to PyAutoGUI.
+try:
+    import pydirectinput as key_module
+except AttributeError:
+    Printr.warn_print('pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.')
+    import pyautogui as key_module
 
 class Wingman:
     start_time = None
@@ -13,6 +20,7 @@ class Wingman:
         self.config = config
         self.name = name
         self.audio_player = AudioPlayer()
+
 
     @staticmethod
     def create_dynamically(
@@ -28,16 +36,17 @@ class Wingman:
 
     async def process(self, audio_input_wav: str):
         transcript = self._transcribe(audio_input_wav)
-        print(
-            f"{Printr.clr('>> (You):', Printr.LILA)} {Printr.clr(transcript, Printr.LILA)}"
-        )
+        if transcript:
+            print(
+                f"{Printr.clr('>> (You):', Printr.LILA)} {Printr.clr(transcript, Printr.LILA)}"
+            )
 
-        response = self._process_transcript(transcript)
-        print(
-            f"{Printr.clr('<<', Printr.GREEN)} ({Printr.clr(self.name, Printr.GREEN)}): {Printr.clr(response, Printr.GREEN)}"
-        )
+            response = self._process_transcript(transcript)
+            print(
+                f"{Printr.clr('<<', Printr.GREEN)} ({Printr.clr(self.name, Printr.GREEN)}): {Printr.clr(response, Printr.GREEN)}"
+            )
 
-        self._finish_processing(response)
+            self._finish_processing(response)
 
     def _get_command(self, command_name):
         # Get the command from the list of commands
@@ -97,28 +106,17 @@ class Wingman:
         if self.config.get("debug_mode"):
             return command_response
 
-        # PyDirectInput uses SIGEVENTS to send keypresses to the OS.
-        # This is the only way to send keypresses to games reliably.
-        # It only works on Windows, though. For MacOS, we fall back to PyAutoGUI.
-        try:
-            import pydirectinput as module
-        except ModuleNotFoundError:
-            print(
-                f"{Printr.clr('pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.', Printr.YELLOW)}"
-            )
-            import pyautogui as module
-
         for entry in command.get("keys"):
             if entry.get("modifier"):
-                module.keyDown(entry["modifier"])
+                key_module.keyDown(entry["modifier"])
             if entry.get("hold"):
-                module.keyDown(entry["key"])
+                key_module.keyDown(entry["key"])
                 time.sleep(entry["hold"])
-                module.keyUp(entry["key"])
+                key_module.keyUp(entry["key"])
             else:
-                module.press(entry["key"])
+                key_module.press(entry["key"])
             if entry.get("modifier"):
-                module.keyUp(entry["modifier"])
+                key_module.keyUp(entry["modifier"])
             if entry.get("wait"):
                 time.sleep(entry["wait"])
 
