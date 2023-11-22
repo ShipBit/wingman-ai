@@ -23,8 +23,8 @@ openai:
   #
   tts_voice: nova
   #
-  # The model to use for conversations. This model also determines which functions / commands to call,
-  # so you might want to set it to gpt-4-turbo if something is not working as expected.
+  # The model to use for conversations. GPT-4 is more expensive but also more powerful. So if something is not working
+  # as expected, you might want to set it to gpt-4-turbo.
   # Other choices are: gpt-4-1106-preview
   #
   conversation_model: gpt-3.5-turbo-1106
