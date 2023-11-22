@@ -103,7 +103,7 @@ class OpenAi:
         # Provide additional info an known issues
         match api_response.status_code:
             case 400:
-                Printr.info_print("We are still investigating this issue.", False)
+                Printr.info_print("These errors can have multiple root causes.", False)
                 Printr.info_print("Please have an eye on our Discord 'early-access' channel for the latest updates.", False)
             case 401:
                 Printr.info_print("This is a key related issue. Please check the keys you provided in your 'config.yaml'", False)
