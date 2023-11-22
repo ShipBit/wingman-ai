@@ -41,10 +41,13 @@ class OpenAiWingman(Wingman):
             self._play_audio(self._get_exact_response(instant_activation_command))
             return None
 
+        conversation_model = self.config["openai"].get("conversation_model")
+
         # This is the main GPT call including tools / functions
         completion = self.openai.ask(
             messages=self.messages,
             tools=self.__get_tools(),
+            model=conversation_model,
         )
 
         if completion is None:
@@ -85,9 +88,10 @@ class OpenAiWingman(Wingman):
             # Make a second GPT call to process the function responses.
             # This basically summarizes the function responses.
             # We don't need GPT-4-Turbo for this, GPT-3.5 is enough
+            summarize_model = self.config["openai"].get("summarize_model")
             second_response = self.openai.ask(
                 messages=self.messages,
-                model="gpt-3.5-turbo-1106",
+                model=summarize_model,
             )
             if second_response is None:
                 return None
