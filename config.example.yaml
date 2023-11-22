@@ -22,6 +22,18 @@ openai:
   # Other choices are: alloy, echo, fable, onyx, shimmer
   #
   tts_voice: nova
+  #
+  # The model to use for conversations. This model also determines which functions / commands to call,
+  # so you might want to set it to gpt-4-turbo if something is not working as expected.
+  # Other choices are: gpt-4-1106-preview
+  #
+  conversation_model: gpt-3.5-turbo-1106
+  #
+  # The model to summarize function responses. This model summarizes function responses, like API responses etc.
+  # In most cases gpt-3.5 should be enough.
+  # Other choices are: gpt-4-1106-preview
+  #
+  summarize_model: gpt-3.5-turbo-1106
 
 #
 # These are currently "post-processing" audio effects for the text-to-speech conversion.

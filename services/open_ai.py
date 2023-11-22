@@ -34,10 +34,13 @@ class OpenAi:
     def ask(
         self,
         messages: list[dict[str, str]],
-        model: str = "gpt-4-1106-preview",
+        model: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):
+        if not model:
+            model = "gpt-3.5-turbo-1106"
+
         try:
             if not tools:
                 completion = self.client.chat.completions.create(
@@ -75,7 +78,11 @@ class OpenAi:
     def _handle_api_error(self, api_response):
         # TODO: improve error handling
         if api_response.status_code == 401:
-            Printr.err_print("The OpenAI API key you provided is invalid. Please check your config.yaml")
+            Printr.err_print(
+                "The OpenAI API key you provided is invalid. Please check your config.yaml"
+            )
         else:
-            Printr.err_print(f"The OpenAI API send the following error code {api_response.status_code}")
+            Printr.err_print(
+                f"The OpenAI API send the following error code {api_response.status_code}"
+            )
         print("")
