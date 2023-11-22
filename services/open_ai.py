@@ -85,9 +85,7 @@ class OpenAi:
             return None
 
     def _handle_key_error(self):
-        Printr.err_print(
-            "The OpenAI API key you provided is invalid. Please check your config.yaml"
-        )
+        Printr.err_print("The OpenAI API key you provided is invalid. Please check your 'apikey.yaml'")
 
     def _handle_api_error(self, api_response):
         Printr.err_print(
@@ -116,10 +114,7 @@ class OpenAi:
                     False,
                 )
             case 401:
-                Printr.info_print(
-                    "This is a key related issue. Please check the keys you provided in your 'config.yaml'",
-                    False,
-                )
+                Printr.info_print("This is a key related issue. Please check the keys you provided in your 'apikeys.yaml'", False)
             case 404:
                 Printr.info_print(
                     "The key you are using might not be eligible for the gpt-4 model.",
