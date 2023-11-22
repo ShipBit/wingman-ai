@@ -1,25 +1,23 @@
-#
-# Questions?
+# ───────────────────────────── Questions? ──────────────────────────────
 # Join us on our Discord server (https://discord.com/invite/k8tTBar3gZ) and ask us!
 #
-# Found a mistake? Missing something?
-# Please feel free to open a Pull Request on GitHub instead of asking us to change it for you. Thanks!
-#
-# ===================================================================================================
-#
-# IMPORTANT:
-# This config/YAML file is very sensitive to indentation. Make sure you use a single "TAB" character for indentation.
+# This config/YAML file is very sensitive to indentation.
+# Make sure you use a single "TAB" character for indentation.
 # If you're struggling with that, check our Discord server and find this thread:
 #       SUPPORTER SPACE > faq > How can I add commands?
 # There are useful tips and tools that will help you edit this config much easier and faster!
 #
-# ===================================================================================================
-#
-# GLOBAL configuration:
+# ──────────────────────────── GLOBAL CONFIGURATION ──────────────────────────────
 # You can override these settings per wingman if necessary (unless specified otherwise).
 # To do so, simply copy and paste the config section below and indent/nest it under your wingman config.
 #
 openai:
+  #
+  # Where is the API_KEY? We moved it to a separate file in the new version!
+  # Just start Wingman and paste it to the terminal window when asked.
+  # It will create the new file for you.
+  #
+
   #
   # The voice to use for text-to-speech.
   # Other choices are: alloy, echo, fable, onyx, shimmer
@@ -45,20 +43,14 @@ openai:
 features:
   play_beep_on_receiving: false
   enable_radio_sound_effect: false # adds noise to messages
-#
-# ===================================================================================================
-#
-# WIGMEN configuration:
-#
+
 wingmen:
-  #
+  # ────────────────────────────────── BOARD COMPUTER ────────────────────────────────────────
   # "board-computer" is a "default" wingman that you can roleplay with and that can execute commands (=keypresses).
   # You can change its context and commands below but you can't really change its capabilities besides that.
   # If you're a developer and want to get crazy with your own wingmen, check out the "groot" examples below!
   #
-  # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
-  #
-  board-computer:
+  board-computer: # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
     openai:
       #
       # The "context" for the wingman. Here's where you can tell the AI how to behave.
@@ -91,39 +83,39 @@ wingmen:
       #
       # We're currently looking into how we can provide more control over this.
       #
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: DeployLandingGear
         keys:
           # see https://github.com/learncodebygaming/pydirectinput/blob/master/pydirectinput/__init__.py for all available keys
           - key: n # The key the wingman will press when executing the command
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: RetractLandingGear
         keys:
           - key: n
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: EnableQuantumDrive
         keys:
           - key: b
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: DisableQuantumDrive
         keys:
           - key: b
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: JumpWithQuantumDrive
         keys:
           - key: b
             hold: 0.8 # Optional: The duration the key will be pressed in seconds.
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: HoldCurrentSpeed
         keys:
           - key: c
             modifier: alt # This will press "Alt + c" instead of just "c"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: DisableLimiter
         keys:
           - key: c
             modifier: alt
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ScanArea
         keys:
           - key: v
@@ -139,7 +131,7 @@ wingmen:
           - Scan Area
           - Scan the area
           - Initiate scan
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: FlightReady
         keys:
           - key: r
@@ -151,7 +143,7 @@ wingmen:
         responses: # Provide responses that will be used when the command is executed. A random one will be chosen.
           - Powering up the ship. All systems online. Ready for takeoff.
           - Start sequence initiated. All systems online. Ready for takeoff.
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: InitiateStartSequence
         keys: # You can have multiple keys per command!
           - key: r
@@ -160,179 +152,178 @@ wingmen:
           - key: n
             modifier: alt
           - key: s
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: HeadLightsOn
         keys:
           - key: l
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: HeadLightsOff
         keys:
           - key: l
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: WipeVisor
         keys:
           - key: x
             modifier: altleft
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: PowerEngines
         keys:
           - key: o
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: PowerShip
         keys:
           - key: u
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: PowerThrusters
         keys:
           - key: i
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: OpenMobiGlass
         keys:
           - key: f1
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: OpenStarMap
         keys:
           - key: f2
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: IncreasePowerToShields
         keys:
           - key: f6
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: IncreasePowerToEngines
         keys:
           - key: f5
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: IncreasePowerToGuns
         keys:
           - key: f7
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: Lock
         keys:
           - key: f8
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: Unlock
         keys:
           - key: f8
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ResetPowerPriority
         keys:
           - key: f8
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: MiningMode
         keys:
           - key: m
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: CycleCamera
         keys:
           - key: f4
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: SideArm
         keys:
           - key: "1"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: PrimaryWeapon
         keys:
           - key: "2"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: SecondaryWeapon
         keys:
           - key: "3"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: HolsterWeapon
         keys:
           - key: r
             hold: 0.8
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: Reload
         keys:
           - key: r
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: UseMedPen
         keys:
           - key: c
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: UseFlashLight
         keys:
           - key: t
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: OpenInventory
         keys:
           - key: i
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: DeployDecoy
         keys:
           - key: h
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: DeployNoise
         keys:
           - key: j
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ShieldRaiseBack
         keys:
           - key: "2"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ShieldRaiseLeft
         keys:
           - key: "4"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ResetShields
         keys:
           - key: "5"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ShieldRaiseRight
         keys:
           - key: "6"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ShieldRaiseTop
         keys:
           - key: "7"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ShieldRaiseFront
         keys:
           - key: "8"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ShieldRaiseBottom
         keys:
           - key: "9"
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: EmergencyEject
         keys:
           - key: y
             modifier: altright
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: SelfDestruct
         keys:
           - key: backspace
             hold: 0.8
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: SalvageMode
         keys:
           - key: g
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: SpaceBrake
         keys:
           - key: x
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: ExitSeat
         keys:
           - key: y
             hold: 0.8
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: CycleGimbalAssist
         keys:
           - key: g
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: RequestLandingPermission
         keys:
           - key: n
             modifier: alt
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: RequestDeparture
         keys:
           - key: n
             modifier: alt
-      # -----------------------------------------------------------------------------------------------
-      # HOW TO INSERT NEW COMMANDS:
+      # ───────────────────────── HOW TO INSERT NEW COMMANDS: ───────────────────────────
       #   - Please make sure the indentation aligns with the commands above perfectly.
       #   - Use a single "TAB" character for indentation. No spaces!
       #   - Always put a "-" sign in front of the "name" of each new command.
@@ -341,18 +332,14 @@ wingmen:
       #       - If you use number keys, make sure to put them in quotes like "1" or "2".
       #   - use https://slickgpt.vercel.app/shared/blue-weak-application to let AI help you with adding new commands.
       #
-      # INSERT YOUR NEW COMMANDS HERE:
-      # -----------------------------------------------------------------------------------------------
+      # ───────────────────────INSERT YOUR NEW COMMANDS HERE:────────────────────────────
       #- name: MyNewCommand
       #  keys:
       #    - key: x
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
+      #
 
-  #
-  # ============= END OF "board-computer" Wingman config =============
-  #
-
-  #
+  # ─────────────────────────────────────── ATC ────────────────────────────────────────
   # "atc" is another default wingman like "board-computer" above.
   # We wanted to show you how you can override the global settings for a specific wingman
   # and that you can have multiple wingmen defined in your config.
@@ -377,18 +364,17 @@ wingmen:
       play_beep_on_receiving: true
       enable_radio_sound_effect: true
     commands:
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: RequestLandingPermission
         keys:
           - key: n
             modifier: alt
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
       - name: RequestDeparture
         keys:
           - key: n
             modifier: alt
-      # -----------------------------------------------------------------------------------------------
-      # HOW TO INSERT NEW COMMANDS:
+      # ───────────────────────── HOW TO INSERT NEW COMMANDS: ───────────────────────────
       #   - Please make sure the indentation aligns with the commands above perfectly.
       #   - Use a single "TAB" character for indentation. No spaces!
       #   - Always put a "-" sign in front of the "name" of each new command.
@@ -397,18 +383,13 @@ wingmen:
       #       - If you use number keys, make sure to put them in quotes like "1" or "2".
       #   - use https://slickgpt.vercel.app/shared/blue-weak-application to let AI help you with adding new commands.
       #
-      # INSERT YOUR NEW COMMANDS HERE:
-      # -----------------------------------------------------------------------------------------------
+      # ───────────────────────INSERT YOUR NEW COMMANDS HERE:────────────────────────────
       #- name: MyNewCommand
       #  keys:
       #    - key: x
-      # -----------------------------------------------------------------------------------------------
+      # ──────────────────────────────────────────────────────────────────────────
 
-  #
-  # ============= END OF "atc" Wingman config =============
-  #
-
-  #
+  # ────────────────────────────────────── GROOT ────────────────────────────────────────────
   # You made it until here - wow! You're probably a developer and want to create your own wingman.
   # So meet Groot!
   # He's a custom wingman who lives in its own Python file that you can find in the /wingmen directory.
@@ -416,28 +397,18 @@ wingmen:
   # First, checkout Groot's code in /wingmen/groot.py.
   #
   groot:
-    # Oh yeah, that's a thing, too. We added this because we think you'll collect Wingmen like Pokemon ;)
-    disabled: true
+    disabled: true # Oh yeah, that's a thing, too. We added this because we think you'll collect Wingmen like Pokemon ;)
     record_key: up
-    #
-    # Custom wingmen are defined by a "class" section. We'll need that to create an instance of your Python class.
-    #
-    class:
+    class: # Custom wingmen are defined by a "class" section. We'll need that to create an instance of your Python class.
       #
       # Basically where your code is located. Use '.' as path separator!
       # We advise you to put all your custom wingmen into the /wingmen directory.
       # "wingmen" is the directory and "groot" is the name of the Python file (without the .py extension).
       #
       module: wingmen.groot
-      #
-      # The name of your class within your file/module.
-      #
-      name: Groot
-  #
-  # ============= END OF "groot" Wingman config =============
-  #
+      name: Groot # The name of your class within your file/module.
 
-  #
+  # ───────────────────────────────────  OPENAI GROOT ─────────────────────────────────────────
   # Let's see if we can make Groot a bit smarter. We'll use OpenAI's API to make him talk.
   # The config is like dumb Groot's but here we'll pass a parameter to your class constructor.
   #
@@ -458,11 +429,8 @@ wingmen:
       args: # passed to the class constructor as **kwargs dict - optional
         one_liner: Groot? # you can pass any base type here, in this case a string
         #... you can have as many as you want here
-  #
-  # ============= END OF "openai-groot" Wingman config =============
-  #
 
-  #
+  # ────────────────────────────────── EDGE-TTS GROOT ────────────────────────────────────────
   # But what if we want to use EdgeTTS instead of OpenAI to make Groot talk?
   # You know the config drill already, so jump into /wingmen/edge_tts_groot.py.
   # EdgeTtsGroot just inherits from our base Wingman class and overrides the _play_audio method doing his own thing.
@@ -482,10 +450,8 @@ wingmen:
     class:
       module: wingmen.edge_tts_groot
       name: EdgeTtsGroot
-  #
-  # ============= END OF "edge-tts-groot" Wingman config =============
-  #
 
+  # ─────────────────────────────────── FREE WINGMAN ─────────────────────────────────────────
   # IMPORTANT: This is commented out for now because we're still working on it.
   #
   # This is an all-free wingman using Open Source Whisper, instant commands and responses and Edge TTS.
