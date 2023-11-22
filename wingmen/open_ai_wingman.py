@@ -72,7 +72,7 @@ class OpenAiWingman(Wingman):
                     # execute the command
                     function_response = self._execute_command(command)
                     # if the command has responses, we have to play one of them
-                    if command.get("responses"):
+                    if command and command.get("responses"):
                         self._play_audio(self._get_exact_response(command))
 
                 # add the response of the function to the messages list so that it can be used in the next GPT call
