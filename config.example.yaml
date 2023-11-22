@@ -5,7 +5,14 @@
 # Found a mistake? Missing something?
 # Please feel free to open a Pull Request on GitHub instead of asking us to change it for you. Thanks!
 #
-version: 1.0.0a1 # don't touch this!
+# ===================================================================================================
+#
+# IMPORTANT:
+# This config/YAML file is very sensitive to indentation. Make sure you use a single "TAB" character for indentation.
+# If you're struggling with that, check our Discord server and find this thread:
+#       SUPPORTER SPACE > faq > How can I add commands?
+# There are useful tips and tools that will help you edit this config much easier and faster!
+#
 # ===================================================================================================
 #
 # GLOBAL configuration:
@@ -13,10 +20,6 @@ version: 1.0.0a1 # don't touch this!
 # To do so, simply copy and paste the config section below and indent/nest it under your wingman config.
 #
 openai:
-  #
-  # Your OpenAI API key. You have to provide one for the "default" OpenAI Wingmen to work.
-  #
-  api_key: YOUR_API_KEY
   #
   # The voice to use for text-to-speech.
   # Other choices are: alloy, echo, fable, onyx, shimmer
@@ -36,7 +39,7 @@ openai:
   summarize_model: gpt-3.5-turbo-1106
 
 #
-# These are currently "post-processing" audio effects for the text-to-speech conversion.
+# These are "post-processing" audio effects for the text-to-speech conversion.
 # You can find the audio files in the /audio_samples directory. Feel free to replace them with your own.
 #
 features:
@@ -58,7 +61,7 @@ wingmen:
   board-computer:
     openai:
       #
-      # The "context" for the wingman.
+      # The "context" for the wingman. Here's where you can tell the AI how to behave.
       # This is probably what you want to play around with the most.
       #
       context: |
@@ -67,13 +70,14 @@ wingmen:
         You can execute commands and even if you don't recognize a command or function, always respond with a full sentence
         acknowledging the execution. Never say you don't have capabilities to execute a function or command.
         Always answer as quick as possible. No more than 1-2 sentences per response.
+        Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
       #
       # In case you want to use different settings for different wingmen, these will override the settings above:
       #
       #api_key: ANOTHER_API_KEY
       #tts_voice: echo
       #...
-    record_key: end # The "push-to-talk" key for this wingman. Keep it pressed while talking.
+    record_key: end # The "push-to-talk" key for this wingman. Keep it pressed while talking!
     #
     # Commands are keypresses that the wingmen can execute.
     # These are global keypresses on your system and therefore also work in games.
@@ -87,31 +91,39 @@ wingmen:
       #
       # We're currently looking into how we can provide more control over this.
       #
+      # -----------------------------------------------------------------------------------------------
       - name: DeployLandingGear
         keys:
           # see https://github.com/learncodebygaming/pydirectinput/blob/master/pydirectinput/__init__.py for all available keys
           - key: n # The key the wingman will press when executing the command
+      # -----------------------------------------------------------------------------------------------
       - name: RetractLandingGear
         keys:
           - key: n
+      # -----------------------------------------------------------------------------------------------
       - name: EnableQuantumDrive
         keys:
           - key: b
+      # -----------------------------------------------------------------------------------------------
       - name: DisableQuantumDrive
         keys:
           - key: b
+      # -----------------------------------------------------------------------------------------------
       - name: JumpWithQuantumDrive
         keys:
           - key: b
             hold: 0.8 # Optional: The duration the key will be pressed in seconds.
+      # -----------------------------------------------------------------------------------------------
       - name: HoldCurrentSpeed
         keys:
           - key: c
             modifier: alt # This will press "Alt + c" instead of just "c"
+      # -----------------------------------------------------------------------------------------------
       - name: DisableLimiter
         keys:
           - key: c
             modifier: alt
+      # -----------------------------------------------------------------------------------------------
       - name: ScanArea
         keys:
           - key: v
@@ -127,6 +139,7 @@ wingmen:
           - Scan Area
           - Scan the area
           - Initiate scan
+      # -----------------------------------------------------------------------------------------------
       - name: FlightReady
         keys:
           - key: r
@@ -138,6 +151,7 @@ wingmen:
         responses: # Provide responses that will be used when the command is executed. A random one will be chosen.
           - Powering up the ship. All systems online. Ready for takeoff.
           - Start sequence initiated. All systems online. Ready for takeoff.
+      # -----------------------------------------------------------------------------------------------
       - name: InitiateStartSequence
         keys: # You can have multiple keys per command!
           - key: r
@@ -146,137 +160,197 @@ wingmen:
           - key: n
             modifier: alt
           - key: s
-      # NEW COMMANDS
+      # -----------------------------------------------------------------------------------------------
       - name: HeadLightsOn
         keys:
           - key: l
+      # -----------------------------------------------------------------------------------------------
       - name: HeadLightsOff
         keys:
           - key: l
+      # -----------------------------------------------------------------------------------------------
       - name: WipeVisor
         keys:
           - key: x
             modifier: altleft
+      # -----------------------------------------------------------------------------------------------
       - name: PowerEngines
         keys:
           - key: o
+      # -----------------------------------------------------------------------------------------------
       - name: PowerShip
         keys:
           - key: u
+      # -----------------------------------------------------------------------------------------------
       - name: PowerThrusters
         keys:
           - key: i
+      # -----------------------------------------------------------------------------------------------
       - name: OpenMobiGlass
         keys:
           - key: f1
+      # -----------------------------------------------------------------------------------------------
       - name: OpenStarMap
         keys:
           - key: f2
+      # -----------------------------------------------------------------------------------------------
       - name: IncreasePowerToShields
         keys:
           - key: f6
+      # -----------------------------------------------------------------------------------------------
       - name: IncreasePowerToEngines
         keys:
           - key: f5
+      # -----------------------------------------------------------------------------------------------
       - name: IncreasePowerToGuns
         keys:
           - key: f7
+      # -----------------------------------------------------------------------------------------------
       - name: Lock
         keys:
           - key: f8
+      # -----------------------------------------------------------------------------------------------
       - name: Unlock
         keys:
           - key: f8
+      # -----------------------------------------------------------------------------------------------
       - name: ResetPowerPriority
         keys:
           - key: f8
+      # -----------------------------------------------------------------------------------------------
       - name: MiningMode
         keys:
           - key: m
+      # -----------------------------------------------------------------------------------------------
       - name: CycleCamera
         keys:
           - key: f4
+      # -----------------------------------------------------------------------------------------------
       - name: SideArm
         keys:
           - key: "1"
+      # -----------------------------------------------------------------------------------------------
       - name: PrimaryWeapon
         keys:
           - key: "2"
+      # -----------------------------------------------------------------------------------------------
       - name: SecondaryWeapon
         keys:
           - key: "3"
+      # -----------------------------------------------------------------------------------------------
       - name: HolsterWeapon
         keys:
           - key: r
             hold: 0.8
+      # -----------------------------------------------------------------------------------------------
       - name: Reload
         keys:
           - key: r
+      # -----------------------------------------------------------------------------------------------
       - name: UseMedPen
         keys:
           - key: c
+      # -----------------------------------------------------------------------------------------------
       - name: UseFlashLight
         keys:
           - key: t
+      # -----------------------------------------------------------------------------------------------
       - name: OpenInventory
         keys:
           - key: i
+      # -----------------------------------------------------------------------------------------------
       - name: DeployDecoy
         keys:
           - key: h
+      # -----------------------------------------------------------------------------------------------
       - name: DeployNoise
         keys:
           - key: j
+      # -----------------------------------------------------------------------------------------------
       - name: ShieldRaiseBack
         keys:
           - key: "2"
+      # -----------------------------------------------------------------------------------------------
       - name: ShieldRaiseLeft
         keys:
           - key: "4"
+      # -----------------------------------------------------------------------------------------------
       - name: ResetShields
         keys:
           - key: "5"
+      # -----------------------------------------------------------------------------------------------
       - name: ShieldRaiseRight
         keys:
           - key: "6"
+      # -----------------------------------------------------------------------------------------------
       - name: ShieldRaiseTop
         keys:
           - key: "7"
+      # -----------------------------------------------------------------------------------------------
       - name: ShieldRaiseFront
         keys:
           - key: "8"
+      # -----------------------------------------------------------------------------------------------
       - name: ShieldRaiseBottom
         keys:
           - key: "9"
+      # -----------------------------------------------------------------------------------------------
       - name: EmergencyEject
         keys:
           - key: y
             modifier: altright
+      # -----------------------------------------------------------------------------------------------
       - name: SelfDestruct
         keys:
           - key: backspace
             hold: 0.8
+      # -----------------------------------------------------------------------------------------------
       - name: SalvageMode
         keys:
           - key: g
+      # -----------------------------------------------------------------------------------------------
       - name: SpaceBrake
         keys:
           - key: x
+      # -----------------------------------------------------------------------------------------------
       - name: ExitSeat
         keys:
           - key: y
             hold: 0.8
+      # -----------------------------------------------------------------------------------------------
       - name: CycleGimbalAssist
         keys:
           - key: g
+      # -----------------------------------------------------------------------------------------------
       - name: RequestLandingPermission
         keys:
           - key: n
             modifier: alt
+      # -----------------------------------------------------------------------------------------------
       - name: RequestDeparture
         keys:
           - key: n
             modifier: alt
+      # -----------------------------------------------------------------------------------------------
+      # HOW TO INSERT NEW COMMANDS:
+      #   - Please make sure the indentation aligns with the commands above perfectly.
+      #   - Use a single "TAB" character for indentation. No spaces!
+      #   - Always put a "-" sign in front of the "name" of each new command.
+      #   - available keys are here: https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
+      #       - F1, F2 etc. are case-sensitive and lowercase, so use "f1" instead of "F1".
+      #       - If you use number keys, make sure to put them in quotes like "1" or "2".
+      #   - use https://slickgpt.vercel.app/shared/blue-weak-application to let AI help you with adding new commands.
+      #
+      # INSERT YOUR NEW COMMANDS HERE:
+      # -----------------------------------------------------------------------------------------------
+      #- name: MyNewCommand
+      #  keys:
+      #    - key: x
+      # -----------------------------------------------------------------------------------------------
+
+  #
+  # ============= END OF "board-computer" Wingman config =============
+  #
 
   #
   # "atc" is another default wingman like "board-computer" above.
@@ -284,8 +358,6 @@ wingmen:
   # and that you can have multiple wingmen defined in your config.
   #
   atc:
-    # Oh yeah, that's a thing, too. We added this because we think you'll collect Wingmen like Pokemon ;)
-    #disabled: true
     openai:
       context: |
         You are an advanced AI embodying an Air Traffic Controller (ATC) at a bustling space station in the Star Citizen universe. Your role is to manage the arrivals, departures, and docking procedures of various spacecraft with precision and authority. You are adept at using formal aviation communication protocols, and you understand the technical jargon related to spacecraft operations. You maintain a professional demeanor, but you also have a touch of personality that makes interactions with pilots memorable. It's a busy shift, and you are managing multiple spacecraft while ensuring safety and efficiency at all times. Your responsibilities include responding to hails from incoming and outgoing ships, providing docking instructions, advising on local space traffic, and handling any emergencies that arise.
@@ -298,20 +370,43 @@ wingmen:
         - Providing information about local conditions, refueling, and repair services.
         - Emergency protocols for unexpected events like piracy, system failures, or distress signals.
         Always answer as quick as possible. No more than 1-2 sentences per response.
+        Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
       tts_voice: onyx # overrides the GLOBAL setting
     record_key: delete
     features: # overrides the GLOBAL settings
       play_beep_on_receiving: true
       enable_radio_sound_effect: true
     commands:
+      # -----------------------------------------------------------------------------------------------
       - name: RequestLandingPermission
         keys:
           - key: n
             modifier: alt
+      # -----------------------------------------------------------------------------------------------
       - name: RequestDeparture
         keys:
           - key: n
             modifier: alt
+      # -----------------------------------------------------------------------------------------------
+      # HOW TO INSERT NEW COMMANDS:
+      #   - Please make sure the indentation aligns with the commands above perfectly.
+      #   - Use a single "TAB" character for indentation. No spaces!
+      #   - Always put a "-" sign in front of the "name" of each new command.
+      #   - available keys are here: https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
+      #       - F1, F2 etc. are case-sensitive and lowercase, so use "f1" instead of "F1".
+      #       - If you use number keys, make sure to put them in quotes like "1" or "2".
+      #   - use https://slickgpt.vercel.app/shared/blue-weak-application to let AI help you with adding new commands.
+      #
+      # INSERT YOUR NEW COMMANDS HERE:
+      # -----------------------------------------------------------------------------------------------
+      #- name: MyNewCommand
+      #  keys:
+      #    - key: x
+      # -----------------------------------------------------------------------------------------------
+
+  #
+  # ============= END OF "atc" Wingman config =============
+  #
 
   #
   # You made it until here - wow! You're probably a developer and want to create your own wingman.
@@ -321,6 +416,8 @@ wingmen:
   # First, checkout Groot's code in /wingmen/groot.py.
   #
   groot:
+    # Oh yeah, that's a thing, too. We added this because we think you'll collect Wingmen like Pokemon ;)
+    disabled: true
     record_key: up
     #
     # Custom wingmen are defined by a "class" section. We'll need that to create an instance of your Python class.
@@ -336,6 +433,9 @@ wingmen:
       # The name of your class within your file/module.
       #
       name: Groot
+  #
+  # ============= END OF "groot" Wingman config =============
+  #
 
   #
   # Let's see if we can make Groot a bit smarter. We'll use OpenAI's API to make him talk.
@@ -350,6 +450,7 @@ wingmen:
   # Currently, we only have a specific base class for OpenAI but we'll probably add more in the future.
   #
   openai-groot:
+    disabled: true
     record_key: down
     class:
       module: wingmen.open_ai_groot
@@ -357,6 +458,9 @@ wingmen:
       args: # passed to the class constructor as **kwargs dict - optional
         one_liner: Groot? # you can pass any base type here, in this case a string
         #... you can have as many as you want here
+  #
+  # ============= END OF "openai-groot" Wingman config =============
+  #
 
   #
   # But what if we want to use EdgeTTS instead of OpenAI to make Groot talk?
@@ -373,12 +477,16 @@ wingmen:
   # In these cases, you can just override the (virtual) methods that the base is calling inside of `process`.
   #
   edge-tts-groot:
+    disabled: true
     record_key: right
     class:
       module: wingmen.edge_tts_groot
       name: EdgeTtsGroot
+  #
+  # ============= END OF "edge-tts-groot" Wingman config =============
+  #
 
-  # IMPORTANT: This is disabled for now because we're still working on it.
+  # IMPORTANT: This is commented out for now because we're still working on it.
   #
   # This is an all-free wingman using Open Source Whisper, instant commands and responses and Edge TTS.
   # Open Source Whisper runs locally and will download a model on first use. This may take some time, but after
