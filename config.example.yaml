@@ -146,7 +146,6 @@ wingmen:
           - key: n
             modifier: alt
           - key: s
-
       # NEW COMMANDS
       - name: HeadLightsOn
         keys:
@@ -167,39 +166,45 @@ wingmen:
       - name: PowerThrusters
         keys:
           - key: i
+      - name: OpenMobiGlass
+        keys:
+          - key: f1
+      - name: OpenStarMap
+        keys:
+          - key: f2
+      - name: IncreasePowerToShields
+        keys:
+          - key: f6
+      - name: IncreasePowerToEngines
+        keys:
+          - key: f5
+      - name: IncreasePowerToGuns
+        keys:
+          - key: f7
       - name: Lock
         keys:
           - key: f8
       - name: Unlock
         keys:
           - key: f8
-      - name: IncreasePowerToShields
-        keys:
-          - key: F6
-      - name: IncreasePowerToEngines
-        keys:
-          - key: F5
-      - name: IncreasePowerToGuns
-        keys:
-          - key: F7
       - name: ResetPowerPriority
         keys:
-          - key: F8
+          - key: f8
       - name: MiningMode
         keys:
           - key: m
       - name: CycleCamera
         keys:
-          - key: F4
+          - key: f4
       - name: SideArm
         keys:
-          - key: 1
+          - key: "1"
       - name: PrimaryWeapon
         keys:
-          - key: 2
+          - key: "2"
       - name: SecondaryWeapon
         keys:
-          - key: 3
+          - key: "3"
       - name: HolsterWeapon
         keys:
           - key: r
@@ -222,27 +227,27 @@ wingmen:
       - name: DeployNoise
         keys:
           - key: j
-      - name: ShieldRaiseFront
-        keys:
-          - key: 8
       - name: ShieldRaiseBack
         keys:
-          - key: 2
+          - key: "2"
       - name: ShieldRaiseLeft
         keys:
-          - key: 4
-      - name: ShieldRaiseRight
-        keys:
-          - key: 6
-      - name: ShieldRaiseTop
-        keys:
-          - key: 7
-      - name: ShieldRaiseBottom
-        keys:
-          - key: 9
+          - key: "4"
       - name: ResetShields
         keys:
-          - key: 5
+          - key: "5"
+      - name: ShieldRaiseRight
+        keys:
+          - key: "6"
+      - name: ShieldRaiseTop
+        keys:
+          - key: "7"
+      - name: ShieldRaiseFront
+        keys:
+          - key: "8"
+      - name: ShieldRaiseBottom
+        keys:
+          - key: "9"
       - name: EmergencyEject
         keys:
           - key: y
@@ -254,12 +259,6 @@ wingmen:
       - name: SalvageMode
         keys:
           - key: g
-      - name: OpenMobiGlass
-        keys:
-          - key: F1
-      - name: OpenStarMap
-        keys:
-          - key: F2
       - name: SpaceBrake
         keys:
           - key: x
