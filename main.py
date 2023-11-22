@@ -77,6 +77,15 @@ def on_release(key):
 
 try:
     config = read_main_config()
+
+    # config migration
+    if config.get("version") or config["openai"].get("api_key"):
+        Printr.err_print(
+            "You are using an outdated config.yaml file. Please copy&paste your changes/commands from the old one and save them or backup your old config. Then delete your config.yaml and copy the new one from our latest release into your Wingman directory. Then reapply your changes in the new config."
+        )
+        input("Press ENTER to continue...")
+        sys.exit(0)
+
     apikeys = get_or_create_api_keys()
     for key, value in apikeys.items():
         config[key]["api_key"] = value.get("api_key")
