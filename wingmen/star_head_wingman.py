@@ -1,8 +1,6 @@
 import json
 import requests
 from wingmen.open_ai_wingman import OpenAiWingman
-from exceptions import MissingApiKeyException
-from services.open_ai import OpenAi
 
 
 class StarHeadWingman(OpenAiWingman):
