@@ -95,11 +95,11 @@ class OpenAiWingman(Wingman):
             )
 
             if second_response is None:
-                return None
+                return content
 
             second_content = second_response.choices[0].message.content
             self.messages.append(second_response.choices[0].message)
-            self._play_audio(second_content)
+            return second_content
 
         return content
 

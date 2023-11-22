@@ -109,14 +109,17 @@ class Wingman:
         for entry in command.get("keys"):
             if entry.get("modifier"):
                 key_module.keyDown(entry["modifier"])
+
             if entry.get("hold"):
                 key_module.keyDown(entry["key"])
                 time.sleep(entry["hold"])
                 key_module.keyUp(entry["key"])
             else:
                 key_module.press(entry["key"])
+
             if entry.get("modifier"):
                 key_module.keyUp(entry["modifier"])
+
             if entry.get("wait"):
                 time.sleep(entry["wait"])
 
