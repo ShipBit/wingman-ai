@@ -2,12 +2,14 @@ import requests
 from packaging import version
 from services.printr import Printr
 
+LOCAL_VERSION = '1.0.0a2'
 
-def check_version(local_version, url):
+
+def check_version(url):
     try:
-        app_version = version.parse(local_version)
+        app_version = version.parse(LOCAL_VERSION)
 
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
 
         remote_version_str = response.json().get("version", None)
@@ -21,10 +23,7 @@ def check_version(local_version, url):
 
     except requests.RequestException as e:
         Printr.err_print(f"Error fetching version information: {e}")
-        print("")
     except ValueError as e:
         Printr.err_print(f"Error with version information: {e}")
-        print("")
     except FileNotFoundError as e:
         Printr.err_print(f"Error: The local version file was not found: {e}")
-        print("")

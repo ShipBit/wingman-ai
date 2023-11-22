@@ -65,6 +65,7 @@ class OpenAiWingman(Wingman):
             for tool_call in tool_calls:  # there could be multiple tool calls at once
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
+                function_response = ""
                 if function_name == "execute_command":
                     # get the command based on the argument passed by GPT
                     command = self._get_command(function_args["command_name"])
@@ -75,15 +76,14 @@ class OpenAiWingman(Wingman):
                         self._play_audio(self._get_exact_response(command))
 
                 # add the response of the function to the messages list so that it can be used in the next GPT call
-                if function_response:
-                    self.messages.append(
-                        {
-                            "tool_call_id": tool_call.id,
-                            "role": "tool",
-                            "name": function_name,
-                            "content": function_response,
-                        }
-                    )
+                self.messages.append(
+                    {
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": function_response,
+                    }
+                )
 
             # Make a second GPT call to process the function responses.
             # This basically summarizes the function responses.
@@ -93,12 +93,13 @@ class OpenAiWingman(Wingman):
                 messages=self.messages,
                 model=summarize_model,
             )
+
             if second_response is None:
-                return None
+                return content
 
             second_content = second_response.choices[0].message.content
             self.messages.append(second_response.choices[0].message)
-            self._play_audio(second_content)
+            return second_content
 
         return content
 

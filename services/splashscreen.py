@@ -1,4 +1,5 @@
 from services.printr import Printr
+from services.check_version import LOCAL_VERSION
 
 class Splashscreen:
     @staticmethod
@@ -7,7 +8,7 @@ class Splashscreen:
         github_link = Printr.clr('https://github.com/shipbit/wingman-ai', Printr.CYAN)
         patreon_link = Printr.clr('https://www.patreon.com/ShipBit', Printr.CYAN)
 
-        version = tower.get_config().get("version")
+        version = LOCAL_VERSION
         wingmen = tower.get_wingmen()
         count = len(wingmen)
         ea = 'e' if count > 1 else 'a'
