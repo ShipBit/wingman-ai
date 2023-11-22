@@ -146,6 +146,137 @@ wingmen:
           - key: n
             modifier: alt
           - key: s
+      # NEW COMMANDS
+      - name: HeadLightsOn
+        keys:
+          - key: l
+      - name: HeadLightsOff
+        keys:
+          - key: l
+      - name: WipeVisor
+        keys:
+          - key: x
+            modifier: altleft
+      - name: PowerEngines
+        keys:
+          - key: o
+      - name: PowerShip
+        keys:
+          - key: u
+      - name: PowerThrusters
+        keys:
+          - key: i
+      - name: OpenMobiGlass
+        keys:
+          - key: f1
+      - name: OpenStarMap
+        keys:
+          - key: f2
+      - name: IncreasePowerToShields
+        keys:
+          - key: f6
+      - name: IncreasePowerToEngines
+        keys:
+          - key: f5
+      - name: IncreasePowerToGuns
+        keys:
+          - key: f7
+      - name: Lock
+        keys:
+          - key: f8
+      - name: Unlock
+        keys:
+          - key: f8
+      - name: ResetPowerPriority
+        keys:
+          - key: f8
+      - name: MiningMode
+        keys:
+          - key: m
+      - name: CycleCamera
+        keys:
+          - key: f4
+      - name: SideArm
+        keys:
+          - key: "1"
+      - name: PrimaryWeapon
+        keys:
+          - key: "2"
+      - name: SecondaryWeapon
+        keys:
+          - key: "3"
+      - name: HolsterWeapon
+        keys:
+          - key: r
+            hold: 0.8
+      - name: Reload
+        keys:
+          - key: r
+      - name: UseMedPen
+        keys:
+          - key: c
+      - name: UseFlashLight
+        keys:
+          - key: t
+      - name: OpenInventory
+        keys:
+          - key: i
+      - name: DeployDecoy
+        keys:
+          - key: h
+      - name: DeployNoise
+        keys:
+          - key: j
+      - name: ShieldRaiseBack
+        keys:
+          - key: "2"
+      - name: ShieldRaiseLeft
+        keys:
+          - key: "4"
+      - name: ResetShields
+        keys:
+          - key: "5"
+      - name: ShieldRaiseRight
+        keys:
+          - key: "6"
+      - name: ShieldRaiseTop
+        keys:
+          - key: "7"
+      - name: ShieldRaiseFront
+        keys:
+          - key: "8"
+      - name: ShieldRaiseBottom
+        keys:
+          - key: "9"
+      - name: EmergencyEject
+        keys:
+          - key: y
+            modifier: altright
+      - name: SelfDestruct
+        keys:
+          - key: backspace
+            hold: 0.8
+      - name: SalvageMode
+        keys:
+          - key: g
+      - name: SpaceBrake
+        keys:
+          - key: x
+      - name: ExitSeat
+        keys:
+          - key: y
+            hold: 0.8
+      - name: CycleGimbalAssist
+        keys:
+          - key: g
+      - name: RequestLandingPermission
+        keys:
+          - key: n
+            modifier: alt
+      - name: RequestDeparture
+        keys:
+          - key: n
+            modifier: alt
 
   #
   # "atc" is another default wingman like "board-computer" above.
