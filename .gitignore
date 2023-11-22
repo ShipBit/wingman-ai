@@ -163,3 +163,4 @@ audio_output
 config.yaml
 .vscode/settings.json
 .DS_Store
+apikeys.yaml

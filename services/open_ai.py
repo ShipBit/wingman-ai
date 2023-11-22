@@ -79,7 +79,7 @@ class OpenAi:
         # TODO: improve error handling
         if api_response.status_code == 401:
             Printr.err_print(
-                "The OpenAI API key you provided is invalid. Please check your config.yaml"
+                "The OpenAI API key you provided is invalid. Please check your apikeys.yaml, or delete it and run Wingman again"
             )
         else:
             Printr.err_print(
