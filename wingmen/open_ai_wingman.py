@@ -65,6 +65,7 @@ class OpenAiWingman(Wingman):
             for tool_call in tool_calls:  # there could be multiple tool calls at once
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
+                function_response = ""
                 function_response = self._get_function_response(
                     function_name, function_args
                 )
