@@ -25,7 +25,7 @@ pyenv global 3.11.6     # set your global Python version
 
 Restart the terminal. Test with `python --version` and `python3 --version`.
 
-Finally, install [ffmpeg](https://ffmpeg.org/download.html) and add it to your `PATH` as well.
+Finally, download [ffmpeg](https://ffmpeg.org/download.html) and copy the `exe` files from their package to the Wingman root source directory.
 
 ## Install dependencies
 
