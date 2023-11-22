@@ -96,7 +96,7 @@ try:
     if __name__ == "__main__":
         Splashscreen.show(tower)
 
-        check_version(config.get("version"), "https://shipbit.de/wingman.json")
+        check_version("https://shipbit.de/wingman.json")
 
         with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
             print(
