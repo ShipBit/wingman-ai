@@ -41,14 +41,22 @@ class AudioRecorder:
     def stop_recording(self) -> str:
         self.recstream.stop()
         self.is_recording = False
+        Printr.override_print("Recording stopped")
 
         if not os.path.exists("audio_output"):
             os.makedirs("audio_output")
+
+        if self.recording is None:
+            Printr.warn_print("Ignored empty recording")
+            return None
+        if (len(self.recording) / self.samplerate) < 0.15:
+            Printr.warn_print("Recording was too short to be handled by the AI")
+            return None
+
         try:
             soundfile.write(self.filename, self.recording, self.samplerate)
             self.recording = None
-            Printr.override_print("Recording stopped")
             return self.filename
         except IndexError:
-            Printr.clr_print("Ignored empty recording", Printr.YELLOW)
+            Printr.warn_print("Ignored empty recording")
             return None

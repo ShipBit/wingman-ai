@@ -37,7 +37,7 @@ class Tower:
     def __get_wingmen(self) -> list[Wingman]:
         wingmen = []
         for wingman_name, wingman_config in self.config["wingmen"].items():
-            if self.config.get("disabled") is True:
+            if wingman_config.get("disabled") is True:
                 continue
 
             global_config = {

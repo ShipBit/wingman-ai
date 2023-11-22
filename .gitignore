@@ -165,3 +165,5 @@ config.yaml
 .DS_Store
 *.exe
 /.vs/
+.DS_Store
+apikeys.yaml
