@@ -95,7 +95,7 @@ class OpenAi:
             message_lines = m['message'].split('. ')
             for line in message_lines:
                 Printr.err_print(line, False)
-        else if api_response.message:
+        elif api_response.message:
             Printr.err_print(api_response.message, False)
         else:
             Printr.err_print('The API did not provide further information.', False)
