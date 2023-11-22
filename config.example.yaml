@@ -17,8 +17,6 @@ openai:
   # Just start Wingman and paste it to the terminal window when asked.
   # It will create the new file for you.
   #
-
-  #
   # The voice to use for text-to-speech.
   # Other choices are: alloy, echo, fable, onyx, shimmer
   #

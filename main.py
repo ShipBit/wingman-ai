@@ -12,7 +12,7 @@ from services.splashscreen import Splashscreen
 from services.printr import Printr
 
 
-def read_config(file_name=None) -> dict[str, any]:
+def read_main_config(file_name=None) -> dict[str, any]:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # running in a PyInstaller bundle'
         if not file_name:
@@ -30,6 +30,25 @@ def read_config(file_name=None) -> dict[str, any]:
         except yaml.YAMLError as exc:
             print(exc)
     return cfg
+
+
+def get_or_create_api_keys(filename="apikeys.yaml"):
+    # Check if file exists
+    if path.exists(filename):
+        with open(filename, "r") as file:
+            data = yaml.safe_load(file)
+            return data
+
+    print(
+        f"{Printr.clr('⌬', Printr.CYAN)} How to get your OpenAI API key: https://www.patreon.com/posts/how-to-get-your-93307145"
+    )
+    openai_api_key = input("Please paste your OpenAI API key: ")
+    data = {"openai": {"api_key": openai_api_key}}
+
+    with open(filename, "w") as file:
+        yaml.dump(data, file)
+
+    return data
 
 
 def on_press(key):
@@ -57,7 +76,11 @@ def on_release(key):
 
 
 try:
-    config = read_config()
+    config = read_main_config()
+    apikeys = get_or_create_api_keys()
+    for key, value in apikeys.items():
+        config[key]["api_key"] = value.get("api_key")
+
     tower = Tower(config)
     audio_recorder = AudioRecorder()
 
@@ -79,9 +102,17 @@ try:
 
 except FileNotFoundError:
     Printr.err_print("Missing config.yaml")
-    Printr.err_print("Rename config.yaml.example to config.yaml if you're running from source.", False)
-    Printr.err_print("Make sure that your VSCode terminal executed main.py from the root directory.", False)
-    Printr.err_print("Sometimes you have to 'cd' into it first, then press F5 again.", False)
+    Printr.err_print(
+        "Rename config.yaml.example to config.yaml if you're running from source.",
+        False,
+    )
+    Printr.err_print(
+        "Make sure that your VSCode terminal executed main.py from the root directory.",
+        False,
+    )
+    Printr.err_print(
+        "Sometimes you have to 'cd' into it first, then press F5 again.", False
+    )
 
 except MissingApiKeyException:
     Printr.err_print("Please set your OpenAI API key in config.yaml")
