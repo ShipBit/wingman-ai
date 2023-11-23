@@ -194,11 +194,11 @@ class Wingman:
         )
         return command
 
-    def _select_command_response(self, command: {}) -> str | None:
+    def _select_command_response(self, command: dict) -> str | None:
         """Returns one of the configured responses of the command. This base implementation returns a random one.
 
         Args:
-            command ({}): The command object from the config
+            command (dict): The command object from the config
 
         Returns:
             str: A random response from the command's responses list in the config.
@@ -243,15 +243,14 @@ class Wingman:
                     return None
         return None
 
-    # TODO: Refactor this "Ok" stuff. This is pretty OpenAI-specific and should be moved to the OpenAIWingman class.
-    def _execute_command(self, command: {}) -> Literal["Ok"]:
+    def _execute_command(self, command: dict) -> str:
         """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
 
         Args:
-            command (_type_): The command object from the config to execute
+            command (dict): The command object from the config to execute
 
         Returns:
-            Literal["Ok"]: We always return "Ok" because we need to pass it to a subsequent AI call. If we'd return something more specific, the AI would give a duplicate response.
+            str: the selected response from the command's responses list in the config. "Ok" if there are none.
         """
         if not command:
             return "Command not found"
@@ -271,9 +270,9 @@ class Wingman:
             # in debug mode we already printed the separate execution times
             self.print_execution_time()
 
-        return "Ok"
+        return self._select_command_response(command) or "Ok"
 
-    def execute_keypress(self, command: {}):
+    def execute_keypress(self, command: dict):
         """Executes the keypresses defined in the command in order.
 
         pydirectinput uses SIGEVENTS to send keypresses to the OS. This lib seems to be the only way to send keypresses to games reliably.
@@ -281,7 +280,7 @@ class Wingman:
         It only works on Windows. For MacOS, we fall back to PyAutoGUI (which has the exact same API as pydirectinput is built on top of it).
 
         Args:
-            command (_type_): The command object from the config to execute
+            command (dict): The command object from the config to execute
         """
         for entry in command.get("keys"):
             if entry.get("modifier"):

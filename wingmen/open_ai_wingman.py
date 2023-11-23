@@ -133,7 +133,11 @@ class OpenAiWingman(Wingman):
                 self.config.get("features", {}).get("enable_radio_sound_effect"),
             )
 
-    def _get_tools(self) -> list[dict[str, any]]:
+    def _execute_command(self, command: dict) -> str:
+        super()._execute_command(command)
+        return "Ok"
+
+    def _get_tools(self) -> list[dict]:
         # all commands that are NOT instant_activation
         commands = [
             command["name"]
