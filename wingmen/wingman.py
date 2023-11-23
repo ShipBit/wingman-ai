@@ -2,12 +2,11 @@ import random
 import time
 from difflib import SequenceMatcher
 from importlib import import_module
+from typing import Literal
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 
-# PyDirectInput uses SIGEVENTS to send keypresses to the OS.
-# This is the only way to send keypresses to games reliably.
-# It only works on Windows, though. For MacOS, we fall back to PyAutoGUI.
+# see execute_keypress() method
 try:
     import pydirectinput as key_module
 except AttributeError:
@@ -23,7 +22,8 @@ class Wingman:
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
     """
 
-    start_time = None
+    # used for benchmarking
+    __command_execution_start: float = None
 
     def __init__(self, name: str, config: dict[str, any]):
         """The constructor of the Wingman class. You can override it in your custom wingman.
@@ -46,7 +46,7 @@ class Wingman:
     def create_dynamically(
         module_path: str, class_name: str, name: str, config: dict[str, any], **kwargs
     ):
-        """Dynamically create a Wingman instance from a module path and class name
+        """Dynamically creates a Wingman instance from a module path and class name
 
         Args:
             module_path (str): The module path, e.g. wingmen.open_ai_wingman. It's like the filepath from root to your custom-wingman.py but with dots instead of slashes and without the .py extension. Case-sensitive!
@@ -63,11 +63,13 @@ class Wingman:
     def get_record_key(self) -> str:
         return self.config.get("record_key", None)
 
+    # ──────────────────────────── The main processing loop ──────────────────────────── #
+
     async def process(self, audio_input_wav: str):
         """The main method that gets called when the wingman is activated. This method controls what your wingman actually does and you can override it if you want to.
 
         The base implementation here triggers the transcription and processing of the given audio input.
-        If you don't need even transcription, you can just override this entire process method.
+        If you don't need even transcription, you can just override this entire process method. If you want transcription but then do something in addition, you can override the listed hooks.
 
         Async so you can do async processing, e.g. send a request to an API.
 
@@ -75,29 +77,83 @@ class Wingman:
             audio_input_wav (str): The path to the audio file that contains the user's speech. This is a recording of what you you said.
 
         Hooks:
-            - async _transcribe
-            - async _process_transcript
-            - async _on_process_finished
+            - async _transcribe: transcribe the audio to text
+            - async _get_reponse_for_transcript: process the transcript and return a text response
+            - async _play_to_user: do something with the response, e.g. play it as audio
         """
+
         process_result = None
 
         # transcribe the audio.
-        transcript = await self._transcribe(audio_input_wav)
+        transcript = await self.__transcribe_internal(audio_input_wav)
         if transcript:
             print(
                 f"{Printr.clr('>> (You):', Printr.LILA)} {Printr.clr(transcript, Printr.LILA)}"
             )
 
-            process_result, instant_response = self._process_transcript(transcript)
+            # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
+            process_result, instant_response = await self._get_reponse_for_transcript(transcript)
             print(
                 f"{Printr.clr('<<', Printr.GREEN)} ({Printr.clr(self.name, Printr.GREEN)}): {Printr.clr(instant_response or response, Printr.GREEN)}"
             )
 
-        # the last step in the chain. Usually, you'll want to play the response to the user as audio using a TTS provider or mechanism of your choice.
-        await self._on_process_finished(process_result)
+        # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
+        await self._play_to_user(process_result)
 
-    def _get_command(self, command_name):
-        # Get the command from the list of commands
+    async def __transcribe_internal(self, audio_input_wav: str):
+        if self.config.get("debug_mode"):
+            # start the benchmark timer
+            self.__command_execution_start = time.perf_counter()
+
+        return await self._transcribe(audio_input_wav)
+
+    # ───────────────── virtual methods / hooks ───────────────── #
+
+    async def _transcribe(self, audio_input_wav: str) -> str | None:
+        """Transcribes the audio to text. You can override this method if you want to use a different transcription service.
+
+        Args:
+            audio_input_wav (str): The path to the audio file that contains the user's speech. This is a recording of what you you said.
+
+        Returns:
+            str | None: The transcript of the audio file or None if the transcription failed.
+        """
+
+        return None
+
+    async def _get_reponse_for_transcript(self, transcript: str) -> str | None:
+        """Processes the transcript and return a response as text. This where you'll do most of your work.
+        Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
+
+
+        Args:
+            transcript (str): What the user said, transcripted to text.
+
+        Returns:
+            str | None: What you want to pass to _respond_to_user as the last processing step. This is usually the "response" from the conversation with the AI.
+        """
+        return None
+
+    async def _play_to_user(self, text: str):
+        """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
+
+        Args:
+            text (str): The response of your _get_reponse_for_transcript. This is usually the "response" from conversation with the AI.
+        """
+        pass
+
+    # ───────────────────────────────── Commands ─────────────────────────────── #
+
+    def _get_command(self, command_name: str) -> {} | None:
+        """Extracts the command with the given name
+
+        Args:
+            command_name (str): the name of the command you used in the config
+
+        Returns:
+            {}: The command object from the config
+        """
+        #
         command = next(
             (
                 item
@@ -108,8 +164,31 @@ class Wingman:
         )
         return command
 
-    def _process_instant_activation_command(self, transcript) -> bool | None:
-        # all instant activation commands
+    def _select_command_response(self, command: {}) -> str | None:
+        """Returns one of the configured responses of the command. This base implementation returns a random one.
+
+        Args:
+            command ({}): The command object from the config
+
+        Returns:
+            str: A random response from the command's responses list in the config.
+        """
+        command_responses = command.get("responses", None)
+        if (command_responses is None) or (len(command_responses) == 0):
+            return None
+
+        return random.choice(command_responses)
+
+    def _execute_instant_activation_command(self, transcript: str) -> {} | None:
+        """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
+
+        Args:
+            transcript (text): What the user said, transcripted to text. Needs to be similar to one of the defined instant_activation phrases to work.
+
+        Returns:
+            {} | None: The executed instant_activation command.
+        """
+
         instant_activation_commands = [
             command
             for command in self.config["commands"]
@@ -127,33 +206,56 @@ class Wingman:
                 if (
                     ratio > 0.8
                 ):  # if the ratio is higher than 0.8, we assume that the command was spoken
-                    self._execute_command(command)  # execute the command immediately
+                    self._execute_command(command)
                     if command.get("responses"):
                         return command
                     return None
         return None
 
-    def _get_exact_response(self, command):
-        response = random.choice(command.get("responses"))
-        return response
+    # TODO: Refactor this "Ok" stuff. This is pretty OpenAI-specific and should be moved to the OpenAIWingman class.
+    def _execute_command(self, command: {}) -> Literal["Ok"]:
+        """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
 
-    def _execute_command(self, command) -> str:
+        Args:
+            command (_type_): The command object from the config to execute
+
+        Returns:
+            Literal["Ok"]: We always return "Ok" because we need to pass it to a subsequent AI call. If we'd return something more specific, the AI would give a duplicate response.
+        """
         if not command:
             return "Command not found"
-
-        if self.config.get("debug_mode") and self.start_time:
-            end_time = time.perf_counter()
-            print(f"Execution Time: {end_time - self.start_time}")
 
         print(
             f"{Printr.clr('❖ Executing command:', Printr.BLUE)} {command.get('name')}"
         )
 
-        command_response = "Ok"
-
         if self.config.get("debug_mode"):
-            return command_response
+            print(
+                f"{Printr.clr('Skipping keypress execution in debug_mode...', Printr.YELLOW)}"
+            )
+            return "Ok"
 
+        self.execute_keypress(command)
+        # TODO: we could do mouse_events here, too...
+
+        if self.config.get("debug_mode") and self.__command_execution_start:
+            __command_execution_stop = time.perf_counter()
+            print(
+                f"{Printr.clr('❖ Execution Time:', Printr.BLUE)} {__command_execution_stop - self.__command_execution_start}s"
+            )
+
+        return "Ok"
+
+    def execute_keypress(self, command: {}):
+        """Executes the keypresses defined in the command in order.
+
+        pydirectinput uses SIGEVENTS to send keypresses to the OS. This lib seems to be the only way to send keypresses to games reliably.
+
+        It only works on Windows. For MacOS, we fall back to PyAutoGUI (which has the exact same API as pydirectinput is built on top of it).
+
+        Args:
+            command (_type_): The command object from the config to execute
+        """
         for entry in command.get("keys"):
             if entry.get("modifier"):
                 key_module.keyDown(entry["modifier"])
@@ -170,19 +272,3 @@ class Wingman:
 
             if entry.get("wait"):
                 time.sleep(entry["wait"])
-
-        return command_response
-
-    # virtual methods:
-
-    async def _transcribe(self, audio_input_wav: str) -> str | None:
-        if self.config.get("debug_mode"):
-            self.start_time = time.perf_counter()
-
-        return None
-
-    def _process_transcript(self, transcript: str) -> tuple[str, str]:
-        return ""
-
-    async def _on_process_finished(self, text: str):
-        pass

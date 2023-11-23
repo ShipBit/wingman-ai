@@ -29,12 +29,12 @@ class OpenAiWingman(Wingman):
         transcript = self.openai.transcribe(audio_input_wav)
         return transcript.text if transcript else None
 
-    def _process_transcript(self, transcript: str) -> tuple[str, bool]:
+    async def _get_reponse_for_transcript(self, transcript: str) -> tuple[str, str]:
         self.messages.append({"role": "user", "content": transcript})
 
         # Check if the transcript is an instant activation command.
         # If so, it will be executed immediately and no further processing is needed.
-        instant_activation_command = self._process_instant_activation_command(
+        instant_activation_command = self._execute_instant_activation_command(
             transcript
         )
         if instant_activation_command:
@@ -120,7 +120,7 @@ class OpenAiWingman(Wingman):
 
         return function_response, instant_reponse
 
-    async def _on_process_finished(self, text: str):
+    async def _play_to_user(self, text: str):
         if text:
             self._play_audio(text)
 
