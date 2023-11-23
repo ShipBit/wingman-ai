@@ -175,11 +175,11 @@ class Wingman:
 
     # virtual methods:
 
-    async def _transcribe(self, audio_input_wav: str) -> str:
+    async def _transcribe(self, audio_input_wav: str) -> str | None:
         if self.config.get("debug_mode"):
             self.start_time = time.perf_counter()
 
-        return ""
+        return None
 
     def _process_transcript(self, transcript: str) -> tuple[str, str]:
         return ""
