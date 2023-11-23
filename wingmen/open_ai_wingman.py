@@ -25,7 +25,7 @@ class OpenAiWingman(Wingman):
         ]
 
     async def _transcribe(self, audio_input_wav: str) -> str:
-        super()._transcribe(audio_input_wav)
+        await super()._transcribe(audio_input_wav)
         transcript = self.openai.transcribe(audio_input_wav)
         return transcript.text if transcript else None
 
@@ -38,7 +38,7 @@ class OpenAiWingman(Wingman):
             transcript
         )
         if instant_activation_command:
-            instant_response = self._get_exact_response(instant_activation_command)
+            instant_response = self._select_command_response(instant_activation_command)
             self._play_audio(instant_response)
             return None, instant_response
 
@@ -115,7 +115,7 @@ class OpenAiWingman(Wingman):
             function_response = self._execute_command(command)
             # if the command has responses, we have to play one of them
             if command and command.get("responses"):
-                instant_reponse = self._get_exact_response(command)
+                instant_reponse = self._select_command_response(command)
                 self._play_audio(instant_reponse)
 
         return function_response, instant_reponse
