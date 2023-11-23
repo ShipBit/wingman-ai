@@ -43,7 +43,7 @@ class Wingman:
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
         self.debug: bool = self.config["features"].get("debug_mode", False)
-        """Whether the debug mode is enabled or not. If enabled, the Wingman will acutally execute any keypresses or mouse events. It will also print more debug messages."""
+        """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
 
     @staticmethod
     def create_dynamically(
