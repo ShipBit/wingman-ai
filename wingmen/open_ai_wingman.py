@@ -24,7 +24,7 @@ class OpenAiWingman(Wingman):
             },
         ]
 
-    def _transcribe(self, audio_input_wav: str) -> str:
+    async def _transcribe(self, audio_input_wav: str) -> str:
         super()._transcribe(audio_input_wav)
         transcript = self.openai.transcribe(audio_input_wav)
         return transcript.text if transcript else None
@@ -120,7 +120,7 @@ class OpenAiWingman(Wingman):
 
         return function_response, instant_reponse
 
-    def _finish_processing(self, text: str):
+    async def _on_process_finished(self, text: str):
         if text:
             self._play_audio(text)
 
