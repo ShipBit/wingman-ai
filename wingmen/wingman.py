@@ -22,9 +22,6 @@ class Wingman:
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
     """
 
-    # used for benchmarking
-    __command_execution_start: float = None
-
     def __init__(self, name: str, config: dict[str, any]):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
@@ -37,10 +34,16 @@ class Wingman:
         """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
 
         self.name = name
-        """The name of the wingman. This is the key you gave it in the config, e.g. "atc"""
+        """The name of the wingman. This is the key you gave it in the config, e.g. "atc"."""
 
         self.audio_player = AudioPlayer()
         """A service that allows you to play audio files and add sound effects to them."""
+
+        self.execution_start: float = None
+        """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
+
+        self.debug: bool = self.config["features"].get("debug_mode", False)
+        """Whether the debug mode is enabled or not. If enabled, the Wingman will acutally execute any keypresses or mouse events. It will also print more debug messages."""
 
     @staticmethod
     def create_dynamically(
@@ -61,7 +64,21 @@ class Wingman:
         return instance
 
     def get_record_key(self) -> str:
+        """Returns the activation or "push-to-talk" key for this Wingman."""
         return self.config.get("record_key", None)
+
+    def print_execution_time(self, reset_timer=False):
+        """Prints the current time since the execution started (in seconds)."""
+        if self.execution_start:
+            execution_stop = time.perf_counter()
+            elapsed_seconds = execution_stop - self.execution_start
+            Printr.info_print(f"...took {elapsed_seconds:.2f}s", first_message=False)
+        if reset_timer:
+            self.start_execution_benchmark()
+
+    def start_execution_benchmark(self):
+        """Starts the execution benchmark timer."""
+        self.execution_start = time.perf_counter()
 
     # ──────────────────────────── The main processing loop ──────────────────────────── #
 
@@ -82,30 +99,44 @@ class Wingman:
             - async _play_to_user: do something with the response, e.g. play it as audio
         """
 
+        self.start_execution_benchmark()
+
         process_result = None
 
+        if self.debug:
+            Printr.info_print("Starting transcription...")
+
         # transcribe the audio.
-        transcript = await self.__transcribe_internal(audio_input_wav)
+        transcript = await self._transcribe(audio_input_wav)
+
+        if self.debug:
+            self.print_execution_time(reset_timer=True)
+
         if transcript:
-            print(
-                f"{Printr.clr('>> (You):', Printr.LILA)} {Printr.clr(transcript, Printr.LILA)}"
-            )
+            Printr.clr_print(f">> (You): {transcript}", Printr.LILA)
+
+            if self.debug:
+                Printr.info_print("Getting response for transcript...")
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response = await self._get_reponse_for_transcript(transcript)
-            print(
-                f"{Printr.clr('<<', Printr.GREEN)} ({Printr.clr(self.name, Printr.GREEN)}): {Printr.clr(instant_response or response, Printr.GREEN)}"
+            process_result, instant_response = await self._get_reponse_for_transcript(
+                transcript
             )
+
+            if self.debug:
+                self.print_execution_time(reset_timer=True)
+
+            actual_response = instant_response or process_result
+            Printr.clr_print(f"<< ({self.name}): {actual_response}", Printr.GREEN)
+
+        if self.debug:
+            Printr.info_print("Playing response back to user...")
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         await self._play_to_user(process_result)
 
-    async def __transcribe_internal(self, audio_input_wav: str):
-        if self.config.get("debug_mode"):
-            # start the benchmark timer
-            self.__command_execution_start = time.perf_counter()
-
-        return await self._transcribe(audio_input_wav)
+        if self.debug:
+            self.print_execution_time()
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
@@ -118,7 +149,6 @@ class Wingman:
         Returns:
             str | None: The transcript of the audio file or None if the transcription failed.
         """
-
         return None
 
     async def _get_reponse_for_transcript(self, transcript: str) -> str | None:
@@ -144,7 +174,7 @@ class Wingman:
 
     # ───────────────────────────────── Commands ─────────────────────────────── #
 
-    def _get_command(self, command_name: str) -> {} | None:
+    def _get_command(self, command_name: str) -> dict | None:
         """Extracts the command with the given name
 
         Args:
@@ -179,7 +209,7 @@ class Wingman:
 
         return random.choice(command_responses)
 
-    def _execute_instant_activation_command(self, transcript: str) -> {} | None:
+    def _execute_instant_activation_command(self, transcript: str) -> dict | None:
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -207,6 +237,7 @@ class Wingman:
                     ratio > 0.8
                 ):  # if the ratio is higher than 0.8, we assume that the command was spoken
                     self._execute_command(command)
+
                     if command.get("responses"):
                         return command
                     return None
@@ -225,24 +256,20 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        print(
-            f"{Printr.clr('❖ Executing command:', Printr.BLUE)} {command.get('name')}"
-        )
+        Printr.info_print(f"❖ Executing command: {command.get('name')}")
 
-        if self.config.get("debug_mode"):
-            print(
-                f"{Printr.clr('Skipping keypress execution in debug_mode...', Printr.YELLOW)}"
+        if self.debug:
+            Printr.warn_print(
+                "Skipping actual keypress execution in debug_mode...", False
             )
             return "Ok"
 
         self.execute_keypress(command)
         # TODO: we could do mouse_events here, too...
 
-        if self.config.get("debug_mode") and self.__command_execution_start:
-            __command_execution_stop = time.perf_counter()
-            print(
-                f"{Printr.clr('❖ Execution Time:', Printr.BLUE)} {__command_execution_stop - self.__command_execution_start}s"
-            )
+        if not self.debug:
+            # in debug mode we already printed the separate execution times
+            self.print_execution_time()
 
         return "Ok"
 
