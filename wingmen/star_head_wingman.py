@@ -71,10 +71,10 @@ class StarHeadWingman(OpenAiWingman):
                 f"Failed to retrieve quantum drives. Status code: {response.status_code}"
             )
 
-    def _get_function_response(
+    def _execute_command_by_function(
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str]:
-        function_response, instant_response = super()._get_function_response(
+        function_response, instant_response = super()._execute_command_by_function(
             function_name, function_args
         )
 
@@ -151,8 +151,8 @@ class StarHeadWingman(OpenAiWingman):
         else:
             return None
 
-    def _get_tools(self) -> list[dict[str, any]]:
-        tools = super()._get_tools()
+    def _build_tools(self) -> list[dict[str, any]]:
+        tools = super()._build_tools()
         tools.append(
             {
                 "type": "function",

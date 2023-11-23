@@ -2,7 +2,6 @@ import random
 import time
 from difflib import SequenceMatcher
 from importlib import import_module
-from typing import Literal
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 
@@ -95,7 +94,7 @@ class Wingman:
 
         Hooks:
             - async _transcribe: transcribe the audio to text
-            - async _get_reponse_for_transcript: process the transcript and return a text response
+            - async _get_response_for_transcript: process the transcript and return a text response
             - async _play_to_user: do something with the response, e.g. play it as audio
         """
 
@@ -119,7 +118,7 @@ class Wingman:
                 Printr.info_print("Getting response for transcript...")
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response = await self._get_reponse_for_transcript(
+            process_result, instant_response = await self._get_response_for_transcript(
                 transcript
             )
 
@@ -151,16 +150,16 @@ class Wingman:
         """
         return None
 
-    async def _get_reponse_for_transcript(self, transcript: str) -> str | None:
+    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
 
         Args:
-            transcript (str): What the user said, transcripted to text.
+            transcript (str): The user's spoken text transcribed as text.
 
         Returns:
-            str | None: What you want to pass to _respond_to_user as the last processing step. This is usually the "response" from the conversation with the AI.
+            A tuple of strings representing the response to a function call and/or an instant response.
         """
         return None
 
@@ -168,7 +167,7 @@ class Wingman:
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
-            text (str): The response of your _get_reponse_for_transcript. This is usually the "response" from conversation with the AI.
+            text (str): The response of your _get_response_for_transcript. This is usually the "response" from conversation with the AI.
         """
         pass
 
@@ -183,7 +182,7 @@ class Wingman:
         Returns:
             {}: The command object from the config
         """
-        #
+
         command = next(
             (
                 item
@@ -252,6 +251,7 @@ class Wingman:
         Returns:
             str: the selected response from the command's responses list in the config. "Ok" if there are none.
         """
+
         if not command:
             return "Command not found"
 
@@ -282,6 +282,7 @@ class Wingman:
         Args:
             command (dict): The command object from the config to execute
         """
+
         for entry in command.get("keys"):
             if entry.get("modifier"):
                 key_module.keyDown(entry["modifier"])
