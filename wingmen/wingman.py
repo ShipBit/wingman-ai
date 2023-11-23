@@ -4,14 +4,18 @@ from difflib import SequenceMatcher
 from importlib import import_module
 from services.audio_player import AudioPlayer
 from services.printr import Printr
+
 # PyDirectInput uses SIGEVENTS to send keypresses to the OS.
 # This is the only way to send keypresses to games reliably.
 # It only works on Windows, though. For MacOS, we fall back to PyAutoGUI.
 try:
     import pydirectinput as key_module
 except AttributeError:
-    Printr.warn_print('pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.')
+    Printr.warn_print(
+        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games."
+    )
     import pyautogui as key_module
+
 
 class Wingman:
     start_time = None
@@ -20,7 +24,6 @@ class Wingman:
         self.config = config
         self.name = name
         self.audio_player = AudioPlayer()
-
 
     @staticmethod
     def create_dynamically(
@@ -41,9 +44,9 @@ class Wingman:
                 f"{Printr.clr('>> (You):', Printr.LILA)} {Printr.clr(transcript, Printr.LILA)}"
             )
 
-            response = self._process_transcript(transcript)
+            response, instant_response = self._process_transcript(transcript)
             print(
-                f"{Printr.clr('<<', Printr.GREEN)} ({Printr.clr(self.name, Printr.GREEN)}): {Printr.clr(response, Printr.GREEN)}"
+                f"{Printr.clr('<<', Printr.GREEN)} ({Printr.clr(self.name, Printr.GREEN)}): {Printr.clr(instant_response or response, Printr.GREEN)}"
             )
 
             self._finish_processing(response)
@@ -133,7 +136,7 @@ class Wingman:
 
         return ""
 
-    def _process_transcript(self, transcript: str) -> str:
+    def _process_transcript(self, transcript: str) -> tuple[str, str]:
         return ""
 
     def _finish_processing(self, text: str):
