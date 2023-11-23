@@ -64,14 +64,16 @@ class StarHeadWingman(OpenAiWingman):
 
     def _get_function_response(
         self, function_name: str, function_args: dict[str, any]
-    ) -> str:
-        function_response = super()._get_function_response(function_name, function_args)
+    ) -> tuple[str, str]:
+        function_response, instant_response = super()._get_function_response(
+            function_name, function_args
+        )
 
         if function_name == "get_best_trading_route":
             # get the best trading route based on the arguments passed by GPT
             function_response = self.__get_best_trading_route(**function_args)
 
-        return function_response
+        return function_response, instant_response
 
     def __get_best_trading_route(self, ship, position, moneyToSpend):
         print(
@@ -93,7 +95,6 @@ class StarHeadWingman(OpenAiWingman):
 
         section = response.json()[0]
 
-        print(section)
         return json.dumps(section)
 
     def __get_celestial_object_id(self, name):
