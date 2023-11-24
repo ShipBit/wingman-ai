@@ -14,12 +14,12 @@ from services.printr import Printr
 
 def read_main_config(file_name=None) -> dict[str, any]:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        # running in a PyInstaller bundle'
+        # running in a PyInstaller bundle
         if not file_name:
             bundle_dir = path.abspath(path.dirname(__file__))
             file_name = path.join(bundle_dir, "../config.yaml")
     else:
-        # running in a normal Python process'
+        # running in a normal Python process
         if not file_name:
             bundle_dir = path.abspath(path.dirname(__file__))
             file_name = path.join(bundle_dir, "config.yaml")
@@ -35,17 +35,23 @@ def read_main_config(file_name=None) -> dict[str, any]:
 def get_or_create_api_keys(filename="apikeys.yaml"):
     # Check if file exists
     if path.exists(filename):
-        with open(filename, "r") as file:
+        with open(filename, "r", encoding="UTF-8") as file:
             data = yaml.safe_load(file)
-            return data
+
+            try:
+                if data["openai"].get("api_key"):
+                    return data
+            except (KeyError, AttributeError):
+                pass
 
     print(
         f"{Printr.clr('⌬', Printr.CYAN)} How to get your OpenAI API key: https://www.patreon.com/posts/how-to-get-your-93307145"
     )
     openai_api_key = input("Please paste your OpenAI API key: ")
+    #TODO do not override whole file
     data = {"openai": {"api_key": openai_api_key}}
 
-    with open(filename, "w") as file:
+    with open(filename, "w", encoding="UTF-8") as file:
         yaml.dump(data, file)
 
     return data
@@ -79,11 +85,13 @@ try:
     config = read_main_config()
 
     # config migration
+    # todo: remove for public release
     if config.get("version") or config["openai"].get("api_key"):
-        Printr.err_print(
-            "You are using an outdated config.yaml file. Please copy&paste your changes/commands from the old one and save them or backup your old config. Then delete your config.yaml and copy the new one from our latest release into your Wingman directory. Then reapply your changes in the new config."
-        )
-        input("Press ENTER to continue...")
+        Printr.err_print("You are using an outdated config.yaml file.")
+        Printr.err_print("Please copy&paste your changes/commands from the old one and save them or backup your old config.", False)
+        Printr.err_print("Then delete your config.yaml and copy the new one from our latest release into your Wingman directory.", False)
+        Printr.err_print("Then reapply your changes in the new config.", False)
+        input("Press your favorite key to exit...")
         sys.exit(0)
 
     apikeys = get_or_create_api_keys()
@@ -95,8 +103,8 @@ try:
 
     if __name__ == "__main__":
         Splashscreen.show(tower)
-
         check_version("https://shipbit.de/wingman.json")
+        tower.prepare_wingmen()
 
         with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
             print(
@@ -107,6 +115,7 @@ try:
                 f"{Printr.clr('⌬', Printr.CYAN)} Exit this program by pressing [{Printr.clr('Ctrl', Printr.BLUE)}] + [{Printr.clr('C', Printr.BLUE)}]"
             )
             print("")
+
             listener.join()
 
 except FileNotFoundError:
@@ -124,7 +133,7 @@ except FileNotFoundError:
     )
 
 except MissingApiKeyException:
-    Printr.err_print("Please set your OpenAI API key in config.yaml")
+    Printr.err_print("Please set your OpenAI API key in 'apikeys.yaml'")
 
 except KeyboardInterrupt:
     # Nothing bad. Just exit the application

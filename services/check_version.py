@@ -2,7 +2,7 @@ import requests
 from packaging import version
 from services.printr import Printr
 
-LOCAL_VERSION = '1.0.0a2'
+LOCAL_VERSION = "1.0.0a3"
 
 
 def check_version(url):
