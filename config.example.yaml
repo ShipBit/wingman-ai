@@ -409,8 +409,9 @@ wingmen:
         provide values / parameters. Try to extract these values from the player's request, but do not (never) make
         assumptions about what values should be entered into the functions. Ask for clarification if you do not know
         the values. Always answer in the language in which the question was asked.
-    record_key: up
-    class: # Custom wingmen are defined by a "class" section. We'll need that to create an instance of your Python class.
+      use_edge_tts: true
+      conversation_model: gpt-4-1106-preview
+      use_edge_tts: true
       #
       # Basically where your code is located. Use '.' as path separator!
       # We advise you to put all your custom wingmen into the /wingmen directory.

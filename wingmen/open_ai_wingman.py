@@ -2,6 +2,7 @@ import json
 from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
 from wingmen.wingman import Wingman
+from services.edge import EdgeTTS
 
 
 class OpenAiWingman(Wingman):
@@ -158,7 +159,7 @@ class OpenAiWingman(Wingman):
             (
                 function_response,
                 instant_response,
-            ) = self._execute_command_by_function_call(function_name, function_args)
+            ) = await self._execute_command_by_function_call(function_name, function_args)
 
             # Include the function's name when adding the message to history.
             self._add_message_to_history(

@@ -65,11 +65,11 @@ class StarHeadWingman(OpenAiWingman):
             else vehicle["name"]
         )
 
-    def _execute_command_by_function_call(
+    async def _execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str]:
         """Execute commands passed from the base class and handles the 'get_best_trading_route'."""
-        function_response, instant_response = super()._execute_command_by_function_call(
+        function_response, instant_response = await super()._execute_command_by_function_call(
             function_name, function_args
         )
         if function_name == "get_best_trading_route":
