@@ -25,7 +25,7 @@ class StarHeadWingman(OpenAiWingman):
         self.celestial_object_names = []
         self.quantum_drives = []
 
-    def load_data_once(self):
+    def prepare(self):
         self.start_execution_benchmark()
 
         self.vehicles = self._fetch_data("vehicle")
@@ -69,7 +69,10 @@ class StarHeadWingman(OpenAiWingman):
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str]:
         """Execute commands passed from the base class and handles the 'get_best_trading_route'."""
-        function_response, instant_response = await super()._execute_command_by_function_call(
+        (
+            function_response,
+            instant_response,
+        ) = await super()._execute_command_by_function_call(
             function_name, function_args
         )
         if function_name == "get_best_trading_route":

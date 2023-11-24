@@ -1,14 +1,21 @@
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
+from services.printr import Printr
 
 
 class Tower:
     def __init__(self, config: dict[str, any]):
         self.config = config
-        self.key_wingman_dict: dict[str, Wingman] = {}
-        self.wingmen = []
 
-    def instantiate_wingmen(self) -> list[Wingman]:
+        self.wingmen = self.__instantiate_wingmen()
+        self.key_wingman_dict: dict[str, Wingman] = {}
+        for wingman in self.wingmen:
+            self.key_wingman_dict[wingman.get_record_key()] = wingman
+
+        self.wingmen_prepared = False
+
+    def __instantiate_wingmen(self) -> list[Wingman]:
+        wingmen = []
         for wingman_name, wingman_config in self.config["wingmen"].items():
             if wingman_config.get("disabled") is True:
                 continue
@@ -34,11 +41,19 @@ class Tower:
             else:
                 wingman = OpenAiWingman(wingman_name, merged_config)
 
-            wingman.load_data_once()
-            self.wingmen.append(wingman)
+            wingmen.append(wingman)
 
-        for wingman in self.wingmen:
-            self.key_wingman_dict[wingman.get_record_key()] = wingman
+        return wingmen
+
+    def prepare_wingmen(self):
+        if not self.wingmen_prepared:
+            for wingman in self.wingmen:
+                wingman.prepare()
+        else:
+            Printr.warn_print(
+                "Tower tried to prepare Wingmen multiple times. That should never happen."
+            )
+        self.wingmen_prepared = True
 
     def get_wingman_from_key(self, key: any) -> Wingman | None:
         if hasattr(key, "char"):

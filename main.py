@@ -79,6 +79,7 @@ try:
     config = read_main_config()
 
     # config migration
+    # todo: remove for public release
     if config.get("version") or config["openai"].get("api_key"):
         Printr.err_print(
             "You are using an outdated config.yaml file. Please copy&paste your changes/commands from the old one and save them or backup your old config. Then delete your config.yaml and copy the new one from our latest release into your Wingman directory. Then reapply your changes in the new config."
@@ -94,11 +95,9 @@ try:
     audio_recorder = AudioRecorder()
 
     if __name__ == "__main__":
-        tower.instantiate_wingmen()  # todo fix load_once output
-
         Splashscreen.show(tower)
-
         check_version("https://shipbit.de/wingman.json")
+        tower.prepare_wingmen()
 
         with keyboard.Listener(on_press=on_press, on_release=on_release) as listener:
             print(
