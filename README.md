@@ -107,10 +107,6 @@ The first time you start it, a base model is downloaded. This may take some time
 
 Please refer to the [commands](#commands) section for more information on how to define commands.
 
-### Groot (Custom)
-
-The _Groot_ wingmen are aimed at **developers** who want to dive deeper into creating their own fully custom wingmen implementations. If you are interested, start by reading the comments in `config.yaml` and work your way through the classes and functions mentioned in the config.
-
 ## Commands
 
 Commands are the heart of the Wingman AI, as they add "functions" in addition to pure conversations. Commands are defined in `config.yaml` and are activated by the corresponding Wingman as a result of a conversation with you. In the first version, they are mainly used to trigger keystrokes, but they can also be used for other actions such as calling external APIs or executing complex scripts.
