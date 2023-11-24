@@ -388,14 +388,12 @@ wingmen:
       #    - key: x
       # ──────────────────────────────────────────────────────────────────────────
 
-  # ─────────────────────────────────── Star-Head (API-Caller) ────────────────────────────────────
-
+  # ──────────────────────────────── Star-Head ──────────────────────────────────────
+  # "star-head" is a full-custom wingman with its own Python code, see /wingmen/star_head_wingman.py.
+  # It uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
+  # If it's missing any of these parameters, it will ask the user for them.
   star-head:
     openai:
-      #
-      # The "context" for the wingman.
-      # This is probably what you want to play around with the most.
-      #
       context: |
         You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
         permission. You are the ship's computer, and you are in charge of all the ship's systems.
@@ -411,85 +409,12 @@ wingmen:
         provide values / parameters. Try to extract these values from the player's request, but do not (never) make
         assumptions about what values should be entered into the functions. Ask for clarification if you do not know
         the values. Always answer in the language in which the question was asked.
+    record_key: up
+    class: # Custom wingmen are defined by a "class" section. We'll need that to create an instance of your Python class.
       #
-      # In case you want to use different settings for different wingmen, these will override the settings above:
+      # Basically where your code is located. Use '.' as path separator!
+      # We advise you to put all your custom wingmen into the /wingmen directory.
+      # "wingmen" is the directory and "groot" is the name of the Python file (without the .py extension).
       #
-      #api_key: ANOTHER_API_KEY
-      #tts_voice: echo
-      #...
-    record_key: end # The "push-to-talk" key for this wingman. Keep it pressed while talking.
-    class:
       module: wingmen.star_head_wingman
-      name: StarHeadWingman
-    #
-    # Commands are keypresses that the wingmen can execute.
-    # These are global keypresses on your system and therefore also work in games.
-    #
-    commands:
-      #
-      # This is where the magic happens!
-      # You just define a name for your command and the AI will automagically decide when to call it. Not kidding!
-      # We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
-      # If the Wingman doesn't call your command, try to rephrase the name here.
-      #
-      # We're currently looking into how we can provide more control over this.
-      #
-      - name: DeployLandingGear
-        keys:
-          # see https://github.com/learncodebygaming/pydirectinput/blob/master/pydirectinput/__init__.py for all available keys
-          - key: n # The key the wingman will press when executing the command
-      - name: RetractLandingGear
-        keys:
-          - key: n
-      - name: EnableQuantumDrive
-        keys:
-          - key: b
-      - name: DisableQuantumDrive
-        keys:
-          - key: b
-      - name: JumpWithQuantumDrive
-        keys:
-          - key: b
-            hold: 0.8 # Optional: The duration the key will be pressed in seconds.
-      - name: HoldCurrentSpeed
-        keys:
-          - key: c
-            modifier: alt # This will press "Alt + c" instead of just "c"
-      - name: DisableLimiter
-        keys:
-          - key: c
-            modifier: alt
-      - name: ScanArea
-        keys:
-          - key: v
-            hold: 0.6
-        #
-        # Provide phrases that will instantly activate the command (without AI roundtripping).
-        # This reduces execution time from ~2-3 seconds to ~1 second and is basically "VoiceAtack Light".
-        # You have to say one exact phrases for this to work.
-        #
-        # We are currently looking into ways to make this faster.
-        #
-        instant_activation:
-          - Scan Area
-          - Scan the area
-          - Initiate scan
-      - name: FlightReady
-        keys:
-          - key: r
-            modifier: alt
-        instant_activation:
-          - Power up the ship
-          - Start the ship
-          - Flight Ready
-        responses: # Provide responses that will be used when the command is executed. A random one will be chosen.
-          - Powering up the ship. All systems online. Ready for takeoff.
-          - Start sequence initiated. All systems online. Ready for takeoff.
-      - name: InitiateStartSequence
-        keys: # You can have multiple keys per command!
-          - key: r
-            modifier: altright
-            wait: 2 # wait 2 second before pressing the next key
-          - key: n
-            modifier: alt
-          - key: s
+      name: StarHeadWingman # The name of your class within your file/module.
