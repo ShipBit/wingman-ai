@@ -2,6 +2,7 @@ import json
 from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
+from services.printr import Printr
 from wingmen.wingman import Wingman
 
 
@@ -72,7 +73,7 @@ class OpenAiWingman(Wingman):
         self.messages.append(response_message)
 
         if tool_calls:
-            instant_response = self._handle_tool_calls(tool_calls)
+            instant_response = await self._handle_tool_calls(tool_calls)
             if instant_response:
                 return None, instant_response
 
@@ -233,16 +234,29 @@ class OpenAiWingman(Wingman):
         return function_response, instant_reponse
 
     async def _play_to_user(self, text: str):
-        """Plays audio to the user using the OpenAI TTS API. Adds sound effects if enabled in the configuration.
+        """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
+        Also adds sound effects if enabled in the configuration.
 
         Args:
             text (str): The text to play as audio.
         """
-        use_edge_tts = self.config.get("openai").get("use_edge_tts")
-        if use_edge_tts:
-            # todo use other new config stuff for edge
+        tts_provider = self.config["features"].get("tts_provider")
+
+        # todo: remove warning for release
+        if not tts_provider or not self.config.get("edge_tts"):
+            Printr.warn_print(
+                "No TTS provider configured. You're probably using an outdated config.yaml"
+            )
+
+        if tts_provider == "edge_tts":
+            # todo: implement detect_language stuff
+            detect_language = self.config["edge_tts"].get("detect_language")
+            tts_voice = self.config["edge_tts"].get("tts_voice")
+
             edge_tts = EdgeTTS()
-            await edge_tts.generate_speech(text, filename="audio_output/edge_tts.mp3")
+            await edge_tts.generate_speech(
+                text, filename="audio_output/edge_tts.mp3", voice=tts_voice
+            )
             self.audio_player.play("audio_output/edge_tts.mp3")
         else:
             response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
