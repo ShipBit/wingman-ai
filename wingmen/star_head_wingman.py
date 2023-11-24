@@ -93,16 +93,19 @@ class StarHeadWingman(OpenAiWingman):
         return tools
 
     def _get_best_trading_route(
-        self, ship: str, position: str, money_to_spend: float
+        self, ship: str, position: str, moneyToSpend: float
     ) -> str:
-        """Calculates the best trading route for the specified ship and position."""
+        """Calculates the best trading route for the specified ship and position.
+        Note that the function arguments have to match the funtion_args from OpenAI, hence the camelCase!
+        """
+
         cargo, qd = self._get_ship_details(ship)
         celestial_object_id = self._get_celestial_object_id(position)
         data = {
             "startCelestialObjectId": celestial_object_id,
             "quantumDriveId": qd["id"] if qd else None,
             "maxAvailablScu": cargo,
-            "maxAvailableMoney": money_to_spend,
+            "maxAvailableMoney": moneyToSpend,
             "useOnlyWeaponFreeZones": False,
             "onlySingleSections": True,
         }

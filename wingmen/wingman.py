@@ -220,7 +220,7 @@ class Wingman:
 
         instant_activation_commands = [
             command
-            for command in self.config["commands"]
+            for command in self.config.get("commands", [])
             if command.get("instant_activation")
         ]
 

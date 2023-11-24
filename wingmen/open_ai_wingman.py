@@ -259,7 +259,7 @@ class OpenAiWingman(Wingman):
         """
         commands = [
             command["name"]
-            for command in self.config["commands"]
+            for command in self.config.get("commands", [])
             if not command.get("instant_activation")
         ]
         tools = [
