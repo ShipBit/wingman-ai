@@ -44,14 +44,23 @@ class OpenAiWingman(Wingman):
         Returns:
             str | None: The transcript of the audio file or None if the transcription failed.
         """
-        # verbose_json will return us the language used in the audio.
-        response_format = "verbose_json" if self.tts_provider == "edge_tts" else "json"
+        detect_language = self.config["edge_tts"].get("detect_language")
+
+        response_format = (
+            "verbose_json"  # verbose_json will return the language detected in the transcript.
+            if self.tts_provider == "edge_tts" and detect_language
+            else "json"
+        )
         transcript = self.openai.transcribe(
             audio_input_wav, response_format=response_format
         )
+
         locale = None
         # skip the GPT call if we didn't change the language
-        if transcript.language and transcript.language != self.last_transcript_locale:
+        if (
+            response_format == "verbose_json"
+            and transcript.language != self.last_transcript_locale
+        ):
             Printr.hl_print(
                 f"   EdgeTTS detected language '{transcript.language}'.", False
             )
