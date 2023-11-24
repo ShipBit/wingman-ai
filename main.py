@@ -94,6 +94,8 @@ try:
     audio_recorder = AudioRecorder()
 
     if __name__ == "__main__":
+        tower.instantiate_wingmen()  # todo fix load_once output
+
         Splashscreen.show(tower)
 
         check_version("https://shipbit.de/wingman.json")
@@ -108,7 +110,6 @@ try:
             )
             print("")
 
-            tower.instantiate_wingmen()
             listener.join()
 
 except FileNotFoundError:

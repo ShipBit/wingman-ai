@@ -1,8 +1,8 @@
 import json
 from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
-from wingmen.wingman import Wingman
 from services.edge import EdgeTTS
+from wingmen.wingman import Wingman
 
 
 class OpenAiWingman(Wingman):
@@ -141,7 +141,7 @@ class OpenAiWingman(Wingman):
         response_message = completion.choices[0].message
         return response_message, response_message.tool_calls
 
-    def _handle_tool_calls(self, tool_calls):
+    async def _handle_tool_calls(self, tool_calls):
         """Processes all the tool calls identified in the response message.
 
         Args:
@@ -159,7 +159,9 @@ class OpenAiWingman(Wingman):
             (
                 function_response,
                 instant_response,
-            ) = await self._execute_command_by_function_call(function_name, function_args)
+            ) = await self._execute_command_by_function_call(
+                function_name, function_args
+            )
 
             # Include the function's name when adding the message to history.
             self._add_message_to_history(
@@ -201,7 +203,7 @@ class OpenAiWingman(Wingman):
             return self.messages[-1]["content"], self.messages[-1]["content"]
         return summarize_response, summarize_response
 
-    def _execute_command_by_function_call(
+    async def _execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str]:
         """
@@ -236,13 +238,20 @@ class OpenAiWingman(Wingman):
         Args:
             text (str): The text to play as audio.
         """
-        response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
-        if response is not None:
-            self.audio_player.stream_with_effects(
-                response.content,
-                self.config.get("features", {}).get("play_beep_on_receiving"),
-                self.config.get("features", {}).get("enable_radio_sound_effect"),
-            )
+        use_edge_tts = self.config.get("openai").get("use_edge_tts")
+        if use_edge_tts:
+            # todo use other new config stuff for edge
+            edge_tts = EdgeTTS()
+            await edge_tts.generate_speech(text, filename="audio_output/edge_tts.mp3")
+            self.audio_player.play("audio_output/edge_tts.mp3")
+        else:
+            response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
+            if response is not None:
+                self.audio_player.stream_with_effects(
+                    response.content,
+                    self.config.get("features", {}).get("play_beep_on_receiving"),
+                    self.config.get("features", {}).get("enable_radio_sound_effect"),
+                )
 
     def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.

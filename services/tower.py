@@ -37,6 +37,9 @@ class Tower:
             wingman.load_data_once()
             self.wingmen.append(wingman)
 
+        for wingman in self.wingmen:
+            self.key_wingman_dict[wingman.get_record_key()] = wingman
+
     def get_wingman_from_key(self, key: any) -> Wingman | None:
         if hasattr(key, "char"):
             wingman = self.key_wingman_dict.get(key.char, None)
