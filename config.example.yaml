@@ -409,6 +409,7 @@ wingmen:
   # It uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
   # If it's missing any of these parameters, it will ask the user for them.
   star-head:
+    record_key: up
     openai:
       context: |
         You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
