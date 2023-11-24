@@ -1,0 +1,20 @@
+# ───────────────────────────────────  OPENAI GROOT ─────────────────────────────────────────
+# Let's see if we can make Groot a bit smarter. We'll use OpenAI's API to make him talk.
+# The config is like dumb Groot's but here we'll pass a parameter to your class constructor.
+#
+# Check out the code in /wingmen/open_ai_groot.py.
+# Note that OpenAiGroot inherits from 'OpenAiWingman' instead of 'Wingman' which gives him the _play_audio method.
+#
+# The OpenAiWingman not only gives you access to our OpenAI wrapper but also handles the whole "command" magic.
+# So we could add commands like ATC's "RequestLandingPermission" to Groot as well and it would "just work".
+#
+# Currently, we only have a specific base class for OpenAI, but we'll probably add more in the future.
+#
+disabled: true
+record_key: down
+class:
+  module: wingmen.open_ai_groot
+  name: OpenAiGroot
+  args: # passed to the class constructor as **kwargs dict - optional
+    one_liner: Groot? # you can pass any base type here, in this case a string
+    #... you can have as many as you want here

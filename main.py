@@ -1,3 +1,4 @@
+import os
 from os import path
 import sys
 import asyncio
@@ -29,7 +30,41 @@ def read_main_config(file_name=None) -> dict[str, any]:
             cfg = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
             print(exc)
+
+    # Load wingmen
+    wingmen = load_wingmen("wingmen")
+
+    # Inject wingmen into config
+    cfg["wingmen"] = wingmen
+
     return cfg
+
+
+def load_wingmen(directory: str) -> dict[str, any]:
+
+    # Global wingmen dict
+    wingmen = dict()
+
+    # Dynamically load all wingmen configuration files from the provided directory
+    for file in os.listdir(directory):
+
+        # Filter out all non-yaml files
+        if file.endswith(".yaml"):
+
+            # Get the absolute path of the file along with other file info
+            bundle_dir = path.abspath(path.dirname(__file__))
+            file_name = path.join(bundle_dir + "/" + directory, file)
+            wingman_name = file.replace(".yaml", "")
+
+            # Load wingman configuration file as a dict and add it to the global wingmen dict
+            with open(file_name, "r", encoding="UTF-8") as stream:
+                try:
+                    wingman = yaml.safe_load(stream)
+                    wingmen[wingman_name] = wingman
+                except yaml.YAMLError as exc:
+                    print(exc)
+
+    return wingmen
 
 
 def get_or_create_api_keys(filename="apikeys.yaml"):
