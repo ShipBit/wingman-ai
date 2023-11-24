@@ -114,6 +114,7 @@ class OpenAiWingman(Wingman):
                 response.content,
                 self.config.get("features", {}).get("play_beep_on_receiving"),
                 self.config.get("features", {}).get("enable_radio_sound_effect"),
+                self.config.get("features", {}).get("enable_robot_sound_effect")
             )
 
     def __get_tools(self) -> list[dict[str, any]]:
