@@ -14,11 +14,10 @@ class StarHeadWingman(OpenAiWingman):
         super().__init__(name, config)
         self.star_head_url = "https://api-test.star-head.de"
         """The base URL of the StarHead API"""
-        self.headers = {
-            "x-origin": "wingman-ai",
-        }
-
-        self.timeout = 30
+        self.headers = {"x-origin": "wingman-ai"}
+        """Requireds header for the StarHead API"""
+        self.timeout = 5
+        """Global timeout for calls to the the StarHead API (in seconds)"""
 
         self.vehicles = []
         self.ship_names = []
@@ -49,7 +48,9 @@ class StarHeadWingman(OpenAiWingman):
         url = f"{self.star_head_url}/{endpoint}"
         Printr.info_print(f"Retrieving {url}")
 
-        response = requests.get(url, params=params, timeout=self.timeout)
+        response = requests.get(
+            url, params=params, timeout=self.timeout, headers=self.headers
+        )
         response.raise_for_status()
         if self.debug:
             self.print_execution_time(reset_timer=True)
@@ -119,7 +120,10 @@ class StarHeadWingman(OpenAiWingman):
             "onlySingleSections": True,
         }
         response = requests.post(
-            f"{self.star_head_url}/trading", json=data, timeout=self.timeout
+            f"{self.star_head_url}/trading",
+            json=data,
+            timeout=self.timeout,
+            headers=self.headers,
         )
         section = response.json()[0]
         return json.dumps(section)
