@@ -12,10 +12,13 @@ class StarHeadWingman(OpenAiWingman):
 
     def __init__(self, name: str, config: dict[str, any]) -> None:
         super().__init__(name, config)
-        self.star_head_url = "https://api-test.star-head.de"
+        # config entry existence not validated yet. Assign later when checked!
+        self.star_head_url = ""
         """The base URL of the StarHead API"""
+
         self.headers = {"x-origin": "wingman-ai"}
         """Requireds header for the StarHead API"""
+
         self.timeout = 5
         """Global timeout for calls to the the StarHead API (in seconds)"""
 
@@ -25,7 +28,20 @@ class StarHeadWingman(OpenAiWingman):
         self.celestial_object_names = []
         self.quantum_drives = []
 
+    def validate(self):
+        # collect errors from the base class (if any)
+        errors: list[str] = super().validate()
+
+        # add custom errors
+        if not self.config.get("starhead_api_url"):
+            errors.append("Missing 'starhead_api_url' in config.yaml")
+
+        return errors
+
     def prepare(self):
+        # here validate() already ran, so we can safely access the config
+        self.star_head_url = self.config.get("starhead_api_url")
+
         self.start_execution_benchmark()
 
         self.vehicles = self._fetch_data("vehicle")
@@ -128,8 +144,13 @@ class StarHeadWingman(OpenAiWingman):
             timeout=self.timeout,
             headers=self.headers,
         )
-        section = response.json()[0]
-        return json.dumps(section)
+        response.raise_for_status()
+
+        parsed_response = response.json()
+        if parsed_response:
+            section = parsed_response[0]
+            return json.dumps(section)
+        return "No route found. This might be an issue with the StarHead API."
 
     def _get_celestial_object_id(self, name: str) -> Optional[int]:
         """Finds the ID of the celestial object with the specified name."""

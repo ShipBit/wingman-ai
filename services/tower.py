@@ -29,7 +29,7 @@ class Tower:
             }
             merged_config = self.__merge_configs(global_config, wingman_config)
             class_config = merged_config.get("class")
-            try:
+
             wingman = None
             # it's a custom Wingman
             if class_config:
@@ -44,11 +44,14 @@ class Tower:
             else:
                 wingman = OpenAiWingman(wingman_name, merged_config)
 
+            errors = wingman.validate()
+            if not errors or len(errors) == 0:
                 wingmen.append(wingman)
+            else:
+                self.broken_wingmen.append(
+                    {"name": wingman_name, "error": ", ".join(errors)}
+                )
 
-            except Exception as e:
-                #TODO better exception handling
-                self.broken_wingmen.append({"name": wingman_name, "error": e})
         return wingmen
 
     def prepare_wingmen(self):

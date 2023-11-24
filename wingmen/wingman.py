@@ -88,7 +88,18 @@ class Wingman:
         You can override it if you need to load async data from an API or file."""
         pass
 
-    # TODO: add validation for config
+    def validate(self) -> list[str]:
+        """Use this function to validate params and config before the Wingman is started.
+        If you add new config sections or entries to your custom wingman, you should validate them here.
+
+        It's a good idea to collect all errors from the base class and not to swallow them first.
+
+        If you return errors, your Wingman will be disabled by Tower and not be loaded.
+
+        Returns:
+            list[str]: A list of error messages or an empty list if everything is okay.
+        """
+        return []
 
     # ──────────────────────────── The main processing loop ──────────────────────────── #
 
