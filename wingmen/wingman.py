@@ -197,7 +197,7 @@ class Wingman:
         command = next(
             (
                 item
-                for item in self.config.get("commands")
+                for item in self.config.get("commands", [])
                 if item["name"] == command_name
             ),
             None,
