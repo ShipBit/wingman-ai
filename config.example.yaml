@@ -410,6 +410,7 @@ wingmen:
   # If it's missing any of these parameters, it will ask the user for them.
   star-head:
     record_key: up
+    starhead_api_url: https://api-test.star-head.de # note how you can just add your own config options here!
     features:
       tts_provider: edge_tts
     edge_tts:

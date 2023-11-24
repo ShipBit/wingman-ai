@@ -4,6 +4,8 @@ from services.printr import Printr
 
 
 class Tower:
+    broken_wingmen = []
+
     def __init__(self, config: dict[str, any]):
         self.config = config
 
@@ -30,19 +32,30 @@ class Tower:
 
             wingman = None
             # it's a custom Wingman
-            if class_config:
-                kwargs = class_config.get("args", {})
-                wingman = Wingman.create_dynamically(
-                    name=wingman_name,
-                    config=merged_config,
-                    module_path=class_config.get("module"),
-                    class_name=class_config.get("name"),
-                    **kwargs
-                )
+            try:
+                if class_config:
+                    kwargs = class_config.get("args", {})
+                    wingman = Wingman.create_dynamically(
+                        name=wingman_name,
+                        config=merged_config,
+                        module_path=class_config.get("module"),
+                        class_name=class_config.get("name"),
+                        **kwargs
+                    )
+                else:
+                    wingman = OpenAiWingman(wingman_name, merged_config)
+            except Exception as e:
+                # just in case we missed something
+                self.broken_wingmen.append({"name": wingman_name, "error": e})
             else:
-                wingman = OpenAiWingman(wingman_name, merged_config)
-
-            wingmen.append(wingman)
+                # additional validation check if no exception was raised
+                errors = wingman.validate()
+                if not errors or len(errors) == 0:
+                    wingmen.append(wingman)
+                else:
+                    self.broken_wingmen.append(
+                        {"name": wingman_name, "error": ", ".join(errors)}
+                    )
 
         return wingmen
 
@@ -65,6 +78,9 @@ class Tower:
 
     def get_wingmen(self):
         return self.wingmen
+
+    def get_broken_wingmen(self):
+        return self.broken_wingmen
 
     def get_config(self):
         return self.config
