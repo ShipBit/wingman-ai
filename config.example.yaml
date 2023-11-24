@@ -35,7 +35,7 @@ openai:
   summarize_model: gpt-3.5-turbo-1106
 
 features:
-  debug_mode: true # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
+  debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
 
   # These are "post-processing" audio effects for the TTS conversion. Files are located in /audio_samples.
   # Sound effects are currently not supported for the edge_tts provider.

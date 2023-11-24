@@ -140,7 +140,6 @@ class OpenAiWingman(Wingman):
         command = self._execute_instant_activation_command(transcript)
         if command:
             response = self._select_command_response(command)
-            self._play_to_user(response)
             return response
         return None
 
@@ -255,7 +254,7 @@ class OpenAiWingman(Wingman):
             # if the command has responses, we have to play one of them
             if command and command.get("responses"):
                 instant_reponse = self._select_command_response(command)
-                self._play_to_user(instant_reponse)
+                await self._play_to_user(instant_reponse)
 
         return function_response, instant_reponse
 
