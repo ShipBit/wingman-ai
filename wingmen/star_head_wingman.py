@@ -1,185 +1,183 @@
+from typing import Optional
 import json
 import requests
+from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 
 
 class StarHeadWingman(OpenAiWingman):
-    def __init__(self, name: str, config: dict[str, any]):
+    """Our StarHead Wingman uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
+    If it's missing any of these parameters, it will ask the user for them.
+    """
+
+    def __init__(self, name: str, config: dict[str, any]) -> None:
         super().__init__(name, config)
+        self.star_head_url = "https://api-test.star-head.de"
+        """The base URL of the StarHead API"""
+        self.headers = {"x-origin": "wingman-ai"}
+        """Requireds header for the StarHead API"""
+        self.timeout = 5
+        """Global timeout for calls to the the StarHead API (in seconds)"""
 
-        self.__init_star_head()
+        self.vehicles = []
+        self.ship_names = []
+        self.celestial_objects = []
+        self.celestial_object_names = []
+        self.quantum_drives = []
 
-    def __init_star_head(self):
-        # Setup StarHead
-        # The API endpoint URL
-        self.star_head_url = "https://api.star-head.de"
-        self.headers = {
-            "x-origin": "wingman-ai",
-        }
+    def load_data_once(self):
+        self.start_execution_benchmark()
 
-        # GET all ships
-        response = requests.get(f"{self.star_head_url}/vehicle", headers=self.headers)
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Parse the JSON response
-            self.vehicles = response.json()
+        self.vehicles = self._fetch_data("vehicle")
+        self.ship_names = [
+            self._format_ship_name(vehicle)
+            for vehicle in self.vehicles
+            if vehicle["type"] == "Ship"
+        ]
 
-            # Extract a list of ship names
-            self.ship_names = [
-                vehicle["model"] + " " + vehicle["name"]
-                if vehicle["model"] != vehicle["name"]
-                else vehicle["name"]
-                for vehicle in self.vehicles
-                if vehicle["type"] == "Ship"
-            ]
-        else:
-            print(f"Failed to retrieve vehicles. Status code: {response.status_code}")
+        self.celestial_objects = self._fetch_data("celestialobject")
+        self.celestial_object_names = [
+            celestial_object["name"] for celestial_object in self.celestial_objects
+        ]
 
-        # Get all celestial objects
+        self.quantum_drives = self._fetch_data("vehiclecomponent", {"typeFilter": 8})
+
+    def _fetch_data(
+        self, endpoint: str, params: Optional[dict[str, any]] = None
+    ) -> list[dict[str, any]]:
+        url = f"{self.star_head_url}/{endpoint}"
+        Printr.info_print(f"Retrieving {url}")
+
         response = requests.get(
-            f"{self.star_head_url}/celestialobject", headers=self.headers
+            url, params=params, timeout=self.timeout, headers=self.headers
         )
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Parse the JSON response
-            self.celestial_objects = response.json()
+        response.raise_for_status()
+        if self.debug:
+            self.print_execution_time(reset_timer=True)
 
-            # Extract a list of celestial object names
-            self.celestial_object_names = [
-                celestial_object["name"] for celestial_object in self.celestial_objects
-            ]
-        else:
-            print(
-                f"Failed to retrieve celestial objects. Status code: {response.status_code}"
-            )
+        return response.json()
 
-        # Get all quantum drives
-        params = {
-            "typeFilter": "8",
-        }
-        response = requests.get(
-            f"{self.star_head_url}/vehiclecomponent",
-            params=params,
-            headers=self.headers,
+    def _format_ship_name(self, vehicle: dict[str, any]) -> str:
+        """Formats name by combining model and name, avoiding repetition"""
+        return (
+            f"{vehicle['model']} {vehicle['name']}"
+            if vehicle["name"] != vehicle["model"]
+            else vehicle["name"]
         )
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Parse the JSON response
-            self.quantum_drives = response.json()
-        else:
-            print(
-                f"Failed to retrieve quantum drives. Status code: {response.status_code}"
-            )
 
-    def _get_function_response(
+    def _execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str]:
-        function_response, instant_response = super()._get_function_response(
+        """Execute commands passed from the base class and handles the 'get_best_trading_route'."""
+        function_response, instant_response = super()._execute_command_by_function_call(
             function_name, function_args
         )
-
         if function_name == "get_best_trading_route":
-            # get the best trading route based on the arguments passed by GPT
-            function_response = self.__get_best_trading_route(**function_args)
-
+            function_response = self._get_best_trading_route(**function_args)
         return function_response, instant_response
 
-    def __get_best_trading_route(self, ship, position, moneyToSpend):
-        print(
-            f"Call StarHead - Ship: {ship}, Position: {position} - Money to spend: {moneyToSpend}"
-        )
-        cargo, qd = self.__get_ship_details(ship)
-        celestial_object_id = self.__get_celestial_object_id(position)
-
-        data = {
-            "startCelestialObjectId": celestial_object_id,
-            "quantumDriveId": qd.get("id"),
-            "maxAvailablScu": cargo,
-            "maxAvailableMoney": moneyToSpend,
-            "useOnlyWeaponFreeZones": False,
-            "onlySingleSections": True,
-        }
-
-        response = requests.post(
-            f"{self.star_head_url}/trading", json=data, headers=self.headers
-        )
-
-        section = response.json()[0]
-
-        return json.dumps(section)
-
-    def __get_celestial_object_id(self, name):
-        for celestial_object in self.celestial_objects:
-            if celestial_object["name"].lower() == name.lower():
-                return celestial_object["id"]
-        return None
-
-    def __get_ship_details(self, ship_name):
-        for vehicle in self.vehicles:
-            # Construct a ship identifier that includes both model and name if they're different
-            constructed_name = (
-                f"{vehicle['model']} {vehicle['name']}"
-                if vehicle["model"] != vehicle["name"]
-                else vehicle["name"]
-            )
-            if constructed_name.lower() == ship_name.lower():
-                cargo = vehicle.get("scuCargo")
-                loadouts = self.__get_ship_loadout(vehicle.get("id"))
-                if loadouts:
-                    loadout = next(
-                        (l for l in loadouts.get("loadouts") if l["isDefaultLayout"]),
-                        None,
-                    )
-                    if loadout:
-                        for qd in self.quantum_drives:
-                            for item in loadout.get("data"):
-                                if item.get("componentId") == qd.get("id"):
-                                    return cargo, qd
-        return None, None
-
-    def __get_ship_loadout(self, ship_id):
-        if not ship_id:
-            return None
-
-        response = requests.get(
-            f"{self.star_head_url}/vehicle/{ship_id}/loadout", headers=self.headers
-        )
-        # Check if the request was successful
-        if response.status_code == 200:
-            # Parse the JSON response
-            return response.json()
-        else:
-            return None
-
-    def _get_tools(self) -> list[dict[str, any]]:
-        tools = super()._get_tools()
+    def _build_tools(self) -> list[dict[str, any]]:
+        """Builds the toolset for execution, adding custom function 'get_best_trading_route'."""
+        tools = super()._build_tools()
         tools.append(
             {
                 "type": "function",
                 "function": {
                     "name": "get_best_trading_route",
-                    "description": "Determines the (best) trade route for a spaceship and its current position.",
+                    "description": "Finds the best trade route for a given spaceship and position.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "ship": {
-                                "type": "string",
-                                "description": "The spaceship for which the trade route is to be determined.",
-                                "enum": self.ship_names,
-                            },
+                            "ship": {"type": "string", "enum": self.ship_names},
                             "position": {
                                 "type": "string",
-                                "description": "The current position of the spaceship.",
                                 "enum": self.celestial_object_names,
                             },
-                            "moneyToSpend": {
-                                "type": "number",
-                                "description": "The maximum amount of money to spend on the trade route.",
-                            },
+                            "moneyToSpend": {"type": "number"},
                         },
                         "required": ["ship", "position", "moneyToSpend"],
                     },
                 },
-            },
+            }
         )
         return tools
+
+    def _get_best_trading_route(
+        self, ship: str, position: str, moneyToSpend: float
+    ) -> str:
+        """Calculates the best trading route for the specified ship and position.
+        Note that the function arguments have to match the funtion_args from OpenAI, hence the camelCase!
+        """
+
+        cargo, qd = self._get_ship_details(ship)
+        celestial_object_id = self._get_celestial_object_id(position)
+        data = {
+            "startCelestialObjectId": celestial_object_id,
+            "quantumDriveId": qd["id"] if qd else None,
+            "maxAvailablScu": cargo,
+            "maxAvailableMoney": moneyToSpend,
+            "useOnlyWeaponFreeZones": False,
+            "onlySingleSections": True,
+        }
+        response = requests.post(
+            f"{self.star_head_url}/trading",
+            json=data,
+            timeout=self.timeout,
+            headers=self.headers,
+        )
+        section = response.json()[0]
+        return json.dumps(section)
+
+    def _get_celestial_object_id(self, name: str) -> Optional[int]:
+        """Finds the ID of the celestial object with the specified name."""
+        return next(
+            (
+                obj["id"]
+                for obj in self.celestial_objects
+                if obj["name"].lower() == name.lower()
+            ),
+            None,
+        )
+
+    def _get_ship_details(
+        self, ship_name: str
+    ) -> tuple[Optional[int], Optional[dict[str, any]]]:
+        """Gets ship details including cargo capacity and quantum drive information."""
+        vehicle = next(
+            (
+                v
+                for v in self.vehicles
+                if self._format_ship_name(v).lower() == ship_name.lower()
+            ),
+            None,
+        )
+        if vehicle:
+            cargo = vehicle.get("scuCargo")
+            loadouts = self._get_ship_loadout(vehicle.get("id"))
+            if loadouts:
+                loadout = next(
+                    (l for l in loadouts.get("loadouts") if l["isDefaultLayout"]), None
+                )
+                qd = next(
+                    (
+                        qd
+                        for qd in self.quantum_drives
+                        for item in loadout.get("data")
+                        if item.get("componentId") == qd.get("id")
+                    ),
+                    None,
+                )
+                return cargo, qd
+        return None, None
+
+    def _get_ship_loadout(self, ship_id: Optional[int]) -> Optional[dict[str, any]]:
+        """Retrieves loadout data for a given ship ID."""
+        if ship_id:
+            try:
+                loadout = self._fetch_data(f"vehicle/{ship_id}/loadout")
+                return loadout or None
+            except requests.HTTPError:
+                Printr.err_print(
+                    f"Failed to fetch loadout data for ship with ID: {ship_id}"
+                )
+        return None
