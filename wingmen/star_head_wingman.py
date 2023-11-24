@@ -12,10 +12,13 @@ class StarHeadWingman(OpenAiWingman):
     def __init_star_head(self):
         # Setup StarHead
         # The API endpoint URL
-        self.star_head_url = "https://api-test.star-head.de"
+        self.star_head_url = "https://api.star-head.de"
+        self.headers = {
+            "x-origin": "wingman-ai",
+        }
 
         # GET all ships
-        response = requests.get(f"{self.star_head_url}/vehicle")
+        response = requests.get(f"{self.star_head_url}/vehicle", headers=self.headers)
         # Check if the request was successful
         if response.status_code == 200:
             # Parse the JSON response
@@ -33,7 +36,9 @@ class StarHeadWingman(OpenAiWingman):
             print(f"Failed to retrieve vehicles. Status code: {response.status_code}")
 
         # Get all celestial objects
-        response = requests.get(f"{self.star_head_url}/celestialobject")
+        response = requests.get(
+            f"{self.star_head_url}/celestialobject", headers=self.headers
+        )
         # Check if the request was successful
         if response.status_code == 200:
             # Parse the JSON response
@@ -52,7 +57,11 @@ class StarHeadWingman(OpenAiWingman):
         params = {
             "typeFilter": "8",
         }
-        response = requests.get(f"{self.star_head_url}/vehiclecomponent", params=params)
+        response = requests.get(
+            f"{self.star_head_url}/vehiclecomponent",
+            params=params,
+            headers=self.headers,
+        )
         # Check if the request was successful
         if response.status_code == 200:
             # Parse the JSON response
@@ -91,7 +100,9 @@ class StarHeadWingman(OpenAiWingman):
             "onlySingleSections": True,
         }
 
-        response = requests.post(f"{self.star_head_url}/trading", json=data)
+        response = requests.post(
+            f"{self.star_head_url}/trading", json=data, headers=self.headers
+        )
 
         section = response.json()[0]
 
@@ -130,7 +141,9 @@ class StarHeadWingman(OpenAiWingman):
         if not ship_id:
             return None
 
-        response = requests.get(f"{self.star_head_url}/vehicle/{ship_id}/loadout")
+        response = requests.get(
+            f"{self.star_head_url}/vehicle/{ship_id}/loadout", headers=self.headers
+        )
         # Check if the request was successful
         if response.status_code == 200:
             # Parse the JSON response
