@@ -14,12 +14,12 @@ from services.printr import Printr
 
 def read_main_config(file_name=None) -> dict[str, any]:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        # running in a PyInstaller bundle'
+        # running in a PyInstaller bundle
         if not file_name:
             bundle_dir = path.abspath(path.dirname(__file__))
             file_name = path.join(bundle_dir, "../config.yaml")
     else:
-        # running in a normal Python process'
+        # running in a normal Python process
         if not file_name:
             bundle_dir = path.abspath(path.dirname(__file__))
             file_name = path.join(bundle_dir, "config.yaml")
@@ -107,6 +107,8 @@ try:
                 f"{Printr.clr('⌬', Printr.CYAN)} Exit this program by pressing [{Printr.clr('Ctrl', Printr.BLUE)}] + [{Printr.clr('C', Printr.BLUE)}]"
             )
             print("")
+
+            tower.instantiate_wingmen()
             listener.join()
 
 except FileNotFoundError:

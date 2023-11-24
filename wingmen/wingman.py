@@ -79,6 +79,17 @@ class Wingman:
         """Starts the execution benchmark timer."""
         self.execution_start = time.perf_counter()
 
+    # ──────────────────────────────────── Hooks ─────────────────────────────────── #
+
+    # TODO: this should be async
+    def load_data_once(self):
+        """This method is called only once when the Wingman is instantiated by Tower.
+
+        You can override it if you need to load async data from an API or file."""
+        pass
+
+    # TODO: add validation for config
+
     # ──────────────────────────── The main processing loop ──────────────────────────── #
 
     async def process(self, audio_input_wav: str):

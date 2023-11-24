@@ -6,10 +6,49 @@ class Tower:
     def __init__(self, config: dict[str, any]):
         self.config = config
         self.key_wingman_dict: dict[str, Wingman] = {}
-        self.wingmen = self.__get_wingmen()
+        self.wingmen = []
 
-        for wingman in self.wingmen:
-            self.key_wingman_dict[wingman.get_record_key()] = wingman
+    def instantiate_wingmen(self) -> list[Wingman]:
+        for wingman_name, wingman_config in self.config["wingmen"].items():
+            if wingman_config.get("disabled") is True:
+                continue
+
+            global_config = {
+                "openai": self.config["openai"],
+                "features": self.config["features"],
+            }
+            merged_config = self.__merge_configs(global_config, wingman_config)
+            class_config = merged_config.get("class")
+
+            wingman = None
+            # it's a custom Wingman
+            if class_config:
+                kwargs = class_config.get("args", {})
+                wingman = Wingman.create_dynamically(
+                    name=wingman_name,
+                    config=merged_config,
+                    module_path=class_config.get("module"),
+                    class_name=class_config.get("name"),
+                    **kwargs
+                )
+            else:
+                wingman = OpenAiWingman(wingman_name, merged_config)
+
+            wingman.load_data_once()
+            self.wingmen.append(wingman)
+
+    def get_wingman_from_key(self, key: any) -> Wingman | None:
+        if hasattr(key, "char"):
+            wingman = self.key_wingman_dict.get(key.char, None)
+        else:
+            wingman = self.key_wingman_dict.get(key.name, None)
+        return wingman
+
+    def get_wingmen(self):
+        return self.wingmen
+
+    def get_config(self):
+        return self.config
 
     def __deep_merge(self, source, updates):
         """Recursively merges updates into source."""
@@ -33,43 +72,3 @@ class Tower:
                 )
 
         return merged
-
-    def __get_wingmen(self) -> list[Wingman]:
-        wingmen = []
-        for wingman_name, wingman_config in self.config["wingmen"].items():
-            if wingman_config.get("disabled") is True:
-                continue
-
-            global_config = {
-                "openai": self.config["openai"],
-                "features": self.config["features"],
-            }
-            merged_config = self.__merge_configs(global_config, wingman_config)
-            class_config = merged_config.get("class")
-            if class_config:
-                kwargs = class_config.get("args", {})
-                wingmen.append(
-                    Wingman.create_dynamically(
-                        name=wingman_name,
-                        config=merged_config,
-                        module_path=class_config.get("module"),
-                        class_name=class_config.get("name"),
-                        **kwargs
-                    )
-                )
-            else:
-                wingmen.append(OpenAiWingman(wingman_name, merged_config))
-        return wingmen
-
-    def get_wingman_from_key(self, key: any) -> Wingman | None:
-        if hasattr(key, "char"):
-            wingman = self.key_wingman_dict.get(key.char, None)
-        else:
-            wingman = self.key_wingman_dict.get(key.name, None)
-        return wingman
-
-    def get_wingmen(self):
-        return self.wingmen
-
-    def get_config(self):
-        return self.config

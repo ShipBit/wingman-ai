@@ -1,7 +1,6 @@
-from typing import Any, List, Optional, Tuple
+from typing import Optional
 import json
 import requests
-
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 
@@ -11,7 +10,7 @@ class StarHeadWingman(OpenAiWingman):
     If it's missing any of these parameters, it will ask the user for them.
     """
 
-    def __init__(self, name: str, config: dict[str, Any]) -> None:
+    def __init__(self, name: str, config: dict[str, any]) -> None:
         super().__init__(name, config)
         self.star_head_url = "https://api-test.star-head.de"
         """The base URL of the StarHead API"""
@@ -20,6 +19,14 @@ class StarHeadWingman(OpenAiWingman):
         }
 
         self.timeout = 30
+
+        self.vehicles = []
+        self.ship_names = []
+        self.celestial_objects = []
+        self.celestial_object_names = []
+        self.quantum_drives = []
+
+    def load_data_once(self):
         self.start_execution_benchmark()
 
         self.vehicles = self._fetch_data("vehicle")
@@ -37,17 +44,19 @@ class StarHeadWingman(OpenAiWingman):
         self.quantum_drives = self._fetch_data("vehiclecomponent", {"typeFilter": 8})
 
     def _fetch_data(
-        self, endpoint: str, params: Optional[dict[str, Any]] = None
-    ) -> List[dict[str, Any]]:
-        response = requests.get(
-            f"{self.star_head_url}/{endpoint}", params=params, timeout=self.timeout
-        )
+        self, endpoint: str, params: Optional[dict[str, any]] = None
+    ) -> list[dict[str, any]]:
+        url = f"{self.star_head_url}/{endpoint}"
+        Printr.info_print(f"Retrieving {url}")
+
+        response = requests.get(url, params=params, timeout=self.timeout)
         response.raise_for_status()
         if self.debug:
             self.print_execution_time(reset_timer=True)
+
         return response.json()
 
-    def _format_ship_name(self, vehicle: dict[str, Any]) -> str:
+    def _format_ship_name(self, vehicle: dict[str, any]) -> str:
         """Formats name by combining model and name, avoiding repetition"""
         return (
             f"{vehicle['model']} {vehicle['name']}"
@@ -56,8 +65,8 @@ class StarHeadWingman(OpenAiWingman):
         )
 
     def _execute_command_by_function_call(
-        self, function_name: str, function_args: dict[str, Any]
-    ) -> Tuple[str, str]:
+        self, function_name: str, function_args: dict[str, any]
+    ) -> tuple[str, str]:
         """Execute commands passed from the base class and handles the 'get_best_trading_route'."""
         function_response, instant_response = super()._execute_command_by_function_call(
             function_name, function_args
@@ -66,7 +75,7 @@ class StarHeadWingman(OpenAiWingman):
             function_response = self._get_best_trading_route(**function_args)
         return function_response, instant_response
 
-    def _build_tools(self) -> List[dict[str, Any]]:
+    def _build_tools(self) -> list[dict[str, any]]:
         """Builds the toolset for execution, adding custom function 'get_best_trading_route'."""
         tools = super()._build_tools()
         tools.append(
@@ -128,7 +137,7 @@ class StarHeadWingman(OpenAiWingman):
 
     def _get_ship_details(
         self, ship_name: str
-    ) -> Tuple[Optional[int], Optional[dict[str, Any]]]:
+    ) -> tuple[Optional[int], Optional[dict[str, any]]]:
         """Gets ship details including cargo capacity and quantum drive information."""
         vehicle = next(
             (
@@ -157,7 +166,7 @@ class StarHeadWingman(OpenAiWingman):
                 return cargo, qd
         return None, None
 
-    def _get_ship_loadout(self, ship_id: Optional[int]) -> Optional[dict[str, Any]]:
+    def _get_ship_loadout(self, ship_id: Optional[int]) -> Optional[dict[str, any]]:
         """Retrieves loadout data for a given ship ID."""
         if ship_id:
             try:
