@@ -69,6 +69,8 @@ wingmen:
       #tts_voice: echo
       #...
     record_key: end # The "push-to-talk" key for this wingman. Keep it pressed while talking!
+    features: # overrides the GLOBAL settings
+      enable_robot_sound_effect: true
     #
     # Commands are keypresses that the wingmen can execute.
     # These are global keypresses on your system and therefore also work in games.
