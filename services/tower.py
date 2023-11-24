@@ -4,6 +4,8 @@ from services.printr import Printr
 
 
 class Tower:
+    broken_wingmen = []
+
     def __init__(self, config: dict[str, any]):
         self.config = config
 
@@ -27,7 +29,7 @@ class Tower:
             }
             merged_config = self.__merge_configs(global_config, wingman_config)
             class_config = merged_config.get("class")
-
+            try:
             wingman = None
             # it's a custom Wingman
             if class_config:
@@ -42,8 +44,11 @@ class Tower:
             else:
                 wingman = OpenAiWingman(wingman_name, merged_config)
 
-            wingmen.append(wingman)
+                wingmen.append(wingman)
 
+            except Exception as e:
+                #TODO better exception handling
+                self.broken_wingmen.append({"name": wingman_name, "error": e})
         return wingmen
 
     def prepare_wingmen(self):
@@ -65,6 +70,9 @@ class Tower:
 
     def get_wingmen(self):
         return self.wingmen
+
+    def get_broken_wingmen(self):
+        return self.broken_wingmen
 
     def get_config(self):
         return self.config
