@@ -35,19 +35,35 @@ openai:
   summarize_model: gpt-3.5-turbo-1106
 
 features:
-  debug_mode: false # If this is set to true, actual keypresses are skipped and you'll see more verbose output in the console.
-  #
-  # These are "post-processing" audio effects for the text-to-speech conversion.
-  # You can find the audio files in the /audio_samples directory. Feel free to replace them with your own.
-  #
+  debug_mode: true # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
+
+  # These are "post-processing" audio effects for the TTS conversion. Files are located in /audio_samples.
+  # Sound effects are currently not supported for the edge_tts provider.
   play_beep_on_receiving: false
   enable_radio_sound_effect: false # adds noise to messages
+
+  # ────────────────────────────────── TTS Provider ────────────────────────────────────────
+  # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  # We are already working on more providers like elevenlabs.
+  tts_provider: default # or: 'edge_tts'
+
+# Specifig settings for the edge_tts provider. Only used if tts_provider in features is set to 'edge_tts' above.
+# Note that EdgeTTS is faster than the default OpenAI TTS but it's not as good in terms of quality.
+edge_tts:
+  # EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
+  # We built something for that but it means that you'll get a random voice for each language.
+  # Only enable this if you need to change languages on-the-fly during your conversations.
+  detect_language: false
+  # The voice to use (only if detect_language is set to false above).
+  # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
+  tts_voice: en-US-GuyNeural
 
 wingmen:
   # ────────────────────────────────── BOARD COMPUTER ────────────────────────────────────────
   # "board-computer" is a "default" wingman that you can roleplay with and that can execute commands (=keypresses).
   # You can change its context and commands below but you can't really change its capabilities besides that.
-  # If you're a developer and want to get crazy with your own wingmen, check out the "groot" examples below!
+  # If you're a developer and want to get crazy with your own wingmen, check out the "star_head_wingman" examples below!
   #
   board-computer: # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
     openai:
@@ -393,6 +409,17 @@ wingmen:
   # It uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
   # If it's missing any of these parameters, it will ask the user for them.
   star-head:
+    record_key: up
+    features:
+      tts_provider: edge_tts
+    edge_tts:
+      detect_language: true
+    class:
+      # Where your code is located. Use '.' as path separator!
+      # We advise you to put all your custom wingmen into the /wingmen directory.
+      # "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).
+      module: wingmen.star_head_wingman
+      name: StarHeadWingman # The name of your class within your file/module.
     openai:
       context: |
         You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
@@ -409,12 +436,4 @@ wingmen:
         provide values / parameters. Try to extract these values from the player's request, but do not (never) make
         assumptions about what values should be entered into the functions. Ask for clarification if you do not know
         the values. Always answer in the language in which the question was asked.
-    record_key: up
-    class: # Custom wingmen are defined by a "class" section. We'll need that to create an instance of your Python class.
-      #
-      # Basically where your code is located. Use '.' as path separator!
-      # We advise you to put all your custom wingmen into the /wingmen directory.
-      # "wingmen" is the directory and "groot" is the name of the Python file (without the .py extension).
-      #
-      module: wingmen.star_head_wingman
-      name: StarHeadWingman # The name of your class within your file/module.
+      conversation_model: gpt-4-1106-preview

@@ -82,7 +82,7 @@ class Wingman:
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
     # TODO: this should be async
-    def load_data_once(self):
+    def prepare(self):
         """This method is called only once when the Wingman is instantiated by Tower.
 
         You can override it if you need to load async data from an API or file."""
@@ -197,7 +197,7 @@ class Wingman:
         command = next(
             (
                 item
-                for item in self.config.get("commands")
+                for item in self.config.get("commands", [])
                 if item["name"] == command_name
             ),
             None,
