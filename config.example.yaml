@@ -410,6 +410,16 @@ wingmen:
   # If it's missing any of these parameters, it will ask the user for them.
   star-head:
     record_key: up
+    features:
+      tts_provider: edge_tts
+    edge_tts:
+      detect_language: true
+    class:
+      # Where your code is located. Use '.' as path separator!
+      # We advise you to put all your custom wingmen into the /wingmen directory.
+      # "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).
+      module: wingmen.star_head_wingman
+      name: StarHeadWingman # The name of your class within your file/module.
     openai:
       context: |
         You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
@@ -427,13 +437,3 @@ wingmen:
         assumptions about what values should be entered into the functions. Ask for clarification if you do not know
         the values. Always answer in the language in which the question was asked.
       conversation_model: gpt-4-1106-preview
-      features:
-        tts_provider: edge_tts
-      edge_tts:
-        detect_language: true
-      class:
-        # Where your code is located. Use '.' as path separator!
-        # We advise you to put all your custom wingmen into the /wingmen directory.
-        # "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).
-        module: wingmen.star_head_wingman
-        name: StarHeadWingman # The name of your class within your file/module.
