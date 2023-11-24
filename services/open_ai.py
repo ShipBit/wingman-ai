@@ -17,6 +17,7 @@ class OpenAi:
         self,
         filename: str,
         model: str = "whisper-1",
+        response_format: str = "json",
         **params,
     ):
         try:
@@ -24,6 +25,7 @@ class OpenAi:
                 transcript = self.client.audio.transcriptions.create(
                     model=model,
                     file=audio_input,
+                    response_format=response_format,
                     **params,
                 )
                 return transcript

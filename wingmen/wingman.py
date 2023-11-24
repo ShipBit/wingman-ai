@@ -44,6 +44,14 @@ class Wingman:
         self.debug: bool = self.config["features"].get("debug_mode", False)
         """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
 
+        self.tts_provider = self.config["features"].get("tts_provider")
+        """The name of the TTS provider you configured in the config.yaml"""
+        # todo: remove warning for release
+        if not self.tts_provider or not self.config.get("edge_tts"):
+            Printr.warn_print(
+                "No TTS provider configured. You're probably using an outdated config.yaml"
+            )
+
     @staticmethod
     def create_dynamically(
         module_path: str, class_name: str, name: str, config: dict[str, any], **kwargs
@@ -128,7 +136,7 @@ class Wingman:
             Printr.info_print("Starting transcription...")
 
         # transcribe the audio.
-        transcript = await self._transcribe(audio_input_wav)
+        transcript, locale = await self._transcribe(audio_input_wav)
 
         if self.debug:
             self.print_execution_time(reset_timer=True)
@@ -141,7 +149,7 @@ class Wingman:
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
-                transcript
+                transcript, locale
             )
 
             if self.debug:
@@ -161,24 +169,27 @@ class Wingman:
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
-    async def _transcribe(self, audio_input_wav: str) -> str | None:
+    async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the audio to text. You can override this method if you want to use a different transcription service.
 
         Args:
             audio_input_wav (str): The path to the audio file that contains the user's speech. This is a recording of what you you said.
 
         Returns:
-            str | None: The transcript of the audio file or None if the transcription failed.
+            tuple[str | None, str | None]: The transcript of the audio file and the detected language as locale (if determined).
         """
-        return None
+        return None, None
 
-    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
+    async def _get_response_for_transcript(
+        self, transcript: str, locale: str | None
+    ) -> tuple[str, str]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
 
         Args:
             transcript (str): The user's spoken text transcribed as text.
+            locale (str | None): The language that was detected to be used in the transcript, e.g. "de-DE".
 
         Returns:
             A tuple of strings representing the response to a function call and/or an instant response.

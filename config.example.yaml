@@ -52,9 +52,13 @@ features:
 # Note that EdgeTTS is faster than the default OpenAI TTS but it's not as good in terms of quality.
 edge_tts:
   # EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
-  # We built something for that but it means that you'll get a random voice for each language.
+  # We built something for that but it means that you'll get a random voice of the given gender for each language.
+  #
   # Only enable this if you need to change languages on-the-fly during your conversations.
+  # Otherwise it's better to set a fixed voice in your language below.
   detect_language: false
+  gender: Female # or "Male". Nothing else, sorry AttackHelicopters! Only used if detect_language is set to true above.
+
   # The voice to use (only if detect_language is set to false above).
   # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
   tts_voice: en-US-GuyNeural

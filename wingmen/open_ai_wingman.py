@@ -32,7 +32,10 @@ class OpenAiWingman(Wingman):
         # every conversation starts with the "context" that the user has configured
         self._add_message_to_history(self.config["openai"].get("context"), "system")
 
-    async def _transcribe(self, audio_input_wav: str) -> str | None:
+        self.edge_tts = EdgeTTS()
+        self.last_transcript_locale = None
+
+    async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
 
         Args:
@@ -41,11 +44,33 @@ class OpenAiWingman(Wingman):
         Returns:
             str | None: The transcript of the audio file or None if the transcription failed.
         """
+        detect_language = self.config["edge_tts"].get("detect_language")
 
-        transcript = self.openai.transcribe(audio_input_wav)
-        return transcript.text if transcript else None
+        response_format = (
+            "verbose_json"  # verbose_json will return the language detected in the transcript.
+            if self.tts_provider == "edge_tts" and detect_language
+            else "json"
+        )
+        transcript = self.openai.transcribe(
+            audio_input_wav, response_format=response_format
+        )
 
-    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
+        locale = None
+        # skip the GPT call if we didn't change the language
+        if (
+            response_format == "verbose_json"
+            and transcript.language != self.last_transcript_locale
+        ):
+            Printr.hl_print(
+                f"   EdgeTTS detected language '{transcript.language}'.", False
+            )
+            locale = self.__ask_gpt_for_locale(transcript.language)
+
+        return transcript.text if transcript else None, locale
+
+    async def _get_response_for_transcript(
+        self, transcript: str, locale: str | None
+    ) -> tuple[str, str]:
         """Gets the response for a given transcript.
 
         This function interprets the transcript, runs instant commands if triggered,
@@ -57,6 +82,7 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple of strings representing the response to a function call and an instant response.
         """
+        self.last_transcript_locale = locale
         self._add_message_to_history(transcript, "user")
 
         instant_response = self._try_instant_activation(transcript)
@@ -240,25 +266,23 @@ class OpenAiWingman(Wingman):
         Args:
             text (str): The text to play as audio.
         """
-        tts_provider = self.config["features"].get("tts_provider")
 
-        # todo: remove warning for release
-        if not tts_provider or not self.config.get("edge_tts"):
-            Printr.warn_print(
-                "No TTS provider configured. You're probably using an outdated config.yaml"
-            )
+        if self.tts_provider == "edge_tts":
+            edge_config = self.config["edge_tts"]
+            tts_voice = edge_config.get("tts_voice")
+            gender = edge_config.get("gender")
+            detect_language = edge_config.get("detect_language")
 
-        if tts_provider == "edge_tts":
-            # todo: implement detect_language stuff
-            detect_language = self.config["edge_tts"].get("detect_language")
-            tts_voice = self.config["edge_tts"].get("tts_voice")
+            if detect_language:
+                tts_voice = await self.edge_tts.get_same_random_voice_for_language(
+                    gender, self.last_transcript_locale
+                )
 
-            edge_tts = EdgeTTS()
-            await edge_tts.generate_speech(
+            await self.edge_tts.generate_speech(
                 text, filename="audio_output/edge_tts.mp3", voice=tts_voice
             )
             self.audio_player.play("audio_output/edge_tts.mp3")
-        else:
+        else:  # OpenAI TTS
             response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
             if response is not None:
                 self.audio_player.stream_with_effects(
@@ -307,3 +331,41 @@ class OpenAiWingman(Wingman):
             },
         ]
         return tools
+
+    def __ask_gpt_for_locale(self, language: str) -> str:
+        """OpenAI TTS returns a natural language name for the language of the transcript, e.g. "german" or "english".
+        This method uses ChatGPT to find the corresponding locale, e.g. "de-DE" or "en-EN".
+
+        Args:
+            language (str): The natural, lowercase language name returned by OpenAI TTS. Thank you for that btw.. WTF OpenAI?
+        """
+
+        response = self.openai.ask(
+            messages=[
+                {
+                    "content": """
+                        I'll say a natural language name in lowercase and you'll just return the IETF country code / locale for this language.
+                        Your answer always has exactly 2 lowercase letters, a dash, then two more letters in uppercase.
+                        If I say "german", you answer with "de-DE". If I say "russian", you answer with "ru-RU".
+                        If it's ambiguous and you don't know which locale to pick ("en-GB" vs "en-US"), you pick the most commonly used one.
+                        You only answer with valid country codes according to most common standards.
+                        If you can't, you respond with "None".
+                    """,
+                    "role": "system",
+                },
+                {
+                    "content": language,
+                    "role": "user",
+                },
+            ],
+            model="gpt-3.5-turbo-1106",
+        )
+        answer = response.choices[0].message.content
+
+        if answer == "None":
+            return None
+
+        Printr.hl_print(
+            f"   ChatGPT says this language maps to locale '{answer}'.", False
+        )
+        return answer
