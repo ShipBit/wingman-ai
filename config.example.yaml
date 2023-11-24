@@ -41,6 +41,7 @@ openai:
 features:
   play_beep_on_receiving: false
   enable_radio_sound_effect: false # adds noise to messages
+  enable_robot_sound_effect: false # adds a robotic sound effect
 
 wingmen:
   # ────────────────────────────────── BOARD COMPUTER ────────────────────────────────────────
