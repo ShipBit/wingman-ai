@@ -81,6 +81,24 @@ The board computer is your AI companion that helps you with all kinds of things.
 
 The ATC Wingman is basically the same as the board computer, but it specializes in ATC chatter. This is a showcase example of how to build specialized wingmen for specific use cases/scenarios. The main difference is that it uses a different GPT prompt and a different set of commands.
 
+### StarHead Wingman
+
+![StarHead](https://star-head.de/assets/images/logo/LOGO_@290.png)
+
+This is where it really gets interesting. The StarHead Wingman is a specialized Wingman for _Star Citizen_ that uses the [StarHead](https://star-head.de) API to enrich your gaming experience with external data. It is a showcase example of how to build specialized wingmen for specific use cases/scenarios.
+
+StarHead is a community project that aims to provide a platform for _Star Citizen_ players to share their knowledge and experience. Right now, it is mainly focused on the trading aspect of _Star Citizen_. With a huge database of trading items, shop inventories and prices, it allows you to find the best trade routes and make the most profit.
+A huge community of players is constantly working on keeping the data up to date.
+
+For Updates and more information, visit the [StarHead website](https://star-head.de) or follow @KNEBEL on:
+
+- [Twitch](https://www.twitch.tv/knebeltv)
+- [YouTube](https://www.youtube.com/@Knebel_DE)
+
+The StarHead Wingman allows you to access the StarHead API via voice. In version 1 you can ask for the best trade route, based on your ship, your location and your budget. If you forget to provide one of these parameters, the Wingman will ask you for it. It will then call the StarHead API and read the result to you.
+
+The cool thing is: It will remember everything and you can ask follow-up questions. For example, you can ask what the start point of the route is, or what the next stop is. You can also ask for the best trade route from a different location or with a different ship.
+
 ### Free-Wingman
 
 This is an example of a wingman that **does not** use OpenAI's online APIs and only relies on freely available tools instead. It is a good starting point if you want to create your own wingman with different AI services or models. It uses [Open-Source Whisper](https://github.com/openai/whisper) from OpenAI, which runs **locally on your machine**.
@@ -88,10 +106,6 @@ This is an example of a wingman that **does not** use OpenAI's online APIs and o
 The first time you start it, a base model is downloaded. This may take some time depending on your internet connection, so be patient. When you say something, it will recognize your language but will not send it to GPT. It will try to match your phrases with the ones defined in the `config.yaml` and trigger the configured commands for you. It will also read you the response via [Edge-TTS](https://github.com/rany2/edge-tts).
 
 Please refer to the [commands](#commands) section for more information on how to define commands.
-
-### Groot (Custom)
-
-The _Groot_ wingmen are aimed at **developers** who want to dive deeper into creating their own fully custom wingmen implementations. If you are interested, start by reading the comments in `config.yaml` and work your way through the classes and functions mentioned in the config.
 
 ## Commands
 

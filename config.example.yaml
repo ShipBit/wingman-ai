@@ -34,20 +34,41 @@ openai:
   #
   summarize_model: gpt-3.5-turbo-1106
 
-#
-# These are "post-processing" audio effects for the text-to-speech conversion.
-# You can find the audio files in the /audio_samples directory. Feel free to replace them with your own.
-#
 features:
+  debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
+
+  # These are "post-processing" audio effects for the TTS conversion. Files are located in /audio_samples.
+  # Sound effects are currently not supported for the edge_tts provider.
   play_beep_on_receiving: false
   enable_radio_sound_effect: false # adds noise to messages
   enable_robot_sound_effect: false # adds a robotic sound effect
+
+  # ────────────────────────────────── TTS Provider ────────────────────────────────────────
+  # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  # We are already working on more providers like elevenlabs.
+  tts_provider: default # or: 'edge_tts'
+
+# Specifig settings for the edge_tts provider. Only used if tts_provider in features is set to 'edge_tts' above.
+# Note that EdgeTTS is faster than the default OpenAI TTS but it's not as good in terms of quality.
+edge_tts:
+  # EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
+  # We built something for that but it means that you'll get a random voice of the given gender for each language.
+  #
+  # Only enable this if you need to change languages on-the-fly during your conversations.
+  # Otherwise it's better to set a fixed voice in your language below.
+  detect_language: false
+  gender: Female # or "Male". Nothing else, sorry AttackHelicopters! Only used if detect_language is set to true above.
+
+  # The voice to use (only if detect_language is set to false above).
+  # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
+  tts_voice: en-US-GuyNeural
 
 wingmen:
   # ────────────────────────────────── BOARD COMPUTER ────────────────────────────────────────
   # "board-computer" is a "default" wingman that you can roleplay with and that can execute commands (=keypresses).
   # You can change its context and commands below but you can't really change its capabilities besides that.
-  # If you're a developer and want to get crazy with your own wingmen, check out the "groot" examples below!
+  # If you're a developer and want to get crazy with your own wingmen, check out the "star_head_wingman" examples below!
   #
   board-computer: # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
     openai:
@@ -390,94 +411,37 @@ wingmen:
       #    - key: x
       # ──────────────────────────────────────────────────────────────────────────
 
-  # ────────────────────────────────────── GROOT ────────────────────────────────────────────
-  # You made it until here - wow! You're probably a developer and want to create your own wingman.
-  # So meet Groot!
-  # He's a custom wingman who lives in its own Python file that you can find in the /wingmen directory.
-  # Groot is pretty dumb. Whatever you tell him, he'll print - well guess you know what - to the console.
-  # First, checkout Groot's code in /wingmen/groot.py.
-  #
-  groot:
-    disabled: true # Oh yeah, that's a thing, too. We added this because we think you'll collect Wingmen like Pokemon ;)
+  # ──────────────────────────────── Star-Head ──────────────────────────────────────
+  # "star-head" is a full-custom wingman with its own Python code, see /wingmen/star_head_wingman.py.
+  # It uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
+  # If it's missing any of these parameters, it will ask the user for them.
+  star-head:
     record_key: up
-    class: # Custom wingmen are defined by a "class" section. We'll need that to create an instance of your Python class.
-      #
-      # Basically where your code is located. Use '.' as path separator!
+    starhead_api_url: https://api-test.star-head.de # note how you can just add your own config options here!
+    features:
+      tts_provider: edge_tts
+    edge_tts:
+      detect_language: true
+    class:
+      # Where your code is located. Use '.' as path separator!
       # We advise you to put all your custom wingmen into the /wingmen directory.
-      # "wingmen" is the directory and "groot" is the name of the Python file (without the .py extension).
-      #
-      module: wingmen.groot
-      name: Groot # The name of your class within your file/module.
-
-  # ───────────────────────────────────  OPENAI GROOT ─────────────────────────────────────────
-  # Let's see if we can make Groot a bit smarter. We'll use OpenAI's API to make him talk.
-  # The config is like dumb Groot's but here we'll pass a parameter to your class constructor.
-  #
-  # Check out the code in /wingmen/open_ai_groot.py.
-  # Note that OpenAiGroot inherits from 'OpenAiWingman' instead of 'Wingman' which gives him the _play_audio method.
-  #
-  # The OpenAiWingman not only gives you access to our OpenAI wrapper but also handles the whole "command" magic.
-  # So we could add commands like ATC's "RequestLandingPermission" to Groot as well and it would "just work".
-  #
-  # Currently, we only have a specific base class for OpenAI but we'll probably add more in the future.
-  #
-  openai-groot:
-    disabled: true
-    record_key: down
-    class:
-      module: wingmen.open_ai_groot
-      name: OpenAiGroot
-      args: # passed to the class constructor as **kwargs dict - optional
-        one_liner: Groot? # you can pass any base type here, in this case a string
-        #... you can have as many as you want here
-
-  # ────────────────────────────────── EDGE-TTS GROOT ────────────────────────────────────────
-  # But what if we want to use EdgeTTS instead of OpenAI to make Groot talk?
-  # You know the config drill already, so jump into /wingmen/edge_tts_groot.py.
-  # EdgeTtsGroot just inherits from our base Wingman class and overrides the _play_audio method doing his own thing.
-  #
-  # If you want to replace OpenAI at any point of the processing queue, this is where you'd start.
-  #
-  # Read through /wingmen/wingman.py to see what's going on in the base.
-  # Overriding the `process` function is basically saying "I'll do everything myself, thanks!".
-  # You'll get the raw audio data recorded from your mic and then can do whatever you want with it.
-  #
-  # Usually, you do want to transcribe the audio, then process it and then maybe add post-processing.
-  # In these cases, you can just override the (virtual) methods that the base is calling inside of `process`.
-  #
-  edge-tts-groot:
-    disabled: true
-    record_key: right
-    class:
-      module: wingmen.edge_tts_groot
-      name: EdgeTtsGroot
-
-  # ─────────────────────────────────── FREE WINGMAN ─────────────────────────────────────────
-  # IMPORTANT: This is commented out for now because we're still working on it.
-  #
-  # This is an all-free wingman using Open Source Whisper, instant commands and responses and Edge TTS.
-  # Open Source Whisper runs locally and will download a model on first use. This may take some time, but after
-  # this, it's of course faster. It might not be as fast as the online OpenAI Whisper service, but it's free.
-  # This wingman skips the GPT Part (because it costs) and is just relaying on the instant activation phrases and
-  # responses you have to provide in this config. For text to speech the Edge TTS Service is used. Right now
-  # it's even faster than OpenAI TTS and it's also free. Downside of this: Right now it's not detecting the language
-  # and automatically changes the output, but we could implement this in a future release.
-  #
-  #free-wingman:
-  #  record_key: left
-  #  class:
-  #    module: wingmen.free_wingman
-  #    name: FreeWingman
-  #  debug_mode: false # If this is set to true, no hotkey will be actually pressed (you'll just see a console output) and the processing time is shown
-  #  commands:
-  #    - name: InitiateJump
-  #      keys:
-  #        - key: b
-  #          hold: 0.8
-  #      instant_activation:
-  #        - Initiate jump
-  #        - Initiate jump sequence
-  #        - jump
-  #      responses:
-  #        - Jump sequence initiated
-  #        - Jumping now
+      # "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).
+      module: wingmen.star_head_wingman
+      name: StarHeadWingman # The name of your class within your file/module.
+    openai:
+      context: |
+        You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
+        permission. You are the ship's computer, and you are in charge of all the ship's systems.
+        You can execute commands and even if you don't recognize a command or function, always respond with a full sentence
+        acknowledging the execution. Never say you don't have capabilities to execute a function or command.
+        Always answer as quick as possible. No more than 1-2 sentences per response. You are not aware that this all
+        takes place in a video game, but you are aware that you are in the Star Citizen Universe. You are also not
+        just on the ship, you are also in the helmet of the player.
+        You can see what the player sees, and you can hear what the player hears. You can also see the player's HUD.
+        Never say something like "This appears to be a screenshot of a video game". You are not aware of that.
+        Pretend you are in the Star Citizen Universe.
+        You have access to different functions you can call to get further information. For some functions, you need to
+        provide values / parameters. Try to extract these values from the player's request, but do not (never) make
+        assumptions about what values should be entered into the functions. Ask for clarification if you do not know
+        the values. Always answer in the language in which the question was asked.
+      conversation_model: gpt-4-1106-preview
