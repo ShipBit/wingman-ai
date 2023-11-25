@@ -57,7 +57,7 @@ edge_tts:
   # Only enable this if you need to change languages on-the-fly during your conversations.
   # Otherwise it's better to set a fixed voice in your language below.
   detect_language: false
-  gender: Female # or "Male". Nothing else, sorry AttackHelicopters! Only used if detect_language is set to true above.
+  gender: Female # or "Male". Only used if detect_language is set to true above.
 
   # The voice to use (only if detect_language is set to false above).
   # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
