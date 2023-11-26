@@ -26,6 +26,7 @@ class Tower:
                 "openai": self.config["openai"],
                 "features": self.config["features"],
                 "edge_tts": self.config["edge_tts"],
+                "commands": self.config["commands"],
             }
             merged_config = self.__merge_configs(global_config, wingman_config)
             class_config = merged_config.get("class")
@@ -95,15 +96,36 @@ class Tower:
                 source[key] = value
         return source
 
+    def __merge_command_lists(self, general_commands, wingman_commands):
+        """Merge two lists of commands, where wingman-specific commands override or get added based on the 'name' key."""
+        # Use a dictionary to ensure unique names and allow easy overrides
+        merged_commands = {cmd["name"]: cmd for cmd in general_commands}
+        for cmd in wingman_commands:
+            merged_commands[
+                cmd["name"]
+            ] = cmd  # Will override or add the wingman-specific command
+        # Convert merged commands back to a list since that's the expected format
+        return list(merged_commands.values())
+
     def __merge_configs(self, general, wingman):
-        """Merge general settings with a specific wingman's overrides, for the 'openai' and 'features' sections."""
+        """Merge general settings with a specific wingman's overrides, including commands."""
         # Start with a copy of the wingman's specific config to keep it intact.
         merged = wingman.copy()
-        # Update 'openai' and 'features' sections from general config into wingman's config.
+        # Update 'openai', 'features', and 'edge_tts' sections from general config into wingman's config.
         for key in ["openai", "features", "edge_tts"]:
             if key in general:
                 merged[key] = self.__deep_merge(
                     general[key].copy(), wingman.get(key, {})
                 )
+
+        # Special handling for merging the commands lists
+        if "commands" in general and "commands" in wingman:
+            merged["commands"] = self.__merge_command_lists(
+                general["commands"], wingman["commands"]
+            )
+        elif "commands" in general:
+            # If the wingman config does not have commands, use the general ones
+            merged["commands"] = general["commands"]
+        # No else needed; if 'commands' is not in general, we simply don't set it
 
         return merged
