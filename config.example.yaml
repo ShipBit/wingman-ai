@@ -37,6 +37,17 @@ openai:
 features:
   debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
 
+  # ────────────────────────────────── Cost Control ────────────────────────────────────────
+  # How many messages should a Wingman remember in your conversations?
+  # "0" means you start fresh with just the context after every message. This is like restarting Wingman after every interaction.
+  # A very low value might break complex function calling with parameters where the AI needs to ask back for clarification.
+  #
+  # Use this to limit the number of tokens used in your conversations and to reduce the cost of using the OpenAI API.
+  # Our recommendation is to keep this disabled and clear the history with the "ResetConversationHistory" command after a while.
+  #
+  # remember_messages: 3 # uncomment this to enable!
+
+  # ────────────────────────────────── Sound Effects ────────────────────────────────────────
   # These are "post-processing" audio effects for the TTS conversion. Files are located in /audio_samples.
   # Sound effects are currently not supported for the edge_tts provider.
   play_beep_on_receiving: false
@@ -62,6 +73,19 @@ edge_tts:
   # The voice to use (only if detect_language is set to false above).
   # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
   tts_voice: en-US-GuyNeural
+
+# ────────────────────────────────── Global commands ───────────────────────────────────────
+# These are available to all wingmen. You can override them per wingman if necessary.
+#
+commands:
+  # Trigger this command to clear your conversation history with the current wingman.
+  # This is like setting "remember_messages" to 0 above, but "on-demand". You'll restart with just the context.
+  - name: ResetConversationHistory # don't rename this!
+    instant_activation:
+      - Forget everything!
+      - Clear conversation history!
+    responses:
+      - Conversation history cleared.
 
 wingmen:
   # ────────────────────────────────── BOARD COMPUTER ────────────────────────────────────────
