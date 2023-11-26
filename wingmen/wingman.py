@@ -109,6 +109,11 @@ class Wingman:
         """
         return []
 
+    def reset_conversation_history(self):
+        """This function is called when the user triggers the ResetConversationHistory command.
+        It's a global command that should be implemented by every Wingman that keeps a message history.
+        """
+
     # ──────────────────────────── The main processing loop ──────────────────────────── #
 
     async def process(self, audio_input_wav: str):
@@ -294,10 +299,14 @@ class Wingman:
             Printr.warn_print(
                 "Skipping actual keypress execution in debug_mode...", False
             )
-            return "Ok"
 
-        self.execute_keypress(command)
+        if command.get("keys", None) and len(command.key) > 0 and not self.debug:
+            self.execute_keypress(command)
         # TODO: we could do mouse_events here, too...
+
+        # handle the global special commands:
+        if command.get("name", None) == "ResetConversationHistory":
+            self.reset_conversation_history()
 
         if not self.debug:
             # in debug mode we already printed the separate execution times
