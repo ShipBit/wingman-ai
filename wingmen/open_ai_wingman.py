@@ -321,7 +321,7 @@ class OpenAiWingman(Wingman):
         elif self.tts_provider == "elevenlabs":
             elevenlabs_config = self.config["elevenlabs"]
             voice = elevenlabs_config.get("voice")
-            if voice is not str:
+            if not isinstance(voice, str):
                 voice = Voice(voice_id=voice.get("id"))
             response = generate(
                 text,
