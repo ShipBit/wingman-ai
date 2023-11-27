@@ -214,3 +214,4 @@ We would like to thank their creators for their great work and contributions to 
 - [sounddevice](https://github.com/spatialaudio/python-sounddevice/) - MIT, © 2015-2023 Matthias Geier
 - [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
 - [packaging](https://github.com/pypa/packaging) - Apache/BSD, © Donald Stufft and individual contributors
+- [faqtory](https://github.com/willmcgugan/faqtory) - MIT, © 2022 Will McGugan
