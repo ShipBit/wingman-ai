@@ -1,5 +1,6 @@
 import json
 from exceptions import MissingApiKeyException
+from elevenlabs import generate, stream, Voice
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
@@ -317,6 +318,19 @@ class OpenAiWingman(Wingman):
                 text, filename="audio_output/edge_tts.mp3", voice=tts_voice
             )
             self.audio_player.play("audio_output/edge_tts.mp3")
+        elif self.tts_provider == "elevenlabs":
+            elevenlabs_config = self.config["elevenlabs"]
+            voice = elevenlabs_config.get("voice")
+            if voice is not str:
+                voice = Voice(voice_id=voice.get("id"))
+            response = generate(
+                text,
+                voice=voice,
+                model=elevenlabs_config.get("model"),
+                stream=True,
+                api_key=elevenlabs_config.get("api_key"),
+            )
+            stream(response)
         else:  # OpenAI TTS
             response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
             if response is not None:

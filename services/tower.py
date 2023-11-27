@@ -27,6 +27,7 @@ class Tower:
                 "features": self.config["features"],
                 "edge_tts": self.config["edge_tts"],
                 "commands": self.config["commands"],
+                "elevenlabs": self.config["elevenlabs"],
             }
             merged_config = self.__merge_configs(global_config, wingman_config)
             class_config = merged_config.get("class")
@@ -112,7 +113,7 @@ class Tower:
         # Start with a copy of the wingman's specific config to keep it intact.
         merged = wingman.copy()
         # Update 'openai', 'features', and 'edge_tts' sections from general config into wingman's config.
-        for key in ["openai", "features", "edge_tts"]:
+        for key in ["openai", "features", "edge_tts", "elevenlabs"]:
             if key in general:
                 merged[key] = self.__deep_merge(
                     general[key].copy(), wingman.get(key, {})
