@@ -141,3 +141,39 @@ Please follow our guides to get started:
 
 - [Windows](docs/develop-windows.md)
 - [MacOS](docs/develop-macos.md)
+
+## Our Patreons and early access testers
+
+Thank you so much for your support. We really appreciate it!
+
+### Commanders
+
+To our greatest supporters we say: `o7` Commanders!
+
+- **Rodney W. Harper**
+
+### Premium Donators
+
+- [Weyland](https://robertsspaceindustries.com/orgs/corp)
+- Morthius
+
+### Wingmen
+
+Zenith, DiVille, [Hiwada], Hades aka Architeutes, Raziel317, [CptToastey](https://www.twitch.tv/cpttoastey), NeyMR AKA EagleOne (Capt.Epic), a Bit Brutal, AlexeiX, [Dragon Aura](https://robertsspaceindustries.com/citizens/Dragon_Aura), Perry-x-Rhodan, DoublarThackery, SilentCid, Bytebool
+
+## Open Source Acknowledgements
+
+Wingman makes use of other Open Source projects internally (without modifying them in any way).
+We would like to thank their creators for their great work and contributions to the Open Source community, especially:
+
+- [edge-tts](https://github.com/rany2/edge-tts) - GPL-3.0
+- [openai](https://github.com/openai/openai-python) - Apache-2.0
+- [openai-whisper](https://github.com/openai/whisper) - MIT
+- [pydirectinput](https://github.com/learncodebygaming/pydirectinput) - MIT, © 2020 Ben Johnson
+- [PyAutoGUI](https://github.com/asweigart/pyautogui) - BSD 3, © 2014 Al Sweigart
+- [pydub](https://github.com/jiaaro/pydub) - MIT, © 2011 James Robert
+- [scipy](https://github.com/scipy/scipy) - BSD 3, © 2001-2002 Enthought, Inc. 2003-2023, SciPy Developers
+- [numpy](https://github.com/numpy/numpy) - BSD 3, © 2005-2023, NumPy Developers
+- [sounddevice](https://github.com/spatialaudio/python-sounddevice/) - MIT, © 2015-2023 Matthias Geier
+- [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
+- [packaging](https://github.com/pypa/packaging) - Apache/BSD, © Donald Stufft and individual contributors
