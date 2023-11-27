@@ -146,11 +146,13 @@ Please follow our guides to get started:
 
 Thank you so much for your support. We really appreciate it!
 
+This list will inevitably remain incomplete. If you miss your name here, please let us know in [Discord](https://discord.com/invite/k8tTBar3gZ) or via [Patreon](https://www.patreon.com/ShipBit).
+
 ### Commanders
 
 To our greatest supporters we say: `o7` Commanders!
 
-- **Rodney W. Harper**
+- [**Rodney W. Harper aka Mactavious-Actual**](https://linktr.ee/rwhnc)
 
 ### Premium Donators
 
