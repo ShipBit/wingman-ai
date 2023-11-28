@@ -36,12 +36,53 @@ If you're a developer, you can just clone the repository and start building your
 
 If you're not a developer, you can start with pre-built wingmen from us or from the community and [reconfigure](#configure-wingmen) them to your needs. We take a very _configuration-heavy_ approach, and while it might be a bit overwhelming and confusing to edit our (very identation-sensitive) YAML config file right now, we're working on a more user-friendly UI to make it easier for you in the future.
 
+## Is this free? What about these API keys? Do I need a subscription?
+
+Wingman AI is free and open source, but the AI providers you'll be using are not.
+
+### OpenAI
+
+Our Wingmen use OpenAI's APIs and they charge by usage. That means: You don't pay a flat subscription fee, but rather for each call you make to their APIs. You can find more information about the APIs and their [pricing](https://openai.com/pricing) on the [OpenAI website](https://beta.openai.com/docs/introduction). You will need to create your API key:
+
+- Navigate to [openai.com](https://openai.com/) and click on "Try ChatGPT".
+- Choose "Sign-Up" and create an account.
+- (if you get an error, go back to [openai.com](https://openai.com/))
+- Click "Login".
+- Fill in your personal information and verify your phone number.
+- **Select API**. You don't need ChatGPT Plus to use Wingman AI.
+- (Go to "Settings > Limits" and set a low soft and hard "usage limit" for your API key. We recommend this to avoid unexpected costs. $5 is fine for now)
+- Go to "Billing" and add a payment method.
+- Select "API Key" from the menu on the left and create one. Copy it! If you forget it, you can always create a new one.
+
+**Our sample wingmen use the following OpenAI APIs:**.
+
+- Whisper for transcription
+- Any GPT model you configure, e.g. `gpt-3.5-turbo-1106`. More complex Wingmen examples require a more powerful model like `gpt-4-1106-preview` to work correctly.
+- TTS / Text-to-Speech
+
+We are also working on a Vision API implementation, but it's not ready yet.
+
+### ElevenLabs
+
+You don't have to use [ElevenLabs](https://elevenlabs.io/) as TTS provider, but their voices are great. You can also clone your own with less than 5 minutes of sample audio, e.g. your friend, an actor or a recording of an NPC in your game.
+
+They have a free tier with a limited number of characters generated per month so you can try it out first. You can find more information on their [pricing page] (https://elevenlabs.io/pricing). Signing up is very similar to OpenAI:
+Create your account, set up your payment method, and create an API key.
+
+### Edge TTS
+
+Microsoft Edge TTS is actually free and you don't need an API key to use it. However, it's not as "good" as the others in terms of quality. Their voices are split by language, so the same voice can't speak different languages - you have to choose a new voice for the new language instead. Wingman does this for you, but it's still "Windows TTS" and not as good as the other providers.
+
+### Is this possible for free? I have my own local LLM running
+
+Yes, it is. If you're a developer. We're also working on a "Free Wingman" that uses only free APIs and services. But it's not ready yet.
+
 ## Installing Wingman AI
 
 ### Windows
 
 - Download the latest version from [wingman-ai.com](https://www.wingman-ai.com).
-- Extract it to a new directory of your choice. All the files, not just the `.exe`.
+- Extract it to a new directory of your choice. **DO NOT** extract it to `C:\Program Files` or you'll need admin priviledges to execute it. Pick a user directory, your Desktop, Downloads etc instead. Extract all the files, not just the `.exe`.
 - Run `WingmanAI.exe` from that directory.
 - There will be a Windows SmartScreen security warning (see screenshots below) because our package is currently unsigned. Sorry about that, we're working on it. Just click `More Info` and then `Run anyway` to start the application.
 - Follow the instructions and enter your API key(s).
@@ -90,7 +131,7 @@ Our first two wingmen are based on OpenAI's APIs. The basic process is as follow
 
 Before you ask: You can change all of these providers in the `config.yaml` file. We're not affiliated with any of them, and we're not paid by them.
 
-Talking to a Wingman is like chatting with ChatGPT. This means that you can customize their behavior by giving them a `context` (or `system`) prompt as starting point for your conversation. You can also just tell them how to behave and they will remember that during your conversation. ATC and board-computer use vey different prompts, so they behave very differently. See `config.yaml` for more information.
+Talking to a Wingman is like chatting with ChatGPT. This means that you can customize their behavior by giving them a `context` (or `system`) prompt as starting point for your conversation. You can also just tell them how to behave and they will remember that during your conversation. ATC and board-computer use very different prompts, so they behave very differently. See `config.yaml` for more information.
 
 The magic happens when you configure _commands_ or key bindings. GPT will then try to match your request with the configured commands and execute them for you. It will automatically choose the best matching command based only on its name, so make sure you give it a good one (e.g. `RequestLandingPermission`).
 
@@ -141,17 +182,18 @@ Commands are the heart of the Wingman AI, as they add _functions_ to otherwise p
 
 Here are the most important properties of a command:
 
-- `name`: This is used to match your request with the command. So make sure to give it a good name (e.g. `RequestLandingPermission`). This where Wingman commands are "better" than VoiceAttack: You don't have to say a specific phrase to trigger it. This is a very powerful concept.
-- `keys`: A list of keys to press. They will be triggered in the order they are defined. Each key can have these properties:
+- `name`: This is used to associate your request to the command. So make sure to give it a good name, e.g. `RequestLandingPermission`. Use `camelCasing` to separate words. No spaces and don't write everything in lowercase. You do not have to say a specific phrase to trigger the command because the AI is smart enough to detect which command you _meant_. This is a very powerful concept and one of the reason this is way better than other (sometimes "aggressive" 🤭) `voice-to-key` tools.
+- `keys`: A list of keys to press. They will be triggered in the order they are defined. Any key can have these properties:
   - `key`: The key to press.
   - `modifier`: A modifier key to press with the key. _(optional)_
   - `hold`: The time to hold the key in milliseconds. _(optional)_
-- `instant_activation`: A list of phrases that will trigger the command instantly (without AI roundtripping). _(optional)_
-- `responses`: A list of responses. If the command is executed, a random response is picked and read out to you. _(optional)_
+  - `wait`: The time to wait until the next key in this command is pressed _(optional)_
+- `instant_activation`: A list of phrases that will trigger the command immediatale without AI round-tripping. _(optional)_
+- `responses`: A list of responses. If the command is executed, a random response will be chosen and read out to you. _(optional)_
 
 #### Wow, this is hard!
 
-Yes, we know. We're working on a more user-friendly interface to make it easier for you. For now, we recommend the following tools to help you out:
+Yeah, we know. We're working on a more user-friendly interface to make it easier for you. For now, we recommend the following tools to help you out:
 
 - [VSCode](https://code.visualstudio.com/) with the
 - [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)
@@ -162,13 +204,13 @@ Both are free and very easy to install and use. VSCode is a great editor for dev
 
 Notice how it has detected that something is wrong with the indentation. In this case, there is a single space before the `features` entry, which is not allowed. It also shows you visually how it should be indented.
 
-It will be easier once you get used to it, we promise!
+It will get easier once you get used to it, we promise!
 
 **Remember: Never use `SPACE`, always use `TAB`!**
 
 ## Set up your development environment
 
-Are you ready to build your own Wingman or to bring a new feature to the framework?
+Are you ready to build your own Wingman or to bring new features to the framework?
 
 Great! We really appreciate your contributions!
 
