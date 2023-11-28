@@ -167,7 +167,7 @@ class Wingman:
             Printr.info_print("Playing response back to user...")
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
-        await self._play_to_user(process_result)
+        await self._play_to_user(str(process_result))
 
         if self.debug:
             self.print_execution_time()
@@ -300,7 +300,7 @@ class Wingman:
                 "Skipping actual keypress execution in debug_mode...", False
             )
 
-        if command.get("keys", None) and len(command.key) > 0 and not self.debug:
+        if len(command.get("keys", [])) > 0 and not self.debug:
             self.execute_keypress(command)
         # TODO: we could do mouse_events here, too...
 
@@ -325,7 +325,7 @@ class Wingman:
             command (dict): The command object from the config to execute
         """
 
-        for entry in command.get("keys"):
+        for entry in command.get("keys", []):
             if entry.get("modifier"):
                 key_module.keyDown(entry["modifier"])
 
