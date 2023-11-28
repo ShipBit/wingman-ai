@@ -2,7 +2,7 @@
 
 Wingman AI allows you to use your voice to talk to various AI providers and LLMs, process your conversations, and ultimately trigger actions such as pressing buttons or reading answers. Our _Wingmen_ are like characters and your interface to this world, and you can easily control their behavior and characteristics, even if you're not a developer.
 
-AI is complex and it scares people. It's also not 'just ChatGPT'. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own wingmen and use them in your games and programs.
+AI is complex and it scares people. It's also not 'just ChatGPT'. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.
 
 ![Wingman Flow](assets/wingman-flow.png)
 
@@ -34,7 +34,7 @@ If you're a developer, you can just clone the repository and start building your
 
 ### Gamers & other interested people
 
-If you're not a developer, you can start with pre-built wingmen from us or from the community and [reconfigure](#configure-wingmen) them to your needs. We take a very _configuration-heavy_ approach, and while it might be a bit overwhelming and confusing to edit our (very identation-sensitive) YAML config file right now, we're working on a more user-friendly UI to make it easier for you in the future.
+If you're not a developer, you can start with pre-built Wingmen from us or from the community and [reconfigure](#configure-wingmen) them to your needs. We take a very _configuration-heavy_ approach, and while it might be a bit overwhelming and confusing to edit our (very identation-sensitive) YAML config file right now, we're working on a more user-friendly UI to make it easier for you in the future.
 
 ## Is this free? What about these API keys? Do I need a subscription?
 
@@ -54,7 +54,7 @@ Our Wingmen use OpenAI's APIs and they charge by usage. That means: You don't pa
 - Go to "Billing" and add a payment method.
 - Select "API Key" from the menu on the left and create one. Copy it! If you forget it, you can always create a new one.
 
-**Our sample wingmen use the following OpenAI APIs:**.
+**Our sample Wingmen use the following OpenAI APIs:**.
 
 - Whisper for transcription
 - Any GPT model you configure, e.g. `gpt-3.5-turbo-1106`. More complex Wingmen examples require a more powerful model like `gpt-4-1106-preview` to work correctly.
@@ -122,13 +122,13 @@ The Wingman AI console doesn't need to be focused, so you can leave it running i
 
 To exit Wingman AI, simply press `CTRL+C` in the console or close the console window. -->
 
-## Who are these wingmen?
+## Who are these Wingmen?
 
-Our default wingmen serve as examples and starting points for your own wingmen, and you can easily reconfigure them in the `config.yaml` file. You can also add your own wingmen to this config file.
+Our default Wingmen serve as examples and starting points for your own Wingmen, and you can easily reconfigure them in the `config.yaml` file. You can also add your own Wingmen to this config file.
 
 ### board-computer & atc
 
-Our first two wingmen are based on OpenAI's APIs. The basic process is as follows:
+Our first two Wingmen are based on OpenAI's APIs. The basic process is as follows:
 
 - Your speech is transcribed by the **Whisper API**.
 - The transcript is then sent as text to the **GPT-4 Turbo API**, which responds with a text.
@@ -146,9 +146,9 @@ More information about the API can be found in the [OpenAI API documentation](ht
 
 ![StarHead](https://star-head.de/assets/images/logo/LOGO_@290.png)
 
-StarHead is where it gets really interesting. This wingman is tailored to _Star Citizen_ and uses the [StarHead API](https://star-head.de) to enrich your gaming experience with external data. It is a showcase of how to build specialized wingmen for specific use-cases and scenarios. Simply ask StarHead for the best trade route, and it will prompt you for your ship, location, and budget. It will then call the StarHead API and read the result back to you.
+StarHead is where it gets really interesting. This Wingman is tailored to _Star Citizen_ and uses the [StarHead API](https://star-head.de) to enrich your gaming experience with external data. It is a showcase of how to build specialized Wingmen for specific use-cases and scenarios. Simply ask StarHead for the best trade route, and it will prompt you for your ship, location, and budget. It will then call the StarHead API and read the result back to you.
 
-Like all of our OpenAI wingmen, it will remember the conversation history and you can ask follow-up questions. For example, you can ask what the starting point of the route, or what the next stop is. You can also ask for the best trade route from a different location or with a different ship.
+Like all of our OpenAI Wingmen, it will remember the conversation history and you can ask follow-up questions. For example, you can ask what the starting point of the route, or what the next stop is. You can also ask for the best trade route from a different location or with a different ship.
 
 StarHead is a community project that aims to provide a platform for _Star Citizen_ players to share their knowledge and experience. At the moment it is mainly focused on the trading aspect of _Star Citizen_. With a huge database of trade items, shop inventories and prices, it allows you to find the best trade routes and make the most profit. A large community of players is constantly working to keep the data up to date.
 
@@ -169,7 +169,7 @@ Check out the [FAQ](FAQ.md) section for more information and documentation.
 
 Wingman supports all languages that OpenAI (or your configured AI provider) supports. Setting this up in Wingman is really easy:
 
-Find the `context` setting in `config.xaml` for the wingman you want to change.
+Find the `context` setting in `config.xaml` for the Wingman you want to change.
 
 Now add a simple sentence to the `context` prompt:
 
