@@ -1,6 +1,6 @@
 import json
 from exceptions import MissingApiKeyException
-from elevenlabs import generate, stream, Voice
+from elevenlabs import generate, stream, Voice, VoiceSettings, voices
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
@@ -323,12 +323,20 @@ class OpenAiWingman(Wingman):
             voice = elevenlabs_config.get("voice")
             if not isinstance(voice, str):
                 voice = Voice(voice_id=voice.get("id"))
+            else:
+                voice = next((v for v in voices() if v.name == voice), None)
+
+            voice_setting = self._get_elevenlabs_settings(elevenlabs_config)
+            if voice_setting:
+                voice.settings = voice_setting
+
             response = generate(
                 text,
                 voice=voice,
                 model=elevenlabs_config.get("model"),
                 stream=True,
                 api_key=elevenlabs_config.get("api_key"),
+                latency=elevenlabs_config.get("latency", 3),
             )
             stream(response)
         else:  # OpenAI TTS
@@ -339,6 +347,25 @@ class OpenAiWingman(Wingman):
                     self.config.get("features", {}).get("play_beep_on_receiving"),
                     self.config.get("features", {}).get("enable_radio_sound_effect"),
                 )
+
+    def _get_elevenlabs_settings(self, elevenlabs_config):
+        settings = elevenlabs_config.get("voice_settings")
+        if not settings:
+            return None
+
+        voice_settings = VoiceSettings(
+            stability=settings.get("stability", 0.5),
+            similarity_boost=settings.get("similarity_boost", 0.75),
+        )
+        style = settings.get("style", None)
+        use_speaker_boost = settings.get("use_speaker_boost", None)
+
+        if style is not None:
+            voice_settings.style = style
+        if use_speaker_boost is not None:
+            voice_settings.use_speaker_boost = use_speaker_boost
+
+        return voice_settings
 
     def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
