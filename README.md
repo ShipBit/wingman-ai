@@ -165,6 +165,22 @@ It's very indentation-sensitive, so please be careful. We recommend using [VSCod
 
 Check out the [FAQ](FAQ.md) section for more information and documentation.
 
+## Does it support my language?
+
+Wingman supports all languages that OpenAI (or your configured AI provider) supports. Setting this up in Wingman is really easy:
+
+Find the `context` setting in `config.xaml` for the wingman you want to change.
+
+Now add a simple sentence to the `context` prompt:
+
+`Always answer in the language I'm using to talk to you.`
+
+or something like:
+
+`Always answer in Portuguese.`
+
+The cool thing is that you can now trigger commands in the language of your choice without changing/translating the `name` of the commands - the AI will do that for you.
+
 ## Develop with Wingman AI
 
 Are you ready to build your own Wingman or implement new features to the framework?

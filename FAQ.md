@@ -1,10 +1,34 @@
 # Frequently Asked Questions
 
+- [Can I just add new config sections and settings for my custom Wingman?](#can-i-just-add-new-config-sections-and-settings-for-my-custom-wingman)
+
 - [Configuring Wingman AI](#configuring-wingman-ai)
+
+- [How can I change the language?](#how-can-i-change-the-language)
 
 - [I'm a Patreon supporter, but not mentioned here](#i'm-a-patreon-supporter,-but-not-mentioned-here)
 
 - [StarHead API Issues](#starhead-api-issues)
+
+- [What voices are available in EdgeTTS?](#what-voices-are-available-in-edgetts)
+
+- [Why does it take so long for the voice responses to play?](#why-does-it-take-so-long-for-the-voice-responses-to-play)
+
+- [Windows: How to change the audio device for output?](#windows:-how-to-change-the-audio-device-for-output)
+
+- [Wingman does not start](#wingman-does-not-start)
+
+<a name="can-i-just-add-new-config-sections-and-settings-for-my-custom-wingman"></a>
+
+## Can I just add new config sections and settings for my custom Wingman?
+
+Yes, you can! We take all the "general" sections (currently: `openai`, `features` and `edge_tts`) from the top of the config, and then copy the wingman config section over, so that the wingman always takes precedence.
+
+So if you want to override something, just mirror the general structure in your wingman config:
+
+`features > tts_provider: default` is overridden by `my-wingman > features > tts_provider: edge_tts`.
+
+Because of this mechanism, you can also add completely new config settings and sections to your custom Wingman. Just add something new to your wingman's config, override `Wingman.validate()` to validate it if necessary, and then you can use it safely.
 
 <a name="configuring-wingman-ai"></a>
 
@@ -53,6 +77,18 @@ Here are the most important properties of a command:
 - `instant_activation`: A list of phrases that will trigger the command immediatale without AI round-tripping. _(optional)_
 - `responses`: A list of responses. If the command is executed, a random response will be chosen and read out to you. _(optional)_
 
+Your new command has to _line up_ with the ones before and starts with a `- name: Whatever line`. Align the `-` with the one from the command before. Indent everything under your command with a single `TAB` character as separator.
+
+![Alt text](assets/add-new-command.png)
+
+**Do not** cut the `instant_activation` from the previous command (the one in the screenshot belongs to the `ScanArea` command.
+
+## Which keys are available in commands?
+
+See the full list [here](https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys)
+
+![Alt text](assets/available-keys.png)
+
 ## Are there tools to help me?
 
 Yaml is hard, we know. We're working on a more user-friendly interface to make it easier for you. For now, we recommend the following tools to help you out:
@@ -69,6 +105,24 @@ Notice how it has detected that something is wrong with the indentation. In this
 It will get easier once you get used to it, we promise!
 
 **Remember: Never use `SPACE`, always use `TAB`!**
+
+<a name="how-can-i-change-the-language"></a>
+
+## How can I change the language?
+
+Wingman supports all languages that OpenAI (or your configured AI provider) supports. Setting this up in Wingman is really easy:
+
+Find the `context` setting in `config.xaml` for the wingman you want to change.
+
+Now add a simple sentence to the `context` prompt:
+
+`Always answer in the language I'm using to talk to you.`
+
+or something like:
+
+`Always answer in Portuguese.`
+
+The cool thing is that you can now trigger commands in the language of your choice without changing/translating the `name` of the commands - the AI will do that for you.
 
 <a name="i'm-a-patreon-supporter,-but-not-mentioned-here"></a>
 
@@ -93,5 +147,55 @@ If so, for now you can either change your DNS to something else (`8.8.8.8` is Go
 Please check the exact transcript text. Where there words misunderstood? Especially the API params `ship`, `location` or `money`?
 
 We're aware of this issue and looking into it.
+
+<a name="what-voices-are-available-in-edgetts"></a>
+
+## What voices are available in EdgeTTS?
+
+If you install EdgeTTS on your system, you can output all the voices in your terminal using `edge-tts --list-voices`.
+
+[Here's a dump](docs/available-edge-tts-voices.md) of this list (taken 11/24/2023):
+
+<a name="why-does-it-take-so-long-for-the-voice-responses-to-play"></a>
+
+## Why does it take so long for the voice responses to play?
+
+**Non-techie version:**.
+It should be like using ChatGPT: You hit enter and it starts typing immediately. Only this time with speech. But that's not happening right now because the OpenAI API is broken. Instead, we have to wait for all the audio to be generated and then start playing it.
+
+Dev version:
+There is currently a [known issue](https://github.com/openai/openai-python/issues/864) with Open AI's TTS API that our community member _meenie_ discovered and reported to them. Basically, their audio streaming doesn't work in Python. This results in much higher latency when starting the TTS conversion. We're waiting for a fix.
+
+Until then, you can always use another TTS provider like EdgeTTS or 11Labs.
+
+<a name="windows:-how-to-change-the-audio-device-for-output"></a>
+
+## Windows: How to change the audio device for output?
+
+Here's how to set the default sound output for a particular program on Windows 10 (and probably 11):
+
+- Right-click the speaker icon in the system tray:
+- There should be a speaker icon in the lower-right corner of your screen. Right-click it.
+  Open the sound settings.
+- Select "Open sound settings" from the context menu. This will open the sound settings window.
+  Scroll down to "Advanced sound options"
+- In the sound settings window, scroll down to the "Advanced sound options" section.
+  Select the output device for each application
+- Under the App volume and device settings section, you should see a list of open applications and their corresponding output devices. Use the drop-down menus to select the output device you want for each application.
+  Note that not all applications might appear in this list, depending on whether the application supports individual sound output settings.
+
+Thanks to our community member _EagleOne_ for posting this guide on our [Discord server](https://discord.com/invite/k8tTBar3gZ).
+
+<a name="wingman-does-not-start"></a>
+
+## Wingman does not start
+
+Make sure you **DID NOT** extract Wingman to `C:\Program Files` or another directory that needs admin priviledges. Pick a user directory like your Desktop, Documents, Downloads etc instead.
+
+Extract all the files from the `.zip` file, not just the `.exe`.
+
+If it still doesn't work, please join our [Discord](https://discord.com/invite/k8tTBar3gZ) and provide a screenshot showing the error message.
+
+Please do not create a new GitHub issue for that.
 
 <hr>

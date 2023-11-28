@@ -12,6 +12,8 @@ alt_titles:
   - 'My prompt is not working'
   - 'What is a yaml file?'
   - 'How can I use another provider?'
+  - 'How can I press this key?'
+  - 'Key is not pressed'
 ---
 
 Everything you can change (as non-dev) is stored in the `config.yaml` file.
@@ -56,6 +58,18 @@ Here are the most important properties of a command:
   - `wait`: The time to wait until the next key in this command is pressed _(optional)_
 - `instant_activation`: A list of phrases that will trigger the command immediatale without AI round-tripping. _(optional)_
 - `responses`: A list of responses. If the command is executed, a random response will be chosen and read out to you. _(optional)_
+
+Your new command has to _line up_ with the ones before and starts with a `- name: Whatever line`. Align the `-` with the one from the command before. Indent everything under your command with a single `TAB` character as separator.
+
+![Alt text](assets/add-new-command.png)
+
+**Do not** cut the `instant_activation` from the previous command (the one in the screenshot belongs to the `ScanArea` command.
+
+## Which keys are available in commands?
+
+See the full list [here](https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys)
+
+![Alt text](assets/available-keys.png)
 
 ## Are there tools to help me?
 
