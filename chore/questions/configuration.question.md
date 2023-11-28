@@ -1,14 +1,18 @@
-# Frequently Asked Questions
-
-- [Configuring Wingman AI](#configuring-wingman-ai)
-
-- [I'm a Patreon supporter, but not mentioned here](#i'm-a-patreon-supporter,-but-not-mentioned-here)
-
-- [StarHead API Issues](#starhead-api-issues)
-
-<a name="configuring-wingman-ai"></a>
-
-## Configuring Wingman AI
+---
+title: 'Configuring Wingman AI'
+alt_titles:
+  - 'Edit config'
+  - 'commands'
+  - 'My command is not working'
+  - 'Wingman error'
+  - 'Key is not pressed'
+  - 'What is this key called?'
+  - 'config error'
+  - 'How do I open or edit the config?'
+  - 'My prompt is not working'
+  - 'What is a yaml file?'
+  - 'How can I use another provider?'
+---
 
 Everything you can change (as non-dev) is stored in the `config.yaml` file.
 
@@ -69,29 +73,3 @@ Notice how it has detected that something is wrong with the indentation. In this
 It will get easier once you get used to it, we promise!
 
 **Remember: Never use `SPACE`, always use `TAB`!**
-
-<a name="i'm-a-patreon-supporter,-but-not-mentioned-here"></a>
-
-## I'm a Patreon supporter, but not mentioned here
-
-Please contact us directly in [Discord](https://discord.gg/k8tTBar3gZ) or via [Patreon](https://www.patreon.com/ShipBit). Please **do not** open an issue on GitHub.
-
-<a name="starhead-api-issues"></a>
-
-## StarHead API Issues
-
-## I get errors on start before I can say anything or I get weird connection errors
-
-Are you using Cloudflare DNS?
-
-Try `nslookup https://api-test.star-head.de` in your terminal. If `Adress` is `1.1.1.1`, then you are.
-
-If so, for now you can either change your DNS to something else (`8.8.8.8` is Google) or have to disable :wingman_ai: StarHead, sorry. We'll report this to the StarHead backend team.
-
-## I get occasional errors
-
-Please check the exact transcript text. Where there words misunderstood? Especially the API params `ship`, `location` or `money`?
-
-We're aware of this issue and looking into it.
-
-<hr>

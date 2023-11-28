@@ -17,7 +17,7 @@ The idea is simple, but the possibilities are endless. For example, you could:
 
 ## Is this a "Star Citizen" thing?
 
-**No**, it is not! We presented an early prototype of Wingman AI in _Star Citizen_ on YouTube, which caused a lot of excitement and interest in the community. Star Citizen is a great game, we love it and it has a lot of interesting use-cases for Wingmen but it's not the only game we play and not the core of our interest. We're also not affiliated with CIG or _Star Citizen_ in any way.
+**No, it is not!** We presented an early prototype of Wingman AI in _Star Citizen_ on YouTube, which caused a lot of excitement and interest in the community. Star Citizen is a great game, we love it and it has a lot of interesting use-cases for Wingmen but it's not the only game we play and not the core of our interest. We're also not affiliated with CIG or _Star Citizen_ in any way.
 
 [![Early prototype on Wingman in Star Citizen](https://img.youtube.com/vi/hHy7OZQX_nQ/0.jpg)](https://www.youtube.com/watch?v=hHy7OZQX_nQ)
 
@@ -66,8 +66,9 @@ We are also working on a Vision API implementation, but it's not ready yet.
 
 You don't have to use [ElevenLabs](https://elevenlabs.io/) as TTS provider, but their voices are great. You can also clone your own with less than 5 minutes of sample audio, e.g. your friend, an actor or a recording of an NPC in your game.
 
-They have a free tier with a limited number of characters generated per month so you can try it out first. You can find more information on their [pricing page] (https://elevenlabs.io/pricing). Signing up is very similar to OpenAI:
-Create your account, set up your payment method, and create an API key.
+They have a free tier with a limited number of characters generated per month so you can try it out first. You can find more information on their [pricing page](https://elevenlabs.io/pricing).
+
+Signing up is very similar to OpenAI: Create your account, set up your payment method, and create an API key.
 
 ### Edge TTS
 
@@ -75,7 +76,9 @@ Microsoft Edge TTS is actually free and you don't need an API key to use it. How
 
 ### Is this possible for free? I have my own local LLM running
 
-Yes, it is. If you're a developer. We're also working on a "Free Wingman" that uses only free APIs and services. But it's not ready yet.
+Yes, it is. If you're a developer.
+
+We're also working on a "Free Wingman" that uses only free APIs and services. But it's not ready yet.
 
 ## Installing Wingman AI
 
@@ -91,17 +94,19 @@ Yes, it is. If you're a developer. We're also working on a "Free Wingman" that u
   - _END_: ATC
   - _UP_: StarHead
 
-You can ask them anything you want, so just try something like: _"Hey, what can you do for me?"_.
+You can ask them anything you want, so just try something like: _"Hey, what can you do for me?"_. You can change their activation keys and other settings in the `config.yaml` file in your Wingman directory.
 
 ![Alt text](assets/win-smartscreen-1.png)
 
 ![Alt text](assets/win-smartscreen-2.png)
 
+**If you're a developer**, we always recommend to [run from source](#set-up-your-development-environment). This way you can pull our latest changes and debug the code.
+
 ### MacOS
 
-Wingman **does** run on MacOS. While we don't have a precompiled package for it yet, you can run it from source. Please see the [Developer Guide](#set-up-your-development-environment) for more information. Also note that we have to rely on [PyAutoGUI](https://github.com/asweigart/pyautogui) for key presses on MacOS, which does not work well in many games. Developing on MacOS is perfectly fine, though.
+Wingman **does** run on MacOS. While we don't have a precompiled package for it yet but you can [run it from source](#set-up-your-development-environment).
 
-Before you get too excited and see it fail on the first try, open `config.yaml` and enter your API key(s). Please read the [config section](#configure-wingmen)!
+Also note that we have to rely on [PyAutoGUI](https://github.com/asweigart/pyautogui) for key presses on MacOS, which does not work well in many games. Developing on MacOS is perfectly fine, though.
 
 ## Running Wingman AI
 
@@ -154,70 +159,29 @@ For updates and more information, visit the [StarHead website](https://star-head
 
 ## Configuring Wingman
 
-Everything you can change (as non-dev) is stored in the `config.yaml' file.
+This is the most complex part of Wingman AI right now, but we're working on a more user-friendly UI to make it easier for you. For now, you have to edit the [config.yaml](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/config.example.yaml) file directly. It is well-documented and contains a lot of examples and comments to help you get started.
 
-**Be careful: It is very indentation-sensitive**!
+It's very indentation-sensitive, so please be careful. We recommend using [VSCode](https://code.visualstudio.com/) with the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) to edit it.
 
-Please **DO NOT** use the `SPACE` bar to indent lines in the config. Use the `TAB` key instead. Always use a single `TAB` to indent. If you're using an editor that automatically converts `TAB` to `SPACE', please disable this feature for this file.
+Check out the [FAQ](FAQ.md) section for more information and documentation.
 
-The file is very **hierarchical**, meaning that entries _belong_ to other entries. The file begins with a general section. These are global (default) settings for all your wingmen.
+## Develop with Wingman AI
 
-![Alt text](assets/general-config.png)
+Are you ready to build your own Wingman or implement new features to the framework?
 
-The screenshot shows the general section of the config file. It has several sections or entries (colored), and these are all siblings to each other, meaning they have the same indentation level and must _align_ perfectly with each other.
+Please follow our guides to setup your dev environment:
 
-After the general section come the wingmen. Each wingman is defined in its own entry. They are all _children_ of the `wingmen` entry and siblings to each other. Then each wingman has its own commands and other settings.
+- [Windows development](docs/develop-windows.md)
+- [MacOS development](docs/develop-macos.md)
 
-![Alt text](assets/wingman-config.png)
+If you want to read some code first and understand how it all works, we recommend you start here (in this order):
 
-You can override any setting from the general config in a specific wingman. For example, the `board-computer` wingman overrides the global `features > enable_robot_sound_effect: false` by mirroring the exact same structure with `wingmen > board-computer > features > enable_robot_sound_effect: true`.
+- [config.yaml](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/config.example.yaml) - the configuration file
+- [Wingman.py](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/wingmen/wingman.py) - the base class for all Wingmen
+- [OpenAIWingman.py](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/wingmen/open_ai_wingman.py) - derived from Wingman
+- [Tower.py](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/services/tower.py) - the factory that creates Wingmen
 
-Note also the `commands`. The general section defines a global `ResetConversationHistory`command, meaning that every wingman has this command. Then the`board-computer`wingman adds its own keystroke command to the command list. Also note that commands start with a`-`sign. This is because they are lists of commands. You can add as many commands as you like. Please do not remove the`-` sign and add it to your new commands.
-
-### The context prompt
-
-### Adding and editing commands
-
-Commands are the heart of the Wingman AI, as they add _functions_ to otherwise pure conversations. Commands are defined in `config.yaml` and are activated by the corresponding Wingman as a result of a conversation with you. In the first version, they are mainly used to trigger keystrokes, but they can also be used for other actions such as calling external APIs or executing complex scripts.
-
-Here are the most important properties of a command:
-
-- `name`: This is used to associate your request to the command. So make sure to give it a good name, e.g. `RequestLandingPermission`. Use `camelCasing` to separate words. No spaces and don't write everything in lowercase. You do not have to say a specific phrase to trigger the command because the AI is smart enough to detect which command you _meant_. This is a very powerful concept and one of the reason this is way better than other (sometimes "aggressive" 🤭) `voice-to-key` tools.
-- `keys`: A list of keys to press. They will be triggered in the order they are defined. Any key can have these properties:
-  - `key`: The key to press.
-  - `modifier`: A modifier key to press with the key. _(optional)_
-  - `hold`: The time to hold the key in milliseconds. _(optional)_
-  - `wait`: The time to wait until the next key in this command is pressed _(optional)_
-- `instant_activation`: A list of phrases that will trigger the command immediatale without AI round-tripping. _(optional)_
-- `responses`: A list of responses. If the command is executed, a random response will be chosen and read out to you. _(optional)_
-
-#### Wow, this is hard!
-
-Yeah, we know. We're working on a more user-friendly interface to make it easier for you. For now, we recommend the following tools to help you out:
-
-- [VSCode](https://code.visualstudio.com/) with the
-- [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml)
-
-Both are free and very easy to install and use. VSCode is a great editor for developers, and the YAML extension will help you with indentation by showing you errors and warnings in your config file as you type.
-
-![Alt text](assets/vscode-yaml.png)
-
-Notice how it has detected that something is wrong with the indentation. In this case, there is a single space before the `features` entry, which is not allowed. It also shows you visually how it should be indented.
-
-It will get easier once you get used to it, we promise!
-
-**Remember: Never use `SPACE`, always use `TAB`!**
-
-## Set up your development environment
-
-Are you ready to build your own Wingman or to bring new features to the framework?
-
-Great! We really appreciate your contributions!
-
-Please follow our guides to get started on
-
-- [Windows](docs/develop-windows.md)
-- [MacOS](docs/develop-macos.md)
+If you're planning to develop a major feature or new integration, please contact us on [Discord](https://discord.com/invite/k8tTBar3gZ) first and let us know what you're up to. We'll be happy to help you get started and make sure your work isn't wasted because we're already working on something similar.
 
 ## Our Patreons & Early Access Testers
 
