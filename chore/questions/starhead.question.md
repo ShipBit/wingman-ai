@@ -1,5 +1,10 @@
 ---
 title: 'StarHead API Issues'
+alt_titles:
+  - 'StarHead does not work'
+  - 'StarHead connection issues'
+  - 'StarHead errors'
+  - 'StarHead'
 ---
 
 ## I get errors on start before I can say anything or I get weird connection errors
