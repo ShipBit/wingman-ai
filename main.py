@@ -48,7 +48,7 @@ def get_or_create_api_keys(filename="apikeys.yaml"):
         f"{Printr.clr('⌬', Printr.CYAN)} How to get your OpenAI API key: https://www.patreon.com/posts/how-to-get-your-93307145"
     )
     openai_api_key = input("Please paste your OpenAI API key: ")
-    #TODO do not override whole file
+    # TODO do not override whole file
     data = {"openai": {"api_key": openai_api_key}}
 
     with open(filename, "w", encoding="UTF-8") as file:
@@ -88,14 +88,22 @@ try:
     # todo: remove for public release
     if config.get("version") or config["openai"].get("api_key"):
         Printr.err_print("You are using an outdated config.yaml file.")
-        Printr.err_print("Please copy&paste your changes/commands from the old one and save them or backup your old config.", False)
-        Printr.err_print("Then delete your config.yaml and copy the new one from our latest release into your Wingman directory.", False)
+        Printr.err_print(
+            "Please copy&paste your changes/commands from the old one and save them or backup your old config.",
+            False,
+        )
+        Printr.err_print(
+            "Then delete your config.yaml and copy the new one from our latest release into your Wingman directory.",
+            False,
+        )
         Printr.err_print("Then reapply your changes in the new config.", False)
         input("Press your favorite key to exit...")
         sys.exit(0)
 
     apikeys = get_or_create_api_keys()
     for key, value in apikeys.items():
+        if key not in config:
+            config[key] = {}
         config[key]["api_key"] = value.get("api_key")
 
     tower = Tower(config)
