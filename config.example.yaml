@@ -56,8 +56,7 @@ features:
   # ────────────────────────────────── TTS Provider ────────────────────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  # We are already working on more providers like elevenlabs.
-  tts_provider: default # or: 'edge_tts'
+  tts_provider: default # or: 'edge_tts' or 'elevenlabs'
 
 # Specifig settings for the edge_tts provider. Only used if tts_provider in features is set to 'edge_tts' above.
 # Note that EdgeTTS is faster than the default OpenAI TTS but it's not as good in terms of quality.
@@ -73,6 +72,21 @@ edge_tts:
   # The voice to use (only if detect_language is set to false above).
   # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
   tts_voice: en-US-GuyNeural
+
+# Specifig settings for the elevenlabs provider. Only used if tts_provider in features is set to 'elevenlabs' above.
+# Note that elevenlabs requires an own API key. See https://elevenlabs.io/ for more information.
+elevenlabs:
+  voice: Adam # Simple voice names.
+  # If you have a custom voice, you can use the voice ID instead:
+  # voice:
+  #   id: xxx
+  model: eleven_multilingual_v2 # or: 'eleven_turbo_v2' or 'eleven_multilingual_v1' or 'eleven_multilingual_v2'
+  latency: 3 # 0 - 4
+  voice_settings:
+    stability: 0.71 # 0.0 - 1.0
+    similarity_boost: 0.5 # 0.0 - 1.0
+    style: 0.0 # 0.0 - 1.0
+    use_speaker_boost: true # true or false
 
 # ────────────────────────────────── Global commands ───────────────────────────────────────
 # These are available to all wingmen. You can override them per wingman if necessary.
