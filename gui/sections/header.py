@@ -1,7 +1,7 @@
-import tkinter as tk
 import customtkinter as ctk
 from gui.components.icon import Icon
 from gui.components.icon_button import IconButton
+from gui.components.social_links import SocialLinks
 from services.version_check import VersionCheck, LOCAL_VERSION
 from services.printr import Printr
 
@@ -27,7 +27,8 @@ class Header(ctk.CTkFrame):
             printr.print_info(f"A new Wingman AI version is available! Get the latest version ({version_check.get_latest_version()}) at https://wingman-ai.com")
         self.version.grid(row=0, column=0, padx=20, pady=10, sticky="es")
 
-        # TODO: add links for 'discord', 'patreon' and 'github'
+        self.social_links = SocialLinks(self, fg_color=("grey80", "grey40"))
+        self.social_links.grid(row=0, column=1, padx=5, pady=5)
 
         # TODO: Move to Burger-Menu
         self.about_button = IconButton(self,
