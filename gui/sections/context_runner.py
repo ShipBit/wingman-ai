@@ -47,7 +47,7 @@ class ContextRunner(ctk.CTkFrame):
 
         self.terminal = ctk.CTkTextbox(self)
         self.terminal.grid(row=3, column=0, padx=20, pady=10, sticky="nesw")
-        self.terminal.configure(state="disabled", wrap="none")
+        self.terminal.configure(state="disabled", wrap="word")
         printr.set_output("main", self.terminal)
 
 

@@ -26,13 +26,13 @@ class Printr(object):
 
     tags = [
         # {"tagName": "bold", "font": "TkTextFont bold"},
-        {"tagName": "info", "foreground": "blue"},
+        {"tagName": "info", "foreground": "#6699ff"},
         {"tagName": "warn", "foreground": "orange"},
         {"tagName": "err", "foreground": "red"},
 
-        {"tagName": "green", "foreground": "green"},
-        {"tagName": "blue", "foreground": "blue"},
-        {"tagName": "violet", "foreground": "#9900dd"},
+        {"tagName": "green", "foreground": "#33cc33"},
+        {"tagName": "blue", "foreground": "#6699ff"},
+        {"tagName": "violet", "foreground": "#aa33dd"},
         {"tagName": "grey", "foreground": "grey"}
     ]
 
