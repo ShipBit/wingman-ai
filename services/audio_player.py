@@ -27,32 +27,44 @@ class AudioPlayer:
         if not os.path.exists("audio_output"):
             os.makedirs("audio_output")
 
-        audio.export("audio_output/output_generated.wav", format="wav")
+        audio_path = "audio_output/output_generated.wav"
+        audio.export(audio_path, format="wav")
 
         if play_beep | play_noise:
             audio = self.add_radio_effect_with_beep(
-                "audio_output/output_generated.wav",
+                audio_path,
                 play_beep,
                 play_noise,
                 delete_source=True,
             )
+            audio.export(audio_path, format="wav")
 
         if robot_effect:
-            self.effect_audio("audio_output/output_generated.wav")
-            audio = AudioSegment.from_wav("audio_output/output_generated.wav")
+            self.effect_audio(audio_path)
+            audio = AudioSegment.from_wav(audio_path)
 
         play(audio)
 
     def effect_audio(self, audio_file_path):
         # Load the audio file
-        audio, sample_rate = sf.read(audio_file_path)        
-        board = Pedalboard([
-            PitchShift(semitones=-3),
-            Delay(delay_seconds=0.01,feedback=0.5,mix=0.5),
-            Chorus(rate_hz=0.5, depth=0.8, mix=0.7, centre_delay_ms=2, feedback=0.3),
-            Reverb(room_size=0.05, dry_level=0.5, wet_level=0.2, freeze_mode=0.5, width=0.5),
-            Gain(gain_db=9)
-        ])
+        audio, sample_rate = sf.read(audio_file_path)
+        board = Pedalboard(
+            [
+                PitchShift(semitones=-3),
+                Delay(delay_seconds=0.01, feedback=0.5, mix=0.5),
+                Chorus(
+                    rate_hz=0.5, depth=0.8, mix=0.7, centre_delay_ms=2, feedback=0.3
+                ),
+                Reverb(
+                    room_size=0.05,
+                    dry_level=0.5,
+                    wet_level=0.2,
+                    freeze_mode=0.5,
+                    width=0.5,
+                ),
+                Gain(gain_db=9),
+            ]
+        )
         # Process the audio with the effects
         processed_audio = board(audio, sample_rate)
         # Save the processed audio to a new file

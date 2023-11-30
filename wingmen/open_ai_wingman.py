@@ -317,8 +317,8 @@ class OpenAiWingman(Wingman):
             await self.edge_tts.generate_speech(
                 text, filename="audio_output/edge_tts.mp3", voice=tts_voice
             )
-            
-            if(self.config.get("features", {}).get("enable_robot_sound_effect")):
+
+            if self.config.get("features", {}).get("enable_robot_sound_effect"):
                 self.audio_player.effect_audio("audio_output/edge_tts.mp3")
 
             self.audio_player.play("audio_output/edge_tts.mp3")
@@ -350,7 +350,7 @@ class OpenAiWingman(Wingman):
                     response.content,
                     self.config.get("features", {}).get("play_beep_on_receiving"),
                     self.config.get("features", {}).get("enable_radio_sound_effect"),
-                    self.config.get("features", {}).get("enable_robot_sound_effect")
+                    self.config.get("features", {}).get("enable_robot_sound_effect"),
                 )
 
     def _get_elevenlabs_settings(self, elevenlabs_config):
