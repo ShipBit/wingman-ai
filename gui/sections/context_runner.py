@@ -14,11 +14,11 @@ class ContextRunner(ctk.CTkFrame):
         self.grid_rowconfigure(3, weight=1)
 
         context_title = context.title().replace("_", " ").strip() if context else "Default"
-        self.status = ctk.CTkLabel(self, text=context_title)
+        self.status = ctk.CTkLabel(self, text=context_title, font=('TkHeadingFont', 20, "bold"), text_color="#EB154D")
         self.status.grid(row=0, column=0, padx=20, pady=10, sticky="w")
 
-        self.welcome_msg = ctk.CTkLabel(self, text="Welcome, Commander! o7")
-        self.welcome_msg.grid(row=0, column=0, padx=20, pady=10)
+        # self.welcome_msg = ctk.CTkLabel(self, text="Welcome, Commander! o7")
+        # self.welcome_msg.grid(row=0, column=0, padx=20, pady=10)
 
         self.status = ctk.CTkLabel(self,
                                    textvariable=self.status_var,
