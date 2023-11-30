@@ -40,7 +40,7 @@ class ContextRunner(ctk.CTkFrame):
 
         broken_wingmen = []
         if tower:
-            tower.get_broken_wingmen()
+            broken_wingmen = tower.get_broken_wingmen()
         if len(broken_wingmen) > 0:
             self.broken_wingmen_list = WingmenList(self, wingmen=broken_wingmen, broken=True)
             self.broken_wingmen_list.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
