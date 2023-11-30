@@ -9,12 +9,13 @@ from services.check_version import check_version
 from services.tower import Tower
 from services.printr import Printr
 from gui.root import WingmanUI
+from wingmen.wingman import Wingman
 
 
 class WingmanAI():
     def __init__(self):
         self.active = False
-        self.active_recording = dict(key="", wingman=None)
+        self.active_recording = {"key": "", "wingman": None}
         self.tower = None
         self.audio_recorder = AudioRecorder()
         check_version("https://shipbit.de/wingman.json")
@@ -27,8 +28,9 @@ class WingmanAI():
             # TODO: validate config & check which api keys are needed
             # append api keys
             apikeys = self.get_or_create_api_keys()
-            for key, value in apikeys.items():
-                config[key]["api_key"] = value.get("api_key")
+            if apikeys:
+                for key, value in apikeys.items():
+                    config[key]["api_key"] = value.get("api_key")
 
             # TODO: move to "load config"?
             # config migration
@@ -58,8 +60,9 @@ class WingmanAI():
     def deactivate(self):
         self.active = False
 
-    def read_config(self, context=None) -> dict[str, any]:
+    def read_config(self, context=None) -> dict[str, any]: # type: ignore
         is_bundled = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+        cfg = {}
         # move up one step, if bundled -> '../'
         # default name -> 'config.yaml'
         # context config -> 'config.{context}.yaml'
@@ -94,11 +97,11 @@ class WingmanAI():
         # with open(filename, "w") as file:
         #     yaml.dump(data, file)
 
-        return data
+        # return data
 
 
     def on_press(self, key):
-        if self.active and self.active_recording["key"] == "":
+        if self.active and self.tower and self.active_recording["key"] == "":
             wingman = self.tower.get_wingman_from_key(key)
             if wingman:
                 self.active_recording = dict(key= key, wingman=wingman)
@@ -116,7 +119,8 @@ class WingmanAI():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    loop.run_until_complete(wingman.process(recorded_audio_wav))
+                    if type(wingman) is Wingman:
+                        loop.run_until_complete(wingman.process(recorded_audio_wav))
                 finally:
                     loop.close()
 

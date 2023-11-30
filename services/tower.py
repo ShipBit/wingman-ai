@@ -5,7 +5,7 @@ from services.printr import Printr
 
 class Tower:
 
-    def __init__(self, config: dict[str, any]):
+    def __init__(self, config: dict[str, any]): # type: ignore
         self.config = config
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.broken_wingmen = []
