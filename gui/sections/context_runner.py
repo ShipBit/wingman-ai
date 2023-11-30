@@ -47,20 +47,6 @@ class ContextRunner(ctk.CTkFrame):
 
         self.terminal = ctk.CTkTextbox(self)
         self.terminal.grid(row=3, column=0, padx=20, pady=10, sticky="nesw")
-        # TODO: Remove playground code ^^  -----------------------------------------------------------------------------
-        # self.terminal.insert("1.0", "Lorem Wingsum\n")
-        # self.terminal.insert("2.0",
-        #                      "While users can modify the text in the text widget interactively, your program can also make changes. Adding text is done with the insert method, which we used above to provide an initial value for the text widget.")
-        # self.terminal.tag_add("here", "1.1", "1.4")
-        # self.terminal.tag_add("here", "1.10", "1.12")
-        # self.terminal.tag_config("here", foreground="red")
-        # self.terminal.tag_add("there", "2.2 wordstart", "2.12 wordend")
-        # self.terminal.tag_config("there", foreground="green")
-        # self.terminal.insert("4.0",
-        #                      "Tags can also be provided when first inserting text. The insert method supports an optional parameter containing a list of one or more tags to add to the text being inserted.",
-        #                      ("black"))
-        # self.terminal.tag_config("black", background="black")
-        # # --------------------------------------------------------------------------------------------------------------
         self.terminal.configure(state="disabled", wrap="none")
         printr.set_output("main", self.terminal)
 

@@ -24,6 +24,18 @@ class Printr(object):
     DELETE_LINE = "\033[2K\033[1G"
     PREVIOUS_LINE = "\033[2F"
 
+    tags = [
+        # {"tagName": "bold", "font": "TkTextFont bold"},
+        {"tagName": "info", "foreground": "blue"},
+        {"tagName": "warn", "foreground": "orange"},
+        {"tagName": "err", "foreground": "red"},
+
+        {"tagName": "green", "foreground": "green"},
+        {"tagName": "blue", "foreground": "blue"},
+        {"tagName": "violet", "foreground": "#9900dd"},
+        {"tagName": "grey", "foreground": "grey"}
+    ]
+
     CHANNEL = Literal["main", "error", "warning", "info"]
     OUTPUT_TYPES = None | ctk.StringVar | ctk.CTkTextbox
 
@@ -49,26 +61,28 @@ class Printr(object):
 
 
     def set_output(self, output_channel: CHANNEL, output_element: OUTPUT_TYPES):
+        if isinstance(output_element, ctk.CTkTextbox):
+            for tag in self.tags:
+                output_element.tag_config(**tag)
+
         self.out[output_channel] = output_element
-        # if output_channel == 'main':
-            # for _ in range(len(msg_stack)):
-            # msg_stack.pop()
-        # else:
-        #     pass
+
         msg_stack = self._message_stacks.get(output_channel, [])
         if len(msg_stack) > 0:
             msg = "\n".join(msg_stack)
             self.print(msg, output_channel)
             # TODO: clear stack?
+            for _ in range(len(msg_stack)):
+                msg_stack.pop()
 
 
 
-    def print(self, text, output_channel: CHANNEL = "main", wait_for_gui=False, console_only=False):
+    def print(self, text, output_channel: CHANNEL = "main", tags=None, wait_for_gui=False, console_only=False):
         channel = self.out.get(output_channel, None)
         if channel and not console_only:
             if isinstance(channel, ctk.CTkTextbox):
                 channel.configure(state="normal")
-                channel.insert("end", f"{text}\n")
+                channel.insert("end", f"{text}\n", tags=tags)
                 channel.configure(state="disabled")
             else:
                 # output type -> StringVar

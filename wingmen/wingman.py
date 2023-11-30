@@ -83,7 +83,7 @@ class Wingman:
         if self.execution_start:
             execution_stop = time.perf_counter()
             elapsed_seconds = execution_stop - self.execution_start
-            Printr.info_print(f"...took {elapsed_seconds:.2f}s", first_message=False)
+            printr.print(f"...took {elapsed_seconds:.2f}s", tags="info")
         if reset_timer:
             self.start_execution_benchmark()
 
@@ -142,7 +142,7 @@ class Wingman:
         process_result = None
 
         if self.debug:
-            Printr.info_print("Starting transcription...")
+            printr.print("Starting transcription...", tags="info")
 
         # transcribe the audio.
         transcript, locale = await self._transcribe(audio_input_wav)
@@ -153,10 +153,10 @@ class Wingman:
         if transcript:
             # TODO:
             # Printr.clr_print(f">> (You): {transcript}", Printr.LILA)
-            printr.print(f">> (You): {transcript}")
+            printr.print(f">> (You): {transcript}", tags="violet")
 
             if self.debug:
-                Printr.info_print("Getting response for transcript...")
+                printr.print("Getting response for transcript...", tags="info")
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
@@ -169,10 +169,10 @@ class Wingman:
             actual_response = instant_response or process_result
             # TODO:
             # Printr.clr_print(f"<< ({self.name}): {actual_response}", Printr.GREEN)
-            printr.print(f"<< ({self.name}): {actual_response}")
+            printr.print(f"<< ({self.name}): {actual_response}", tags="green")
 
         if self.debug:
-            Printr.info_print("Playing response back to user...")
+            printr.print("Playing response back to user...", tags="info")
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         await self._play_to_user(str(process_result))
@@ -302,7 +302,7 @@ class Wingman:
             return "Command not found"
 
         # Printr.info_print(f"❖ Executing command: {command.get('name')}")
-        printr.print(f"❖ Executing command: {command.get('name')}")
+        printr.print(f"❖ Executing command: {command.get('name')}", tags="blue")
 
         if self.debug:
             Printr.warn_print(
