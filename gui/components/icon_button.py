@@ -2,7 +2,7 @@ import customtkinter as ctk
 from gui.components.icon import Icon
 
 class IconButton(ctk.CTkButton):
-    def __init__(self, master, icon="", size=42, padding=4, themed=True, emoji=False, **kwargs):
+    def __init__(self, master, icon="", size=42, padding=4, themed=True, emoji=False, fg_color="transparent", **kwargs):
         char_count = len(icon)
         text = ""
         image = None
@@ -21,6 +21,6 @@ class IconButton(ctk.CTkButton):
                         height=dimension,
                         text=text,
                         image=image,
-                        fg_color="transparent",
+                        fg_color=fg_color,
                         # hover_color="grey50",
                         **kwargs)
