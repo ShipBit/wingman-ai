@@ -119,7 +119,7 @@ class WingmanAI():
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 try:
-                    if type(wingman) is Wingman:
+                    if isinstance(wingman, Wingman):
                         loop.run_until_complete(wingman.process(recorded_audio_wav))
                 finally:
                     loop.close()
