@@ -13,8 +13,7 @@ class ContextSwitcher(ctk.CTkFrame):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         self.grid_columnconfigure(0, weight=1)
-        #self.contexts = contexts  #TODO use service
-        self.contexts = ["", "test"] #NOTE dummy data
+        self.contexts = master.core.config_manager.contexts
         self.context_buttons = []
 
         self.spacer = ctk.CTkLabel(self, text="")

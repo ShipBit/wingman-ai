@@ -1,3 +1,4 @@
+from exceptions import MissingApiKeyException
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.printr import Printr
@@ -47,9 +48,14 @@ class Tower:
                     )
                 else:
                     wingman = OpenAiWingman(wingman_name, merged_config)
-            except Exception as e:
+            except MissingApiKeyException:
+                self.broken_wingmen.append({"name": wingman_name, "error": "Missing API key. Please check your key config."})
+            except Exception as e: # pylint: disable=broad-except
                 # just in case we missed something
-                self.broken_wingmen.append({"name": wingman_name, "error": e})
+                msg = str(e).strip()
+                if not msg:
+                    msg= type(e).__name__
+                self.broken_wingmen.append({"name": wingman_name, "error": msg})
             else:
                 # additional validation check if no exception was raised
                 errors = wingman.validate()
@@ -72,7 +78,7 @@ class Tower:
             )
         self.wingmen_prepared = True
 
-    def get_wingman_from_key(self, key: any) -> Wingman | None:
+    def get_wingman_from_key(self, key: any) -> Wingman | None: # type: ignore
         if hasattr(key, "char"):
             wingman = self.key_wingman_dict.get(key.char, None)
         else:

@@ -6,6 +6,7 @@ class WingmanUI(ctk.CTk):
     def __init__(self, core):
         super().__init__()
         self.core = core
+        self.core.setup()
 
         self.title("Wingman AI")
         self.geometry("1024x800+200+150")
