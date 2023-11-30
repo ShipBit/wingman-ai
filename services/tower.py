@@ -25,11 +25,10 @@ class Tower:
                 continue
 
             global_config = {
-                "openai": self.config["openai"],
-                "features": self.config["features"],
-                "edge_tts": self.config["edge_tts"],
-                "commands": self.config["commands"],
-                "elevenlabs": self.config["elevenlabs"],
+                "openai": self.config.get("openai", {}),
+                "features": self.config.get("features", {}),
+                "edge_tts": self.config.get("edge_tts", {}),
+                "commands": self.config.get("commands", {}),
             }
             merged_config = self.__merge_configs(global_config, wingman_config)
             class_config = merged_config.get("class")

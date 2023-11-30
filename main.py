@@ -2,7 +2,6 @@ from os import path
 import sys
 import asyncio
 import threading
-import yaml
 from pynput import keyboard
 from services.audio_recorder import AudioRecorder
 from services.check_version import check_version
