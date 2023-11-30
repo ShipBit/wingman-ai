@@ -1,10 +1,18 @@
 import tkinter as tk
+from typing import Literal
 import customtkinter as ctk
 from gui.components.notification_banner import NotificationBanner
 from gui.sections.header import Header
 from gui.views.context_view import ContextView
+from gui.views.settings_view import SettingsView
 
 class WingmanUI(ctk.CTk):
+    VIEWS = Literal["context", "settings"]
+    _views: dict[VIEWS, ctk.CTkFrame | None] = dict(
+        context=None,
+        settings=None
+    )
+
     def __init__(self, core):
         super().__init__()
         self.core = core
@@ -34,11 +42,29 @@ class WingmanUI(ctk.CTk):
         self.header = Header(self, height=74, corner_radius=0)
         self.header.grid(row=0, column=0, sticky="we")
 
-        self.context_view = ContextView(self, width=88, corner_radius=0, fg_color="transparent")
-        self.context_view.grid(row=1, column=0, sticky="nesw")
+        self._views["settings"] = SettingsView(self, corner_radius=0, fg_color="transparent")
+        self._views["settings"].grid(row=1, column=0, sticky="nesw")
+
+        self._views["context"] = ContextView(self, corner_radius=0, fg_color="transparent")
+        self._views["context"].grid(row=1, column=0, sticky="nesw")
 
         self.notification_banner = NotificationBanner(self, corner_radius=0)
         self.notification_banner.set_grid_position(row=2, column=0)
+
+
+    def switch_view(self, view:VIEWS, show=True):
+        toggle_view = self._views.get(view)
+        if isinstance(toggle_view, ctk.CTkFrame):
+            if show:
+                toggle_view.tkraise()
+            else:
+                toggle_view.lower()
+
+    def show_view(self, view:VIEWS):
+        self.switch_view(view, show=True)
+
+    def hide_view(self, view:VIEWS):
+        self.switch_view(view, show=False)
 
 
     def show_info(self):

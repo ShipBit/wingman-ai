@@ -17,7 +17,6 @@ class WingmanAI():
         self.active = False
         self.active_recording = {"key": "", "wingman": None}
         self.tower = None
-        self.config_manager = None
         self.audio_recorder = AudioRecorder()
         self.app_is_bundled = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
         self.app_root_dir = path.abspath(path.dirname(__file__))

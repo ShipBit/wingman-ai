@@ -2,7 +2,6 @@ import requests
 from packaging import version
 from services.printr import Printr
 
-# LOCAL_VERSION = "1.0.0a3"
 LOCAL_VERSION = "1.0.0a4"
 VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
 
@@ -36,8 +35,11 @@ class VersionCheck():
 
             return app_version >= remote_version
 
-        except requests.RequestException as e:
-            printr.print_warn(f"Error fetching version information: {e}")
+        except requests.RequestException:
+            # msg = str(e)
+            msg = "Could not reach version endpoint."
+            printr.print_warn(f"Error fetching version information: \n{msg}")
+            # printr.print_warn(f"Error fetching version information: \n{e}")
             return False
         except ValueError as e:
             printr.print_warn(f"Error with version information: {e}")

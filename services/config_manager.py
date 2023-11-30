@@ -1,5 +1,6 @@
 import os
 import shutil
+from typing import Literal
 import yaml
 from services.printr import Printr
 
@@ -11,6 +12,14 @@ EXAMPLE_CONTEXT_CONFIG = "context.example.yaml"
 API_KEYS_CONFIG = "api_keys.yaml"
 
 class ConfigManager():
+    SYSTEM_APPEARANCE_OPTIONS = Literal["🌙", "☀️", "⚙️"]
+    SYSTEM_APPEARANCE_MAP: dict[SYSTEM_APPEARANCE_OPTIONS, str] = {
+        "🌙": "dark",
+        "☀️": "light",
+        "⚙️": "system"
+    }
+
+
     def __init__(self, app_root_path:str, app_is_bundled:bool):
         # all paths are one folder above executable file, if bundled
         self.user_configs = {}
