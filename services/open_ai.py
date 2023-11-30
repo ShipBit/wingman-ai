@@ -101,11 +101,11 @@ class OpenAi:
         if m is not None:
             message_lines = m["message"].split(". ")
             for line in message_lines:
-                printr.err_print(line, False)
+                printr.print_err(line, True)
         elif api_response.message:
-            printr.err_print(api_response.message, False)
+            printr.print_err(api_response.message, True)
         else:
-            printr.err_print("The API did not provide further information.", False)
+            printr.print_err("The API did not provide further information.", True)
 
         # Provide additional info an known issues
         match api_response.status_code:

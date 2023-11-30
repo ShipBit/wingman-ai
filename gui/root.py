@@ -1,5 +1,6 @@
 import tkinter as tk
 import customtkinter as ctk
+from gui.components.notification_banner import NotificationBanner
 from gui.sections.header import Header
 from gui.views.context_view import ContextView
 
@@ -19,8 +20,8 @@ class WingmanUI(ctk.CTk):
 
         # TODO:
         self.menubar = tk.Menu(self)
-        self.system_menu = tk.Menu(self.menubar, tearoff=0)
-        self.system_menu.add_command(label="Exit", command=self.quit)
+        self.system_menu = tk.Menu(self.menubar, name="apple")
+        self.system_menu.add_command(label="Exit Wingman AI", command=self.quit)
         self.menubar.add_cascade(label="System", menu=self.system_menu)
         self.help_menu = tk.Menu(self.menubar, tearoff=0)
         self.help_menu.add_command(label="About Wingman AI", command=self.show_info)
@@ -28,16 +29,16 @@ class WingmanUI(ctk.CTk):
         self.config(menu=self.menubar)
 
         self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=0)
         self.grid_rowconfigure(1, weight=1)
 
         self.header = Header(self, height=74, corner_radius=0)
-        self.header.grid(row=0, column=0, columnspan=2, sticky="we")
-
-        # self.notification_banner =
+        self.header.grid(row=0, column=0, sticky="we")
 
         self.context_view = ContextView(self, width=88, corner_radius=0, fg_color="transparent")
         self.context_view.grid(row=1, column=0, sticky="nesw")
+
+        self.notification_banner = NotificationBanner(self, corner_radius=0)
+        self.notification_banner.set_grid_position(row=2, column=0)
 
 
     def show_info(self):

@@ -27,6 +27,13 @@ class Printr(object):
     CHANNEL = Literal["main", "error", "warning", "info"]
     OUTPUT_TYPES = None | ctk.StringVar | ctk.CTkTextbox
 
+    _message_stacks: dict[CHANNEL, list] = dict(
+        main=[],
+        error=[],
+        warning=[],
+        info=[]
+    )
+
 
     def __new__(cls):
         if cls._instance is None:
@@ -44,11 +51,22 @@ class Printr(object):
 
     def set_output(self, output_channel: CHANNEL, output_element: OUTPUT_TYPES):
         self.out[output_channel] = output_element
+        # if output_channel == 'main':
+            # for _ in range(len(msg_stack)):
+            # msg_stack.pop()
+        # else:
+        #     pass
+        msg_stack = self._message_stacks.get(output_channel, [])
+        if len(msg_stack) > 0:
+            msg = "\n".join(msg_stack)
+            self.print(msg, output_channel)
+            # TODO: clear stack?
 
 
-    def print(self, text, output_channel: CHANNEL = "main"):
+
+    def print(self, text, output_channel: CHANNEL = "main", wait_for_gui=False, console_only=False):
         channel = self.out.get(output_channel, None)
-        if channel:
+        if channel and not console_only:
             if isinstance(channel, ctk.CTkTextbox):
                 channel.configure(state="normal")
                 channel.insert("end", f"{text}\n")
@@ -56,9 +74,23 @@ class Printr(object):
             else:
                 # output type -> StringVar
                 channel.set(text)
+        elif wait_for_gui and not console_only:
+            # message should only be shown in GUI
+            # so add it to the queue to wait for GUI initialization
+            self._message_stacks.get(output_channel, []).append(text)
         else:
             # no special output type -> terminal output
             print(text)
+
+
+    def print_err(self, text, wait_for_gui=False):
+        self.print(text, output_channel="error", wait_for_gui=wait_for_gui)
+
+    def print_warn(self, text, wait_for_gui=False):
+        self.print(text, output_channel="warning", wait_for_gui=wait_for_gui)
+
+    def print_info(self, text, wait_for_gui=False):
+        self.print(text, output_channel="info", wait_for_gui=wait_for_gui)
 
 
     @staticmethod

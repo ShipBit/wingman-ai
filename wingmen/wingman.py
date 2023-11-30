@@ -2,18 +2,20 @@ import random
 import time
 from difflib import SequenceMatcher
 from importlib import import_module
+from typing import Any
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 # see execute_keypress() method
+printr = Printr()
 try:
     import pydirectinput as key_module
 except AttributeError:
-    Printr.warn_print(
-        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games."
+    printr.print_warn(
+        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
+        wait_for_gui=True
     )
     import pyautogui as key_module
 
-printr = Printr()
 
 class Wingman:
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
@@ -21,7 +23,7 @@ class Wingman:
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
     """
 
-    def __init__(self, name: str, config: dict[str, any]):
+    def __init__(self, name: str, config: dict[str, Any]):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
@@ -48,13 +50,14 @@ class Wingman:
         """The name of the TTS provider you configured in the config.yaml"""
         # todo: remove warning for release
         if not self.tts_provider or not self.config.get("edge_tts"):
-            Printr.warn_print(
-                "No TTS provider configured. You're probably using an outdated config.yaml"
+            printr.print_warn(
+                "No TTS provider configured. You're probably using an outdated config.yaml",
+                True
             )
 
     @staticmethod
     def create_dynamically(
-        module_path: str, class_name: str, name: str, config: dict[str, any], **kwargs
+        module_path: str, class_name: str, name: str, config: dict[str, Any], **kwargs
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -203,7 +206,7 @@ class Wingman:
         Returns:
             A tuple of strings representing the response to a function call and/or an instant response.
         """
-        return None
+        return ("", "")
 
     async def _play_to_user(self, text: str):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.

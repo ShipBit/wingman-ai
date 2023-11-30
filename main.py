@@ -19,7 +19,6 @@ class WingmanAI():
         self.active_recording = {"key": "", "wingman": None}
         self.tower = None
         self.config_manager = None
-        # self.printr = Printr()
         self.audio_recorder = AudioRecorder()
         self.app_is_bundled = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
         self.app_root_dir = path.abspath(path.dirname(__file__))
@@ -36,11 +35,10 @@ class WingmanAI():
                 self.tower = Tower(config)
 
         except FileNotFoundError:
-            # Printr.err_print(f"Could not find context.{context}.yaml")
-            printr.err_print(f"Could not find context.{context}.yaml")
+            printr.print_err(f"Could not find context.{context}.yaml", True)
         except Exception as e:
             # Everything else...
-            printr.err_print(str(e))
+            printr.print_err(str(e), True)
 
 
     def activate(self):

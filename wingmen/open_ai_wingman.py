@@ -106,7 +106,7 @@ class OpenAiWingman(Wingman):
                 return None, instant_response
 
             summarize_response = self._summarize_function_calls()
-            return self._finalize_response(summarize_response)
+            return self._finalize_response(str(summarize_response))
 
         return response_message.content, response_message.content
 
