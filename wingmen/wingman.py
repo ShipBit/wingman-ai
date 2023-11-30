@@ -151,8 +151,6 @@ class Wingman:
             self.print_execution_time(reset_timer=True)
 
         if transcript:
-            # TODO:
-            # Printr.clr_print(f">> (You): {transcript}", Printr.LILA)
             printr.print(f">> (You): {transcript}", tags="violet")
 
             if self.debug:
@@ -167,8 +165,6 @@ class Wingman:
                 self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
-            # TODO:
-            # Printr.clr_print(f"<< ({self.name}): {actual_response}", Printr.GREEN)
             printr.print(f"<< ({self.name}): {actual_response}", tags="green")
 
         if self.debug:
@@ -301,13 +297,10 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        # Printr.info_print(f"❖ Executing command: {command.get('name')}")
-        printr.print(f"❖ Executing command: {command.get('name')}", tags="blue")
+        printr.print(f"❖ Executing command: {command.get('name')}", tags="info")
 
         if self.debug:
-            Printr.warn_print(
-                "Skipping actual keypress execution in debug_mode...", False
-            )
+            printr.print("Skipping actual keypress execution in debug_mode...", tags="warn")
 
         if len(command.get("keys", [])) > 0 and not self.debug:
             self.execute_keypress(command)

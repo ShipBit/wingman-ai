@@ -37,5 +37,4 @@ cmd = [
 ]
 subprocess.call(cmd)
 
-shutil.copy2("config.example.yaml", "dist/WingmanAI/config.yaml")
 shutil.copytree("assets", "dist/WingmanAI/assets")

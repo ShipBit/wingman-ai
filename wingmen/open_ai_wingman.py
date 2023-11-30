@@ -6,6 +6,7 @@ from services.edge import EdgeTTS
 from services.printr import Printr
 from wingmen.wingman import Wingman
 
+printr = Printr()
 
 class OpenAiWingman(Wingman):
     """Our OpenAI Wingman base gives you everything you need to interact with OpenAI's various APIs.
@@ -62,8 +63,8 @@ class OpenAiWingman(Wingman):
             response_format == "verbose_json"
             and transcript.language != self.last_transcript_locale
         ):
-            Printr.hl_print(
-                f"   EdgeTTS detected language '{transcript.language}'.", False
+            printr.print(
+                f"   EdgeTTS detected language '{transcript.language}'.", tags="info"
             )
             locale = self.__ask_gpt_for_locale(transcript.language)
 
@@ -148,8 +149,8 @@ class OpenAiWingman(Wingman):
                     deleted_pairs += 1
 
         if self.debug and deleted_pairs > 0:
-            Printr.warn_print(
-                f"   Deleted {deleted_pairs} pairs of messages from the conversation history."
+            printr.print(
+                f"   Deleted {deleted_pairs} pairs of messages from the conversation history.", tags="warn"
             )
 
     def reset_conversation_history(self):
@@ -178,9 +179,9 @@ class OpenAiWingman(Wingman):
             The GPT completion object or None if the call fails.
         """
         if self.debug:
-            Printr.info_print(
+            printr.print(
                 f"   Calling GPT with {(len(self.messages) - 1) // 2} message pairs (excluding context)",
-                False,
+                tags="info",
             )
         return self.openai.ask(
             messages=self.messages,
@@ -446,7 +447,7 @@ class OpenAiWingman(Wingman):
         if answer == "None":
             return None
 
-        Printr.hl_print(
-            f"   ChatGPT says this language maps to locale '{answer}'.", False
+        printr.print(
+            f"   ChatGPT says this language maps to locale '{answer}'.", tags="info"
         )
         return answer
