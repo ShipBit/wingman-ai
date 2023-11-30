@@ -10,10 +10,6 @@ class ContextSwitcher(ctk.CTkFrame):
         self.contexts = ["", "test"] #NOTE dummy data
         self.context_buttons = []
 
-        # img_logo = ctk.CTkImage(light_image=Image.open("assets/shipbit-logo.png"),
-        #                     dark_image=Image.open("assets/shipbit-logo.png"),
-        #                     size=(60, 60))
-
         self.spacer = ctk.CTkLabel(self, text="")
         self.spacer.grid(row=0, column=0)
 

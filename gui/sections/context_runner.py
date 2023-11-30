@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from gui.wingmen_list import WingmenList
+from gui.components.wingmen_list import WingmenList
 
 class ContextRunner(ctk.CTkFrame):
     def __init__(self, master, context=None, **kwargs):
