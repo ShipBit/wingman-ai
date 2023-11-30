@@ -1,5 +1,5 @@
 from services.printr import Printr
-from services.check_version import LOCAL_VERSION
+from services.version_check import LOCAL_VERSION
 
 class Splashscreen:
     @staticmethod

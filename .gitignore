@@ -159,11 +159,18 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-audio_output
-config.yaml
+# VSCode files
 .vscode/settings.json
-.DS_Store
-*.exe
 /.vs/
+
+# Mac stuff
 .DS_Store
+
+# Wingman AI generated files
+*.exe
+configs/contexts/
+audio_output
+gui.yaml
+config.yaml
 apikeys.yaml
+api_keys.yaml

@@ -5,6 +5,8 @@ import soundfile
 from services.printr import Printr
 
 
+printr = Printr()
+
 class AudioRecorder:
     def __init__(
         self,
@@ -36,21 +38,21 @@ class AudioRecorder:
 
         self.recstream.start()
         self.is_recording = True
-        Printr.override_print("Recording started")
+        printr.print("Recording started", tags="grey")
 
-    def stop_recording(self) -> str:
+    def stop_recording(self) -> None | str:
         self.recstream.stop()
         self.is_recording = False
-        Printr.override_print("Recording stopped")
+        printr.print("Recording stopped", tags="grey")
 
         if not os.path.exists("audio_output"):
             os.makedirs("audio_output")
 
         if self.recording is None:
-            Printr.warn_print("Ignored empty recording")
+            printr.print("Ignored empty recording", tags="warn")
             return None
         if (len(self.recording) / self.samplerate) < 0.15:
-            Printr.warn_print("Recording was too short to be handled by the AI")
+            printr.print("Recording was too short to be handled by the AI", tags="warn")
             return None
 
         try:
@@ -58,5 +60,5 @@ class AudioRecorder:
             self.recording = None
             return self.filename
         except IndexError:
-            Printr.warn_print("Ignored empty recording")
+            printr.print("Ignored empty recording", tags="warn")
             return None

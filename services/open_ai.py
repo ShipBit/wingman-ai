@@ -2,7 +2,7 @@ import re
 from openai import OpenAI, APIStatusError
 from services.printr import Printr
 
-
+printr = Printr()
 class OpenAi:
     def __init__(
         self,
@@ -87,11 +87,11 @@ class OpenAi:
             return None
 
     def _handle_key_error(self):
-        Printr.err_print("The OpenAI API key you provided is invalid. Please check your 'apikey.yaml'")
+        printr.err_print("The OpenAI API key you provided is invalid. Please check your 'apikey.yaml'")
 
     def _handle_api_error(self, api_response):
-        Printr.err_print(
-            f"The OpenAI API send the following error code {Printr.BOLD}{api_response.status_code}{Printr.NORMAL_WEIGHT} ({Printr.FAINT}{api_response.type}{Printr.NORMAL_WEIGHT})"
+        printr.err_print(
+            f"The OpenAI API send the following error code {printr.BOLD}{api_response.status_code}{printr.NORMAL_WEIGHT} ({printr.FAINT}{api_response.type}{printr.NORMAL_WEIGHT})"
         )
         # get API message from appended JSON object in the "message" part of the exception
         m = re.search(
@@ -101,32 +101,32 @@ class OpenAi:
         if m is not None:
             message_lines = m["message"].split(". ")
             for line in message_lines:
-                Printr.err_print(line, False)
+                printr.print_err(line, True)
         elif api_response.message:
-            Printr.err_print(api_response.message, False)
+            printr.print_err(api_response.message, True)
         else:
-            Printr.err_print("The API did not provide further information.", False)
+            printr.print_err("The API did not provide further information.", True)
 
         # Provide additional info an known issues
         match api_response.status_code:
             case 400:
-                Printr.info_print("These errors can have multiple root causes.", False)
-                Printr.info_print(
+                printr.info_print("These errors can have multiple root causes.", False)
+                printr.info_print(
                     "Please have an eye on our Discord 'early-access' channel for the latest updates.",
                     False,
                 )
             case 401:
-                Printr.info_print("This is a key related issue. Please check the keys you provided in your 'apikeys.yaml'", False)
+                printr.info_print("This is a key related issue. Please check the keys you provided in your 'apikeys.yaml'", False)
             case 404:
-                Printr.info_print(
+                printr.info_print(
                     "The key you are using might not be eligible for the gpt-4 model.",
                     False,
                 )
-                Printr.info_print(
+                printr.info_print(
                     "Access to gpt-4 is granted, after you spent at least 1$ on your Open AI account.",
                     False,
                 )
-                Printr.info_print(
+                printr.info_print(
                     "Have a look at our Discord 'early-access' channel for more information on that topic.",
                     False,
                 )
