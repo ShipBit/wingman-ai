@@ -1,6 +1,13 @@
 import customtkinter as ctk
 from gui.components.icon_button import IconButton
 
+CONTEXT_COLORS = (
+    "red",
+    "blue",
+    "green",
+    "yellow"
+)
+
 class ContextSwitcher(ctk.CTkFrame):
 # class ContextSwitcher(ctk.CTkScrollableFrame):
     def __init__(self, master, **kwargs):
@@ -15,7 +22,7 @@ class ContextSwitcher(ctk.CTkFrame):
 
         for i, value in enumerate(self.contexts):
             context = IconButton(self,
-                                icon="shipbit-logo" if value else "wingman-ai",
+                                icon=f"context-icon_{CONTEXT_COLORS[i % len(CONTEXT_COLORS)]}" if value else "context-icon",
                                 themed=False,
                                 command=lambda v=value: master.update_context(v))
             context.grid(row=i+1, column=0, padx=14, pady=14)
