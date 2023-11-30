@@ -1,6 +1,5 @@
 import os
 import shutil
-from typing import Literal
 import yaml
 from services.printr import Printr
 

@@ -28,7 +28,7 @@ class SettingsView(ctk.CTkFrame):
                                         emoji=True,
                                         size=32,
                                         themed=False,
-                                        command=lambda: master.hide_view("settings"))
+                                        command=lambda: master.show_view("context"))
         self.close_button.grid(row=0, column=3, **padding, sticky="e")
 
         appearance_options = ["🌙", "⚙️", "☀️"]

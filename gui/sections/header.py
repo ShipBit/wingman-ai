@@ -29,11 +29,19 @@ class Header(ctk.CTkFrame):
 
         # TODO: add links for 'discord', 'patreon' and 'github'
 
+        # TODO: Move to Burger-Menu
+        self.about_button = IconButton(self,
+                                icon="ℹ️",
+                                emoji=True,
+                                size=32,
+                                themed=False,
+                                command=lambda: master.show_view("about"))
+        self.about_button.grid(row=0, column=3, padx=5, pady=5, sticky="e")
         self.settings_button = IconButton(self,
                                 icon="⚙️",
                                 emoji=True,
                                 size=32,
                                 themed=False,
                                 command=lambda: master.show_view("settings"))
-        self.settings_button.grid(row=0, column=3, padx=5, pady=5, sticky="e")
+        self.settings_button.grid(row=0, column=4, padx=5, pady=5, sticky="e")
 
