@@ -28,8 +28,9 @@ class AboutView(ctk.CTkFrame):
         self.tab_view.grid(row=1, column=0, columnspan=2, **padding, sticky="nesw")
 
         self.__create_license_tab()
-        self.__create_patreon_tab()
-        self.__create_modules_tab()
+        # TODO:
+        # self.__create_patreon_tab()
+        # self.__create_modules_tab()
 
     # ──────────────────────────────────────────────────────────────────────────
     def __create_license_tab(self):
