@@ -23,7 +23,7 @@ class WingmanAI():
         self.config_manager = ConfigManager(self.app_root_dir, self.app_is_bundled)
 
 
-    def load_context(self, context=None):
+    def load_context(self, context=""):
         self.active = False
         try:
             if self.config_manager:
