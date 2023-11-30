@@ -7,7 +7,6 @@ class WingmanUI(ctk.CTk):
     def __init__(self, core):
         super().__init__()
         self.core = core
-        self.core.setup()
 
         self.about_window = None
 
@@ -18,6 +17,7 @@ class WingmanUI(ctk.CTk):
         self.geometry("1024x800+200+150")
         self.minsize(400, 150)
 
+        # TODO:
         self.menubar = tk.Menu(self)
         self.system_menu = tk.Menu(self.menubar, tearoff=0)
         self.system_menu.add_command(label="Exit", command=self.quit)
@@ -33,6 +33,8 @@ class WingmanUI(ctk.CTk):
 
         self.header = Header(self, height=74, corner_radius=0)
         self.header.grid(row=0, column=0, columnspan=2, sticky="we")
+
+        # self.notification_banner =
 
         self.context_view = ContextView(self, width=88, corner_radius=0, fg_color="transparent")
         self.context_view.grid(row=1, column=0, sticky="nesw")

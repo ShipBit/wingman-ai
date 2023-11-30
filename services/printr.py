@@ -1,4 +1,10 @@
-class Printr:
+from typing import Literal
+import customtkinter as ctk
+
+
+class Printr(object):
+    _instance = None
+
     LILA = "\033[95m"
     BLUE = "\033[94m"
     CYAN = "\033[96m"
@@ -17,6 +23,43 @@ class Printr:
     ENCIRCLED = "\033[52m"
     DELETE_LINE = "\033[2K\033[1G"
     PREVIOUS_LINE = "\033[2F"
+
+    CHANNEL = Literal["main", "error", "warning", "info"]
+    OUTPUT_TYPES = None | ctk.StringVar | ctk.CTkTextbox
+
+
+    def __new__(cls):
+        if cls._instance is None:
+            print('Creating the object')
+            cls._instance = super(Printr, cls).__new__(cls)
+
+            cls.out: dict[Printr.CHANNEL, Printr.OUTPUT_TYPES ] = dict(
+                main=None,
+                error=None,
+                warning=None,
+                info=None
+            )
+        return cls._instance
+
+
+    def set_output(self, output_channel: CHANNEL, output_element: OUTPUT_TYPES):
+        self.out[output_channel] = output_element
+
+
+    def print(self, text, output_channel: CHANNEL = "main"):
+        channel = self.out.get(output_channel, None)
+        if channel:
+            if isinstance(channel, ctk.CTkTextbox):
+                channel.configure(state="normal")
+                channel.insert("end", f"{text}\n")
+                channel.configure(state="disabled")
+            else:
+                # output type -> StringVar
+                channel.set(text)
+        else:
+            # no special output type -> terminal output
+            print(text)
+
 
     @staticmethod
     def clr(text, color_format):

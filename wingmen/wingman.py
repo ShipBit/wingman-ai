@@ -4,7 +4,6 @@ from difflib import SequenceMatcher
 from importlib import import_module
 from services.audio_player import AudioPlayer
 from services.printr import Printr
-
 # see execute_keypress() method
 try:
     import pydirectinput as key_module
@@ -14,6 +13,7 @@ except AttributeError:
     )
     import pyautogui as key_module
 
+printr = Printr()
 
 class Wingman:
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
@@ -38,7 +38,7 @@ class Wingman:
         self.audio_player = AudioPlayer()
         """A service that allows you to play audio files and add sound effects to them."""
 
-        self.execution_start: float = None
+        self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
         self.debug: bool = self.config["features"].get("debug_mode", False)
@@ -147,7 +147,9 @@ class Wingman:
             self.print_execution_time(reset_timer=True)
 
         if transcript:
-            Printr.clr_print(f">> (You): {transcript}", Printr.LILA)
+            # TODO:
+            # Printr.clr_print(f">> (You): {transcript}", Printr.LILA)
+            printr.print(f">> (You): {transcript}")
 
             if self.debug:
                 Printr.info_print("Getting response for transcript...")
@@ -161,7 +163,9 @@ class Wingman:
                 self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
-            Printr.clr_print(f"<< ({self.name}): {actual_response}", Printr.GREEN)
+            # TODO:
+            # Printr.clr_print(f"<< ({self.name}): {actual_response}", Printr.GREEN)
+            printr.print(f"<< ({self.name}): {actual_response}")
 
         if self.debug:
             Printr.info_print("Playing response back to user...")
@@ -293,7 +297,8 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        Printr.info_print(f"❖ Executing command: {command.get('name')}")
+        # Printr.info_print(f"❖ Executing command: {command.get('name')}")
+        printr.print(f"❖ Executing command: {command.get('name')}")
 
         if self.debug:
             Printr.warn_print(

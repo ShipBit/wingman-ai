@@ -5,6 +5,8 @@ import soundfile
 from services.printr import Printr
 
 
+printr = Printr()
+
 class AudioRecorder:
     def __init__(
         self,
@@ -36,12 +38,14 @@ class AudioRecorder:
 
         self.recstream.start()
         self.is_recording = True
-        Printr.override_print("Recording started")
+        # Printr.override_print("Recording started")
+        printr.print("Recording started")
 
-    def stop_recording(self) -> str:
+    def stop_recording(self) -> None | str:
         self.recstream.stop()
         self.is_recording = False
-        Printr.override_print("Recording stopped")
+        # Printr.override_print("Recording stopped")
+        printr.print("Recording stopped")
 
         if not os.path.exists("audio_output"):
             os.makedirs("audio_output")

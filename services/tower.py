@@ -4,6 +4,8 @@ from wingmen.wingman import Wingman
 from services.printr import Printr
 
 
+printr = Printr()
+
 class Tower:
 
     def __init__(self, config: dict[str, any]): # type: ignore
@@ -72,7 +74,7 @@ class Tower:
             for wingman in self.wingmen:
                 wingman.prepare()
         else:
-            Printr.warn_print(
+            printr.warn_print(
                 "Tower tried to prepare Wingmen multiple times. That should never happen."
             )
         self.wingmen_prepared = True

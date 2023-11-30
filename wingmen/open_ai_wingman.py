@@ -16,7 +16,7 @@ class OpenAiWingman(Wingman):
     def __init__(self, name: str, config: dict[str, any]):
         super().__init__(name, config)
 
-        if not self.config.get("openai").get("api_key"):
+        if not self.config.get("openai", []).get("api_key"):
             raise MissingApiKeyException
 
         api_key = self.config["openai"]["api_key"]

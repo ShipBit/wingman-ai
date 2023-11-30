@@ -11,26 +11,21 @@ from services.config_manager import ConfigManager
 from gui.root import WingmanUI
 from wingmen.wingman import Wingman
 
+printr = Printr()
 
 class WingmanAI():
     def __init__(self):
         self.active = False
-        self.ready = False
         self.active_recording = {"key": "", "wingman": None}
         self.tower = None
         self.config_manager = None
-        # self.printr = None
+        # self.printr = Printr()
         self.audio_recorder = AudioRecorder()
         self.app_is_bundled = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
         self.app_root_dir = path.abspath(path.dirname(__file__))
-        check_version("https://shipbit.de/wingman.json")
-
-
-    def setup(self):
         self.config_manager = ConfigManager(self.app_root_dir, self.app_is_bundled)
-        # TODO: new Version of Printer, that handles core output
-        # self.printr = NewPrintr()
-        self.ready = True
+        # TODO: move to gui
+        check_version("https://shipbit.de/wingman.json")
 
 
     def load_context(self, context=None):
@@ -41,10 +36,11 @@ class WingmanAI():
                 self.tower = Tower(config)
 
         except FileNotFoundError:
-            Printr.err_print(f"Could not find context.{context}.yaml")
+            # Printr.err_print(f"Could not find context.{context}.yaml")
+            printr.err_print(f"Could not find context.{context}.yaml")
         except Exception as e:
             # Everything else...
-            Printr.err_print(str(e))
+            printr.err_print(str(e))
 
 
     def activate(self):
@@ -75,7 +71,7 @@ class WingmanAI():
                 asyncio.set_event_loop(loop)
                 try:
                     if isinstance(wingman, Wingman):
-                        loop.run_until_complete(wingman.process(recorded_audio_wav))
+                        loop.run_until_complete(wingman.process(str(recorded_audio_wav)))
                 finally:
                     loop.close()
 
