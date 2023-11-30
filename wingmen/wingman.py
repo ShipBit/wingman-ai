@@ -10,10 +10,11 @@ printr = Printr()
 try:
     import pydirectinput as key_module
 except AttributeError:
-    printr.print_warn(
-        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
-        wait_for_gui=True
-    )
+    # TODO: Instead of creating a banner make this an icon in the header
+    # printr.print_warn(
+    #     "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
+    #     wait_for_gui=True
+    # )
     import pyautogui as key_module
 
 

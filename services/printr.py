@@ -34,10 +34,9 @@ class Printr(object):
         info=[]
     )
 
-
+    # NOTE this is a singleton class
     def __new__(cls):
         if cls._instance is None:
-            print('Creating the object')
             cls._instance = super(Printr, cls).__new__(cls)
 
             cls.out: dict[Printr.CHANNEL, Printr.OUTPUT_TYPES ] = dict(
@@ -83,13 +82,13 @@ class Printr(object):
             print(text)
 
 
-    def print_err(self, text, wait_for_gui=False):
+    def print_err(self, text, wait_for_gui=True):
         self.print(text, output_channel="error", wait_for_gui=wait_for_gui)
 
-    def print_warn(self, text, wait_for_gui=False):
+    def print_warn(self, text, wait_for_gui=True):
         self.print(text, output_channel="warning", wait_for_gui=wait_for_gui)
 
-    def print_info(self, text, wait_for_gui=False):
+    def print_info(self, text, wait_for_gui=True):
         self.print(text, output_channel="info", wait_for_gui=wait_for_gui)
 
 

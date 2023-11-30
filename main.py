@@ -4,7 +4,6 @@ import asyncio
 import threading
 from pynput import keyboard
 from services.audio_recorder import AudioRecorder
-from services.check_version import check_version
 from services.tower import Tower
 from services.printr import Printr
 from services.config_manager import ConfigManager
@@ -23,8 +22,6 @@ class WingmanAI():
         self.app_is_bundled = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
         self.app_root_dir = path.abspath(path.dirname(__file__))
         self.config_manager = ConfigManager(self.app_root_dir, self.app_is_bundled)
-        # TODO: move to gui
-        check_version("https://shipbit.de/wingman.json")
 
 
     def load_context(self, context=None):

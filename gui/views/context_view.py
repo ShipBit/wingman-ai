@@ -16,10 +16,10 @@ class ContextView(ctk.CTkFrame):
         self.context_switcher.grid(row=0, column=0, sticky="ns")
 
         self.context_runner = ContextRunner(self, context="", fg_color="transparent", bg_color="transparent")
-        self.context_runner.grid(row=0, column=1, sticky="nesw")
+        self.context_runner.grid(row=0, column=1, pady=5, sticky="nesw")
 
 
     def update_context(self, context=""):
         self.context_runner.destroy()
         self.context_runner = ContextRunner(self, context=context, fg_color="transparent", bg_color="transparent")
-        self.context_runner.grid(row=0, column=1, sticky="nesw")
+        self.context_runner.grid(row=0, column=1, pady=5, sticky="nesw")
