@@ -8,9 +8,9 @@ class WingmanUI(ctk.CTk):
         self.core = core
 
         self.title("Wingman AI")
-        self.geometry("800x600")
+        self.geometry("1024x800+200+150")
         self.minsize(400, 150)
-        self.eval('tk::PlaceWindow . center')
+        # self.eval('tk::PlaceWindow . center')
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=0)
