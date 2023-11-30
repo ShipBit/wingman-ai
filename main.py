@@ -22,7 +22,6 @@ class WingmanAI():
     def load_context(self, context=None):
         self.active = False
         try:
-            # TODO: load context config
             config = self.read_config(context)
 
             # TODO: validate config & check which api keys are needed

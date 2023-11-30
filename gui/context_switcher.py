@@ -7,7 +7,7 @@ class ContextSwitcher(ctk.CTkFrame):
         super().__init__(master, **kwargs)
         self.grid_columnconfigure(0, weight=1)
         #self.contexts = contexts  #TODO use service
-        self.contexts = ["Star Citizen", "No Mans Sky", "Diablo IV"] #NOTE dummy data
+        self.contexts = ["", "test"] #NOTE dummy data
         self.context_buttons = []
 
         # img_logo = ctk.CTkImage(light_image=Image.open("assets/shipbit-logo.png"),
@@ -19,8 +19,9 @@ class ContextSwitcher(ctk.CTkFrame):
 
         for i, value in enumerate(self.contexts):
             context = IconButton(self,
-                                icon="shipbit-logo",
+                                icon="shipbit-logo" if value else "wingman-ai",
                                 themed=False,
-                                command=master.quit)
+                                command=lambda v=value: master.update_context(v))
             context.grid(row=i+1, column=0, padx=14, pady=14)
             self.context_buttons.append(context)
+

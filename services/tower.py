@@ -4,10 +4,11 @@ from services.printr import Printr
 
 
 class Tower:
-    broken_wingmen = []
 
     def __init__(self, config: dict[str, any]):
         self.config = config
+        self.key_wingman_dict: dict[str, Wingman] = {}
+        self.broken_wingmen = []
 
         self.wingmen = self.__instantiate_wingmen()
         self.key_wingman_dict: dict[str, Wingman] = {}

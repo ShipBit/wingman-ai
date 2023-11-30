@@ -1,4 +1,3 @@
-import sys
 import customtkinter as ctk
 from gui.header import Header
 from gui.context_switcher import ContextSwitcher
@@ -34,3 +33,7 @@ class WingmanUI(ctk.CTk):
         self.context_runner = ContextRunner(self, context="", fg_color="transparent", bg_color="transparent")
         self.context_runner.grid(row=1, column=1, sticky="nesw")
 
+    def update_context(self, context=""):
+        self.context_runner.destroy()
+        self.context_runner = ContextRunner(self, context=context, fg_color="transparent", bg_color="transparent")
+        self.context_runner.grid(row=1, column=1, sticky="nesw")
