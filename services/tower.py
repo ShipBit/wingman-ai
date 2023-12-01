@@ -6,9 +6,9 @@ from services.printr import Printr
 
 printr = Printr()
 
-class Tower:
 
-    def __init__(self, config: dict[str, any]): # type: ignore
+class Tower:
+    def __init__(self, config: dict[str, any]):  # type: ignore
         self.config = config
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.broken_wingmen = []
@@ -17,8 +17,6 @@ class Tower:
         self.key_wingman_dict: dict[str, Wingman] = {}
         for wingman in self.wingmen:
             self.key_wingman_dict[wingman.get_record_key()] = wingman
-
-        self.wingmen_prepared = False
 
     def __instantiate_wingmen(self) -> list[Wingman]:
         wingmen = []
@@ -31,7 +29,7 @@ class Tower:
                 "features": self.config.get("features", {}),
                 "edge_tts": self.config.get("edge_tts", {}),
                 "commands": self.config.get("commands", {}),
-                "elevenlabs": self.config.get("elevenlabs", {})
+                "elevenlabs": self.config.get("elevenlabs", {}),
             }
             merged_config = self.__merge_configs(global_config, wingman_config)
             class_config = merged_config.get("class")
@@ -51,17 +49,23 @@ class Tower:
                 else:
                     wingman = OpenAiWingman(wingman_name, merged_config)
             except MissingApiKeyException:
-                self.broken_wingmen.append({"name": wingman_name, "error": "Missing API key. Please check your key config."})
-            except Exception as e: # pylint: disable=broad-except
+                self.broken_wingmen.append(
+                    {
+                        "name": wingman_name,
+                        "error": "Missing API key. Please check your key config.",
+                    }
+                )
+            except Exception as e:  # pylint: disable=broad-except
                 # just in case we missed something
                 msg = str(e).strip()
                 if not msg:
-                    msg= type(e).__name__
+                    msg = type(e).__name__
                 self.broken_wingmen.append({"name": wingman_name, "error": msg})
             else:
                 # additional validation check if no exception was raised
                 errors = wingman.validate()
                 if not errors or len(errors) == 0:
+                    wingman.prepare()
                     wingmen.append(wingman)
                 else:
                     self.broken_wingmen.append(
@@ -70,17 +74,7 @@ class Tower:
 
         return wingmen
 
-    def prepare_wingmen(self):
-        if not self.wingmen_prepared:
-            for wingman in self.wingmen:
-                wingman.prepare()
-        else:
-            printr.warn_print(
-                "Tower tried to prepare Wingmen multiple times. That should never happen."
-            )
-        self.wingmen_prepared = True
-
-    def get_wingman_from_key(self, key: any) -> Wingman | None: # type: ignore
+    def get_wingman_from_key(self, key: any) -> Wingman | None:  # type: ignore
         if hasattr(key, "char"):
             wingman = self.key_wingman_dict.get(key.char, None)
         else:

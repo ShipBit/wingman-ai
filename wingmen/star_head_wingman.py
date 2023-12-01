@@ -142,8 +142,9 @@ class StarHeadWingman(OpenAiWingman):
             "useOnlyWeaponFreeZones": False,
             "onlySingleSections": True,
         }
+        url = f"{self.star_head_url}/trading"
         response = requests.post(
-            f"{self.star_head_url}/trading",
+            url=url,
             json=data,
             timeout=self.timeout,
             headers=self.headers,
