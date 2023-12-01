@@ -15,8 +15,6 @@ cmd = [
     "--noconfirm",
     "--hidden-import",
     "edge_tts",
-   "--collect-all",
-    "pedalboard_native",
     "--collect-all",
     "tkinter",
     "--hidden-import",
