@@ -10,6 +10,7 @@ class ContextRunner(ctk.CTkFrame):
 
         self.core = master.core
         self.core.load_context(context)
+        # TODO: use icon
         self.status_var = ctk.StringVar(self, "Inactive 🔴", "status")
         tower = self.core.tower
 
@@ -64,9 +65,11 @@ class ContextRunner(ctk.CTkFrame):
     def toggle_listener(self):
         if self.core.active:
             self.core.deactivate()
+            # TODO: use icon
             self.status_var.set("Inactive 🔴")
             self.button.configure(text="Run")
         else:
             self.core.activate()
+            # TODO: use icon
             self.status_var.set("Active 🟢")
             self.button.configure(text="Stop")

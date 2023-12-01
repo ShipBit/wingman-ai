@@ -24,13 +24,13 @@ class SettingsView(ctk.CTkFrame):
         self.headline = ctk.CTkLabel(self, text="Settings", font=('TkHeadingFont', 20, "bold"))
         self.headline.grid(row=0, column=1, columnspan=2, **padding)
         self.close_button = IconButton(self,
-                                        icon="✖️",
-                                        emoji=True,
+                                        icon="close",
                                         size=32,
                                         themed=False,
                                         command=lambda: master.show_view("context"))
         self.close_button.grid(row=0, column=3, **padding, sticky="e")
 
+        # TODO: change!
         appearance_options = ["🌙", "⚙️", "☀️"]
         self.appearance_label = ctk.CTkLabel(self, text="UI Appearance: ")
         self.appearance_label.grid(row=1, column=1, **padding, sticky="w")
