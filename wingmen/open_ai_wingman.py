@@ -61,12 +61,13 @@ class OpenAiWingman(Wingman):
         # skip the GPT call if we didn't change the language
         if (
             response_format == "verbose_json"
-            and transcript.language != self.last_transcript_locale
+            and transcript
+            and transcript.language != self.last_transcript_locale # type: ignore
         ):
             printr.print(
-                f"   EdgeTTS detected language '{transcript.language}'.", tags="info"
+                f"   EdgeTTS detected language '{transcript.language}'.", tags="info" # type: ignore
             )
-            locale = self.__ask_gpt_for_locale(transcript.language)
+            locale = self.__ask_gpt_for_locale(transcript.language) # type: ignore
 
         return transcript.text if transcript else None, locale
 

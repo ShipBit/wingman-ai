@@ -12,6 +12,9 @@
 # To do so, simply copy and paste the config section below and indent/nest it under your wingman config.
 #
 openai:
+  # If this config requires a key, list its name here.
+  # The user needs to enter a key associated to this name in the user interface.
+  required_key: openai
   #
   # Where is the API_KEY? We moved it to a separate file in the new version!
   # Just start Wingman and paste it to the terminal window when asked.
@@ -78,6 +81,7 @@ edge_tts:
 # Note that elevenlabs requires an own API key. See https://elevenlabs.io/ for more information.
 # Also note: With elevenlabs you can't add audio effects right now. We are working on that.'
 elevenlabs:
+  required_key: elevenlabs
   voice: Adam # Simple voice names.
   # If you have a custom voice, you can use the voice ID instead:
   # voice:
@@ -111,6 +115,8 @@ wingmen:
   #
   board-computer: # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
     openai:
+      # You could require an alternative key, that differs from the one defined globally.
+      # required_key: openai-alternative
       #
       # The "context" for the wingman. Here's where you can tell the AI how to behave.
       # This is probably what you want to play around with the most.

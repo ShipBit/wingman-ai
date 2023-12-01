@@ -1,6 +1,7 @@
 import os
 import shutil
 import yaml
+import customtkinter as ctk
 from services.printr import Printr
 
 SYSTEM_CONFIG_PATH = "configs/system"
@@ -57,12 +58,31 @@ class ConfigManager():
         return False
 
 
-    def __append_keys_to_config(self, config):
-        # TODO: just append the keys that are really needed by the current config
-        # and check if all needed keys are present
-        if self.api_keys:
-            for key, value in self.api_keys.items():
-                config[key]["api_key"] = value
+    def __append_api_keys_to_config(self, config):
+        for key, value in config.items():
+            if key == "wingmen":
+                # If entry is a wingmen run this function again on its config,
+                # as the logic is the same as for global configs
+                for wingman, wingman_config in value.items():
+                    config[key][wingman] = self.__append_api_keys_to_config(wingman_config)
+            elif key != "commands" and key != "features" and isinstance(value, dict):
+                required_api_key = value.get("required_key", None)
+                if required_api_key:
+                    api_key = self.api_keys.get(required_api_key, None)
+                    if not api_key:
+                        # Prompt user for key
+                        dialog = ctk.CTkInputDialog(text=f"Please enter a valid key for '{required_api_key}':",
+                                                    title="Enter API Key")
+                        new_api_key = dialog.get_input()
+                        if new_api_key:
+                            # Save new key to config
+                            self.api_keys[required_api_key] = new_api_key
+                            self.save_api_keys()
+                            api_key = new_api_key
+                        else:
+                            # Still no key? -> Skip
+                            continue
+                    config[key]["api_key"] = api_key
 
         return config
 
@@ -120,6 +140,6 @@ class ConfigManager():
         config = self.__read_config_file(file_name, False)
 
         if config:
-            return self.__append_keys_to_config(config)
+            return self.__append_api_keys_to_config(config)
 
         return {}
