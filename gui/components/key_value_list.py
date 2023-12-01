@@ -26,7 +26,7 @@ class KeyValueList(ctk.CTkScrollableFrame):
         add_name_entry.grid(row=last_row, column=0, **padding, sticky='esw')
         add_key_entry = ctk.CTkEntry(self, placeholder_text="API Key")
         add_key_entry.grid(row=last_row, column=1, **padding, sticky='esw')
-        add_button = IconButton(self, icon="➕", emoji=True, size=20, hover_color="#00dd33", command=self.__add_entry)
+        add_button = IconButton(self, icon="add", themed=False, size=20, hover_color="#00dd33", command=self.__add_entry)
         add_button.grid(row=last_row, column=2, **padding, sticky="s")
         self.add_row = {"name": add_name_entry, "key": add_key_entry, "btn": add_button}
 
@@ -53,7 +53,7 @@ class KeyValueList(ctk.CTkScrollableFrame):
             name_entry.grid(row=i+row_offset, column=0, **padding, sticky="e")
             key_entry = ctk.CTkLabel(self, text=self.data.get(key_name, ""), fg_color=("grey90", "grey10"), corner_radius=5)
             key_entry.grid(row=i+row_offset, column=1, **padding, sticky="w")
-            del_button = IconButton(self, icon="🗑️", emoji=True, size=20, hover_color="#dd0033", command=lambda k=key_name: self.__delete_entry(k))
+            del_button = IconButton(self, icon="delete", size=20, hover_color="#dd0033", themed=False, command=lambda k=key_name: self.__delete_entry(k))
             del_button.grid(row=i+row_offset, column=2, **padding)
             rows[key_name] = {"name": name_entry, "key": key_entry, "btn": del_button}
 

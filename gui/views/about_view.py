@@ -17,9 +17,9 @@ class AboutView(ctk.CTkFrame):
         self.headline = ctk.CTkLabel(self, text="About Wingman AI", font=('TkHeadingFont', 20, "bold"))
         self.headline.grid(row=0, column=0, columnspan=2, **padding)
         self.close_button = IconButton(self,
-                                        icon="✖️",
-                                        emoji=True,
-                                        size=32,
+                                        icon="close",
+                                        size=16,
+                                        padding=8,
                                         themed=False,
                                         command=lambda: master.show_view("context"))
         self.close_button.grid(row=0, column=1, **padding, sticky="e")

@@ -32,15 +32,13 @@ class Header(ctk.CTkFrame):
 
         # TODO: Move to Burger-Menu
         self.about_button = IconButton(self,
-                                icon="ℹ️",
-                                emoji=True,
+                                icon="info",
                                 size=32,
                                 themed=False,
                                 command=lambda: master.show_view("about"))
         self.about_button.grid(row=0, column=3, padx=5, pady=5, sticky="e")
         self.settings_button = IconButton(self,
-                                icon="⚙️",
-                                emoji=True,
+                                icon="settings",
                                 size=32,
                                 themed=False,
                                 command=lambda: master.show_view("settings"))

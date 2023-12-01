@@ -22,6 +22,8 @@ class ConfigManager():
         self.context_config_path: str = os.path.join(
             app_root_path,
             CONTEXT_CONFIG_PATH_BUNDLED if app_is_bundled else CONTEXT_CONFIG_PATH)
+        if not os.path.exists(self.context_config_path):
+            os.makedirs(self.context_config_path)
         self.system_config_path: str = os.path.join(app_root_path, SYSTEM_CONFIG_PATH)
         self.load_gui_config()
         self.load_api_keys()

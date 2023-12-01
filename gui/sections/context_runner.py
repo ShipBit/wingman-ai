@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from gui.components.icon import Icon
 from gui.components.wingmen_list import WingmenList
 from services.printr import Printr
 
@@ -10,27 +11,30 @@ class ContextRunner(ctk.CTkFrame):
 
         self.core = master.core
         self.core.load_context(context)
-        self.status_var = ctk.StringVar(self, "Inactive 🔴", "status")
+        # TODO: use icon
+        self.status_var = ctk.StringVar(self, "Inactive", "status")
         tower = self.core.tower
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(3, weight=1)
 
         context_title = context.title().replace("_", " ").strip() if context else "Default"
-        self.status = ctk.CTkLabel(self, text=context_title, font=('TkHeadingFont', 20, "bold"), text_color="#EB154D")
-        self.status.grid(row=0, column=0, padx=20, pady=10, sticky="w")
+        self.title = ctk.CTkLabel(self, text=context_title, font=('TkHeadingFont', 20, "bold"), text_color="#EB154D")
+        self.title.grid(row=0, column=0, padx=20, pady=10, sticky="w")
 
-        # self.welcome_msg = ctk.CTkLabel(self, text="Welcome, Commander! o7")
-        # self.welcome_msg.grid(row=0, column=0, padx=20, pady=10)
-
+        # TODO: Make this a component
         self.status = ctk.CTkLabel(self,
                                    textvariable=self.status_var,
-                                   anchor="e",
+                                   anchor="w",
                                    fg_color=("grey70", "grey30"),
                                    corner_radius=10,
-                                   width=90,
+                                   width=65,
                                    pady=3)
         self.status.grid(row=0, column=0, padx=20, pady=10, sticky="e")
+        self.status_icon_active = Icon("state_active", 16, False)
+        self.status_icon_inactive = Icon("state_inactive", 16, False)
+        self.status_led = ctk.CTkLabel(self, image=self.status_icon_inactive, text="", fg_color="transparent")
+        self.status_led.grid(row=0, column=0, padx=95, pady=10, sticky="e")
 
         wingmen = []
         if tower:
@@ -64,9 +68,13 @@ class ContextRunner(ctk.CTkFrame):
     def toggle_listener(self):
         if self.core.active:
             self.core.deactivate()
-            self.status_var.set("Inactive 🔴")
+            # TODO: use icon
+            self.status_var.set("Inactive")
+            self.status_led.configure(image=self.status_icon_inactive)
             self.button.configure(text="Run")
         else:
             self.core.activate()
-            self.status_var.set("Active 🟢")
+            # TODO: use icon
+            self.status_var.set("Active")
+            self.status_led.configure(image=self.status_icon_active)
             self.button.configure(text="Stop")
