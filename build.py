@@ -1,6 +1,5 @@
 import os
 import subprocess
-import shutil
 
 cmd = [
     "python",
@@ -47,5 +46,3 @@ cmd = [
 ]
 subprocess.call(cmd)
 
-# HACK: just needed until app creates empty dir on its own
-shutil.copytree("configs/contexts", "dist/WingmanAI/contexts")
