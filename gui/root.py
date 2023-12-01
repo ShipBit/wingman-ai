@@ -24,7 +24,7 @@ class WingmanUI(ctk.CTk):
 
         ctk.set_appearance_mode(self.core.config_manager.gui_config.get("appearance", "system"))
         # TODO: add themes
-        # ctk.set_default_color_theme("assets/themes/wingman-ai.json")
+        # ctk.set_default_color_theme(path.join(self.core.app_root_dir, "assets", "themes", "wingman-ai.json"))
 
         self.title("Wingman AI")
         self.geometry("1024x800+200+150")

@@ -16,12 +16,14 @@ cmd = [
     "--noconfirm",
     "--hidden-import",
     "edge_tts",
+   "--collect-all",
+    "pedalboard_native",
     "--collect-all",
     "tkinter",
     "--hidden-import",
     "darkdetect",
-    # "--add-data",
-    # f"assets{os.pathsep}assets",
+    "--add-data",
+    f"assets{os.pathsep}assets",
     "--add-data",
     f"services{os.pathsep}services",
     "--add-data",
@@ -33,8 +35,17 @@ cmd = [
     "--add-data",
     f".venv/Lib/site-packages/customtkinter{os.pathsep}customtkinter/",
     "--add-data",
-    f".venv/Lib/site-packages/darkdetect{os.pathsep}darkdetect/"
+    f".venv/Lib/site-packages/darkdetect{os.pathsep}darkdetect/",
+    "--add-data",
+    f".venv/Lib/site-packages/elevenlabs{os.pathsep}elevenlabs/",
+    "--add-data",
+    f".venv/Lib/site-packages/websockets{os.pathsep}websockets/",
+    "--add-data",
+    f".venv/Lib/site-packages/pedalboard{os.pathsep}pedalboard/",
+    "--add-data",
+    f".venv/Lib/site-packages/pedalboard_native{os.pathsep}pedalboard_native/"
 ]
 subprocess.call(cmd)
 
-shutil.copytree("assets", "dist/WingmanAI/assets")
+# HACK: just needed until app creates empty dir on its own
+shutil.copytree("configs/contexts", "dist/WingmanAI/contexts")
