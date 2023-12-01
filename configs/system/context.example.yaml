@@ -81,7 +81,7 @@ edge_tts:
 # Note that elevenlabs requires an own API key. See https://elevenlabs.io/ for more information.
 # Also note: With elevenlabs you can't add audio effects right now. We are working on that.'
 elevenlabs:
-  required_key: elevenlabs
+  # required_key: elevenlabs
   voice: Adam # Simple voice names.
   # If you have a custom voice, you can use the voice ID instead:
   # voice:

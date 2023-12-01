@@ -22,7 +22,7 @@ class KeyValueList(ctk.CTkScrollableFrame):
         self.rows = self.__create_rows_from_data(1)
 
         _last_column, last_row = self.grid_size()
-        add_name_entry = ctk.CTkEntry(self, placeholder_text="eg.: 'openai'")
+        add_name_entry = ctk.CTkEntry(self, placeholder_text="e.g. elevenlabs")
         add_name_entry.grid(row=last_row, column=0, **padding, sticky='esw')
         add_key_entry = ctk.CTkEntry(self, placeholder_text="API Key")
         add_key_entry.grid(row=last_row, column=1, **padding, sticky='esw')
