@@ -6,6 +6,7 @@ from wingmen.open_ai_wingman import OpenAiWingman
 
 printr = Printr()
 
+
 class StarHeadWingman(OpenAiWingman):
     """Our StarHead Wingman uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
     If it's missing any of these parameters, it will ask the user for them.
@@ -63,7 +64,9 @@ class StarHeadWingman(OpenAiWingman):
         self, endpoint: str, params: Optional[dict[str, any]] = None
     ) -> list[dict[str, any]]:
         url = f"{self.star_head_url}/{endpoint}"
-        printr.print(f"Retrieving {url}", tags="info")
+
+        if self.debug:
+            printr.print(f"Retrieving {url}", tags="info")
 
         response = requests.get(
             url, params=params, timeout=self.timeout, headers=self.headers
@@ -204,6 +207,6 @@ class StarHeadWingman(OpenAiWingman):
             except requests.HTTPError:
                 printr.print(
                     f"Failed to fetch loadout data for ship with ID: {ship_id}",
-                    tags="err"
+                    tags="err",
                 )
         return None
