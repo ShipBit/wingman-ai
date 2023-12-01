@@ -83,6 +83,7 @@ class Printr(object):
             if isinstance(channel, ctk.CTkTextbox):
                 channel.configure(state="normal")
                 channel.insert("end", f"{text}\n", tags=tags)
+                channel.see("end")
                 channel.configure(state="disabled")
             else:
                 # output type -> StringVar
