@@ -80,5 +80,4 @@ typing_extensions==4.8.0
 urllib3==2.1.0
 wcwidth==0.2.12
 websockets==12.0
-whisper==1.1.10
 yarl==1.9.2

@@ -1,12 +1,13 @@
 import json
-from exceptions import MissingApiKeyException
 from elevenlabs import generate, stream, Voice, VoiceSettings, voices
+from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
 from wingmen.wingman import Wingman
 
 printr = Printr()
+
 
 class OpenAiWingman(Wingman):
     """Our OpenAI Wingman base gives you everything you need to interact with OpenAI's various APIs.
@@ -62,12 +63,12 @@ class OpenAiWingman(Wingman):
         if (
             response_format == "verbose_json"
             and transcript
-            and transcript.language != self.last_transcript_locale # type: ignore
+            and transcript.language != self.last_transcript_locale  # type: ignore
         ):
             printr.print(
-                f"   EdgeTTS detected language '{transcript.language}'.", tags="info" # type: ignore
+                f"   EdgeTTS detected language '{transcript.language}'.", tags="info"  # type: ignore
             )
-            locale = self.__ask_gpt_for_locale(transcript.language) # type: ignore
+            locale = self.__ask_gpt_for_locale(transcript.language)  # type: ignore
 
         return transcript.text if transcript else None, locale
 
@@ -151,7 +152,8 @@ class OpenAiWingman(Wingman):
 
         if self.debug and deleted_pairs > 0:
             printr.print(
-                f"   Deleted {deleted_pairs} pairs of messages from the conversation history.", tags="warn"
+                f"   Deleted {deleted_pairs} pairs of messages from the conversation history.",
+                tags="warn",
             )
 
     def reset_conversation_history(self):

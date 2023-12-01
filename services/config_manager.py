@@ -5,10 +5,10 @@ import customtkinter as ctk
 from services.printr import Printr
 
 SYSTEM_CONFIG_PATH = "configs/system"
-CONTEXT_CONFIG_PATH = "configs/contexts"
-CONTEXT_CONFIG_PATH_BUNDLED = "../contexts"
-DEFAULT_CONTEXT_CONFIG = "context.yaml"
-EXAMPLE_CONTEXT_CONFIG = "context.example.yaml"
+CONTEXT_CONFIG_PATH = "configs/configs"
+CONTEXT_CONFIG_PATH_BUNDLED = "../configs"
+DEFAULT_CONTEXT_CONFIG = "config.yaml"
+EXAMPLE_CONTEXT_CONFIG = "config.example.yaml"
 API_KEYS_CONFIG = "api_keys.yaml"
 GUI_CONFIG = "gui.yaml"
 
@@ -136,7 +136,7 @@ class ConfigManager():
     def get_context_config(self, context="") -> dict[str, any]: #type: ignore
         # default name -> 'config.yaml'
         # context config -> 'config.{context}.yaml'
-        file_name = f"context.{f'{context}.' if context else ''}yaml"
+        file_name = f"config.{f'{context}.' if context else ''}yaml"
         config = self.__read_config_file(file_name, False)
 
         if config:
