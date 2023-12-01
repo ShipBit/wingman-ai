@@ -45,6 +45,10 @@ class SettingsView(ctk.CTkFrame):
         self.key_list.grid(row=3, column=0, columnspan=4, **padding, sticky="nesw")
 
 
+    def tkraise(self, aboveThis=None):
+        super().tkraise(aboveThis)
+        self.key_list.update(self.config_manager.api_keys)
+
     def __load_gui_config(self):
         config = self.config_manager.load_gui_config()
 
