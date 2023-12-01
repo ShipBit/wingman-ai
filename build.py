@@ -9,7 +9,7 @@ cmd = [
     "--name",
     "WingmanAI",  # name of your app
     # "--onefile",
-    #'--windowed', # prevent console appearing, only use with ui.run(native=True, ...)
+    '--windowed', # prevent console appearing, only use with ui.run(native=True, ...)
     "--icon",
     "assets/icons/wingman-ai.png",
     "--noconfirm",
@@ -42,7 +42,11 @@ cmd = [
     "--add-data",
     f".venv/Lib/site-packages/pedalboard{os.pathsep}pedalboard/",
     "--add-data",
-    f".venv/Lib/site-packages/pedalboard_native{os.pathsep}pedalboard_native/"
+    f".venv/Lib/site-packages/pedalboard_native{os.pathsep}pedalboard_native/",
+    "--add-data",
+    f".venv/Lib/site-packages/pedalboard_native.cp311-win_amd64.pyd{os.pathsep}.",
+    "--add-data",
+    f"LICENSE{os.pathsep}."
 ]
 subprocess.call(cmd)
 
