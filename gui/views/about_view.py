@@ -18,7 +18,8 @@ class AboutView(ctk.CTkFrame):
         self.headline.grid(row=0, column=0, columnspan=2, **padding)
         self.close_button = IconButton(self,
                                         icon="close",
-                                        size=32,
+                                        size=16,
+                                        padding=8,
                                         themed=False,
                                         command=lambda: master.show_view("context"))
         self.close_button.grid(row=0, column=1, **padding, sticky="e")

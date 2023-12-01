@@ -19,9 +19,9 @@ class NotificationBanner(ctk.CTkFrame):
         self.grid_columnconfigure(0, weight=1)
 
         self.close_button = IconButton(self,
-                                icon="✖️",
-                                emoji=True,
-                                size=32,
+                                icon="close",
+                                size=16,
+                                padding=8,
                                 themed=False,
                                 hover_color="white",
                                 command=self.hide)

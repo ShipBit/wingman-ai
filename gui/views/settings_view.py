@@ -5,9 +5,9 @@ from services.config_manager import ConfigManager
 
 class SettingsView(ctk.CTkFrame):
     SYSTEM_APPEARANCE_MAP: dict[str, str] = {
-        "🌙": "dark",
-        "☀️": "light",
-        "⚙️": "system"
+        "Dark": "dark",
+        "Light": "light",
+        "System": "system"
     }
 
     def __init__(self, master, **kwargs):
@@ -25,13 +25,14 @@ class SettingsView(ctk.CTkFrame):
         self.headline.grid(row=0, column=1, columnspan=2, **padding)
         self.close_button = IconButton(self,
                                         icon="close",
-                                        size=32,
+                                        size=16,
+                                        padding=8,
                                         themed=False,
                                         command=lambda: master.show_view("context"))
         self.close_button.grid(row=0, column=3, **padding, sticky="e")
 
         # TODO: change!
-        appearance_options = ["🌙", "⚙️", "☀️"]
+        appearance_options = ["Dark", "System", "Light"]
         self.appearance_label = ctk.CTkLabel(self, text="UI Appearance: ")
         self.appearance_label.grid(row=1, column=1, **padding, sticky="w")
         self.appearance_switcher = ctk.CTkSegmentedButton(self, values=appearance_options, command=self.set_appearance)
