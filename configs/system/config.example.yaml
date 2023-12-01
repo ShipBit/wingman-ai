@@ -12,6 +12,9 @@
 # To do so, simply copy and paste the config section below and indent/nest it under your wingman config.
 #
 openai:
+  # If this config requires a key, list its name here.
+  # The user needs to enter a key associated to this name in the user interface.
+  required_key: openai
   #
   # Where is the API_KEY? We moved it to a separate file in the new version!
   # Just start Wingman and paste it to the terminal window when asked.
@@ -37,16 +40,27 @@ openai:
 features:
   debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
 
+  # ────────────────────────────────── Cost Control ────────────────────────────────────────
+  # How many messages should a Wingman remember in your conversations?
+  # "0" means you start fresh with just the context after every message. This is like restarting Wingman after every interaction.
+  # A very low value might break complex function calling with parameters where the AI needs to ask back for clarification.
+  #
+  # Use this to limit the number of tokens used in your conversations and to reduce the cost of using the OpenAI API.
+  # Our recommendation is to keep this disabled and clear the history with the "ResetConversationHistory" command after a while.
+  #
+  # remember_messages: 3 # uncomment this to enable!
+
+  # ────────────────────────────────── Sound Effects ────────────────────────────────────────
   # These are "post-processing" audio effects for the TTS conversion. Files are located in /audio_samples.
   # Sound effects are currently not supported for the edge_tts provider.
   play_beep_on_receiving: false
   enable_radio_sound_effect: false # adds noise to messages
+  enable_robot_sound_effect: false # adds a robotic sound effect
 
   # ────────────────────────────────── TTS Provider ────────────────────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  # We are already working on more providers like elevenlabs.
-  tts_provider: default # or: 'edge_tts'
+  tts_provider: default # or: 'edge_tts' or 'elevenlabs'
 
 # Specifig settings for the edge_tts provider. Only used if tts_provider in features is set to 'edge_tts' above.
 # Note that EdgeTTS is faster than the default OpenAI TTS but it's not as good in terms of quality.
@@ -63,6 +77,36 @@ edge_tts:
   # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
   tts_voice: en-US-GuyNeural
 
+# Specifig settings for the elevenlabs provider. Only used if tts_provider in features is set to 'elevenlabs' above.
+# Note that elevenlabs requires an own API key. See https://elevenlabs.io/ for more information.
+# Also note: With elevenlabs you can't add audio effects right now. We are working on that.'
+elevenlabs:
+  # required_key: elevenlabs
+  voice: Adam # Simple voice names.
+  # If you have a custom voice, you can use the voice ID instead:
+  # voice:
+  #   id: xxx
+  model: eleven_multilingual_v2 # or: 'eleven_turbo_v2' or 'eleven_multilingual_v1' or 'eleven_multilingual_v2'
+  latency: 3 # 0 - 4
+  voice_settings:
+    stability: 0.71 # 0.0 - 1.0
+    similarity_boost: 0.5 # 0.0 - 1.0
+    style: 0.0 # 0.0 - 1.0
+    use_speaker_boost: true # true or false
+
+# ────────────────────────────────── Global commands ───────────────────────────────────────
+# These are available to all wingmen. You can override them per wingman if necessary.
+#
+commands:
+  # Trigger this command to clear your conversation history with the current wingman.
+  # This is like setting "remember_messages" to 0 above, but "on-demand". You'll restart with just the context.
+  - name: ResetConversationHistory # don't rename this!
+    instant_activation:
+      - Forget everything!
+      - Clear conversation history!
+    responses:
+      - Conversation history cleared.
+
 wingmen:
   # ────────────────────────────────── BOARD COMPUTER ────────────────────────────────────────
   # "board-computer" is a "default" wingman that you can roleplay with and that can execute commands (=keypresses).
@@ -71,6 +115,8 @@ wingmen:
   #
   board-computer: # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
     openai:
+      # You could require an alternative key, that differs from the one defined globally.
+      # required_key: openai-alternative
       #
       # The "context" for the wingman. Here's where you can tell the AI how to behave.
       # This is probably what you want to play around with the most.
@@ -89,6 +135,8 @@ wingmen:
       #tts_voice: echo
       #...
     record_key: end # The "push-to-talk" key for this wingman. Keep it pressed while talking!
+    features: # overrides the GLOBAL settings
+      enable_robot_sound_effect: true
     #
     # Commands are keypresses that the wingmen can execute.
     # These are global keypresses on your system and therefore also work in games.

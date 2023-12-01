@@ -2,16 +2,19 @@ import random
 import time
 from difflib import SequenceMatcher
 from importlib import import_module
+from typing import Any
 from services.audio_player import AudioPlayer
 from services.printr import Printr
-
 # see execute_keypress() method
+printr = Printr()
 try:
     import pydirectinput as key_module
 except AttributeError:
-    Printr.warn_print(
-        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games."
-    )
+    # TODO: Instead of creating a banner make this an icon in the header
+    # printr.print_warn(
+    #     "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
+    #     wait_for_gui=True
+    # )
     import pyautogui as key_module
 
 
@@ -21,7 +24,7 @@ class Wingman:
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
     """
 
-    def __init__(self, name: str, config: dict[str, any]):
+    def __init__(self, name: str, config: dict[str, Any]):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
@@ -38,7 +41,7 @@ class Wingman:
         self.audio_player = AudioPlayer()
         """A service that allows you to play audio files and add sound effects to them."""
 
-        self.execution_start: float = None
+        self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
         self.debug: bool = self.config["features"].get("debug_mode", False)
@@ -48,13 +51,14 @@ class Wingman:
         """The name of the TTS provider you configured in the config.yaml"""
         # todo: remove warning for release
         if not self.tts_provider or not self.config.get("edge_tts"):
-            Printr.warn_print(
-                "No TTS provider configured. You're probably using an outdated config.yaml"
+            printr.print_warn(
+                "No TTS provider configured. You're probably using an outdated config.yaml",
+                True
             )
 
     @staticmethod
     def create_dynamically(
-        module_path: str, class_name: str, name: str, config: dict[str, any], **kwargs
+        module_path: str, class_name: str, name: str, config: dict[str, Any], **kwargs
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -79,7 +83,7 @@ class Wingman:
         if self.execution_start:
             execution_stop = time.perf_counter()
             elapsed_seconds = execution_stop - self.execution_start
-            Printr.info_print(f"...took {elapsed_seconds:.2f}s", first_message=False)
+            printr.print(f"...took {elapsed_seconds:.2f}s", tags="info")
         if reset_timer:
             self.start_execution_benchmark()
 
@@ -109,6 +113,11 @@ class Wingman:
         """
         return []
 
+    def reset_conversation_history(self):
+        """This function is called when the user triggers the ResetConversationHistory command.
+        It's a global command that should be implemented by every Wingman that keeps a message history.
+        """
+
     # ──────────────────────────── The main processing loop ──────────────────────────── #
 
     async def process(self, audio_input_wav: str):
@@ -133,7 +142,7 @@ class Wingman:
         process_result = None
 
         if self.debug:
-            Printr.info_print("Starting transcription...")
+            printr.print("Starting transcription...", tags="info")
 
         # transcribe the audio.
         transcript, locale = await self._transcribe(audio_input_wav)
@@ -142,10 +151,10 @@ class Wingman:
             self.print_execution_time(reset_timer=True)
 
         if transcript:
-            Printr.clr_print(f">> (You): {transcript}", Printr.LILA)
+            printr.print(f">> (You): {transcript}", tags="violet")
 
             if self.debug:
-                Printr.info_print("Getting response for transcript...")
+                printr.print("Getting response for transcript...", tags="info")
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
@@ -156,13 +165,13 @@ class Wingman:
                 self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
-            Printr.clr_print(f"<< ({self.name}): {actual_response}", Printr.GREEN)
+            printr.print(f"<< ({self.name}): {actual_response}", tags="green")
 
         if self.debug:
-            Printr.info_print("Playing response back to user...")
+            printr.print("Playing response back to user...", tags="info")
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
-        await self._play_to_user(process_result)
+        await self._play_to_user(str(process_result))
 
         if self.debug:
             self.print_execution_time()
@@ -194,7 +203,7 @@ class Wingman:
         Returns:
             A tuple of strings representing the response to a function call and/or an instant response.
         """
-        return None
+        return ("", "")
 
     async def _play_to_user(self, text: str):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
@@ -288,16 +297,18 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        Printr.info_print(f"❖ Executing command: {command.get('name')}")
+        printr.print(f"❖ Executing command: {command.get('name')}", tags="info")
 
         if self.debug:
-            Printr.warn_print(
-                "Skipping actual keypress execution in debug_mode...", False
-            )
-            return "Ok"
+            printr.print("Skipping actual keypress execution in debug_mode...", tags="warn")
 
-        self.execute_keypress(command)
+        if len(command.get("keys", [])) > 0 and not self.debug:
+            self.execute_keypress(command)
         # TODO: we could do mouse_events here, too...
+
+        # handle the global special commands:
+        if command.get("name", None) == "ResetConversationHistory":
+            self.reset_conversation_history()
 
         if not self.debug:
             # in debug mode we already printed the separate execution times
@@ -316,7 +327,7 @@ class Wingman:
             command (dict): The command object from the config to execute
         """
 
-        for entry in command.get("keys"):
+        for entry in command.get("keys", []):
             if entry.get("modifier"):
                 key_module.keyDown(entry["modifier"])
 

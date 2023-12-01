@@ -4,6 +4,8 @@ import requests
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 
+printr = Printr()
+
 
 class StarHeadWingman(OpenAiWingman):
     """Our StarHead Wingman uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
@@ -62,7 +64,9 @@ class StarHeadWingman(OpenAiWingman):
         self, endpoint: str, params: Optional[dict[str, any]] = None
     ) -> list[dict[str, any]]:
         url = f"{self.star_head_url}/{endpoint}"
-        Printr.info_print(f"Retrieving {url}")
+
+        if self.debug:
+            printr.print(f"Retrieving {url}", tags="info")
 
         response = requests.get(
             url, params=params, timeout=self.timeout, headers=self.headers
@@ -138,8 +142,9 @@ class StarHeadWingman(OpenAiWingman):
             "useOnlyWeaponFreeZones": False,
             "onlySingleSections": True,
         }
+        url = f"{self.star_head_url}/trading"
         response = requests.post(
-            f"{self.star_head_url}/trading",
+            url=url,
             json=data,
             timeout=self.timeout,
             headers=self.headers,
@@ -201,7 +206,8 @@ class StarHeadWingman(OpenAiWingman):
                 loadout = self._fetch_data(f"vehicle/{ship_id}/loadout")
                 return loadout or None
             except requests.HTTPError:
-                Printr.err_print(
-                    f"Failed to fetch loadout data for ship with ID: {ship_id}"
+                printr.print(
+                    f"Failed to fetch loadout data for ship with ID: {ship_id}",
+                    tags="err",
                 )
         return None

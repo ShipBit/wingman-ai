@@ -2,6 +2,7 @@ import random
 from edge_tts import Communicate, VoicesManager
 from services.printr import Printr
 
+printr = Printr()
 # List available voices in your terminal using 'edge-tts --list-voices'.
 #
 # Examples:
@@ -50,6 +51,6 @@ class EdgeTTS:
         )
         self.random_voices[locale] = random_voice
 
-        Printr.hl_print(f"   Your random EdgeTTS voice: '{random_voice}'.", False)
+        printr.print(f"   Your random EdgeTTS voice: '{random_voice}'.", tags="info")
 
         return random_voice
