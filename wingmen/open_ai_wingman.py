@@ -4,6 +4,7 @@ from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
+from services.secret_keeper import SecretKeeper
 from wingmen.wingman import Wingman
 
 printr = Printr()
@@ -15,18 +16,10 @@ class OpenAiWingman(Wingman):
     It transcribes speech to text using Whisper, uses the Completion API for conversation and implements the Tools API to execute functions.
     """
 
-    def __init__(self, name: str, config: dict[str, any]):
-        super().__init__(name, config)
+    def __init__(self, name: str, config: dict[str, any], secret_keeper: SecretKeeper):
+        super().__init__(name, config, secret_keeper)
 
-        if not self.config.get("openai", []).get("api_key"):
-            raise MissingApiKeyException
-
-        api_key = self.config["openai"]["api_key"]
-
-        if api_key == "YOUR_API_KEY":
-            raise MissingApiKeyException
-
-        self.openai = OpenAi(api_key)
+        self.openai: OpenAi = None  # validate will set this
         """Our OpenAI API wrapper"""
 
         # every conversation starts with the "context" that the user has configured
@@ -37,6 +30,36 @@ class OpenAiWingman(Wingman):
 
         self.edge_tts = EdgeTTS()
         self.last_transcript_locale = None
+        self.elevenlabs_api_key = None
+
+    def validate(self):
+        errors = super().validate()
+        openai_api_key = self.secret_keeper.retrieve(
+            requester=self.name,
+            key="openai",
+            friendly_key_name="OpenAI API key",
+            prompt_if_missing=True,
+        )
+        if not openai_api_key:
+            errors.append(
+                "Missing 'openai' API key. Please provide a valid key in the settings."
+            )
+        else:
+            self.openai = OpenAi(openai_api_key)
+
+        if self.tts_provider == "elevenlabs":
+            self.elevenlabs_api_key = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="elevenlabs",
+                friendly_key_name="Elevenlabs API key",
+                prompt_if_missing=True,
+            )
+            if not self.elevenlabs_api_key:
+                errors.append(
+                    "Missing 'elevenlabs' API key. Please provide a valid key in the settings or use another tts_provider."
+                )
+
+        return errors
 
     async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
@@ -343,7 +366,7 @@ class OpenAiWingman(Wingman):
                 voice=voice,
                 model=elevenlabs_config.get("model"),
                 stream=True,
-                api_key=elevenlabs_config.get("api_key"),
+                api_key=self.elevenlabs_api_key,
                 latency=elevenlabs_config.get("latency", 3),
             )
             stream(response)

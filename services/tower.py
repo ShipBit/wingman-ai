@@ -2,14 +2,16 @@ from exceptions import MissingApiKeyException
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.printr import Printr
+from services.secret_keeper import SecretKeeper
 
 
 printr = Printr()
 
 
 class Tower:
-    def __init__(self, config: dict[str, any]):  # type: ignore
+    def __init__(self, config: dict[str, any], secret_keeper: SecretKeeper):  # type: ignore
         self.config = config
+        self.secret_keeper = secret_keeper
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.broken_wingmen = []
 
@@ -42,12 +44,15 @@ class Tower:
                     wingman = Wingman.create_dynamically(
                         name=wingman_name,
                         config=merged_config,
+                        secret_keeper=self.secret_keeper,
                         module_path=class_config.get("module"),
                         class_name=class_config.get("name"),
                         **kwargs
                     )
                 else:
-                    wingman = OpenAiWingman(wingman_name, merged_config)
+                    wingman = OpenAiWingman(
+                        wingman_name, merged_config, self.secret_keeper
+                    )
             except MissingApiKeyException:
                 self.broken_wingmen.append(
                     {

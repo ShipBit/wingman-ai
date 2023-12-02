@@ -174,3 +174,5 @@ gui.yaml
 config.yaml
 apikeys.yaml
 api_keys.yaml
+
+configs/system/secrets.yaml
