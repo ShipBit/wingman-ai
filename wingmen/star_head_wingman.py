@@ -2,6 +2,7 @@ from typing import Optional
 import json
 import requests
 from services.printr import Printr
+from services.secret_keeper import SecretKeeper
 from wingmen.open_ai_wingman import OpenAiWingman
 
 printr = Printr()
@@ -12,8 +13,10 @@ class StarHeadWingman(OpenAiWingman):
     If it's missing any of these parameters, it will ask the user for them.
     """
 
-    def __init__(self, name: str, config: dict[str, any]) -> None:
-        super().__init__(name, config)
+    def __init__(
+        self, name: str, config: dict[str, any], secret_keeper: SecretKeeper
+    ) -> None:
+        super().__init__(name, config, secret_keeper)
         # config entry existence not validated yet. Assign later when checked!
         self.star_head_url = ""
         """The base URL of the StarHead API"""
