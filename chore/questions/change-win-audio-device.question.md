@@ -1,5 +1,5 @@
 ---
-title: 'Windows: How to change the audio device for output?'
+title: 'How to change the audio device for output?'
 alt_titles:
   - "I can't hear Wingman"
   - 'I have no sound'
