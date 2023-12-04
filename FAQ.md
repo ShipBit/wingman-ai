@@ -6,6 +6,8 @@
 
 - [How can I change the language?](#how-can-i-change-the-language)
 
+- [How to change the audio device for output?](#how-to-change-the-audio-device-for-output)
+
 - [I'm a Patreon supporter, but not mentioned here](#i'm-a-patreon-supporter,-but-not-mentioned-here)
 
 - [StarHead API Issues](#starhead-api-issues)
@@ -13,8 +15,6 @@
 - [What voices are available in EdgeTTS?](#what-voices-are-available-in-edgetts)
 
 - [Why does it take so long for the voice responses to play?](#why-does-it-take-so-long-for-the-voice-responses-to-play)
-
-- [Windows: How to change the audio device for output?](#windows:-how-to-change-the-audio-device-for-output)
 
 - [Wingman does not start](#wingman-does-not-start)
 
@@ -124,6 +124,24 @@ or something like:
 
 The cool thing is that you can now trigger commands in the language of your choice without changing/translating the `name` of the commands - the AI will do that for you.
 
+<a name="how-to-change-the-audio-device-for-output"></a>
+
+## How to change the audio device for output?
+
+Here's how to set the default sound output for a particular program on Windows 10 (and probably 11):
+
+- Right-click the speaker icon in the system tray:
+- There should be a speaker icon in the lower-right corner of your screen. Right-click it.
+  Open the sound settings.
+- Select "Open sound settings" from the context menu. This will open the sound settings window.
+  Scroll down to "Advanced sound options"
+- In the sound settings window, scroll down to the "Advanced sound options" section.
+  Select the output device for each application
+- Under the App volume and device settings section, you should see a list of open applications and their corresponding output devices. Use the drop-down menus to select the output device you want for each application.
+  Note that not all applications might appear in this list, depending on whether the application supports individual sound output settings.
+
+Thanks to our community member _EagleOne_ for posting this guide on our [Discord server](https://discord.com/invite/k8tTBar3gZ).
+
 <a name="i'm-a-patreon-supporter,-but-not-mentioned-here"></a>
 
 ## I'm a Patreon supporter, but not mentioned here
@@ -167,24 +185,6 @@ Dev version:
 There is currently a [known issue](https://github.com/openai/openai-python/issues/864) with Open AI's TTS API that our community member _meenie_ discovered and reported to them. Basically, their audio streaming doesn't work in Python. This results in much higher latency when starting the TTS conversion. We're waiting for a fix.
 
 Until then, you can always use another TTS provider like EdgeTTS or 11Labs.
-
-<a name="windows:-how-to-change-the-audio-device-for-output"></a>
-
-## Windows: How to change the audio device for output?
-
-Here's how to set the default sound output for a particular program on Windows 10 (and probably 11):
-
-- Right-click the speaker icon in the system tray:
-- There should be a speaker icon in the lower-right corner of your screen. Right-click it.
-  Open the sound settings.
-- Select "Open sound settings" from the context menu. This will open the sound settings window.
-  Scroll down to "Advanced sound options"
-- In the sound settings window, scroll down to the "Advanced sound options" section.
-  Select the output device for each application
-- Under the App volume and device settings section, you should see a list of open applications and their corresponding output devices. Use the drop-down menus to select the output device you want for each application.
-  Note that not all applications might appear in this list, depending on whether the application supports individual sound output settings.
-
-Thanks to our community member _EagleOne_ for posting this guide on our [Discord server](https://discord.com/invite/k8tTBar3gZ).
 
 <a name="wingman-does-not-start"></a>
 

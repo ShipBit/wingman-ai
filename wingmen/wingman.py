@@ -5,6 +5,8 @@ from importlib import import_module
 from typing import Any
 from services.audio_player import AudioPlayer
 from services.printr import Printr
+from services.secret_keeper import SecretKeeper
+
 # see execute_keypress() method
 printr = Printr()
 try:
@@ -24,7 +26,7 @@ class Wingman:
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
     """
 
-    def __init__(self, name: str, config: dict[str, Any]):
+    def __init__(self, name: str, config: dict[str, Any], secret_keeper: SecretKeeper):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
@@ -34,6 +36,9 @@ class Wingman:
 
         self.config = config
         """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
+
+        self.secret_keeper = secret_keeper
+        """A service that allows you to store and retrieve secrets like API keys. It can prompt the user for secrets if necessary."""
 
         self.name = name
         """The name of the wingman. This is the key you gave it in the config, e.g. "atc"."""
@@ -49,16 +54,15 @@ class Wingman:
 
         self.tts_provider = self.config["features"].get("tts_provider")
         """The name of the TTS provider you configured in the config.yaml"""
-        # todo: remove warning for release
-        if not self.tts_provider or not self.config.get("edge_tts"):
-            printr.print_warn(
-                "No TTS provider configured. You're probably using an outdated config.yaml",
-                True
-            )
 
     @staticmethod
     def create_dynamically(
-        module_path: str, class_name: str, name: str, config: dict[str, Any], **kwargs
+        module_path: str,
+        class_name: str,
+        name: str,
+        config: dict[str, Any],
+        secret_keeper: SecretKeeper,
+        **kwargs,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -71,7 +75,7 @@ class Wingman:
 
         module = import_module(module_path)
         DerivedWingmanClass = getattr(module, class_name)
-        instance = DerivedWingmanClass(name, config, **kwargs)
+        instance = DerivedWingmanClass(name, config, secret_keeper, **kwargs)
         return instance
 
     def get_record_key(self) -> str:
@@ -93,13 +97,6 @@ class Wingman:
 
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
-    # TODO: this should be async
-    def prepare(self):
-        """This method is called only once when the Wingman is instantiated by Tower.
-
-        You can override it if you need to load async data from an API or file."""
-        pass
-
     def validate(self) -> list[str]:
         """Use this function to validate params and config before the Wingman is started.
         If you add new config sections or entries to your custom wingman, you should validate them here.
@@ -112,6 +109,14 @@ class Wingman:
             list[str]: A list of error messages or an empty list if everything is okay.
         """
         return []
+
+    # TODO: this should be async
+    def prepare(self):
+        """This method is called only once when the Wingman is instantiated by Tower.
+        It is run AFTER validate() so you can access validated params safely here.
+
+        You can override it if you need to load async data from an API or file."""
+        pass
 
     def reset_conversation_history(self):
         """This function is called when the user triggers the ResetConversationHistory command.
@@ -300,7 +305,9 @@ class Wingman:
         printr.print(f"❖ Executing command: {command.get('name')}", tags="info")
 
         if self.debug:
-            printr.print("Skipping actual keypress execution in debug_mode...", tags="warn")
+            printr.print(
+                "Skipping actual keypress execution in debug_mode...", tags="warn"
+            )
 
         if len(command.get("keys", [])) > 0 and not self.debug:
             self.execute_keypress(command)
