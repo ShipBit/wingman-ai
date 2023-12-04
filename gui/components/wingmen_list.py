@@ -16,25 +16,17 @@ class WingmenList(ctk.CTkFrame):
                 intro = f"Looks like {count} of your Wingmen {'is' if count == 1 else 'are'} not operational:"
             else:
                 intro = f"You currently have {count} Wingm{'a' if count == 1 else 'e'}n registered"
+                self.header_label = ctk.CTkLabel(
+                    self, text="Push-to-talk Key", text_color=("gray40", "gray55")
+                )
+                self.header_label.grid(row=1, column=0, padx=10)
+                self.header_label2 = ctk.CTkLabel(
+                    self, text="Wingman to activate", text_color=("gray40", "gray55")
+                )
+                self.header_label2.grid(row=1, column=2, padx=10, sticky="w")
             self.intro_label = ctk.CTkLabel(self, text=intro)
             self.intro_label.grid(row=0, column=0, columnspan=4, padx=10, pady=10)
 
-            self.header_label = ctk.CTkLabel(
-                self, text="Activation Key", text_color=("gray40", "gray55")
-            )
-            self.header_label.grid(row=1, column=0, padx=10)
-
-            self.header_label2 = ctk.CTkLabel(
-                self, text="Wingman to activate", text_color=("gray40", "gray55")
-            )
-            self.header_label2.grid(row=1, column=2, padx=10, sticky="w")
-
-            self.header_info = ctk.CTkLabel(
-                self,
-                text="Hold down the activation key to speak to the corresponding Wingman.\n Let go to stop.\n The window does not need to be in focus.",
-                text_color=("gray40", "gray55"),
-            )
-            self.header_info.grid(row=1, column=3, padx=10, sticky="w")
 
             for i, wingman in enumerate(wingmen):
                 row_index = i + 2
