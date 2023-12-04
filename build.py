@@ -20,7 +20,7 @@ cmd = [
     "--add-data",
     f"services{os.pathsep}services",
     "--add-data",
-    f"configs{os.pathsep}configs",
+    f"configs/system/config.example.yaml{os.pathsep}configs/system/.",
     "--add-data",
     f"wingmen{os.pathsep}wingmen",
     "--add-data",
