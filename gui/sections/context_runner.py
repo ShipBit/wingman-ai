@@ -53,6 +53,8 @@ class ContextRunner(ctk.CTkFrame):
         self.terminal.grid(row=3, column=0, padx=20, pady=10, sticky="nesw")
         self.terminal.configure(state="disabled", wrap="word")
         printr.set_output("main", self.terminal)
+        if len(wingmen):
+            printr.print(f"Press 'Run' to activate you wingm{'e' if len(wingmen) > 1 else 'a'}n")
 
 
         self.button = ctk.CTkButton(self, text="Run", command=self.toggle_listener)
