@@ -112,7 +112,7 @@ It will get easier once you get used to it, we promise!
 
 Wingman supports all languages that OpenAI (or your configured AI provider) supports. Setting this up in Wingman is really easy:
 
-Find the `context` setting in `config.xaml` for the wingman you want to change.
+Find the `context` setting in `config/config.yaml` for the wingman you want to change.
 
 Now add a simple sentence to the `context` prompt:
 
