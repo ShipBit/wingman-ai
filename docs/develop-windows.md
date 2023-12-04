@@ -37,9 +37,9 @@ python -m venv venv                 # create a virtual environment
 pip install -r requirements.txt     # install dependencies
 ```
 
-## Provide the config
+## Create your config
 
-Rename `config.example.yaml` to `config.yaml` and fill in your API keys and other settings.
+Put the `ffmpeg.exe`, `ffprobe.exe`, `ffplay.exe` and `mpv.exe` files from our release into the Wingman root source directory. Start Wingman UI with `python main.py` and provide your OpenAI API key. Wingman will create a `config.yaml` file in the `./configs/configs/` directory. `configs`-ception, yay!
 
 ## Setup Visual Studio Code
 
