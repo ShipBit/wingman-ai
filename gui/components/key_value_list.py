@@ -3,10 +3,11 @@ import customtkinter as ctk
 from gui.components.icon_button import IconButton
 
 class KeyValueList(ctk.CTkScrollableFrame):
-    def __init__(self, master, data, update_callback, key_name="", value_name="", **kwargs):
+    def __init__(self, master, data, update_callback, key_name="", value_name="", key_placeholder="", value_placeholder="", hide_values=False, **kwargs):
         super().__init__(master, **kwargs)
         self.data = data
         self.update_callback = update_callback
+        self.__hide_values = hide_values
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
@@ -14,21 +15,21 @@ class KeyValueList(ctk.CTkScrollableFrame):
 
         if key_name or value_name:
             font = ("TkTextFont", 16, "bold")
-            self.name_label = ctk.CTkLabel(self, text=key_name, font=font)
-            self.name_label.grid(row=0, column=0, **padding)
-            self.key_label = ctk.CTkLabel(self, text=value_name, font=font)
-            self.key_label.grid(row=0, column=1, **padding)
+            self.key_label = ctk.CTkLabel(self, text=key_name, font=font)
+            self.key_label.grid(row=0, column=0, **padding)
+            self.value_label = ctk.CTkLabel(self, text=value_name, font=font)
+            self.value_label.grid(row=0, column=1, **padding)
 
         self.rows = self.__create_rows_from_data(1)
 
         _last_column, last_row = self.grid_size()
-        add_name_entry = ctk.CTkEntry(self, placeholder_text="e.g. elevenlabs")
-        add_name_entry.grid(row=last_row, column=0, **padding, sticky='esw')
-        add_key_entry = ctk.CTkEntry(self, placeholder_text="API Key")
-        add_key_entry.grid(row=last_row, column=1, **padding, sticky='esw')
+        add_key_entry = ctk.CTkEntry(self, placeholder_text=key_placeholder)
+        add_key_entry.grid(row=last_row, column=0, **padding, sticky='esw')
+        add_value_entry = ctk.CTkEntry(self, placeholder_text=value_placeholder)
+        add_value_entry.grid(row=last_row, column=1, **padding, sticky='esw')
         add_button = IconButton(self, icon="add", themed=False, size=20, hover_color="#00dd33", command=self.__add_entry)
         add_button.grid(row=last_row, column=2, **padding, sticky="s")
-        self.add_row = {"name": add_name_entry, "key": add_key_entry, "btn": add_button}
+        self.add_row = {"key": add_key_entry, "value": add_value_entry, "btn": add_button}
 
 
     def update(self, data=None):
@@ -44,18 +45,28 @@ class KeyValueList(ctk.CTkScrollableFrame):
             widget.grid(row=last_row)
 
 
+    def hide_values(self, hide: bool | None=None):
+        if hide is None:
+            hide = not self.__hide_values
+        self.__hide_values = hide
+        self.update()
+
+
     def __create_rows_from_data(self, row_offset=0):
         padding = {"padx": 10, "pady": 10}
 
         rows = {}
-        for i, key_name in enumerate(self.data):
-            name_entry = ctk.CTkLabel(self, text=key_name)
-            name_entry.grid(row=i+row_offset, column=0, **padding, sticky="e")
-            key_entry = ctk.CTkLabel(self, text=self.data.get(key_name, ""), fg_color=("grey90", "grey10"), corner_radius=5)
-            key_entry.grid(row=i+row_offset, column=1, **padding, sticky="w")
-            del_button = IconButton(self, icon="delete", size=20, hover_color="#dd0033", themed=False, command=lambda k=key_name: self.__delete_entry(k))
+        for i, key in enumerate(self.data):
+            key_entry = ctk.CTkLabel(self, text=key)
+            key_entry.grid(row=i+row_offset, column=0, **padding, sticky="e")
+            value = self.data.get(key, "")
+            if self.__hide_values:
+                value = self.__obfuscate_value(value)
+            value_entry = ctk.CTkLabel(self, text=value, fg_color=("grey90", "grey10"), corner_radius=5)
+            value_entry.grid(row=i+row_offset, column=1, **padding, sticky="w")
+            del_button = IconButton(self, icon="delete", size=20, hover_color="#dd0033", themed=False, command=lambda k=key: self.__delete_entry(k))
             del_button.grid(row=i+row_offset, column=2, **padding)
-            rows[key_name] = {"name": name_entry, "key": key_entry, "btn": del_button}
+            rows[key] = {"key": key_entry, "value": value_entry, "btn": del_button}
 
         return rows
 
@@ -73,16 +84,17 @@ class KeyValueList(ctk.CTkScrollableFrame):
 
 
     def __add_entry(self):
-        new_name_entry = self.add_row["name"]
         new_key_entry = self.add_row["key"]
-        if new_name_entry and new_key_entry:
-            new_name = self.__sanitize_key(new_name_entry.get())
-            new_key = new_key_entry.get()
+        new_value_entry = self.add_row["value"]
+        if new_key_entry and new_value_entry:
+            # TODO: Remove API key specific code
+            new_name = self.__sanitize_key(new_key_entry.get())
+            new_key = new_value_entry.get()
             if new_name and new_name not in self.data:
                 self.data[new_name] = new_key
                 self.update_callback(self.data)
-                new_name_entry.delete(0, 'end')
                 new_key_entry.delete(0, 'end')
+                new_value_entry.delete(0, 'end')
                 self.update()
 
 
@@ -97,3 +109,7 @@ class KeyValueList(ctk.CTkScrollableFrame):
         """
         clean_key = re.sub(r'[^\w\s_-]', '', key)
         return clean_key.replace(" ", "_")
+
+
+    def __obfuscate_value(self, value: str) -> str:
+        return re.sub(r'[^_-]', '*', value)

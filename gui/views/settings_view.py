@@ -18,7 +18,7 @@ class SettingsView(ctk.CTkFrame):
         self.config_manager: ConfigManager = self.core.config_manager
         self.secret_keeper = self.core.secret_keeper
 
-        self.grid_rowconfigure(3, weight=1)
+        self.grid_rowconfigure(4, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(3, weight=1)
         padding = {"padx": 15, "pady": 10}
@@ -54,11 +54,18 @@ class SettingsView(ctk.CTkFrame):
             self,
             label_text="API Keys",
             key_name="Service Name",
+            key_placeholder="e.g. elevenlabs",
             value_name="API Key",
+            value_placeholder="Your Key",
+            hide_values=True,
             data=self.secret_keeper.secrets,
             update_callback=self.__update_secrets,
         )
-        self.key_list.grid(row=3, column=0, columnspan=4, **padding, sticky="nesw")
+        self.key_list.grid(row=4, column=0, columnspan=4, **padding, sticky="nesw")
+        self.hide_keys_button = ctk.CTkButton(
+            self, text="Toggle API Key Visibility", command=self.key_list.hide_values
+        )
+        self.hide_keys_button.grid(row=3, column=2, **padding, sticky="w")
 
     def tkraise(self, aboveThis=None):
         super().tkraise(aboveThis)
