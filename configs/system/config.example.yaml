@@ -74,10 +74,9 @@ edge_tts:
 # Note that elevenlabs requires an own API key. See https://elevenlabs.io/ for more information.
 # Also note: With elevenlabs you can't add audio effects right now. We are working on that.'
 elevenlabs:
-  voice: Adam # Simple voice names.
-  # If you have a custom voice, you can use the voice ID instead:
-  # voice:
-  #   id: xxx
+  voice:
+    name: Adam # Simple voice names. Only works with the "default" 11Labs voices.
+    #id: xxx   # Uncomment this if you want to use a voice from your VoiceLab. Overrules name if both are set!
   model: eleven_multilingual_v2 # or: 'eleven_turbo_v2' or 'eleven_multilingual_v1' or 'eleven_multilingual_v2'
   latency: 3 # 0 - 4
   voice_settings:
@@ -107,8 +106,6 @@ wingmen:
   #
   board-computer: # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
     openai:
-      # You could require an alternative key, that differs from the one defined globally.
-      # required_key: openai-alternative
       #
       # The "context" for the wingman. Here's where you can tell the AI how to behave.
       # This is probably what you want to play around with the most.
