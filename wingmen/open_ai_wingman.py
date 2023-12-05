@@ -1,6 +1,5 @@
 import json
 from elevenlabs import generate, stream, Voice, VoiceSettings, voices
-from exceptions import MissingApiKeyException
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
@@ -49,6 +48,11 @@ class OpenAiWingman(Wingman):
             openai_base_url = self.config["openai"].get("base_url")
             self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
 
+        self.__validate_elevenlabs_config(errors)
+
+        return errors
+
+    def __validate_elevenlabs_config(self, errors):
         if self.tts_provider == "elevenlabs":
             self.elevenlabs_api_key = self.secret_keeper.retrieve(
                 requester=self.name,
@@ -60,8 +64,26 @@ class OpenAiWingman(Wingman):
                 errors.append(
                     "Missing 'elevenlabs' API key. Please provide a valid key in the settings or use another tts_provider."
                 )
-
-        return errors
+                return
+            elevenlabs_settings = self.config.get("elevenlabs")
+            if not elevenlabs_settings:
+                errors.append(
+                    "Missing 'elevenlabs' section in config. Please provide a valid config or change the TTS provider."
+                )
+                return
+            if not elevenlabs_settings.get("model"):
+                errors.append("Missing 'model' setting in 'elevenlabs' config.")
+                return
+            voice_settings = elevenlabs_settings.get("voice")
+            if not voice_settings:
+                errors.append(
+                    "Missing 'voice' section in 'elevenlabs' config. Please provide a voice configuration as shown in our example config."
+                )
+                return
+            if not voice_settings.get("id") and not voice_settings.get("name"):
+                errors.append(
+                    "Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config."
+                )
 
     async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
@@ -352,12 +374,19 @@ class OpenAiWingman(Wingman):
 
             self.audio_player.play("audio_output/edge_tts.mp3")
         elif self.tts_provider == "elevenlabs":
+            # already validated in validate():
             elevenlabs_config = self.config["elevenlabs"]
-            voice = elevenlabs_config.get("voice")
-            if not isinstance(voice, str):
-                voice = Voice(voice_id=voice.get("id"))
-            else:
-                voice = next((v for v in voices() if v.name == voice), None)
+            voice_config = elevenlabs_config["voice"]
+            # validate() already checked that at least one of these is set
+            voice_id = voice_config.get("id")
+            voice_name = voice_config.get("name")
+            voice = (
+                Voice(voice_id=voice_id)  # id takes precendence if set
+                if voice_id
+                else next(
+                    (v for v in voices() if v.name == voice_name), None
+                )  # else use the name
+            )
 
             voice_setting = self._get_elevenlabs_settings(elevenlabs_config)
             if voice_setting:
