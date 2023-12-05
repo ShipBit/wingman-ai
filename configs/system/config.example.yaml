@@ -392,7 +392,6 @@ wingmen:
       #   - available keys are here: https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
       #       - F1, F2 etc. are case-sensitive and lowercase, so use "f1" instead of "F1".
       #       - If you use number keys, make sure to put them in quotes like "1" or "2".
-      #   - use https://slickgpt.vercel.app/shared/blue-weak-application to let AI help you with adding new commands.
       #
       # ───────────────────────INSERT YOUR NEW COMMANDS HERE:────────────────────────────
       #- name: MyNewCommand
@@ -443,7 +442,6 @@ wingmen:
       #   - available keys are here: https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
       #       - F1, F2 etc. are case-sensitive and lowercase, so use "f1" instead of "F1".
       #       - If you use number keys, make sure to put them in quotes like "1" or "2".
-      #   - use https://slickgpt.vercel.app/shared/blue-weak-application to let AI help you with adding new commands.
       #
       # ───────────────────────INSERT YOUR NEW COMMANDS HERE:────────────────────────────
       #- name: MyNewCommand
