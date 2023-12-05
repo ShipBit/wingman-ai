@@ -96,5 +96,5 @@ class ConfigManager:
         # default name -> 'config.yaml'
         # context config -> 'config.{context}.yaml'
         file_name = f"config.{f'{context}.' if context else ''}yaml"
-        config = self.__read_config_file(file_name, {})
+        config = self.__read_config_file(file_name, False)
         return config
