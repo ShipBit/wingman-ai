@@ -29,6 +29,12 @@ openai:
   # Other choices are: gpt-4-1106-preview
   #
   summarize_model: gpt-3.5-turbo-1106
+  #
+  #organization: whatever # If you have an organization key, you can set it here.
+  #
+  # If you want to use a different API endpoint, uncomment this and configure it here.
+  # Use this to hook up your local in-place OpenAI replacement like Llama or if you need to use a proxy.
+  #base_url: https://api.openai.com
 
 features:
   debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
