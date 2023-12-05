@@ -45,7 +45,9 @@ class OpenAiWingman(Wingman):
                 "Missing 'openai' API key. Please provide a valid key in the settings."
             )
         else:
-            self.openai = OpenAi(openai_api_key)
+            openai_organization = self.config["openai"].get("organization")
+            openai_base_url = self.config["openai"].get("base_url")
+            self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
 
         if self.tts_provider == "elevenlabs":
             self.elevenlabs_api_key = self.secret_keeper.retrieve(

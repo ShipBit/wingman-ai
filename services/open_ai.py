@@ -3,14 +3,20 @@ from openai import OpenAI, APIStatusError
 from services.printr import Printr
 
 printr = Printr()
+
+
 class OpenAi:
     def __init__(
         self,
         openai_api_key: str = "",
+        organization: str | None = None,
+        base_url: str | None = None,
     ):
         self.api_key = openai_api_key
         self.client = OpenAI(
             api_key=openai_api_key,
+            organization=organization,
+            base_url=base_url,
         )
 
     def transcribe(
@@ -87,7 +93,9 @@ class OpenAi:
             return None
 
     def _handle_key_error(self):
-        printr.print_err("The OpenAI API key you provided is invalid. Please check your 'apikey.yaml'")
+        printr.print_err(
+            "The OpenAI API key you provided is invalid. Please check your 'secrets.yaml'"
+        )
 
     def _handle_api_error(self, api_response):
         printr.print_err(
