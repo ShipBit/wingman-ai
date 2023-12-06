@@ -12,9 +12,9 @@ class ContextRunner(ctk.CTkFrame):
 
         self.core = master.core
         self.core.load_context(context)
-        # TODO: use icon
         self.status_var = ctk.StringVar(self, "Inactive", "status")
         tower = self.core.tower
+        auto_run = self.core.config_manager.gui_config.get("auto-run", "off") == "on"
 
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(3, weight=1)
@@ -69,7 +69,7 @@ class ContextRunner(ctk.CTkFrame):
         self.terminal.grid(row=3, column=0, padx=20, pady=10, sticky="nesw")
         self.terminal.configure(state="disabled", wrap="word")
         printr.set_output("main", self.terminal)
-        if len(wingmen):
+        if len(wingmen) and not auto_run:
             printr.print(
                 f"Press 'Run' to start your wingm{'e' if len(wingmen) > 1 else 'a'}n!"
             )
@@ -90,23 +90,24 @@ class ContextRunner(ctk.CTkFrame):
         elif len(wingmen) <= 0:
             printr.print_warn(f"No runnable Wingman found for `{context_title}`.")
             self.button.configure(state="disabled")
+        elif auto_run:
+            self.toggle_listener()
+
 
     def toggle_listener(self):
         if self.core.active:
             self.core.deactivate()
-            # TODO: use icon
             self.status_var.set("Inactive")
             self.status_led.configure(image=self.status_icon_inactive)
             self.button.configure(text="Run")
             printr.print(
-                f"Your Wingman is now inactive.\nPress 'Run' to start listening again."
+                "Your Wingman is now inactive.\nPress 'Run' to start listening again."
             )
         else:
             self.core.activate()
-            # TODO: use icon
             self.status_var.set("Active")
             self.status_led.configure(image=self.status_icon_active)
             self.button.configure(text="Stop")
             printr.print(
-                f"Your Wingman is now listening for commands.\nPress 'Stop' to stop listening."
+                "Your Wingman is now listening for commands.\nPress 'Stop' to stop listening."
             )
