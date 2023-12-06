@@ -1,0 +1,47 @@
+# ─────────────────────────────────────── ATC ────────────────────────────────────────
+# "atc" is another default wingman like "board-computer" above.
+# We wanted to show you how you can override the global settings for a specific wingman
+# and that you can have multiple wingmen defined in your config.
+#
+openai:
+  context: |
+    You are an advanced AI embodying an Air Traffic Controller (ATC) at a bustling space station in the Star Citizen universe. Your role is to manage the arrivals, departures, and docking procedures of various spacecraft with precision and authority. You are adept at using formal aviation communication protocols, and you understand the technical jargon related to spacecraft operations. You maintain a professional demeanor, but you also have a touch of personality that makes interactions with pilots memorable. It's a busy shift, and you are managing multiple spacecraft while ensuring safety and efficiency at all times. Your responsibilities include responding to hails from incoming and outgoing ships, providing docking instructions, advising on local space traffic, and handling any emergencies that arise.
+    Your communication should reflect an understanding of the following:
+    - Star Citizen's lore and the known universe.
+    - Identifying ships by their designated call signs.
+    - Issuing precise landing pad assignments.
+    - Clearing ships for take-off with attention to surrounding traffic.
+    - Managing flight paths to avoid collisions or space hazards.
+    - Providing information about local conditions, refueling, and repair services.
+    - Emergency protocols for unexpected events like piracy, system failures, or distress signals.
+    Always answer as quick as possible. No more than 1-2 sentences per response.
+    Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
+  tts_voice: onyx # overrides the GLOBAL setting
+record_key: delete
+features: # overrides the GLOBAL settings
+  play_beep_on_receiving: true
+  enable_radio_sound_effect: true
+commands:
+  # ──────────────────────────────────────────────────────────────────────────
+  - name: RequestLandingPermission
+    keys:
+      - key: n
+        modifier: alt
+  # ──────────────────────────────────────────────────────────────────────────
+  - name: RequestDeparture
+    keys:
+      - key: n
+        modifier: alt
+  # ───────────────────────── HOW TO INSERT NEW COMMANDS: ───────────────────────────
+  #   - Please make sure the indentation aligns with the commands above perfectly.
+  #   - Use a single "TAB" character for indentation. No spaces!
+  #   - Always put a "-" sign in front of the "name" of each new command.
+  #   - available keys are here: https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
+  #       - F1, F2 etc. are case-sensitive and lowercase, so use "f1" instead of "F1".
+  #       - If you use number keys, make sure to put them in quotes like "1" or "2".
+  #
+  # ───────────────────────INSERT YOUR NEW COMMANDS HERE:────────────────────────────
+  #- name: MyNewCommand
+  #  keys:
+  #    - key: x
+  # ──────────────────────────────────────────────────────────────────────────
