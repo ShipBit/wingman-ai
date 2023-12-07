@@ -36,6 +36,18 @@ openai:
   # Use this to hook up your local in-place OpenAI replacement like Llama or if you need to use a proxy.
   #base_url: https://api.openai.com
 
+# ────────────────────────────────── Sound Effects ────────────────────────────────────────
+# Sound effects currently DO NOT work with the elevenlabs TTS provider!
+#
+sound:
+  # you can put as many sound effects here as you want.
+  # They will be stacked and added in the order you define them.
+  effects:
+    #- RADIO
+    #- ROBOT
+    #- INTERIOR_SMALL
+  play_beep: False # adds a beep sound before and after the wingman talks
+
 features:
   debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
 
@@ -48,13 +60,6 @@ features:
   # Our recommendation is to keep this disabled and clear the history with the "ResetConversationHistory" command after a while.
   #
   # remember_messages: 3 # uncomment this to enable!
-
-  # ────────────────────────────────── Sound Effects ────────────────────────────────────────
-  # These are "post-processing" audio effects for the TTS conversion. Files are located in /audio_samples.
-  # Sound effects are currently not supported for the edge_tts provider.
-  play_beep_on_receiving: false
-  enable_radio_sound_effect: false # adds noise to messages
-  enable_robot_sound_effect: false # adds a robotic sound effect
 
   # ────────────────────────────────── TTS Provider ────────────────────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
@@ -111,6 +116,9 @@ wingmen:
   # If you're a developer and want to get crazy with your own wingmen, check out the "star_head_wingman" examples below!
   #
   board-computer: # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
+    sound:
+      effects:
+        - ROBOT
     openai:
       #
       # The "context" for the wingman. Here's where you can tell the AI how to behave.
@@ -130,8 +138,6 @@ wingmen:
       #tts_voice: echo
       #...
     record_key: end # The "push-to-talk" key for this wingman. Keep it pressed while talking!
-    features: # overrides the GLOBAL settings
-      enable_robot_sound_effect: true
     #
     # Commands are keypresses that the wingmen can execute.
     # These are global keypresses on your system and therefore also work in games.
@@ -406,6 +412,10 @@ wingmen:
   # and that you can have multiple wingmen defined in your config.
   #
   atc:
+    sound:
+      effects:
+        - RADIO
+      play_beep: True
     openai:
       context: |
         You are an advanced AI embodying an Air Traffic Controller (ATC) at a bustling space station in the Star Citizen universe. Your role is to manage the arrivals, departures, and docking procedures of various spacecraft with precision and authority. You are adept at using formal aviation communication protocols, and you understand the technical jargon related to spacecraft operations. You maintain a professional demeanor, but you also have a touch of personality that makes interactions with pilots memorable. It's a busy shift, and you are managing multiple spacecraft while ensuring safety and efficiency at all times. Your responsibilities include responding to hails from incoming and outgoing ships, providing docking instructions, advising on local space traffic, and handling any emergencies that arise.
@@ -421,9 +431,6 @@ wingmen:
         Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
       tts_voice: onyx # overrides the GLOBAL setting
     record_key: delete
-    features: # overrides the GLOBAL settings
-      play_beep_on_receiving: true
-      enable_radio_sound_effect: true
     commands:
       # ──────────────────────────────────────────────────────────────────────────
       - name: RequestLandingPermission
