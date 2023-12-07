@@ -369,17 +369,10 @@ class OpenAiWingman(Wingman):
                 text, filename="audio_output/edge_tts.mp3", voice=tts_voice
             )
 
-            audio = self.audio_player.get_audio_from_file("audio_output/edge_tts.mp3")
-            self.audio_player.stream_with_effects(
-                audio,
-                play_beep=self.config.get("features", {}).get("play_beep_on_receiving"),
-                play_noise=self.config.get("features", {}).get(
-                    "enable_radio_sound_effect"
-                ),
-                robot_effect=self.config.get("features", {}).get(
-                    "enable_robot_sound_effect"
-                ),
+            audio, sample_rate = self.audio_player.get_audio_from_file(
+                "audio_output/edge_tts.mp3"
             )
+            self.audio_player.stream_with_effects((audio, sample_rate), self.config)
 
         elif self.tts_provider == "elevenlabs":
             # already validated in validate():
@@ -412,18 +405,7 @@ class OpenAiWingman(Wingman):
         else:  # OpenAI TTS
             response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
             if response is not None:
-                self.audio_player.stream_with_effects(
-                    response.content,
-                    play_beep=self.config.get("features", {}).get(
-                        "play_beep_on_receiving"
-                    ),
-                    play_noise=self.config.get("features", {}).get(
-                        "enable_radio_sound_effect"
-                    ),
-                    robot_effect=self.config.get("features", {}).get(
-                        "enable_robot_sound_effect"
-                    ),
-                )
+                self.audio_player.stream_with_effects(response.content, self.config)
 
     def _get_elevenlabs_settings(self, elevenlabs_config):
         settings = elevenlabs_config.get("voice_settings")

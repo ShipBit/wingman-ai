@@ -2,8 +2,8 @@ import io
 import numpy as np
 import soundfile as sf
 import sounddevice as sd
-from pedalboard import Pedalboard, Chorus, PitchShift, Reverb, Delay, Gain
-from scipy.signal import butter, lfilter
+from scipy.signal import resample
+from services.sound_effects import get_sound_effects_from_config
 
 
 class AudioPlayer:
@@ -22,24 +22,23 @@ class AudioPlayer:
         sd.play(audio, sample_rate)
         sd.wait()
 
-    def stream_with_effects(
-        self,
-        stream: bytes,
-        play_beep: bool = False,
-        play_noise: bool = False,
-        robot_effect: bool = False,
-    ):
-        audio, sample_rate = self._get_audio_from_stream(stream)
+    def stream_with_effects(self, input_data: bytes | tuple, config: dict):
+        if isinstance(input_data, bytes):
+            audio, sample_rate = self._get_audio_from_stream(input_data)
+        elif isinstance(input_data, tuple):
+            audio, sample_rate = input_data
+        else:
+            raise TypeError("Invalid input type for stream_with_effects")
 
-        # Apply effects as needed
-        if play_noise:
-            audio = self._add_noise_effect(audio, sample_rate)
-        if play_beep:
+        sound_effects = get_sound_effects_from_config(config)
+        add_beep = config.get("sound", {}).get("play_beep", False)
+
+        for sound_effect in sound_effects:
+            audio = sound_effect(audio, sample_rate)
+
+        if add_beep:
             audio = self._add_beep_effect(audio, sample_rate)
-        if robot_effect:
-            audio = self._add_robot_effect(audio, sample_rate)
 
-        # Play the audio
         sd.play(audio, sample_rate)
         sd.wait()
 
@@ -51,49 +50,29 @@ class AudioPlayer:
         audio, sample_rate = sf.read(io.BytesIO(stream), dtype="float32")
         return audio, sample_rate
 
-    # ────────────────────────────────── Sound Effects ───────────────────────────────── #
-
-    def _add_robot_effect(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
-        board = Pedalboard(
-            [
-                PitchShift(semitones=-3),
-                Delay(delay_seconds=0.01, feedback=0.5, mix=0.5),
-                Chorus(
-                    rate_hz=0.5, depth=0.8, mix=0.7, centre_delay_ms=2, feedback=0.3
-                ),
-                Reverb(
-                    room_size=0.05,
-                    dry_level=0.5,
-                    wet_level=0.2,
-                    freeze_mode=0.5,
-                    width=0.5,
-                ),
-                Gain(gain_db=9),
-            ]
-        )
-        return board(audio, sample_rate)
-
-    def _add_noise_effect(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
-        # Create band-pass filter for audio
-        low = 500.0 / (0.5 * sample_rate)
-        high = 5000.0 / (0.5 * sample_rate)
-        b, a = butter(5, [low, high], "band")
-        filtered_audio = lfilter(b, a, audio)
-
-        # Generate white noise
-        noise = np.random.normal(0, 0.1, audio.shape)
-
-        # Combine noise with filtered audio
-        noisy_audio = filtered_audio + noise
-        return noisy_audio
-
     def _add_beep_effect(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
-        # Generate beep signal
-        duration = 0.2
-        freq = 1000
-        samples = int(sample_rate * duration)
-        beep_signal = np.sin(2 * np.pi * np.arange(samples) * freq / sample_rate)
+        beep_audio, beep_sample_rate = self.get_audio_from_file(
+            "audio_samples/beep.wav"
+        )
 
-        # Add beeps at the start and end of the audio signal
-        beeped_audio = np.concatenate([beep_signal, audio, beep_signal])
-        return beeped_audio
+        # Resample the beep sound if necessary to match the sample rate of 'audio'
+        if beep_sample_rate != sample_rate:
+            beep_audio = self._resample_audio(beep_audio, beep_sample_rate, sample_rate)
+
+        # Concatenate the beep sound to the start and end of the audio
+        audio_with_beeps = np.concatenate((beep_audio, audio, beep_audio), axis=0)
+
+        return audio_with_beeps
+
+    def _resample_audio(
+        self, audio: np.ndarray, original_sample_rate: int, target_sample_rate: int
+    ) -> np.ndarray:
+        # Calculate the number of samples after resampling
+        num_original_samples = audio.shape[0]
+        num_target_samples = int(
+            round(num_original_samples * target_sample_rate / original_sample_rate)
+        )
+        # Use scipy.signal resample method to resample the audio to the target sample rate
+        resampled_audio = resample(audio, num_target_samples)
+
+        return resampled_audio
