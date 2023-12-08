@@ -94,7 +94,7 @@ class OpenAi:
 
     def _handle_key_error(self):
         printr.print_err(
-            "The OpenAI API key you provided is invalid. Please check your 'secrets.yaml'"
+            "The OpenAI API key you provided is invalid. Please check the GUI settings or your 'secrets.yaml'"
         )
 
     def _handle_api_error(self, api_response):

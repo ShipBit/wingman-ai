@@ -14,7 +14,7 @@ darkdetect==0.8.0
 decorator==5.1.1
 distro==1.8.0
 edge-tts==6.1.8
-elevenlabs==0.2.26
+elevenlabslib==0.16.0
 executing==2.0.1
 filelock==3.13.1
 frozenlist==1.4.0
@@ -51,7 +51,6 @@ pycparser==2.21
 pydantic==2.5.0
 pydantic_core==2.14.1
 PyDirectInput==1.0.4
-pydub==0.25.1
 PyGetWindow==0.0.9
 Pygments==2.17.2
 PyMsgBox==1.0.9

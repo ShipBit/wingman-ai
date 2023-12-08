@@ -1,5 +1,5 @@
 import json
-from elevenlabs import generate, stream, Voice, VoiceSettings, voices
+from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
@@ -355,80 +355,84 @@ class OpenAiWingman(Wingman):
         """
 
         if self.tts_provider == "edge_tts":
-            edge_config = self.config["edge_tts"]
-            tts_voice = edge_config.get("tts_voice")
-            gender = edge_config.get("gender")
-            detect_language = edge_config.get("detect_language")
-
-            if detect_language:
-                tts_voice = await self.edge_tts.get_same_random_voice_for_language(
-                    gender, self.last_transcript_locale
-                )
-
-            await self.edge_tts.generate_speech(
-                text, filename="audio_output/edge_tts.mp3", voice=tts_voice
-            )
-
-            if self.config.get("features", {}).get("enable_robot_sound_effect"):
-                self.audio_player.effect_audio("audio_output/edge_tts.mp3")
-
-            self.audio_player.play("audio_output/edge_tts.mp3")
+            await self._play_with_edge_tts(text)
         elif self.tts_provider == "elevenlabs":
-            # already validated in validate():
-            elevenlabs_config = self.config["elevenlabs"]
-            voice_config = elevenlabs_config["voice"]
-            # validate() already checked that at least one of these is set
-            voice_id = voice_config.get("id")
-            voice_name = voice_config.get("name")
-            voice = (
-                Voice(voice_id=voice_id)  # id takes precendence if set
-                if voice_id
-                else next(
-                    (v for v in voices() if v.name == voice_name), None
-                )  # else use the name
+            self._play_with_elevenlabs(text)
+        else:
+            self._play_with_openai(text)
+
+    def _play_with_openai(self, text):
+        response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
+        if response is not None:
+            self.audio_player.stream_with_effects(response.content, self.config)
+
+    async def _play_with_edge_tts(self, text: str):
+        output_file = "audio_output/edge_tts.mp3"
+        edge_config = self.config["edge_tts"]
+
+        tts_voice = edge_config.get("tts_voice")
+        detect_language = edge_config.get("detect_language")
+        if detect_language:
+            gender = edge_config.get("gender")
+            tts_voice = await self.edge_tts.get_same_random_voice_for_language(
+                gender, self.last_transcript_locale
             )
 
-            voice_setting = self._get_elevenlabs_settings(elevenlabs_config)
-            if voice_setting:
-                voice.settings = voice_setting
+        await self.edge_tts.generate_speech(text, filename=output_file, voice=tts_voice)
+        audio, sample_rate = self.audio_player.get_audio_from_file(output_file)
 
-            response = generate(
-                text,
-                voice=voice,
-                model=elevenlabs_config.get("model"),
-                stream=True,
-                api_key=self.elevenlabs_api_key,
-                latency=elevenlabs_config.get("latency", 3),
-            )
-            stream(response)
-        else:  # OpenAI TTS
-            response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
-            if response is not None:
-                self.audio_player.stream_with_effects(
-                    response.content,
-                    self.config.get("features", {}).get("play_beep_on_receiving"),
-                    self.config.get("features", {}).get("enable_radio_sound_effect"),
-                    self.config.get("features", {}).get("enable_robot_sound_effect"),
-                )
+        self.audio_player.stream_with_effects((audio, sample_rate), self.config)
 
-    def _get_elevenlabs_settings(self, elevenlabs_config):
-        settings = elevenlabs_config.get("voice_settings")
-        if not settings:
-            return None
+    def _play_with_elevenlabs(self, text: str):
+        # presence already validated in validate()
+        elevenlabs_config = self.config["elevenlabs"]
+        # validate() already checked that either id or name is set
+        voice_id = elevenlabs_config["voice"].get("id")
+        voice_name = elevenlabs_config["voice"].get("name")
 
-        voice_settings = VoiceSettings(
-            stability=settings.get("stability", 0.5),
-            similarity_boost=settings.get("similarity_boost", 0.75),
+        voice_settings = elevenlabs_config.get("voice_settings", {})
+        user = ElevenLabsUser(self.elevenlabs_api_key)
+        model = elevenlabs_config.get("model", "eleven_multilingual_v2")
+
+        if voice_id:
+            voice = user.get_voice_by_ID(voice_id)
+        else:
+            voice = user.get_voices_by_name(voice_name)[0]
+
+        # todo: add start/end callbacks to play Quindar beep even if use_sound_effects is disabled
+        playback_options = PlaybackOptions(runInBackground=True)
+        generation_options = GenerationOptions(
+            model=model,
+            latencyOptimizationLevel=elevenlabs_config.get("latency", 0),
+            style=voice_settings.get("style", 0),
+            use_speaker_boost=voice_settings.get("use_speaker_boost", True),
         )
-        style = settings.get("style", None)
-        use_speaker_boost = settings.get("use_speaker_boost", None)
+        stability = voice_settings.get("stability")
+        if stability is not None:
+            generation_options.stability = stability
 
-        if style is not None:
-            voice_settings.style = style
-        if use_speaker_boost is not None:
-            voice_settings.use_speaker_boost = use_speaker_boost
+        similarity_boost = voice_settings.get("similarity_boost")
+        if similarity_boost is not None:
+            generation_options.similarity_boost = similarity_boost
 
-        return voice_settings
+        style = voice_settings.get("style")
+        if style is not None and model != "eleven_turbo_v2":
+            generation_options.style = style
+
+        use_sound_effects = elevenlabs_config.get("use_sound_effects", False)
+        if use_sound_effects:
+            audio_bytes, _history_id = voice.generate_audio_v2(
+                prompt=text,
+                generationOptions=generation_options,
+            )
+            if audio_bytes:
+                self.audio_player.stream_with_effects(audio_bytes, self.config)
+        else:
+            voice.generate_stream_audio_v2(
+                prompt=text,
+                playbackOptions=playback_options,
+                generationOptions=generation_options,
+            )
 
     def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.

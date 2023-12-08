@@ -230,12 +230,13 @@ We would like to thank their creators for their great work and contributions to 
 - [edge-tts](https://github.com/rany2/edge-tts) - GPL-3.0
 - [openai](https://github.com/openai/openai-python) - Apache-2.0
 - [openai-whisper](https://github.com/openai/whisper) - MIT
+- [elevenlabslib](https://github.com/lugia19/elevenlabslib) - MIT, © 2018 The Python Packaging Authority
 - [pydirectinput](https://github.com/learncodebygaming/pydirectinput) - MIT, © 2020 Ben Johnson
 - [PyAutoGUI](https://github.com/asweigart/pyautogui) - BSD 3, © 2014 Al Sweigart
-- [pydub](https://github.com/jiaaro/pydub) - MIT, © 2011 James Robert
-- [scipy](https://github.com/scipy/scipy) - BSD 3, © 2001-2002 Enthought, Inc. 2003-2023, SciPy Developers
-- [numpy](https://github.com/numpy/numpy) - BSD 3, © 2005-2023, NumPy Developers
 - [sounddevice](https://github.com/spatialaudio/python-sounddevice/) - MIT, © 2015-2023 Matthias Geier
 - [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
+- [scipy](https://github.com/scipy/scipy) - BSD 3, © 2001-2002 Enthought, Inc. 2003-2023, SciPy Developers
+- [numpy](https://github.com/numpy/numpy) - BSD 3, © 2005-2023, NumPy Developers
 - [packaging](https://github.com/pypa/packaging) - Apache/BSD, © Donald Stufft and individual contributors
+- [pyinstaller](https://github.com/pyinstaller/pyinstaller) - extended GPL 2.0, © 2010-2023, PyInstaller Development Team
 - [faqtory](https://github.com/willmcgugan/faqtory) - MIT, © 2022 Will McGugan
