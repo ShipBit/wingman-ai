@@ -399,7 +399,7 @@ class OpenAiWingman(Wingman):
         else:
             voice = user.get_voices_by_name(voice_name)[0]
 
-        # todo: add start/end callbacks to play Quindar beep
+        # todo: add start/end callbacks to play Quindar beep even if use_sound_effects is disabled
         playback_options = PlaybackOptions(runInBackground=True)
         generation_options = GenerationOptions(
             model=model,
