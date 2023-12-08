@@ -1,4 +1,5 @@
 import io
+from os import path
 import numpy as np
 import soundfile as sf
 import sounddevice as sd
@@ -55,8 +56,9 @@ class AudioPlayer:
         return audio, sample_rate
 
     def _add_beep_effect(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
+        bundle_dir = path.abspath(path.dirname(__file__))
         beep_audio, beep_sample_rate = self.get_audio_from_file(
-            "audio_samples/beep.wav"
+            path.join(bundle_dir, "../audio_samples/beep.wav")
         )
 
         # Resample the beep sound if necessary to match the sample rate of 'audio'
