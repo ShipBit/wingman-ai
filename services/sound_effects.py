@@ -33,6 +33,7 @@ class SoundEffects(Enum):
             Resample(10000),
             Gain(gain_db=3),
             Compressor(threshold_db=-21, ratio=3.5, attack_ms=1, release_ms=50),
+            Gain(gain_db=6),
         ]
     )
     INTERIOR_SMALL = Pedalboard(
