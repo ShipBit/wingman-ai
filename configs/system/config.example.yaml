@@ -33,7 +33,7 @@ features:
   #remember_messages: 3 # uncomment this  (=remove the "# in front) to enable!
 
 # ────────────────────────────── SOUND SETTINGS ───────────────────────────────
-# Sound effects currently do not work with elevenlabs as TTS provider!
+# If you want to use sound effects with 11Labs, you need to enable them in the elevenlabs config below.
 sound:
   # You can put as many sound effects here as you want. They stack and are added in the defined order here.
   # Available: RADIO, ROBOT, INTERIOR_HELMET, INTERIOR_SMALL, INTERIOR_MEDIUM, INTERIOR_LARGE
@@ -90,13 +90,13 @@ edge_tts:
 # https://elevenlabs.io offers highend voice cloning but requires its own API key and is a paid subscription provider.
 # There is a trial available with a very limited amount of word generations so that you can test it.
 # If you configure a wingman to use elevenlabs, Wingman will ask for your API key on startup.
-# Note: Our sound effects (ROBOT, RADIO etc.) currently don't work with elevenlabs.
 # Only used if tts_provider in features is set to 'elevenlabs' above.
 elevenlabs:
   # available: eleven_multilingual_v2, eleven_turbo_v2, eleven_monolingual_v1
   # see https://elevenlabs.io/docs/speech-synthesis/models
   model: eleven_multilingual_v2
   latency: 3 # optimization, 0 - 4
+  use_sound_effects: false # you can use our sound_effects with elevenlabs but it adds a delay to the playback
 
   voice:
     # You can configure "Premade voices" from the dropdown on https://elevenlabs.io/speech-synthesis by name.

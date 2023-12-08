@@ -1,5 +1,5 @@
 import json
-from elevenlabslib import *
+from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
@@ -419,11 +419,20 @@ class OpenAiWingman(Wingman):
         if style is not None and model != "eleven_turbo_v2":
             generation_options.style = style
 
-        voice.generate_stream_audio_v2(
-            prompt=text,
-            playbackOptions=playback_options,
-            generationOptions=generation_options,
-        )
+        use_sound_effects = elevenlabs_config.get("use_sound_effects", False)
+        if use_sound_effects:
+            audio_bytes, _history_id = voice.generate_audio_v2(
+                prompt=text,
+                generationOptions=generation_options,
+            )
+            if audio_bytes:
+                self.audio_player.stream_with_effects(audio_bytes, self.config)
+        else:
+            voice.generate_stream_audio_v2(
+                prompt=text,
+                playbackOptions=playback_options,
+                generationOptions=generation_options,
+            )
 
     def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
