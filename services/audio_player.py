@@ -22,7 +22,9 @@ class AudioPlayer:
         sd.play(audio, sample_rate)
         sd.wait()
 
-    def stream_with_effects(self, input_data: bytes | tuple, config: dict):
+    def stream_with_effects(
+        self, input_data: bytes | tuple, config: dict, wait: bool = False
+    ):
         if isinstance(input_data, bytes):
             audio, sample_rate = self._get_audio_from_stream(input_data)
         elif isinstance(input_data, tuple):
@@ -40,7 +42,9 @@ class AudioPlayer:
             audio = self._add_beep_effect(audio, sample_rate)
 
         sd.play(audio, sample_rate)
-        sd.wait()
+
+        if wait:
+            sd.wait()
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")

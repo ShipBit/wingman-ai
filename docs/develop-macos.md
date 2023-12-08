@@ -45,7 +45,6 @@ quit()                                      # quit the Py interpreter
 brew update                                 # update Homebrew. Important!
 brew upgrade                                # upgrade all packages. Also important!
 brew install pyenv                          # install pyenv with Homebrew
-brew install ffmpeg portaudio               # install dependencies
 brew install tcl-tk                         # install TKinter and dependencies
 pyenv install 3.11.6                        # install Python with pyenv
 pyenv global 3.11.6                         # set your global Python version

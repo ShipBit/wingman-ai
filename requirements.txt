@@ -14,7 +14,7 @@ darkdetect==0.8.0
 decorator==5.1.1
 distro==1.8.0
 edge-tts==6.1.8
-elevenlabs==0.2.26
+elevenlabslib==0.16.0
 executing==2.0.1
 filelock==3.13.1
 frozenlist==1.4.0

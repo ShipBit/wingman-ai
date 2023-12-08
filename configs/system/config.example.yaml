@@ -93,6 +93,11 @@ edge_tts:
 # Note: Our sound effects (ROBOT, RADIO etc.) currently don't work with elevenlabs.
 # Only used if tts_provider in features is set to 'elevenlabs' above.
 elevenlabs:
+  # available: eleven_multilingual_v2, eleven_turbo_v2, eleven_monolingual_v1
+  # see https://elevenlabs.io/docs/speech-synthesis/models
+  model: eleven_multilingual_v2
+  latency: 3 # optimization, 0 - 4
+
   voice:
     # You can configure "Premade voices" from the dropdown on https://elevenlabs.io/speech-synthesis by name.
     name: Adam
@@ -100,14 +105,10 @@ elevenlabs:
     # Only you(r) API key has acces to these voice IDs, so you can't share them.
     #id: xxx  # id overrules name if both are set!
 
-  latency: 3 # 0 - 4
-
-  # These are the settings that you can set in their "Speech Synthesis" web interface to tune the voice:
-  model: eleven_multilingual_v2 # available:eleven_multilingual_v2, eleven_multilingual_v1, eleven_turbo_v2
   voice_settings:
     stability: 0.71 # 0.0 - 1.0
     similarity_boost: 0.5 # 0.0 - 1.0
-    style: 0.0 # 0.0 - 1.0
+    style: 0.0 # 0.0 - 1.0, not available for eleven_turbo_v2
     use_speaker_boost: true # true or false
 
 # ────────────────────────────── GLOBAL COMMANDS ───────────────────────────────

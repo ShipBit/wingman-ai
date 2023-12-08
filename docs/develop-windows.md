@@ -10,8 +10,6 @@ Install Python 3.11.6 and add it to your `PATH`. Make sure to check the box **Ad
 
 Then (re-)start your terminal and test with `python --version` and `python3 --version`.
 
-Finally, install [ffmpeg](https://ffmpeg.org/download.html) and add it to your `PATH` as well.
-
 #### The clean and better way
 
 Use [pyenv-win](https://github.com/pyenv-win/pyenv-win) to manage multiple Python versions on your system. Install it using their documentation.
@@ -25,8 +23,6 @@ pyenv global 3.11.6     # set your global Python version
 
 Restart the terminal. Test with `python --version` and `python3 --version`.
 
-Finally, download [ffmpeg](https://ffmpeg.org/download.html) and copy the `exe` files from their package to the Wingman root source directory.
-
 ## Install dependencies
 
 Checkout the repository and start a terminal in the root folder.
@@ -39,7 +35,7 @@ pip install -r requirements.txt     # install dependencies
 
 ## Create your config
 
-Put the `ffmpeg.exe`, `ffprobe.exe`, `ffplay.exe` and `mpv.exe` files from our release into the Wingman root source directory. Start Wingman UI with `python main.py` and provide your OpenAI API key. Wingman will create a `config.yaml` file in the `./configs/configs/` directory. `configs`-ception, yay!
+Start Wingman UI with `python main.py` and provide your OpenAI API key. Wingman will create a `config.yaml` file in the `./configs/configs/` directory. `configs`-ception, yay!
 
 ## Setup Visual Studio Code
 

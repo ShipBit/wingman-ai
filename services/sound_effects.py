@@ -24,7 +24,7 @@ class SoundEffects(Enum):
             Reverb(
                 room_size=0.05, dry_level=0.5, wet_level=0.5, freeze_mode=0.5, width=0.3
             ),
-            Gain(gain_db=3),
+            Gain(gain_db=8),
         ]
     )
     RADIO = Pedalboard(
