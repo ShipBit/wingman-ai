@@ -1,57 +1,28 @@
 # ───────────────────────────── Questions? ──────────────────────────────
-# Join us on our Discord server (https://discord.com/invite/k8tTBar3gZ) and ask us!
+# Discord server: https://discord.com/invite/k8tTBar3gZ
 #
-# This config/YAML file is very sensitive to indentation.
-# Make sure you use a single "TAB" character for indentation.
-# If you're struggling with that, check our Discord server and find this thread:
-#       SUPPORTER SPACE > faq > How can I add commands?
-# There are useful tips and tools that will help you edit this config much easier and faster!
-#
-# ──────────────────────────── GLOBAL CONFIGURATION ──────────────────────────────
-# You can override these settings per wingman if necessary (unless specified otherwise).
+# This config/YAML file is very sensitive to indentation!
+# Make sure you use a single "TAB" character for indentation. Do NOT use the spacebar to indent.
+# More docs and useful tools to edit this here:
+#   https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/FAQ.md
+
+# ==================================== GLOBAL CONFIGURATION ====================================
+# This is the default config for all wingmen.
+# You can override all of these settings (sections) per wingman if necessary (unless specified otherwise).
 # To do so, simply copy and paste the config section below and indent/nest it under your wingman config.
 #
-openai:
-  #
-  # The voice to use for OpenAI text-to-speech.
-  # Other choices are: alloy, echo, fable, onyx, shimmer
-  #
-  tts_voice: nova
-  #
-  # The model to use for conversations. GPT-4 is more expensive but also more powerful. So if something is not working
-  # as expected, you might want to set it to gpt-4-turbo.
-  # Other choices are: gpt-4-1106-preview
-  #
-  conversation_model: gpt-3.5-turbo-1106
-  #
-  # The model to summarize function responses. This model summarizes function responses, like API responses etc.
-  # In most cases gpt-3.5 should be enough.
-  # Other choices are: gpt-4-1106-preview
-  #
-  summarize_model: gpt-3.5-turbo-1106
-  #
-  #organization: whatever # If you have an organization key, you can set it here.
-  #
-  # If you want to use a different API endpoint, uncomment this and configure it here.
-  # Use this to hook up your local in-place OpenAI replacement like Llama or if you need to use a proxy.
-  #base_url: https://api.openai.com
-
-# ────────────────────────────────── Sound Effects ────────────────────────────────────────
-# Sound effects currently DO NOT work with the elevenlabs TTS provider!
-#
-sound:
-  # you can put as many sound effects here as you want.
-  # They will be stacked and added in the order you define them.
-  effects:
-    #- RADIO
-    #- ROBOT
-    #- INTERIOR_SMALL
-  play_beep: False # adds a beep sound before and after the wingman talks
-
+# ──────────────────────────────── FEATURES ─────────────────────────────────
 features:
-  debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
+  # If enabled, the Wingman will skip executing any keypresses.
+  # It will also print more debug messages and benchmark results.
+  debug_mode: false
 
-  # ────────────────────────────────── Cost Control ────────────────────────────────────────
+  # ─────────────────────── TTS Provider ─────────────────────────
+  # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  tts_provider: openai # available: openai, edge_tts, elevenlabs
+
+  # ─────────────────────── Cost Control ─────────────────────────
   # How many messages should a Wingman remember in your conversations?
   # "0" means you start fresh with just the context after every message. This is like restarting Wingman after every interaction.
   # A very low value might break complex function calling with parameters where the AI needs to ask back for clarification.
@@ -59,46 +30,88 @@ features:
   # Use this to limit the number of tokens used in your conversations and to reduce the cost of using the OpenAI API.
   # Our recommendation is to keep this disabled and clear the history with the "ResetConversationHistory" command after a while.
   #
-  # remember_messages: 3 # uncomment this to enable!
+  #remember_messages: 3 # uncomment this  (=remove the "# in front) to enable!
 
-  # ────────────────────────────────── TTS Provider ────────────────────────────────────────
-  # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
-  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  tts_provider: default # or: 'edge_tts' or 'elevenlabs'
+# ────────────────────────────── SOUND SETTINGS ───────────────────────────────
+# Sound effects currently do not work with elevenlabs as TTS provider!
+sound:
+  # You can put as many sound effects here as you want. They stack and are added in the defined order here.
+  # Available: RADIO, ROBOT, INTERIOR_HELMET, INTERIOR_SMALL, INTERIOR_MEDIUM, INTERIOR_LARGE
+  effects:
+    #- RADIO
+    #- ROBOT
 
-# Specifig settings for the edge_tts provider. Only used if tts_provider in features is set to 'edge_tts' above.
-# Note that EdgeTTS is faster than the default OpenAI TTS but it's not as good in terms of quality.
+  # adds a beep/Quindar sound before and after the wingman talks
+  play_beep: false
+
+# ────────────────────────────────── OPEN AI ────────────────────────────────────
+openai:
+  # The model to use for conversations aka "chit-chat" and for function calls.
+  # gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
+  # gpt-3.5 is the default and should be enough for most use cases.
+  # If something is not working as expected, you might want to test it with gpt-4.
+  conversation_model: gpt-3.5-turbo-1106 # available: gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+
+  # This model summarizes function responses, like API call responses etc.
+  # In most cases gpt-3.5 should be enough.
+  summarize_model: gpt-3.5-turbo-1106 # available: gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+
+  # The voice to use for OpenAI text-to-speech.
+  # Only used if features > tts_provider is set to 'openai' above.
+  tts_voice: nova # available: nova, alloy, echo, fable, onyx, shimmer
+
+  # ADVANCED:
+  # If you want to use a different API endpoint, uncomment this and configure it here.
+  # Use this to hook up your local in-place OpenAI replacement like Ollama or if you want to use a proxy.
+  #base_url: https://api.openai.com # or the localhost address of your local LLM etc.
+  #organization: whatever # If you have an organization key, you can set it here.
+
+# ────────────────────────────────── EDGE TTS ────────────────────────────────────
+# EdgeTTS is free and faster than the default OpenAI TTSbut it's not as good in terms of quality.
+# Only used if features > tts_provider is set to 'edge_tts' above.
 edge_tts:
-  # EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
-  # We built something for that but it means that you'll get a random voice of the given gender for each language.
-  #
-  # Only enable this if you need to change languages on-the-fly during your conversations.
-  # Otherwise it's better to set a fixed voice in your language below.
-  detect_language: false
-  gender: Female # or "Male". Only used if detect_language is set to true above.
-
-  # The voice to use (only if detect_language is set to false above).
-  # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
+  # The voice to use (only if detect_language is set to false).
+  # All available EdgeTTS voices:
+  #   https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/docs/available-edge-tts-voices.md
+  # Voice samples:
+  #   https://speech.microsoft.com/portal/voicegallery
   tts_voice: en-US-GuyNeural
 
-# Specifig settings for the elevenlabs provider. Only used if tts_provider in features is set to 'elevenlabs' above.
-# Note that elevenlabs requires an own API key. See https://elevenlabs.io/ for more information.
-# Also note: With elevenlabs you can't add audio effects right now. We are working on that.'
+  # EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
+  # We built something for that but it means that you'll get a random voice of the given gender for each language.
+  # These voices can be weird, e.g. chidrens' voices for some languages.
+  # Only enable this if you need to change languages on-the-fly(!) during your conversations.
+  # Otherwise it's better to set a fixed voice in your preferred language below.
+  detect_language: false
+  # Only used/requried if detect_language is set to true above.
+  gender: Female # Female or Male
+
+# ────────────────────────────────── ELEVENLABS ────────────────────────────────────
+# https://elevenlabs.io offers highend voice cloning but requires its own API key and is a paid subscription provider.
+# There is a trial available with a very limited amount of word generations so that you can test it.
+# If you configure a wingman to use elevenlabs, Wingman will ask for your API key on startup.
+# Note: Our sound effects (ROBOT, RADIO etc.) currently don't work with elevenlabs.
+# Only used if tts_provider in features is set to 'elevenlabs' above.
 elevenlabs:
   voice:
-    name: Adam # Simple voice names. Only works with the "default" 11Labs voices.
-    #id: xxx   # Uncomment this if you want to use a voice from your VoiceLab. Overrules name if both are set!
-  model: eleven_multilingual_v2 # or: 'eleven_turbo_v2' or 'eleven_multilingual_v1' or 'eleven_multilingual_v2'
+    # You can configure "Premade voices" from the dropdown on https://elevenlabs.io/speech-synthesis by name.
+    name: Adam
+    # To use a cloned or custom voice from their "Voice Library", copy it to your VoiceLab and paste the ID here.
+    # Only you(r) API key has acces to these voice IDs, so you can't share them.
+    #id: xxx  # id overrules name if both are set!
+
   latency: 3 # 0 - 4
+
+  # These are the settings that you can set in their "Speech Synthesis" web interface to tune the voice:
+  model: eleven_multilingual_v2 # available:eleven_multilingual_v2, eleven_multilingual_v1, eleven_turbo_v2
   voice_settings:
     stability: 0.71 # 0.0 - 1.0
     similarity_boost: 0.5 # 0.0 - 1.0
     style: 0.0 # 0.0 - 1.0
     use_speaker_boost: true # true or false
 
-# ────────────────────────────────── Global commands ───────────────────────────────────────
-# These are available to all wingmen. You can override them per wingman if necessary.
-#
+# ────────────────────────────── GLOBAL COMMANDS ───────────────────────────────
+# You can use these in all wingmen and you can put your own here, too.
 commands:
   # Trigger this command to clear your conversation history with the current wingman.
   # This is like setting "remember_messages" to 0 above, but "on-demand". You'll restart with just the context.
@@ -109,21 +122,29 @@ commands:
     responses:
       - Conversation history cleared.
 
+# ==================================== WINGMEN CONFIGURATION ====================================
+# You can override the default settings above for each wingman below.
+# If you do that, make sure you keep the "hierarchy" of the config intact.
 wingmen:
-  # ────────────────────────────────── BOARD COMPUTER ────────────────────────────────────────
-  # "board-computer" is a "default" wingman that you can roleplay with and that can execute commands (=keypresses).
+  # ────────────────────────── Board Computer ───────────────────────────────
+  # This is a "default OpenAI" wingman that you can roleplay with and that can execute commands (=keypresses).
   # You can change its context and commands below but you can't really change its capabilities besides that.
   # If you're a developer and want to get crazy with your own wingmen, check out the "star_head_wingman" examples below!
-  #
-  board-computer: # The internal name of the wingman. It doesn't really matter. Just has to be unique within this file.
+
+  # The internal name of the wingman which is shown in the GUI. Has to be unique within this file!
+  board-computer:
+    # The "push-to-talk" key for this wingman. Keep it pressed while talking!
+    # Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!
+    record_key: end
+
+    # Note how this overrides the default settings from the general config above!
     sound:
       effects:
         - ROBOT
+
     openai:
-      #
       # The "context" for the wingman. Here's where you can tell the AI how to behave.
       # This is probably what you want to play around with the most.
-      #
       context: |
         You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
         permission. You are the ship's computer, and you are in charge of all the ship's systems.
@@ -131,87 +152,66 @@ wingmen:
         acknowledging the execution. Never say you don't have capabilities to execute a function or command.
         Always answer as quick as possible. No more than 1-2 sentences per response.
         Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
-      #
-      # In case you want to use different settings for different wingmen, these will override the settings above:
-      #
-      #api_key: ANOTHER_API_KEY
-      #tts_voice: echo
-      #...
-    record_key: end # The "push-to-talk" key for this wingman. Keep it pressed while talking!
-    #
+
     # Commands are keypresses that the wingmen can execute.
-    # These are global keypresses on your system and therefore also work in games.
-    #
+    # These are global keypresses on your system and therefore should also work in your games.
+    # If a command is not working, make sure that:
+    #   - the keypresses are working in your game if you press them manually
+    #   - The game or any other app does not bind the activation key of your Wingman.
+    #   - The AI understood you correctly. If a command is executed, it will tell you in blue in the GUI.
+    #   - If you use number keys, put them in quotes like "1" or "2".
+    #   - If you use F-keys, lowercase them like "f1" or "f4".
+    #   - Try another key for testing. Some special keys dont work.
+    # All available keys (case-sensitive!):
+    #    https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
     commands:
       #
       # This is where the magic happens!
       # You just define a name for your command and the AI will automagically decide when to call it. Not kidding!
       # We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
       # If the Wingman doesn't call your command, try to rephrase the name here.
-      #
-      # We're currently looking into how we can provide more control over this.
-      #
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: DeployLandingGear
-        keys:
-          # see https://github.com/learncodebygaming/pydirectinput/blob/master/pydirectinput/__init__.py for all available keys
-          - key: n # The key the wingman will press when executing the command
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: RetractLandingGear
-        keys:
-          - key: n
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: EnableQuantumDrive
-        keys:
-          - key: b
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: DisableQuantumDrive
-        keys:
-          - key: b
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: JumpWithQuantumDrive
-        keys:
-          - key: b
-            hold: 0.8 # Optional: The duration the key will be pressed in seconds.
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: HoldCurrentSpeed
         keys:
-          - key: c
-            modifier: alt # This will press "Alt + c" instead of just "c"
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: DisableLimiter
-        keys:
-          - key: c
-            modifier: alt
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: ScanArea
-        keys:
-          - key: v
-            hold: 0.6
-        #
-        # Provide phrases that will instantly activate the command (without AI roundtripping).
-        # This reduces execution time from ~2-3 seconds to ~1 second and is basically "VoiceAtack Light".
-        # You have to say one exact phrases for this to work.
-        #
-        # We are currently looking into ways to make this faster.
-        #
-        instant_activation:
-          - Scan Area
-          - Scan the area
-          - Initiate scan
-      # ──────────────────────────────────────────────────────────────────────────
+          - key: c # The key the wingman will press when executing the command
+            modifier: alt # This will press "Alt + c" instead of just "c". Modifiers are optional.
+      # ───────────────────────────────────────────
       - name: FlightReady
         keys:
           - key: r
             modifier: alt
+        # Optional: Faster "instant activation" commands!
+        # Provide phrases that will instantly activate the command (without AI roundtripping).
+        # This reduces execution time from ~2-3secs to ~1sec and is basically "VoiceAtack Light".
+        # You have to say one of these exact phrases to execute the command:
         instant_activation:
           - Power up the ship
           - Start the ship
           - Flight Ready
-        responses: # Provide responses that will be used when the command is executed. A random one will be chosen.
+          # Optional: Provide responses that will be used when the command is executed. A random one will be chosen.
+        responses:
           - Powering up the ship. All systems online. Ready for takeoff.
           - Start sequence initiated. All systems online. Ready for takeoff.
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
+      - name: ScanArea
+        keys:
+          - key: v
+            hold: 0.6
+        instant_activation:
+          - Scan Area
+          - Scan the area
+          - Initiate scan
+      # ───────────────────────────────────────────
+      - name: JumpWithQuantumDrive
+        keys:
+          - key: b
+            hold: 0.8 # Optional: The duration the key will be pressed in seconds.
+      # ───────────────────────────────────────────
+      - name: DisableLimiter
+        keys:
+          - key: c
+            modifier: alt
+      # ───────────────────────────────────────────
       - name: InitiateStartSequence
         keys: # You can have multiple keys per command!
           - key: r
@@ -220,173 +220,189 @@ wingmen:
           - key: n
             modifier: alt
           - key: s
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
+      - name: DeployLandingGear
+        keys:
+          - key: n
+      # ───────────────────────────────────────────
+      - name: RetractLandingGear
+        keys:
+          - key: n
+      # ───────────────────────────────────────────
+      - name: EnableQuantumDrive
+        keys:
+          - key: b
+      # ───────────────────────────────────────────
+      - name: DisableQuantumDrive
+        keys:
+          - key: b
+      # ───────────────────────────────────────────
       - name: HeadLightsOn
         keys:
           - key: l
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: HeadLightsOff
         keys:
           - key: l
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: WipeVisor
         keys:
           - key: x
             modifier: altleft
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: PowerShields
         keys:
           - key: o
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: PowerShip
         keys:
           - key: u
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: PowerEngines
         keys:
           - key: i
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: OpenMobiGlass
         keys:
           - key: f1
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: OpenStarMap
         keys:
           - key: f2
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: IncreasePowerToShields
         keys:
           - key: f6
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: IncreasePowerToEngines
         keys:
           - key: f5
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: IncreasePowerToGuns
         keys:
           - key: f7
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: Lock
         keys:
           - key: f8
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: Unlock
         keys:
           - key: f8
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ResetPowerPriority
         keys:
           - key: f8
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: MiningMode
         keys:
           - key: m
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: CycleCamera
         keys:
           - key: f4
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: SideArm
         keys:
           - key: "1"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: PrimaryWeapon
         keys:
           - key: "2"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: SecondaryWeapon
         keys:
           - key: "3"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: HolsterWeapon
         keys:
           - key: r
             hold: 0.8
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: Reload
         keys:
           - key: r
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: UseMedPen
         keys:
           - key: c
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: UseFlashLight
         keys:
           - key: t
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: OpenInventory
         keys:
           - key: i
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: DeployDecoy
         keys:
           - key: h
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: DeployNoise
         keys:
           - key: j
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ShieldRaiseBack
         keys:
           - key: "2"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ShieldRaiseLeft
         keys:
           - key: "4"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ResetShields
         keys:
           - key: "5"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ShieldRaiseRight
         keys:
           - key: "6"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ShieldRaiseTop
         keys:
           - key: "7"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ShieldRaiseFront
         keys:
           - key: "8"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ShieldRaiseBottom
         keys:
           - key: "9"
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: EmergencyEject
         keys:
           - key: y
             modifier: altright
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: SelfDestruct
         keys:
           - key: backspace
             hold: 0.8
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: SalvageMode
         keys:
           - key: g
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: SpaceBrake
         keys:
           - key: x
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: ExitSeat
         keys:
           - key: y
             hold: 0.8
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: CycleGimbalAssist
         keys:
           - key: g
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: RequestLandingPermission
         keys:
           - key: n
             modifier: alt
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: RequestDeparture
         keys:
           - key: n
@@ -403,20 +419,22 @@ wingmen:
       #- name: MyNewCommand
       #  keys:
       #    - key: x
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       #
 
-  # ─────────────────────────────────────── ATC ────────────────────────────────────────
-  # "atc" is another default wingman like "board-computer" above.
-  # We wanted to show you how you can override the global settings for a specific wingman
-  # and that you can have multiple wingmen defined in your config.
-  #
+  # ──────────────────────────── ATC ─────────────────────────────────
+  # "atc" is another default OpenAI wingman with a very different context and its own commands.
   atc:
+    record_key: delete
+
     sound:
       effects:
         - RADIO
       play_beep: True
+
     openai:
+      tts_voice: onyx # overrides the GLOBAL setting
+
       context: |
         You are an advanced AI embodying an Air Traffic Controller (ATC) at a bustling space station in the Star Citizen universe. Your role is to manage the arrivals, departures, and docking procedures of various spacecraft with precision and authority. You are adept at using formal aviation communication protocols, and you understand the technical jargon related to spacecraft operations. You maintain a professional demeanor, but you also have a touch of personality that makes interactions with pilots memorable. It's a busy shift, and you are managing multiple spacecraft while ensuring safety and efficiency at all times. Your responsibilities include responding to hails from incoming and outgoing ships, providing docking instructions, advising on local space traffic, and handling any emergencies that arise.
         Your communication should reflect an understanding of the following:
@@ -429,51 +447,50 @@ wingmen:
         - Emergency protocols for unexpected events like piracy, system failures, or distress signals.
         Always answer as quick as possible. No more than 1-2 sentences per response.
         Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
-      tts_voice: onyx # overrides the GLOBAL setting
-    record_key: delete
+
     commands:
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: RequestLandingPermission
         keys:
           - key: n
             modifier: alt
-      # ──────────────────────────────────────────────────────────────────────────
+      # ───────────────────────────────────────────
       - name: RequestDeparture
         keys:
           - key: n
             modifier: alt
-      # ───────────────────────── HOW TO INSERT NEW COMMANDS: ───────────────────────────
-      #   - Please make sure the indentation aligns with the commands above perfectly.
-      #   - Use a single "TAB" character for indentation. No spaces!
-      #   - Always put a "-" sign in front of the "name" of each new command.
-      #   - available keys are here: https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
-      #       - F1, F2 etc. are case-sensitive and lowercase, so use "f1" instead of "F1".
-      #       - If you use number keys, make sure to put them in quotes like "1" or "2".
-      #
-      # ───────────────────────INSERT YOUR NEW COMMANDS HERE:────────────────────────────
-      #- name: MyNewCommand
-      #  keys:
-      #    - key: x
-      # ──────────────────────────────────────────────────────────────────────────
 
-  # ──────────────────────────────── Star-Head ──────────────────────────────────────
-  # "star-head" is a full-custom wingman with its own Python code, see /wingmen/star_head_wingman.py.
-  # It uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
-  # If it's missing any of these parameters, it will ask the user for them.
+  # ──────────────────────────── StarHead ─────────────────────────────────
+  # "star-head" is a "Custom Wingman" with its own Python code (see /wingmen/star_head_wingman.py).
+  # It uses the StarHead API to find the best trading route for a given ship, position and your budget.
+  # If it's missing any of these parameters, it will ask you for them.
   star-head:
     record_key: up
-    starhead_api_url: https://api-test.star-head.de # note how you can just add your own config options here!
-    features:
-      tts_provider: edge_tts
-    edge_tts:
-      detect_language: true
+
+    # For devs - This is how you plug in your own wingman:
     class:
       # Where your code is located. Use '.' as path separator!
       # We advise you to put all your custom wingmen into the /wingmen directory.
       # "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).
       module: wingmen.star_head_wingman
-      name: StarHeadWingman # The name of your class within your file/module.
+      # The name of your class within your file/module.
+      name: StarHeadWingman
+
+    # A custom config entry that Wingman requires. Validate it in your code in the validate() method.
+    # Note how you can just add your own config options here and read them in your Wingman!
+    # Do not put API keys or other sensitive data here! Use the secret_keeper class for that.
+    starhead_api_url: https://api-test.star-head.de
+
+    features:
+      tts_provider: edge_tts
+
+    edge_tts:
+      detect_language: true
+
     openai:
+      # gpt-3.5 is not capable enough for multi-param function calls.
+      conversation_model: gpt-4-1106-preview
+
       context: |
         You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
         permission. You are the ship's computer, and you are in charge of all the ship's systems.
@@ -489,4 +506,3 @@ wingmen:
         provide values / parameters. Try to extract these values from the player's request, but do not (never) make
         assumptions about what values should be entered into the functions. Ask for clarification if you do not know
         the values. Always answer in the language in which the question was asked.
-      conversation_model: gpt-4-1106-preview
