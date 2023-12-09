@@ -180,7 +180,7 @@ class OpenAiWingman(Wingman):
             "remember_messages", None
         )
 
-        if remember_messages is None:
+        if remember_messages is None or len(self.messages) == 0:
             return 0  # Configuration not set, nothing to delete.
 
         # The system message aka `context` does not count
@@ -188,15 +188,19 @@ class OpenAiWingman(Wingman):
             1 if self.messages and self.messages[0]["role"] == "system" else 0
         )
 
-        # Find the cutoff index where to begin deletion, making sure to only count 'user' messages towards the limit.
-        cutoff_index = context_offset
+        # Find the cutoff index where to end deletion, making sure to only count 'user' messages towards the limit starting with newest messages.
+        cutoff_index = len(self.messages) - 1
         user_message_count = 0
-        for message in self.messages[context_offset:]:
+        for message in reversed(self.messages):
             if self.__get_message_role(message) == "user":
                 user_message_count += 1
-                if user_message_count > remember_messages:
+                if user_message_count == remember_messages:
                     break  # Found the cutoff point.
-            cutoff_index += 1
+            cutoff_index -= 1
+
+        # If messages below the keep limit, don't delete anything.
+        if user_message_count < remember_messages:
+            return 0
 
         total_deleted_messages = cutoff_index - context_offset  # Messages to delete.
 
