@@ -1,4 +1,5 @@
 import json
+from typing import Mapping
 from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
 from services.open_ai import OpenAi
 from services.edge import EdgeTTS
@@ -175,33 +176,45 @@ class OpenAiWingman(Wingman):
 
     def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
-        remember_messages = self.config["features"].get("remember_messages", None)
+        remember_messages = self.config.get("features", {}).get(
+            "remember_messages", None
+        )
 
-        if remember_messages is None:
-            return
+        if remember_messages is None or len(self.messages) == 0:
+            return 0  # Configuration not set, nothing to delete.
 
-        # Calculate the max number of messages to keep including the initial system message
-        # `remember_messages * 2` pairs plus one system message.
-        max_messages = (remember_messages * 2) + 1
+        # The system message aka `context` does not count
+        context_offset = (
+            1 if self.messages and self.messages[0]["role"] == "system" else 0
+        )
 
-        # every "AI interaction" is a pair of 2 messages: "user" and "assistant" or "tools"
-        deleted_pairs = 0
+        # Find the cutoff index where to end deletion, making sure to only count 'user' messages towards the limit starting with newest messages.
+        cutoff_index = len(self.messages) - 1
+        user_message_count = 0
+        for message in reversed(self.messages):
+            if self.__get_message_role(message) == "user":
+                user_message_count += 1
+                if user_message_count == remember_messages:
+                    break  # Found the cutoff point.
+            cutoff_index -= 1
 
-        while len(self.messages) > max_messages:
-            if remember_messages == 0:
-                # Calculate pairs to be deleted, excluding the system message.
-                deleted_pairs += (len(self.messages) - 1) // 2
-                self.reset_conversation_history()
-            else:
-                while len(self.messages) > max_messages:
-                    del self.messages[1:3]
-                    deleted_pairs += 1
+        # If messages below the keep limit, don't delete anything.
+        if user_message_count < remember_messages:
+            return 0
 
-        if self.debug and deleted_pairs > 0:
+        total_deleted_messages = cutoff_index - context_offset  # Messages to delete.
+
+        # Remove the messages before the cutoff index, exclusive of the system message.
+        del self.messages[context_offset:cutoff_index]
+
+        # Optional debugging printout.
+        if self.debug and total_deleted_messages > 0:
             printr.print(
-                f"   Deleted {deleted_pairs} pairs of messages from the conversation history.",
+                f"Deleted {total_deleted_messages} messages from the conversation history.",
                 tags="warn",
             )
+
+        return total_deleted_messages
 
     def reset_conversation_history(self):
         """Resets the conversation history by removing all messages except for the initial system message."""
@@ -230,7 +243,7 @@ class OpenAiWingman(Wingman):
         """
         if self.debug:
             printr.print(
-                f"   Calling GPT with {(len(self.messages) - 1) // 2} message pairs (excluding context)",
+                f"   Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
                 tags="info",
             )
         return self.openai.ask(
@@ -512,3 +525,14 @@ class OpenAiWingman(Wingman):
             f"   ChatGPT says this language maps to locale '{answer}'.", tags="info"
         )
         return answer
+
+    def __get_message_role(self, message):
+        """Helper method to get the role of the message regardless of its type."""
+        if isinstance(message, Mapping):
+            return message.get("role")
+        elif hasattr(message, "role"):
+            return message.role
+        else:
+            raise TypeError(
+                f"Message is neither a mapping nor has a 'role' attribute: {message}"
+            )
