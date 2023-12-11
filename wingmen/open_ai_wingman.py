@@ -1,7 +1,7 @@
 import json
 from typing import Mapping
 from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
-from services.open_ai import OpenAi
+from services.open_ai import AzureConfig, OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -102,8 +102,31 @@ class OpenAiWingman(Wingman):
             if self.tts_provider == "edge_tts" and detect_language
             else "json"
         )
+
+        azure_config = None
+        stt_provider = self.config.get("features", {}).get("stt_provider", None)
+        if stt_provider == "azure":
+            azure_api_key = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_whisper",
+                friendly_key_name="Azure API key for whisper",
+                prompt_if_missing=True,
+            )
+            azure_config = AzureConfig(
+                api_key=azure_api_key,
+                api_base_url=self.config["azure"]
+                .get("whisper", {})
+                .get("api_base_url", None),
+                api_version=self.config["azure"]
+                .get("whisper", {})
+                .get("api_version", None),
+                deployment_name=self.config["azure"]
+                .get("whisper", {})
+                .get("deployment_name", None),
+            )
+
         transcript = self.openai.transcribe(
-            audio_input_wav, response_format=response_format
+            audio_input_wav, response_format=response_format, azure_config=azure_config
         )
 
         locale = None
