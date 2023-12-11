@@ -280,7 +280,7 @@ class OpenAiWingman(Wingman):
             )
 
         azure_config = None
-        if self.stt_provider == "azure":
+        if self.conversation_provider == "azure":
             azure_config = self._get_azure_config("conversation")
 
         return self.openai.ask(
@@ -342,7 +342,7 @@ class OpenAiWingman(Wingman):
             The content of the GPT response to the function call summaries.
         """
         azure_config = None
-        if self.stt_provider == "azure":
+        if self.summarize_provider == "azure":
             azure_config = self._get_azure_config("summarize")
 
         summarize_model = self.config["openai"].get("summarize_model")
