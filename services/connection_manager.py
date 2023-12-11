@@ -68,9 +68,13 @@ class ConnectionManager:
         await self._broadcast("log", data)
 
     async def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-        await websocket.close()
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+            try:
+                await websocket.close()
+            except RuntimeError:
+                pass  # already closed, e.g. if the client closed the browser tab
 
-
-# How to use the ConnectionManager as a singleton:
-# connection_manager = ConnectionManager()
+    async def shutdown(self):
+        for websocket in self.active_connections[:]:
+            await self.disconnect(websocket)

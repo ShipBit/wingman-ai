@@ -12,8 +12,8 @@ from services.printr import Printr
 from services.version_check import VersionCheck
 from wingman_core import WingmanCore
 
-
 connection_manager = ConnectionManager()
+
 
 printr = Printr()
 Printr.set_ws_manager(connection_manager)
@@ -35,14 +35,16 @@ listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # before the server STARTS
+    # executed before the application starts
     await core.load_context()
     core.activate()
-
     listener.start()
     listener.wait()
+
     yield
-    # before the server STOPS
+
+    # executed after the application has finished
+    await connection_manager.shutdown()
     listener.stop()
 
 
@@ -86,7 +88,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 secret_keeper.secrets[secret_name] = secret_value
                 secret_keeper.save()
                 printr.print(f"Secret '{secret_name}' saved", toast=ToastType.NORMAL)
-
     except WebSocketDisconnect:
         await connection_manager.disconnect(websocket)
         printr.print("Client disconnected", server_only=True)
