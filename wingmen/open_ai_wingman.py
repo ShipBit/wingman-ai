@@ -300,6 +300,11 @@ class OpenAiWingman(Wingman):
             A tuple containing the message response and tool calls from the completion.
         """
         response_message = completion.choices[0].message
+
+        content = response_message.content
+        if content is None:
+            response_message.content = ""
+
         return response_message, response_message.tool_calls
 
     async def _handle_tool_calls(self, tool_calls):
