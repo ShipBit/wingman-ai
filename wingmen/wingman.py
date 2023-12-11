@@ -1,3 +1,4 @@
+import platform
 import random
 import time
 from difflib import SequenceMatcher
@@ -8,17 +9,16 @@ from services.printr import Printr
 from services.enums import LogSource, LogType
 from services.secret_keeper import SecretKeeper
 
-# see execute_keypress() method
 printr = Printr()
-try:
+
+if platform.system() == "Windows":
     import pydirectinput as key_module
-except AttributeError:
-    # TODO: Instead of creating a banner make this an icon in the header
-    # printr.print_warn(
-    #     "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
-    #     wait_for_gui=True
-    # )
+else:
     import pyautogui as key_module
+
+    printr.toast_warning(
+        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
+    )
 
 
 class Wingman:
@@ -62,7 +62,6 @@ class Wingman:
         class_name: str,
         name: str,
         config: dict[str, Any],
-        secret_keeper: SecretKeeper,
         **kwargs,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
@@ -76,7 +75,7 @@ class Wingman:
 
         module = import_module(module_path)
         DerivedWingmanClass = getattr(module, class_name)
-        instance = DerivedWingmanClass(name, config, secret_keeper, **kwargs)
+        instance = DerivedWingmanClass(name, config, **kwargs)
         return instance
 
     def get_record_key(self) -> str:

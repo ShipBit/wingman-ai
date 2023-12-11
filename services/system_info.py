@@ -1,3 +1,4 @@
+import platform
 from fastapi import APIRouter
 import requests
 from packaging import version
@@ -9,10 +10,10 @@ VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
 printr = Printr()
 
 
-class VersionCheck:
+class SystemInfo:
     def __init__(self):
         self.router = APIRouter()
-        self.router.add_api_route("/version", self.get_version, methods=["GET"])
+        self.router.add_api_route("/system-info", self.get_system_info, methods=["GET"])
 
         self.latest_version = version.parse("0.0.0")
         self.local_version = version.parse(LOCAL_VERSION)
@@ -49,9 +50,15 @@ class VersionCheck:
     def get_latest_version(self, as_string=True) -> str | version.Version:
         return str(self.latest_version) if as_string else self.latest_version
 
-    # GET /version
-    def get_version(self):
+    # GET /system-info
+    def get_system_info(self):
+        printr.print("Checking for updates...", server_only=True)
+        is_latest = self.check_version()
         return {
-            "client": LOCAL_VERSION,
-            "is_latest": self.current_version_is_latest(),
+            "os": platform.system(),
+            "core": {
+                "version": LOCAL_VERSION,
+                "latest": self.latest_version,
+                "isLatest": is_latest,
+            },
         }

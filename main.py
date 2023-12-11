@@ -9,7 +9,7 @@ from services.connection_manager import ConnectionManager
 from services.enums import ToastType
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
-from services.version_check import VersionCheck
+from services.system_info import SystemInfo
 from wingman_core import WingmanCore
 
 connection_manager = ConnectionManager()
@@ -22,7 +22,7 @@ app_root_dir = path.abspath(path.dirname(__file__))
 secret_keeper = SecretKeeper(app_root_dir)
 SecretKeeper.set_ws_manager(connection_manager)
 
-version_check = VersionCheck()
+version_check = SystemInfo()
 is_latest = version_check.check_version()
 
 # uses the Singletons above, so don't move this up!
