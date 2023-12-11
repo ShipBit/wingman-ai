@@ -22,6 +22,21 @@ features:
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
   tts_provider: openai # available: openai, edge_tts, elevenlabs
 
+  # ─────────────────────── Speech to text Provider ─────────────────────────
+  # You can override the speech to text provider to use a different one than the default.
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  stt_provider: openai # available: openai, azure
+
+  # ─────────────────────── Conversation Provider ─────────────────────────
+  # You can override the conversation provider to use a different one than the default.
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  conversation_provider: openai # available: openai, azure
+
+  # ─────────────────────── Summarize Provider ─────────────────────────
+  # You can override the summarize provider to use a different one than the default.
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  summarize_provider: openai # available: openai, azure
+
   # ─────────────────────── Cost Control ─────────────────────────
   # How many messages should a Wingman remember in your conversations?
   # "0" means you start fresh with just the context after every message. This is like restarting Wingman after every interaction.
@@ -110,6 +125,24 @@ elevenlabs:
     similarity_boost: 0.5 # 0.0 - 1.0
     style: 0.0 # 0.0 - 1.0, not available for eleven_turbo_v2
     use_speaker_boost: true # true or false
+
+# ────────────────────────────────── AZURE ────────────────────────────────────
+# Azure is a paid subscription provider from Microsoft which also offers OpenAI API access.
+# If you configured some providers above to use Azure, you need to provide your Azure settings here.
+# Please also provide your Azure API keys in the secrets.yaml.
+azure:
+  whisper:
+    api_base_url: xxx # https://xxx.openai.azure.com/
+    api_version: 2023-09-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
+    deployment_name: xxx # The deployment name e.g. 'whisper'
+  conversation:
+    api_base_url: xxx # https://xxx.openai.azure.com/
+    api_version: 2023-09-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
+    deployment_name: xxx # The deployment name e.g. 'whisper'
+  summarize:
+    api_base_url: xxx # https://xxx.openai.azure.com/
+    api_version: 2023-09-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
+    deployment_name: xxx # The deployment name e.g. 'whisper'
 
 # ────────────────────────────── GLOBAL COMMANDS ───────────────────────────────
 # You can use these in all wingmen and you can put your own here, too.

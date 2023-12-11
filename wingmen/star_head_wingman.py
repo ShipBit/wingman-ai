@@ -136,7 +136,13 @@ class StarHeadWingman(OpenAiWingman):
         """
 
         cargo, qd = self._get_ship_details(ship)
+        if not cargo or not qd:
+            return f"Could not find ship '{ship}' in the StarHead database."
+
         celestial_object_id = self._get_celestial_object_id(position)
+        if not celestial_object_id:
+            return f"Could not find celestial object '{position}' in the StarHead database."
+
         data = {
             "startCelestialObjectId": celestial_object_id,
             "quantumDriveId": qd["id"] if qd else None,
