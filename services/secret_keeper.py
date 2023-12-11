@@ -28,10 +28,17 @@ class SecretKeeper(WebSocketUser):
             cls._instance.printr = Printr()
             cls._instance.router = APIRouter()
             cls._instance.router.add_api_route(
-                "/secrets", cls._instance.get_secrets, methods=["GET"]
+                methods=["GET"],
+                path="/secrets",
+                endpoint=cls._instance.get_secrets,
+                response_model=dict[str, Any],
+                tags=["secret"],
             )
             cls._instance.router.add_api_route(
-                "/secrets", cls._instance.post_secrets, methods=["POST"]
+                methods=["POST"],
+                path="/secrets",
+                endpoint=cls._instance.post_secrets,
+                tags=["secret"],
             )
 
             if app_root_path is None:
@@ -85,10 +92,10 @@ class SecretKeeper(WebSocketUser):
 
     # GET /secrets
     def get_secrets(self):
-        return {"secrets": self.secrets}
+        return self.secrets
 
     # POST /secrets
-    def post_secrets(self, secrets: Dict[str, Any]):
+    def post_secrets(self, secrets: dict[str, Any]):
         self.secrets = secrets
         self.save()
         self.printr.print(

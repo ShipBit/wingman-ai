@@ -1,6 +1,7 @@
 import asyncio
 import threading
 from fastapi import APIRouter
+from api.interface import ContextInfo
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
@@ -13,8 +14,20 @@ printr = Printr()
 class WingmanCore:
     def __init__(self, app_is_bundled: bool, app_root_dir: str):
         self.router = APIRouter()
-        self.router.add_api_route("/contexts", self.get_contexts, methods=["GET"])
-        self.router.add_api_route("/config/", self.get_config, methods=["GET"])
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/contexts",
+            endpoint=self.get_contexts,
+            response_model=ContextInfo,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/config/",
+            endpoint=self.get_config,
+            response_model=None,
+            tags=["core"],
+        )
 
         self.active = False
         self.active_recording = {"key": "", "wingman": None}
@@ -75,11 +88,11 @@ class WingmanCore:
 
     # GET /contexts
     def get_contexts(self):
-        return {
-            "contexts": self.config_manager.contexts,
-            "currentContext": self.current_context,
-        }
+        return ContextInfo(
+            contexts=self.config_manager.contexts,
+            currentContext=self.current_context,
+        )
 
     # GET /config
-    def get_config(self, context: str = None):
-        return {"config": self.config_manager.get_context_config(context or "")}
+    def get_config(self, context: str = None) -> dict[str, any]:
+        return self.config_manager.get_context_config(context or "")
