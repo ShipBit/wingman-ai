@@ -1,89 +1,96 @@
 from os import path
 import sys
-import asyncio
-import threading
+from contextlib import asynccontextmanager
+import uvicorn
 from pynput import keyboard
-from services.audio_recorder import AudioRecorder
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from services.connection_manager import ConnectionManager
+from services.enums import ToastType
 from services.secret_keeper import SecretKeeper
-from services.tower import Tower
 from services.printr import Printr
-from services.config_manager import ConfigManager
-from gui.root import WingmanUI
-from wingmen.wingman import Wingman
+from services.version_check import VersionCheck
+from wingman_core import WingmanCore
+
+
+connection_manager = ConnectionManager()
 
 printr = Printr()
+Printr.set_ws_manager(connection_manager)
+
+app_root_dir = path.abspath(path.dirname(__file__))
+secret_keeper = SecretKeeper(app_root_dir)
+SecretKeeper.set_ws_manager(connection_manager)
+
+version_check = VersionCheck()
+is_latest = version_check.check_version()
+
+# uses the Singletons above, so don't move this up!
+core = WingmanCore(
+    app_root_dir=app_root_dir,
+    app_is_bundled=getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"),
+)
+listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
 
 
-class WingmanAI:
-    def __init__(self):
-        self.active = False
-        self.active_recording = {"key": "", "wingman": None}
-        self.tower = None
-        self.audio_recorder = AudioRecorder()
-        self.app_is_bundled = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
-        self.app_root_dir = path.abspath(path.dirname(__file__))
-        self.config_manager = ConfigManager(self.app_root_dir, self.app_is_bundled)
-        self.secret_keeper = SecretKeeper(self.app_root_dir)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # before the server STARTS
+    await core.load_context()
+    core.activate()
 
-    def load_context(self, context=""):
-        self.active = False
-        try:
-            if self.config_manager:
-                config = self.config_manager.get_context_config(context)
-                self.tower = Tower(config, self.secret_keeper)
-
-        except FileNotFoundError:
-            printr.print_err(f"Could not find context.{context}.yaml", True)
-        except Exception as e:
-            # Everything else...
-            printr.print_err(str(e), True)
-
-    def activate(self):
-        if self.tower:
-            self.active = True
-
-    def deactivate(self):
-        self.active = False
-
-    def on_press(self, key):
-        if self.active and self.tower and self.active_recording["key"] == "":
-            wingman = self.tower.get_wingman_from_key(key)
-            if wingman:
-                self.active_recording = dict(key=key, wingman=wingman)
-                self.audio_recorder.start_recording()
-
-    def on_release(self, key):
-        if self.active and self.active_recording["key"] == key:
-            wingman = self.active_recording["wingman"]
-            recorded_audio_wav = self.audio_recorder.stop_recording()
-            self.active_recording = dict(key="", wingman=None)
-
-            def run_async_process():
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    if isinstance(wingman, Wingman):
-                        loop.run_until_complete(
-                            wingman.process(str(recorded_audio_wav))
-                        )
-                finally:
-                    loop.close()
-
-            if recorded_audio_wav:
-                play_thread = threading.Thread(target=run_async_process)
-                play_thread.start()
-
-
-# ─────────────────────────────────── ↓ START ↓ ─────────────────────────────────────────
-if __name__ == "__main__":
-    core = WingmanAI()
-
-    # NOTE this is the only possibility to use `pynput` and `tkinter` in parallel
-    listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
     listener.start()
     listener.wait()
-
-    ui = WingmanUI(core)
-    ui.mainloop()
-
+    yield
+    # before the server STOPS
     listener.stop()
+
+
+app = FastAPI(lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# if a class adds GET/POST endpoints, add them here:
+app.include_router(core.router)
+app.include_router(version_check.router)
+app.include_router(secret_keeper.router)
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await connection_manager.connect(websocket)
+    try:
+        while True:
+            command = await websocket.receive_text()
+            printr.print(command, server_only=True)
+            command_parts = command.split("::")
+            command_name = command_parts[0]
+            command_params = command_parts[1:]
+
+            if command_name == "client_ready":
+                await connection_manager.client_ready(websocket)
+            elif command_name == "change_context":
+                context = command_params[0]
+                await core.load_context(context)
+                core.activate()
+                printr.print(
+                    f"Loaded context: {context or 'default'}", toast=ToastType.NORMAL
+                )
+            elif command_name == "secret":
+                secret_name = command_params[0]
+                secret_value = command_params[1]
+                secret_keeper.secrets[secret_name] = secret_value
+                secret_keeper.save()
+                printr.print(f"Secret '{secret_name}' saved", toast=ToastType.NORMAL)
+
+    except WebSocketDisconnect:
+        await connection_manager.disconnect(websocket)
+        printr.print("Client disconnected", server_only=True)
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)

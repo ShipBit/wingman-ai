@@ -2,25 +2,20 @@ from exceptions import MissingApiKeyException
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.printr import Printr
-from services.secret_keeper import SecretKeeper
 
 
 printr = Printr()
 
 
 class Tower:
-    def __init__(self, config: dict[str, any], secret_keeper: SecretKeeper):  # type: ignore
+    def __init__(self, config: dict[str, any]):
         self.config = config
-        self.secret_keeper = secret_keeper
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.broken_wingmen = []
-
-        self.wingmen = self.__instantiate_wingmen()
+        self.wingmen: list[Wingman] = []
         self.key_wingman_dict: dict[str, Wingman] = {}
-        for wingman in self.wingmen:
-            self.key_wingman_dict[wingman.get_record_key()] = wingman
 
-    def __instantiate_wingmen(self) -> list[Wingman]:
+    async def instantiate_wingmen(self):
         wingmen = []
         for wingman_name, wingman_config in self.config["wingmen"].items():
             if wingman_config.get("disabled") is True:
@@ -46,15 +41,12 @@ class Tower:
                     wingman = Wingman.create_dynamically(
                         name=wingman_name,
                         config=merged_config,
-                        secret_keeper=self.secret_keeper,
                         module_path=class_config.get("module"),
                         class_name=class_config.get("name"),
                         **kwargs
                     )
                 else:
-                    wingman = OpenAiWingman(
-                        wingman_name, merged_config, self.secret_keeper
-                    )
+                    wingman = OpenAiWingman(wingman_name, merged_config)
             except MissingApiKeyException:
                 self.broken_wingmen.append(
                     {
@@ -70,7 +62,7 @@ class Tower:
                 self.broken_wingmen.append({"name": wingman_name, "error": msg})
             else:
                 # additional validation check if no exception was raised
-                errors = wingman.validate()
+                errors = await wingman.validate()
                 if not errors or len(errors) == 0:
                     wingman.prepare()
                     wingmen.append(wingman)
@@ -79,7 +71,10 @@ class Tower:
                         {"name": wingman_name, "error": ", ".join(errors)}
                     )
 
-        return wingmen
+        for wingman in wingmen:
+            self.key_wingman_dict[wingman.get_record_key()] = wingman
+
+        self.wingmen = wingmen
 
     def get_wingman_from_key(self, key: any) -> Wingman | None:  # type: ignore
         if hasattr(key, "char"):

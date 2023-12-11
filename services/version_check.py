@@ -1,3 +1,4 @@
+from fastapi import APIRouter
 import requests
 from packaging import version
 from services.printr import Printr
@@ -9,17 +10,13 @@ printr = Printr()
 
 
 class VersionCheck:
-    _instance = None
+    def __init__(self):
+        self.router = APIRouter()
+        self.router.add_api_route("/version", self.get_version, methods=["GET"])
 
-    # NOTE this is a singleton class
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(VersionCheck, cls).__new__(cls)
-
-            cls.latest_version = version.parse("0.0.0")
-            cls.local_version = version.parse(LOCAL_VERSION)
-            cls._instance.check_version()
-            return cls._instance
+        self.latest_version = version.parse("0.0.0")
+        self.local_version = version.parse(LOCAL_VERSION)
+        self.check_version()
 
     def check_version(self):
         try:
@@ -36,13 +33,11 @@ class VersionCheck:
             return app_version >= remote_version
 
         except requests.RequestException:
-            # msg = str(e)
             msg = "Could not reach version endpoint."
-            printr.print_warn(f"Error fetching version information: \n{msg}")
-            # printr.print_warn(f"Error fetching version information: \n{e}")
+            printr.toast_warning(f"Error fetching version information: \n{msg}")
             return False
         except ValueError as e:
-            printr.print_warn(f"Error with version information: {e}")
+            printr.toast_warning(f"Error with version information: {e}")
             return False
 
     def current_version_is_latest(self):
@@ -53,3 +48,10 @@ class VersionCheck:
 
     def get_latest_version(self, as_string=True) -> str | version.Version:
         return str(self.latest_version) if as_string else self.latest_version
+
+    # GET /version
+    def get_version(self):
+        return {
+            "client": LOCAL_VERSION,
+            "is_latest": self.current_version_is_latest(),
+        }

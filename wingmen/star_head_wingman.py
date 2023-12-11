@@ -2,7 +2,7 @@ from typing import Optional
 import json
 import requests
 from services.printr import Printr
-from services.secret_keeper import SecretKeeper
+from services.enums import LogType
 from wingmen.open_ai_wingman import OpenAiWingman
 
 printr = Printr()
@@ -13,10 +13,8 @@ class StarHeadWingman(OpenAiWingman):
     If it's missing any of these parameters, it will ask the user for them.
     """
 
-    def __init__(
-        self, name: str, config: dict[str, any], secret_keeper: SecretKeeper
-    ) -> None:
-        super().__init__(name, config, secret_keeper)
+    def __init__(self, name: str, config: dict[str, any]) -> None:
+        super().__init__(name, config)
         # config entry existence not validated yet. Assign later when checked!
         self.star_head_url = ""
         """The base URL of the StarHead API"""
@@ -33,9 +31,9 @@ class StarHeadWingman(OpenAiWingman):
         self.celestial_object_names = []
         self.quantum_drives = []
 
-    def validate(self):
+    async def validate(self):
         # collect errors from the base class (if any)
-        errors: list[str] = super().validate()
+        errors: list[str] = await super().validate()
 
         # add custom errors
         if not self.config.get("starhead_api_url"):
@@ -69,7 +67,7 @@ class StarHeadWingman(OpenAiWingman):
         url = f"{self.star_head_url}/{endpoint}"
 
         if self.debug:
-            printr.print(f"Retrieving {url}", tags="info")
+            printr.print(f"Retrieving {url}", color=LogType.INFO)
 
         response = requests.get(
             url, params=params, timeout=self.timeout, headers=self.headers
@@ -217,6 +215,6 @@ class StarHeadWingman(OpenAiWingman):
             except requests.HTTPError:
                 printr.print(
                     f"Failed to fetch loadout data for ship with ID: {ship_id}",
-                    tags="err",
+                    color=LogType.ERROR,
                 )
         return None

@@ -5,7 +5,7 @@ from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
 from services.open_ai import AzureConfig, OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
-from services.secret_keeper import SecretKeeper
+from services.enums import LogType
 from wingmen.wingman import Wingman
 
 printr = Printr()
@@ -17,8 +17,8 @@ class OpenAiWingman(Wingman):
     It transcribes speech to text using Whisper, uses the Completion API for conversation and implements the Tools API to execute functions.
     """
 
-    def __init__(self, name: str, config: dict[str, any], secret_keeper: SecretKeeper):
-        super().__init__(name, config, secret_keeper)
+    def __init__(self, name: str, config: dict[str, any]):
+        super().__init__(name, config)
 
         self.openai: OpenAi = None  # validate will set this
         """Our OpenAI API wrapper"""
@@ -46,12 +46,11 @@ class OpenAiWingman(Wingman):
             "summarize_provider", None
         )
 
-    def validate(self):
-        errors = super().validate()
-        openai_api_key = self.secret_keeper.retrieve(
+    async def validate(self):
+        errors = await super().validate()
+        openai_api_key = await self.secret_keeper.retrieve(
             requester=self.name,
             key="openai",
-            friendly_key_name="OpenAI API key",
             prompt_if_missing=True,
         )
         if not openai_api_key:
@@ -63,18 +62,17 @@ class OpenAiWingman(Wingman):
             openai_base_url = self.config["openai"].get("base_url")
             self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
 
-        self.__validate_elevenlabs_config(errors)
+        await self.__validate_elevenlabs_config(errors)
 
         self.__validate_azure_config(errors)
 
         return errors
 
-    def __validate_elevenlabs_config(self, errors):
+    async def __validate_elevenlabs_config(self, errors):
         if self.tts_provider == "elevenlabs":
-            self.elevenlabs_api_key = self.secret_keeper.retrieve(
+            self.elevenlabs_api_key = await self.secret_keeper.retrieve(
                 requester=self.name,
                 key="elevenlabs",
-                friendly_key_name="Elevenlabs API key",
                 prompt_if_missing=True,
             )
             if not self.elevenlabs_api_key:
@@ -201,7 +199,7 @@ class OpenAiWingman(Wingman):
             and transcript.language != self.last_transcript_locale  # type: ignore
         ):
             printr.print(
-                f"   EdgeTTS detected language '{transcript.language}'.", tags="info"  # type: ignore
+                f"   EdgeTTS detected language '{transcript.language}'.", color=LogType.INFO  # type: ignore
             )
             locale = self.__ask_gpt_for_locale(transcript.language)  # type: ignore
 
@@ -313,7 +311,7 @@ class OpenAiWingman(Wingman):
         if self.debug and total_deleted_messages > 0:
             printr.print(
                 f"Deleted {total_deleted_messages} messages from the conversation history.",
-                tags="warn",
+                color=LogType.WARNING,
             )
 
         return total_deleted_messages
@@ -346,7 +344,7 @@ class OpenAiWingman(Wingman):
         if self.debug:
             printr.print(
                 f"   Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
-                tags="info",
+                color=LogType.INFO,
             )
 
         azure_config = None
@@ -671,7 +669,8 @@ class OpenAiWingman(Wingman):
             return None
 
         printr.print(
-            f"   ChatGPT says this language maps to locale '{answer}'.", tags="info"
+            f"   ChatGPT says this language maps to locale '{answer}'.",
+            color=LogType.INFO,
         )
         return answer
 

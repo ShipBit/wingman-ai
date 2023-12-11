@@ -1,5 +1,6 @@
 import random
 from edge_tts import Communicate, VoicesManager
+from services.enums import LogType
 from services.printr import Printr
 
 printr = Printr()
@@ -51,6 +52,8 @@ class EdgeTTS:
         )
         self.random_voices[locale] = random_voice
 
-        printr.print(f"   Your random EdgeTTS voice: '{random_voice}'.", tags="info")
+        printr.print(
+            f"   Your random EdgeTTS voice: '{random_voice}'.", color=LogType.INFO
+        )
 
         return random_voice

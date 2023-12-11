@@ -1,67 +1,96 @@
 import os
+from typing import Dict, Any
 import yaml
-import customtkinter as ctk
+from fastapi import APIRouter
+from services.enums import LogType, ToastType
+from services.websocket_user import WebSocketUser
 from services.printr import Printr
 
 SYSTEM_CONFIG_PATH = "configs/system"
 SECRETS_FILE = "secrets.yaml"
 
 
-class SecretKeeper:
-    def __init__(self, app_root_path: str):
-        self.printr = Printr()
-        self.system_config_path: str = os.path.join(app_root_path, SYSTEM_CONFIG_PATH)
-        self.config_file = os.path.join(self.system_config_path, SECRETS_FILE)
-        self.secrets = self.__load()
-        if not self.secrets:
-            self.secrets = {}
+class SecretKeeper(WebSocketUser):
+    """Singleton"""
 
-    def __load(self) -> dict[str, any]:  # type: ignore
-        parsed_config = None
+    _ws_manager = None
+    _instance = None
+    printr: Printr
+    router: APIRouter
+    config_file: str
+    secrets: Dict[str, Any]
+    prompted_secrets: list[str] = []
 
-        if os.path.exists(self.config_file) and os.path.isfile(self.config_file):
-            with open(self.config_file, "r", encoding="UTF-8") as stream:
-                try:
-                    parsed_config = yaml.safe_load(stream)
-                except yaml.YAMLError as e:
-                    self.printr.print_err(
-                        f"Could not load ({SECRETS_FILE})\n{str(e)}", True
-                    )
+    def __new__(cls, app_root_path: str = None):
+        if cls._instance is None:
+            cls._instance = super(SecretKeeper, cls).__new__(cls)
 
-        return parsed_config
+            cls._instance.printr = Printr()
+            cls._instance.router = APIRouter()
+            cls._instance.router.add_api_route(
+                "/secrets", cls._instance.get_secrets, methods=["GET"]
+            )
+            cls._instance.router.add_api_route(
+                "/secrets", cls._instance.post_secrets, methods=["POST"]
+            )
 
-    def save(self):
-        """Write all secrets to the file"""
-        with open(self.config_file, "w", encoding="UTF-8") as stream:
-            try:
-                yaml.dump(self.secrets, stream)
-                return True
-            except yaml.YAMLError as e:
-                self.printr.print_err(
-                    f"Could not write ({SECRETS_FILE})\n{str(e)}", True
+            if app_root_path is None:
+                raise ValueError(
+                    "app_root_path is required for the first instance of SecretKeeper."
                 )
-                return False
 
-    def retrieve(
+            system_config_path = os.path.join(app_root_path, SYSTEM_CONFIG_PATH)
+            cls._instance.config_file = os.path.join(system_config_path, SECRETS_FILE)
+            cls._instance.secrets = cls._instance.load() or {}
+
+        return cls._instance
+
+    def load(self) -> Dict[str, Any]:
+        if not self.config_file or not os.path.exists(self.config_file):
+            return {}
+        try:
+            with open(self.config_file, "r", encoding="UTF-8") as stream:
+                return yaml.safe_load(stream) or {}
+        except yaml.YAMLError as e:
+            self.printr.toast_error(f"Could not load ({SECRETS_FILE})\n{str(e)}")
+            return {}
+
+    def save(self) -> bool:
+        if not self.config_file:
+            self.printr.toast_error("No config file path provided.")
+            return False
+        try:
+            with open(self.config_file, "w", encoding="UTF-8") as stream:
+                yaml.dump(self.secrets, stream)
+                self.load()
+                return True
+        except yaml.YAMLError as e:
+            self.printr.toast_error(f"Could not write ({SECRETS_FILE})\n{str(e)}")
+            return False
+
+    async def retrieve(
         self,
         requester: str,
         key: str,
-        friendly_key_name: str,
         prompt_if_missing: bool = True,
     ) -> str:
-        """Retrieve secret a secret and optionally prompt user for it if missing"""
+        if self._ws_manager is None:
+            raise ValueError("ws_manager has not been set.")
 
-        secret = self.secrets.get(key, None)
-        if not secret and prompt_if_missing:
-            # Prompt user for key
-            dialog = ctk.CTkInputDialog(
-                text=f"Please enter '{friendly_key_name}':",
-                title=f"{requester} needs to know a secret",
-            )
-            secret = dialog.get_input()
-            if secret:
-                secret = secret.strip().replace("\n", "")
-            self.secrets[key] = secret
-            self.save()
-
+        secret = self.secrets.get(key, "")
+        if not secret and prompt_if_missing and not key in self.prompted_secrets:
+            await self._ws_manager.prompt_secret(requester=requester, secret_name=key)
+            self.prompted_secrets.append(key)
         return secret
+
+    # GET /secrets
+    def get_secrets(self):
+        return {"secrets": self.secrets}
+
+    # POST /secrets
+    def post_secrets(self, secrets: Dict[str, Any]):
+        self.secrets = secrets
+        self.save()
+        self.printr.print(
+            "Secrets updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
+        )

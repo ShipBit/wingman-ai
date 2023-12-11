@@ -1,0 +1,232 @@
+# ───────────────────────────── Questions? ──────────────────────────────
+# Discord server: https://discord.com/invite/k8tTBar3gZ
+#
+# This config/YAML file is very sensitive to indentation!
+# Make sure you use a single "TAB" character for indentation. Do NOT use the spacebar to indent.
+# More docs and useful tools to edit this here:
+#   https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/FAQ.md
+
+# ==================================== GLOBAL CONFIGURATION ====================================
+# This is the default config for all wingmen.
+# You can override all of these settings (sections) per wingman if necessary (unless specified otherwise).
+# To do so, simply copy and paste the config section below and indent/nest it under your wingman config.
+#
+# ──────────────────────────────── FEATURES ─────────────────────────────────
+features:
+  # If enabled, the Wingman will skip executing any keypresses.
+  # It will also print more debug messages and benchmark results.
+  debug_mode: false
+
+  # ─────────────────────── TTS Provider ─────────────────────────
+  # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  tts_provider: openai # available: openai, edge_tts, elevenlabs
+
+  # ─────────────────────── Cost Control ─────────────────────────
+  # How many messages should a Wingman remember in your conversations?
+  # "0" means you start fresh with just the context after every message. This is like restarting Wingman after every interaction.
+  # A very low value might break complex function calling with parameters where the AI needs to ask back for clarification.
+  #
+  # Use this to limit the number of tokens used in your conversations and to reduce the cost of using the OpenAI API.
+  # Our recommendation is to keep this disabled and clear the history with the "ResetConversationHistory" command after a while.
+  #
+  #remember_messages: 3 # uncomment this  (=remove the "# in front) to enable!
+
+# ────────────────────────────── SOUND SETTINGS ───────────────────────────────
+# Sound effects currently do not work with elevenlabs as TTS provider!
+sound:
+  # You can put as many sound effects here as you want. They stack and are added in the defined order here.
+  # Available: RADIO, ROBOT, INTERIOR_HELMET, INTERIOR_SMALL, INTERIOR_MEDIUM, INTERIOR_LARGE
+  effects:
+    #- RADIO
+    #- ROBOT
+
+  # adds a beep/Quindar sound before and after the wingman talks
+  play_beep: true
+
+# ────────────────────────────────── OPEN AI ────────────────────────────────────
+openai:
+  # The model to use for conversations aka "chit-chat" and for function calls.
+  # gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
+  # gpt-3.5 is the default and should be enough for most use cases.
+  # If something is not working as expected, you might want to test it with gpt-4.
+  conversation_model: gpt-3.5-turbo-1106 # available: gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+
+  # This model summarizes function responses, like API call responses etc.
+  # In most cases gpt-3.5 should be enough.
+  summarize_model: gpt-3.5-turbo-1106 # available: gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+
+  # The voice to use for OpenAI text-to-speech.
+  # Only used if features > tts_provider is set to 'openai' above.
+  tts_voice: nova # available: nova, alloy, echo, fable, onyx, shimmer
+
+  # ADVANCED:
+  # If you want to use a different API endpoint, uncomment this and configure it here.
+  # Use this to hook up your local in-place OpenAI replacement like Ollama or if you want to use a proxy.
+  #base_url: https://api.openai.com # or the localhost address of your local LLM etc.
+  #organization: whatever # If you have an organization key, you can set it here.
+
+# ────────────────────────────────── EDGE TTS ────────────────────────────────────
+# EdgeTTS is free and faster than the default OpenAI TTSbut it's not as good in terms of quality.
+# Only used if features > tts_provider is set to 'edge_tts' above.
+edge_tts:
+  # The voice to use (only if detect_language is set to false).
+  # All available EdgeTTS voices:
+  #   https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/docs/available-edge-tts-voices.md
+  # Voice samples:
+  #   https://speech.microsoft.com/portal/voicegallery
+  tts_voice: en-US-GuyNeural
+
+  # EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
+  # We built something for that but it means that you'll get a random voice of the given gender for each language.
+  # These voices can be weird, e.g. chidrens' voices for some languages.
+  # Only enable this if you need to change languages on-the-fly(!) during your conversations.
+  # Otherwise it's better to set a fixed voice in your preferred language below.
+  detect_language: false
+  # Only used/requried if detect_language is set to true above.
+  gender: Female # Female or Male
+
+# ────────────────────────────────── ELEVENLABS ────────────────────────────────────
+# https://elevenlabs.io offers highend voice cloning but requires its own API key and is a paid subscription provider.
+# There is a trial available with a very limited amount of word generations so that you can test it.
+# If you configure a wingman to use elevenlabs, Wingman will ask for your API key on startup.
+# Note: Our sound effects (ROBOT, RADIO etc.) currently don't work with elevenlabs.
+# Only used if tts_provider in features is set to 'elevenlabs' above.
+elevenlabs:
+  use_sound_effects: True # you can use our sound_effects with 11Labs but it adds a delay to the playback
+  voice:
+    # You can configure "Premade voices" from the dropdown on https://elevenlabs.io/speech-synthesis by name.
+    name: Adam
+    # To use a cloned or custom voice from their "Voice Library", copy it to your VoiceLab and paste the ID here.
+    # Only you(r) API key has acces to these voice IDs, so you can't share them.
+    #id: xxx  # id overrules name if both are set!
+
+  latency: 3 # 0 - 4
+
+  # These are the settings that you can set in their "Speech Synthesis" web interface to tune the voice:
+  model: eleven_multilingual_v2 # available:eleven_multilingual_v2, eleven_multilingual_v1, eleven_turbo_v2
+  voice_settings:
+    stability: 0.71 # 0.0 - 1.0
+    similarity_boost: 0.5 # 0.0 - 1.0
+    style: 0.0 # 0.0 - 1.0
+    use_speaker_boost: true # true or false
+
+# ────────────────────────────── GLOBAL COMMANDS ───────────────────────────────
+# You can use these in all wingmen and you can put your own here, too.
+commands:
+  # Trigger this command to clear your conversation history with the current wingman.
+  # This is like setting "remember_messages" to 0 above, but "on-demand". You'll restart with just the context.
+  - name: ResetConversationHistory # don't rename this!
+    instant_activation:
+      - Forget everything!
+      - Clear conversation history!
+    responses:
+      - Conversation history cleared.
+
+# ==================================== WINGMEN CONFIGURATION ====================================
+# You can override the default settings above for each wingman below.
+# If you do that, make sure you keep the "hierarchy" of the config intact.
+wingmen:
+  # ────────────────────────── Board Computer ───────────────────────────────
+  # This is a "default OpenAI" wingman that you can roleplay with and that can execute commands (=keypresses).
+  # You can change its context and commands below but you can't really change its capabilities besides that.
+  # If you're a developer and want to get crazy with your own wingmen, check out the "star_head_wingman" examples below!
+
+  # The internal name of the wingman which is shown in the GUI. Has to be unique within this file!
+  board-computer:
+    # The "push-to-talk" key for this wingman. Keep it pressed while talking!
+    # Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!
+    record_key: end
+
+    # Note how this overrides the default settings from the general config above!
+    sound:
+      effects:
+        - ROBOT
+
+    openai:
+      # The "context" for the wingman. Here's where you can tell the AI how to behave.
+      # This is probably what you want to play around with the most.
+      context: |
+        CONFIG TWO BOARD_COMPUTER CONTEXT
+
+    # Commands are keypresses that the wingmen can execute.
+    # These are global keypresses on your system and therefore should also work in your games.
+    # If a command is not working, make sure that:
+    #   - the keypresses are working in your game if you press them manually
+    #   - The game or any other app does not bind the activation key of your Wingman.
+    #   - The AI understood you correctly. If a command is executed, it will tell you in blue in the GUI.
+    #   - If you use number keys, put them in quotes like "1" or "2".
+    #   - If you use F-keys, lowercase them like "f1" or "f4".
+    #   - Try another key for testing. Some special keys dont work.
+    # All available keys (case-sensitive!):
+    #    https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
+    commands:
+      #
+      # This is where the magic happens!
+      # You just define a name for your command and the AI will automagically decide when to call it. Not kidding!
+      # We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
+      # If the Wingman doesn't call your command, try to rephrase the name here.
+      # ───────────────────────────────────────────
+      - name: HoldCurrentSpeed
+        keys:
+          - key: c # The key the wingman will press when executing the command
+            modifier: alt # This will press "Alt + c" instead of just "c". Modifiers are optional.
+      # ───────────────────────────────────────────
+
+  # ──────────────────────────── ATC ─────────────────────────────────
+  # "atc" is another default OpenAI wingman with a very different context and its own commands.
+  atc:
+    record_key: delete
+
+    sound:
+      effects:
+        - RADIO
+      play_beep: True
+
+    openai:
+      tts_voice: onyx # overrides the GLOBAL setting
+
+      context: |
+        CONFIG TWO ATC CONTEXT
+
+  # ──────────────────────────── StarHead ─────────────────────────────────
+  # "star-head" is a "Custom Wingman" with its own Python code (see /wingmen/star_head_wingman.py).
+  # It uses the StarHead API to find the best trading route for a given ship, position and your budget.
+  # If it's missing any of these parameters, it will ask you for them.
+  star-head:
+    record_key: up
+
+    # For devs - This is how you plug in your own wingman:
+    class:
+      # Where your code is located. Use '.' as path separator!
+      # We advise you to put all your custom wingmen into the /wingmen directory.
+      # "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).
+      module: wingmen.star_head_wingman
+      # The name of your class within your file/module.
+      name: StarHeadWingman
+
+    # A custom config entry that Wingman requires. Validate it in your code in the validate() method.
+    # Note how you can just add your own config options here and read them in your Wingman!
+    # Do not put API keys or other sensitive data here! Use the secret_keeper class for that.
+    starhead_api_url: https://api-test.star-head.de
+
+    features:
+      tts_provider: edge_tts
+
+    edge_tts:
+      detect_language: true
+
+    openai:
+      # gpt-3.5 is not capable enough for multi-param function calls.
+      conversation_model: gpt-4-1106-preview
+
+      context: |
+        CONFIG TWO STARHEAD CONTEXT
+
+  elevenlabs:
+    record_key: down
+    features:
+      tts_provider: elevenlabs
+    openai:
+      context: |
+      You always reply with: "Hello, I am Eleven, your personal assistant. How can I help you?"

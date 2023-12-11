@@ -2,10 +2,12 @@ import os
 import numpy
 import sounddevice
 import soundfile
+from services.enums import LogType
 from services.printr import Printr
 
 
 printr = Printr()
+
 
 class AudioRecorder:
     def __init__(
@@ -38,21 +40,23 @@ class AudioRecorder:
 
         self.recstream.start()
         self.is_recording = True
-        printr.print("Recording started", tags="grey")
+        printr.print("Recording started")
 
     def stop_recording(self) -> None | str:
         self.recstream.stop()
         self.is_recording = False
-        printr.print("Recording stopped", tags="grey")
+        printr.print("Recording stopped")
 
         if not os.path.exists("audio_output"):
             os.makedirs("audio_output")
 
         if self.recording is None:
-            printr.print("Ignored empty recording", tags="warn")
+            printr.print("Ignored empty recording", color=LogType.WARNING)
             return None
         if (len(self.recording) / self.samplerate) < 0.15:
-            printr.print("Recording was too short to be handled by the AI", tags="warn")
+            printr.print(
+                "Recording was too short to be handled by the AI", color=LogType.WARNING
+            )
             return None
 
         try:
@@ -60,5 +64,5 @@ class AudioRecorder:
             self.recording = None
             return self.filename
         except IndexError:
-            printr.print("Ignored empty recording", tags="warn")
+            printr.print("Ignored empty recording", color=LogType.WARNING)
             return None
