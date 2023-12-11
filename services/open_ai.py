@@ -68,19 +68,30 @@ class OpenAi:
         model: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
+        azure_config: AzureConfig | None = None,
     ):
         if not model:
             model = "gpt-3.5-turbo-1106"
 
+        client = self.client
+
+        if azure_config:
+            client = AzureOpenAI(
+                api_key=azure_config.api_key,
+                azure_endpoint=azure_config.api_base_url,
+                api_version=azure_config.api_version,
+                azure_deployment=azure_config.deployment_name,
+            )
+
         try:
             if not tools:
-                completion = self.client.chat.completions.create(
+                completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
                     model=model,
                 )
             else:
-                completion = self.client.chat.completions.create(
+                completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
                     model=model,

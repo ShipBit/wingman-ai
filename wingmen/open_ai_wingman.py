@@ -31,6 +31,13 @@ class OpenAiWingman(Wingman):
         self.edge_tts = EdgeTTS()
         self.last_transcript_locale = None
         self.elevenlabs_api_key = None
+        self.stt_provider = self.config["features"].get("stt_provider", None)
+        self.conversation_provider = self.config["features"].get(
+            "conversation_provider", None
+        )
+        self.summarize_provider = self.config["features"].get(
+            "summarize_provider", None
+        )
 
     def validate(self):
         errors = super().validate()
@@ -104,26 +111,8 @@ class OpenAiWingman(Wingman):
         )
 
         azure_config = None
-        stt_provider = self.config.get("features", {}).get("stt_provider", None)
-        if stt_provider == "azure":
-            azure_api_key = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="azure_whisper",
-                friendly_key_name="Azure API key for whisper",
-                prompt_if_missing=True,
-            )
-            azure_config = AzureConfig(
-                api_key=azure_api_key,
-                api_base_url=self.config["azure"]
-                .get("whisper", {})
-                .get("api_base_url", None),
-                api_version=self.config["azure"]
-                .get("whisper", {})
-                .get("api_version", None),
-                deployment_name=self.config["azure"]
-                .get("whisper", {})
-                .get("deployment_name", None),
-            )
+        if self.stt_provider == "azure":
+            azure_config = self._get_azure_config("whisper")
 
         transcript = self.openai.transcribe(
             audio_input_wav, response_format=response_format, azure_config=azure_config
@@ -142,6 +131,26 @@ class OpenAiWingman(Wingman):
             locale = self.__ask_gpt_for_locale(transcript.language)  # type: ignore
 
         return transcript.text if transcript else None, locale
+
+    def _get_azure_config(self, section: str):
+        azure_api_key = self.secret_keeper.retrieve(
+            requester=self.name,
+            key=f"azure_{section}",
+            friendly_key_name="Azure API key",
+            prompt_if_missing=True,
+        )
+        azure_config = AzureConfig(
+            api_key=azure_api_key,
+            api_base_url=self.config["azure"]
+            .get(section, {})
+            .get("api_base_url", None),
+            api_version=self.config["azure"].get(section, {}).get("api_version", None),
+            deployment_name=self.config["azure"]
+            .get(section, {})
+            .get("deployment_name", None),
+        )
+
+        return azure_config
 
     async def _get_response_for_transcript(
         self, transcript: str, locale: str | None
@@ -269,10 +278,16 @@ class OpenAiWingman(Wingman):
                 f"   Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
                 tags="info",
             )
+
+        azure_config = None
+        if self.stt_provider == "azure":
+            azure_config = self._get_azure_config("conversation")
+
         return self.openai.ask(
             messages=self.messages,
             tools=self._build_tools(),
             model=self.config["openai"].get("conversation_model"),
+            azure_config=azure_config,
         )
 
     def _process_completion(self, completion):
@@ -326,10 +341,15 @@ class OpenAiWingman(Wingman):
         Returns:
             The content of the GPT response to the function call summaries.
         """
+        azure_config = None
+        if self.stt_provider == "azure":
+            azure_config = self._get_azure_config("summarize")
+
         summarize_model = self.config["openai"].get("summarize_model")
         summarize_response = self.openai.ask(
             messages=self.messages,
             model=summarize_model,
+            azure_config=azure_config,
         )
 
         if summarize_response is None:
