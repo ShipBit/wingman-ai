@@ -20,7 +20,7 @@ features:
   # ─────────────────────── TTS Provider ─────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  tts_provider: openai # available: openai, edge_tts, elevenlabs
+  tts_provider: openai # available: openai, edge_tts, elevenlabs, azure
 
   # ─────────────────────── Speech to text Provider ─────────────────────────
   # You can override the speech to text provider to use a different one than the default.
@@ -143,6 +143,10 @@ azure:
     api_base_url: xxx # https://xxx.openai.azure.com/
     api_version: 2023-09-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
     deployment_name: xxx # The deployment name e.g. 'whisper'
+  tts:
+    region: westeurope
+    voice: en-US-JaneNeural
+    detect_language: true
 
 # ────────────────────────────── GLOBAL COMMANDS ───────────────────────────────
 # You can use these in all wingmen and you can put your own here, too.
