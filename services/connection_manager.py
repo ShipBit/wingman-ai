@@ -1,3 +1,4 @@
+from enum import Enum
 import json
 from fastapi import WebSocket
 from api.enums import LogType, ToastType, LogSource
@@ -25,19 +26,24 @@ class ConnectionManager:
     async def client_ready(self, websocket: WebSocket):
         await self._broadcast_queued_messages(websocket)
 
+    def _enum_encoder(self, obj):
+        if isinstance(obj, Enum):
+            return obj.value
+        raise TypeError(
+            f"Object of type {obj.__class__.__name__} is not JSON serializable"
+        )
+
     async def _broadcast_queued_messages(self, websocket: WebSocket):
         while self.message_queue:
             payload = self.message_queue.pop(0)
-            await websocket.send_text(json.dumps(payload))
+            await websocket.send_text(json.dumps(payload, default=self._enum_encoder))
 
     async def _broadcast(self, command: str, data: dict):
         payload = {"command": command, "data": data}
+        json_str = json.dumps(payload, default=self._enum_encoder)
         if self.active_connections:
             for connection in self.active_connections:
-                # Use manual serialization for the Enum in the dict
-                await connection.send_text(
-                    json.dumps(payload, default=str)
-                )  # provides a fallback for other non-serializable types
+                await connection.send_text(json_str)
         else:
             self.message_queue.append(payload)
 

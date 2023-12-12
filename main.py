@@ -2,13 +2,16 @@ from enum import Enum
 from os import path
 import sys
 from contextlib import asynccontextmanager
+from typing import Literal, get_args, get_origin
 import uvicorn
 from pynput import keyboard
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from api.enums import ENUM_TYPES, ToastType
+from api.commands import WebSocketCommandModel
+from api.enums import ENUM_TYPES
+from services.command_handler import CommandHandler
 from services.connection_manager import ConnectionManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
@@ -56,7 +59,7 @@ def custom_generate_unique_id(route: APIRoute):
 
 
 def modify_openapi():
-    """strip the tagname of the functions (for the client) in our API spec"""
+    """Strip the tagname of the functions (for the client) in the OpenAPI spec"""
     openapi_schema = app.openapi()
     for path_data in openapi_schema["paths"].values():
         for operation in path_data.values():
@@ -83,11 +86,40 @@ def custom_openapi():
         description="Communicate with the Wingman AI Core",
         routes=app.routes,
     )
+
     # Add custom server configuration
     # TODO: make port configurable
     openapi_schema["servers"] = [{"url": "http://127.0.0.1:8000"}]
 
-    # Loop over the enum types and models to dynamically add them to the schema
+    # Ensure the components.schemas key exists
+    openapi_schema.setdefault("components", {}).setdefault("schemas", {})
+
+    # Add WebSocket command models to schema
+    for cls in WebSocketCommandModel.__subclasses__():
+        cls_schema_dict = cls.model_json_schema(
+            ref_template="#/components/schemas/{model}"
+        )
+
+        for field_name, field_type in cls.__annotations__.items():
+            origin = get_origin(field_type)
+            if origin is Literal:
+                literal_args = get_args(field_type)
+                if len(literal_args) == 1:
+                    literal_value = literal_args[0]
+                    cls_schema_dict["properties"][field_name] = {
+                        "type": "string",
+                        "enum": [literal_value],
+                    }
+                else:
+                    cls_schema_dict["properties"][field_name] = {
+                        "type": "string",
+                        "enum": list(literal_args),
+                    }
+
+                cls_schema_dict.setdefault("required", []).append(field_name)
+        openapi_schema["components"]["schemas"][cls.__name__] = cls_schema_dict
+
+    # Add enums to schema
     for enum_name, enum_model in ENUM_TYPES.items():
         enum_field_name, enum_type = next(iter(enum_model.__annotations__.items()))
         if issubclass(enum_type, Enum):
@@ -101,9 +133,6 @@ def custom_openapi():
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
-
-
-app.openapi = custom_openapi
 
 
 app.openapi = custom_openapi
@@ -127,29 +156,11 @@ app.openapi = custom_openapi
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await connection_manager.connect(websocket)
+    command_handler = CommandHandler(connection_manager, core, secret_keeper, printr)
     try:
         while True:
-            command = await websocket.receive_text()
-            printr.print(command, server_only=True)
-            command_parts = command.split("::")
-            command_name = command_parts[0]
-            command_params = command_parts[1:]
-
-            if command_name == "client_ready":
-                await connection_manager.client_ready(websocket)
-            elif command_name == "change_context":
-                context = command_params[0]
-                await core.load_context(context)
-                core.activate()
-                printr.print(
-                    f"Loaded context: {context or 'default'}", toast=ToastType.NORMAL
-                )
-            elif command_name == "secret":
-                secret_name = command_params[0]
-                secret_value = command_params[1]
-                secret_keeper.secrets[secret_name] = secret_value
-                secret_keeper.save()
-                printr.print(f"Secret '{secret_name}' saved", toast=ToastType.NORMAL)
+            message = await websocket.receive_text()
+            await command_handler.dispatch(message, websocket)
     except WebSocketDisconnect:
         await connection_manager.disconnect(websocket)
         printr.print("Client disconnected", server_only=True)

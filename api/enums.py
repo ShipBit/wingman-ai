@@ -26,15 +26,10 @@ class ToastType(Enum):
     INFO = "info"
 
 
-# Add all additional enums as needed
-
-
 # Pydantic models for enums
-
-
 class BaseEnumModel(BaseModel):
     class Config:
-        # fix serialization of enums
+        # fix pydantic serialization of enums
         json_encoders = {
             Enum: lambda v: v.value,
         }
@@ -53,6 +48,7 @@ class ToastTypeEnumModel(BaseEnumModel):
 
 
 # Add all additional Pydantic models for enums as needed
+
 
 # Enums and their corresponding model classes for dynamic schema generation
 ENUM_TYPES = {
