@@ -1,3 +1,4 @@
+import argparse
 from enum import Enum
 from os import path
 import sys
@@ -17,6 +18,9 @@ from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.system_manager import SystemManager
 from wingman_core import WingmanCore
+
+port = None
+host = None
 
 connection_manager = ConnectionManager()
 
@@ -78,6 +82,8 @@ app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_uni
 
 
 def custom_openapi():
+    global host
+
     if app.openapi_schema:
         return app.openapi_schema
     openapi_schema = get_openapi(
@@ -88,8 +94,9 @@ def custom_openapi():
     )
 
     # Add custom server configuration
-    # TODO: make port configurable
-    openapi_schema["servers"] = [{"url": "http://127.0.0.1:8000"}]
+    if not host.startswith("http://") and not host.startswith("https://"):
+        host = f"http://{host}"
+    openapi_schema["servers"] = [{"url": f"{host}:{port}"}]
 
     # Ensure the components.schemas key exists
     openapi_schema.setdefault("components", {}).setdefault("schemas", {})
@@ -150,8 +157,6 @@ app.include_router(core.router)
 app.include_router(version_check.router)
 app.include_router(secret_keeper.router)
 
-app.openapi = custom_openapi
-
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -167,4 +172,23 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    parser = argparse.ArgumentParser(description="Run the FastAPI server.")
+    parser.add_argument(
+        "-p",
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for the FastAPI server to listen on.",
+    )
+    parser.add_argument(
+        "-H",
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Port for the FastAPI server to listen on.",
+    )
+    args = parser.parse_args()
+    port = args.port
+    host = args.host
+
+    uvicorn.run(app, host=host, port=port)
