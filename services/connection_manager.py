@@ -34,7 +34,10 @@ class ConnectionManager:
         payload = {"command": command, "data": data}
         if self.active_connections:
             for connection in self.active_connections:
-                await connection.send_text(json.dumps(payload))
+                # Use manual serialization for the Enum in the dict
+                await connection.send_text(
+                    json.dumps(payload, default=str)
+                )  # provides a fallback for other non-serializable types
         else:
             self.message_queue.append(payload)
 

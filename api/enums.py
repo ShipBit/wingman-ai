@@ -30,15 +30,25 @@ class ToastType(Enum):
 
 
 # Pydantic models for enums
-class LogTypeEnumModel(BaseModel):
+
+
+class BaseEnumModel(BaseModel):
+    class Config:
+        # fix serialization of enums
+        json_encoders = {
+            Enum: lambda v: v.value,
+        }
+
+
+class LogTypeEnumModel(BaseEnumModel):
     log_type: LogType
 
 
-class LogSourceEnumModel(BaseModel):
+class LogSourceEnumModel(BaseEnumModel):
     log_source: LogSource
 
 
-class ToastTypeEnumModel(BaseModel):
+class ToastTypeEnumModel(BaseEnumModel):
     toast_type: ToastType
 
 
