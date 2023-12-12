@@ -2,7 +2,7 @@ import os
 from typing import Dict, Any
 import yaml
 from fastapi import APIRouter
-from services.enums import LogType, ToastType
+from api.enums import LogType, ToastType
 from services.websocket_user import WebSocketUser
 from services.printr import Printr
 

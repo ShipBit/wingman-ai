@@ -5,7 +5,7 @@ from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
 from services.open_ai import AzureConfig, OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
-from services.enums import LogType
+from api.enums import LogType
 from wingmen.wingman import Wingman
 
 printr = Printr()

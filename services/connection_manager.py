@@ -1,6 +1,6 @@
 import json
 from fastapi import WebSocket
-from services.enums import LogType, ToastType, LogSource
+from api.enums import LogType, ToastType, LogSource
 
 
 class ConnectionManager:

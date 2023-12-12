@@ -6,7 +6,7 @@ from importlib import import_module
 from typing import Any
 from services.audio_player import AudioPlayer
 from services.printr import Printr
-from services.enums import LogSource, LogType
+from api.enums import LogSource, LogType
 from services.secret_keeper import SecretKeeper
 
 printr = Printr()

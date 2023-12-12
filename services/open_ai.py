@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import re
 from openai import OpenAI, APIStatusError, AzureOpenAI
-from services.enums import LogType
+from api.enums import LogType
 from services.printr import Printr
 
 printr = Printr()

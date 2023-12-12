@@ -1,3 +1,4 @@
+from enum import Enum
 from os import path
 import sys
 from contextlib import asynccontextmanager
@@ -7,8 +8,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from api.enums import ENUM_TYPES, ToastType
 from services.connection_manager import ConnectionManager
-from services.enums import ToastType
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.system_manager import SystemManager
@@ -82,12 +83,30 @@ def custom_openapi():
         description="Communicate with the Wingman AI Core",
         routes=app.routes,
     )
-    # this is the important part -
-    # otherwise all routes will be relative and the generated client will try to connect to its own port
+    # Add custom server configuration
     # TODO: make port configurable
     openapi_schema["servers"] = [{"url": "http://127.0.0.1:8000"}]
+
+    # Loop over the enum types and models to dynamically add them to the schema
+    for enum_name, enum_model in ENUM_TYPES.items():
+        enum_field_name, enum_type = next(iter(enum_model.__annotations__.items()))
+        if issubclass(enum_type, Enum):
+            enum_values = [e.value for e in enum_type]
+            enum_schema = {
+                "type": "string",
+                "enum": enum_values,
+                "description": f"Possible values for {enum_name}",
+            }
+            openapi_schema["components"]["schemas"][enum_name] = enum_schema
+
     app.openapi_schema = openapi_schema
     return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
+
+app.openapi = custom_openapi
 
 
 app.add_middleware(
@@ -101,6 +120,7 @@ app.add_middleware(
 app.include_router(core.router)
 app.include_router(version_check.router)
 app.include_router(secret_keeper.router)
+
 app.openapi = custom_openapi
 
 

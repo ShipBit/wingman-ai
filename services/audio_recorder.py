@@ -2,7 +2,7 @@ import os
 import numpy
 import sounddevice
 import soundfile
-from services.enums import LogType
+from api.enums import LogType
 from services.printr import Printr
 
 

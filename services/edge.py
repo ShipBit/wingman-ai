@@ -1,6 +1,6 @@
 import random
 from edge_tts import Communicate, VoicesManager
-from services.enums import LogType
+from api.enums import LogType
 from services.printr import Printr
 
 printr = Printr()

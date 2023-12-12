@@ -2,7 +2,7 @@ from typing import Optional
 import json
 import requests
 from services.printr import Printr
-from services.enums import LogType
+from api.enums import LogType
 from wingmen.open_ai_wingman import OpenAiWingman
 
 printr = Printr()

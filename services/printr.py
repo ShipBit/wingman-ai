@@ -1,4 +1,4 @@
-from services.enums import LogSource, LogType, ToastType
+from api.enums import LogSource, LogType, ToastType
 from services.websocket_user import WebSocketUser
 
 
