@@ -1,8 +1,17 @@
+from dataclasses import dataclass
 import re
-from openai import OpenAI, APIStatusError
+from openai import OpenAI, APIStatusError, AzureOpenAI
 from services.printr import Printr
 
 printr = Printr()
+
+
+@dataclass
+class AzureConfig:
+    api_key: str
+    api_base_url: str
+    api_version: str
+    deployment_name: str
 
 
 class OpenAi:
@@ -24,11 +33,22 @@ class OpenAi:
         filename: str,
         model: str = "whisper-1",
         response_format: str = "json",
+        azure_config: AzureConfig | None = None,
         **params,
     ):
+        client = self.client
+
+        if azure_config:
+            client = AzureOpenAI(
+                api_key=azure_config.api_key,
+                azure_endpoint=azure_config.api_base_url,
+                api_version=azure_config.api_version,
+                azure_deployment=azure_config.deployment_name,
+            )
+
         try:
             with open(filename, "rb") as audio_input:
-                transcript = self.client.audio.transcriptions.create(
+                transcript = client.audio.transcriptions.create(
                     model=model,
                     file=audio_input,
                     response_format=response_format,
@@ -48,19 +68,30 @@ class OpenAi:
         model: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
+        azure_config: AzureConfig | None = None,
     ):
         if not model:
             model = "gpt-3.5-turbo-1106"
 
+        client = self.client
+
+        if azure_config:
+            client = AzureOpenAI(
+                api_key=azure_config.api_key,
+                azure_endpoint=azure_config.api_base_url,
+                api_version=azure_config.api_version,
+                azure_deployment=azure_config.deployment_name,
+            )
+
         try:
             if not tools:
-                completion = self.client.chat.completions.create(
+                completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
                     model=model,
                 )
             else:
-                completion = self.client.chat.completions.create(
+                completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
                     model=model,

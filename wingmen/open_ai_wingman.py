@@ -1,7 +1,8 @@
 import json
+import azure.cognitiveservices.speech as speechsdk
 from typing import Mapping
 from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
-from services.open_ai import OpenAi
+from services.open_ai import AzureConfig, OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -31,6 +32,19 @@ class OpenAiWingman(Wingman):
         self.edge_tts = EdgeTTS()
         self.last_transcript_locale = None
         self.elevenlabs_api_key = None
+        self.azure_keys = {
+            "tts": None,
+            "whisper": None,
+            "conversation": None,
+            "summarize": None,
+        }
+        self.stt_provider = self.config["features"].get("stt_provider", None)
+        self.conversation_provider = self.config["features"].get(
+            "conversation_provider", None
+        )
+        self.summarize_provider = self.config["features"].get(
+            "summarize_provider", None
+        )
 
     def validate(self):
         errors = super().validate()
@@ -50,6 +64,8 @@ class OpenAiWingman(Wingman):
             self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
 
         self.__validate_elevenlabs_config(errors)
+
+        self.__validate_azure_config(errors)
 
         return errors
 
@@ -86,6 +102,72 @@ class OpenAiWingman(Wingman):
                     "Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config."
                 )
 
+    def __validate_azure_config(self, errors):
+        if (
+            self.tts_provider == "azure"
+            or self.stt_provider == "azure"
+            or self.conversation_provider == "azure"
+            or self.summarize_provider == "azure"
+        ):
+            azure_settings = self.config.get("azure")
+            if not azure_settings:
+                errors.append(
+                    "Missing 'azure' section in config. Please provide a valid config."
+                )
+                return
+
+        if self.tts_provider == "azure":
+            self.azure_keys["tts"] = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_tts",
+                friendly_key_name="Azure TTS API key",
+                prompt_if_missing=True,
+            )
+            if not self.azure_keys["tts"]:
+                errors.append(
+                    "Missing 'azure' tts API key. Please provide a valid key in the settings."
+                )
+                return
+
+        if self.stt_provider == "azure":
+            self.azure_keys["whisper"] = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_whisper",
+                friendly_key_name="Azure Whisper API key",
+                prompt_if_missing=True,
+            )
+            if not self.azure_keys["whisper"]:
+                errors.append(
+                    "Missing 'azure' whisper API key. Please provide a valid key in the settings."
+                )
+                return
+
+        if self.conversation_provider == "azure":
+            self.azure_keys["conversation"] = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_conversation",
+                friendly_key_name="Azure Conversation API key",
+                prompt_if_missing=True,
+            )
+            if not self.azure_keys["conversation"]:
+                errors.append(
+                    "Missing 'azure' conversation API key. Please provide a valid key in the settings."
+                )
+                return
+
+        if self.summarize_provider == "azure":
+            self.azure_keys["summarize"] = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_summarize",
+                friendly_key_name="Azure Summarize API key",
+                prompt_if_missing=True,
+            )
+            if not self.azure_keys["summarize"]:
+                errors.append(
+                    "Missing 'azure' summarize API key. Please provide a valid key in the settings."
+                )
+                return
+
     async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
 
@@ -102,8 +184,13 @@ class OpenAiWingman(Wingman):
             if self.tts_provider == "edge_tts" and detect_language
             else "json"
         )
+
+        azure_config = None
+        if self.stt_provider == "azure":
+            azure_config = self._get_azure_config("whisper")
+
         transcript = self.openai.transcribe(
-            audio_input_wav, response_format=response_format
+            audio_input_wav, response_format=response_format, azure_config=azure_config
         )
 
         locale = None
@@ -119,6 +206,21 @@ class OpenAiWingman(Wingman):
             locale = self.__ask_gpt_for_locale(transcript.language)  # type: ignore
 
         return transcript.text if transcript else None, locale
+
+    def _get_azure_config(self, section: str):
+        azure_api_key = self.azure_keys[section]
+        azure_config = AzureConfig(
+            api_key=azure_api_key,
+            api_base_url=self.config["azure"]
+            .get(section, {})
+            .get("api_base_url", None),
+            api_version=self.config["azure"].get(section, {}).get("api_version", None),
+            deployment_name=self.config["azure"]
+            .get(section, {})
+            .get("deployment_name", None),
+        )
+
+        return azure_config
 
     async def _get_response_for_transcript(
         self, transcript: str, locale: str | None
@@ -246,10 +348,16 @@ class OpenAiWingman(Wingman):
                 f"   Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
                 tags="info",
             )
+
+        azure_config = None
+        if self.conversation_provider == "azure":
+            azure_config = self._get_azure_config("conversation")
+
         return self.openai.ask(
             messages=self.messages,
             tools=self._build_tools(),
             model=self.config["openai"].get("conversation_model"),
+            azure_config=azure_config,
         )
 
     def _process_completion(self, completion):
@@ -262,6 +370,11 @@ class OpenAiWingman(Wingman):
             A tuple containing the message response and tool calls from the completion.
         """
         response_message = completion.choices[0].message
+
+        content = response_message.content
+        if content is None:
+            response_message.content = ""
+
         return response_message, response_message.tool_calls
 
     async def _handle_tool_calls(self, tool_calls):
@@ -303,10 +416,15 @@ class OpenAiWingman(Wingman):
         Returns:
             The content of the GPT response to the function call summaries.
         """
+        azure_config = None
+        if self.summarize_provider == "azure":
+            azure_config = self._get_azure_config("summarize")
+
         summarize_model = self.config["openai"].get("summarize_model")
         summarize_response = self.openai.ask(
             messages=self.messages,
             model=summarize_model,
+            azure_config=azure_config,
         )
 
         if summarize_response is None:
@@ -371,6 +489,8 @@ class OpenAiWingman(Wingman):
             await self._play_with_edge_tts(text)
         elif self.tts_provider == "elevenlabs":
             self._play_with_elevenlabs(text)
+        elif self.tts_provider == "azure":
+            self._play_with_azure(text)
         else:
             self._play_with_openai(text)
 
@@ -378,6 +498,35 @@ class OpenAiWingman(Wingman):
         response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
         if response is not None:
             self.audio_player.stream_with_effects(response.content, self.config)
+
+    def _play_with_azure(self, text):
+        azure_config = self.config["azure"].get("tts", None)
+
+        if azure_config is None:
+            return
+
+        speech_config = speechsdk.SpeechConfig(
+            subscription=self.azure_keys["tts"],
+            region=azure_config["region"],
+        )
+        speech_config.speech_synthesis_voice_name = azure_config["voice"]
+
+        if azure_config["detect_language"]:
+            auto_detect_source_language_config = (
+                speechsdk.AutoDetectSourceLanguageConfig()
+            )
+
+        speech_synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=speech_config,
+            audio_config=None,
+            auto_detect_source_language_config=auto_detect_source_language_config
+            if azure_config["detect_language"]
+            else None,
+        )
+
+        result = speech_synthesizer.speak_text_async(text).get()
+        if result is not None:
+            self.audio_player.stream_with_effects(result.audio_data, self.config)
 
     async def _play_with_edge_tts(self, text: str):
         output_file = "audio_output/edge_tts.mp3"

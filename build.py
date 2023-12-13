@@ -16,6 +16,8 @@ cmd = [
     "--paths",
     "venv/Lib/site-packages",
     "--add-data",
+    f"venv/Lib/site-packages/azure/cognitiveservices/speech{os.pathsep}azure/cognitiveservices/speech",
+    "--add-data",
     f"assets{os.pathsep}assets",
     "--add-data",
     f"services{os.pathsep}services",
