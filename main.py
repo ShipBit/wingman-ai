@@ -1,5 +1,4 @@
 from os import path
-import subprocess
 import sys
 import asyncio
 import threading
@@ -11,30 +10,6 @@ from services.printr import Printr
 from services.config_manager import ConfigManager
 from gui.root import WingmanUI
 from wingmen.wingman import Wingman
-
-# ─────────────────────────────────── ↓ MONKEY PATCHING ↓ ─────────────────────────────────────────
-# Patch all subprocess calls to hide the console window on Windows
-# Otherwise the console window will pop up every time a subprocess is called, like when playing audio
-# which leads to loosing focus on the game you are playing
-original_call = subprocess.call
-original_popen_init = subprocess.Popen.__init__
-
-# Monkey patch call
-def monkey_patched_call(*args, **kwargs):
-    if 'creationflags' not in kwargs and sys.platform.startswith('win'):
-        kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-    return original_call(*args, **kwargs)
-
-# Monkey patch Popen.__init__
-def popen_init(self, *args, **kwargs):
-    if 'creationflags' not in kwargs and sys.platform.startswith('win'):
-        kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
-    original_popen_init(self, *args, **kwargs)
-
-# Monkey patch Popen and call
-subprocess.Popen.__init__ = popen_init
-subprocess.call = monkey_patched_call
-# ─────────────────────────────────── MONKEY PATCHING ─────────────────────────────────────────
 
 printr = Printr()
 

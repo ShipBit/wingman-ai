@@ -1,7 +1,8 @@
 import json
-from elevenlabs import generate, stream, Voice, VoiceSettings, voices
-from exceptions import MissingApiKeyException
-from services.open_ai import OpenAi
+import azure.cognitiveservices.speech as speechsdk
+from typing import Mapping
+from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
+from services.open_ai import AzureConfig, OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -31,6 +32,19 @@ class OpenAiWingman(Wingman):
         self.edge_tts = EdgeTTS()
         self.last_transcript_locale = None
         self.elevenlabs_api_key = None
+        self.azure_keys = {
+            "tts": None,
+            "whisper": None,
+            "conversation": None,
+            "summarize": None,
+        }
+        self.stt_provider = self.config["features"].get("stt_provider", None)
+        self.conversation_provider = self.config["features"].get(
+            "conversation_provider", None
+        )
+        self.summarize_provider = self.config["features"].get(
+            "summarize_provider", None
+        )
 
     def validate(self):
         errors = super().validate()
@@ -45,8 +59,17 @@ class OpenAiWingman(Wingman):
                 "Missing 'openai' API key. Please provide a valid key in the settings."
             )
         else:
-            self.openai = OpenAi(openai_api_key)
+            openai_organization = self.config["openai"].get("organization")
+            openai_base_url = self.config["openai"].get("base_url")
+            self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
 
+        self.__validate_elevenlabs_config(errors)
+
+        self.__validate_azure_config(errors)
+
+        return errors
+
+    def __validate_elevenlabs_config(self, errors):
         if self.tts_provider == "elevenlabs":
             self.elevenlabs_api_key = self.secret_keeper.retrieve(
                 requester=self.name,
@@ -58,8 +81,92 @@ class OpenAiWingman(Wingman):
                 errors.append(
                     "Missing 'elevenlabs' API key. Please provide a valid key in the settings or use another tts_provider."
                 )
+                return
+            elevenlabs_settings = self.config.get("elevenlabs")
+            if not elevenlabs_settings:
+                errors.append(
+                    "Missing 'elevenlabs' section in config. Please provide a valid config or change the TTS provider."
+                )
+                return
+            if not elevenlabs_settings.get("model"):
+                errors.append("Missing 'model' setting in 'elevenlabs' config.")
+                return
+            voice_settings = elevenlabs_settings.get("voice")
+            if not voice_settings:
+                errors.append(
+                    "Missing 'voice' section in 'elevenlabs' config. Please provide a voice configuration as shown in our example config."
+                )
+                return
+            if not voice_settings.get("id") and not voice_settings.get("name"):
+                errors.append(
+                    "Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config."
+                )
 
-        return errors
+    def __validate_azure_config(self, errors):
+        if (
+            self.tts_provider == "azure"
+            or self.stt_provider == "azure"
+            or self.conversation_provider == "azure"
+            or self.summarize_provider == "azure"
+        ):
+            azure_settings = self.config.get("azure")
+            if not azure_settings:
+                errors.append(
+                    "Missing 'azure' section in config. Please provide a valid config."
+                )
+                return
+
+        if self.tts_provider == "azure":
+            self.azure_keys["tts"] = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_tts",
+                friendly_key_name="Azure TTS API key",
+                prompt_if_missing=True,
+            )
+            if not self.azure_keys["tts"]:
+                errors.append(
+                    "Missing 'azure' tts API key. Please provide a valid key in the settings."
+                )
+                return
+
+        if self.stt_provider == "azure":
+            self.azure_keys["whisper"] = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_whisper",
+                friendly_key_name="Azure Whisper API key",
+                prompt_if_missing=True,
+            )
+            if not self.azure_keys["whisper"]:
+                errors.append(
+                    "Missing 'azure' whisper API key. Please provide a valid key in the settings."
+                )
+                return
+
+        if self.conversation_provider == "azure":
+            self.azure_keys["conversation"] = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_conversation",
+                friendly_key_name="Azure Conversation API key",
+                prompt_if_missing=True,
+            )
+            if not self.azure_keys["conversation"]:
+                errors.append(
+                    "Missing 'azure' conversation API key. Please provide a valid key in the settings."
+                )
+                return
+
+        if self.summarize_provider == "azure":
+            self.azure_keys["summarize"] = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_summarize",
+                friendly_key_name="Azure Summarize API key",
+                prompt_if_missing=True,
+            )
+            if not self.azure_keys["summarize"]:
+                errors.append(
+                    "Missing 'azure' summarize API key. Please provide a valid key in the settings."
+                )
+                return
 
     async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
@@ -77,8 +184,13 @@ class OpenAiWingman(Wingman):
             if self.tts_provider == "edge_tts" and detect_language
             else "json"
         )
+
+        azure_config = None
+        if self.stt_provider == "azure":
+            azure_config = self._get_azure_config("whisper")
+
         transcript = self.openai.transcribe(
-            audio_input_wav, response_format=response_format
+            audio_input_wav, response_format=response_format, azure_config=azure_config
         )
 
         locale = None
@@ -94,6 +206,21 @@ class OpenAiWingman(Wingman):
             locale = self.__ask_gpt_for_locale(transcript.language)  # type: ignore
 
         return transcript.text if transcript else None, locale
+
+    def _get_azure_config(self, section: str):
+        azure_api_key = self.azure_keys[section]
+        azure_config = AzureConfig(
+            api_key=azure_api_key,
+            api_base_url=self.config["azure"]
+            .get(section, {})
+            .get("api_base_url", None),
+            api_version=self.config["azure"].get(section, {}).get("api_version", None),
+            deployment_name=self.config["azure"]
+            .get(section, {})
+            .get("deployment_name", None),
+        )
+
+        return azure_config
 
     async def _get_response_for_transcript(
         self, transcript: str, locale: str | None
@@ -151,33 +278,45 @@ class OpenAiWingman(Wingman):
 
     def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
-        remember_messages = self.config["features"].get("remember_messages", None)
+        remember_messages = self.config.get("features", {}).get(
+            "remember_messages", None
+        )
 
-        if remember_messages is None:
-            return
+        if remember_messages is None or len(self.messages) == 0:
+            return 0  # Configuration not set, nothing to delete.
 
-        # Calculate the max number of messages to keep including the initial system message
-        # `remember_messages * 2` pairs plus one system message.
-        max_messages = (remember_messages * 2) + 1
+        # The system message aka `context` does not count
+        context_offset = (
+            1 if self.messages and self.messages[0]["role"] == "system" else 0
+        )
 
-        # every "AI interaction" is a pair of 2 messages: "user" and "assistant" or "tools"
-        deleted_pairs = 0
+        # Find the cutoff index where to end deletion, making sure to only count 'user' messages towards the limit starting with newest messages.
+        cutoff_index = len(self.messages) - 1
+        user_message_count = 0
+        for message in reversed(self.messages):
+            if self.__get_message_role(message) == "user":
+                user_message_count += 1
+                if user_message_count == remember_messages:
+                    break  # Found the cutoff point.
+            cutoff_index -= 1
 
-        while len(self.messages) > max_messages:
-            if remember_messages == 0:
-                # Calculate pairs to be deleted, excluding the system message.
-                deleted_pairs += (len(self.messages) - 1) // 2
-                self.reset_conversation_history()
-            else:
-                while len(self.messages) > max_messages:
-                    del self.messages[1:3]
-                    deleted_pairs += 1
+        # If messages below the keep limit, don't delete anything.
+        if user_message_count < remember_messages:
+            return 0
 
-        if self.debug and deleted_pairs > 0:
+        total_deleted_messages = cutoff_index - context_offset  # Messages to delete.
+
+        # Remove the messages before the cutoff index, exclusive of the system message.
+        del self.messages[context_offset:cutoff_index]
+
+        # Optional debugging printout.
+        if self.debug and total_deleted_messages > 0:
             printr.print(
-                f"   Deleted {deleted_pairs} pairs of messages from the conversation history.",
+                f"Deleted {total_deleted_messages} messages from the conversation history.",
                 tags="warn",
             )
+
+        return total_deleted_messages
 
     def reset_conversation_history(self):
         """Resets the conversation history by removing all messages except for the initial system message."""
@@ -206,13 +345,19 @@ class OpenAiWingman(Wingman):
         """
         if self.debug:
             printr.print(
-                f"   Calling GPT with {(len(self.messages) - 1) // 2} message pairs (excluding context)",
+                f"   Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
                 tags="info",
             )
+
+        azure_config = None
+        if self.conversation_provider == "azure":
+            azure_config = self._get_azure_config("conversation")
+
         return self.openai.ask(
             messages=self.messages,
             tools=self._build_tools(),
             model=self.config["openai"].get("conversation_model"),
+            azure_config=azure_config,
         )
 
     def _process_completion(self, completion):
@@ -225,6 +370,11 @@ class OpenAiWingman(Wingman):
             A tuple containing the message response and tool calls from the completion.
         """
         response_message = completion.choices[0].message
+
+        content = response_message.content
+        if content is None:
+            response_message.content = ""
+
         return response_message, response_message.tool_calls
 
     async def _handle_tool_calls(self, tool_calls):
@@ -266,10 +416,15 @@ class OpenAiWingman(Wingman):
         Returns:
             The content of the GPT response to the function call summaries.
         """
+        azure_config = None
+        if self.summarize_provider == "azure":
+            azure_config = self._get_azure_config("summarize")
+
         summarize_model = self.config["openai"].get("summarize_model")
         summarize_response = self.openai.ask(
             messages=self.messages,
             model=summarize_model,
+            azure_config=azure_config,
         )
 
         if summarize_response is None:
@@ -331,73 +486,115 @@ class OpenAiWingman(Wingman):
         """
 
         if self.tts_provider == "edge_tts":
-            edge_config = self.config["edge_tts"]
-            tts_voice = edge_config.get("tts_voice")
-            gender = edge_config.get("gender")
-            detect_language = edge_config.get("detect_language")
-
-            if detect_language:
-                tts_voice = await self.edge_tts.get_same_random_voice_for_language(
-                    gender, self.last_transcript_locale
-                )
-
-            await self.edge_tts.generate_speech(
-                text, filename="audio_output/edge_tts.mp3", voice=tts_voice
-            )
-
-            if self.config.get("features", {}).get("enable_robot_sound_effect"):
-                self.audio_player.effect_audio("audio_output/edge_tts.mp3")
-
-            self.audio_player.play("audio_output/edge_tts.mp3")
+            await self._play_with_edge_tts(text)
         elif self.tts_provider == "elevenlabs":
-            elevenlabs_config = self.config["elevenlabs"]
-            voice = elevenlabs_config.get("voice")
-            if not isinstance(voice, str):
-                voice = Voice(voice_id=voice.get("id"))
-            else:
-                voice = next((v for v in voices() if v.name == voice), None)
+            self._play_with_elevenlabs(text)
+        elif self.tts_provider == "azure":
+            self._play_with_azure(text)
+        else:
+            self._play_with_openai(text)
 
-            voice_setting = self._get_elevenlabs_settings(elevenlabs_config)
-            if voice_setting:
-                voice.settings = voice_setting
+    def _play_with_openai(self, text):
+        response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
+        if response is not None:
+            self.audio_player.stream_with_effects(response.content, self.config)
 
-            response = generate(
-                text,
-                voice=voice,
-                model=elevenlabs_config.get("model"),
-                stream=True,
-                api_key=self.elevenlabs_api_key,
-                latency=elevenlabs_config.get("latency", 3),
-            )
-            stream(response)
-        else:  # OpenAI TTS
-            response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
-            if response is not None:
-                self.audio_player.stream_with_effects(
-                    response.content,
-                    self.config.get("features", {}).get("play_beep_on_receiving"),
-                    self.config.get("features", {}).get("enable_radio_sound_effect"),
-                    self.config.get("features", {}).get("enable_robot_sound_effect"),
-                )
+    def _play_with_azure(self, text):
+        azure_config = self.config["azure"].get("tts", None)
 
-    def _get_elevenlabs_settings(self, elevenlabs_config):
-        settings = elevenlabs_config.get("voice_settings")
-        if not settings:
-            return None
+        if azure_config is None:
+            return
 
-        voice_settings = VoiceSettings(
-            stability=settings.get("stability", 0.5),
-            similarity_boost=settings.get("similarity_boost", 0.75),
+        speech_config = speechsdk.SpeechConfig(
+            subscription=self.azure_keys["tts"],
+            region=azure_config["region"],
         )
-        style = settings.get("style", None)
-        use_speaker_boost = settings.get("use_speaker_boost", None)
+        speech_config.speech_synthesis_voice_name = azure_config["voice"]
 
-        if style is not None:
-            voice_settings.style = style
-        if use_speaker_boost is not None:
-            voice_settings.use_speaker_boost = use_speaker_boost
+        if azure_config["detect_language"]:
+            auto_detect_source_language_config = (
+                speechsdk.AutoDetectSourceLanguageConfig()
+            )
 
-        return voice_settings
+        speech_synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=speech_config,
+            audio_config=None,
+            auto_detect_source_language_config=auto_detect_source_language_config
+            if azure_config["detect_language"]
+            else None,
+        )
+
+        result = speech_synthesizer.speak_text_async(text).get()
+        if result is not None:
+            self.audio_player.stream_with_effects(result.audio_data, self.config)
+
+    async def _play_with_edge_tts(self, text: str):
+        output_file = "audio_output/edge_tts.mp3"
+        edge_config = self.config["edge_tts"]
+
+        tts_voice = edge_config.get("tts_voice")
+        detect_language = edge_config.get("detect_language")
+        if detect_language:
+            gender = edge_config.get("gender")
+            tts_voice = await self.edge_tts.get_same_random_voice_for_language(
+                gender, self.last_transcript_locale
+            )
+
+        await self.edge_tts.generate_speech(text, filename=output_file, voice=tts_voice)
+        audio, sample_rate = self.audio_player.get_audio_from_file(output_file)
+
+        self.audio_player.stream_with_effects((audio, sample_rate), self.config)
+
+    def _play_with_elevenlabs(self, text: str):
+        # presence already validated in validate()
+        elevenlabs_config = self.config["elevenlabs"]
+        # validate() already checked that either id or name is set
+        voice_id = elevenlabs_config["voice"].get("id")
+        voice_name = elevenlabs_config["voice"].get("name")
+
+        voice_settings = elevenlabs_config.get("voice_settings", {})
+        user = ElevenLabsUser(self.elevenlabs_api_key)
+        model = elevenlabs_config.get("model", "eleven_multilingual_v2")
+
+        if voice_id:
+            voice = user.get_voice_by_ID(voice_id)
+        else:
+            voice = user.get_voices_by_name(voice_name)[0]
+
+        # todo: add start/end callbacks to play Quindar beep even if use_sound_effects is disabled
+        playback_options = PlaybackOptions(runInBackground=True)
+        generation_options = GenerationOptions(
+            model=model,
+            latencyOptimizationLevel=elevenlabs_config.get("latency", 0),
+            style=voice_settings.get("style", 0),
+            use_speaker_boost=voice_settings.get("use_speaker_boost", True),
+        )
+        stability = voice_settings.get("stability")
+        if stability is not None:
+            generation_options.stability = stability
+
+        similarity_boost = voice_settings.get("similarity_boost")
+        if similarity_boost is not None:
+            generation_options.similarity_boost = similarity_boost
+
+        style = voice_settings.get("style")
+        if style is not None and model != "eleven_turbo_v2":
+            generation_options.style = style
+
+        use_sound_effects = elevenlabs_config.get("use_sound_effects", False)
+        if use_sound_effects:
+            audio_bytes, _history_id = voice.generate_audio_v2(
+                prompt=text,
+                generationOptions=generation_options,
+            )
+            if audio_bytes:
+                self.audio_player.stream_with_effects(audio_bytes, self.config)
+        else:
+            voice.generate_stream_audio_v2(
+                prompt=text,
+                playbackOptions=playback_options,
+                generationOptions=generation_options,
+            )
 
     def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
@@ -477,3 +674,14 @@ class OpenAiWingman(Wingman):
             f"   ChatGPT says this language maps to locale '{answer}'.", tags="info"
         )
         return answer
+
+    def __get_message_role(self, message):
+        """Helper method to get the role of the message regardless of its type."""
+        if isinstance(message, Mapping):
+            return message.get("role")
+        elif hasattr(message, "role"):
+            return message.role
+        else:
+            raise TypeError(
+                f"Message is neither a mapping nor has a 'role' attribute: {message}"
+            )
