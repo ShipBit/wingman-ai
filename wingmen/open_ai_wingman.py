@@ -509,7 +509,6 @@ class OpenAiWingman(Wingman):
             subscription=self.azure_keys["tts"],
             region=azure_config["region"],
         )
-        audio_config = speechsdk.audio.AudioOutputConfig(use_default_speaker=True)
         speech_config.speech_synthesis_voice_name = azure_config["voice"]
 
         if azure_config["detect_language"]:
@@ -519,13 +518,15 @@ class OpenAiWingman(Wingman):
 
         speech_synthesizer = speechsdk.SpeechSynthesizer(
             speech_config=speech_config,
-            audio_config=audio_config,
+            audio_config=None,
             auto_detect_source_language_config=auto_detect_source_language_config
             if azure_config["detect_language"]
             else None,
         )
 
-        speech_synthesizer.speak_text_async(text).get()
+        result = speech_synthesizer.speak_text_async(text).get()
+        if result is not None:
+            self.audio_player.stream_with_effects(result.audio_data, self.config)
 
     async def _play_with_edge_tts(self, text: str):
         output_file = "audio_output/edge_tts.mp3"
