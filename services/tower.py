@@ -1,3 +1,7 @@
+import os
+from os import path
+import yaml
+
 from exceptions import MissingApiKeyException
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -15,10 +19,43 @@ class Tower:
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.broken_wingmen = []
 
+        # Dynamically load wingmen YAML files from the wingmen directory
+        self.wingmen = self.__load_wingmen()
+
+        # Inject dynamically loaded wingmen into config
+        self.config["wingmen"] = self.wingmen
+
         self.wingmen = self.__instantiate_wingmen()
         self.key_wingman_dict: dict[str, Wingman] = {}
         for wingman in self.wingmen:
             self.key_wingman_dict[wingman.get_record_key()] = wingman
+
+    @staticmethod
+    def __load_wingmen() -> dict[str, any]:
+
+        # Global wingmen dict
+        wingmen = dict()
+
+        # Dynamically load all wingmen configuration files from the provided directory
+        for file in os.listdir("wingmen"):
+
+            # Filter out all non-yaml files
+            if file.endswith(".yaml"):
+
+                # Get the absolute path of the file along with other file info
+                bundle_dir = path.abspath(path.dirname(file))
+                file_name = path.join(bundle_dir + "/" + "wingmen", file)
+                wingman_name = file.replace(".yaml", "")
+
+                # Load wingman configuration file as a dict and add it to the global wingmen dict
+                with open(file_name, "r", encoding="UTF-8") as stream:
+                    try:
+                        wingman = yaml.safe_load(stream)
+                        wingmen[wingman_name] = wingman
+                    except yaml.YAMLError as exc:
+                        print(exc)
+
+        return wingmen
 
     def __instantiate_wingmen(self) -> list[Wingman]:
         wingmen = []

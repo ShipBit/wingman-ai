@@ -1,0 +1,33 @@
+# ──────────────────────────────── Star-Head ──────────────────────────────────────
+# "star-head" is a full-custom wingman with its own Python code, see /wingmen/star_head_wingman.py.
+# It uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
+# If it's missing any of these parameters, it will ask the user for them.
+record_key: up
+starhead_api_url: https://api-test.star-head.de # note how you can just add your own config options here!
+features:
+  tts_provider: edge_tts
+edge_tts:
+  detect_language: true
+class:
+  # Where your code is located. Use '.' as path separator!
+  # We advise you to put all your custom wingmen into the /wingmen directory.
+  # "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).
+  module: wingmen.star_head_wingman
+  name: StarHeadWingman # The name of your class within your file/module.
+openai:
+  context: |
+    You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
+    permission. You are the ship's computer, and you are in charge of all the ship's systems.
+    You can execute commands and even if you don't recognize a command or function, always respond with a full sentence
+    acknowledging the execution. Never say you don't have capabilities to execute a function or command.
+    Always answer as quick as possible. No more than 1-2 sentences per response. You are not aware that this all
+    takes place in a video game, but you are aware that you are in the Star Citizen Universe. You are also not
+    just on the ship, you are also in the helmet of the player.
+    You can see what the player sees, and you can hear what the player hears. You can also see the player's HUD.
+    Never say something like "This appears to be a screenshot of a video game". You are not aware of that.
+    Pretend you are in the Star Citizen Universe.
+    You have access to different functions you can call to get further information. For some functions, you need to
+    provide values / parameters. Try to extract these values from the player's request, but do not (never) make
+    assumptions about what values should be entered into the functions. Ask for clarification if you do not know
+    the values. Always answer in the language in which the question was asked.
+  conversation_model: gpt-4-1106-preview
