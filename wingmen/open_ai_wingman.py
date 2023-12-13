@@ -1,6 +1,6 @@
 import json
-import azure.cognitiveservices.speech as speechsdk
 from typing import Mapping
+import azure.cognitiveservices.speech as speechsdk
 from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
 from services.open_ai import AzureConfig, OpenAi
 from services.edge import EdgeTTS
@@ -63,8 +63,7 @@ class OpenAiWingman(Wingman):
             self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
 
         await self.__validate_elevenlabs_config(errors)
-
-        self.__validate_azure_config(errors)
+        await self.__validate_azure_config(errors)
 
         return errors
 
@@ -100,7 +99,7 @@ class OpenAiWingman(Wingman):
                     "Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config."
                 )
 
-    def __validate_azure_config(self, errors):
+    async def __validate_azure_config(self, errors):
         if (
             self.tts_provider == "azure"
             or self.stt_provider == "azure"
@@ -115,10 +114,9 @@ class OpenAiWingman(Wingman):
                 return
 
         if self.tts_provider == "azure":
-            self.azure_keys["tts"] = self.secret_keeper.retrieve(
+            self.azure_keys["tts"] = await self.secret_keeper.retrieve(
                 requester=self.name,
                 key="azure_tts",
-                friendly_key_name="Azure TTS API key",
                 prompt_if_missing=True,
             )
             if not self.azure_keys["tts"]:
@@ -128,10 +126,9 @@ class OpenAiWingman(Wingman):
                 return
 
         if self.stt_provider == "azure":
-            self.azure_keys["whisper"] = self.secret_keeper.retrieve(
+            self.azure_keys["whisper"] = await self.secret_keeper.retrieve(
                 requester=self.name,
                 key="azure_whisper",
-                friendly_key_name="Azure Whisper API key",
                 prompt_if_missing=True,
             )
             if not self.azure_keys["whisper"]:
@@ -141,10 +138,9 @@ class OpenAiWingman(Wingman):
                 return
 
         if self.conversation_provider == "azure":
-            self.azure_keys["conversation"] = self.secret_keeper.retrieve(
+            self.azure_keys["conversation"] = await self.secret_keeper.retrieve(
                 requester=self.name,
                 key="azure_conversation",
-                friendly_key_name="Azure Conversation API key",
                 prompt_if_missing=True,
             )
             if not self.azure_keys["conversation"]:
@@ -154,10 +150,9 @@ class OpenAiWingman(Wingman):
                 return
 
         if self.summarize_provider == "azure":
-            self.azure_keys["summarize"] = self.secret_keeper.retrieve(
+            self.azure_keys["summarize"] = await self.secret_keeper.retrieve(
                 requester=self.name,
                 key="azure_summarize",
-                friendly_key_name="Azure Summarize API key",
                 prompt_if_missing=True,
             )
             if not self.azure_keys["summarize"]:
