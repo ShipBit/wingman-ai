@@ -1,0 +1,93 @@
+name: "Sign file"
+description: "Sign a file using a code signing certificate"
+inputs:
+  path-to-binary:
+    description: "The folder that contains the files to sign"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Certificate Windows
+      run: |
+        echo "${{env.CLIENT_CERTIFICATE }}" | base64 --decode > /d/cognite_code_signing_github_actions.p12
+      if: ${{ runner.os == 'Windows' && (!contains(env.DEPS_INSTALLED, 'TRUE')) }}
+      shell: bash
+
+    - name: Setup Certificate Linux
+      run: |
+        echo "${{env.CLIENT_CERTIFICATE }}" | base64 --decode | sudo install -D /dev/stdin /d/cognite_code_signing_github_actions.p12
+      if: ${{ runner.os == 'Linux' && (!contains(env.DEPS_INSTALLED, 'TRUE')) }}
+      shell: bash
+
+    - name: Set required variables
+      id: variables
+      run: |
+        echo "SM_HOST=${{ env.CERTIFICATE_HOST }}" >> "$GITHUB_ENV"
+        echo "SM_API_KEY=${{ env.CERTIFICATE_HOST_API_KEY }}" >> "$GITHUB_ENV"
+        echo "SM_CLIENT_CERT_PASSWORD=${{ env.CLIENT_CERTIFICATE_PASSWORD }}" >> "$GITHUB_ENV"
+        echo "SM_CODE_SIGNING_CERT_SHA1_HASH=${{ env.CERTIFICATE_SHA1_HASH }}" >> "$GITHUB_ENV"
+        if [ "${{ runner.os }}" == "Windows" ]
+        then
+          echo "SM_CLIENT_CERT_FILE=D:\\cognite_code_signing_github_actions.p12" >> "$GITHUB_ENV"
+        elif [ "${{ runner.os }}" == "Linux" ]
+        then
+          echo "SM_CLIENT_CERT_FILE=/d/cognite_code_signing_github_actions.p12" >> "$GITHUB_ENV"
+          echo "PKCS11_CONFIG=/tmp/DigiCert One Signing Manager Tools/smtools-linux-x64/pkcs11properties.cfg" >> "$GITHUB_ENV"
+          echo "/tmp/DigiCert One Signing Manager Tools/smtools-linux-x64" >> $GITHUB_PATH
+        fi
+      if: ${{ !contains(env.DEPS_INSTALLED, 'TRUE') }}
+      shell: bash
+
+    - name: Configure Digicert Secure Software Manager
+      uses: digicert/ssm-code-signing@v0.0.2
+      env:
+        SM_API_KEY: ${{ env.SM_API_KEY }}
+        SM_CLIENT_CERT_PASSWORD: ${{ env.SM_CLIENT_CERT_PASSWORD }}
+        SM_CLIENT_CERT_FILE: ${{ env.SM_CLIENT_CERT_FILE }}
+      if: ${{ !contains(env.DEPS_INSTALLED, 'TRUE') }}
+
+    - name: Sign with smctl Windows
+      env:
+        GITHUB_WORKSPACE: ${{ github.workspace }}
+      run: |
+        smctl windows certsync --keypair-alias="key_579581556"
+        $file_path = "${{ env.GITHUB_WORKSPACE }}\${{ inputs.path-to-binary }}"
+        $files_to_sign = @()
+        if (Test-Path -Path $file_path -PathType Leaf) {
+          $files_to_sign = @([PSCustomObject]@{FullName = $file_path})
+        }
+        else {
+          Get-ChildItem -Path $file_path -File -Recurse
+          $files_to_sign = @(Get-ChildItem -Path $file_path -File -Recurse)
+        }
+        foreach ( $f in $files_to_sign )
+        {
+          smctl sign --fingerprint ${{ env.SM_CODE_SIGNING_CERT_SHA1_HASH }} --input $f.FullName
+          smctl sign verify --input $f.FullName
+        }
+      if: runner.os == 'Windows'
+      shell: powershell
+
+    - name: Install Jsign for Linux signing
+      run: |
+        curl -fSslL https://github.com/ebourg/jsign/releases/download/3.1/jsign_3.1_all.deb -o jsign_3.1_all.deb
+        sudo dpkg --install jsign_3.1_all.deb
+      if: ${{ runner.os == 'Linux' && (!contains(env.DEPS_INSTALLED, 'TRUE')) }}
+      shell: bash
+
+    - name: Sign with smctl Linux
+      run: |
+        file_path="${{ inputs.path-to-binary }}"
+        for f in $(find $file_path -type f); do
+          echo $f
+          smctl sign -v --keypair-alias="key_579581556" --config-file="/tmp/DigiCert One Signing Manager Tools/smtools-linux-x64/pkcs11properties.cfg" --fingerprint "${{ env.SM_CODE_SIGNING_CERT_SHA1_HASH }}" --input "$f"
+        done
+      if: runner.os == 'Linux'
+      shell: bash
+
+    - name: Mark dependencies as installed
+      id: dependency-variable
+      run: |
+        echo "DEPS_INSTALLED=TRUE" >> "$GITHUB_ENV"
+      if: ${{ !contains(env.DEPS_INSTALLED, 'TRUE') }}
+      shell: bash
