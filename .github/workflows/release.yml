@@ -1,11 +1,8 @@
 name: Build, Sign and Release
 
 on:
-  push:
-    tags:
-      - '*'
-    branches:
-      - main
+  release:
+    types: [published]
 
 jobs:
   build-windows:
