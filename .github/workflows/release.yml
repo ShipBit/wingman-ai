@@ -79,7 +79,12 @@ jobs:
     steps:
       - uses: actions/download-artifact@v3
         with:
+          name: WingmanAiCore-Windows
           path: .
+
+      - name: Remove Unwanted Files
+        run: |
+          rm -f *.taskkey
 
       - name: Create Release
         id: create_release
