@@ -1,3 +1,4 @@
+import copy
 from exceptions import MissingApiKeyException
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -125,8 +126,9 @@ class Tower:
         # Update 'openai', 'features', and 'edge_tts' sections from general config into wingman's config.
         for key in ["sound", "openai", "features", "edge_tts", "elevenlabs", "azure"]:
             if key in general:
+                # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.
                 merged[key] = self.__deep_merge(
-                    general[key].copy(), wingman.get(key, {})
+                    copy.deepcopy(general[key]), wingman.get(key, {})
                 )
 
         # Special handling for merging the commands lists
