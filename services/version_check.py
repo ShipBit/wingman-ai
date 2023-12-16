@@ -2,7 +2,7 @@ import requests
 from packaging import version
 from services.printr import Printr
 
-LOCAL_VERSION = "1.1.0b1"
+LOCAL_VERSION = "1.1.1b1"
 VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
 
 printr = Printr()
