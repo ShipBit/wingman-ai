@@ -49,8 +49,8 @@ class AudioRecorder:
         self.is_recording = False
         printr.print("Recording stopped", tags="grey")
 
-        if not os.path.exists("audio_output"):
-            os.makedirs("audio_output")
+        if not os.path.exists(self.recording_path):
+            os.makedirs(self.recording_path)
 
         if self.recording is None:
             printr.print("Ignored empty recording", tags="warn")
