@@ -38,24 +38,15 @@ jobs:
           name: WingmanAiCore-Windows
           path: dist/WingmanAiCore/
 
-      - name: Upload action code
-        uses: actions/upload-artifact@v3
-        with:
-          name: action-code
-          path: .github/actions/code-sign
-
   sign-windows-executable:
     needs: build-windows
     runs-on: windows-2022
     steps:
+      - uses: actions/checkout@v3 # for the action
       - uses: actions/download-artifact@v3
         with:
           name: WingmanAiCore-Windows
-          path: .
-      - uses: actions/download-artifact@v3
-        with:
-          name: action-code
-          path: .github/actions/code-sign
+          path: WingmanAiCore
 
       - name: Sign
         env:
@@ -66,13 +57,13 @@ jobs:
           CLIENT_CERTIFICATE_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
         uses: ./.github/actions/code-sign
         with:
-          path-to-binary: 'WingmanAiCore.exe'
+          path-to-binary: 'WingmanAiCore/WingmanAiCore.exe'
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v3
         with:
           name: WingmanAiCore-Windows
-          path: .
+          path: WingmanAiCore
 
   release:
     needs: [sign-windows-executable]
@@ -82,10 +73,6 @@ jobs:
         with:
           name: WingmanAiCore-Windows
           path: .
-
-      - name: Remove Unwanted Files
-        run: |
-          rm -f *.taskkey
 
       - name: Create Release
         id: create_release
