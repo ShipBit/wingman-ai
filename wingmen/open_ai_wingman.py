@@ -1,7 +1,15 @@
 import json
-import azure.cognitiveservices.speech as speechsdk
 from typing import Mapping
-from elevenlabslib import ElevenLabsUser, GenerationOptions, PlaybackOptions
+import azure.cognitiveservices.speech as speechsdk
+from elevenlabslib import (
+    ElevenLabsUser,
+    GenerationOptions,
+    PlaybackOptions,
+    ElevenLabsVoice,
+    ElevenLabsDesignedVoice,
+    ElevenLabsClonedVoice,
+    ElevenLabsProfessionalVoice,
+)
 from services.open_ai import AzureConfig, OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
@@ -556,6 +564,12 @@ class OpenAiWingman(Wingman):
         user = ElevenLabsUser(self.elevenlabs_api_key)
         model = elevenlabs_config.get("model", "eleven_multilingual_v2")
 
+        voice: (
+            ElevenLabsVoice
+            | ElevenLabsDesignedVoice
+            | ElevenLabsClonedVoice
+            | ElevenLabsProfessionalVoice
+        ) = None
         if voice_id:
             voice = user.get_voice_by_ID(voice_id)
         else:
