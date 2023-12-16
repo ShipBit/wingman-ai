@@ -4,17 +4,21 @@ import sounddevice
 import soundfile
 from services.printr import Printr
 
+RECORDING_PATH = "audio_output"
+RECORDING_FILE: str = "recording.wav"
 
 printr = Printr()
+
 
 class AudioRecorder:
     def __init__(
         self,
-        filename: str = "audio_output/output.wav",
+        app_root_path: str,
         samplerate: int = 44100,
         channels: int = 1,
     ):
-        self.filename = filename
+        self.recording_path: str = os.path.join(app_root_path, RECORDING_PATH)
+        self.recording_file = os.path.join(self.recording_path, RECORDING_FILE)
         self.samplerate = samplerate
         self.is_recording = False
         self.recording = None
@@ -56,9 +60,9 @@ class AudioRecorder:
             return None
 
         try:
-            soundfile.write(self.filename, self.recording, self.samplerate)
+            soundfile.write(self.recording_file, self.recording, self.samplerate)
             self.recording = None
-            return self.filename
+            return self.recording_file
         except IndexError:
             printr.print("Ignored empty recording", tags="warn")
             return None
