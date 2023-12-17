@@ -16,7 +16,7 @@ printr = Printr()
 
 def get_application_root(is_bundled: bool):
     if is_bundled:
-        application_path = path.dirname(sys.executable)
+        application_path = sys._MEIPASS
     else:
         application_path = path.dirname(path.abspath(__file__))
     return application_path
@@ -25,7 +25,7 @@ def get_application_root(is_bundled: bool):
 class WingmanAI:
     def __init__(self):
         # pyinstaller things...
-        self.app_is_bundled = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
+        self.app_is_bundled = getattr(sys, "frozen", False)
         self.app_root_dir = get_application_root(self.app_is_bundled)
 
         self.active = False
