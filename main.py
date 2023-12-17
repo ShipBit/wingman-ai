@@ -14,10 +14,19 @@ from wingmen.wingman import Wingman
 printr = Printr()
 
 
+def get_application_root(is_bundled: bool):
+    if is_bundled:
+        application_path = path.dirname(sys.executable)
+    else:
+        application_path = path.dirname(path.abspath(__file__))
+    return application_path
+
+
 class WingmanAI:
     def __init__(self):
+        # pyinstaller things...
         self.app_is_bundled = getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")
-        self.app_root_dir = path.abspath(path.dirname(__file__))
+        self.app_root_dir = get_application_root(self.app_is_bundled)
 
         self.active = False
         self.active_recording = {"key": "", "wingman": None}
@@ -31,7 +40,11 @@ class WingmanAI:
         try:
             if self.config_manager:
                 config = self.config_manager.get_context_config(context)
-                self.tower = Tower(config, self.secret_keeper)
+                self.tower = Tower(
+                    config=config,
+                    secret_keeper=self.secret_keeper,
+                    app_root_dir=self.app_root_dir,
+                )
 
         except FileNotFoundError:
             printr.print_err(f"Could not find context.{context}.yaml", True)

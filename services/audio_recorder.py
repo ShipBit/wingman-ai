@@ -1,8 +1,8 @@
-import os
 import numpy
 import sounddevice
 import soundfile
 from services.printr import Printr
+from services.file_creator import FileCreator
 
 RECORDING_PATH = "audio_output"
 RECORDING_FILE: str = "recording.wav"
@@ -10,15 +10,16 @@ RECORDING_FILE: str = "recording.wav"
 printr = Printr()
 
 
-class AudioRecorder:
+class AudioRecorder(FileCreator):
     def __init__(
         self,
-        app_root_path: str,
+        app_root_dir: str,
         samplerate: int = 44100,
         channels: int = 1,
     ):
-        self.recording_path: str = os.path.join(app_root_path, RECORDING_PATH)
-        self.recording_file = os.path.join(self.recording_path, RECORDING_FILE)
+        super().__init__(app_root_dir, RECORDING_PATH)
+        self.file_path = self.get_full_file_path(RECORDING_FILE)
+
         self.samplerate = samplerate
         self.is_recording = False
         self.recording = None
@@ -49,9 +50,6 @@ class AudioRecorder:
         self.is_recording = False
         printr.print("Recording stopped", tags="grey")
 
-        if not os.path.exists(self.recording_path):
-            os.makedirs(self.recording_path)
-
         if self.recording is None:
             printr.print("Ignored empty recording", tags="warn")
             return None
@@ -60,9 +58,9 @@ class AudioRecorder:
             return None
 
         try:
-            soundfile.write(self.recording_file, self.recording, self.samplerate)
+            soundfile.write(self.file_path, self.recording, self.samplerate)
             self.recording = None
-            return self.recording_file
+            return self.file_path
         except IndexError:
             printr.print("Ignored empty recording", tags="warn")
             return None
