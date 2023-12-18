@@ -36,8 +36,8 @@ class ConfigManager:
                 try:
                     parsed_config = yaml.safe_load(stream)
                 except yaml.YAMLError as e:
-                    self.printr.print_err(
-                        f"Could not load config ({config_name})!\n{str(e)}", True
+                    self.printr.toast_error(
+                        f"Could not load config ({config_name})!\n{str(e)}"
                     )
 
         return parsed_config
@@ -49,8 +49,8 @@ class ConfigManager:
             try:
                 yaml.dump(content, stream)
             except yaml.YAMLError as e:
-                self.printr.print_err(
-                    f"Could not write config ({config_name})!\n{str(e)}", True
+                self.printr.toast_error(
+                    f"Could not write config ({config_name})!\n{str(e)}"
                 )
                 return False
 

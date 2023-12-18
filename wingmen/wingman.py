@@ -1,3 +1,4 @@
+import platform
 import random
 import time
 from difflib import SequenceMatcher
@@ -6,20 +7,19 @@ from typing import Any
 from services.audio_player import AudioPlayer
 from services.file_creator import FileCreator
 from services.printr import Printr
+from api.enums import LogSource, LogType
 from services.secret_keeper import SecretKeeper
 
-# see execute_keypress() method
 printr = Printr()
-try:
+
+if platform.system() == "Windows":
     import pydirectinput as key_module
-except AttributeError:
-    # TODO: Instead of creating a banner make this an icon in the header
-    # printr.print_warn(
-    #     "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
-    #     wait_for_gui=True
-    # )
+else:
     import pyautogui as key_module
 
+    printr.toast_warning(
+        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
+    )
 
 class Wingman(FileCreator):
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
@@ -31,7 +31,6 @@ class Wingman(FileCreator):
         self,
         name: str,
         config: dict[str, Any],
-        secret_keeper: SecretKeeper,
         app_root_dir: str,
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
@@ -47,7 +46,7 @@ class Wingman(FileCreator):
         self.config = config
         """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
 
-        self.secret_keeper = secret_keeper
+        self.secret_keeper = SecretKeeper()
         """A service that allows you to store and retrieve secrets like API keys. It can prompt the user for secrets if necessary."""
 
         self.name = name
@@ -74,7 +73,6 @@ class Wingman(FileCreator):
         class_name: str,
         name: str,
         config: dict[str, Any],
-        secret_keeper: SecretKeeper,
         app_root_dir: str,
         **kwargs,
     ):
@@ -92,7 +90,6 @@ class Wingman(FileCreator):
         instance = DerivedWingmanClass(
             name=name,
             config=config,
-            secret_keeper=secret_keeper,
             app_root_dir=app_root_dir,
             **kwargs,
         )
@@ -107,7 +104,7 @@ class Wingman(FileCreator):
         if self.execution_start:
             execution_stop = time.perf_counter()
             elapsed_seconds = execution_stop - self.execution_start
-            printr.print(f"...took {elapsed_seconds:.2f}s", tags="info")
+            printr.print(f"...took {elapsed_seconds:.2f}s", color=LogType.INFO)
         if reset_timer:
             self.start_execution_benchmark()
 
@@ -117,7 +114,7 @@ class Wingman(FileCreator):
 
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
-    def validate(self) -> list[str]:
+    async def validate(self) -> list[str]:
         """Use this function to validate params and config before the Wingman is started.
         If you add new config sections or entries to your custom wingman, you should validate them here.
 
@@ -167,7 +164,7 @@ class Wingman(FileCreator):
         process_result = None
 
         if self.debug:
-            printr.print("Starting transcription...", tags="info")
+            printr.print("Starting transcription...", color=LogType.INFO)
 
         # transcribe the audio.
         transcript, locale = await self._transcribe(audio_input_wav)
@@ -176,10 +173,15 @@ class Wingman(FileCreator):
             self.print_execution_time(reset_timer=True)
 
         if transcript:
-            printr.print(f">> (You): {transcript}", tags="violet")
+            printr.print(
+                f"{transcript}",
+                color=LogType.PURPLE,
+                source_name="User",
+                source=LogSource.USER,
+            )
 
             if self.debug:
-                printr.print("Getting response for transcript...", tags="info")
+                printr.print("Getting response for transcript...", color=LogType.INFO)
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
@@ -190,10 +192,15 @@ class Wingman(FileCreator):
                 self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
-            printr.print(f"<< ({self.name}): {actual_response}", tags="green")
+            printr.print(
+                f"{actual_response}",
+                color=LogType.POSITIVE,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
 
         if self.debug:
-            printr.print("Playing response back to user...", tags="info")
+            printr.print("Playing response back to user...", color=LogType.INFO)
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         await self._play_to_user(str(process_result))
@@ -322,11 +329,12 @@ class Wingman(FileCreator):
         if not command:
             return "Command not found"
 
-        printr.print(f"❖ Executing command: {command.get('name')}", tags="info")
+        printr.print(f"❖ Executing command: {command.get('name')}", color=LogType.INFO)
 
         if self.debug:
             printr.print(
-                "Skipping actual keypress execution in debug_mode...", tags="warn"
+                "Skipping actual keypress execution in debug_mode...",
+                color=LogType.WARNING,
             )
 
         if len(command.get("keys", [])) > 0 and not self.debug:

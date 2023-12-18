@@ -7,9 +7,9 @@ cmd = [
     "PyInstaller",
     "main.py",  # your main file with ui.run()
     "--name",
-    "WingmanAI",  # name of your app
+    "WingmanAiCore",  # name of your app
     # "--onefile",
-    "--windowed",  # prevent console appearing, only use with ui.run(native=True, ...)
+    # "--windowed",  # prevent console appearing, only use with ui.run(native=True, ...)
     "--icon",
     "assets/icons/wingman-ai.png",
     "--noconfirm",

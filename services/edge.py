@@ -1,6 +1,7 @@
 import random
 from edge_tts import Communicate, VoicesManager
 from services.file_creator import FileCreator
+from api.enums import LogType
 from services.printr import Printr
 
 RECORDING_PATH = "audio_output"
@@ -57,6 +58,8 @@ class EdgeTTS(FileCreator):
         )
         self.random_voices[locale] = random_voice
 
-        printr.print(f"   Your random EdgeTTS voice: '{random_voice}'.", tags="info")
+        printr.print(
+            f"   Your random EdgeTTS voice: '{random_voice}'.", color=LogType.INFO
+        )
 
         return random_voice

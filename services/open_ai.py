@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import re
 from openai import OpenAI, APIStatusError, AzureOpenAI
+from api.enums import LogType
 from services.printr import Printr
 
 printr = Printr()
@@ -124,12 +125,12 @@ class OpenAi:
             return None
 
     def _handle_key_error(self):
-        printr.print_err(
+        printr.toast_error(
             "The OpenAI API key you provided is invalid. Please check the GUI settings or your 'secrets.yaml'"
         )
 
     def _handle_api_error(self, api_response):
-        printr.print_err(
+        printr.toast_error(
             f"The OpenAI API send the following error code {api_response.status_code} ({api_response.type})"
         )
         # get API message from appended JSON object in the "message" part of the exception
@@ -139,35 +140,10 @@ class OpenAi:
         )
         if m is not None:
             message = m["message"].replace(". ", ".\n")
-            printr.print(message, tags="err")
+            printr.print(message, color=LogType.ERROR)
         elif api_response.message:
-            printr.print(api_response.message, tags="err")
+            printr.print(api_response.message, color=LogType.ERROR)
         else:
-            printr.print("The API did not provide further information.", tags="err")
-
-        # TODO:
-        # Provide additional info an known issues
-        # match api_response.status_code:
-        #     case 400:
-        #         printr.info_print("These errors can have multiple root causes.", False)
-        #         printr.info_print(
-        #             "Please have an eye on our Discord 'early-access' channel for the latest updates.",
-        #             False,
-        #         )
-        #     case 401:
-        #         printr.info_print("This is a key related issue. Please check the keys you provided in your 'apikeys.yaml'", False)
-        #     case 404:
-        #         printr.info_print(
-        #             "The key you are using might not be eligible for the gpt-4 model.",
-        #             False,
-        #         )
-        #         printr.info_print(
-        #             "Access to gpt-4 is granted, after you spent at least 1$ on your Open AI account.",
-        #             False,
-        #         )
-        #         printr.info_print(
-        #             "Have a look at our Discord 'early-access' channel for more information on that topic.",
-        #             False,
-        #         )
-        #     case _:
-        #         pass  # ¯\_(ツ)_/¯
+            printr.print(
+                "The API did not provide further information.", color=LogType.ERROR
+            )
