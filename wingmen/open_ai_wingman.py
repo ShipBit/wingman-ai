@@ -125,6 +125,7 @@ class OpenAiWingman(Wingman):
         if (
             self.tts_provider == "azure"
             or self.stt_provider == "azure"
+            or self.stt_provider == "azure_speech"
             or self.conversation_provider == "azure"
             or self.summarize_provider == "azure"
         ):
@@ -148,7 +149,7 @@ class OpenAiWingman(Wingman):
                 )
                 return
 
-        if self.stt_provider == "azure":
+        if self.stt_provider == "azure" or self.stt_provider == "azure_speech":
             self.azure_keys["whisper"] = self.secret_keeper.retrieve(
                 requester=self.name,
                 key="azure_whisper",
@@ -207,6 +208,22 @@ class OpenAiWingman(Wingman):
         azure_config = None
         if self.stt_provider == "azure":
             azure_config = self._get_azure_config("whisper")
+
+        if self.stt_provider == "azure_speech":
+            azure_config = self.config["azure"].get("tts", None)
+
+            if azure_config is not None:
+                speech_config = speechsdk.SpeechConfig(
+                    subscription=self.azure_keys["tts"],
+                    region=azure_config["region"],
+                )
+                audio_config = speechsdk.AudioConfig(filename=audio_input_wav)
+                speech_recognizer = speechsdk.SpeechRecognizer(
+                    speech_config=speech_config, audio_config=audio_config
+                )
+                result = speech_recognizer.recognize_once_async().get()
+
+                return result.text, None
 
         transcript = self.openai.transcribe(
             audio_input_wav, response_format=response_format, azure_config=azure_config
