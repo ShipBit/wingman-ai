@@ -10,8 +10,9 @@ printr = Printr()
 
 
 class Tower:
-    def __init__(self, config: dict[str, any], secret_keeper: SecretKeeper):  # type: ignore
+    def __init__(self, config: dict[str, any], secret_keeper: SecretKeeper, app_root_dir: str):  # type: ignore
         self.config = config
+        self.app_root_dir = app_root_dir
         self.secret_keeper = secret_keeper
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.broken_wingmen = []
@@ -50,11 +51,15 @@ class Tower:
                         secret_keeper=self.secret_keeper,
                         module_path=class_config.get("module"),
                         class_name=class_config.get("name"),
+                        app_root_dir=self.app_root_dir,
                         **kwargs
                     )
                 else:
                     wingman = OpenAiWingman(
-                        wingman_name, merged_config, self.secret_keeper
+                        name=wingman_name,
+                        config=merged_config,
+                        secret_keeper=self.secret_keeper,
+                        app_root_dir=self.app_root_dir,
                     )
             except MissingApiKeyException:
                 self.broken_wingmen.append(
