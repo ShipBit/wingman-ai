@@ -14,9 +14,19 @@ class StarHeadWingman(OpenAiWingman):
     """
 
     def __init__(
-        self, name: str, config: dict[str, any], secret_keeper: SecretKeeper
+        self,
+        name: str,
+        config: dict[str, any],
+        secret_keeper: SecretKeeper,
+        app_root_dir: str,
     ) -> None:
-        super().__init__(name, config, secret_keeper)
+        super().__init__(
+            name=name,
+            config=config,
+            secret_keeper=secret_keeper,
+            app_root_dir=app_root_dir,
+        )
+
         # config entry existence not validated yet. Assign later when checked!
         self.star_head_url = ""
         """The base URL of the StarHead API"""

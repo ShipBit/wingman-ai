@@ -1,3 +1,4 @@
+from os import path
 from sys import platform
 import tkinter as tk
 from typing import Literal
@@ -31,11 +32,14 @@ class WingmanUI(ctk.CTk):
         self.geometry("1024x800+200+150")
         self.minsize(400, 150)
         # no way to set this on MacOS
-        self.iconbitmap(self.core.app_root_dir + "/assets/wingman-ai.ico")
+        self.iconbitmap(path.join(self.core.app_root_dir, "assets", "wingman-ai.ico"))
 
         if platform == "darwin":
             mac_dock_icon = tk.Image(
-                "photo", file=self.core.app_root_dir + "/assets/icons/wingman-ai.png"
+                "photo",
+                file=path.join(
+                    self.core.app_root_dir, "assets", "icons", "wingman-ai.png"
+                ),
             )
             self.iconphoto(True, mac_dock_icon)
             self.menubar = tk.Menu(self)

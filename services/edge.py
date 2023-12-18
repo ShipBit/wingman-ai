@@ -1,6 +1,10 @@
 import random
 from edge_tts import Communicate, VoicesManager
+from services.file_creator import FileCreator
 from services.printr import Printr
+
+RECORDING_PATH = "audio_output"
+OUTPUT_FILE: str = "edge_tts.mp3"
 
 printr = Printr()
 # List available voices in your terminal using 'edge-tts --list-voices'.
@@ -10,14 +14,15 @@ printr = Printr()
 #   Name: de-DE-KillianNeural, Gender: Male
 
 
-class EdgeTTS:
-    def __init__(self):
+class EdgeTTS(FileCreator):
+    def __init__(self, app_root_dir: str):
+        super().__init__(app_root_dir, RECORDING_PATH)
+
         self.random_voices = {}
 
     async def generate_speech(
         self,
         text: str,
-        filename: str = "",
         voice: str = "en-US-GuyNeural",
         rate: str = "+0%",
     ):
@@ -25,9 +30,10 @@ class EdgeTTS:
             return
 
         communicate = Communicate(text, voice, rate=rate)
-        await communicate.save(filename)
+        file_path = self.get_full_file_path(OUTPUT_FILE)
+        await communicate.save(file_path)
 
-        return communicate
+        return communicate, file_path
 
     async def get_random_voice(
         self, gender: str = "Male", locale: str = "en-US"

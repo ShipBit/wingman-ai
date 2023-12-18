@@ -25,8 +25,19 @@ class OpenAiWingman(Wingman):
     It transcribes speech to text using Whisper, uses the Completion API for conversation and implements the Tools API to execute functions.
     """
 
-    def __init__(self, name: str, config: dict[str, any], secret_keeper: SecretKeeper):
-        super().__init__(name, config, secret_keeper)
+    def __init__(
+        self,
+        name: str,
+        config: dict[str, any],
+        secret_keeper: SecretKeeper,
+        app_root_dir: str,
+    ):
+        super().__init__(
+            name=name,
+            config=config,
+            secret_keeper=secret_keeper,
+            app_root_dir=app_root_dir,
+        )
 
         self.openai: OpenAi = None  # validate will set this
         """Our OpenAI API wrapper"""
@@ -37,7 +48,7 @@ class OpenAiWingman(Wingman):
         ]
         """The conversation history that is used for the GPT calls"""
 
-        self.edge_tts = EdgeTTS()
+        self.edge_tts = EdgeTTS(app_root_dir)
         self.last_transcript_locale = None
         self.elevenlabs_api_key = None
         self.azure_keys = {
@@ -537,7 +548,6 @@ class OpenAiWingman(Wingman):
             self.audio_player.stream_with_effects(result.audio_data, self.config)
 
     async def _play_with_edge_tts(self, text: str):
-        output_file = "audio_output/edge_tts.mp3"
         edge_config = self.config["edge_tts"]
 
         tts_voice = edge_config.get("tts_voice")
@@ -548,7 +558,9 @@ class OpenAiWingman(Wingman):
                 gender, self.last_transcript_locale
             )
 
-        await self.edge_tts.generate_speech(text, filename=output_file, voice=tts_voice)
+        communicate, output_file = await self.edge_tts.generate_speech(
+            text, voice=tts_voice
+        )
         audio, sample_rate = self.audio_player.get_audio_from_file(output_file)
 
         self.audio_player.stream_with_effects((audio, sample_rate), self.config)

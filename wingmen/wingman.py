@@ -4,6 +4,7 @@ from difflib import SequenceMatcher
 from importlib import import_module
 from typing import Any
 from services.audio_player import AudioPlayer
+from services.file_creator import FileCreator
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
@@ -20,19 +21,28 @@ except AttributeError:
     import pyautogui as key_module
 
 
-class Wingman:
+class Wingman(FileCreator):
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
 
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
     """
 
-    def __init__(self, name: str, config: dict[str, Any], secret_keeper: SecretKeeper):
+    def __init__(
+        self,
+        name: str,
+        config: dict[str, Any],
+        secret_keeper: SecretKeeper,
+        app_root_dir: str,
+    ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
             name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
             config (dict[str, any]): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
+            app_root_dir (str): The path to the root directory of the app. This is where the Wingman executable lives.
         """
+
+        super().__init__(app_root_dir=app_root_dir, subdir="wingman_data")
 
         self.config = config
         """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
@@ -55,6 +65,9 @@ class Wingman:
         self.tts_provider = self.config["features"].get("tts_provider")
         """The name of the TTS provider you configured in the config.yaml"""
 
+        self.app_root_dir = app_root_dir
+        """The path to the root directory of the app. This is where the Wingman executable lives."""
+
     @staticmethod
     def create_dynamically(
         module_path: str,
@@ -62,6 +75,7 @@ class Wingman:
         name: str,
         config: dict[str, Any],
         secret_keeper: SecretKeeper,
+        app_root_dir: str,
         **kwargs,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
@@ -75,7 +89,13 @@ class Wingman:
 
         module = import_module(module_path)
         DerivedWingmanClass = getattr(module, class_name)
-        instance = DerivedWingmanClass(name, config, secret_keeper, **kwargs)
+        instance = DerivedWingmanClass(
+            name=name,
+            config=config,
+            secret_keeper=secret_keeper,
+            app_root_dir=app_root_dir,
+            **kwargs,
+        )
         return instance
 
     def get_record_key(self) -> str:
