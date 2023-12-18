@@ -51,9 +51,14 @@ class StarHeadWingman(OpenAiWingman):
         if not self.config.get("starhead_api_url"):
             errors.append("Missing 'starhead_api_url' in config.yaml")
 
+        try:
+            self._prepare_data()
+        except Exception as e:
+            errors.append(f"Failed to load data from StarHead API: {e}")
+
         return errors
 
-    def prepare(self):
+    def _prepare_data(self):
         # here validate() already ran, so we can safely access the config
         self.star_head_url = self.config.get("starhead_api_url")
 
