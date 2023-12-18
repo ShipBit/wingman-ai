@@ -218,16 +218,24 @@ class OpenAiWingman(Wingman):
                     region=azure_config["region"],
                 )
                 audio_config = speechsdk.AudioConfig(filename=audio_input_wav)
+                auto_detect_source_language_config = (
+                    speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                        languages=["en-US", "de-DE"]
+                    )
+                )
                 speech_recognizer = speechsdk.SpeechRecognizer(
-                    speech_config=speech_config, audio_config=audio_config
+                    speech_config=speech_config,
+                    audio_config=audio_config,
+                    auto_detect_source_language_config=auto_detect_source_language_config,
                 )
                 result = speech_recognizer.recognize_once_async().get()
-
-                return result.text, None
-
-        transcript = self.openai.transcribe(
-            audio_input_wav, response_format=response_format, azure_config=azure_config
-        )
+                transcript = result
+        else:
+            transcript = self.openai.transcribe(
+                audio_input_wav,
+                response_format=response_format,
+                azure_config=azure_config,
+            )
 
         locale = None
         # skip the GPT call if we didn't change the language
