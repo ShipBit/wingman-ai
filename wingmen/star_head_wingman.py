@@ -1,8 +1,9 @@
 from typing import Optional
 import json
 import requests
-from services.printr import Printr
+from api.interface import WingmanConfig
 from api.enums import LogType
+from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 
 printr = Printr()
@@ -16,7 +17,7 @@ class StarHeadWingman(OpenAiWingman):
     def __init__(
         self,
         name: str,
-        config: dict[str, any],
+        config: WingmanConfig,
         app_root_dir: str,
     ) -> None:
         super().__init__(
@@ -46,7 +47,7 @@ class StarHeadWingman(OpenAiWingman):
         errors: list[str] = await super().validate()
 
         # add custom errors
-        if not self.config.get("starhead_api_url"):
+        if not self.config.starhead_api_url:
             errors.append("Missing 'starhead_api_url' in config.yaml")
 
         try:
@@ -58,7 +59,7 @@ class StarHeadWingman(OpenAiWingman):
 
     def _prepare_data(self):
         # here validate() already ran, so we can safely access the config
-        self.star_head_url = self.config.get("starhead_api_url")
+        self.star_head_url = self.config.starhead_api_url
 
         self.start_execution_benchmark()
 

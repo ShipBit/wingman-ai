@@ -1,18 +1,10 @@
-from dataclasses import dataclass
 import re
 from openai import OpenAI, APIStatusError, AzureOpenAI
-from api.enums import LogType
+from api.enums import LogType, OpenAiModel, OpenAiTtsVoice
+from api.interface import AzureConfig
 from services.printr import Printr
 
 printr = Printr()
-
-
-@dataclass
-class AzureConfig:
-    api_key: str
-    api_base_url: str
-    api_version: str
-    deployment_name: str
 
 
 class OpenAi:
@@ -66,13 +58,13 @@ class OpenAi:
     def ask(
         self,
         messages: list[dict[str, str]],
-        model: str,
+        model: OpenAiModel,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
         azure_config: AzureConfig | None = None,
     ):
         if not model:
-            model = "gpt-3.5-turbo-1106"
+            model = OpenAiModel.GPT_35_TURBO_1106
 
         client = self.client
 
@@ -89,13 +81,13 @@ class OpenAi:
                 completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
-                    model=model,
+                    model=model.value,
                 )
             else:
                 completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
-                    model=model,
+                    model=model.value,
                     tools=tools,
                     tool_choice="auto",
                 )
@@ -107,13 +99,14 @@ class OpenAi:
             self._handle_key_error()
             return None
 
-    def speak(self, text: str, voice: str = "nova"):
+    def speak(self, text: str, voice: OpenAiTtsVoice):
         try:
             if not voice:
-                voice = "nova"
+                voice = OpenAiTtsVoice.NOVA
+
             response = self.client.audio.speech.create(
                 model="tts-1",
-                voice=voice,
+                voice=voice.value,
                 input=text,
             )
             return response

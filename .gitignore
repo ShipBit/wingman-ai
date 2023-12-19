@@ -167,7 +167,7 @@ cython_debug/
 
 # Wingman AI generated files
 *.exe
-configs/contexts/*.yaml
+configs/configs/config.*.yaml
 audio_output
 settings.yaml
 config.yaml

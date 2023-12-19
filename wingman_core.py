@@ -1,10 +1,9 @@
 import asyncio
 import threading
-from typing import Any
 from fastapi import APIRouter
 import sounddevice as sd
 from api.enums import LogType, ToastType
-from api.interface import AudioDevice, AudioDevices, ContextInfo
+from api.interface import AudioDevice, AudioSettings, Config, ContextInfo
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
@@ -28,7 +27,7 @@ class WingmanCore:
             methods=["GET"],
             path="/config/",
             endpoint=self.get_config,
-            response_model=None,
+            response_model=Config,
             tags=["core"],
         )
         self.router.add_api_route(
@@ -48,7 +47,7 @@ class WingmanCore:
             methods=["GET"],
             path="/configured-audio-devices",
             endpoint=self.get_configured_audio_devices,
-            response_model=AudioDevices,
+            response_model=AudioSettings,
             tags=["core"],
         )
 
@@ -71,7 +70,7 @@ class WingmanCore:
         try:
             if self.config_manager:
                 config = self.config_manager.get_context_config(context)
-                self.tower = Tower(config, app_root_dir=self.app_root_dir)
+                self.tower = Tower(config=config, app_root_dir=self.app_root_dir)
                 await self.tower.instantiate_wingmen()
                 self.current_context = context
 
@@ -124,15 +123,15 @@ class WingmanCore:
         )
 
     # GET /config
-    def get_config(self, context: str = None) -> dict[str, any]:
+    def get_config(self, context: str = None) -> Config:
         return self.config_manager.get_context_config(context or "")
 
     # GET /configured-audio-devices
     def get_configured_audio_devices(self):
-        audio_devices = self.config_manager.settings_config.get("audio-devices", {})
-        input_device = audio_devices.get("input")
-        output_device = audio_devices.get("output")
-        return AudioDevices(input=input_device, output=output_device)
+        audio_devices = self.config_manager.settings_config.audio
+        input_device = audio_devices.input if audio_devices else None
+        output_device = audio_devices.output if audio_devices else None
+        return AudioSettings(input=input_device, output=output_device)
 
     # GET /audio-devices
     def get_audio_devices(self):
@@ -144,7 +143,7 @@ class WingmanCore:
         # set the devices
         sd.default.device = input_device, output_device
         # save settings
-        self.config_manager.settings_config["audio-devices"] = {
+        self.config_manager.settings_config["audio"] = {
             "input": input_device,
             "output": output_device,
         }

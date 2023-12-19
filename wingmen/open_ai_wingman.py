@@ -10,10 +10,11 @@ from elevenlabslib import (
     ElevenLabsClonedVoice,
     ElevenLabsProfessionalVoice,
 )
+from api.interface import WingmanConfig
+from api.enums import LogType
 from services.open_ai import AzureConfig, OpenAi
 from services.edge import EdgeTTS
 from services.printr import Printr
-from api.enums import LogType
 from wingmen.wingman import Wingman
 
 printr = Printr()
@@ -28,7 +29,7 @@ class OpenAiWingman(Wingman):
     def __init__(
         self,
         name: str,
-        config: dict[str, any],
+        config: WingmanConfig,
         app_root_dir: str,
     ):
         super().__init__(
@@ -41,9 +42,11 @@ class OpenAiWingman(Wingman):
         """Our OpenAI API wrapper"""
 
         # every conversation starts with the "context" that the user has configured
-        self.messages = [
-            {"role": "system", "content": self.config["openai"].get("context")}
-        ]
+        self.messages = (
+            [{"role": "system", "content": self.config.openai.context}]
+            if self.config.openai.context
+            else []
+        )
         """The conversation history that is used for the GPT calls"""
 
         self.edge_tts = EdgeTTS(app_root_dir)
@@ -55,13 +58,9 @@ class OpenAiWingman(Wingman):
             "conversation": None,
             "summarize": None,
         }
-        self.stt_provider = self.config["features"].get("stt_provider", None)
-        self.conversation_provider = self.config["features"].get(
-            "conversation_provider", None
-        )
-        self.summarize_provider = self.config["features"].get(
-            "summarize_provider", None
-        )
+        self.stt_provider = self.config.features.stt_provider
+        self.conversation_provider = self.config.features.conversation_provider
+        self.summarize_provider = self.config.features.summarize_provider
 
     async def validate(self):
         errors = await super().validate()
@@ -75,9 +74,11 @@ class OpenAiWingman(Wingman):
                 "Missing 'openai' API key. Please provide a valid key in the settings."
             )
         else:
-            openai_organization = self.config["openai"].get("organization")
-            openai_base_url = self.config["openai"].get("base_url")
-            self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
+            self.openai = OpenAi(
+                openai_api_key=openai_api_key,
+                organization=self.config.openai.organization,
+                base_url=self.config.openai.base_url,
+            )
 
         await self.__validate_elevenlabs_config(errors)
         await self.__validate_azure_config(errors)
@@ -96,41 +97,15 @@ class OpenAiWingman(Wingman):
                     "Missing 'elevenlabs' API key. Please provide a valid key in the settings or use another tts_provider."
                 )
                 return
-            elevenlabs_settings = self.config.get("elevenlabs")
-            if not elevenlabs_settings:
-                errors.append(
-                    "Missing 'elevenlabs' section in config. Please provide a valid config or change the TTS provider."
-                )
-                return
-            if not elevenlabs_settings.get("model"):
-                errors.append("Missing 'model' setting in 'elevenlabs' config.")
-                return
-            voice_settings = elevenlabs_settings.get("voice")
-            if not voice_settings:
-                errors.append(
-                    "Missing 'voice' section in 'elevenlabs' config. Please provide a voice configuration as shown in our example config."
-                )
-                return
-            if not voice_settings.get("id") and not voice_settings.get("name"):
+            if (
+                not self.config.elevenlabs.voice.id
+                and not self.config.elevenlabs.voice.name
+            ):
                 errors.append(
                     "Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config."
                 )
 
     async def __validate_azure_config(self, errors):
-        if (
-            self.tts_provider == "azure"
-            or self.stt_provider == "azure"
-            or self.stt_provider == "azure_speech"
-            or self.conversation_provider == "azure"
-            or self.summarize_provider == "azure"
-        ):
-            azure_settings = self.config.get("azure")
-            if not azure_settings:
-                errors.append(
-                    "Missing 'azure' section in config. Please provide a valid config."
-                )
-                return
-
         if self.tts_provider == "azure":
             self.azure_keys["tts"] = await self.secret_keeper.retrieve(
                 requester=self.name,
@@ -188,7 +163,7 @@ class OpenAiWingman(Wingman):
         Returns:
             str | None: The transcript of the audio file or None if the transcription failed.
         """
-        detect_language = self.config["edge_tts"].get("detect_language")
+        detect_language = self.config.edge_tts.detect_language
 
         response_format = (
             "verbose_json"  # verbose_json will return the language detected in the transcript.
@@ -201,7 +176,7 @@ class OpenAiWingman(Wingman):
             azure_config = self._get_azure_config("whisper")
 
         if self.stt_provider == "azure_speech":
-            azure_config = self.config["azure"].get("tts", None)
+            azure_config = self.config.azure.tts
 
             if azure_config is not None:
                 speech_config = speechsdk.SpeechConfig(
@@ -313,9 +288,7 @@ class OpenAiWingman(Wingman):
 
     def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
-        remember_messages = self.config.get("features", {}).get(
-            "remember_messages", None
-        )
+        remember_messages = self.config.features.remember_messages
 
         if remember_messages is None or len(self.messages) == 0:
             return 0  # Configuration not set, nothing to delete.
@@ -391,7 +364,7 @@ class OpenAiWingman(Wingman):
         return self.openai.ask(
             messages=self.messages,
             tools=self._build_tools(),
-            model=self.config["openai"].get("conversation_model"),
+            model=self.config.openai.conversation_model,
             azure_config=azure_config,
         )
 
@@ -455,10 +428,9 @@ class OpenAiWingman(Wingman):
         if self.summarize_provider == "azure":
             azure_config = self._get_azure_config("summarize")
 
-        summarize_model = self.config["openai"].get("summarize_model")
         summarize_response = self.openai.ask(
             messages=self.messages,
-            model=summarize_model,
+            model=self.config.openai.summarize_model,
             azure_config=azure_config,
         )
 
@@ -506,7 +478,7 @@ class OpenAiWingman(Wingman):
             # execute the command
             function_response = self._execute_command(command)
             # if the command has responses, we have to play one of them
-            if command and command.get("responses"):
+            if command and command.responses:
                 instant_reponse = self._select_command_response(command)
                 await self._play_to_user(instant_reponse)
 
@@ -530,23 +502,25 @@ class OpenAiWingman(Wingman):
             self._play_with_openai(text)
 
     def _play_with_openai(self, text):
-        response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
+        response = self.openai.speak(text=text, voice=self.config.openai.tts_voice)
         if response is not None:
-            self.audio_player.stream_with_effects(response.content, self.config)
+            self.audio_player.stream_with_effects(
+                input_data=response.content, config=self.config
+            )
 
     def _play_with_azure(self, text):
-        azure_config = self.config["azure"].get("tts", None)
+        azure_config = self.config.azure.tts
 
         if azure_config is None:
             return
 
         speech_config = speechsdk.SpeechConfig(
             subscription=self.azure_keys["tts"],
-            region=azure_config["region"],
+            region=azure_config.region,
         )
-        speech_config.speech_synthesis_voice_name = azure_config["voice"]
+        speech_config.speech_synthesis_voice_name = azure_config.voice
 
-        if azure_config["detect_language"]:
+        if azure_config.detect_language:
             auto_detect_source_language_config = (
                 speechsdk.AutoDetectSourceLanguageConfig()
             )
@@ -555,7 +529,7 @@ class OpenAiWingman(Wingman):
             speech_config=speech_config,
             audio_config=None,
             auto_detect_source_language_config=auto_detect_source_language_config
-            if azure_config["detect_language"]
+            if azure_config.detect_language
             else None,
         )
 
@@ -564,33 +538,32 @@ class OpenAiWingman(Wingman):
             self.audio_player.stream_with_effects(result.audio_data, self.config)
 
     async def _play_with_edge_tts(self, text: str):
-        edge_config = self.config["edge_tts"]
+        edge_config = self.config.edge_tts
 
-        tts_voice = edge_config.get("tts_voice")
-        detect_language = edge_config.get("detect_language")
+        tts_voice = edge_config.tts_voice
+        detect_language = edge_config.detect_language
         if detect_language:
-            gender = edge_config.get("gender")
+            gender = edge_config.gender
             tts_voice = await self.edge_tts.get_same_random_voice_for_language(
-                gender, self.last_transcript_locale
+                gender=gender, locale=self.last_transcript_locale
             )
 
         communicate, output_file = await self.edge_tts.generate_speech(
-            text, voice=tts_voice
+            text=text, voice=tts_voice
         )
         audio, sample_rate = self.audio_player.get_audio_from_file(output_file)
 
-        self.audio_player.stream_with_effects((audio, sample_rate), self.config)
+        self.audio_player.stream_with_effects(
+            input_data=(audio, sample_rate), config=self.config
+        )
 
     def _play_with_elevenlabs(self, text: str):
-        # presence already validated in validate()
-        elevenlabs_config = self.config["elevenlabs"]
-        # validate() already checked that either id or name is set
-        voice_id = elevenlabs_config["voice"].get("id")
-        voice_name = elevenlabs_config["voice"].get("name")
+        elevenlabs_config = self.config.elevenlabs
+        voice_id = elevenlabs_config.voice.id
+        voice_name = elevenlabs_config.voice.name
 
-        voice_settings = elevenlabs_config.get("voice_settings", {})
+        voice_settings = elevenlabs_config.voice_settings
         user = ElevenLabsUser(self.elevenlabs_api_key)
-        model = elevenlabs_config.get("model", "eleven_multilingual_v2")
 
         voice: (
             ElevenLabsVoice
@@ -606,25 +579,24 @@ class OpenAiWingman(Wingman):
         # todo: add start/end callbacks to play Quindar beep even if use_sound_effects is disabled
         playback_options = PlaybackOptions(runInBackground=True)
         generation_options = GenerationOptions(
-            model=model,
-            latencyOptimizationLevel=elevenlabs_config.get("latency", 0),
-            style=voice_settings.get("style", 0),
-            use_speaker_boost=voice_settings.get("use_speaker_boost", True),
+            model=elevenlabs_config.model,
+            latencyOptimizationLevel=elevenlabs_config.latency,
+            style=voice_settings.style,
+            use_speaker_boost=voice_settings.use_speaker_boost,
         )
-        stability = voice_settings.get("stability")
+        stability = voice_settings.stability
         if stability is not None:
             generation_options.stability = stability
 
-        similarity_boost = voice_settings.get("similarity_boost")
+        similarity_boost = voice_settings.similarity_boost
         if similarity_boost is not None:
             generation_options.similarity_boost = similarity_boost
 
-        style = voice_settings.get("style")
-        if style is not None and model != "eleven_turbo_v2":
+        style = voice_settings.style
+        if style is not None and elevenlabs_config.model != "eleven_turbo_v2":
             generation_options.style = style
 
-        use_sound_effects = elevenlabs_config.get("use_sound_effects", False)
-        if use_sound_effects:
+        if elevenlabs_config.use_sound_effects:
             audio_bytes, _history_id = voice.generate_audio_v2(
                 prompt=text,
                 generationOptions=generation_options,
@@ -653,9 +625,9 @@ class OpenAiWingman(Wingman):
             list[dict]: A list of tool descriptors in OpenAI format.
         """
         commands = [
-            command["name"]
-            for command in self.config.get("commands", [])
-            if not command.get("instant_activation")
+            command.name
+            for command in self.config.commands
+            if not command.instant_activation
         ]
         tools = [
             {
