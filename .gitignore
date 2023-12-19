@@ -169,7 +169,7 @@ cython_debug/
 *.exe
 configs/contexts/*.yaml
 audio_output
-gui.yaml
+settings.yaml
 config.yaml
 apikeys.yaml
 api_keys.yaml

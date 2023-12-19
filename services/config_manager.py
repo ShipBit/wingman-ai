@@ -8,13 +8,13 @@ CONTEXT_CONFIG_PATH = "configs/configs"
 CONTEXT_CONFIG_PATH_BUNDLED = "../configs"
 DEFAULT_CONTEXT_CONFIG = "config.yaml"
 EXAMPLE_CONTEXT_CONFIG = "config.example.yaml"
-GUI_CONFIG = "gui.yaml"
+SETTINGS_CONFIG = "settings.yaml"
 
 
 class ConfigManager:
     def __init__(self, app_root_path: str, app_is_bundled: bool):
         self.printr = Printr()
-        self.gui_config = {}
+        self.settings_config = {}
         self.contexts = [""]
         self.context_config_path: str = os.path.join(
             app_root_path,
@@ -23,7 +23,7 @@ class ConfigManager:
         if not os.path.exists(self.context_config_path):
             os.makedirs(self.context_config_path)
         self.system_config_path: str = os.path.join(app_root_path, SYSTEM_CONFIG_PATH)
-        self.load_gui_config()
+        self.load_settings_config()
         self.load_context_config_names()
 
     def __read_config_file(self, config_name, is_system_config=True) -> dict[str, any]:  # type: ignore
@@ -56,14 +56,14 @@ class ConfigManager:
 
             return True
 
-    def load_gui_config(self):
-        """Fetch GUI config from file and store it for future use"""
-        self.gui_config = self.__read_config_file(GUI_CONFIG)
-        return self.gui_config
+    def load_settings_config(self):
+        """Fetch Settings config from file and store it for future use"""
+        self.settings_config = self.__read_config_file(SETTINGS_CONFIG)
+        return self.settings_config
 
-    def save_gui_config(self):
-        """Write GUI config to file"""
-        return self.__write_config_file(GUI_CONFIG, self.gui_config)
+    def save_settings_config(self):
+        """Write Settings config to file"""
+        return self.__write_config_file(SETTINGS_CONFIG, self.settings_config)
 
     def load_context_config_names(self):
         default_found = False

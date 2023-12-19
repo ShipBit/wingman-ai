@@ -1,7 +1,10 @@
 import asyncio
 import threading
+from typing import Any
 from fastapi import APIRouter
-from api.interface import ContextInfo
+import sounddevice as sd
+from api.enums import LogType, ToastType
+from api.interface import AudioDevice, AudioDevices, ContextInfo
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
@@ -28,13 +31,39 @@ class WingmanCore:
             response_model=None,
             tags=["core"],
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/audio-devices",
+            endpoint=self.get_audio_devices,
+            response_model=list[AudioDevice],
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/audio-devices",
+            endpoint=self.set_audio_devices,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/configured-audio-devices",
+            endpoint=self.get_configured_audio_devices,
+            response_model=AudioDevices,
+            tags=["core"],
+        )
 
         self.app_root_dir = app_root_dir
         self.active = False
         self.active_recording = {"key": "", "wingman": None}
         self.tower = None
-        self.audio_recorder = AudioRecorder(app_root_dir=app_root_dir)
+
         self.config_manager = ConfigManager(app_root_dir, app_is_bundled)
+
+        # restore settings
+        configured_devices = self.get_configured_audio_devices()
+        sd.default.device = (configured_devices.input, configured_devices.output)
+
+        self.audio_recorder = AudioRecorder(app_root_dir=app_root_dir)
         self.current_context = None
 
     async def load_context(self, context=""):
@@ -97,3 +126,29 @@ class WingmanCore:
     # GET /config
     def get_config(self, context: str = None) -> dict[str, any]:
         return self.config_manager.get_context_config(context or "")
+
+    # GET /configured-audio-devices
+    def get_configured_audio_devices(self):
+        audio_devices = self.config_manager.settings_config.get("audio-devices", {})
+        input_device = audio_devices.get("input")
+        output_device = audio_devices.get("output")
+        return AudioDevices(input=input_device, output=output_device)
+
+    # GET /audio-devices
+    def get_audio_devices(self):
+        audio_devices = sd.query_devices()
+        return audio_devices
+
+    # POST /audio-devices
+    def set_audio_devices(self, output_device: int, input_device: int):
+        # set the devices
+        sd.default.device = input_device, output_device
+        # save settings
+        self.config_manager.settings_config["audio-devices"] = {
+            "input": input_device,
+            "output": output_device,
+        }
+        if self.config_manager.save_settings_config():
+            printr.print(
+                "Audio devices updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
+            )
