@@ -76,9 +76,11 @@ class WingmanCore:
 
         except FileNotFoundError:
             printr.toast_error(f"Could not find context.{context}.yaml")
+            raise
         except Exception as e:
             # Everything else...
             printr.toast_error(str(e))
+            raise e
 
     def activate(self):
         if self.tower:

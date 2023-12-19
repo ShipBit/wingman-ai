@@ -112,11 +112,10 @@ class ConfigManager:
         for wingman_name, wingman_config in parsed_config.get("wingmen", []).items():
             merged_config = self.__merge_configs(config, wingman_config)
             config["wingmen"][wingman_name] = merged_config
-        try:
-            return Config(**config)
-        except ValidationError as e:
-            self.printr.toast_error(f"Could not load config!\n{str(e)}")
-            return None
+
+        # not catching ValifationExceptions here, because we can't revover from it
+        # TODO: Notify the client about the error somehow
+        return Config(**config)
 
     def __deep_merge(self, source, updates):
         """Recursively merges updates into source."""
