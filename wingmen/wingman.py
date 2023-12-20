@@ -62,11 +62,13 @@ class Wingman(FileCreator):
         self.debug: bool = self.config.features.debug_mode
         """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
 
-        self.tts_provider = self.config.features.tts_provider
-        """The name of the TTS provider you configured in the config.yaml"""
-
         self.app_root_dir = app_root_dir
         """The path to the root directory of the app. This is where the Wingman executable lives."""
+
+        self.tts_provider = self.config.features.tts_provider
+        self.stt_provider = self.config.features.stt_provider
+        self.conversation_provider = self.config.features.conversation_provider
+        self.summarize_provider = self.config.features.summarize_provider
 
     @staticmethod
     def create_dynamically(

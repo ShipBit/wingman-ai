@@ -4,8 +4,8 @@ import numpy as np
 import soundfile as sf
 import sounddevice as sd
 from scipy.signal import resample
-from api.interface import Config
-from services.sound_effects import get_sound_effects_from_config
+from api.interface import SoundConfig
+from services.sound_effects import get_sound_effects
 
 
 class AudioPlayer:
@@ -25,7 +25,7 @@ class AudioPlayer:
         sd.wait()
 
     def stream_with_effects(
-        self, input_data: bytes | tuple, config: Config, wait: bool = False
+        self, input_data: bytes | tuple, config: SoundConfig, wait: bool = False
     ):
         if isinstance(input_data, bytes):
             audio, sample_rate = self._get_audio_from_stream(input_data)
@@ -34,12 +34,12 @@ class AudioPlayer:
         else:
             raise TypeError("Invalid input type for stream_with_effects")
 
-        sound_effects = get_sound_effects_from_config(config)
+        sound_effects = get_sound_effects(config)
 
         for sound_effect in sound_effects:
             audio = sound_effect(audio, sample_rate)
 
-        if config.sound.play_beep:
+        if config.play_beep:
             audio = self._add_beep_effect(audio, sample_rate)
 
         sd.play(audio, sample_rate)

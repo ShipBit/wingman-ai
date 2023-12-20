@@ -72,6 +72,7 @@ class AzureTtsConfig(BaseModel):
     region: str
     voice: str
     detect_language: bool
+    languages: list[str]
 
 
 class AzureConfig(BaseModel):
@@ -126,7 +127,7 @@ class ElevenlabsConfig(BaseModel):
     """Optimization - Higher values are faster but can produce audio stuttering. 0 - 4"""
 
     voice: ElevenlabsVoiceConfig
-    voice_settings: Optional[ElevenlabsVoiceSettingsConfig] = None
+    voice_settings: ElevenlabsVoiceSettingsConfig
     use_sound_effects: Optional[bool] = False
     """Adds a delay"""
 

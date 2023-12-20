@@ -50,7 +50,7 @@ class ConfigManager:
         config_file = os.path.join(path, config_name)
         with open(config_file, "w", encoding="UTF-8") as stream:
             try:
-                yaml.dump(content, stream)
+                yaml.dump(content.dict(exclude_none=True), stream)
             except yaml.YAMLError as e:
                 self.printr.toast_error(
                     f"Could not write config ({config_name})!\n{str(e)}"

@@ -79,7 +79,8 @@ class TtsProvider(Enum):
 
 class SttProvider(Enum):
     OPENAI = "openai"
-    AZURE = "azure"
+    AZURE = ("azure",)
+    AZURE_SPEECH = "azure_speech"
 
 
 class ConversationProvider(Enum):

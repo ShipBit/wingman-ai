@@ -13,7 +13,7 @@ from pedalboard import (
     Gain,
 )
 
-from api.interface import Config
+from api.interface import Config, SoundConfig
 
 
 # Credits to Discord community member @psigen aka GH @JaydiCodes!
@@ -77,10 +77,8 @@ class SoundEffects(Enum):
     )
 
 
-def get_sound_effects_from_config(config: Config):
-    if config.sound is None:
-        return []
-    if not config.sound.effects or len(config.sound.effects) == 0:
+def get_sound_effects(config: SoundConfig):
+    if config is None or not config.effects or len(config.effects) == 0:
         return []
 
     sound_effects = []
@@ -94,7 +92,7 @@ def get_sound_effects_from_config(config: Config):
         "INTERIOR_LARGE": SoundEffects.INTERIOR_LARGE.value,
     }
 
-    for effect in config.sound.effects:
+    for effect in config.effects:
         effect_name = effect.value
         effect = mapping.get(effect_name)
         if effect:
