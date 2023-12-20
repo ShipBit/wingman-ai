@@ -147,6 +147,9 @@ azure:
     region: westeurope
     voice: en-US-JaneNeural
     detect_language: true
+    languages: # Only used if detect_language is set to true above.
+      - en-US
+      - de-DE
 
 # ────────────────────────────── GLOBAL COMMANDS ───────────────────────────────
 # You can use these in all wingmen and you can put your own here, too.
