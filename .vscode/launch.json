@@ -10,7 +10,11 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            // "args": [
+            //     "--port",
+            //     "9000"
+            // ]
         }
     ]
 }

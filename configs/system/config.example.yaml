@@ -506,7 +506,7 @@ wingmen:
     record_key: up
 
     # For devs - This is how you plug in your own wingman:
-    class:
+    custom_class:
       # Where your code is located. Use '.' as path separator!
       # We advise you to put all your custom wingmen into the /wingmen directory.
       # "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).

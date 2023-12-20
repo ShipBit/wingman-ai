@@ -1,8 +1,9 @@
 from typing import Optional
 import json
 import requests
+from api.interface import WingmanConfig
+from api.enums import LogType
 from services.printr import Printr
-from services.secret_keeper import SecretKeeper
 from wingmen.open_ai_wingman import OpenAiWingman
 
 printr = Printr()
@@ -16,14 +17,12 @@ class StarHeadWingman(OpenAiWingman):
     def __init__(
         self,
         name: str,
-        config: dict[str, any],
-        secret_keeper: SecretKeeper,
+        config: WingmanConfig,
         app_root_dir: str,
     ) -> None:
         super().__init__(
             name=name,
             config=config,
-            secret_keeper=secret_keeper,
             app_root_dir=app_root_dir,
         )
 
@@ -43,12 +42,12 @@ class StarHeadWingman(OpenAiWingman):
         self.celestial_object_names = []
         self.quantum_drives = []
 
-    def validate(self):
+    async def validate(self):
         # collect errors from the base class (if any)
-        errors: list[str] = super().validate()
+        errors: list[str] = await super().validate()
 
         # add custom errors
-        if not self.config.get("starhead_api_url"):
+        if not self.config.starhead_api_url:
             errors.append("Missing 'starhead_api_url' in config.yaml")
 
         try:
@@ -60,7 +59,7 @@ class StarHeadWingman(OpenAiWingman):
 
     def _prepare_data(self):
         # here validate() already ran, so we can safely access the config
-        self.star_head_url = self.config.get("starhead_api_url")
+        self.star_head_url = self.config.starhead_api_url
 
         self.start_execution_benchmark()
 
@@ -84,7 +83,7 @@ class StarHeadWingman(OpenAiWingman):
         url = f"{self.star_head_url}/{endpoint}"
 
         if self.debug:
-            printr.print(f"Retrieving {url}", tags="info")
+            printr.print(f"Retrieving {url}", color=LogType.INFO)
 
         response = requests.get(
             url, params=params, timeout=self.timeout, headers=self.headers
@@ -232,6 +231,6 @@ class StarHeadWingman(OpenAiWingman):
             except requests.HTTPError:
                 printr.print(
                     f"Failed to fetch loadout data for ship with ID: {ship_id}",
-                    tags="err",
+                    color=LogType.ERROR,
                 )
         return None

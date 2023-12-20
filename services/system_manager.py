@@ -1,5 +1,8 @@
+import platform
+from fastapi import APIRouter
 import requests
 from packaging import version
+from api.interface import SystemCore, SystemInfo
 from services.printr import Printr
 
 LOCAL_VERSION = "1.1.3b1"
@@ -8,18 +11,20 @@ VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
 printr = Printr()
 
 
-class VersionCheck:
-    _instance = None
+class SystemManager:
+    def __init__(self):
+        self.router = APIRouter()
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/system-info",
+            endpoint=self.get_system_info,
+            response_model=SystemInfo,
+            tags=["system"],
+        )
 
-    # NOTE this is a singleton class
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super(VersionCheck, cls).__new__(cls)
-
-            cls.latest_version = version.parse("0.0.0")
-            cls.local_version = version.parse(LOCAL_VERSION)
-            cls._instance.check_version()
-            return cls._instance
+        self.latest_version = version.parse("0.0.0")
+        self.local_version = version.parse(LOCAL_VERSION)
+        self.check_version()
 
     def check_version(self):
         try:
@@ -36,13 +41,11 @@ class VersionCheck:
             return app_version >= remote_version
 
         except requests.RequestException:
-            # msg = str(e)
             msg = "Could not reach version endpoint."
-            printr.print_warn(f"Error fetching version information: \n{msg}")
-            # printr.print_warn(f"Error fetching version information: \n{e}")
+            printr.toast_warning(f"Error fetching version information: \n{msg}")
             return False
         except ValueError as e:
-            printr.print_warn(f"Error with version information: {e}")
+            printr.toast_warning(f"Error with version information: {e}")
             return False
 
     def current_version_is_latest(self):
@@ -53,3 +56,17 @@ class VersionCheck:
 
     def get_latest_version(self, as_string=True) -> str | version.Version:
         return str(self.latest_version) if as_string else self.latest_version
+
+    # GET /system-info
+    def get_system_info(self):
+        printr.print("Checking for updates...", server_only=True)
+        is_latest = self.check_version()
+
+        return SystemInfo(
+            os=platform.system(),
+            core=SystemCore(
+                version=str(LOCAL_VERSION),
+                latest=str(self.latest_version),
+                isLatest=is_latest,
+            ),
+        )
