@@ -517,7 +517,9 @@ wingmen:
     # A custom config entry that Wingman requires. Validate it in your code in the validate() method.
     # Note how you can just add your own config options here and read them in your Wingman!
     # Do not put API keys or other sensitive data here! Use the secret_keeper class for that.
-    starhead_api_url: https://api.star-head.de
+    # Note that the values can only be strings. You can convert them to other types in your code.
+    custom_properties:
+      starhead_api_url: https://api-test.star-head.de
 
     features:
       tts_provider: edge_tts

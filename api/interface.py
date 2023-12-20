@@ -259,8 +259,14 @@ class NestedConfig(BaseModel):
 
 
 class WingmanConfig(NestedConfig):
-    class Config:  # allow extra fields that are not defined in the model here
-        extra = "allow"
+    def __getitem__(self, item):
+        return self.extra_properties.get(item)
+
+    def __setitem__(self, key, value):
+        self.extra_properties[key] = value
+
+    # these can only be strings because otherwise our schema generation will break (if they were of type Any)
+    custom_properties: Optional[dict[str, str]] = {}
 
     disabled: Optional[bool] = False
     custom_class: Optional[CustomWingmanClassConfig] = None

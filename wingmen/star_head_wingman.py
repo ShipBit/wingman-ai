@@ -47,8 +47,8 @@ class StarHeadWingman(OpenAiWingman):
         errors: list[str] = await super().validate()
 
         # add custom errors
-        if not self.config.starhead_api_url:
-            errors.append("Missing 'starhead_api_url' in config.yaml")
+        if not self.config.custom_properties["starhead_api_url"]:
+            errors.append("Missing custom property 'starhead_api_url' in config.yaml")
 
         try:
             self._prepare_data()
@@ -59,7 +59,7 @@ class StarHeadWingman(OpenAiWingman):
 
     def _prepare_data(self):
         # here validate() already ran, so we can safely access the config
-        self.star_head_url = self.config.starhead_api_url
+        self.star_head_url = self.config.custom_properties["starhead_api_url"]
 
         self.start_execution_benchmark()
 
