@@ -43,7 +43,7 @@ class ElevenlabsModel(Enum):
 
 
 class EdgeTtsVoiceGender(Enum):
-    MALE = ("Male",)
+    MALE = "Male"
     FEMALE = "Female"
 
 
@@ -79,7 +79,7 @@ class TtsProvider(Enum):
 
 class SttProvider(Enum):
     OPENAI = "openai"
-    AZURE = ("azure",)
+    AZURE = "azure"
     AZURE_SPEECH = "azure_speech"
 
 
