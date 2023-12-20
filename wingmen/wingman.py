@@ -1,24 +1,25 @@
+import platform
 import random
 import time
 from difflib import SequenceMatcher
 from importlib import import_module
-from typing import Any
+from api.interface import CommandConfig, WingmanConfig
+from api.enums import LogSource, LogType
 from services.audio_player import AudioPlayer
 from services.file_creator import FileCreator
-from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+from services.printr import Printr
 
-# see execute_keypress() method
 printr = Printr()
-try:
+
+if platform.system() == "Windows":
     import pydirectinput as key_module
-except AttributeError:
-    # TODO: Instead of creating a banner make this an icon in the header
-    # printr.print_warn(
-    #     "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
-    #     wait_for_gui=True
-    # )
+else:
     import pyautogui as key_module
+
+    printr.toast_warning(
+        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
+    )
 
 
 class Wingman(FileCreator):
@@ -30,15 +31,14 @@ class Wingman(FileCreator):
     def __init__(
         self,
         name: str,
-        config: dict[str, Any],
-        secret_keeper: SecretKeeper,
+        config: WingmanConfig,
         app_root_dir: str,
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
             name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
-            config (dict[str, any]): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
+            config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
             app_root_dir (str): The path to the root directory of the app. This is where the Wingman executable lives.
         """
 
@@ -47,7 +47,7 @@ class Wingman(FileCreator):
         self.config = config
         """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
 
-        self.secret_keeper = secret_keeper
+        self.secret_keeper = SecretKeeper()
         """A service that allows you to store and retrieve secrets like API keys. It can prompt the user for secrets if necessary."""
 
         self.name = name
@@ -59,24 +59,22 @@ class Wingman(FileCreator):
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
-        self.debug: bool = self.config["features"].get("debug_mode", False)
+        self.debug: bool = self.config.features.debug_mode
         """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
-
-        self.tts_provider = self.config["features"].get("tts_provider")
-        """The name of the TTS provider you configured in the config.yaml"""
 
         self.app_root_dir = app_root_dir
         """The path to the root directory of the app. This is where the Wingman executable lives."""
 
+        self.tts_provider = self.config.features.tts_provider
+        self.stt_provider = self.config.features.stt_provider
+        self.conversation_provider = self.config.features.conversation_provider
+        self.summarize_provider = self.config.features.summarize_provider
+
     @staticmethod
     def create_dynamically(
-        module_path: str,
-        class_name: str,
         name: str,
-        config: dict[str, Any],
-        secret_keeper: SecretKeeper,
+        config: WingmanConfig,
         app_root_dir: str,
-        **kwargs,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -84,30 +82,29 @@ class Wingman(FileCreator):
             module_path (str): The module path, e.g. wingmen.open_ai_wingman. It's like the filepath from root to your custom-wingman.py but with dots instead of slashes and without the .py extension. Case-sensitive!
             class_name (str): The name of the class inside your custom-wingman.py, e.g. OpenAiWingman. Case-sensitive!
             name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
-            config (dict[str, any]): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
+            config (Config): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
+            app_root_dir (str): The path to the root directory of the app. This is where the Wingman executable lives.
         """
 
-        module = import_module(module_path)
-        DerivedWingmanClass = getattr(module, class_name)
+        module = import_module(config.custom_class.module)
+        DerivedWingmanClass = getattr(module, config.custom_class.name)
         instance = DerivedWingmanClass(
             name=name,
             config=config,
-            secret_keeper=secret_keeper,
             app_root_dir=app_root_dir,
-            **kwargs,
         )
         return instance
 
     def get_record_key(self) -> str:
         """Returns the activation or "push-to-talk" key for this Wingman."""
-        return self.config.get("record_key", None)
+        return self.config.record_key
 
     def print_execution_time(self, reset_timer=False):
         """Prints the current time since the execution started (in seconds)."""
         if self.execution_start:
             execution_stop = time.perf_counter()
             elapsed_seconds = execution_stop - self.execution_start
-            printr.print(f"...took {elapsed_seconds:.2f}s", tags="info")
+            printr.print(f"...took {elapsed_seconds:.2f}s", color=LogType.INFO)
         if reset_timer:
             self.start_execution_benchmark()
 
@@ -117,7 +114,7 @@ class Wingman(FileCreator):
 
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
-    def validate(self) -> list[str]:
+    async def validate(self) -> list[str]:
         """Use this function to validate params and config before the Wingman is started.
         If you add new config sections or entries to your custom wingman, you should validate them here.
 
@@ -167,7 +164,7 @@ class Wingman(FileCreator):
         process_result = None
 
         if self.debug:
-            printr.print("Starting transcription...", tags="info")
+            printr.print("Starting transcription...", color=LogType.INFO)
 
         # transcribe the audio.
         transcript, locale = await self._transcribe(audio_input_wav)
@@ -176,10 +173,15 @@ class Wingman(FileCreator):
             self.print_execution_time(reset_timer=True)
 
         if transcript:
-            printr.print(f">> (You): {transcript}", tags="violet")
+            printr.print(
+                f"{transcript}",
+                color=LogType.PURPLE,
+                source_name="User",
+                source=LogSource.USER,
+            )
 
             if self.debug:
-                printr.print("Getting response for transcript...", tags="info")
+                printr.print("Getting response for transcript...", color=LogType.INFO)
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
@@ -190,10 +192,15 @@ class Wingman(FileCreator):
                 self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
-            printr.print(f"<< ({self.name}): {actual_response}", tags="green")
+            printr.print(
+                f"{actual_response}",
+                color=LogType.POSITIVE,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
 
         if self.debug:
-            printr.print("Playing response back to user...", tags="info")
+            printr.print("Playing response back to user...", color=LogType.INFO)
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         await self._play_to_user(str(process_result))
@@ -240,7 +247,7 @@ class Wingman(FileCreator):
 
     # ───────────────────────────────── Commands ─────────────────────────────── #
 
-    def _get_command(self, command_name: str) -> dict | None:
+    def _get_command(self, command_name: str):
         """Extracts the command with the given name
 
         Args:
@@ -249,18 +256,16 @@ class Wingman(FileCreator):
         Returns:
             {}: The command object from the config
         """
+        if self.config.commands is None:
+            return None
 
         command = next(
-            (
-                item
-                for item in self.config.get("commands", [])
-                if item["name"] == command_name
-            ),
+            (item for item in self.config.commands if item.name == command_name),
             None,
         )
         return command
 
-    def _select_command_response(self, command: dict) -> str | None:
+    def _select_command_response(self, command: CommandConfig) -> str | None:
         """Returns one of the configured responses of the command. This base implementation returns a random one.
 
         Args:
@@ -269,13 +274,13 @@ class Wingman(FileCreator):
         Returns:
             str: A random response from the command's responses list in the config.
         """
-        command_responses = command.get("responses", None)
+        command_responses = command.responses
         if (command_responses is None) or (len(command_responses) == 0):
             return None
 
         return random.choice(command_responses)
 
-    def _execute_instant_activation_command(self, transcript: str) -> dict | None:
+    def _execute_instant_activation_command(self, transcript: str):
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -286,14 +291,12 @@ class Wingman(FileCreator):
         """
 
         instant_activation_commands = [
-            command
-            for command in self.config.get("commands", [])
-            if command.get("instant_activation")
+            command for command in self.config.commands if command.instant_activation
         ]
 
         # check if transcript matches any instant activation command. Each command has a list of possible phrases
         for command in instant_activation_commands:
-            for phrase in command.get("instant_activation"):
+            for phrase in command.instant_activation:
                 ratio = SequenceMatcher(
                     None,
                     transcript.lower(),
@@ -304,12 +307,12 @@ class Wingman(FileCreator):
                 ):  # if the ratio is higher than 0.8, we assume that the command was spoken
                     self._execute_command(command)
 
-                    if command.get("responses"):
+                    if command.responses:
                         return command
                     return None
         return None
 
-    def _execute_command(self, command: dict) -> str:
+    def _execute_command(self, command: CommandConfig) -> str:
         """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
 
         Args:
@@ -322,19 +325,20 @@ class Wingman(FileCreator):
         if not command:
             return "Command not found"
 
-        printr.print(f"❖ Executing command: {command.get('name')}", tags="info")
+        printr.print(f"❖ Executing command: {command.name}", color=LogType.INFO)
 
         if self.debug:
             printr.print(
-                "Skipping actual keypress execution in debug_mode...", tags="warn"
+                "Skipping actual keypress execution in debug_mode...",
+                color=LogType.WARNING,
             )
 
-        if len(command.get("keys", [])) > 0 and not self.debug:
+        if len(command.keys or []) > 0 and not self.debug:
             self.execute_keypress(command)
         # TODO: we could do mouse_events here, too...
 
         # handle the global special commands:
-        if command.get("name", None) == "ResetConversationHistory":
+        if command.name == "ResetConversationHistory":
             self.reset_conversation_history()
 
         if not self.debug:
@@ -343,7 +347,7 @@ class Wingman(FileCreator):
 
         return self._select_command_response(command) or "Ok"
 
-    def execute_keypress(self, command: dict):
+    def execute_keypress(self, command: CommandConfig):
         """Executes the keypresses defined in the command in order.
 
         pydirectinput uses SIGEVENTS to send keypresses to the OS. This lib seems to be the only way to send keypresses to games reliably.
@@ -353,20 +357,22 @@ class Wingman(FileCreator):
         Args:
             command (dict): The command object from the config to execute
         """
+        if not command or not command.keys:
+            return
 
-        for entry in command.get("keys", []):
-            if entry.get("modifier"):
-                key_module.keyDown(entry["modifier"])
+        for key_cfg in command.keys:
+            if key_cfg.modifier:
+                key_module.keyDown(key_cfg.modifier)
 
-            if entry.get("hold"):
-                key_module.keyDown(entry["key"])
-                time.sleep(entry["hold"])
-                key_module.keyUp(entry["key"])
+            if key_cfg.hold:
+                key_module.keyDown(key_cfg.key)
+                time.sleep(key_cfg.hold)
+                key_module.keyUp(key_cfg.key)
             else:
-                key_module.press(entry["key"])
+                key_module.press(key_cfg.key)
 
-            if entry.get("modifier"):
-                key_module.keyUp(entry["modifier"])
+            if key_cfg.modifier:
+                key_module.keyUp(key_cfg.modifier)
 
-            if entry.get("wait"):
-                time.sleep(entry["wait"])
+            if key_cfg.wait:
+                time.sleep(key_cfg.wait)
