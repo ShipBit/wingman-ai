@@ -1,4 +1,5 @@
-from api.enums import LogSource, LogType, ToastType
+from api.commands import LogCommand, ToastCommand
+from api.enums import CommandTag, LogSource, LogType, ToastType
 from services.websocket_user import WebSocketUser
 
 
@@ -32,15 +33,24 @@ class Printr(WebSocketUser):
         toast_type: ToastType,
         source=LogSource.SYSTEM,
         source_name: str = "",
+        command_tag: CommandTag = None,
     ):
         if self._ws_manager is None:
             raise ValueError("ws_manager has not been set.")
 
-        if toast_type is not None:
-            await self._ws_manager.toast(message=text, toast_type=toast_type)
+        elif toast_type is not None:
+            await self._ws_manager.broadcast(
+                command=ToastCommand(text=text, toast_type=toast_type)
+            )
         else:
-            await self._ws_manager.log(
-                message=text, log_type=log_type, source=source, source_name=source_name
+            await self._ws_manager.broadcast(
+                command=LogCommand(
+                    text=text,
+                    log_type=log_type,
+                    source=source,
+                    source_name=source_name,
+                    tag=command_tag,
+                )
             )
 
     def print(
@@ -51,6 +61,7 @@ class Printr(WebSocketUser):
         source_name: str = "",
         toast: ToastType = None,
         server_only=False,
+        command_tag: CommandTag = None,
     ):
         # print to server (terminal)
         self.print_colored(text, color=self.get_terminal_color(color))
@@ -64,6 +75,7 @@ class Printr(WebSocketUser):
                     toast_type=toast,
                     source=source,
                     source_name=source_name,
+                    command_tag=command_tag,
                 )
             )
 

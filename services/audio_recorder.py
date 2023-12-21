@@ -1,7 +1,7 @@
 import numpy
 import sounddevice
 import soundfile
-from api.enums import LogType
+from api.enums import CommandTag, LogType
 from services.printr import Printr
 from services.file_creator import FileCreator
 
@@ -9,6 +9,7 @@ RECORDING_PATH = "audio_output"
 RECORDING_FILE: str = "recording.wav"
 
 printr = Printr()
+
 
 class AudioRecorder(FileCreator):
     def __init__(
@@ -37,25 +38,41 @@ class AudioRecorder(FileCreator):
             else:
                 self.recording = numpy.concatenate((self.recording, indata.copy()))
 
-    def start_recording(self):
+    def start_recording(self, wingman_name: str):
         if self.is_recording:
             return
 
         self.recstream.start()
         self.is_recording = True
-        printr.print("Recording started")
+        printr.print(
+            f"Recording started ({wingman_name})",
+            source_name=wingman_name,
+            command_tag=CommandTag.RECORDING_STARTED,
+        )
 
-    def stop_recording(self) -> None | str:
+    def stop_recording(self, wingman_name) -> None | str:
         self.recstream.stop()
         self.is_recording = False
-        printr.print("Recording stopped")
+        printr.print(
+            f"Recording stopped ({wingman_name})",
+            source_name=wingman_name,
+            command_tag=CommandTag.RECORDING_STOPPED,
+        )
 
         if self.recording is None:
-            printr.print("Ignored empty recording", color=LogType.WARNING)
+            printr.print(
+                "Ignored empty recording",
+                color=LogType.WARNING,
+                source_name=wingman_name,
+                command_tag=CommandTag.IGNORED_RECORDING,
+            )
             return None
         if (len(self.recording) / self.samplerate) < 0.15:
             printr.print(
-                "Recording was too short to be handled by the AI", color=LogType.WARNING
+                f"Recording was too short to be handled by {wingman_name}",
+                color=LogType.WARNING,
+                source_name=wingman_name,
+                command_tag=CommandTag.IGNORED_RECORDING,
             )
             return None
 
@@ -64,5 +81,10 @@ class AudioRecorder(FileCreator):
             self.recording = None
             return self.file_path
         except IndexError:
-            printr.print("Ignored empty recording", color=LogType.WARNING)
+            printr.print(
+                "Ignored empty recording",
+                color=LogType.WARNING,
+                source_name=wingman_name,
+                command_tag=CommandTag.IGNORED_RECORDING,
+            )
             return None

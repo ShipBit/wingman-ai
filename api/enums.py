@@ -26,6 +26,12 @@ class ToastType(Enum):
     INFO = "info"
 
 
+class CommandTag(Enum):
+    RECORDING_STARTED = "recording_started"
+    RECORDING_STOPPED = "recording_stopped"
+    IGNORED_RECORDING = "ignored_recording"
+
+
 class AzureApiVersion(Enum):
     A2022_12_01 = "2022-12-01"
     A2023_03_15_PREVIEW = "2023-03-15-preview"
@@ -114,6 +120,10 @@ class ToastTypeEnumModel(BaseEnumModel):
     toast_type: ToastType
 
 
+class CommandTagEnumModel(BaseEnumModel):
+    command_tag: CommandTag
+
+
 class AzureApiVersionEnumModel(BaseEnumModel):
     api_version: AzureApiVersion
 
@@ -162,6 +172,7 @@ ENUM_TYPES = {
     "LogType": LogTypeEnumModel,
     "LogSource": LogSourceEnumModel,
     "ToastType": ToastTypeEnumModel,
+    "CommandTag": CommandTagEnumModel,
     "AzureApiVersion": AzureApiVersionEnumModel,
     "ElevenlabsModel": ElevenlabsModelEnumModel,
     "EdgeTtsVoiceGender": EdgeTtsVoiceGenderEnumModel,
