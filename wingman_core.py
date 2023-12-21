@@ -94,12 +94,14 @@ class WingmanCore:
             wingman = self.tower.get_wingman_from_key(key)
             if wingman:
                 self.active_recording = dict(key=key, wingman=wingman)
-                self.audio_recorder.start_recording()
+                self.audio_recorder.start_recording(wingman_name=wingman.name)
 
     def on_release(self, key):
         if self.active and self.active_recording["key"] == key:
             wingman = self.active_recording["wingman"]
-            recorded_audio_wav = self.audio_recorder.stop_recording()
+            recorded_audio_wav = self.audio_recorder.stop_recording(
+                wingman_name=wingman.name
+            )
             self.active_recording = {"key": "", "wingman": None}
 
             def run_async_process():

@@ -1,6 +1,7 @@
 from enum import Enum
 import json
 from fastapi import WebSocket
+from api.commands import WebSocketCommandModel
 from api.enums import LogType, ToastType, LogSource
 
 
@@ -38,43 +39,14 @@ class ConnectionManager:
             payload = self.message_queue.pop(0)
             await websocket.send_text(json.dumps(payload, default=self._enum_encoder))
 
-    async def _broadcast(self, command: str, data: dict):
-        payload = {"command": command, "data": data}
-        json_str = json.dumps(payload, default=self._enum_encoder)
+    async def broadcast(self, command: WebSocketCommandModel):
+        # json_str = json.dumps(command, default=self._enum_encoder)
+        json_str = command.model_dump_json()
         if self.active_connections:
             for connection in self.active_connections:
                 await connection.send_text(json_str)
         else:
-            self.message_queue.append(payload)
-
-    async def toast(self, message: str, toast_type: ToastType):
-        data = {
-            "text": message,
-            "toastType": toast_type,
-        }
-        await self._broadcast("toast", data)
-
-    async def prompt_secret(self, secret_name: str, requester: str):
-        data = {
-            "requester": requester,
-            "secret_name": secret_name,
-        }
-        await self._broadcast("prompt_secret", data)
-
-    async def log(
-        self,
-        message: str,
-        log_type: LogType,
-        source: LogSource = LogSource.SYSTEM,
-        source_name: str = None,
-    ):
-        data = {
-            "text": message,
-            "logType": log_type,
-            "source": source,
-            "sourceName": source_name,
-        }
-        await self._broadcast("log", data)
+            self.message_queue.append(command)
 
     async def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
