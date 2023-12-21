@@ -109,7 +109,7 @@ class ConfigManager:
         config = copy.deepcopy(parsed_config)
         config["wingmen"] = {}
 
-        for wingman_name, wingman_config in parsed_config.get("wingmen", []).items():
+        for wingman_name, wingman_config in parsed_config.get("wingmen", {}).items():
             merged_config = self.__merge_configs(config, wingman_config)
             config["wingmen"][wingman_name] = merged_config
 
