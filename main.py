@@ -25,14 +25,14 @@ host = None
 connection_manager = ConnectionManager()
 
 printr = Printr()
-Printr.set_ws_manager(connection_manager)
+Printr.set_connection_manager(connection_manager)
 
 
 app_is_bundled = getattr(sys, "frozen", False)
 app_root_dir = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__file__))
 
 secret_keeper = SecretKeeper(app_root_dir)
-SecretKeeper.set_ws_manager(connection_manager)
+SecretKeeper.set_connection_manager(connection_manager)
 
 version_check = SystemManager()
 is_latest = version_check.check_version()

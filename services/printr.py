@@ -35,15 +35,15 @@ class Printr(WebSocketUser):
         source_name: str = "",
         command_tag: CommandTag = None,
     ):
-        if self._ws_manager is None:
-            raise ValueError("ws_manager has not been set.")
+        if self._connection_manager is None:
+            raise ValueError("connection_manager has not been set.")
 
         elif toast_type is not None:
-            await self._ws_manager.broadcast(
+            await self._connection_manager.broadcast(
                 command=ToastCommand(text=text, toast_type=toast_type)
             )
         else:
-            await self._ws_manager.broadcast(
+            await self._connection_manager.broadcast(
                 command=LogCommand(
                     text=text,
                     log_type=log_type,
@@ -66,7 +66,7 @@ class Printr(WebSocketUser):
         # print to server (terminal)
         self.print_colored(text, color=self.get_terminal_color(color))
 
-        if not server_only and self._ws_manager is not None:
+        if not server_only and self._connection_manager is not None:
             # send to GUI without print() having to be async
             self.ensure_async(
                 self.__send_to_gui(

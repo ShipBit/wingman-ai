@@ -2,6 +2,7 @@ import os
 from typing import Dict, Any
 import yaml
 from fastapi import APIRouter
+from api.commands import PromptSecretCommand
 from api.enums import LogType, ToastType
 from services.websocket_user import WebSocketUser
 from services.printr import Printr
@@ -13,7 +14,7 @@ SECRETS_FILE = "secrets.yaml"
 class SecretKeeper(WebSocketUser):
     """Singleton"""
 
-    _ws_manager = None
+    _connection_manager = None
     _instance = None
     printr: Printr
     router: APIRouter
@@ -81,12 +82,14 @@ class SecretKeeper(WebSocketUser):
         key: str,
         prompt_if_missing: bool = True,
     ) -> str:
-        if self._ws_manager is None:
-            raise ValueError("ws_manager has not been set.")
+        if self._connection_manager is None:
+            raise ValueError("connection_manager has not been set.")
 
         secret = self.secrets.get(key, "")
         if not secret and prompt_if_missing and not key in self.prompted_secrets:
-            await self._ws_manager.prompt_secret(requester=requester, secret_name=key)
+            await self._connection_manager.broadcast(
+                PromptSecretCommand(requester=requester, secret_name=key)
+            )
             self.prompted_secrets.append(key)
         return secret
 
