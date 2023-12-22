@@ -12,8 +12,10 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             // "args": [
+            //     "--host",
+            //     "192.168.178.64"
             //     "--port",
-            //     "9000"
+            //     "9000",
             // ]
         }
     ]
