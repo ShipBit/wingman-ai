@@ -2,8 +2,8 @@ name: Build, Sign and Release
 
 on:
   push:
-    tags:
-      - '*'
+    branches:
+      - "ci-cd-core"
 
 jobs:
   build-windows:
