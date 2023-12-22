@@ -3,7 +3,7 @@ name: Build, Sign and Release
 on:
   push:
     tags:
-      - "*"
+      - '*'
 
 jobs:
   build-windows:
@@ -30,7 +30,7 @@ jobs:
       - name: Build with PyInstaller
         run: |
           .\venv\Scripts\Activate
-          pyinstaller main.py --name WingmanAiCore --windowed --noconfirm --icon assets/icons/wingman-ai.png --paths venv/Lib/site-packages --add-data "venv/Lib/site-packages/azure/cognitiveservices/speech;azure/cognitiveservices/speech" --add-data "assets;assets" --add-data "services;services" --add-data "configs/system/config.example.yaml;configs/system/." --add-data "wingmen;wingmen" --add-data "audio_samples;audio_samples" --add-data "LICENSE;."
+          pyinstaller main.py --name WingmanAiCore --noconfirm --icon assets/icons/wingman-ai.png --paths venv/Lib/site-packages --add-data "venv/Lib/site-packages/azure/cognitiveservices/speech;azure/cognitiveservices/speech" --add-data "assets;assets" --add-data "services;services" --add-data "configs/system/config.example.yaml;configs/system/." --add-data "wingmen;wingmen" --add-data "audio_samples;audio_samples" --add-data "LICENSE;."
 
       - name: Upload Windows Exe Artifact
         uses: actions/upload-artifact@v3
@@ -57,7 +57,7 @@ jobs:
           CLIENT_CERTIFICATE_PASSWORD: ${{ secrets.SM_CLIENT_CERT_PASSWORD }}
         uses: ./.github/actions/code-sign
         with:
-          path-to-binary: "WingmanAiCore/WingmanAiCore.exe"
+          path-to-binary: 'WingmanAiCore/WingmanAiCore.exe'
 
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v3
