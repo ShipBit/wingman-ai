@@ -3,15 +3,15 @@ from services.connection_manager import ConnectionManager
 
 
 class WebSocketUser:
-    _ws_manager: ConnectionManager = None
+    _connection_manager: ConnectionManager = None
 
     @classmethod
-    def set_ws_manager(cls, ws_manager: ConnectionManager):
-        if cls._ws_manager is None:
-            cls._ws_manager = ws_manager
+    def set_connection_manager(cls, connection_manager: ConnectionManager):
+        if cls._connection_manager is None:
+            cls._connection_manager = connection_manager
         else:
             raise ValueError(
-                "ws_manager can only be set once during the singleton lifetime of Printr."
+                "connection_manager can only be set once during the singleton lifetime of Printr."
             )
 
     def ensure_async(self, coro):
