@@ -76,6 +76,7 @@ class WingmanCore:
         self.current_config = config
         self.tower = Tower(config=config, app_root_dir=self.app_root_dir)
         errors = await self.tower.instantiate_wingmen()
+        return errors
 
     def on_press(self, key):
         if self.tower and self.active_recording["key"] == "":

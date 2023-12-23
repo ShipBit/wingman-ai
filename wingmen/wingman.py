@@ -141,7 +141,7 @@ class Wingman(FileCreator):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.name,
-                    msg=f"Missing secret '{key_name}'.",
+                    message=f"Missing secret '{key_name}'.",
                     errorType=WingmanInitializationErrorType.MISSING_SECRET,
                 )
             )

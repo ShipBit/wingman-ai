@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 from enum import Enum
 from os import path
 import sys
@@ -45,22 +46,6 @@ core = WingmanCore(
 listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # executed before the application starts
-    modify_openapi()
-    await core.load_config()
-    core.activate()
-    listener.start()
-    listener.wait()
-
-    yield
-
-    # executed after the application has finished
-    await connection_manager.shutdown()
-    listener.stop()
-
-
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
 
@@ -79,6 +64,18 @@ def modify_openapi():
                     new_operation_id = operation_id[len(to_remove) :]
                     operation["operationId"] = new_operation_id
     app.openapi_schema = openapi_schema
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # executed before the application starts
+    modify_openapi()
+
+    yield
+
+    # executed after the application has finished
+    await connection_manager.shutdown()
+    listener.stop()
 
 
 app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_unique_id)
@@ -174,8 +171,32 @@ async def websocket_endpoint(websocket: WebSocket):
         printr.print("Client disconnected", server_only=True)
 
 
+async def async_main(host: str, port: int, sidecar: bool):
+    errors = await core.load_config()
+
+    # TODO: handle the errors
+    # if error.secret_missing and
+    #   !sidecar: prompt in terminal
+    #   else queue secret prompts and send to client
+    # other errors?
+
+    listener.start()
+    listener.wait()
+
+    config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
+    server = uvicorn.Server(config)
+    await server.serve()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the FastAPI server.")
+    parser.add_argument(
+        "-H",
+        "--host",
+        type=str,
+        default="127.0.0.1",
+        help="Host for the FastAPI server to listen on.",
+    )
     parser.add_argument(
         "-p",
         "--port",
@@ -184,14 +205,20 @@ if __name__ == "__main__":
         help="Port for the FastAPI server to listen on.",
     )
     parser.add_argument(
-        "-H",
-        "--host",
-        type=str,
-        default="127.0.0.1",
-        help="Port for the FastAPI server to listen on.",
+        "--sidecar",
+        type=bool,
+        default=False,
+        help="Whether or not Wingman AI Core was launched from a client (as sidecar).",
     )
     args = parser.parse_args()
-    port = args.port
-    host = args.host
 
-    uvicorn.run(app, host=host, port=port)
+    host = args.host
+    port = args.port
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:  # No running event loop
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    finally:
+        loop.run_until_complete(async_main(host=host, port=port, sidecar=args.sidecar))
