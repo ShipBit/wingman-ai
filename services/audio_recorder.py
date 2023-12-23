@@ -15,7 +15,7 @@ class AudioRecorder(FileCreator):
     def __init__(
         self,
         app_root_dir: str,
-        samplerate: int = 44100,
+        samplerate: int = 16000,
         channels: int = 1,
     ):
         super().__init__(app_root_dir, RECORDING_PATH)
