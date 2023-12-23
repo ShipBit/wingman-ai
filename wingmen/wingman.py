@@ -3,8 +3,8 @@ import random
 import time
 from difflib import SequenceMatcher
 from importlib import import_module
-from api.interface import CommandConfig, WingmanConfig
-from api.enums import LogSource, LogType
+from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
+from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from services.audio_player import AudioPlayer
 from services.file_creator import FileCreator
 from services.secret_keeper import SecretKeeper
@@ -114,18 +114,38 @@ class Wingman(FileCreator):
 
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
-    async def validate(self) -> list[str]:
+    async def validate(self) -> list[WingmanInitializationError]:
         """Use this function to validate params and config before the Wingman is started.
         If you add new config sections or entries to your custom wingman, you should validate them here.
 
         It's a good idea to collect all errors from the base class and not to swallow them first.
 
-        If you return errors, your Wingman will be disabled by Tower and not be loaded.
+        If you return MISSING_SECRET errors, the user will be asked for them.
+        If you return other errors, your Wingman will not be loaded by Tower.
 
         Returns:
-            list[str]: A list of error messages or an empty list if everything is okay.
+            list[WingmanInitializationError]: A list of errors or an empty list if everything is okay.
         """
         return []
+
+    async def retrieve_api_key(self, key_name, errors):
+        """Use this method to retrieve secrets like API keys from the SecretKeeper.
+        If the key is missing, the user will be prompted to enter it.
+        """
+        api_key = await self.secret_keeper.retrieve(
+            requester=self.name,
+            key=key_name,
+            prompt_if_missing=True,
+        )
+        if not api_key:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.name,
+                    msg=f"Missing secret '{key_name}'.",
+                    errorType=WingmanInitializationErrorType.MISSING_SECRET,
+                )
+            )
+        return api_key
 
     # TODO: this should be async
     def prepare(self):

@@ -52,52 +52,40 @@ class WingmanCore:
         )
 
         self.app_root_dir = app_root_dir
-        self.active = False
         self.active_recording = {"key": "", "wingman": None}
-        self.tower = None
-
         self.config_manager = ConfigManager(app_root_dir, app_is_bundled)
+        self.audio_recorder = AudioRecorder(app_root_dir=app_root_dir)
+        self.tower = None
+        self.current_config = None
 
         # restore settings
         configured_devices = self.get_configured_audio_devices()
         sd.default.device = (configured_devices.input, configured_devices.output)
 
-        self.audio_recorder = AudioRecorder(app_root_dir=app_root_dir)
-        self.current_context = None
-
-    async def load_context(self, context=""):
-        self.active = False
+    async def load_config(self, config_name=""):
         try:
-            if self.config_manager:
-                config = self.config_manager.get_context_config(context)
-                self.tower = Tower(config=config, app_root_dir=self.app_root_dir)
-                await self.tower.instantiate_wingmen()
-                self.current_context = context
-
+            config = self.config_manager.load_config(config_name)
         except FileNotFoundError:
-            printr.toast_error(f"Could not find context.{context}.yaml")
+            printr.toast_error(f"Could not find config.{config_name}.yaml")
             raise
         except Exception as e:
             # Everything else...
             printr.toast_error(str(e))
             raise e
 
-    def activate(self):
-        if self.tower:
-            self.active = True
-
-    def deactivate(self):
-        self.active = False
+        self.current_config = config
+        self.tower = Tower(config=config, app_root_dir=self.app_root_dir)
+        errors = await self.tower.instantiate_wingmen()
 
     def on_press(self, key):
-        if self.active and self.tower and self.active_recording["key"] == "":
+        if self.tower and self.active_recording["key"] == "":
             wingman = self.tower.get_wingman_from_key(key)
             if wingman:
                 self.active_recording = dict(key=key, wingman=wingman)
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
     def on_release(self, key):
-        if self.active and self.active_recording["key"] == key:
+        if self.tower and self.active_recording["key"] == key:
             wingman = self.active_recording["wingman"]
             recorded_audio_wav = self.audio_recorder.stop_recording(
                 wingman_name=wingman.name
@@ -123,12 +111,12 @@ class WingmanCore:
     def get_contexts(self):
         return ContextInfo(
             contexts=self.config_manager.contexts,
-            currentContext=self.current_context,
+            currentContext=self.current_config,
         )
 
     # GET /config
     def get_config(self, context: str = None) -> Config:
-        return self.config_manager.get_context_config(context or "")
+        return self.config_manager.load_config(context or "")
 
     # GET /configured-audio-devices
     def get_configured_audio_devices(self):

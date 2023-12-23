@@ -1,6 +1,6 @@
 import json
 from typing import Mapping
-from api.interface import WingmanConfig
+from api.interface import WingmanConfig, WingmanInitializationError
 from api.enums import (
     LogType,
     OpenAiModel,
@@ -97,7 +97,7 @@ class OpenAiWingman(Wingman):
             return self.tts_provider == TtsProvider.ELEVENLABS
         return False
 
-    async def validate_and_set_openai(self, errors):
+    async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_api_key("openai", errors)
         if api_key:
             self.openai = OpenAi(
@@ -106,7 +106,9 @@ class OpenAiWingman(Wingman):
                 base_url=self.config.openai.base_url,
             )
 
-    async def validate_and_set_elevenlabs(self, errors):
+    async def validate_and_set_elevenlabs(
+        self, errors: list[WingmanInitializationError]
+    ):
         api_key = await self.retrieve_api_key("elevenlabs", errors)
         if api_key:
             self.elevenlabs = ElevenLabs(
@@ -117,7 +119,7 @@ class OpenAiWingman(Wingman):
                 config=self.config.elevenlabs, errors=errors
             )
 
-    async def validate_and_set_azure(self, errors):
+    async def validate_and_set_azure(self, errors: list[WingmanInitializationError]):
         for key_type in self.AZURE_SERVICES:
             if self.uses_provider("azure"):
                 api_key = await self.retrieve_api_key(f"azure_{key_type}", errors)
@@ -125,18 +127,6 @@ class OpenAiWingman(Wingman):
                     self.azure_api_keys[key_type] = api_key
         if len(errors) == 0:
             self.openai_azure = OpenAiAzure()
-
-    async def retrieve_api_key(self, key_name, errors):
-        api_key = await self.secret_keeper.retrieve(
-            requester=self.name,
-            key=key_name,
-            prompt_if_missing=True,
-        )
-        if not api_key:
-            errors.append(
-                f"Missing '{key_name}' API key. Please provide a valid key in the settings."
-            )
-        return api_key
 
     async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.

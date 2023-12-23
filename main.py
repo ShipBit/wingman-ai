@@ -49,7 +49,7 @@ listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
 async def lifespan(app: FastAPI):
     # executed before the application starts
     modify_openapi()
-    await core.load_context()
+    await core.load_config()
     core.activate()
     listener.start()
     listener.wait()

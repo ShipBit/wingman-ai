@@ -1,4 +1,5 @@
-from api.interface import Config
+from api.enums import WingmanInitializationErrorType
+from api.interface import Config, WingmanInitializationError
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.printr import Printr
@@ -12,14 +13,14 @@ class Tower:
         self.config = config
         self.app_root_dir = app_root_dir
         self.key_wingman_dict: dict[str, Wingman] = {}
-        self.broken_wingmen = []
         self.wingmen: list[Wingman] = []
         self.key_wingman_dict: dict[str, Wingman] = {}
 
     async def instantiate_wingmen(self):
-        wingmen = []
+        errors: list[WingmanInitializationError] = []
+
         if not self.config.wingmen:
-            return wingmen
+            return errors
 
         for wingman_name, wingman_config in self.config.wingmen.items():
             if wingman_config.disabled is True:
@@ -42,25 +43,26 @@ class Tower:
                     )
             except Exception as e:  # pylint: disable=broad-except
                 # just in case we missed something
-                msg = str(e).strip()
-                if not msg:
-                    msg = type(e).__name__
-                self.broken_wingmen.append({"name": wingman_name, "error": msg})
+                msg = str(e).strip() or type(e).__name__
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=wingman_name,
+                        msg=msg,
+                        errorType=WingmanInitializationErrorType.UNKNOWN,
+                    )
+                )
+                printr.toast_error(f"Could not instantiate {wingman_name}:\n{str(e)}")
             else:
                 # additional validation check if no exception was raised
-                errors = await wingman.validate()
+                errors.extend(await wingman.validate())
                 if not errors or len(errors) == 0:
                     wingman.prepare()
-                    wingmen.append(wingman)
-                else:
-                    self.broken_wingmen.append(
-                        {"name": wingman_name, "error": ", ".join(errors)}
-                    )
+                    self.wingmen.append(wingman)
 
-        for wingman in wingmen:
+        for wingman in self.wingmen:
             self.key_wingman_dict[wingman.get_record_key()] = wingman
 
-        self.wingmen = wingmen
+        return errors
 
     def get_wingman_from_key(self, key: any) -> Wingman | None:  # type: ignore
         if hasattr(key, "char"):
@@ -68,12 +70,3 @@ class Tower:
         else:
             wingman = self.key_wingman_dict.get(key.name, None)
         return wingman
-
-    def get_wingmen(self):
-        return self.wingmen
-
-    def get_broken_wingmen(self):
-        return self.broken_wingmen
-
-    def get_config(self):
-        return self.config
