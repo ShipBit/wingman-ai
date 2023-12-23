@@ -386,11 +386,19 @@ class Wingman(FileCreator):
                 key_module.keyDown(key_cfg.modifier)
 
             if key_cfg.hold:
-                key_module.keyDown(key_cfg.key)
-                time.sleep(key_cfg.hold)
-                key_module.keyUp(key_cfg.key)
+                if key_cfg.key in ["primary", "secondary", "middle"]:
+                    key_module.mouseDown(button=key_cfg.key)
+                    time.sleep(key_cfg.hold)
+                    key_module.mouseUp(button=key_cfg.key)
+                else:
+                    key_module.keyDown(key_cfg.key)
+                    time.sleep(key_cfg.hold)
+                    key_module.keyUp(key_cfg.key)
             else:
-                key_module.press(key_cfg.key)
+                if key_cfg.key in ["primary", "secondary", "middle"]:
+                    key_module.click(button=key_cfg.key)
+                else:
+                    key_module.press(key_cfg.key)
 
             if key_cfg.modifier:
                 key_module.keyUp(key_cfg.modifier)
