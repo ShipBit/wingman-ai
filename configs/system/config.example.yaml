@@ -20,7 +20,7 @@ features:
   # ─────────────────────── TTS Provider ─────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  tts_provider: openai # available: openai, edge_tts, elevenlabs, azure
+  tts_provider: openai # available: openai, edge_tts, elevenlabs, azure, xvasynth
 
   # ─────────────────────── Speech to text Provider ─────────────────────────
   # You can override the speech to text provider to use a different one than the default.
@@ -157,11 +157,13 @@ azure:
 # The ideal setup is to start XVASynth and then run WingmanAI. However, if you do not do so, WingmanAI will try to run XVASynth if you use it for a wingman.
 # This implementation only supports XVASynth v3 voices.
 # You can find the voice folders you have installed in the /resources/app/models folder, and inside of each will be the voices.
-# An example below is where "terminator" is the name of the game folder inside of "models" and "tn-850" is the name of the voice.  The name of the voice is the name without the .pt or .json file extensions.
+# An example below is where "terminator" is the name of the game folder inside of "models" and "tn-850" is the name of the voice.  
+# The name of the voice is the name without the .pt or .json file extensions.
+# Only used if features > tts_provider is set to 'xvasynth' above.
 xvasynth:
   xvasynth_path: C:\Program Files (x86)\Steam\steamapps\common\xVASynth # The path to your install of XVASynth.  If you do not provide this and try to use xvasynth there will be an error.
   process_device: cpu # Can be cpu or gpu, if gpu you may need to take more steps to have xvasynth run on gpu.  Defaults to cpu.
-  game_folder_name: terminator #The game folder name of the voice you donwloaded to use as your primary xvasynth voice.  This can be overwritten in a particular wingman.  If you do not provide this and try to use xvasynth there will be an error.
+  game_folder_name: terminator # The game folder name of the voice you donwloaded to use as your primary xvasynth voice.  This can be overwritten in a particular wingman.  If you do not provide this and try to use xvasynth there will be an error.
   voice: tn-T850 # The name of the voice you downloaded to use.  This can be overwritten in a particular wingman.  If you do not provide this and try to use xvasynth there will be an error.
   language: en # The language the voice will speak in. Some XVASynth voices are trained to be multi-lingual.  Defaults to english, 'en'.
   pace: 1.0 # The speed of the voice playback. Defaults to 1.0.
