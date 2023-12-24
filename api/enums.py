@@ -1,4 +1,4 @@
-from enum import Enum
+from enum import Enum, StrEnum
 from pydantic import BaseModel
 
 
@@ -59,6 +59,11 @@ class EdgeTtsVoiceGender(Enum):
     FEMALE = "Female"
 
 
+class XVASynthModel(StrEnum):
+    SYNTHESIZE_URL = "http://127.0.0.1:8008/synthesize"
+    LOADMODEL_URL = "http://127.0.0.1:8008/loadModel"
+
+
 class OpenAiModel(Enum):
     GPT_35_TURBO_1106 = "gpt-3.5-turbo-1106"
     GPT_4_1106_PREVIEW = "gpt-4-1106-preview"
@@ -87,6 +92,7 @@ class TtsProvider(Enum):
     ELEVENLABS = "elevenlabs"
     EDGE_TTS = "edge_tts"
     AZURE = "azure"
+    XVASYNTH = "xvasynth"
 
 
 class SttProvider(Enum):
@@ -142,6 +148,10 @@ class ElevenlabsModelEnumModel(BaseEnumModel):
     model: ElevenlabsModel
 
 
+class XVASynthModelEnumModel(BaseEnumModel):
+    model: XVASynthModel
+
+
 class EdgeTtsVoiceGenderEnumModel(BaseEnumModel):
     gender: EdgeTtsVoiceGender
 
@@ -186,6 +196,7 @@ ENUM_TYPES = {
     "CommandTag": CommandTagEnumModel,
     "AzureApiVersion": AzureApiVersionEnumModel,
     "ElevenlabsModel": ElevenlabsModelEnumModel,
+    "XVASynthModel": XVASynthModelEnumModel,
     "EdgeTtsVoiceGender": EdgeTtsVoiceGenderEnumModel,
     "OpenAiModel": OpenAiModelEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,

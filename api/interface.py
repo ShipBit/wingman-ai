@@ -160,6 +160,17 @@ class EdgeTtsConfig(BaseModel):
     gender: EdgeTtsVoiceGender
 
 
+class XVASynthTtsConfig(BaseModel):
+    xvasynth_path: str
+    game_folder_name: str
+    voice: str
+    language: Optional[str] = "en"
+    pace: Optional[float] = 1.0
+    useSR: Optional[bool] = False
+    useCleanup: Optional[bool] = False
+    process_device: Optional[str] = "cpu"
+
+
 class OpenAiConfig(BaseModel):
     context: Optional[str] = None
     """The "context" for the wingman. Here's where you can tell the AI how to behave.
@@ -262,6 +273,7 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
+    xvasynth: XVASynthTtsConfig
     azure: AzureConfig
     commands: list[CommandConfig] | None = None
 
