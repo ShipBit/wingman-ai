@@ -14,6 +14,7 @@ class XVASynth:
         self.xvasynth_path = ""
         self.process_device = ""
         self.times_checked_xvasynth = 0
+        self.current_voice = ""
         
     def validate_config(self, config: XVASynthTtsConfig, errors: list[str]):
         if not errors:
@@ -46,25 +47,20 @@ class XVASynth:
             errors.append(check)
         # if xvasynth is found, load initial XVASynth voice
         else:
-            loadmodel_url = XVASynthModel.LOADMODEL_URL
-            # example: voice_path = "D:\\DExtraSteamGames\\steamapps\\common\\xVASynth\\resources\\app\\models\\masseffect\\me_edi"
-            voice_path = config.xvasynth_path + "\\resources\\app\\models\\" + config.game_folder_name + "\\" + config.voice
-            base_lang = config.language
-            model_change = {
-            'outputs': None,
-            'version': '3.0',
-            'model': voice_path, 
-            'modelType': 'XVAPitch',
-            'base_lang': base_lang, 
-            'pluginsContext': '{}',
-            }
-            requests.post(loadmodel_url, json=model_change)
+            load_ok = self.load_xvasynth_model(path_to_xvasynth=config.xvasynth_path, game_folder=config.game_folder_name, voice=config.voice, language=config.language)
+            if load_ok != "ok":
+                errors.append(load_ok)
+            self.current_voice = config.voice
+
         return errors
 
     def play_audio(
         self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
     ):
-        #voice = config.voice
+        if config.voice != self.current_voice:
+            load_ok = self.load_xvasynth_model(path_to_xvasynth=config.xvasynth_path, game_folder=config.game_folder_name, voice=config.voice, language=config.language)
+            if load_ok != "ok":
+                print("There was a problem loading your XVASynth voice, check your voice name and game folder for your voice in XVAsynth")
         voiceline = text
         file_dir = path.abspath(path.dirname(__file__))
         wingman_dir = path.abspath(path.dirname(file_dir))
@@ -106,3 +102,24 @@ class XVASynth:
             return "ERROR: You chose XVASynth for Text to Speech but the program does not appear to be running.  Please start XVASynth and try again or choose another Text to Speech type."
 
         return "ok"
+
+    def load_xvasynth_model(self, path_to_xvasynth:str, game_folder:str, voice:str, language:str):
+        loadmodel_url = XVASynthModel.LOADMODEL_URL
+        # example: voice_path = "D:\\DExtraSteamGames\\steamapps\\common\\xVASynth\\resources\\app\\models\\masseffect\\me_edi"
+        voice_path = path_to_xvasynth + "\\resources\\app\\models\\" + game_folder + "\\" + voice
+        base_lang = language
+        model_change = {
+            'outputs': None,
+            'version': '3.0',
+            'model': voice_path, 
+            'modelType': 'XVAPitch',
+            'base_lang': base_lang, 
+            'pluginsContext': '{}',
+            }
+        try:
+            response = requests.post(loadmodel_url, json=model_change)
+            response.raise_for_status()
+            self.current_voice = voice
+            return "ok"
+        except:
+            return "There was an error with loading your XVASynth voice. Double check your game folder and voice path."
