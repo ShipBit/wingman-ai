@@ -57,10 +57,9 @@ class XVASynth:
     def play_audio(
         self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
     ):
-        if config.voice != self.current_voice:
-            load_ok = self.load_xvasynth_model(path_to_xvasynth=config.xvasynth_path, game_folder=config.game_folder_name, voice=config.voice, language=config.language)
-            if load_ok != "ok":
-                print("There was a problem loading your XVASynth voice, check your voice name and game folder for your voice in XVAsynth")
+        load_ok = self.load_xvasynth_model(path_to_xvasynth=config.xvasynth_path, game_folder=config.game_folder_name, voice=config.voice, language=config.language)
+        if load_ok != "ok":
+            print("There was a problem loading your XVASynth voice, check your voice name and game folder for your voice in XVAsynth")
         voiceline = text
         file_dir = path.abspath(path.dirname(__file__))
         wingman_dir = path.abspath(path.dirname(file_dir))
