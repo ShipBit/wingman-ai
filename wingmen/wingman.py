@@ -382,6 +382,18 @@ class Wingman(FileCreator):
             return
 
         for key_cfg in command.keys:
+            if key_cfg.moveto:
+                x,y = key_cfg.moveto
+                key_module.moveTo(x,y)
+
+            if key_cfg.moveto_relative:
+                x,y = key_cfg.moveto_relative
+                key_module.move(x,y)
+
+            if key_cfg.key == "scroll":
+                if key_cfg.scroll_amount:
+                    key_module.scroll(key_cfg.scroll_amount)
+
             if key_cfg.modifier:
                 key_module.keyDown(key_cfg.modifier)
 
@@ -390,18 +402,21 @@ class Wingman(FileCreator):
                     key_module.mouseDown(button=key_cfg.key)
                     time.sleep(key_cfg.hold)
                     key_module.mouseUp(button=key_cfg.key)
-                else:
+                elif key_cfg.key != "scroll":
                     key_module.keyDown(key_cfg.key)
                     time.sleep(key_cfg.hold)
                     key_module.keyUp(key_cfg.key)
             else:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
                     key_module.click(button=key_cfg.key)
-                else:
+                elif key_cfg.key != "scroll":
                     key_module.press(key_cfg.key)
 
             if key_cfg.modifier:
                 key_module.keyUp(key_cfg.modifier)
+
+            if key_cfg.write:
+                key_module.typewrite(key_cfg.write, interval=0.10)
 
             if key_cfg.wait:
                 time.sleep(key_cfg.wait)
