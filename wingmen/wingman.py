@@ -422,5 +422,8 @@ class Wingman(FileCreator):
             if key_cfg.write:
                 key_module.typewrite(key_cfg.write, interval=0.10)
 
+            if key_cfg.write:
+                key_module.typewrite(key_cfg.write, interval=0.10)
+
             if key_cfg.wait:
                 time.sleep(key_cfg.wait)
