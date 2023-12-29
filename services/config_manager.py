@@ -18,7 +18,7 @@ class ConfigManager:
     def __init__(self, app_root_path: str, app_is_bundled: bool):
         self.printr = Printr()
         self.settings_config: SettingsConfig = {}
-        self.contexts = [""]
+        self.configs = [""]
         self.context_config_path: str = os.path.join(
             app_root_path,
             CONTEXT_CONFIG_PATH_BUNDLED if app_is_bundled else CONTEXT_CONFIG_PATH,
@@ -27,7 +27,65 @@ class ConfigManager:
             os.makedirs(self.context_config_path)
         self.system_config_path: str = os.path.join(app_root_path, SYSTEM_CONFIG_PATH)
         self.load_settings_config()
-        self.load_context_config_names()
+        self.load_config_names()
+
+    def load_settings_config(self):
+        """Fetch Settings config from file and store it for future use"""
+        parsed_config = self.__read_config_file(SETTINGS_CONFIG)
+        try:
+            self.settings_config = SettingsConfig(**parsed_config)
+            return self.settings_config
+        except ValidationError as e:
+            self.printr.toast_error(f"Could not load settings config!\n{str(e)}")
+            return None
+
+    def save_settings_config(self):
+        """Write Settings config to file"""
+        return self.__write_config_file(SETTINGS_CONFIG, self.settings_config)
+
+    def load_config_names(self):
+        default_found = False
+        file_prefix, file_ending = DEFAULT_CONTEXT_CONFIG.split(".")
+
+        # Dynamically load all user configuration files from the provided directory
+        for file in os.listdir(self.context_config_path):
+            # Filter out all non-yaml files
+            if file.endswith(f".{file_ending}") and file.startswith(f"{file_prefix}."):
+                if file == DEFAULT_CONTEXT_CONFIG:
+                    default_found = True
+                else:
+                    config_name = file.replace(f"{file_prefix}.", "").replace(
+                        f".{file_ending}", ""
+                    )
+                    self.configs.append(config_name)
+
+        if not default_found:
+            # create default context from the systems example context config
+            example_context: str = os.path.join(
+                self.system_config_path, EXAMPLE_CONTEXT_CONFIG
+            )
+            default_context: str = os.path.join(
+                self.context_config_path, DEFAULT_CONTEXT_CONFIG
+            )
+            if os.path.exists(example_context) and os.path.isfile(example_context):
+                shutil.copyfile(example_context, default_context)
+
+    def load_config(self, config_name=""):  # type: ignore
+        # default name -> 'config.yaml'
+        # context config -> 'config.{context}.yaml'
+        file_name = f"config.{f'{config_name}.' if config_name else ''}yaml"
+
+        parsed_config = self.__read_config_file(file_name, False)
+        config = copy.deepcopy(parsed_config)
+        config["wingmen"] = {}
+
+        for wingman_name, wingman_config in parsed_config.get("wingmen", {}).items():
+            merged_config = self.__merge_configs(config, wingman_config)
+            config["wingmen"][wingman_name] = merged_config
+
+        # not catching ValifationExceptions here, because we can't revover from it
+        # TODO: Notify the client about the error somehow
+        return Config(**config)
 
     def __read_config_file(self, config_name, is_system_config=True) -> dict[str, any]:  # type: ignore
         parsed_config = {}
@@ -58,64 +116,6 @@ class ConfigManager:
                 return False
 
             return True
-
-    def load_settings_config(self):
-        """Fetch Settings config from file and store it for future use"""
-        parsed_config = self.__read_config_file(SETTINGS_CONFIG)
-        try:
-            self.settings_config = SettingsConfig(**parsed_config)
-            return self.settings_config
-        except ValidationError as e:
-            self.printr.toast_error(f"Could not load settings config!\n{str(e)}")
-            return None
-
-    def save_settings_config(self):
-        """Write Settings config to file"""
-        return self.__write_config_file(SETTINGS_CONFIG, self.settings_config)
-
-    def load_context_config_names(self):
-        default_found = False
-        file_prefix, file_ending = DEFAULT_CONTEXT_CONFIG.split(".")
-
-        # Dynamically load all user configuration files from the provided directory
-        for file in os.listdir(self.context_config_path):
-            # Filter out all non-yaml files
-            if file.endswith(f".{file_ending}") and file.startswith(f"{file_prefix}."):
-                if file == DEFAULT_CONTEXT_CONFIG:
-                    default_found = True
-                else:
-                    config_name = file.replace(f"{file_prefix}.", "").replace(
-                        f".{file_ending}", ""
-                    )
-                    self.contexts.append(config_name)
-
-        if not default_found:
-            # create default context from the systems example context config
-            example_context: str = os.path.join(
-                self.system_config_path, EXAMPLE_CONTEXT_CONFIG
-            )
-            default_context: str = os.path.join(
-                self.context_config_path, DEFAULT_CONTEXT_CONFIG
-            )
-            if os.path.exists(example_context) and os.path.isfile(example_context):
-                shutil.copyfile(example_context, default_context)
-
-    def get_context_config(self, context=""):  # type: ignore
-        # default name -> 'config.yaml'
-        # context config -> 'config.{context}.yaml'
-        file_name = f"config.{f'{context}.' if context else ''}yaml"
-
-        parsed_config = self.__read_config_file(file_name, False)
-        config = copy.deepcopy(parsed_config)
-        config["wingmen"] = {}
-
-        for wingman_name, wingman_config in parsed_config.get("wingmen", {}).items():
-            merged_config = self.__merge_configs(config, wingman_config)
-            config["wingmen"][wingman_name] = merged_config
-
-        # not catching ValifationExceptions here, because we can't revover from it
-        # TODO: Notify the client about the error somehow
-        return Config(**config)
 
     def __deep_merge(self, source, updates):
         """Recursively merges updates into source."""

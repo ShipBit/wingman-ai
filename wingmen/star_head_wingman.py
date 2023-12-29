@@ -1,8 +1,8 @@
 from typing import Optional
 import json
 import requests
-from api.interface import WingmanConfig
-from api.enums import LogType
+from api.interface import WingmanConfig, WingmanInitializationError
+from api.enums import LogType, WingmanInitializationErrorType
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 
@@ -44,16 +44,28 @@ class StarHeadWingman(OpenAiWingman):
 
     async def validate(self):
         # collect errors from the base class (if any)
-        errors: list[str] = await super().validate()
+        errors: list[WingmanInitializationError] = await super().validate()
 
         # add custom errors
         if not self.config.custom_properties["starhead_api_url"]:
-            errors.append("Missing custom property 'starhead_api_url' in config.yaml")
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.name,
+                    message="Missing custom property 'starhead_api_url' in config.yaml",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
 
         try:
             self._prepare_data()
         except Exception as e:
-            errors.append(f"Failed to load data from StarHead API: {e}")
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.name,
+                    message=f"Failed to load data from StarHead API: {e}",
+                    error_type=WingmanInitializationErrorType.UNKNOWN,
+                )
+            )
 
         return errors
 

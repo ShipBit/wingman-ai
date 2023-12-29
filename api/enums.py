@@ -26,6 +26,12 @@ class ToastType(Enum):
     INFO = "info"
 
 
+class WingmanInitializationErrorType(Enum):
+    UNKNOWN = "unknown"
+    INVALID_CONFIG = "invalid_config"
+    MISSING_SECRET = "missing_secret"
+
+
 class CommandTag(Enum):
     RECORDING_STARTED = "recording_started"
     RECORDING_STOPPED = "recording_stopped"
@@ -120,6 +126,10 @@ class ToastTypeEnumModel(BaseEnumModel):
     toast_type: ToastType
 
 
+class WingmanInitializationErrorTypeModel(BaseEnumModel):
+    error_type: WingmanInitializationErrorType
+
+
 class CommandTagEnumModel(BaseEnumModel):
     command_tag: CommandTag
 
@@ -172,6 +182,7 @@ ENUM_TYPES = {
     "LogType": LogTypeEnumModel,
     "LogSource": LogSourceEnumModel,
     "ToastType": ToastTypeEnumModel,
+    "WingmanInitializationErrorType": WingmanInitializationErrorTypeModel,
     "CommandTag": CommandTagEnumModel,
     "AzureApiVersion": AzureApiVersionEnumModel,
     "ElevenlabsModel": ElevenlabsModelEnumModel,

@@ -3,8 +3,8 @@ from elevenlabslib import (
     GenerationOptions,
     PlaybackOptions,
 )
-from api.enums import ElevenlabsModel
-from api.interface import ElevenlabsConfig, SoundConfig
+from api.enums import ElevenlabsModel, WingmanInitializationErrorType
+from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
 from services.secret_keeper import SecretKeeper
 
@@ -15,14 +15,20 @@ class ElevenLabs:
         self.wingman_name = wingman_name
         self.secret_keeper = SecretKeeper()
 
-    def validate_config(self, config: ElevenlabsConfig, errors: list[str]):
+    def validate_config(
+        self, config: ElevenlabsConfig, errors: list[WingmanInitializationError]
+    ):
         if not errors:
             errors = []
 
         # TODO: Let Pydantic check that with a custom validator
         if not config.voice.id and not config.voice.name:
             errors.append(
-                "Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config."
+                WingmanInitializationError(
+                    wingman_name=self.wingman_name,
+                    message="Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
             )
         return errors
 

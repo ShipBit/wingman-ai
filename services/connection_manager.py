@@ -36,10 +36,9 @@ class ConnectionManager:
     async def _broadcast_queued_messages(self, websocket: WebSocket):
         while self.message_queue:
             payload = self.message_queue.pop(0)
-            await websocket.send_text(json.dumps(payload, default=self._enum_encoder))
+            await websocket.send_text(payload.model_dump_json())
 
     async def broadcast(self, command: WebSocketCommandModel):
-        # json_str = json.dumps(command, default=self._enum_encoder)
         json_str = command.model_dump_json()
         if self.active_connections:
             for connection in self.active_connections:

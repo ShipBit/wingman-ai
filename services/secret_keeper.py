@@ -99,6 +99,9 @@ class SecretKeeper(WebSocketUser):
 
     # POST /secrets
     def post_secrets(self, secrets: dict[str, Any]):
+        if not secrets or len(secrets) == 0:
+            return
+
         self.secrets = secrets
         self.save()
         self.printr.print(

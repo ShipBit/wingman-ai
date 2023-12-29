@@ -15,9 +15,9 @@ class ClientReadyCommand(WebSocketCommandModel):
     command: Literal["client_ready"] = "client_ready"
 
 
-class ChangeContextCommand(WebSocketCommandModel):
-    command: Literal["change_context"] = "change_context"
-    context: str
+class ChangeConfigCommand(WebSocketCommandModel):
+    command: Literal["change_config"] = "change_config"
+    config: str
 
 
 class SaveSecretCommand(WebSocketCommandModel):
