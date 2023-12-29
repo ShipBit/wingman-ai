@@ -27,7 +27,7 @@ class ElevenLabs:
                 WingmanInitializationError(
                     wingman_name=self.wingman_name,
                     message="Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config.",
-                    errorType=WingmanInitializationErrorType.INVALID_CONFIG,
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                 )
             )
         return errors

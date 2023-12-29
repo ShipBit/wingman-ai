@@ -4,7 +4,7 @@ from enum import Enum
 from os import path
 import sys
 from contextlib import asynccontextmanager
-from typing import Literal, get_args, get_origin
+from typing import Any, Literal, get_args, get_origin
 import uvicorn
 from pynput import keyboard
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -12,7 +12,7 @@ from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from api.commands import WebSocketCommandModel
-from api.enums import ENUM_TYPES
+from api.enums import ENUM_TYPES, WingmanInitializationErrorType
 from services.command_handler import CommandHandler
 from services.connection_manager import ConnectionManager
 from services.secret_keeper import SecretKeeper
@@ -171,14 +171,30 @@ async def websocket_endpoint(websocket: WebSocket):
         printr.print("Client disconnected", server_only=True)
 
 
+@app.post("/start-secrets", tags=["main"])
+async def start_secrets(secrets: dict[str, Any]):
+    secret_keeper.post_secrets(secrets)
+    core.startup_errors = []
+    await core.load_config()
+
+
 async def async_main(host: str, port: int, sidecar: bool):
     errors = await core.load_config()
+    for error in errors:
+        if (
+            not sidecar  # running standalone
+            and error.error_type == WingmanInitializationErrorType.MISSING_SECRET
+        ):
+            secret = input(f"Please enter your '{error.secret_name}' API key/secret: ")
+            if secret:
+                secret_keeper.secrets[error.secret_name] = secret
+                secret_keeper.save()
+            else:
+                return
+        else:
+            core.startup_errors.append(error)
 
-    # TODO: handle the errors
-    # if error.secret_missing and
-    #   !sidecar: prompt in terminal
-    #   else queue secret prompts and send to client
-    # other errors?
+    core.is_started = True
 
     listener.start()
     listener.wait()
@@ -206,8 +222,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--sidecar",
-        type=bool,
-        default=False,
+        action="store_true",
         help="Whether or not Wingman AI Core was launched from a client (as sidecar).",
     )
     args = parser.parse_args()

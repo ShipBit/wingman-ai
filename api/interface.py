@@ -16,9 +16,9 @@ from api.enums import (
 )
 
 
-class ContextInfo(BaseModel):
-    contexts: list[str]
-    currentContext: str
+class ConfigInfo(BaseModel):
+    configs: list[str]
+    currentConfig: str
 
 
 class SystemCore(TypedDict):
@@ -35,7 +35,8 @@ class SystemInfo(BaseModel):
 class WingmanInitializationError(BaseModel):
     wingman_name: str
     message: str
-    errorType: WingmanInitializationErrorType
+    error_type: WingmanInitializationErrorType
+    secret_name: Optional[str] = None
 
 
 # from sounddevice lib

@@ -128,21 +128,22 @@ class Wingman(FileCreator):
         """
         return []
 
-    async def retrieve_api_key(self, key_name, errors):
+    async def retrieve_secret(self, secret_name, errors):
         """Use this method to retrieve secrets like API keys from the SecretKeeper.
         If the key is missing, the user will be prompted to enter it.
         """
         api_key = await self.secret_keeper.retrieve(
             requester=self.name,
-            key=key_name,
+            key=secret_name,
             prompt_if_missing=True,
         )
         if not api_key:
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.name,
-                    message=f"Missing secret '{key_name}'.",
-                    errorType=WingmanInitializationErrorType.MISSING_SECRET,
+                    message=f"Missing secret '{secret_name}'.",
+                    error_type=WingmanInitializationErrorType.MISSING_SECRET,
+                    secret_name=secret_name,
                 )
             )
         return api_key

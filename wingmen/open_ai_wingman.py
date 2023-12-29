@@ -98,7 +98,7 @@ class OpenAiWingman(Wingman):
         return False
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
-        api_key = await self.retrieve_api_key("openai", errors)
+        api_key = await self.retrieve_secret("openai", errors)
         if api_key:
             self.openai = OpenAi(
                 api_key=api_key,
@@ -109,7 +109,7 @@ class OpenAiWingman(Wingman):
     async def validate_and_set_elevenlabs(
         self, errors: list[WingmanInitializationError]
     ):
-        api_key = await self.retrieve_api_key("elevenlabs", errors)
+        api_key = await self.retrieve_secret("elevenlabs", errors)
         if api_key:
             self.elevenlabs = ElevenLabs(
                 api_key=api_key,
@@ -122,7 +122,7 @@ class OpenAiWingman(Wingman):
     async def validate_and_set_azure(self, errors: list[WingmanInitializationError]):
         for key_type in self.AZURE_SERVICES:
             if self.uses_provider("azure"):
-                api_key = await self.retrieve_api_key(f"azure_{key_type}", errors)
+                api_key = await self.retrieve_secret(f"azure_{key_type}", errors)
                 if api_key:
                     self.azure_api_keys[key_type] = api_key
         if len(errors) == 0:

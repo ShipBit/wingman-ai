@@ -3,7 +3,13 @@ import threading
 from fastapi import APIRouter
 import sounddevice as sd
 from api.enums import LogType, ToastType
-from api.interface import AudioDevice, AudioSettings, Config, ContextInfo
+from api.interface import (
+    AudioDevice,
+    AudioSettings,
+    Config,
+    ConfigInfo,
+    WingmanInitializationError,
+)
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
@@ -18,9 +24,9 @@ class WingmanCore:
         self.router = APIRouter()
         self.router.add_api_route(
             methods=["GET"],
-            path="/contexts",
-            endpoint=self.get_contexts,
-            response_model=ContextInfo,
+            path="/configs",
+            endpoint=self.get_configs,
+            response_model=ConfigInfo,
             tags=["core"],
         )
         self.router.add_api_route(
@@ -50,13 +56,22 @@ class WingmanCore:
             response_model=AudioSettings,
             tags=["core"],
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/startup-errors",
+            endpoint=self.get_startup_errors,
+            response_model=list[WingmanInitializationError],
+            tags=["core"],
+        )
 
         self.app_root_dir = app_root_dir
         self.active_recording = {"key": "", "wingman": None}
         self.config_manager = ConfigManager(app_root_dir, app_is_bundled)
         self.audio_recorder = AudioRecorder(app_root_dir=app_root_dir)
-        self.tower = None
-        self.current_config = None
+        self.tower: Tower = None
+        self.current_config: str = None
+        self.startup_errors: list[WingmanInitializationError] = []
+        self.is_started = False
 
         # restore settings
         configured_devices = self.get_configured_audio_devices()
@@ -73,7 +88,7 @@ class WingmanCore:
             printr.toast_error(str(e))
             raise e
 
-        self.current_config = config
+        self.current_config = config_name
         self.tower = Tower(config=config, app_root_dir=self.app_root_dir)
         errors = await self.tower.instantiate_wingmen()
         return errors
@@ -108,11 +123,11 @@ class WingmanCore:
                 play_thread = threading.Thread(target=run_async_process)
                 play_thread.start()
 
-    # GET /contexts
-    def get_contexts(self):
-        return ContextInfo(
-            contexts=self.config_manager.contexts,
-            currentContext=self.current_config,
+    # GET /configs
+    def get_configs(self):
+        return ConfigInfo(
+            configs=self.config_manager.configs,
+            currentConfig=self.current_config,
         )
 
     # GET /config
@@ -144,3 +159,7 @@ class WingmanCore:
             printr.print(
                 "Audio devices updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
             )
+
+    # GET /startup-errors
+    def get_startup_errors(self):
+        return self.startup_errors

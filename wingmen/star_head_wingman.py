@@ -52,7 +52,7 @@ class StarHeadWingman(OpenAiWingman):
                 WingmanInitializationError(
                     wingman_name=self.name,
                     message="Missing custom property 'starhead_api_url' in config.yaml",
-                    errorType=WingmanInitializationErrorType.INVALID_CONFIG,
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                 )
             )
 
@@ -63,7 +63,7 @@ class StarHeadWingman(OpenAiWingman):
                 WingmanInitializationError(
                     wingman_name=self.name,
                     message=f"Failed to load data from StarHead API: {e}",
-                    errorType=WingmanInitializationErrorType.UNKNOWN,
+                    error_type=WingmanInitializationErrorType.UNKNOWN,
                 )
             )
 

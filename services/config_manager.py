@@ -18,7 +18,7 @@ class ConfigManager:
     def __init__(self, app_root_path: str, app_is_bundled: bool):
         self.printr = Printr()
         self.settings_config: SettingsConfig = {}
-        self.contexts = [""]
+        self.configs = [""]
         self.context_config_path: str = os.path.join(
             app_root_path,
             CONTEXT_CONFIG_PATH_BUNDLED if app_is_bundled else CONTEXT_CONFIG_PATH,
@@ -57,7 +57,7 @@ class ConfigManager:
                     config_name = file.replace(f"{file_prefix}.", "").replace(
                         f".{file_ending}", ""
                     )
-                    self.contexts.append(config_name)
+                    self.configs.append(config_name)
 
         if not default_found:
             # create default context from the systems example context config

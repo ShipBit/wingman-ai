@@ -48,7 +48,7 @@ class Tower:
                     WingmanInitializationError(
                         wingman_name=wingman_name,
                         msg=msg,
-                        errorType=WingmanInitializationErrorType.UNKNOWN,
+                        error_type=WingmanInitializationErrorType.UNKNOWN,
                     )
                 )
                 printr.toast_error(f"Could not instantiate {wingman_name}:\n{str(e)}")
