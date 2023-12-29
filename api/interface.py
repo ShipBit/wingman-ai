@@ -12,12 +12,13 @@ from api.enums import (
     SttProvider,
     SummarizeProvider,
     TtsProvider,
+    WingmanInitializationErrorType,
 )
 
 
-class ContextInfo(BaseModel):
-    contexts: list[str]
-    currentContext: str
+class ConfigInfo(BaseModel):
+    configs: list[str]
+    currentConfig: str
 
 
 class SystemCore(TypedDict):
@@ -29,6 +30,13 @@ class SystemCore(TypedDict):
 class SystemInfo(BaseModel):
     os: str
     core: SystemCore
+
+
+class WingmanInitializationError(BaseModel):
+    wingman_name: str
+    message: str
+    error_type: WingmanInitializationErrorType
+    secret_name: Optional[str] = None
 
 
 # from sounddevice lib
