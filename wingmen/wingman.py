@@ -417,7 +417,6 @@ class Wingman(FileCreator):
             if key_cfg.modifier:
                 for mod in reversed(modifiers):
                     key_module.keyUp(mod)
-                    print(f"Releasing key: {mod}")
 
             if key_cfg.write:
                 key_module.typewrite(key_cfg.write, interval=0.10)
