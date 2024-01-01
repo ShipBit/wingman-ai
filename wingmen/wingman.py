@@ -395,7 +395,9 @@ class Wingman(FileCreator):
                     key_module.scroll(key_cfg.scroll_amount)
 
             if key_cfg.modifier:
-                key_module.keyDown(key_cfg.modifier)
+                modifiers = [mod.strip() for mod in key_cfg.modifier.split(',')]
+                for mod in modifiers:
+                    key_module.keyDown(mod)
 
             if key_cfg.hold:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
@@ -413,7 +415,9 @@ class Wingman(FileCreator):
                     key_module.press(key_cfg.key)
 
             if key_cfg.modifier:
-                key_module.keyUp(key_cfg.modifier)
+                for mod in reversed(modifiers):
+                    key_module.keyUp(mod)
+                    print(f"Releasing key: {mod}")
 
             if key_cfg.write:
                 key_module.typewrite(key_cfg.write, interval=0.10)
