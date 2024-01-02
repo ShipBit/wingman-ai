@@ -231,8 +231,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "-p",
         "--port",
-        type=int,
-        default=8000,
+        type=str,
+        default="8000",
         help="Port for the FastAPI server to listen on.",
     )
     parser.add_argument(
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     host = args.host
-    port = args.port
+    port = int(args.port)
 
     try:
         loop = asyncio.get_running_loop()
