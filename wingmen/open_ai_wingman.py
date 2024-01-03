@@ -12,6 +12,7 @@ from api.enums import (
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
+from providers.xvasynth import XVASynth
 from services.printr import Printr
 from wingmen.wingman import Wingman
 
@@ -47,6 +48,7 @@ class OpenAiWingman(Wingman):
         self.openai: OpenAi = None  # validate will set this
         self.openai_azure: OpenAiAzure = None  # validate will set this
         self.elevenlabs: ElevenLabs = None  # validate will set this
+        self.xvasynth: XVASynth = None # validate will set this
 
         # every conversation starts with the "context" that the user has configured
         self.messages = (
@@ -95,6 +97,8 @@ class OpenAiWingman(Wingman):
             return self.tts_provider == TtsProvider.EDGE_TTS
         elif provider_type == "elevenlabs":
             return self.tts_provider == TtsProvider.ELEVENLABS
+        elif provider_type == "xvasynth":
+            return self.tts_provider == TtsProvider.XVASYNTH
         return False
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
@@ -127,6 +131,17 @@ class OpenAiWingman(Wingman):
                     self.azure_api_keys[key_type] = api_key
         if len(errors) == 0:
             self.openai_azure = OpenAiAzure()
+
+    async def validate_and_set_xvasynth(self, errors: list[WingmanInitializationError]):
+        self.xvasynth = XVASynth(
+            wingman_name=self.name,
+            xvasynth_path=self.config.xvasynth.xvasynth_path,
+            process_device=self.config.xvasynth.process_device,
+            times_checked_xvasynth=0
+        )
+        self.xvasynth.validate_config(
+            config=self.config.xvasynth, errors = errors
+        )
 
     async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
@@ -455,6 +470,12 @@ class OpenAiWingman(Wingman):
                 text=text,
                 api_key=self.azure_api_keys["tts"],
                 config=self.config.azure.tts,
+                sound_config=self.config.sound,
+            )
+        elif self.tts_provider ==TtsProvider.XVASYNTH:
+            self.xvasynth.play_audio(
+                text=text,
+                config=self.config.xvasynth, 
                 sound_config=self.config.sound,
             )
         else:
