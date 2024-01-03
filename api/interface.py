@@ -3,8 +3,9 @@ from typing_extensions import Annotated, TypedDict
 from pydantic import BaseModel, Field
 from api.enums import (
     AzureApiVersion,
+    AzureRegion,
     ConversationProvider,
-    EdgeTtsVoiceGender,
+    TtsVoiceGender,
     ElevenlabsModel,
     OpenAiModel,
     OpenAiTtsVoice,
@@ -37,6 +38,13 @@ class WingmanInitializationError(BaseModel):
     message: str
     error_type: WingmanInitializationErrorType
     secret_name: Optional[str] = None
+
+
+class VoiceInfo(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    gender: Optional[TtsVoiceGender] = None
+    locale: Optional[str] = None
 
 
 # from sounddevice lib
@@ -77,10 +85,9 @@ class AzureInstanceConfig(BaseModel):
 
 
 class AzureTtsConfig(BaseModel):
-    region: str
+    region: AzureRegion
     voice: str
     detect_language: bool
-    languages: list[str]
 
 
 class AzureConfig(BaseModel):
@@ -157,7 +164,7 @@ class EdgeTtsConfig(BaseModel):
     Otherwise it's better to set a fixed voice in your preferred language below.
     """
 
-    gender: EdgeTtsVoiceGender
+    gender: TtsVoiceGender
 
 
 class XVASynthTtsConfig(BaseModel):

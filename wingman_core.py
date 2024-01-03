@@ -1,15 +1,19 @@
 import asyncio
 import threading
+from elevenlabslib import ElevenLabsVoice
 from fastapi import APIRouter
 import sounddevice as sd
-from api.enums import LogType, ToastType
+from api.enums import AzureRegion, LogType, ToastType
 from api.interface import (
     AudioDevice,
     AudioSettings,
     Config,
     ConfigInfo,
+    VoiceInfo,
     WingmanInitializationError,
 )
+from providers.elevenlabs import ElevenLabs
+from providers.open_ai import OpenAiAzure
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
@@ -61,6 +65,20 @@ class WingmanCore:
             path="/startup-errors",
             endpoint=self.get_startup_errors,
             response_model=list[WingmanInitializationError],
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/elevenlabs-voices",
+            endpoint=self.get_elevenlabs_voices,
+            response_model=list[VoiceInfo],
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/azure-voices",
+            endpoint=self.get_azure_voices,
+            response_model=list[VoiceInfo],
             tags=["core"],
         )
 
@@ -163,3 +181,28 @@ class WingmanCore:
     # GET /startup-errors
     def get_startup_errors(self):
         return self.startup_errors
+
+    # GET /elevenlabs-voices
+    def get_elevenlabs_voices(self, api_key: str):
+        elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
+        voices = elevenlabs.get_available_voices()
+        convert = lambda voice: VoiceInfo(id=voice.voiceID, name=voice.name)
+        result = [convert(voice) for voice in voices]
+
+        return result
+
+    # GET /azure-voices
+    def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
+        azure = OpenAiAzure()
+        voices = azure.get_available_voices(
+            api_key=api_key, region=region.value, locale=locale
+        )
+        convert = lambda voice: VoiceInfo(
+            id=voice.short_name,
+            name=voice.local_name,
+            gender=voice.gender.name,
+            locale=voice.locale,
+        )
+        result = [convert(voice) for voice in voices]
+
+        return result

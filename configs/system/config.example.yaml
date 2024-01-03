@@ -147,9 +147,6 @@ azure:
     region: westeurope
     voice: en-US-JaneNeural
     detect_language: true
-    languages: # Only used if detect_language is set to true above.
-      - en-US
-      - de-DE
 
 # ────────────────────────────────── XVASYNTH ────────────────────────────────────
 # XVASynth is a free program on Steam that uses your local computer resources to generate text to speech using free voice models created by the community.

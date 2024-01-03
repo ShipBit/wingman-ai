@@ -3,7 +3,7 @@ import re
 from typing import Literal
 from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
-from api.enums import LogType, OpenAiModel, OpenAiTtsVoice
+from api.enums import AzureRegion, LogType, OpenAiModel, OpenAiTtsVoice
 from api.interface import AzureConfig, AzureInstanceConfig, AzureTtsConfig, SoundConfig
 from services.audio_player import AudioPlayer
 from services.printr import Printr
@@ -207,9 +207,7 @@ class OpenAiAzure(BaseOpenAi):
         )
         audio_config = speechsdk.AudioConfig(filename=filename)
         auto_detect_source_language_config = (
-            speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-                languages=config.languages
-            )
+            speechsdk.languageconfig.AutoDetectSourceLanguageConfig()
         )
         speech_recognizer = speechsdk.SpeechRecognizer(
             speech_config=speech_config,
@@ -245,12 +243,13 @@ class OpenAiAzure(BaseOpenAi):
             subscription=api_key,
             region=config.region,
         )
-        speech_config.speech_synthesis_voice_name = config.voice
 
         if config.detect_language:
             auto_detect_source_language_config = (
                 speechsdk.AutoDetectSourceLanguageConfig()
             )
+        else:
+            speech_config.speech_synthesis_voice_name = config.voice
 
         speech_synthesizer = speechsdk.SpeechSynthesizer(
             speech_config=speech_config,
@@ -266,3 +265,18 @@ class OpenAiAzure(BaseOpenAi):
             audio_player.stream_with_effects(
                 input_data=result.audio_data, config=sound_config
             )
+
+    def get_available_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
+        speech_config = speechsdk.SpeechConfig(subscription=api_key, region=region)
+        speech_synthesizer = speechsdk.SpeechSynthesizer(
+            speech_config=speech_config, audio_config=None
+        )
+        result = speech_synthesizer.get_voices_async(locale).get()
+
+        if result.reason == speechsdk.ResultReason.VoicesListRetrieved:
+            return result.voices
+        if result.reason == speechsdk.ResultReason.Canceled:
+            printr.toast_error(
+                f"Unable to retrieve Azure voices: {result.error_details}"
+            )
+        return None
