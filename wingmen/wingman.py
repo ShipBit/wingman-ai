@@ -224,7 +224,8 @@ class Wingman(FileCreator):
             printr.print("Playing response back to user...", color=LogType.INFO)
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
-        await self._play_to_user(str(process_result))
+        if process_result:
+            await self._play_to_user(str(process_result))
 
         if self.debug:
             self.print_execution_time()
