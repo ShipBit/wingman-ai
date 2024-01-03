@@ -212,7 +212,7 @@ This list will inevitably remain incomplete. If you miss your name here, please 
 To our greatest supporters we say: `o7` Commanders!
 
 - [**Rodney W. Harper aka Mactavious-Actual**](https://linktr.ee/rwhnc)
-- **JayMatthew aka SawPsyder**
+- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew)
 
 ### Premium Donators
 
@@ -224,7 +224,7 @@ To our greatest supporters we say: `o7` Commanders!
 
 ### Wingmen
 
-[Ira Robinson aka Serene/BlindDadDoes](http://twitch.tv/BlindDadDoes), Zenith, DiVille, [Hiwada], Hades aka Architeutes, Raziel317, [CptToastey](https://www.twitch.tv/cpttoastey), NeyMR AKA EagleOne (Capt.Epic), a Bit Brutal, AlexeiX, [Dragon Aura](https://robertsspaceindustries.com/citizens/Dragon_Aura), Perry-x-Rhodan, DoublarThackery, SilentCid, Bytebool, Exaust A.K.A Nikoyevitch, Tycoon3000, N.T.G, Jolan97, Greywolfe, [JayMatthew](https://robertsspaceindustries.com/citizens/JayMatthew), [Dayel Ostraco aka BlakeSlate](https://dayelostra.co/), Nielsjuh01, Manasy, Sierra-Noble, Simon says aka Asgard, JillyTheSnail, [Admiral-Chaos aka Darth-Igi], The Don, Tristan Import Error, Munkey the pirate, Norman Pham aka meMidgety, [meenie](https://github.com/meenie), [Tilawan](https://github.com/jlaluces123), Mr. Moo42, Geekdomo, Jenpai, Blitz, [Aaron Sadler](https://github.com/AaronSadler687), [SleeperActual](https://vngd.net/), parawho, [HypeMunkey] https://robertsspaceindustries.com/citizens/HypeMunkey, Huniken, SuperTruck, [NozDog]
+[Ira Robinson aka Serene/BlindDadDoes](http://twitch.tv/BlindDadDoes), Zenith, DiVille, [Hiwada], Hades aka Architeutes, Raziel317, [CptToastey](https://www.twitch.tv/cpttoastey), NeyMR AKA EagleOne (Capt.Epic), a Bit Brutal, AlexeiX, [Dragon Aura](https://robertsspaceindustries.com/citizens/Dragon_Aura), Perry-x-Rhodan, DoublarThackery, SilentCid, Bytebool, Exaust A.K.A Nikoyevitch, Tycoon3000, N.T.G, Jolan97, Greywolfe, [Dayel Ostraco aka BlakeSlate](https://dayelostra.co/), Nielsjuh01, Manasy, Sierra-Noble, Simon says aka Asgard, JillyTheSnail, [Admiral-Chaos aka Darth-Igi], The Don, Tristan Import Error, Munkey the pirate, Norman Pham aka meMidgety, [meenie](https://github.com/meenie), [Tilawan](https://github.com/jlaluces123), Mr. Moo42, Geekdomo, Jenpai, Blitz, [Aaron Sadler](https://github.com/AaronSadler687), [SleeperActual](https://vngd.net/), parawho, [HypeMunkey] https://robertsspaceindustries.com/citizens/HypeMunkey, Huniken, SuperTruck, [NozDog]
 
 ## Open Source Acknowledgements
 
