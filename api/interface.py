@@ -166,9 +166,11 @@ class XVASynthTtsConfig(BaseModel):
     voice: str
     language: Optional[str] = "en"
     pace: Optional[float] = 1.0
-    useSR: Optional[bool] = False
-    useCleanup: Optional[bool] = False
+    use_sr: Optional[bool] = False
+    use_cleanup: Optional[bool] = False
     process_device: Optional[str] = "cpu"
+    synthesize_url: Optional[str] = "http://127.0.0.1:8008/synthesize"
+    load_model_url: Optional[str] = "http://127.0.0.1:8008/loadModel"
 
 
 class OpenAiConfig(BaseModel):

@@ -68,6 +68,8 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
+        if self.uses_provider("xvasynth"):
+            await self.validate_and_set_xvasynth(errors)
 
         await self.validate_and_set_azure(errors)
 
