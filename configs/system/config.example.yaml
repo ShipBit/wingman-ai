@@ -215,7 +215,7 @@ wingmen:
       - name: HoldCurrentSpeed
         keys:
           - key: c # The key the wingman will press when executing the command
-            modifier: alt # This will press "Alt + c" instead of just "c". Modifiers are optional.
+            modifier: alt # This will press "Alt + c" instead of just "c". Modifiers are optional.  You can also use multiple modifiers by separating them by commas, such as modifier: alt, ctrl, shift.
       # ───────────────────────────────────────────
       - name: FlightReady
         keys:
@@ -448,6 +448,86 @@ wingmen:
         keys:
           - key: n
             modifier: alt
+      # ───────────────────────────────────────────
+      - name: DisplayDebuggingInfo
+        keys:
+          - key: "~"
+            modifier: shift
+            write: r_DisplayInfo # For now this will actually type all in lower case, the write command writes text to the screen in the position of your current cursor
+            wait: 1
+          - key: enter
+            wait: 1
+          - key: "~"
+            modifier: shift
+        instant_activation:
+          - Display info
+          - Display debugging information
+          - Display debug information
+      # ───────────────────────────────────────────
+      - name: ZoomIn
+        keys:
+          - key: scroll # use scroll command to simulate scrolling the mouse wheel
+            scroll_amount: 30 # use scroll_amount for how much to scroll, use whole numbers here, postive is scroll up, negative is scroll down
+        instant_activation:
+          - Zoom in
+      # ───────────────────────────────────────────
+      - name: ZoomOut
+        keys:
+          - key: scroll
+            scroll_amount: -30
+        instant_activation:
+          - Zoom out
+      # ───────────────────────────────────────────
+      - name: FireMiningLaser
+        keys:
+          - key: primary # to use mouse buttons, primary = left mouse button, secondary = right mouse button, middle = middle mouse button
+            hold: 0.6
+        instant_activation:
+          - Fire mining laser
+      # ───────────────────────────────────────────
+      - name: SwitchMiningLaser
+        keys:
+          - key: secondary
+            hold: 0.6
+        instant_activation:
+          - Change mining laser
+          - Switch mining laser
+      # ───────────────────────────────────────────
+      - name: LaunchMissile
+        keys:
+          - key: middle
+            hold: 1.0
+        instant_activation:
+          - Launch Missile
+          - Fire Missile
+      # ───────────────────────────────────────────
+      - name: MoveTurretLeft
+        keys:
+          - key: primary
+            moveto_relative: [-100, 0] # use the moveto_relative command to move to x and y coordinates relative to current mouse position. If you have a speedy or accelerated mouse setting, this might trigger an error or unexpected behavior.
+        instant_activation:
+          - Turret left
+      # ───────────────────────────────────────────
+      - name: MoveTurretRight
+        keys:
+          - key: primary
+            moveto_relative: [100, 0] # You can use just the move: keyword instead to move to an absolute position on your screen.  Not utilized in the examples because there isn't a real use case in Star Citizen.
+        instant_activation:
+          - Turret right
+      # ───────────────────────────────────────────
+      - name: MoveTurretUp
+        keys:
+          - key: primary
+            moveto_relative: [0, 100]
+        instant_activation:
+          - Turret up
+      # ───────────────────────────────────────────
+      - name: MoveTurretUp
+        keys:
+          - key: primary
+            moveto_relative: [0, -100]
+        instant_activation:
+          - Turret down
       # ───────────────────────── HOW TO INSERT NEW COMMANDS: ───────────────────────────
       #   - Please make sure the indentation aligns with the commands above perfectly.
       #   - Use a single "TAB" character for indentation. No spaces!
