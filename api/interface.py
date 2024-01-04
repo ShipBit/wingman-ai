@@ -225,7 +225,7 @@ class SoundConfig(BaseModel):
     play_beep: bool
     """adds a beep/Quindar sound before and after the wingman talks"""
 
-    effects: Optional[list[SoundEffect]] = None
+    effects: list[SoundEffect]
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
 
