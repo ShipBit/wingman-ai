@@ -47,7 +47,7 @@ class Edge(FileCreator):
         if not text:
             return
 
-        communicate = Communicate(text, voice, rate=rate)
+        communicate = Communicate(text=text, voice=voice, rate=rate)
         file_path = self.get_full_file_path(OUTPUT_FILE)
         await communicate.save(file_path)
 
@@ -72,7 +72,7 @@ class Edge(FileCreator):
             return self.random_voices[locale]
 
         random_voice = await self.__get_random_voice(
-            gender=gender.value,
+            gender=gender,
             locale=locale,
         )
         self.random_voices[locale] = random_voice
