@@ -145,8 +145,14 @@ azure:
     deployment_name: xxx # The deployment name e.g. 'whisper'
   tts:
     region: westeurope
-    voice: en-US-JaneNeural
     detect_language: true
+    voice: en-US-JaneNeural
+  stt:
+    region: westeurope
+    detect_language: true
+    languages:
+      - en-US
+      - de-DE
 
 # ────────────────────────────────── XVASYNTH ────────────────────────────────────
 # XVASynth is a free program on Steam that uses your local computer resources to generate text to speech using free voice models created by the community.

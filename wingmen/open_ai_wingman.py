@@ -49,7 +49,7 @@ class OpenAiWingman(Wingman):
         self.openai: OpenAi = None  # validate will set this
         self.openai_azure: OpenAiAzure = None  # validate will set this
         self.elevenlabs: ElevenLabs = None  # validate will set this
-        self.xvasynth: XVASynth = None # validate will set this
+        self.xvasynth: XVASynth = None  # validate will set this
 
         self.pending_tool_calls = []
         self.last_gpt_call = None
@@ -143,11 +143,9 @@ class OpenAiWingman(Wingman):
             wingman_name=self.name,
             xvasynth_path=self.config.xvasynth.xvasynth_path,
             process_device=self.config.xvasynth.process_device,
-            times_checked_xvasynth=0
+            times_checked_xvasynth=0,
         )
-        self.xvasynth.validate_config(
-            config=self.config.xvasynth, errors = errors
-        )
+        self.xvasynth.validate_config(config=self.config.xvasynth, errors=errors)
 
     async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
@@ -176,7 +174,7 @@ class OpenAiWingman(Wingman):
             transcript = self.openai_azure.transcribe_with_azure(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["tts"],
-                config=self.config.azure.tts,
+                config=self.config.azure.stt,
             )
         else:
             transcript = self.openai.transcribe(
@@ -640,10 +638,10 @@ class OpenAiWingman(Wingman):
                 config=self.config.azure.tts,
                 sound_config=self.config.sound,
             )
-        elif self.tts_provider ==TtsProvider.XVASYNTH:
+        elif self.tts_provider == TtsProvider.XVASYNTH:
             self.xvasynth.play_audio(
                 text=text,
-                config=self.config.xvasynth, 
+                config=self.config.xvasynth,
                 sound_config=self.config.sound,
             )
         else:

@@ -4,7 +4,13 @@ from typing import Literal
 from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
 from api.enums import AzureRegion, LogType, OpenAiModel, OpenAiTtsVoice
-from api.interface import AzureConfig, AzureInstanceConfig, AzureTtsConfig, SoundConfig
+from api.interface import (
+    AzureConfig,
+    AzureInstanceConfig,
+    AzureSttConfig,
+    AzureTtsConfig,
+    SoundConfig,
+)
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 
@@ -199,16 +205,24 @@ class OpenAiAzure(BaseOpenAi):
         )
 
     def transcribe_with_azure(
-        self, filename: str, api_key: str, config: AzureTtsConfig
+        self, filename: str, api_key: str, config: AzureSttConfig
     ):
         speech_config = speechsdk.SpeechConfig(
             subscription=api_key,
-            region=config.region,
+            region=config.region.value,
         )
         audio_config = speechsdk.AudioConfig(filename=filename)
+
         auto_detect_source_language_config = (
-            speechsdk.languageconfig.AutoDetectSourceLanguageConfig()
+            (
+                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                    languages=config.languages
+                )
+            )
+            if config.detect_language
+            else None
         )
+
         speech_recognizer = speechsdk.SpeechRecognizer(
             speech_config=speech_config,
             audio_config=audio_config,
@@ -237,26 +251,29 @@ class OpenAiAzure(BaseOpenAi):
         )
 
     def play_audio(
-        self, text: str, api_key: str, config: AzureTtsConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        api_key: str,
+        config: AzureTtsConfig,
+        sound_config: SoundConfig,
     ):
         speech_config = speechsdk.SpeechConfig(
             subscription=api_key,
-            region=config.region,
+            region=config.region.value,
         )
 
-        if config.detect_language:
-            auto_detect_source_language_config = (
-                speechsdk.AutoDetectSourceLanguageConfig()
-            )
-        else:
+        auto_detect_source_language_config = (
+            speechsdk.AutoDetectSourceLanguageConfig()
+            if config.detect_language
+            else None
+        )
+        if not config.detect_language:
             speech_config.speech_synthesis_voice_name = config.voice
 
         speech_synthesizer = speechsdk.SpeechSynthesizer(
             speech_config=speech_config,
             audio_config=None,
-            auto_detect_source_language_config=auto_detect_source_language_config
-            if config.detect_language
-            else None,
+            auto_detect_source_language_config=auto_detect_source_language_config,
         )
 
         result = speech_synthesizer.speak_text_async(text).get()

@@ -86,8 +86,14 @@ class AzureInstanceConfig(BaseModel):
 
 class AzureTtsConfig(BaseModel):
     region: AzureRegion
-    voice: str
     detect_language: bool
+    voice: str
+
+
+class AzureSttConfig(BaseModel):
+    region: AzureRegion
+    detect_language: bool
+    languages: list[str]
 
 
 class AzureConfig(BaseModel):
@@ -101,6 +107,7 @@ class AzureConfig(BaseModel):
     conversation: AzureInstanceConfig
     summarize: AzureInstanceConfig
     tts: AzureTtsConfig
+    stt: AzureSttConfig
 
 
 class ElevenlabsVoiceConfig(BaseModel):
@@ -262,6 +269,7 @@ class KeyPressConfig(BaseModel):
 
     write: Optional[str] = None
     """The word or phrase to type, for example, to type text in a login screen.  Must have associated button press to work.  May need special formatting for special characters."""
+
 
 class CommandConfig(BaseModel):
     name: str
