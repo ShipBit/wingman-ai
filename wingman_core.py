@@ -237,14 +237,16 @@ class WingmanCore:
         return result
 
     # POST /play/openai
-    def play_openai_tts(self, text: str, api_key: str, voice: OpenAiTtsVoice):
-        sound_config = SoundConfig(play_beep=False, effects=None)
+    def play_openai_tts(
+        self, text: str, api_key: str, voice: OpenAiTtsVoice, sound_config: SoundConfig
+    ):
         openai = OpenAi(api_key=api_key)
         openai.play_audio(text=text, voice=voice, sound_config=sound_config)
 
     # POST /play/azure
-    def play_azure_tts(self, text: str, api_key: str, config: AzureTtsConfig):
-        sound_config = SoundConfig(play_beep=False, effects=None)
+    def play_azure_tts(
+        self, text: str, api_key: str, config: AzureTtsConfig, sound_config: SoundConfig
+    ):
         azure = OpenAiAzure()
         azure.play_audio(
             text=text,
@@ -259,8 +261,8 @@ class WingmanCore:
         text: str,
         api_key: str,
         config: ElevenlabsConfig,
+        sound_config: SoundConfig,
     ):
-        sound_config = SoundConfig(play_beep=False, effects=None)
         elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
         elevenlabs.play_audio(
             text=text,
@@ -269,8 +271,9 @@ class WingmanCore:
         )
 
     # POST /play/edgetts
-    async def play_edge_tts(self, text: str, locale: str, config: EdgeTtsConfig):
-        sound_config = SoundConfig(play_beep=False, effects=None)
+    async def play_edge_tts(
+        self, text: str, locale: str, config: EdgeTtsConfig, sound_config: SoundConfig
+    ):
         edge = Edge(app_root_dir=self.app_root_dir)
         edge.last_transcript_locale = locale
         await edge.play_audio(text=text, config=config, sound_config=sound_config)
