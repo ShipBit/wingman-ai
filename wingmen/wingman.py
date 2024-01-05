@@ -386,10 +386,14 @@ class Wingman(FileCreator):
             if key_cfg.moveto:
                 x,y = key_cfg.moveto
                 key_module.moveTo(x,y)
-
+            
+            # Normally would use key_module.move(x,y,duration) but for some reason this seems broken on pydirectinput-rgx, so computing the relative position manually and using move absolute instead.
             if key_cfg.moveto_relative:
                 x,y = key_cfg.moveto_relative
-                key_module.move(x,y)
+                oldx, oldy = key_module.position()
+                x = oldx + x
+                y = oldy + y
+                key_module.moveTo(x,y, duration=0.5)
 
             if key_cfg.key == "scroll":
                 if key_cfg.scroll_amount:
@@ -419,11 +423,12 @@ class Wingman(FileCreator):
                 for mod in reversed(modifiers):
                     key_module.keyUp(mod)
 
+            # Pyautogui automatically detects if the indicated keys need a "shift" applied; pydirectinput / pydirectinput-rgx do not. Pydirectinput-rgx implements a flavor of this with an auto_shift parameter that is not in pyautogui.
             if key_cfg.write:
-                key_module.typewrite(key_cfg.write, interval=0.10)
-
-            if key_cfg.write:
-                key_module.typewrite(key_cfg.write, interval=0.10)
+                try:
+                    key_module.write(key_cfg.write, interval=0.10, auto_shift=True)
+                except:
+                    key_module.write(key_cfg.write, interval=0.10)
 
             if key_cfg.wait:
                 time.sleep(key_cfg.wait)
