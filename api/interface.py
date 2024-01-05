@@ -160,6 +160,19 @@ class EdgeTtsConfig(BaseModel):
     gender: EdgeTtsVoiceGender
 
 
+class XVASynthTtsConfig(BaseModel):
+    xvasynth_path: str
+    game_folder_name: str
+    voice: str
+    language: Optional[str] = "en"
+    pace: Optional[float] = 1.0
+    use_sr: Optional[bool] = False
+    use_cleanup: Optional[bool] = False
+    process_device: Optional[str] = "cpu"
+    synthesize_url: Optional[str] = "http://127.0.0.1:8008/synthesize"
+    load_model_url: Optional[str] = "http://127.0.0.1:8008/loadModel"
+
+
 class OpenAiConfig(BaseModel):
     context: Optional[str] = None
     """The "context" for the wingman. Here's where you can tell the AI how to behave.
@@ -220,7 +233,7 @@ class FeaturesConfig(BaseModel):
 
 class KeyPressConfig(BaseModel):
     key: str
-    """The key the wingman will press when executing the command"""
+    """The key the wingman will press when executing the command.  Use 'primary', 'secondary' or 'middle' for mouse buttons. Use 'scroll' to scroll."""
 
     modifier: Optional[str] = None
     """This will press "modifier + key" instead of just "modifier". Optional."""
@@ -231,6 +244,17 @@ class KeyPressConfig(BaseModel):
     hold: Optional[float] = None
     """The duration the key will be pressed in seconds. Optional."""
 
+    scroll_amount: Optional[int] = None
+    """The amount of clicks to scroll up (positive integer) or down (negative integer), example 10 or -10. Must have 'scroll' as key above to work."""
+
+    moveto: Optional[tuple] = None
+    """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
+
+    moveto_relative: Optional[tuple] = None
+    """The x, y coordinates to move to relative to the current mouse position, expected [x,y] format in yaml.  Must have associated button press to work."""
+
+    write: Optional[str] = None
+    """The word or phrase to type, for example, to type text in a login screen.  Must have associated button press to work.  May need special formatting for special characters."""
 
 class CommandConfig(BaseModel):
     name: str
@@ -262,6 +286,7 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
+    xvasynth: XVASynthTtsConfig
     azure: AzureConfig
     commands: list[CommandConfig] | None = None
 

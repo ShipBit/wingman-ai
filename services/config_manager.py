@@ -150,7 +150,7 @@ class ConfigManager:
         # Start with a copy of the wingman's specific config to keep it intact.
         merged = wingman.copy()
         # Update 'openai', 'features', and 'edge_tts' sections from general config into wingman's config.
-        for key in ["sound", "openai", "features", "edge_tts", "elevenlabs", "azure"]:
+        for key in ["sound", "openai", "features", "edge_tts", "elevenlabs", "azure", "xvasynth"]:
             if key in general:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.
                 merged[key] = self.__deep_merge(

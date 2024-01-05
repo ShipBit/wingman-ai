@@ -87,6 +87,7 @@ class TtsProvider(Enum):
     ELEVENLABS = "elevenlabs"
     EDGE_TTS = "edge_tts"
     AZURE = "azure"
+    XVASYNTH = "xvasynth"
 
 
 class SttProvider(Enum):

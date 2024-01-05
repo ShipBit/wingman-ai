@@ -383,18 +383,52 @@ class Wingman(FileCreator):
             return
 
         for key_cfg in command.keys:
+            if key_cfg.moveto:
+                x,y = key_cfg.moveto
+                key_module.moveTo(x,y)
+            
+            # Normally would use key_module.move(x,y,duration) but for some reason this seems broken on pydirectinput-rgx, so computing the relative position manually and using move absolute instead.
+            if key_cfg.moveto_relative:
+                x,y = key_cfg.moveto_relative
+                oldx, oldy = key_module.position()
+                x = oldx + x
+                y = oldy + y
+                key_module.moveTo(x,y, duration=0.5)
+
+            if key_cfg.key == "scroll":
+                if key_cfg.scroll_amount:
+                    key_module.scroll(key_cfg.scroll_amount)
+
             if key_cfg.modifier:
-                key_module.keyDown(key_cfg.modifier)
+                modifiers = [mod.strip() for mod in key_cfg.modifier.split(',')]
+                for mod in modifiers:
+                    key_module.keyDown(mod)
 
             if key_cfg.hold:
-                key_module.keyDown(key_cfg.key)
-                time.sleep(key_cfg.hold)
-                key_module.keyUp(key_cfg.key)
+                if key_cfg.key in ["primary", "secondary", "middle"]:
+                    key_module.mouseDown(button=key_cfg.key)
+                    time.sleep(key_cfg.hold)
+                    key_module.mouseUp(button=key_cfg.key)
+                elif key_cfg.key != "scroll":
+                    key_module.keyDown(key_cfg.key)
+                    time.sleep(key_cfg.hold)
+                    key_module.keyUp(key_cfg.key)
             else:
-                key_module.press(key_cfg.key)
+                if key_cfg.key in ["primary", "secondary", "middle"]:
+                    key_module.click(button=key_cfg.key)
+                elif key_cfg.key != "scroll":
+                    key_module.press(key_cfg.key)
 
             if key_cfg.modifier:
-                key_module.keyUp(key_cfg.modifier)
+                for mod in reversed(modifiers):
+                    key_module.keyUp(mod)
+
+            # Pyautogui automatically detects if the indicated keys need a "shift" applied; pydirectinput / pydirectinput-rgx do not. Pydirectinput-rgx implements a flavor of this with an auto_shift parameter that is not in pyautogui.
+            if key_cfg.write:
+                try:
+                    key_module.write(key_cfg.write, interval=0.10, auto_shift=True)
+                except:
+                    key_module.write(key_cfg.write, interval=0.10)
 
             if key_cfg.wait:
                 time.sleep(key_cfg.wait)
