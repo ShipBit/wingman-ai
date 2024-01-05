@@ -365,6 +365,14 @@ class OpenAiWingman(Wingman):
         for tool_call in tool_calls:
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
+
+            # try to resolve function name to a command name
+            if len(function_args) == 0 and self._get_command(function_name):
+                function_args["command_name"] = function_name
+                function_name = "execute_command"
+                if self.debug:
+                    printr.print("Applied command call fix.", color=LogType.INFO)
+
             (
                 function_response,
                 instant_response,
