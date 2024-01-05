@@ -473,7 +473,7 @@ wingmen:
         keys:
           - key: "~"
             modifier: shift
-            write: r_DisplayInfo # For now this will actually type all in lower case, the write command writes text to the screen in the position of your current cursor
+            write: r_DisplayInfo 2
             wait: 1
           - key: enter
             wait: 1
@@ -515,7 +515,7 @@ wingmen:
       # ───────────────────────────────────────────
       - name: LaunchMissile
         keys:
-          - key: middle
+          - key: primary
             hold: 1.0
         instant_activation:
           - Launch Missile
@@ -538,14 +538,14 @@ wingmen:
       - name: MoveTurretUp
         keys:
           - key: primary
-            moveto_relative: [0, 100]
+            moveto_relative: [0, -100]
         instant_activation:
           - Turret up
       # ───────────────────────────────────────────
-      - name: MoveTurretUp
+      - name: MoveTurretDown
         keys:
           - key: primary
-            moveto_relative: [0, -100]
+            moveto_relative: [0, 100]
         instant_activation:
           - Turret down
       # ───────────────────────── HOW TO INSERT NEW COMMANDS: ───────────────────────────
