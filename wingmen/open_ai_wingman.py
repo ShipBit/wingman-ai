@@ -370,7 +370,8 @@ class OpenAiWingman(Wingman):
             if len(function_args) == 0 and self._get_command(function_name):
                 function_args["command_name"] = function_name
                 function_name = "execute_command"
-                printr.print("Applied command call fix.", color=LogType.INFO)
+                if self.debug:
+                    printr.print("Applied command call fix.", color=LogType.INFO)
 
             (
                 function_response,
