@@ -178,8 +178,10 @@ class WingmanCore:
         )
 
     # GET /config
-    def get_config(self, context: str = None) -> Config:
-        return self.config_manager.load_config(context or "")
+    def get_config(self, config_name: str) -> Config:
+        return self.config_manager.load_config(
+            config_name if config_name != "default" else ""
+        )
 
     # GET /configured-audio-devices
     def get_configured_audio_devices(self):
