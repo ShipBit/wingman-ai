@@ -238,8 +238,8 @@ class KeyPressConfig(BaseModel):
     modifier: Optional[str] = None
     """This will press "modifier + key" instead of just "modifier". Optional."""
 
-    wait: Optional[int] = None
-    """Wait n second before pressing the next key. Optional."""
+    wait: Optional[float] = None
+    """Wait time in seconds before pressing the next key. Optional."""
 
     hold: Optional[float] = None
     """The duration the key will be pressed in seconds. Optional."""
