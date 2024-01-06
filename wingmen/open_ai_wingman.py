@@ -1,4 +1,5 @@
 import json
+import time
 from typing import Mapping
 from api.interface import WingmanConfig, WingmanInitializationError
 from api.enums import (
@@ -49,6 +50,9 @@ class OpenAiWingman(Wingman):
         self.openai_azure: OpenAiAzure = None  # validate will set this
         self.elevenlabs: ElevenLabs = None  # validate will set this
         self.xvasynth: XVASynth = None # validate will set this
+
+        self.pending_tool_calls = []
+        self.last_gpt_call = None
 
         # every conversation starts with the "context" that the user has configured
         self.messages = (
@@ -221,8 +225,8 @@ class OpenAiWingman(Wingman):
 
         response_message, tool_calls = self._process_completion(completion)
 
-        # do not tamper with this message as it will lead to 400 errors!
-        self.messages.append(response_message)
+        # add message and dummy tool responses to conversation history
+        self._add_gpt_response(response_message, tool_calls)
 
         if tool_calls:
             instant_response = await self._handle_tool_calls(tool_calls)
@@ -233,6 +237,146 @@ class OpenAiWingman(Wingman):
             return self._finalize_response(str(summarize_response))
 
         return response_message.content, response_message.content
+    
+    def _fix_tool_calls(self, tool_calls):
+        """Fixes tool calls that have a command name as function name.
+
+        Args:
+            tool_calls (list): The tool calls to fix.
+
+        Returns:
+            list: The fixed tool calls.
+        """
+        if tool_calls and len(tool_calls) > 0:
+            for tool_call in tool_calls:
+                function_name = tool_call.function.name
+                function_args = json.loads(tool_call.function.arguments)
+
+                # try to resolve function name to a command name
+                if len(function_args) == 0 and self._get_command(function_name):
+                    function_args["command_name"] = function_name
+                    function_name = "execute_command"
+
+                    # update the tool call
+                    tool_call.function.name = function_name
+                    tool_call.function.arguments = json.dumps(function_args)
+                    
+                    if self.debug:
+                        printr.print("Applied command call fix.", color=LogType.WARNING)
+
+        return tool_calls
+    
+    def _add_gpt_response(self, message, tool_calls) -> None:
+        """Adds a message from GPT to the conversation history as well as adding dummy tool responses for any tool calls.
+
+        Args:
+            message (dict): The message to add.
+            tool_calls (list): The tool calls associated with the message.
+        """
+        # do not tamper with this message as it will lead to 400 errors!
+        self.messages.append(message)
+
+        # adding dummy tool responses to prevent corrupted message history on parallel requests
+        if tool_calls:
+            for tool_call in tool_calls:
+                if not tool_call.id:
+                    continue
+                # adding a dummy tool response to get updated later
+                self._add_tool_response(tool_call, "Loading..", False)
+
+    def _add_tool_response(self, tool_call, response: str, completed: bool = True):
+        """Adds a tool response to the conversation history.
+
+        Args:
+            tool_call (dict): The tool call to add the dummy response for.
+        """
+        msg = {"role": "tool", "content": response}
+        if tool_call.id is not None:
+            msg["tool_call_id"] = tool_call.id
+        if tool_call.function.name is not None:
+            msg["name"] = tool_call.function.name
+        self.messages.append(msg)
+
+        if tool_call.id and not completed:
+            self.pending_tool_calls.append(tool_call.id)
+
+    def _update_tool_response(self, tool_call_id, response) -> bool:
+        """Updates a tool response in the conversation history. This also moves the message to the end of the history if all tool responses are given.
+
+        Args:
+            tool_call_id (str): The identifier of the tool call to update the response for.
+            response (str): The new response to set.
+
+        Returns:
+            bool: True if the response was updated, False if the tool call was not found.
+        """
+        if not tool_call_id:
+            return False
+        
+        completed = False
+        index = len(self.messages)
+
+        # go through message history to find and update the tool call
+        for message in reversed(self.messages):
+            index -= 1
+            if self.__get_message_role(message) == "tool" and message.get("tool_call_id") == tool_call_id:
+                message["content"] = str(response)
+                if tool_call_id in self.pending_tool_calls:
+                    self.pending_tool_calls.remove(tool_call_id)
+                break
+        if not index:
+            return False
+        
+        # find the assistant message that triggered the tool call
+        for message in reversed(self.messages[:index]):
+            index -= 1
+            if self.__get_message_role(message) == "assistant":
+                break
+
+        # check if all tool calls are completed
+        completed = True
+        for tool_call in self.messages[index].tool_calls:
+            if tool_call.id in self.pending_tool_calls:
+                completed = False
+                break
+        if not completed:
+            return True
+        
+        # find the first user message(s) that triggered this assistant message
+        index -= 1 # skip the assistant message
+        for message in reversed(self.messages[:index]):
+            index -= 1
+            if self.__get_message_role(message) != "user":
+                index += 1
+                break
+        
+        # built message block to move
+        start_index = index
+        end_index = start_index
+        reached_tool_call = False
+        for message in self.messages[start_index:]:
+            if not reached_tool_call and self.__get_message_role(message) == "tool":
+                reached_tool_call = True
+            if reached_tool_call and self.__get_message_role(message) == "user":
+                end_index -= 1
+                break
+            end_index += 1
+        if end_index == len(self.messages):
+            end_index -= 1 # loop ended at the end of the message history, so we have to go back one index
+        message_block = self.messages[start_index:end_index+1]
+
+        # check if the message block is already at the end
+        if end_index == len(self.messages) - 1:
+            return True
+        
+        # move message block to the end
+        del self.messages[start_index:end_index+1]
+        self.messages.extend(message_block)
+
+        if self.debug:
+            printr.print("Moved message block to the end.", color=LogType.INFO)
+
+        return True
 
     def _add_user_message(self, content: str):
         """Shortens the conversation history if needed and adds a user message to it.
@@ -249,7 +393,7 @@ class OpenAiWingman(Wingman):
 
     def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
-        remember_messages = self.config.features.remember_messages
+        remember_messages = self.config.features.remember_messages - 1
 
         if remember_messages is None or len(self.messages) == 0:
             return 0  # Configuration not set, nothing to delete.
@@ -274,6 +418,13 @@ class OpenAiWingman(Wingman):
             return 0
 
         total_deleted_messages = cutoff_index - context_offset  # Messages to delete.
+
+        # Remove the pending tool calls that are no longer needed.
+        for mesage in self.messages[context_offset:cutoff_index]:
+            if self.__get_message_role(mesage) == "tool" and mesage.get("tool_call_id") in self.pending_tool_calls:
+                self.pending_tool_calls.remove(mesage.get("tool_call_id"))
+                if self.debug:
+                    printr.print(f"Removing pending tool call {mesage.get('tool_call_id')} due to message history clean up.", color=LogType.WARNING)
 
         # Remove the messages before the cutoff index, exclusive of the system message.
         del self.messages[context_offset:cutoff_index]
@@ -318,20 +469,33 @@ class OpenAiWingman(Wingman):
                 color=LogType.INFO,
             )
 
+        # save request time for later comparison
+        thiscall = time.time()
+        self.last_gpt_call = thiscall
+
         if self.conversation_provider == ConversationProvider.AZURE:
-            return self.openai_azure.ask(
+            completion = self.openai_azure.ask(
                 messages=self.messages,
                 api_key=self.azure_api_keys["conversation"],
                 config=self.config.azure.conversation,
                 tools=self._build_tools(),
                 model=self.config.openai.conversation_model,
             )
+        else:
+            completion = self.openai.ask(
+                messages=self.messages,
+                tools=self._build_tools(),
+                model=self.config.openai.conversation_model,
+            )
 
-        return self.openai.ask(
-            messages=self.messages,
-            tools=self._build_tools(),
-            model=self.config.openai.conversation_model,
-        )
+        # if request isnt most recent, ignore the response
+        if self.last_gpt_call != thiscall:
+            printr.print(
+                "GPT call was cancelled due to a new call.", color=LogType.WARNING
+            )
+            return None
+        
+        return completion
 
     def _process_completion(self, completion):
         """Processes the completion returned by the GPT call.
@@ -347,6 +511,10 @@ class OpenAiWingman(Wingman):
         content = response_message.content
         if content is None:
             response_message.content = ""
+
+        # temporary fix for tool calls that have a command name as function name
+        if response_message.tool_calls:
+            response_message.tool_calls = self._fix_tool_calls(response_message.tool_calls)
 
         return response_message, response_message.tool_calls
 
@@ -365,14 +533,6 @@ class OpenAiWingman(Wingman):
         for tool_call in tool_calls:
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
-
-            # try to resolve function name to a command name
-            if len(function_args) == 0 and self._get_command(function_name):
-                function_args["command_name"] = function_name
-                function_name = "execute_command"
-                if self.debug:
-                    printr.print("Applied command call fix.", color=LogType.INFO)
-
             (
                 function_response,
                 instant_response,
@@ -380,14 +540,12 @@ class OpenAiWingman(Wingman):
                 function_name, function_args
             )
 
-            msg = {"role": "tool", "content": function_response}
-            if tool_call.id is not None:
-                msg["tool_call_id"] = tool_call.id
-            if function_name is not None:
-                msg["name"] = function_name
-
-            # Don't use self._add_user_message_to_history here because we never want to skip this because of history limitions
-            self.messages.append(msg)
+            if tool_call.id:
+                # updating the dummy tool response with the actual response
+                self._update_tool_response(tool_call.id, function_response)
+            else:
+                # adding a new tool response
+                self._add_tool_response(tool_call, function_response)
 
         return instant_response
 
