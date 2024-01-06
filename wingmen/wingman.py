@@ -213,12 +213,13 @@ class Wingman(FileCreator):
                 self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
-            printr.print(
-                f"{actual_response}",
-                color=LogType.POSITIVE,
-                source=LogSource.WINGMAN,
-                source_name=self.name,
-            )
+            if actual_response:
+                printr.print(
+                    f"{actual_response}",
+                    color=LogType.POSITIVE,
+                    source=LogSource.WINGMAN,
+                    source_name=self.name,
+                )
 
         if self.debug:
             printr.print("Playing response back to user...", color=LogType.INFO)
