@@ -6,6 +6,7 @@ numpy~=1.26.3
 openai~=1.6.1
 packaging~=23.2
 pedalboard~=0.8.7
+platformdirs~=4.1.0
 PyAutoGUI~=0.9.54
 pydantic~=2.5.3
 pydirectinput-rgx==2.1.1
