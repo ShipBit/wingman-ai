@@ -49,7 +49,9 @@ class CommandHandler:
         config = command.config
         errors = await self.core.load_config(config)
         self.printr.print(
-            f"Loaded config: {config or 'default'}", toast=ToastType.NORMAL
+            f"Loaded config: {config or 'default'}",
+            toast=ToastType.NORMAL,
+            server_only=True,
         )
 
     async def handle_secret(self, command: SaveSecretCommand, websocket: WebSocket):

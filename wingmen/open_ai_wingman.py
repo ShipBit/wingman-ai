@@ -37,19 +37,19 @@ class OpenAiWingman(Wingman):
         self,
         name: str,
         config: WingmanConfig,
-        app_root_dir: str,
     ):
         super().__init__(
             name=name,
             config=config,
-            app_root_dir=app_root_dir,
         )
 
-        self.edge_tts = Edge(app_root_dir)
-        self.openai: OpenAi = None  # validate will set this
-        self.openai_azure: OpenAiAzure = None  # validate will set this
-        self.elevenlabs: ElevenLabs = None  # validate will set this
-        self.xvasynth: XVASynth = None  # validate will set this
+        self.edge_tts = Edge()
+
+        # validate will set these:
+        self.openai: OpenAi = None
+        self.openai_azure: OpenAiAzure = None
+        self.elevenlabs: ElevenLabs = None
+        self.xvasynth: XVASynth = None
 
         self.pending_tool_calls = []
         self.last_gpt_call = None
@@ -235,7 +235,7 @@ class OpenAiWingman(Wingman):
             return self._finalize_response(str(summarize_response))
 
         return response_message.content, response_message.content
-    
+
     def _fix_tool_calls(self, tool_calls):
         """Fixes tool calls that have a command name as function name.
 
@@ -258,12 +258,12 @@ class OpenAiWingman(Wingman):
                     # update the tool call
                     tool_call.function.name = function_name
                     tool_call.function.arguments = json.dumps(function_args)
-                    
+
                     if self.debug:
                         printr.print("Applied command call fix.", color=LogType.WARNING)
 
         return tool_calls
-    
+
     def _add_gpt_response(self, message, tool_calls) -> None:
         """Adds a message from GPT to the conversation history as well as adding dummy tool responses for any tool calls.
 
@@ -310,21 +310,24 @@ class OpenAiWingman(Wingman):
         """
         if not tool_call_id:
             return False
-        
+
         completed = False
         index = len(self.messages)
 
         # go through message history to find and update the tool call
         for message in reversed(self.messages):
             index -= 1
-            if self.__get_message_role(message) == "tool" and message.get("tool_call_id") == tool_call_id:
+            if (
+                self.__get_message_role(message) == "tool"
+                and message.get("tool_call_id") == tool_call_id
+            ):
                 message["content"] = str(response)
                 if tool_call_id in self.pending_tool_calls:
                     self.pending_tool_calls.remove(tool_call_id)
                 break
         if not index:
             return False
-        
+
         # find the assistant message that triggered the tool call
         for message in reversed(self.messages[:index]):
             index -= 1
@@ -339,15 +342,15 @@ class OpenAiWingman(Wingman):
                 break
         if not completed:
             return True
-        
+
         # find the first user message(s) that triggered this assistant message
-        index -= 1 # skip the assistant message
+        index -= 1  # skip the assistant message
         for message in reversed(self.messages[:index]):
             index -= 1
             if self.__get_message_role(message) != "user":
                 index += 1
                 break
-        
+
         # built message block to move
         start_index = index
         end_index = start_index
@@ -360,15 +363,15 @@ class OpenAiWingman(Wingman):
                 break
             end_index += 1
         if end_index == len(self.messages):
-            end_index -= 1 # loop ended at the end of the message history, so we have to go back one index
-        message_block = self.messages[start_index:end_index+1]
+            end_index -= 1  # loop ended at the end of the message history, so we have to go back one index
+        message_block = self.messages[start_index : end_index + 1]
 
         # check if the message block is already at the end
         if end_index == len(self.messages) - 1:
             return True
-        
+
         # move message block to the end
-        del self.messages[start_index:end_index+1]
+        del self.messages[start_index : end_index + 1]
         self.messages.extend(message_block)
 
         if self.debug:
@@ -419,10 +422,16 @@ class OpenAiWingman(Wingman):
 
         # Remove the pending tool calls that are no longer needed.
         for mesage in self.messages[context_offset:cutoff_index]:
-            if self.__get_message_role(mesage) == "tool" and mesage.get("tool_call_id") in self.pending_tool_calls:
+            if (
+                self.__get_message_role(mesage) == "tool"
+                and mesage.get("tool_call_id") in self.pending_tool_calls
+            ):
                 self.pending_tool_calls.remove(mesage.get("tool_call_id"))
                 if self.debug:
-                    printr.print(f"Removing pending tool call {mesage.get('tool_call_id')} due to message history clean up.", color=LogType.WARNING)
+                    printr.print(
+                        f"Removing pending tool call {mesage.get('tool_call_id')} due to message history clean up.",
+                        color=LogType.WARNING,
+                    )
 
         # Remove the messages before the cutoff index, exclusive of the system message.
         del self.messages[context_offset:cutoff_index]
@@ -492,7 +501,7 @@ class OpenAiWingman(Wingman):
                 "GPT call was cancelled due to a new call.", color=LogType.WARNING
             )
             return None
-        
+
         return completion
 
     def _process_completion(self, completion):
@@ -512,7 +521,9 @@ class OpenAiWingman(Wingman):
 
         # temporary fix for tool calls that have a command name as function name
         if response_message.tool_calls:
-            response_message.tool_calls = self._fix_tool_calls(response_message.tool_calls)
+            response_message.tool_calls = self._fix_tool_calls(
+                response_message.tool_calls
+            )
 
         return response_message, response_message.tool_calls
 

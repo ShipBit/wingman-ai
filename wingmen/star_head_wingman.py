@@ -18,12 +18,10 @@ class StarHeadWingman(OpenAiWingman):
         self,
         name: str,
         config: WingmanConfig,
-        app_root_dir: str,
     ) -> None:
         super().__init__(
             name=name,
             config=config,
-            app_root_dir=app_root_dir,
         )
 
         # config entry existence not validated yet. Assign later when checked!

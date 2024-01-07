@@ -6,7 +6,6 @@ from importlib import import_module
 from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from services.audio_player import AudioPlayer
-from services.file_creator import FileCreator
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 
@@ -22,7 +21,7 @@ else:
     )
 
 
-class Wingman(FileCreator):
+class Wingman:
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
 
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
@@ -32,17 +31,13 @@ class Wingman(FileCreator):
         self,
         name: str,
         config: WingmanConfig,
-        app_root_dir: str,
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
             name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
             config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
-            app_root_dir (str): The path to the root directory of the app. This is where the Wingman executable lives.
         """
-
-        super().__init__(app_root_dir=app_root_dir, subdir="wingman_data")
 
         self.config = config
         """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
@@ -62,9 +57,6 @@ class Wingman(FileCreator):
         self.debug: bool = self.config.features.debug_mode
         """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
 
-        self.app_root_dir = app_root_dir
-        """The path to the root directory of the app. This is where the Wingman executable lives."""
-
         self.tts_provider = self.config.features.tts_provider
         self.stt_provider = self.config.features.stt_provider
         self.conversation_provider = self.config.features.conversation_provider
@@ -74,7 +66,6 @@ class Wingman(FileCreator):
     def create_dynamically(
         name: str,
         config: WingmanConfig,
-        app_root_dir: str,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -83,7 +74,6 @@ class Wingman(FileCreator):
             class_name (str): The name of the class inside your custom-wingman.py, e.g. OpenAiWingman. Case-sensitive!
             name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
             config (Config): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
-            app_root_dir (str): The path to the root directory of the app. This is where the Wingman executable lives.
         """
 
         module = import_module(config.custom_class.module)
@@ -91,7 +81,6 @@ class Wingman(FileCreator):
         instance = DerivedWingmanClass(
             name=name,
             config=config,
-            app_root_dir=app_root_dir,
         )
         return instance
 
@@ -397,7 +386,7 @@ class Wingman(FileCreator):
                     key_module.scroll(key_cfg.scroll_amount)
 
             if key_cfg.modifier:
-                modifiers = [mod.strip() for mod in key_cfg.modifier.split(',')]
+                modifiers = [mod.strip() for mod in key_cfg.modifier.split(",")]
                 for mod in modifiers:
                     key_module.keyDown(mod)
 

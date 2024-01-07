@@ -9,9 +9,8 @@ printr = Printr()
 
 
 class Tower:
-    def __init__(self, config: Config, app_root_dir: str):
+    def __init__(self, config: Config):
         self.config = config
-        self.app_root_dir = app_root_dir
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
         self.key_wingman_dict: dict[str, Wingman] = {}
@@ -33,14 +32,9 @@ class Tower:
                     wingman = Wingman.create_dynamically(
                         name=wingman_name,
                         config=wingman_config,
-                        app_root_dir=self.app_root_dir,
                     )
                 else:
-                    wingman = OpenAiWingman(
-                        name=wingman_name,
-                        config=wingman_config,
-                        app_root_dir=self.app_root_dir,
-                    )
+                    wingman = OpenAiWingman(name=wingman_name, config=wingman_config)
             except Exception as e:  # pylint: disable=broad-except
                 # just in case we missed something
                 msg = str(e).strip() or type(e).__name__

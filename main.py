@@ -3,11 +3,11 @@ import asyncio
 from enum import Enum
 from os import path
 import sys
-from contextlib import asynccontextmanager
 from typing import Any, Literal, get_args, get_origin
 import uvicorn
 from pynput import keyboard
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -28,21 +28,17 @@ connection_manager = ConnectionManager()
 printr = Printr()
 Printr.set_connection_manager(connection_manager)
 
-
 app_is_bundled = getattr(sys, "frozen", False)
 app_root_dir = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__file__))
 
-secret_keeper = SecretKeeper(app_root_dir)
+secret_keeper = SecretKeeper()
 SecretKeeper.set_connection_manager(connection_manager)
 
 version_check = SystemManager()
 is_latest = version_check.check_version()
 
 # uses the Singletons above, so don't move this up!
-core = WingmanCore(
-    app_root_dir=app_root_dir,
-    app_is_bundled=app_is_bundled,
-)
+core = WingmanCore(app_root_path=app_root_dir)
 listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
 
 
@@ -67,7 +63,7 @@ def modify_openapi():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     # executed before the application starts
     modify_openapi()
 

@@ -172,19 +172,30 @@ class EdgeTtsConfig(BaseModel):
     """
 
     gender: TtsVoiceGender
+    """Only used if detect_language is set to true. Male, Female or Unknown."""
 
 
 class XVASynthTtsConfig(BaseModel):
     xvasynth_path: str
+    """The path to your install of XVASynth.  If you do not provide this and try to use XVASynth there will be an error."""
     game_folder_name: str
+    """The game folder name of the voice you donwloaded to use as your primary XVASynth voice. This can be overwritten in a particular wingman. If you do not provide this and try to use XVASynth, there will be an error."""
     voice: str
+    """The name of the voice you downloaded to use.  This can be overwritten in a particular wingman. If you do not provide this and try to use XVASynth there will be an error."""
     language: Optional[str] = "en"
+    """The language the voice will speak in. Some XVASynth voices are trained to be multi-lingual. Defaults to 'en' (English)."""
     pace: Optional[float] = 1.0
+    """The speed of the voice playback. Defaults to 1."""
     use_sr: Optional[bool] = False
+    """Whether to use XVASynth's super resolution mode. Will take longer and generally not recommended. Defaults to false."""
     use_cleanup: Optional[bool] = False
+    """Whether to use XVASynth's cleanup mode. May make voice quality better or worse depending on the voice model. Defaults to false."""
     process_device: Optional[str] = "cpu"
+    """Can be cpu or gpu. You may need to take more steps to have xvasynth run on your GPU. Defaults to cpu."""
     synthesize_url: Optional[str] = "http://127.0.0.1:8008/synthesize"
+    """This should typically be left alone, changing it will cause errors unless you manually changed XVASynth's server."""
     load_model_url: Optional[str] = "http://127.0.0.1:8008/loadModel"
+    """This should be typically left alone, changing it will cause errors unless you manually changed XVASynth's server."""
 
 
 class OpenAiConfig(BaseModel):
@@ -280,8 +291,11 @@ class CommandConfig(BaseModel):
     """
 
     instant_activation: Optional[list[str]] = None
+    """Optional: Faster - like Voice Attack! Provide phrases that will instantly activate the command (without AI roundtripping). You need to say the exact phrase to execute the command"""
     responses: Optional[list[str]] = None
+    """Optional: Provide responses that will be used when the command is executed. A random one will be chosen (if multiple)."""
     keys: Optional[list[KeyPressConfig]] = None
+    """The key or keys to press when the command is executed."""
 
 
 class CustomWingmanClassConfig(BaseModel):
@@ -313,11 +327,17 @@ class WingmanConfig(NestedConfig):
     def __setitem__(self, key, value):
         self.extra_properties[key] = value
 
-    # these can only be strings because otherwise our schema generation will break (if they were of type Any)
     custom_properties: Optional[dict[str, str]] = {}
+    """You can add custom properties here to use in your custom wingman class. Strings only!"""
 
     disabled: Optional[bool] = False
+    """Set this to true if you want to disable this wingman. You can also just remove it from the config."""
     custom_class: Optional[CustomWingmanClassConfig] = None
+    """If you want to use a custom Wingman (Python) class, you can specify it here."""
+    name: str
+    """The "friendly" name of this Wingman. Can be changed by the user."""
+    description: str
+    """A short description of this Wingman."""
     record_key: str
     """The "push-to-talk" key for this wingman. Keep it pressed while talking!
     Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
@@ -329,3 +349,4 @@ class Config(NestedConfig):
     """
 
     wingmen: Optional[dict[str, WingmanConfig]] = None
+    """The Wingmen in this config. You can add as many as you want!"""

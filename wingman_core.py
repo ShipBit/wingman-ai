@@ -1,9 +1,8 @@
 import asyncio
 import threading
-from elevenlabslib import ElevenLabsVoice
 from fastapi import APIRouter
 import sounddevice as sd
-from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType, TtsProvider
+from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
 from api.interface import (
     AudioDevice,
     AudioSettings,
@@ -23,13 +22,13 @@ from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
 from services.tower import Tower
-from services.config_manager import ConfigManager
+from services.config_manager import DEFAULT_CONFIG_DIR, ConfigManager
 
 printr = Printr()
 
 
 class WingmanCore:
-    def __init__(self, app_is_bundled: bool, app_root_dir: str):
+    def __init__(self, app_root_path: str):
         self.router = APIRouter()
         self.router.add_api_route(
             methods=["GET"],
@@ -111,10 +110,9 @@ class WingmanCore:
             tags=["core"],
         )
 
-        self.app_root_dir = app_root_dir
         self.active_recording = {"key": "", "wingman": None}
-        self.config_manager = ConfigManager(app_root_dir, app_is_bundled)
-        self.audio_recorder = AudioRecorder(app_root_dir=app_root_dir)
+        self.config_manager = ConfigManager(app_root_path)
+        self.audio_recorder = AudioRecorder()
         self.tower: Tower = None
         self.current_config: str = None
         self.startup_errors: list[WingmanInitializationError] = []
@@ -124,7 +122,7 @@ class WingmanCore:
         configured_devices = self.get_configured_audio_devices()
         sd.default.device = (configured_devices.input, configured_devices.output)
 
-    async def load_config(self, config_name=""):
+    async def load_config(self, config_name: str = DEFAULT_CONFIG_DIR):
         try:
             config = self.config_manager.load_config(config_name)
         except FileNotFoundError:
@@ -135,8 +133,8 @@ class WingmanCore:
             printr.toast_error(str(e))
             raise e
 
-        self.current_config = config_name or "default"
-        self.tower = Tower(config=config, app_root_dir=self.app_root_dir)
+        self.current_config = config_name
+        self.tower = Tower(config=config)
         errors = await self.tower.instantiate_wingmen()
         return errors
 
@@ -173,19 +171,21 @@ class WingmanCore:
     # GET /configs
     def get_configs(self):
         return ConfigInfo(
-            configs=[config or "default" for config in self.config_manager.configs],
+            configs=self.config_manager.config_dirs,
             currentConfig=self.current_config,
         )
 
     # GET /config
     def get_config(self, config_name: str) -> Config:
-        return self.config_manager.load_config(
-            config_name if config_name != "default" else ""
-        )
+        return self.config_manager.load_config(config_name)
 
     # GET /configured-audio-devices
     def get_configured_audio_devices(self):
-        audio_devices = self.config_manager.settings_config.audio
+        audio_devices = (
+            self.config_manager.settings_config.audio
+            if self.config_manager.settings_config
+            else None
+        )
         input_device = audio_devices.input if audio_devices else None
         output_device = audio_devices.output if audio_devices else None
         return AudioSettings(input=input_device, output=output_device)
@@ -276,6 +276,6 @@ class WingmanCore:
     async def play_edge_tts(
         self, text: str, locale: str, config: EdgeTtsConfig, sound_config: SoundConfig
     ):
-        edge = Edge(app_root_dir=self.app_root_dir)
+        edge = Edge()
         edge.last_transcript_locale = locale
         await edge.play_audio(text=text, config=config, sound_config=sound_config)

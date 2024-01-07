@@ -1,13 +1,17 @@
-import os
+from os import path
 from typing import Dict, Any
 import yaml
 from fastapi import APIRouter
 from api.commands import PromptSecretCommand
-from api.enums import LogType, ToastType
+from api.enums import (
+    LogType,
+    ToastType,
+)
+from services.config_manager import CONFIGS_DIR
+from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
 from services.printr import Printr
 
-SYSTEM_CONFIG_PATH = "configs/system"
 SECRETS_FILE = "secrets.yaml"
 
 
@@ -22,7 +26,7 @@ class SecretKeeper(WebSocketUser):
     secrets: Dict[str, Any]
     prompted_secrets: list[str] = []
 
-    def __new__(cls, app_root_path: str = None):
+    def __new__(cls):
         if cls._instance is None:
             cls._instance = super(SecretKeeper, cls).__new__(cls)
 
@@ -42,24 +46,32 @@ class SecretKeeper(WebSocketUser):
                 tags=["secret"],
             )
 
-            if app_root_path is None:
-                raise ValueError(
-                    "app_root_path is required for the first instance of SecretKeeper."
-                )
-
-            system_config_path = os.path.join(app_root_path, SYSTEM_CONFIG_PATH)
-            cls._instance.config_file = os.path.join(system_config_path, SECRETS_FILE)
+            cls._instance.config_file = path.join(
+                get_writable_dir(CONFIGS_DIR), SECRETS_FILE
+            )
+            if not path.exists(cls._instance.config_file):
+                try:
+                    with open(cls._instance.config_file, "w", encoding="UTF-8"):
+                        pass
+                except OSError as e:
+                    cls._instance.printr.toast_error(
+                        f"Could not create ({SECRETS_FILE})\n{str(e)}"
+                    )
+                    return {}
             cls._instance.secrets = cls._instance.load() or {}
 
         return cls._instance
 
     def load(self) -> Dict[str, Any]:
-        if not self.config_file or not os.path.exists(self.config_file):
+        if not self.config_file or not path.exists(self.config_file):
             return {}
         try:
             with open(self.config_file, "r", encoding="UTF-8") as stream:
                 return yaml.safe_load(stream) or {}
         except yaml.YAMLError as e:
+            self.printr.toast_error(f"Could not load ({SECRETS_FILE})\n{str(e)}")
+            return {}
+        except OSError as e:
             self.printr.toast_error(f"Could not load ({SECRETS_FILE})\n{str(e)}")
             return {}
 
@@ -74,6 +86,9 @@ class SecretKeeper(WebSocketUser):
                 return True
         except yaml.YAMLError as e:
             self.printr.toast_error(f"Could not write ({SECRETS_FILE})\n{str(e)}")
+            return False
+        except OSError as e:
+            self.printr.toast_error(f"Could not create ({SECRETS_FILE})\n{str(e)}")
             return False
 
     async def retrieve(

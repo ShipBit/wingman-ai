@@ -1,9 +1,10 @@
+from os import path
 import random
 from edge_tts import Communicate, VoicesManager
 from api.interface import EdgeTtsConfig, SoundConfig
 from api.enums import TtsVoiceGender, LogType
-from services.file_creator import FileCreator
 from services.audio_player import AudioPlayer
+from services.file import get_writable_dir
 from services.printr import Printr
 
 RECORDING_PATH = "audio_output"
@@ -12,10 +13,8 @@ OUTPUT_FILE: str = "edge_tts.mp3"
 printr = Printr()
 
 
-class Edge(FileCreator):
-    def __init__(self, app_root_dir: str):
-        super().__init__(app_root_dir, RECORDING_PATH)
-
+class Edge:
+    def __init__(self):
         self.random_voices = {}
         self.last_transcript_locale: str = None
 
@@ -48,7 +47,7 @@ class Edge(FileCreator):
             return
 
         communicate = Communicate(text=text, voice=voice, rate=rate)
-        file_path = self.get_full_file_path(OUTPUT_FILE)
+        file_path = path.join(get_writable_dir(RECORDING_PATH), OUTPUT_FILE)
         await communicate.save(file_path)
 
         return communicate, file_path

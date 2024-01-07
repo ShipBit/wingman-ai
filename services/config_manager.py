@@ -1,120 +1,124 @@
-import os
-import shutil
+from os import makedirs, path, walk
 import copy
+import shutil
 from pydantic import ValidationError
 import yaml
 from api.interface import Config, SettingsConfig, WingmanConfig
+from services.file import get_writable_dir
 from services.printr import Printr
 
-SYSTEM_CONFIG_PATH = "configs/system"
-CONTEXT_CONFIG_PATH = "configs/configs"
-CONTEXT_CONFIG_PATH_BUNDLED = "../configs"
-DEFAULT_CONTEXT_CONFIG = "config.yaml"
-EXAMPLE_CONTEXT_CONFIG = "config.example.yaml"
-SETTINGS_CONFIG = "settings.yaml"
+CONFIGS_DIR = "configs"
+TEMPLATES_DIR = "configs/templates"
+DEFAULT_CONFIG_DIR = "Star Citizen"
+SETTINGS_CONFIG_FILE = "settings.yaml"
+DEFAULT_TEMPLATE_FILE = "defaults.yaml"
 
 
 class ConfigManager:
-    def __init__(self, app_root_path: str, app_is_bundled: bool):
+    def __init__(self, app_root_path: str):
         self.printr = Printr()
-        self.settings_config: SettingsConfig = {}
-        self.configs = [""]
-        self.context_config_path: str = os.path.join(
-            app_root_path,
-            CONTEXT_CONFIG_PATH_BUNDLED if app_is_bundled else CONTEXT_CONFIG_PATH,
-        )
-        if not os.path.exists(self.context_config_path):
-            os.makedirs(self.context_config_path)
-        self.system_config_path: str = os.path.join(app_root_path, SYSTEM_CONFIG_PATH)
-        self.load_settings_config()
-        self.load_config_names()
+        self.app_root_path = app_root_path
+
+        self.config_dir = get_writable_dir(CONFIGS_DIR)
+
+        self.settings_config_path = path.join(self.config_dir, SETTINGS_CONFIG_FILE)
+        self.create_settings_config()
+        self.settings_config = self.load_settings_config()
+
+        self.config_dirs = self.__create_configs_from_templates()
 
     def load_settings_config(self):
-        """Fetch Settings config from file and store it for future use"""
-        parsed_config = self.__read_config_file(SETTINGS_CONFIG)
-        try:
-            self.settings_config = SettingsConfig(**parsed_config)
-            return self.settings_config
-        except ValidationError as e:
-            self.printr.toast_error(f"Could not load settings config!\n{str(e)}")
-            return None
+        """Load and validate Settings config"""
+        parsed = self.__read_config(self.settings_config_path)
+        if parsed:
+            try:
+                validated = SettingsConfig(**parsed)
+                return validated
+            except ValidationError as e:
+                self.printr.toast_error(
+                    f"Invalid config '{self.settings_config_path}':\n{str(e)}"
+                )
+        return None
 
     def save_settings_config(self):
         """Write Settings config to file"""
-        return self.__write_config_file(SETTINGS_CONFIG, self.settings_config)
+        return self.__write_config(self.settings_config_path, self.settings_config)
 
-    def load_config_names(self):
-        default_found = False
-        file_prefix, file_ending = DEFAULT_CONTEXT_CONFIG.split(".")
+    def load_config(self, config_dir=DEFAULT_CONFIG_DIR) -> Config:
+        if config_dir not in self.config_dirs:
+            self.printr.toast_error(f"Config '{config_dir}' not found!")
 
-        # Dynamically load all user configuration files from the provided directory
-        for file in os.listdir(self.context_config_path):
-            # Filter out all non-yaml files
-            if file.endswith(f".{file_ending}") and file.startswith(f"{file_prefix}."):
-                if file == DEFAULT_CONTEXT_CONFIG:
-                    default_found = True
-                else:
-                    config_name = file.replace(f"{file_prefix}.", "").replace(
-                        f".{file_ending}", ""
-                    )
-                    self.configs.append(config_name)
-
-        if not default_found:
-            # create default context from the systems example context config
-            example_context: str = os.path.join(
-                self.system_config_path, EXAMPLE_CONTEXT_CONFIG
-            )
-            default_context: str = os.path.join(
-                self.context_config_path, DEFAULT_CONTEXT_CONFIG
-            )
-            if os.path.exists(example_context) and os.path.isfile(example_context):
-                shutil.copyfile(example_context, default_context)
-
-    def load_config(self, config_name=""):  # type: ignore
-        # default name -> 'config.yaml'
-        # context config -> 'config.{context}.yaml'
-        file_name = f"config.{f'{config_name}.' if config_name and config_name != 'default' else ''}yaml"
-
-        parsed_config = self.__read_config_file(file_name, False)
-        config = copy.deepcopy(parsed_config)
+        config = self.__read_config(path.join(self.config_dir, DEFAULT_TEMPLATE_FILE))
         config["wingmen"] = {}
 
-        for wingman_name, wingman_config in parsed_config.get("wingmen", {}).items():
-            merged_config = self.__merge_configs(config, wingman_config)
-            config["wingmen"][wingman_name] = merged_config
+        for root, _, files in walk(path.join(self.config_dir, config_dir)):
+            for filename in files:
+                if filename.endswith(".yaml"):
+                    wingman_config = self.__read_config(path.join(root, filename))
+                    merged_config = self.__merge_configs(config, wingman_config)
+                    config["wingmen"][filename.replace(".yaml", "")] = merged_config
 
-        # not catching ValifationExceptions here, because we can't revover from it
+        # not catching ValifationExceptions here, because we can't recover from it
         # TODO: Notify the client about the error somehow
         return Config(**config)
 
-    def __read_config_file(self, config_name, is_system_config=True) -> dict[str, any]:  # type: ignore
-        parsed_config = {}
+    def __create_configs_from_templates(self, override: bool = False):
+        templates_dir = path.join(self.app_root_path, TEMPLATES_DIR)
+        config_dirs = []
 
-        path = self.system_config_path if is_system_config else self.context_config_path
-        config_file = os.path.join(path, config_name)
-        if os.path.exists(config_file) and os.path.isfile(config_file):
-            with open(config_file, "r", encoding="UTF-8") as stream:
-                try:
-                    parsed_config = yaml.safe_load(stream)
-                except yaml.YAMLError as e:
-                    self.printr.toast_error(
-                        f"Could not load config ({config_name})!\n{str(e)}"
-                    )
+        for root, dirs, files in walk(templates_dir):
+            if len(config_dirs) == 0:
+                config_dirs = dirs
 
-        return parsed_config
+            relative_path = path.relpath(root, templates_dir)
 
-    def __write_config_file(self, config_name, content, is_system_config=True) -> bool:  # type: ignore
-        path = self.system_config_path if is_system_config else self.context_config_path
-        config_file = os.path.join(path, config_name)
-        with open(config_file, "w", encoding="UTF-8") as stream:
+            # Create the same relative path in the target directory
+            target_path = (
+                self.config_dir
+                if relative_path == "."
+                else path.join(self.config_dir, relative_path)
+            )
+            if not path.exists(target_path):
+                makedirs(target_path)
+
+            for filename in files:
+                if (
+                    filename.endswith(".template.yaml")
+                    or filename == DEFAULT_TEMPLATE_FILE
+                ):
+                    new_filename = filename.replace(".template", "")
+                    source_file_path = path.join(root, filename)
+
+                    if override or not path.exists(
+                        path.join(target_path, new_filename)
+                    ):
+                        shutil.copyfile(
+                            source_file_path, path.join(target_path, new_filename)
+                        )
+
+        return config_dirs
+
+    def __read_config(self, file_path: str):
+        """Loads a config file (without validating it)"""
+        with open(file_path, "r", encoding="UTF-8") as stream:
+            try:
+                parsed = yaml.safe_load(stream)
+                return parsed
+            except yaml.YAMLError as e:
+                self.printr.toast_error(
+                    f"Could not read config '{file_path}':\n{str(e)}"
+                )
+                return None
+
+    def __write_config(self, file_path: str, content) -> bool:
+        with open(file_path, "w", encoding="UTF-8") as stream:
             try:
                 yaml.dump(content.dict(exclude_none=True), stream)
             except yaml.YAMLError as e:
                 self.printr.toast_error(
-                    f"Could not write config ({config_name})!\n{str(e)}"
+                    f"Could not write config '{file_path}')!\n{str(e)}"
                 )
                 return False
-
             return True
 
     def __deep_merge(self, source, updates):
@@ -176,3 +180,14 @@ class ConfigManager:
         # No else needed; if 'commands' is not in general, we simply don't set it
 
         return WingmanConfig(**merged)
+
+    def create_settings_config(self):
+        if not path.exists(self.settings_config_path):
+            try:
+                with open(self.settings_config_path, "w", encoding="UTF-8"):
+                    return True  # just create an empty file
+            except OSError as e:
+                self.printr.toast_error(
+                    f"Could not create ({SETTINGS_CONFIG_FILE})\n{str(e)}"
+                )
+        return False
