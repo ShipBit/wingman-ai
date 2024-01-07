@@ -52,9 +52,7 @@ features:
 sound:
   # You can put as many sound effects here as you want. They stack and are added in the defined order here.
   # Available: RADIO, ROBOT, INTERIOR_HELMET, INTERIOR_SMALL, INTERIOR_MEDIUM, INTERIOR_LARGE
-  effects:
-    #- RADIO
-    #- ROBOT
+  effects: []
 
   # adds a beep/Quindar sound before and after the wingman talks
   play_beep: false
@@ -145,9 +143,12 @@ azure:
     deployment_name: xxx # The deployment name e.g. 'whisper'
   tts:
     region: westeurope
-    voice: en-US-JaneNeural
     detect_language: true
-    languages: # Only used if detect_language is set to true above.
+    voice: en-US-JaneNeural
+  stt:
+    region: westeurope
+    detect_language: true
+    languages:
       - en-US
       - de-DE
 
@@ -200,8 +201,7 @@ wingmen:
 
     # Note how this overrides the default settings from the general config above!
     sound:
-      effects:
-        - ROBOT
+      effects: [ROBOT]
 
     openai:
       # The "context" for the wingman. Here's where you can tell the AI how to behave.
@@ -569,8 +569,7 @@ wingmen:
     record_key: delete
 
     sound:
-      effects:
-        - RADIO
+      effects: [RADIO]
       play_beep: True
 
     openai:

@@ -48,13 +48,18 @@ class AzureApiVersion(Enum):
     A2023_09_01_PREVIEW = "2023-09-01-preview"
 
 
+class AzureRegion(Enum):
+    WESTEUROPE = "westeurope"
+
+
 class ElevenlabsModel(Enum):
     ELEVEN_MULTILINGUAL_V2 = "eleven_multilingual_v2"
     ELEVEN_TURBO_V2 = "eleven_turbo_v2"
     ELEVEN_MONOLINGUAL_V1 = "eleven_monolingual_v1"
 
 
-class EdgeTtsVoiceGender(Enum):
+class TtsVoiceGender(Enum):
+    UNKNOWN = "Unknown"
     MALE = "Male"
     FEMALE = "Female"
 
@@ -139,12 +144,16 @@ class AzureApiVersionEnumModel(BaseEnumModel):
     api_version: AzureApiVersion
 
 
+class AzureRegionEnumModel(BaseEnumModel):
+    region: AzureRegion
+
+
 class ElevenlabsModelEnumModel(BaseEnumModel):
     model: ElevenlabsModel
 
 
-class EdgeTtsVoiceGenderEnumModel(BaseEnumModel):
-    gender: EdgeTtsVoiceGender
+class TtsVoiceGenderEnumModel(BaseEnumModel):
+    gender: TtsVoiceGender
 
 
 class OpenAiModelEnumModel(BaseEnumModel):
@@ -186,8 +195,9 @@ ENUM_TYPES = {
     "WingmanInitializationErrorType": WingmanInitializationErrorTypeModel,
     "CommandTag": CommandTagEnumModel,
     "AzureApiVersion": AzureApiVersionEnumModel,
+    "AzureRegion": AzureRegionEnumModel,
     "ElevenlabsModel": ElevenlabsModelEnumModel,
-    "EdgeTtsVoiceGender": EdgeTtsVoiceGenderEnumModel,
+    "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "OpenAiModel": OpenAiModelEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,

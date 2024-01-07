@@ -71,3 +71,7 @@ class ElevenLabs:
                 playbackOptions=playback_options,
                 generationOptions=generation_options,
             )
+
+    def get_available_voices(self):
+        user = ElevenLabsUser(self.api_key)
+        return user.get_available_voices()
