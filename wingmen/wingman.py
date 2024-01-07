@@ -387,14 +387,10 @@ class Wingman(FileCreator):
             if key_cfg.moveto:
                 x,y = key_cfg.moveto
                 key_module.moveTo(x,y)
-            
-            # Normally would use key_module.move(x,y,duration) but for some reason this seems broken on pydirectinput-rgx, so computing the relative position manually and using move absolute instead.
+
             if key_cfg.moveto_relative:
                 x,y = key_cfg.moveto_relative
-                oldx, oldy = key_module.position()
-                x = oldx + x
-                y = oldy + y
-                key_module.moveTo(x,y, duration=0.5)
+                key_module.move(x,y, duration=0.5)
 
             if key_cfg.key == "scroll":
                 if key_cfg.scroll_amount:
