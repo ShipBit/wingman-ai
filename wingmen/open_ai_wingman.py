@@ -391,7 +391,7 @@ class OpenAiWingman(Wingman):
 
     def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
-        remember_messages = self.config.features.remember_messages - 1
+        remember_messages = self.config.features.remember_messages
 
         if remember_messages is None or len(self.messages) == 0:
             return 0  # Configuration not set, nothing to delete.
