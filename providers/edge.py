@@ -1,7 +1,7 @@
 import random
 from edge_tts import Communicate, VoicesManager
 from api.interface import EdgeTtsConfig, SoundConfig
-from api.enums import EdgeTtsVoiceGender, LogType
+from api.enums import TtsVoiceGender, LogType
 from services.file_creator import FileCreator
 from services.audio_player import AudioPlayer
 from services.printr import Printr
@@ -47,7 +47,7 @@ class Edge(FileCreator):
         if not text:
             return
 
-        communicate = Communicate(text, voice, rate=rate)
+        communicate = Communicate(text=text, voice=voice, rate=rate)
         file_path = self.get_full_file_path(OUTPUT_FILE)
         await communicate.save(file_path)
 
@@ -55,7 +55,7 @@ class Edge(FileCreator):
 
     async def __get_random_voice(
         self,
-        gender: EdgeTtsVoiceGender,
+        gender: TtsVoiceGender,
         locale: str = "en-US",
     ) -> str:
         voices = await VoicesManager.create()
@@ -64,7 +64,7 @@ class Edge(FileCreator):
         return random_voice.get("ShortName")
 
     async def __get_same_random_voice_for_language(
-        self, gender: EdgeTtsVoiceGender, locale: str = "en-US"
+        self, gender: TtsVoiceGender, locale: str = "en-US"
     ) -> str:
         # if we already have a voice for this language, return it ("cache")
         # Otherwise the voice would change every time we call this function / talk to the AI
@@ -72,7 +72,7 @@ class Edge(FileCreator):
             return self.random_voices[locale]
 
         random_voice = await self.__get_random_voice(
-            gender=gender.value,
+            gender=gender,
             locale=locale,
         )
         self.random_voices[locale] = random_voice

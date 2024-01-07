@@ -1,15 +1,24 @@
 import asyncio
 import threading
+from elevenlabslib import ElevenLabsVoice
 from fastapi import APIRouter
 import sounddevice as sd
-from api.enums import LogType, ToastType
+from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType, TtsProvider
 from api.interface import (
     AudioDevice,
     AudioSettings,
+    AzureTtsConfig,
     Config,
     ConfigInfo,
+    EdgeTtsConfig,
+    ElevenlabsConfig,
+    SoundConfig,
+    VoiceInfo,
     WingmanInitializationError,
 )
+from providers.edge import Edge
+from providers.elevenlabs import ElevenLabs
+from providers.open_ai import OpenAi, OpenAiAzure
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
@@ -63,6 +72,44 @@ class WingmanCore:
             response_model=list[WingmanInitializationError],
             tags=["core"],
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/elevenlabs-voices",
+            endpoint=self.get_elevenlabs_voices,
+            response_model=list[VoiceInfo],
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/azure-voices",
+            endpoint=self.get_azure_voices,
+            response_model=list[VoiceInfo],
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/play/openai",
+            endpoint=self.play_openai_tts,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/play/azure",
+            endpoint=self.play_azure_tts,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/play/elevenlabs",
+            endpoint=self.play_elevenlabs_tts,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/play/edgetts",
+            endpoint=self.play_edge_tts,
+            tags=["core"],
+        )
 
         self.app_root_dir = app_root_dir
         self.active_recording = {"key": "", "wingman": None}
@@ -88,7 +135,7 @@ class WingmanCore:
             printr.toast_error(str(e))
             raise e
 
-        self.current_config = config_name
+        self.current_config = config_name or "default"
         self.tower = Tower(config=config, app_root_dir=self.app_root_dir)
         errors = await self.tower.instantiate_wingmen()
         return errors
@@ -126,13 +173,15 @@ class WingmanCore:
     # GET /configs
     def get_configs(self):
         return ConfigInfo(
-            configs=self.config_manager.configs,
+            configs=[config or "default" for config in self.config_manager.configs],
             currentConfig=self.current_config,
         )
 
     # GET /config
-    def get_config(self, context: str = None) -> Config:
-        return self.config_manager.load_config(context or "")
+    def get_config(self, config_name: str) -> Config:
+        return self.config_manager.load_config(
+            config_name if config_name != "default" else ""
+        )
 
     # GET /configured-audio-devices
     def get_configured_audio_devices(self):
@@ -163,3 +212,70 @@ class WingmanCore:
     # GET /startup-errors
     def get_startup_errors(self):
         return self.startup_errors
+
+    # GET /elevenlabs-voices
+    def get_elevenlabs_voices(self, api_key: str):
+        elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
+        voices = elevenlabs.get_available_voices()
+        convert = lambda voice: VoiceInfo(id=voice.voiceID, name=voice.name)
+        result = [convert(voice) for voice in voices]
+
+        return result
+
+    # GET /azure-voices
+    def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
+        azure = OpenAiAzure()
+        voices = azure.get_available_voices(
+            api_key=api_key, region=region.value, locale=locale
+        )
+        convert = lambda voice: VoiceInfo(
+            id=voice.short_name,
+            name=voice.local_name,
+            gender=voice.gender.name,
+            locale=voice.locale,
+        )
+        result = [convert(voice) for voice in voices]
+
+        return result
+
+    # POST /play/openai
+    def play_openai_tts(
+        self, text: str, api_key: str, voice: OpenAiTtsVoice, sound_config: SoundConfig
+    ):
+        openai = OpenAi(api_key=api_key)
+        openai.play_audio(text=text, voice=voice, sound_config=sound_config)
+
+    # POST /play/azure
+    def play_azure_tts(
+        self, text: str, api_key: str, config: AzureTtsConfig, sound_config: SoundConfig
+    ):
+        azure = OpenAiAzure()
+        azure.play_audio(
+            text=text,
+            api_key=api_key,
+            config=config,
+            sound_config=sound_config,
+        )
+
+    # POST /play/elevenlabs
+    def play_elevenlabs_tts(
+        self,
+        text: str,
+        api_key: str,
+        config: ElevenlabsConfig,
+        sound_config: SoundConfig,
+    ):
+        elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
+        elevenlabs.play_audio(
+            text=text,
+            config=config,
+            sound_config=sound_config,
+        )
+
+    # POST /play/edgetts
+    async def play_edge_tts(
+        self, text: str, locale: str, config: EdgeTtsConfig, sound_config: SoundConfig
+    ):
+        edge = Edge(app_root_dir=self.app_root_dir)
+        edge.last_transcript_locale = locale
+        await edge.play_audio(text=text, config=config, sound_config=sound_config)

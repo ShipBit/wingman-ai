@@ -1,5 +1,4 @@
 from enum import Enum
-import json
 from fastapi import WebSocket
 from api.commands import WebSocketCommandModel
 

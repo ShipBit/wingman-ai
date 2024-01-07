@@ -178,6 +178,11 @@ async def start_secrets(secrets: dict[str, Any]):
     await core.load_config()
 
 
+@app.get("/ping", tags=["main"])
+async def ping():
+    return "Ok"
+
+
 async def async_main(host: str, port: int, sidecar: bool):
     errors = await core.load_config()
     for error in errors:

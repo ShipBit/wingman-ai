@@ -3,8 +3,9 @@ from typing_extensions import Annotated, TypedDict
 from pydantic import BaseModel, Field
 from api.enums import (
     AzureApiVersion,
+    AzureRegion,
     ConversationProvider,
-    EdgeTtsVoiceGender,
+    TtsVoiceGender,
     ElevenlabsModel,
     OpenAiModel,
     OpenAiTtsVoice,
@@ -37,6 +38,13 @@ class WingmanInitializationError(BaseModel):
     message: str
     error_type: WingmanInitializationErrorType
     secret_name: Optional[str] = None
+
+
+class VoiceInfo(BaseModel):
+    id: Optional[str] = None
+    name: Optional[str] = None
+    gender: Optional[TtsVoiceGender] = None
+    locale: Optional[str] = None
 
 
 # from sounddevice lib
@@ -77,8 +85,13 @@ class AzureInstanceConfig(BaseModel):
 
 
 class AzureTtsConfig(BaseModel):
-    region: str
+    region: AzureRegion
+    detect_language: bool
     voice: str
+
+
+class AzureSttConfig(BaseModel):
+    region: AzureRegion
     detect_language: bool
     languages: list[str]
 
@@ -94,6 +107,7 @@ class AzureConfig(BaseModel):
     conversation: AzureInstanceConfig
     summarize: AzureInstanceConfig
     tts: AzureTtsConfig
+    stt: AzureSttConfig
 
 
 class ElevenlabsVoiceConfig(BaseModel):
@@ -157,7 +171,7 @@ class EdgeTtsConfig(BaseModel):
     Otherwise it's better to set a fixed voice in your preferred language below.
     """
 
-    gender: EdgeTtsVoiceGender
+    gender: TtsVoiceGender
 
 
 class XVASynthTtsConfig(BaseModel):
@@ -211,7 +225,7 @@ class SoundConfig(BaseModel):
     play_beep: bool
     """adds a beep/Quindar sound before and after the wingman talks"""
 
-    effects: Optional[list[SoundEffect]] = None
+    effects: list[SoundEffect]
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
 
@@ -255,6 +269,7 @@ class KeyPressConfig(BaseModel):
 
     write: Optional[str] = None
     """The word or phrase to type, for example, to type text in a login screen.  Must have associated button press to work.  May need special formatting for special characters."""
+
 
 class CommandConfig(BaseModel):
     name: str
