@@ -135,7 +135,7 @@ class WingmanCore:
             printr.toast_error(str(e))
             raise e
 
-        self.current_config = config_name
+        self.current_config = config_name or "default"
         self.tower = Tower(config=config, app_root_dir=self.app_root_dir)
         errors = await self.tower.instantiate_wingmen()
         return errors
@@ -173,7 +173,7 @@ class WingmanCore:
     # GET /configs
     def get_configs(self):
         return ConfigInfo(
-            configs=self.config_manager.configs,
+            configs=[config or "default" for config in self.config_manager.configs],
             currentConfig=self.current_config,
         )
 
