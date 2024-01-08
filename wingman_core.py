@@ -108,7 +108,7 @@ class WingmanCore:
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="voices/azure",
+            path="/voices/azure",
             endpoint=self.get_azure_voices,
             response_model=list[VoiceInfo],
             tags=["core"],
