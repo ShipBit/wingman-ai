@@ -181,15 +181,18 @@ async def ping():
 
 async def async_main(host: str, port: int, sidecar: bool):
     errors = await core.load_config()
+    saved_secrets: list[str] = []
     for error in errors:
         if (
             not sidecar  # running standalone
             and error.error_type == WingmanInitializationErrorType.MISSING_SECRET
+            and not error.secret_name in saved_secrets
         ):
             secret = input(f"Please enter your '{error.secret_name}' API key/secret: ")
             if secret:
                 secret_keeper.secrets[error.secret_name] = secret
                 secret_keeper.save()
+                saved_secrets.append(error.secret_name)
             else:
                 return
         else:
