@@ -186,6 +186,7 @@ class OpenAiWingman(Wingman):
         if (
             response_format == "verbose_json"
             and transcript
+            and hasattr(transcript, "language")
             and transcript.language != self.edge_tts.last_transcript_locale
         ):
             printr.print(

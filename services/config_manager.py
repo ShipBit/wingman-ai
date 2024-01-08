@@ -68,6 +68,7 @@ class ConfigManager:
 
     def create_config(self, config_name: str, template: str = None):
         new_dir = get_writable_dir(path.join(self.config_dir, config_name))
+        self.config_dirs.append(config_name)
 
         template_dir = path.join(self.app_root_path, TEMPLATES_DIR, template)
         if template_dir and path.exists(template_dir):
@@ -76,7 +77,7 @@ class ConfigManager:
                     if filename.endswith("template.yaml"):
                         shutil.copyfile(
                             path.join(root, filename),
-                            path.join(new_dir, filename),
+                            path.join(new_dir, filename.replace(".template", "")),
                         )
 
     def delete_config(self, config_name: str):
