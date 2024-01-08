@@ -8,6 +8,7 @@ from api.interface import XVASynthTtsConfig, SoundConfig, WingmanInitializationE
 from services.audio_player import AudioPlayer
 from os import path
 from urllib.parse import urlparse, urlunparse
+from concurrent.futures import ThreadPoolExecutor
 
 class XVASynth:
     def __init__(self, wingman_name: str, xvasynth_path: str, process_device: str, times_checked_xvasynth: int):
@@ -75,38 +76,51 @@ class XVASynth:
 
         return errors
 
-    def play_audio(
-        self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
-    ):
+    def play_audio(self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig):
         load_ok = self.load_xvasynth_model(path_to_xvasynth=config.xvasynth_path, game_folder=config.game_folder_name, voice=config.voice, language=config.language, load_model_url=config.load_model_url)
         if load_ok != "ok":
             print("There was a problem loading your XVASynth voice, check your voice name and game folder for your voice in XVAsynth")
-        voiceline = text
+
         file_dir = path.abspath(path.dirname(__file__))
         wingman_dir = path.abspath(path.dirname(file_dir))
-        final_voiceline_file =  wingman_dir + "\\audio_output\\xvasynth.wav"
 
-        if path.exists(final_voiceline_file):
-            os.remove(final_voiceline_file)
+        # Create a list to store generated audio futures
+        audio_futures = []
 
-        # Synthesize voiceline
-        synthesize_url= config.synthesize_url
-        data = {
-            'pluginsContext': '{}',
-            'modelType': 'xVAPitch',
-            'sequence': voiceline,
-            'pace': config.pace,
-            'outfile': final_voiceline_file,
-            'vocoder': 'n/a',
-            'base_lang': config.language,
-            'base_emb': '[]',
-            'useSR': config.use_sr,
-            'useCleanup': config.use_cleanup,
-        }
-        response = requests.post(synthesize_url, json=data)
+        # Define a function to generate audio and return the file path only after the response is completed
+        def generate_audio(sentence, index):
+            final_voiceline_file = wingman_dir + f"\\audio_output\\xvasynth{index}.wav"
+            if path.exists(final_voiceline_file):
+                os.remove(final_voiceline_file)
+
+            synthesize_url = config.synthesize_url
+            data = {
+                'pluginsContext': '{}',
+                'modelType': 'xVAPitch',
+                'sequence': sentence,
+                'pace': config.pace,
+                'outfile': final_voiceline_file,
+                'vocoder': 'n/a',
+                'base_lang': config.language,
+                'base_emb': '[]',
+                'useSR': config.use_sr,
+                'useCleanup': config.use_cleanup,
+            }
+            response = requests.post(synthesize_url, json=data)
+            return final_voiceline_file
+
+        # Use ThreadPoolExecutor to parallelize audio generation
+        with ThreadPoolExecutor() as executor:
+            sentences = text.split(". ")
+            # Submit tasks for each sentence and store the futures
+            audio_futures = [executor.submit(generate_audio, sentence, i) for i, sentence in enumerate(sentences)]
+
+        # Play the generated audio files sequentially
         audio_player = AudioPlayer()
-        audio, sample_rate = audio_player.get_audio_from_file(final_voiceline_file)
-        audio_player.stream_with_effects(input_data=(audio, sample_rate), config=sound_config)
+        for future in audio_futures:
+            audio_file = future.result()
+            audio, sample_rate = audio_player.get_audio_from_file(audio_file)
+            audio_player.stream_with_effects(input_data=(audio, sample_rate), config=sound_config, wait=True)
 
     def check_if_xvasynth_is_running(self, url:str):
         # get base url from synthesize url in config
