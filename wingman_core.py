@@ -39,11 +39,37 @@ class WingmanCore:
         )
         self.router.add_api_route(
             methods=["GET"],
+            path="/default-config/",
+            endpoint=self.get_default_config,
+            response_model=Config,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
             path="/config/",
             endpoint=self.get_config,
             response_model=Config,
             tags=["core"],
         )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/config/",
+            endpoint=self.delete_config,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/create",
+            endpoint=self.create_config,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/save-wingman",
+            endpoint=self.save_wingman_config,
+            tags=["core"],
+        )
+
         self.router.add_api_route(
             methods=["GET"],
             path="/audio-devices",
@@ -59,11 +85,12 @@ class WingmanCore:
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/configured-audio-devices",
+            path="/audio-devices/configured",
             endpoint=self.get_configured_audio_devices,
             response_model=AudioSettings,
             tags=["core"],
         )
+
         self.router.add_api_route(
             methods=["GET"],
             path="/startup-errors",
@@ -71,20 +98,22 @@ class WingmanCore:
             response_model=list[WingmanInitializationError],
             tags=["core"],
         )
+
         self.router.add_api_route(
             methods=["GET"],
-            path="/elevenlabs-voices",
+            path="/voices/elevenlabs",
             endpoint=self.get_elevenlabs_voices,
             response_model=list[VoiceInfo],
             tags=["core"],
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/azure-voices",
+            path="voices/azure",
             endpoint=self.get_azure_voices,
             response_model=list[VoiceInfo],
             tags=["core"],
         )
+
         self.router.add_api_route(
             methods=["POST"],
             path="/play/openai",
@@ -112,6 +141,11 @@ class WingmanCore:
 
         self.active_recording = {"key": "", "wingman": None}
         self.config_manager = ConfigManager(app_root_path)
+        printr.print(
+            f"Config directory: {self.config_manager.config_dir}",
+            server_only=True,
+            color=LogType.HIGHLIGHT,
+        )
         self.audio_recorder = AudioRecorder()
         self.tower: Tower = None
         self.current_config: str = None
@@ -179,7 +213,25 @@ class WingmanCore:
     def get_config(self, config_name: str) -> Config:
         return self.config_manager.load_config(config_name)
 
-    # GET /configured-audio-devices
+    # GET /default-config
+    def get_default_config(self) -> Config:
+        return self.config_manager.load_default_config()
+
+    # POST config/create
+    def create_config(self, config_name: str, template: str = None):
+        self.config_manager.create_config(config_name=config_name, template=template)
+
+    # DELETE config
+    def delete_config(self, config_name: str):
+        self.config_manager.delete_config(config_name=config_name)
+
+    # POST config/save-wingman
+    def save_wingman_config(self, config_name: str, wingman_name: str, config: Config):
+        self.config_manager.save_wingman_config(
+            config_name=config_name, wingman_name=wingman_name, config=config
+        )
+
+    # GET /audio-devices/configured
     def get_configured_audio_devices(self):
         audio_devices = (
             self.config_manager.settings_config.audio
@@ -213,7 +265,7 @@ class WingmanCore:
     def get_startup_errors(self):
         return self.startup_errors
 
-    # GET /elevenlabs-voices
+    # GET /voices/elevenlabs
     def get_elevenlabs_voices(self, api_key: str):
         elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
         voices = elevenlabs.get_available_voices()
@@ -222,7 +274,7 @@ class WingmanCore:
 
         return result
 
-    # GET /azure-voices
+    # GET /voices/azure
     def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
         azure = OpenAiAzure()
         voices = azure.get_available_voices(

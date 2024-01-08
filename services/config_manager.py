@@ -44,12 +44,16 @@ class ConfigManager:
         """Write Settings config to file"""
         return self.__write_config(self.settings_config_path, self.settings_config)
 
+    def load_default_config(self) -> Config:
+        config = self.__read_config(path.join(self.config_dir, DEFAULT_TEMPLATE_FILE))
+        config["wingmen"] = {}
+        return config
+
     def load_config(self, config_dir=DEFAULT_CONFIG_DIR) -> Config:
         if config_dir not in self.config_dirs:
             self.printr.toast_error(f"Config '{config_dir}' not found!")
 
-        config = self.__read_config(path.join(self.config_dir, DEFAULT_TEMPLATE_FILE))
-        config["wingmen"] = {}
+        config = self.load_default_config()
 
         for root, _, files in walk(path.join(self.config_dir, config_dir)):
             for filename in files:
@@ -61,6 +65,29 @@ class ConfigManager:
         # not catching ValifationExceptions here, because we can't recover from it
         # TODO: Notify the client about the error somehow
         return Config(**config)
+
+    def create_config(self, config_name: str, template: str = None):
+        new_dir = get_writable_dir(path.join(self.config_dir, config_name))
+
+        template_dir = path.join(self.app_root_path, TEMPLATES_DIR, template)
+        if template_dir and path.exists(template_dir):
+            for root, _, files in walk(template_dir):
+                for filename in files:
+                    if filename.endswith("template.yaml"):
+                        shutil.copyfile(
+                            path.join(root, filename),
+                            path.join(new_dir, filename),
+                        )
+
+    def delete_config(self, config_name: str):
+        config_path = path.join(self.config_dir, config_name)
+        if path.exists(config_path):
+            shutil.rmtree(config_path)
+
+    def save_wingman_config(self, config_name: str, wingman_name: str, config: Config):
+        config_path = path.join(self.config_dir, config_name, f"{wingman_name}.yaml")
+        wingman_config = config.wingmen[wingman_name]
+        return self.__write_config(config_path, wingman_config)
 
     def __create_configs_from_templates(self, override: bool = False):
         templates_dir = path.join(self.app_root_path, TEMPLATES_DIR)
@@ -87,13 +114,13 @@ class ConfigManager:
                     or filename == DEFAULT_TEMPLATE_FILE
                 ):
                     new_filename = filename.replace(".template", "")
-                    source_file_path = path.join(root, filename)
 
                     if override or not path.exists(
                         path.join(target_path, new_filename)
                     ):
                         shutil.copyfile(
-                            source_file_path, path.join(target_path, new_filename)
+                            path.join(root, filename),
+                            path.join(target_path, new_filename),
                         )
 
         return config_dirs
