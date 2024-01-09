@@ -188,7 +188,7 @@ class OpenAiWingman(Wingman):
         """
         self._add_user_message(transcript)
 
-        instant_response = self._try_instant_activation(transcript)
+        instant_response = await self._try_instant_activation(transcript)
         if instant_response:
             return instant_response, instant_response
 
@@ -274,7 +274,7 @@ class OpenAiWingman(Wingman):
         if tool_call.id and not completed:
             self.pending_tool_calls.append(tool_call.id)
 
-    def _update_tool_response(self, tool_call_id, response) -> bool:
+    async def _update_tool_response(self, tool_call_id, response) -> bool:
         """Updates a tool response in the conversation history. This also moves the message to the end of the history if all tool responses are given.
 
         Args:
@@ -295,7 +295,7 @@ class OpenAiWingman(Wingman):
             index -= 1
             if (
                 self.__get_message_role(message) == "tool"
-                and message.get("tool_call_id") == tool_call_id
+                and message.get("tool_call_id") == tool_call_id 
             ):
                 message["content"] = str(response)
                 if tool_call_id in self.pending_tool_calls:
@@ -351,7 +351,7 @@ class OpenAiWingman(Wingman):
         self.messages.extend(message_block)
 
         if self.debug:
-            printr.print("Moved message block to the end.", color=LogType.INFO)
+            await printr.print_async("Moved message block to the end.", color=LogType.INFO)
 
         return True
 
@@ -425,7 +425,7 @@ class OpenAiWingman(Wingman):
         """Resets the conversation history by removing all messages except for the initial system message."""
         del self.messages[1:]
 
-    def _try_instant_activation(self, transcript: str) -> str:
+    async def _try_instant_activation(self, transcript: str) -> str:
         """Tries to execute an instant activation command if present in the transcript.
 
         Args:
@@ -434,7 +434,7 @@ class OpenAiWingman(Wingman):
         Returns:
             str: The response to the instant command or None if no such command was found.
         """
-        command = self._execute_instant_activation_command(transcript)
+        command = await self._execute_instant_activation_command(transcript)
         if command:
             response = self._select_command_response(command)
             return response
@@ -527,7 +527,7 @@ class OpenAiWingman(Wingman):
 
             if tool_call.id:
                 # updating the dummy tool response with the actual response
-                self._update_tool_response(tool_call.id, function_response)
+                await self._update_tool_response(tool_call.id, function_response)
             else:
                 # adding a new tool response
                 self._add_tool_response(tool_call, function_response)
@@ -596,7 +596,7 @@ class OpenAiWingman(Wingman):
             # get the command based on the argument passed by GPT
             command = self._get_command(function_args["command_name"])
             # execute the command
-            function_response = self._execute_command(command)
+            function_response = await self._execute_command(command)
             # if the command has responses, we have to play one of them
             if command and command.responses:
                 instant_reponse = self._select_command_response(command)
@@ -640,11 +640,11 @@ class OpenAiWingman(Wingman):
         else:
             self.printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
 
-    def _execute_command(self, command: dict) -> str:
+    async def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
         Otherwise the AI will try to respond to the command and generate a "duplicate" response for instant_activation commands.
         """
-        super()._execute_command(command)
+        await super()._execute_command(command)
         return "Ok"
 
     def _build_tools(self) -> list[dict]:
