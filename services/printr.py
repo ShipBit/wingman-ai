@@ -79,6 +79,29 @@ class Printr(WebSocketUser):
                 )
             )
 
+    async def print_async(
+        self,
+        text,
+        color: LogType = LogType.SUBTLE,
+        source=LogSource.SYSTEM,
+        source_name: str = "",
+        toast: ToastType = None,
+        server_only=False,
+        command_tag: CommandTag = None,
+    ):
+        # print to server (terminal)
+        self.print_colored(text, color=self.get_terminal_color(color))
+
+        if not server_only and self._connection_manager is not None:
+            await self.__send_to_gui(
+                text,
+                color,
+                toast_type=toast,
+                source=source,
+                source_name=source_name,
+                command_tag=command_tag,
+            )
+
     def toast(self, text: str):
         self.print(text, toast=ToastType.NORMAL)
 

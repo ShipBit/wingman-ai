@@ -183,7 +183,7 @@ class Wingman:
             self.print_execution_time(reset_timer=True)
 
         if transcript:
-            printr.print(
+            await printr.print_async(
                 f"{transcript}",
                 color=LogType.PURPLE,
                 source_name="User",
@@ -203,7 +203,7 @@ class Wingman:
 
             actual_response = instant_response or process_result
             if actual_response:
-                printr.print(
+                await printr.print_async(
                     f"{actual_response}",
                     color=LogType.POSITIVE,
                     source=LogSource.WINGMAN,
