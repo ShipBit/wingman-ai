@@ -28,7 +28,7 @@ printr = Printr()
 
 
 class WingmanCore:
-    def __init__(self, app_root_path: str):
+    def __init__(self, config_manager: ConfigManager):
         self.router = APIRouter()
         self.router.add_api_route(
             methods=["GET"],
@@ -139,13 +139,8 @@ class WingmanCore:
             tags=["core"],
         )
 
+        self.config_manager = config_manager
         self.active_recording = {"key": "", "wingman": None}
-        self.config_manager = ConfigManager(app_root_path)
-        printr.print(
-            f"Config directory: {self.config_manager.config_dir}",
-            server_only=True,
-            color=LogType.HIGHLIGHT,
-        )
         self.audio_recorder = AudioRecorder()
         self.tower: Tower = None
         self.current_config: str = None

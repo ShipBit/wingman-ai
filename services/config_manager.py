@@ -12,6 +12,7 @@ TEMPLATES_DIR = "configs/templates"
 DEFAULT_CONFIG_DIR = "Star Citizen"
 SETTINGS_CONFIG_FILE = "settings.yaml"
 DEFAULT_TEMPLATE_FILE = "defaults.yaml"
+SECRETS_FILE = "secrets.yaml"
 
 
 class ConfigManager:
@@ -110,10 +111,7 @@ class ConfigManager:
                 makedirs(target_path)
 
             for filename in files:
-                if (
-                    filename.endswith(".template.yaml")
-                    or filename == DEFAULT_TEMPLATE_FILE
-                ):
+                if filename.endswith(".yaml"):
                     new_filename = filename.replace(".template", "")
 
                     if override or not path.exists(

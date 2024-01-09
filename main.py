@@ -12,8 +12,9 @@ from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from api.commands import WebSocketCommandModel
-from api.enums import ENUM_TYPES, WingmanInitializationErrorType
+from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 from services.command_handler import CommandHandler
+from services.config_manager import ConfigManager
 from services.connection_manager import ConnectionManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
@@ -29,7 +30,15 @@ printr = Printr()
 Printr.set_connection_manager(connection_manager)
 
 app_is_bundled = getattr(sys, "frozen", False)
-app_root_dir = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__file__))
+app_root_path = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__file__))
+
+# creates all the configs from templates - do this first!
+config_manager = ConfigManager(app_root_path)
+printr.print(
+    f"Config directory: {config_manager.config_dir}",
+    server_only=True,
+    color=LogType.HIGHLIGHT,
+)
 
 secret_keeper = SecretKeeper()
 SecretKeeper.set_connection_manager(connection_manager)
@@ -38,7 +47,7 @@ version_check = SystemManager()
 is_latest = version_check.check_version()
 
 # uses the Singletons above, so don't move this up!
-core = WingmanCore(app_root_path=app_root_dir)
+core = WingmanCore(config_manager=config_manager)
 listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
 
 

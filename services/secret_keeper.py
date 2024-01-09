@@ -7,12 +7,10 @@ from api.enums import (
     LogType,
     ToastType,
 )
-from services.config_manager import CONFIGS_DIR
+from services.config_manager import CONFIGS_DIR, SECRETS_FILE
 from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
 from services.printr import Printr
-
-SECRETS_FILE = "secrets.yaml"
 
 
 class SecretKeeper(WebSocketUser):
@@ -49,15 +47,6 @@ class SecretKeeper(WebSocketUser):
             cls._instance.config_file = path.join(
                 get_writable_dir(CONFIGS_DIR), SECRETS_FILE
             )
-            if not path.exists(cls._instance.config_file):
-                try:
-                    with open(cls._instance.config_file, "w", encoding="UTF-8"):
-                        pass
-                except OSError as e:
-                    cls._instance.printr.toast_error(
-                        f"Could not create ({SECRETS_FILE})\n{str(e)}"
-                    )
-                    return {}
             cls._instance.secrets = cls._instance.load() or {}
 
         return cls._instance
