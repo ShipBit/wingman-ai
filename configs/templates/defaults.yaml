@@ -21,22 +21,22 @@ features:
   # ─────────────────────── TTS Provider ─────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  tts_provider: openai # available: openai, edge_tts, elevenlabs, azure, xvasynth
+  tts_provider: azure # available: openai, edge_tts, elevenlabs, azure, xvasynth
 
   # ─────────────────────── Speech to text Provider ─────────────────────────
   # You can override the speech to text provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  stt_provider: openai # available: openai, azure, azure_speech
+  stt_provider: azure_speech # available: openai, azure, azure_speech
 
   # ─────────────────────── Conversation Provider ─────────────────────────
   # You can override the conversation provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  conversation_provider: openai # available: openai, azure
+  conversation_provider: azure # available: openai, azure
 
   # ─────────────────────── Summarize Provider ─────────────────────────
   # You can override the summarize provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  summarize_provider: openai # available: openai, azure
+  summarize_provider: azure # available: openai, azure
 
   # ─────────────────────── Cost Control ─────────────────────────
   # How many messages should a Wingman remember in your conversations?
@@ -92,15 +92,6 @@ edge_tts:
   #   https://speech.microsoft.com/portal/voicegallery
   tts_voice: en-US-GuyNeural
 
-  # EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
-  # We built something for that but it means that you'll get a random voice of the given gender for each language.
-  # These voices can be weird, e.g. chidrens' voices for some languages.
-  # Only enable this if you need to change languages on-the-fly(!) during your conversations.
-  # Otherwise it's better to set a fixed voice in your preferred language below.
-  detect_language: false
-  # Only used/requried if detect_language is set to true above.
-  gender: Female # Female or Male
-
 # ────────────────────────────────── ELEVENLABS ────────────────────────────────────
 # https://elevenlabs.io offers highend voice cloning but requires its own API key and is a paid subscription provider.
 # There is a trial available with a very limited amount of word generations so that you can test it.
@@ -145,14 +136,11 @@ azure:
     deployment_name: gpt-35-turbo
   tts:
     region: westeurope
-    detect_language: true
     voice: en-US-JaneNeural
   stt:
     region: westeurope
-    detect_language: true
     languages:
       - en-US
-      - de-DE
 
 # ────────────────────────────────── XVASYNTH ────────────────────────────────────
 # XVASynth is a free program on Steam that uses your local computer resources to generate text to speech using free voice models created by the community.
