@@ -153,7 +153,7 @@ class ElevenlabsConfig(BaseModel):
 
 
 class EdgeTtsConfig(BaseModel):
-    tts_voice: str
+    voice: str
     """
     All available EdgeTTS voices: https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/docs/available-edge-tts-voices.md
 

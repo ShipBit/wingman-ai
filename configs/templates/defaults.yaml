@@ -90,7 +90,7 @@ edge_tts:
   #   https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/docs/available-edge-tts-voices.md
   # Voice samples:
   #   https://speech.microsoft.com/portal/voicegallery
-  tts_voice: en-US-GuyNeural
+  voice: en-US-GuyNeural
 
 # ────────────────────────────────── ELEVENLABS ────────────────────────────────────
 # https://elevenlabs.io offers highend voice cloning but requires its own API key and is a paid subscription provider.

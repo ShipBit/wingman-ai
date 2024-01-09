@@ -18,10 +18,8 @@ class Edge:
     async def play_audio(
         self, text: str, config: EdgeTtsConfig, sound_config: SoundConfig
     ):
-        tts_voice = config.tts_voice
-
         communicate, output_file = await self.__generate_speech(
-            text=text, voice=tts_voice
+            text=text, voice=config.voice
         )
         audio_player = AudioPlayer()
         audio, sample_rate = audio_player.get_audio_from_file(output_file)

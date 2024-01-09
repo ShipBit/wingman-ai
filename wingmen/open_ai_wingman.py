@@ -631,12 +631,14 @@ class OpenAiWingman(Wingman):
                 config=self.config.xvasynth,
                 sound_config=self.config.sound,
             )
-        else:
+        elif self.tts_provider == TtsProvider.OPENAI:
             self.openai.play_audio(
                 text=text,
                 voice=self.config.openai.tts_voice,
                 sound_config=self.config.sound,
             )
+        else:
+            self.printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
 
     def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
