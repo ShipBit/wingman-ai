@@ -297,7 +297,7 @@ class OpenAiWingman(Wingman):
             index -= 1
             if (
                 self.__get_message_role(message) == "tool"
-                and message.get("tool_call_id") == tool_call_id 
+                and message.get("tool_call_id") == tool_call_id
             ):
                 message["content"] = str(response)
                 if tool_call_id in self.pending_tool_calls:
