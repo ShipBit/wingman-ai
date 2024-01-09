@@ -148,7 +148,6 @@ class ElevenlabsConfig(BaseModel):
 
     voice: ElevenlabsVoiceConfig
     voice_settings: ElevenlabsVoiceSettingsConfig
-    use_sound_effects: Optional[bool] = False
     """Adds a delay"""
 
 

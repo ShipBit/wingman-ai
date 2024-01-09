@@ -102,7 +102,6 @@ elevenlabs:
   # see https://elevenlabs.io/docs/speech-synthesis/models
   model: eleven_multilingual_v2
   latency: 2 # optimization, 0 - 4. Higher values are faster but can produce audio stuttering.
-  use_sound_effects: false # you can use our sound_effects with elevenlabs but it adds a delay to the playback
 
   voice:
     # You can configure "Premade voices" from the dropdown on https://elevenlabs.io/speech-synthesis by name.
