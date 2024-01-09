@@ -86,13 +86,11 @@ class AzureInstanceConfig(BaseModel):
 
 class AzureTtsConfig(BaseModel):
     region: AzureRegion
-    detect_language: bool
     voice: str
 
 
 class AzureSttConfig(BaseModel):
     region: AzureRegion
-    detect_language: bool
     languages: list[str]
 
 
@@ -156,23 +154,11 @@ class ElevenlabsConfig(BaseModel):
 
 class EdgeTtsConfig(BaseModel):
     tts_voice: str
-    """The voice to use (only if detect_language is set to false).
-
+    """
     All available EdgeTTS voices: https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/docs/available-edge-tts-voices.md
 
     Voice samples: https://speech.microsoft.com/portal/voicegallery
     """
-
-    detect_language: bool
-    """EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
-    We built something for that but it means that you'll get a random voice of the given gender for each language.
-    These voices can be weird, e.g. chidrens' voices for some languages.
-    Only enable this if you need to change languages on-the-fly(!) during your conversations.
-    Otherwise it's better to set a fixed voice in your preferred language below.
-    """
-
-    gender: TtsVoiceGender
-    """Only used if detect_language is set to true. Male, Female or Unknown."""
 
 
 class XVASynthTtsConfig(BaseModel):

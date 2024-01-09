@@ -329,5 +329,4 @@ class WingmanCore:
         self, text: str, locale: str, config: EdgeTtsConfig, sound_config: SoundConfig
     ):
         edge = Edge()
-        edge.last_transcript_locale = locale
         await edge.play_audio(text=text, config=config, sound_config=sound_config)

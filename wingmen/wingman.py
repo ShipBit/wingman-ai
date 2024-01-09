@@ -177,7 +177,7 @@ class Wingman:
             printr.print("Starting transcription...", color=LogType.INFO)
 
         # transcribe the audio.
-        transcript, locale = await self._transcribe(audio_input_wav)
+        transcript = await self._transcribe(audio_input_wav)
 
         if self.debug:
             self.print_execution_time(reset_timer=True)
@@ -195,7 +195,7 @@ class Wingman:
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
-                transcript, locale
+                transcript
             )
 
             if self.debug:
@@ -222,27 +222,24 @@ class Wingman:
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
-    async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
+    async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the audio to text. You can override this method if you want to use a different transcription service.
 
         Args:
             audio_input_wav (str): The path to the audio file that contains the user's speech. This is a recording of what you you said.
 
         Returns:
-            tuple[str | None, str | None]: The transcript of the audio file and the detected language as locale (if determined).
+            str | None: The transcript of the audio file and the detected language as locale (if determined).
         """
-        return None, None
+        return None
 
-    async def _get_response_for_transcript(
-        self, transcript: str, locale: str | None
-    ) -> tuple[str, str]:
+    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
 
         Args:
             transcript (str): The user's spoken text transcribed as text.
-            locale (str | None): The language that was detected to be used in the transcript, e.g. "de-DE".
 
         Returns:
             A tuple of strings representing the response to a function call and/or an instant response.
@@ -374,12 +371,12 @@ class Wingman:
 
         for key_cfg in command.keys:
             if key_cfg.moveto:
-                x,y = key_cfg.moveto
-                key_module.moveTo(x,y)
+                x, y = key_cfg.moveto
+                key_module.moveTo(x, y)
 
             if key_cfg.moveto_relative:
-                x,y = key_cfg.moveto_relative
-                key_module.move(x,y, duration=0.5)
+                x, y = key_cfg.moveto_relative
+                key_module.move(x, y, duration=0.5)
 
             if key_cfg.key == "scroll":
                 if key_cfg.scroll_amount:

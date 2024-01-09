@@ -147,7 +147,7 @@ class OpenAiWingman(Wingman):
         )
         self.xvasynth.validate_config(config=self.config.xvasynth, errors=errors)
 
-    async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
+    async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
 
         Args:
@@ -156,19 +156,12 @@ class OpenAiWingman(Wingman):
         Returns:
             str | None: The transcript of the audio file or None if the transcription failed.
         """
-        response_format = (
-            "verbose_json"  # verbose_json will return the language detected in the transcript.
-            if self.tts_provider == TtsProvider.EDGE_TTS
-            and self.config.edge_tts.detect_language
-            else "json"
-        )
 
         if self.stt_provider == SttProvider.AZURE:
             transcript = self.openai_azure.transcribe(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["whisper"],
                 config=self.config.azure.whisper,
-                response_format=response_format,
             )
         elif self.stt_provider == SttProvider.AZURE_SPEECH:
             transcript = self.openai_azure.transcribe_with_azure(
@@ -177,28 +170,11 @@ class OpenAiWingman(Wingman):
                 config=self.config.azure.stt,
             )
         else:
-            transcript = self.openai.transcribe(
-                filename=audio_input_wav, response_format=response_format
-            )
+            transcript = self.openai.transcribe(filename=audio_input_wav)
 
-        locale = None
-        # skip the GPT call if we didn't change the language
-        if (
-            response_format == "verbose_json"
-            and transcript
-            and hasattr(transcript, "language")
-            and transcript.language != self.edge_tts.last_transcript_locale
-        ):
-            printr.print(
-                f"   EdgeTTS detected language '{transcript.language}'.", color=LogType.INFO  # type: ignore
-            )
-            locale = self.__ask_gpt_for_locale(transcript.language)
+        return transcript.text if transcript else None
 
-        return transcript.text if transcript else None, locale
-
-    async def _get_response_for_transcript(
-        self, transcript: str, locale: str | None
-    ) -> tuple[str, str]:
+    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
         """Gets the response for a given transcript.
 
         This function interprets the transcript, runs instant commands if triggered,
@@ -210,7 +186,6 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple of strings representing the response to a function call and an instant response.
         """
-        self.edge_tts.last_transcript_locale = locale
         self._add_user_message(transcript)
 
         instant_response = self._try_instant_activation(transcript)
