@@ -1,11 +1,13 @@
 import argparse
 import asyncio
+import keyboard
 from enum import Enum
 from os import path
 import sys
 from typing import Any, Literal, get_args, get_origin
 import uvicorn
-from pynput import keyboard
+
+# from pynput import keyboard
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
@@ -48,7 +50,11 @@ is_latest = version_check.check_version()
 
 # uses the Singletons above, so don't move this up!
 core = WingmanCore(config_manager=config_manager)
-listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
+# listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
+# keyboard.on_press(core.on_press)
+# keyboard.on_release(core.on_release)
+
+keyboard.hook(core.on_key)
 
 
 def custom_generate_unique_id(route: APIRoute):
@@ -80,7 +86,7 @@ async def lifespan(_app: FastAPI):
 
     # executed after the application has finished
     await connection_manager.shutdown()
-    listener.stop()
+    # listener.stop()
 
 
 app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_unique_id)
@@ -209,8 +215,8 @@ async def async_main(host: str, port: int, sidecar: bool):
 
     core.is_started = True
 
-    listener.start()
-    listener.wait()
+    # listener.start()
+    # listener.wait()
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)
