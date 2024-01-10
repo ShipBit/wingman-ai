@@ -173,7 +173,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await command_handler.dispatch(message, websocket)
     except WebSocketDisconnect:
         await connection_manager.disconnect(websocket)
-        printr.print("Client disconnected", server_only=True)
+        await printr.print_async("Client disconnected", server_only=True)
 
 
 @app.post("/start-secrets", tags=["main"])

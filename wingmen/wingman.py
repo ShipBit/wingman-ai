@@ -88,12 +88,12 @@ class Wingman:
         """Returns the activation or "push-to-talk" key for this Wingman."""
         return self.config.record_key
 
-    def print_execution_time(self, reset_timer=False):
+    async def print_execution_time(self, reset_timer=False):
         """Prints the current time since the execution started (in seconds)."""
         if self.execution_start:
             execution_stop = time.perf_counter()
             elapsed_seconds = execution_stop - self.execution_start
-            printr.print(f"...took {elapsed_seconds:.2f}s", color=LogType.INFO)
+            await printr.print_async(f"...took {elapsed_seconds:.2f}s", color=LogType.INFO)
         if reset_timer:
             self.start_execution_benchmark()
 
@@ -174,16 +174,16 @@ class Wingman:
         process_result = None
 
         if self.debug:
-            printr.print("Starting transcription...", color=LogType.INFO)
+            await printr.print_async("Starting transcription...", color=LogType.INFO)
 
         # transcribe the audio.
         transcript = await self._transcribe(audio_input_wav)
 
         if self.debug:
-            self.print_execution_time(reset_timer=True)
+            await self.print_execution_time(reset_timer=True)
 
         if transcript:
-            printr.print(
+            await printr.print_async(
                 f"{transcript}",
                 color=LogType.PURPLE,
                 source_name="User",
@@ -191,7 +191,7 @@ class Wingman:
             )
 
             if self.debug:
-                printr.print("Getting response for transcript...", color=LogType.INFO)
+                await printr.print_async("Getting response for transcript...", color=LogType.INFO)
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
@@ -199,11 +199,11 @@ class Wingman:
             )
 
             if self.debug:
-                self.print_execution_time(reset_timer=True)
+                await self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
             if actual_response:
-                printr.print(
+                await printr.print_async(
                     f"{actual_response}",
                     color=LogType.POSITIVE,
                     source=LogSource.WINGMAN,
@@ -211,14 +211,14 @@ class Wingman:
                 )
 
         if self.debug:
-            printr.print("Playing response back to user...", color=LogType.INFO)
+            await printr.print_async("Playing response back to user...", color=LogType.INFO)
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
             await self._play_to_user(str(process_result))
 
         if self.debug:
-            self.print_execution_time()
+            await self.print_execution_time()
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
@@ -289,7 +289,7 @@ class Wingman:
 
         return random.choice(command_responses)
 
-    def _execute_instant_activation_command(self, transcript: str):
+    async def _execute_instant_activation_command(self, transcript: str):
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -314,14 +314,14 @@ class Wingman:
                 if (
                     ratio > 0.8
                 ):  # if the ratio is higher than 0.8, we assume that the command was spoken
-                    self._execute_command(command)
+                    await self._execute_command(command)
 
                     if command.responses:
                         return command
                     return None
         return None
 
-    def _execute_command(self, command: CommandConfig) -> str:
+    async def _execute_command(self, command: CommandConfig) -> str:
         """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
 
         Args:
@@ -334,10 +334,10 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        printr.print(f"❖ Executing command: {command.name}", color=LogType.INFO)
+        await printr.print_async(f"❖ Executing command: {command.name}", color=LogType.INFO)
 
         if self.debug:
-            printr.print(
+            await printr.print_async(
                 "Skipping actual keypress execution in debug_mode...",
                 color=LogType.WARNING,
             )
@@ -352,7 +352,7 @@ class Wingman:
 
         if not self.debug:
             # in debug mode we already printed the separate execution times
-            self.print_execution_time()
+            await self.print_execution_time()
 
         return self._select_command_response(command) or "Ok"
 
