@@ -321,7 +321,7 @@ class WingmanCore:
 
     # POST /play/edgetts
     async def play_edge_tts(
-        self, text: str, locale: str, config: EdgeTtsConfig, sound_config: SoundConfig
+        self, text: str, config: EdgeTtsConfig, sound_config: SoundConfig
     ):
         edge = Edge()
         await edge.play_audio(text=text, config=config, sound_config=sound_config)
