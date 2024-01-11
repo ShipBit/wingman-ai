@@ -1,4 +1,5 @@
 import asyncio
+from os import path
 import threading
 from fastapi import APIRouter
 import sounddevice as sd
@@ -13,6 +14,7 @@ from api.interface import (
     ElevenlabsConfig,
     SoundConfig,
     VoiceInfo,
+    WingmanConfig,
     WingmanInitializationError,
 )
 from providers.edge import Edge
@@ -220,11 +222,43 @@ class WingmanCore:
     def delete_config(self, config_name: str):
         self.config_manager.delete_config(config_name=config_name)
 
+    # DELETE config/wingman
+    def delete_wingman_config(self, config_name: str, wingman_name: str):
+        return self.config_manager.delete_wingman_config(config_name, wingman_name)
+
     # POST config/save-wingman
-    def save_wingman_config(self, config_name: str, wingman_name: str, config: Config):
+    async def save_wingman_config(
+        self,
+        config_name: str,
+        wingman_name: str,
+        wingman_config: WingmanConfig,
+        auto_recover: bool = False,
+    ):
         self.config_manager.save_wingman_config(
-            config_name=config_name, wingman_name=wingman_name, config=config
+            config_name=config_name,
+            wingman_name=wingman_name,
+            wingman_config=wingman_config,
         )
+        try:
+            await self.load_config(config_name)
+            printr.toast("Wingman saved successfully.")
+        except Exception:
+            error_message = "Invalid Wingman configuration."
+            if auto_recover:
+                deleted = self.delete_wingman_config(config_name, wingman_name)
+                if deleted:
+                    self.config_manager.create_configs_from_templates()
+
+                await self.load_config(config_name)
+
+                restored_message = (
+                    "Deleted broken config (and restored default if there is a template for it)."
+                    if deleted
+                    else ""
+                )
+                printr.toast_error(f"{error_message} {restored_message}")
+            else:
+                printr.toast_error(f"{error_message}")
 
     # GET /audio-devices/configured
     def get_configured_audio_devices(self):

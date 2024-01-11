@@ -207,3 +207,8 @@ ENUM_TYPES = {
     "SummarizeProvider": SummarizeProviderEnumModel,
     # Add new enums here as key-value pairs
 }
+
+
+# make yaml.dump save Pydantic enums as strings
+def enum_representer(dumper, value):
+    return dumper.represent_data(value.value)

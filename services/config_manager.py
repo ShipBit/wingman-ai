@@ -1,8 +1,10 @@
-from os import makedirs, path, walk
+from enum import Enum
+from os import makedirs, path, remove, walk
 import copy
 import shutil
 from pydantic import ValidationError
 import yaml
+from api.enums import enum_representer
 from api.interface import Config, SettingsConfig, WingmanConfig
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -26,7 +28,7 @@ class ConfigManager:
         self.create_settings_config()
         self.settings_config = self.load_settings_config()
 
-        self.config_dirs = self.__create_configs_from_templates()
+        self.config_dirs = self.create_configs_from_templates()
 
     def load_settings_config(self):
         """Load and validate Settings config"""
@@ -85,13 +87,30 @@ class ConfigManager:
         config_path = path.join(self.config_dir, config_name)
         if path.exists(config_path):
             shutil.rmtree(config_path)
+            return True
+        return False
 
-    def save_wingman_config(self, config_name: str, wingman_name: str, config: Config):
+    def delete_wingman_config(self, config_name: str, wingman_name: str):
+        file_path = path.join(self.config_dir, config_name, f"{wingman_name}.yaml")
+        try:
+            remove(file_path)
+            return True
+        except FileNotFoundError:
+            print(f"Unable to delete {file_path}. The file does not exist.")
+        except PermissionError:
+            print(f"You do not have permissions to delete file {file_path}.")
+        except OSError as e:
+            print(f"Error when trying to delete file {file_path}: {e.strerror}")
+
+        return False
+
+    def save_wingman_config(
+        self, config_name: str, wingman_name: str, wingman_config: WingmanConfig
+    ):
         config_path = path.join(self.config_dir, config_name, f"{wingman_name}.yaml")
-        wingman_config = config.wingmen[wingman_name]
         return self.__write_config(config_path, wingman_config)
 
-    def __create_configs_from_templates(self, override: bool = False):
+    def create_configs_from_templates(self, override: bool = False):
         templates_dir = path.join(self.app_root_path, TEMPLATES_DIR)
         config_dirs = []
 
@@ -137,6 +156,7 @@ class ConfigManager:
                 return None
 
     def __write_config(self, file_path: str, content) -> bool:
+        yaml.add_multi_representer(Enum, enum_representer)
         with open(file_path, "w", encoding="UTF-8") as stream:
             try:
                 yaml.dump(content.dict(exclude_none=True), stream)
