@@ -48,9 +48,6 @@ is_latest = version_check.check_version()
 
 # uses the Singletons above, so don't move this up!
 core = WingmanCore(config_manager=config_manager)
-# listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
-# keyboard.on_press(core.on_press)
-# keyboard.on_release(core.on_release)
 
 keyboard.hook(core.on_key)
 
@@ -84,7 +81,7 @@ async def lifespan(_app: FastAPI):
 
     # executed after the application has finished
     await connection_manager.shutdown()
-    # listener.stop()
+    keyboard.unhook_all()
 
 
 app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_unique_id)
@@ -212,9 +209,6 @@ async def async_main(host: str, port: int, sidecar: bool):
             core.startup_errors.append(error)
 
     core.is_started = True
-
-    # listener.start()
-    # listener.wait()
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)
