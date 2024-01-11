@@ -1,9 +1,9 @@
 import random
 import time
-import keyboard as key_module
-import mouse
 from difflib import SequenceMatcher
 from importlib import import_module
+from keyboard import keyboard
+from mouse import mouse
 from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from services.audio_player import AudioPlayer
@@ -385,7 +385,7 @@ class Wingman:
             if key_cfg.modifier:
                 modifiers = [mod.strip() for mod in key_cfg.modifier.split(",")]
                 for mod in modifiers:
-                    key_module.press(mod)
+                    keyboard.press(mod)
 
             if key_cfg.hold:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
@@ -393,21 +393,21 @@ class Wingman:
                     time.sleep(key_cfg.hold)
                     mouse.release(button=key_cfg.key)
                 elif key_cfg.key != "scroll":
-                    key_module.press(key_cfg.key)
+                    keyboard.press(key_cfg.key)
                     time.sleep(key_cfg.hold)
-                    key_module.release(key_cfg.key)
+                    keyboard.release(key_cfg.key)
             else:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
                     mouse.click(button=key_cfg.key)
                 elif key_cfg.key != "scroll":
-                    key_module.press(key_cfg.key)
+                    keyboard.press(key_cfg.key)
 
             if key_cfg.modifier:
                 for mod in reversed(modifiers):
-                    key_module.release(mod)
+                    keyboard.release(mod)
 
             if key_cfg.write:
-                key_module.write(key_cfg.write)
+                keyboard.write(key_cfg.write)
 
             if key_cfg.wait:
                 time.sleep(key_cfg.wait)

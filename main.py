@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import keyboard
 from enum import Enum
 from os import path
 import sys
@@ -11,6 +10,7 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from keyboard import keyboard
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 from services.command_handler import CommandHandler

@@ -1,4 +1,4 @@
-import keyboard
+import keyboard.keyboard as keyboard
 from api.enums import WingmanInitializationErrorType
 from api.interface import Config, WingmanInitializationError
 from wingmen.open_ai_wingman import OpenAiWingman
