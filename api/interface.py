@@ -101,6 +101,16 @@ class AudioSettings(BaseModel):
     output: Optional[int] = None
 
 
+class WhispercppSttConfig(BaseModel):
+    base_url: Optional[str] = "http://127.0.0.1:8080"
+    autostart: Optional[bool] = False
+    whispercpp_exe_path: Optional[str] = None
+    whispercpp_model_path: Optional[str] = None
+    temperature: Optional[float] = 0.0
+    language: Optional[str] = "en"
+
+class WhispercppTranscript(BaseModel):
+    text: str
 class AzureInstanceConfig(BaseModel):
     api_base_url: str
     """https://xxx.openai.azure.com/"""
@@ -186,7 +196,6 @@ class EdgeTtsConfig(BaseModel):
 
     Voice samples: https://speech.microsoft.com/portal/voicegallery
     """
-
 
 class XVASynthTtsConfig(BaseModel):
     xvasynth_path: str
@@ -356,6 +365,7 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
+    whispercpp: WhispercppSttConfig
     commands: Optional[list[CommandConfig]] = None
 
 

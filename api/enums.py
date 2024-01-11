@@ -94,6 +94,7 @@ class SttProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
     AZURE_SPEECH = "azure_speech"
+    WHISPERCPP = "whispercpp"
 
 
 class ConversationProvider(Enum):
