@@ -1,6 +1,6 @@
-import platform
 import random
 import time
+import keyboard as key_module
 from difflib import SequenceMatcher
 from importlib import import_module
 from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
@@ -10,15 +10,6 @@ from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 
 printr = Printr()
-
-if platform.system() == "Windows":
-    import pydirectinput as key_module
-else:
-    import pyautogui as key_module
-
-    printr.toast_warning(
-        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
-    )
 
 
 class Wingman:
@@ -93,7 +84,9 @@ class Wingman:
         if self.execution_start:
             execution_stop = time.perf_counter()
             elapsed_seconds = execution_stop - self.execution_start
-            await printr.print_async(f"...took {elapsed_seconds:.2f}s", color=LogType.INFO)
+            await printr.print_async(
+                f"...took {elapsed_seconds:.2f}s", color=LogType.INFO
+            )
         if reset_timer:
             self.start_execution_benchmark()
 
@@ -191,7 +184,9 @@ class Wingman:
             )
 
             if self.debug:
-                await printr.print_async("Getting response for transcript...", color=LogType.INFO)
+                await printr.print_async(
+                    "Getting response for transcript...", color=LogType.INFO
+                )
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
@@ -211,7 +206,9 @@ class Wingman:
                 )
 
         if self.debug:
-            await printr.print_async("Playing response back to user...", color=LogType.INFO)
+            await printr.print_async(
+                "Playing response back to user...", color=LogType.INFO
+            )
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
@@ -334,7 +331,9 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        await printr.print_async(f"❖ Executing command: {command.name}", color=LogType.INFO)
+        await printr.print_async(
+            f"❖ Executing command: {command.name}", color=LogType.INFO
+        )
 
         if self.debug:
             await printr.print_async(
@@ -385,7 +384,7 @@ class Wingman:
             if key_cfg.modifier:
                 modifiers = [mod.strip() for mod in key_cfg.modifier.split(",")]
                 for mod in modifiers:
-                    key_module.keyDown(mod)
+                    key_module.press(mod)
 
             if key_cfg.hold:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
@@ -393,9 +392,9 @@ class Wingman:
                     time.sleep(key_cfg.hold)
                     key_module.mouseUp(button=key_cfg.key)
                 elif key_cfg.key != "scroll":
-                    key_module.keyDown(key_cfg.key)
+                    key_module.press(key_cfg.key)
                     time.sleep(key_cfg.hold)
-                    key_module.keyUp(key_cfg.key)
+                    key_module.release(key_cfg.key)
             else:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
                     key_module.click(button=key_cfg.key)
@@ -404,14 +403,10 @@ class Wingman:
 
             if key_cfg.modifier:
                 for mod in reversed(modifiers):
-                    key_module.keyUp(mod)
+                    key_module.release(mod)
 
-            # Pyautogui automatically detects if the indicated keys need a "shift" applied; pydirectinput / pydirectinput-rgx do not. Pydirectinput-rgx implements a flavor of this with an auto_shift parameter that is not in pyautogui.
             if key_cfg.write:
-                try:
-                    key_module.write(key_cfg.write, interval=0.10, auto_shift=True)
-                except:
-                    key_module.write(key_cfg.write, interval=0.10)
+                key_module.write(key_cfg.write)
 
             if key_cfg.wait:
                 time.sleep(key_cfg.wait)

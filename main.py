@@ -6,8 +6,6 @@ from os import path
 import sys
 from typing import Any, Literal, get_args, get_origin
 import uvicorn
-
-# from pynput import keyboard
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
