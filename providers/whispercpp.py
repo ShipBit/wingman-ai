@@ -72,7 +72,7 @@ class Whispercpp:
             response = requests.post(url, files=files, data=data)
             response.raise_for_status()
             # Need to use a pydantic base model to enable openaiwingman to use same transcript.text call as it uses for openai which also uses a pydantic object, otherwise response.json would be fine here, which would return {"text":"transcription"}.
-            return WhispercppTranscript(text=response.json()["text"].strip())
+            return WhispercppTranscript(text=response.json()["text"].strip(),language=self.language)
         except:
             return "There was an error with the whispercpp transcription.  The request to the server failed."
 

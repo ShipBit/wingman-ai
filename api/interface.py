@@ -111,6 +111,8 @@ class WhispercppSttConfig(BaseModel):
 
 class WhispercppTranscript(BaseModel):
     text: str
+    language: str
+
 class AzureInstanceConfig(BaseModel):
     api_base_url: str
     """https://xxx.openai.azure.com/"""
