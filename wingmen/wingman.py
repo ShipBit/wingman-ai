@@ -2,8 +2,8 @@ import random
 import time
 from difflib import SequenceMatcher
 from importlib import import_module
-from keyboard import keyboard
-from mouse import mouse
+import keyboard.keyboard as keyboard
+import mouse.mouse as mouse
 from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from services.audio_player import AudioPlayer
