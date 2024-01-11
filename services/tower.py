@@ -1,3 +1,4 @@
+import keyboard.keyboard as keyboard
 from api.enums import WingmanInitializationErrorType
 from api.interface import Config, WingmanInitializationError
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -9,12 +10,10 @@ printr = Printr()
 
 
 class Tower:
-    def __init__(self, config: Config, app_root_dir: str):
+    def __init__(self, config: Config):
         self.config = config
-        self.app_root_dir = app_root_dir
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
-        self.key_wingman_dict: dict[str, Wingman] = {}
 
     async def instantiate_wingmen(self):
         errors: list[WingmanInitializationError] = []
@@ -33,14 +32,9 @@ class Tower:
                     wingman = Wingman.create_dynamically(
                         name=wingman_name,
                         config=wingman_config,
-                        app_root_dir=self.app_root_dir,
                     )
                 else:
-                    wingman = OpenAiWingman(
-                        name=wingman_name,
-                        config=wingman_config,
-                        app_root_dir=self.app_root_dir,
-                    )
+                    wingman = OpenAiWingman(name=wingman_name, config=wingman_config)
             except Exception as e:  # pylint: disable=broad-except
                 # just in case we missed something
                 msg = str(e).strip() or type(e).__name__
@@ -60,13 +54,13 @@ class Tower:
                     self.wingmen.append(wingman)
 
         for wingman in self.wingmen:
-            self.key_wingman_dict[wingman.get_record_key()] = wingman
+            scan_codes = keyboard.key_to_scan_codes(wingman.get_record_key())
+            if len(scan_codes) > 0:
+                scan_code = scan_codes[0]
+                self.key_wingman_dict[scan_code] = wingman
 
         return errors
 
     def get_wingman_from_key(self, key: any) -> Wingman | None:  # type: ignore
-        if hasattr(key, "char"):
-            wingman = self.key_wingman_dict.get(key.char, None)
-        else:
-            wingman = self.key_wingman_dict.get(key.name, None)
+        wingman = self.key_wingman_dict.get(key.scan_code, None)
         return wingman

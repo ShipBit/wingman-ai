@@ -36,7 +36,7 @@ class CommandHandler:
                 raise ValueError("Unknown command")
         except (ValidationError, KeyError, ValueError) as e:
             # Handle invalid commands or parsing errors
-            self.printr.print(str(e), toast=ToastType.ERROR)
+            await self.printr.print_async(str(e), toast=ToastType.ERROR)
 
     async def handle_client_ready(
         self, command: ClientReadyCommand, websocket: WebSocket
@@ -48,8 +48,10 @@ class CommandHandler:
     ):
         config = command.config
         errors = await self.core.load_config(config)
-        self.printr.print(
-            f"Loaded config: {config or 'default'}", toast=ToastType.NORMAL
+        await self.printr.print_async(
+            f"Loaded config: {config or 'default'}",
+            toast=ToastType.NORMAL,
+            server_only=True,
         )
 
     async def handle_secret(self, command: SaveSecretCommand, websocket: WebSocket):
@@ -57,4 +59,4 @@ class CommandHandler:
         secret_value = command.secret_value
         self.secret_keeper.secrets[secret_name] = secret_value
         self.secret_keeper.save()
-        self.printr.print(f"Secret '{secret_name}' saved", toast=ToastType.NORMAL)
+        await self.printr.print_async(f"Secret '{secret_name}' saved", toast=ToastType.NORMAL)

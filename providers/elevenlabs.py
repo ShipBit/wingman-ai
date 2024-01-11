@@ -55,7 +55,8 @@ class ElevenLabs:
             else None,
         )
 
-        if config.use_sound_effects:
+        if sound_config.play_beep or len(sound_config.effects) > 0:
+            # play with effects - slower
             audio_bytes, _history_id = voice.generate_audio_v2(
                 prompt=text,
                 generationOptions=generation_options,

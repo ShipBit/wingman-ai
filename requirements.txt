@@ -3,14 +3,13 @@ edge-tts==6.1.9
 elevenlabslib~=0.17.1
 fastapi~=0.108.0
 numpy~=1.26.3
-openai~=1.6.1
+openai~=1.7.1
 packaging~=23.2
 pedalboard~=0.8.7
-PyAutoGUI~=0.9.54
+platformdirs~=4.1.0
 pydantic~=2.5.3
 pydirectinput-rgx==2.1.1
 pyinstaller==6.3.0
-pynput~=1.7.6
 PyYAML~=6.0.1
 requests~=2.31.0
 scipy~=1.11.4
