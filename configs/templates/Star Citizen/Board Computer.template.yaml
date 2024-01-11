@@ -1,0 +1,376 @@
+# ────────────────────────── Board Computer ───────────────────────────────
+# This is a "default OpenAI" wingman that you can roleplay with and that can execute commands (=keypresses).
+# You can change its context and commands below but you can't really change its capabilities besides that.
+# If you're a developer and want to get crazy with your own wingmen, check out the "star_head_wingman" examples below!
+
+# The internal name of the wingman which is shown in the GUI. Has to be unique within this file!
+name: Board Computer
+description: The computer of your ship. It's in in charge of all the systems on your ship and executes various commands.
+
+# The "push-to-talk" key for this wingman. Keep it pressed while talking!
+# Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!
+record_key: end
+
+# Note how this overrides the default settings from the general config above!
+sound:
+  effects: [ROBOT]
+
+openai:
+  # The "context" for the wingman. Here's where you can tell the AI how to behave.
+  # This is probably what you want to play around with the most.
+  context: |
+    You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for
+    permission. You are the ship's computer, and you are in charge of all the ship's systems.
+    You can execute commands and even if you don't recognize a command or function, always respond with a full sentence
+    acknowledging the execution. Never say you don't have capabilities to execute a function or command.
+    Always answer as quick as possible. No more than 1-2 sentences per response.
+    Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
+
+# Commands are keypresses that the wingmen can execute.
+# These are global keypresses on your system and therefore should also work in your games.
+# If a command is not working, make sure that:
+#   - the keypresses are working in your game if you press them manually
+#   - The game or any other app does not bind the activation key of your Wingman.
+#   - The AI understood you correctly. If a command is executed, it will tell you in blue in the GUI.
+#   - If you use number keys, put them in quotes like "1" or "2".
+#   - If you use F-keys, lowercase them like "f1" or "f4".
+#   - Try another key for testing. Some special keys dont work.
+# All available keys (case-sensitive!):
+#    https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
+commands:
+  #
+  # This is where the magic happens!
+  # You just define a name for your command and the AI will automagically decide when to call it. Not kidding!
+  # We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
+  # If the Wingman doesn't call your command, try to rephrase the name here.
+  # ───────────────────────────────────────────
+  - name: HoldCurrentSpeed
+    keys:
+      - key: c # The key the wingman will press when executing the command
+        modifier: alt # This will press "Alt + c" instead of just "c". Modifiers are optional.  You can also use multiple modifiers by separating them by commas, such as modifier: alt, ctrl, shift.
+  # ───────────────────────────────────────────
+  - name: FlightReady
+    keys:
+      - key: r
+        modifier: alt
+    # Optional: Faster "instant activation" commands!
+    # Provide phrases that will instantly activate the command (without AI roundtripping).
+    # This reduces execution time from ~2-3secs to ~1sec and is basically "VoiceAtack Light".
+    # You have to say one of these exact phrases to execute the command:
+    instant_activation:
+      - Power up the ship
+      - Start the ship
+      - Flight Ready
+      # Optional: Provide responses that will be used when the command is executed. A random one will be chosen.
+    responses:
+      - Powering up the ship. All systems online. Ready for takeoff.
+      - Start sequence initiated. All systems online. Ready for takeoff.
+  # ───────────────────────────────────────────
+  - name: ScanArea
+    keys:
+      - key: v
+        hold: 0.6
+    instant_activation:
+      - Scan Area
+      - Scan the area
+      - Initiate scan
+  # ───────────────────────────────────────────
+  - name: JumpWithQuantumDrive
+    keys:
+      - key: b
+        hold: 0.8 # Optional: The duration the key will be pressed in seconds.
+  # ───────────────────────────────────────────
+  - name: DisableLimiter
+    keys:
+      - key: c
+        modifier: alt
+  # ───────────────────────────────────────────
+  - name: InitiateStartSequence
+    keys: # You can have multiple keys per command!
+      - key: r
+        modifier: altright
+        wait: 2 # wait 2 second before pressing the next key
+      - key: n
+        modifier: alt
+      - key: s
+  # ───────────────────────────────────────────
+  - name: DeployLandingGear
+    keys:
+      - key: n
+  # ───────────────────────────────────────────
+  - name: RetractLandingGear
+    keys:
+      - key: n
+  # ───────────────────────────────────────────
+  - name: EnableQuantumDrive
+    keys:
+      - key: b
+  # ───────────────────────────────────────────
+  - name: DisableQuantumDrive
+    keys:
+      - key: b
+  # ───────────────────────────────────────────
+  - name: HeadLightsOn
+    keys:
+      - key: l
+  # ───────────────────────────────────────────
+  - name: HeadLightsOff
+    keys:
+      - key: l
+  # ───────────────────────────────────────────
+  - name: WipeVisor
+    keys:
+      - key: x
+        modifier: altleft
+  # ───────────────────────────────────────────
+  - name: PowerShields
+    keys:
+      - key: o
+  # ───────────────────────────────────────────
+  - name: PowerShip
+    keys:
+      - key: u
+  # ───────────────────────────────────────────
+  - name: PowerEngines
+    keys:
+      - key: i
+  # ───────────────────────────────────────────
+  - name: OpenMobiGlass
+    keys:
+      - key: f1
+  # ───────────────────────────────────────────
+  - name: OpenStarMap
+    keys:
+      - key: f2
+  # ───────────────────────────────────────────
+  - name: IncreasePowerToShields
+    keys:
+      - key: f6
+  # ───────────────────────────────────────────
+  - name: IncreasePowerToEngines
+    keys:
+      - key: f5
+  # ───────────────────────────────────────────
+  - name: IncreasePowerToGuns
+    keys:
+      - key: f7
+  # ───────────────────────────────────────────
+  - name: Lock
+    keys:
+      - key: f8
+  # ───────────────────────────────────────────
+  - name: Unlock
+    keys:
+      - key: f8
+  # ───────────────────────────────────────────
+  - name: ResetPowerPriority
+    keys:
+      - key: f8
+  # ───────────────────────────────────────────
+  - name: MiningMode
+    keys:
+      - key: m
+  # ───────────────────────────────────────────
+  - name: CycleCamera
+    keys:
+      - key: f4
+  # ───────────────────────────────────────────
+  - name: SideArm
+    keys:
+      - key: "1"
+  # ───────────────────────────────────────────
+  - name: PrimaryWeapon
+    keys:
+      - key: "2"
+  # ───────────────────────────────────────────
+  - name: SecondaryWeapon
+    keys:
+      - key: "3"
+  # ───────────────────────────────────────────
+  - name: HolsterWeapon
+    keys:
+      - key: r
+        hold: 0.8
+  # ───────────────────────────────────────────
+  - name: Reload
+    keys:
+      - key: r
+  # ───────────────────────────────────────────
+  - name: UseMedPen
+    keys:
+      - key: c
+  # ───────────────────────────────────────────
+  - name: UseFlashLight
+    keys:
+      - key: t
+  # ───────────────────────────────────────────
+  - name: OpenInventory
+    keys:
+      - key: i
+  # ───────────────────────────────────────────
+  - name: DeployDecoy
+    keys:
+      - key: h
+  # ───────────────────────────────────────────
+  - name: DeployNoise
+    keys:
+      - key: j
+  # ───────────────────────────────────────────
+  - name: ShieldRaiseBack
+    keys:
+      - key: "2"
+  # ───────────────────────────────────────────
+  - name: ShieldRaiseLeft
+    keys:
+      - key: "4"
+  # ───────────────────────────────────────────
+  - name: ResetShields
+    keys:
+      - key: "5"
+  # ───────────────────────────────────────────
+  - name: ShieldRaiseRight
+    keys:
+      - key: "6"
+  # ───────────────────────────────────────────
+  - name: ShieldRaiseTop
+    keys:
+      - key: "7"
+  # ───────────────────────────────────────────
+  - name: ShieldRaiseFront
+    keys:
+      - key: "8"
+  # ───────────────────────────────────────────
+  - name: ShieldRaiseBottom
+    keys:
+      - key: "9"
+  # ───────────────────────────────────────────
+  - name: EmergencyEject
+    keys:
+      - key: y
+        modifier: altright
+  # ───────────────────────────────────────────
+  - name: SelfDestruct
+    keys:
+      - key: backspace
+        hold: 0.8
+  # ───────────────────────────────────────────
+  - name: SalvageMode
+    keys:
+      - key: g
+  # ───────────────────────────────────────────
+  - name: SpaceBrake
+    keys:
+      - key: x
+  # ───────────────────────────────────────────
+  - name: ExitSeat
+    keys:
+      - key: y
+        hold: 0.8
+  # ───────────────────────────────────────────
+  - name: CycleGimbalAssist
+    keys:
+      - key: g
+  # ───────────────────────────────────────────
+  - name: RequestLandingPermission
+    keys:
+      - key: n
+        modifier: alt
+  # ───────────────────────────────────────────
+  - name: RequestDeparture
+    keys:
+      - key: n
+        modifier: alt
+  # ───────────────────────────────────────────
+  - name: DisplayDebuggingInfo
+    keys:
+      - key: "~"
+        modifier: shift
+        write: r_DisplayInfo 2
+        wait: 1
+      - key: enter
+        wait: 1
+      - key: "~"
+        modifier: shift
+    instant_activation:
+      - Display info
+      - Display debugging information
+      - Display debug information
+  # ───────────────────────────────────────────
+  - name: ZoomIn
+    keys:
+      - key: scroll # use scroll command to simulate scrolling the mouse wheel
+        scroll_amount: 30 # use scroll_amount for how much to scroll, use whole numbers here, postive is scroll up, negative is scroll down
+    instant_activation:
+      - Zoom in
+  # ───────────────────────────────────────────
+  - name: ZoomOut
+    keys:
+      - key: scroll
+        scroll_amount: -30
+    instant_activation:
+      - Zoom out
+  # ───────────────────────────────────────────
+  - name: FireMiningLaser
+    keys:
+      - key: primary # to use mouse buttons, primary = left mouse button, secondary = right mouse button, middle = middle mouse button
+        hold: 0.6
+    instant_activation:
+      - Fire mining laser
+  # ───────────────────────────────────────────
+  - name: SwitchMiningLaser
+    keys:
+      - key: secondary
+        hold: 0.6
+    instant_activation:
+      - Change mining laser
+      - Switch mining laser
+  # ───────────────────────────────────────────
+  - name: LaunchMissile
+    keys:
+      - key: primary
+        hold: 1.0
+    instant_activation:
+      - Launch Missile
+      - Fire Missile
+  # ───────────────────────────────────────────
+  - name: MoveTurretLeft
+    keys:
+      - key: primary
+        moveto_relative: [-100, 0] # use the moveto_relative command to move to x and y coordinates relative to current mouse position. If you have a speedy or accelerated mouse setting, this might trigger an error or unexpected behavior.
+    instant_activation:
+      - Turret left
+  # ───────────────────────────────────────────
+  - name: MoveTurretRight
+    keys:
+      - key: primary
+        moveto_relative: [100, 0] # You can use just the move: keyword instead to move to an absolute position on your screen.  Not utilized in the examples because there isn't a real use case in Star Citizen.
+    instant_activation:
+      - Turret right
+  # ───────────────────────────────────────────
+  - name: MoveTurretUp
+    keys:
+      - key: primary
+        moveto_relative: [0, -100]
+    instant_activation:
+      - Turret up
+  # ───────────────────────────────────────────
+  - name: MoveTurretDown
+    keys:
+      - key: primary
+        moveto_relative: [0, 100]
+    instant_activation:
+      - Turret down
+  # ───────────────────────── HOW TO INSERT NEW COMMANDS: ───────────────────────────
+  #   - Please make sure the indentation aligns with the commands above perfectly.
+  #   - Use a single "TAB" character for indentation. No spaces!
+  #   - Always put a "-" sign in front of the "name" of each new command.
+  #   - available keys are here: https://pyautogui.readthedocs.io/en/latest/keyboard.html#keyboard-keys
+  #       - F1, F2 etc. are case-sensitive and lowercase, so use "f1" instead of "F1".
+  #       - If you use number keys, make sure to put them in quotes like "1" or "2".
+  #
+  # ───────────────────────INSERT YOUR NEW COMMANDS HERE:────────────────────────────
+  #- name: MyNewCommand
+  #  keys:
+  #    - key: x
+  # ───────────────────────────────────────────
+  #

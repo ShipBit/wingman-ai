@@ -37,19 +37,19 @@ class OpenAiWingman(Wingman):
         self,
         name: str,
         config: WingmanConfig,
-        app_root_dir: str,
     ):
         super().__init__(
             name=name,
             config=config,
-            app_root_dir=app_root_dir,
         )
 
-        self.edge_tts = Edge(app_root_dir)
-        self.openai: OpenAi = None  # validate will set this
-        self.openai_azure: OpenAiAzure = None  # validate will set this
-        self.elevenlabs: ElevenLabs = None  # validate will set this
-        self.xvasynth: XVASynth = None  # validate will set this
+        self.edge_tts = Edge()
+
+        # validate will set these:
+        self.openai: OpenAi = None
+        self.openai_azure: OpenAiAzure = None
+        self.elevenlabs: ElevenLabs = None
+        self.xvasynth: XVASynth = None
 
         self.pending_tool_calls = []
         self.last_gpt_call = None
@@ -147,7 +147,7 @@ class OpenAiWingman(Wingman):
         )
         self.xvasynth.validate_config(config=self.config.xvasynth, errors=errors)
 
-    async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
+    async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
 
         Args:
@@ -156,19 +156,12 @@ class OpenAiWingman(Wingman):
         Returns:
             str | None: The transcript of the audio file or None if the transcription failed.
         """
-        response_format = (
-            "verbose_json"  # verbose_json will return the language detected in the transcript.
-            if self.tts_provider == TtsProvider.EDGE_TTS
-            and self.config.edge_tts.detect_language
-            else "json"
-        )
 
         if self.stt_provider == SttProvider.AZURE:
             transcript = self.openai_azure.transcribe(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["whisper"],
                 config=self.config.azure.whisper,
-                response_format=response_format,
             )
         elif self.stt_provider == SttProvider.AZURE_SPEECH:
             transcript = self.openai_azure.transcribe_with_azure(
@@ -177,27 +170,11 @@ class OpenAiWingman(Wingman):
                 config=self.config.azure.stt,
             )
         else:
-            transcript = self.openai.transcribe(
-                filename=audio_input_wav, response_format=response_format
-            )
+            transcript = self.openai.transcribe(filename=audio_input_wav)
 
-        locale = None
-        # skip the GPT call if we didn't change the language
-        if (
-            response_format == "verbose_json"
-            and transcript
-            and transcript.language != self.edge_tts.last_transcript_locale
-        ):
-            printr.print(
-                f"   EdgeTTS detected language '{transcript.language}'.", color=LogType.INFO  # type: ignore
-            )
-            locale = self.__ask_gpt_for_locale(transcript.language)
+        return transcript.text if transcript else None
 
-        return transcript.text if transcript else None, locale
-
-    async def _get_response_for_transcript(
-        self, transcript: str, locale: str | None
-    ) -> tuple[str, str]:
+    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
         """Gets the response for a given transcript.
 
         This function interprets the transcript, runs instant commands if triggered,
@@ -209,19 +186,18 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple of strings representing the response to a function call and an instant response.
         """
-        self.edge_tts.last_transcript_locale = locale
-        self._add_user_message(transcript)
+        await self._add_user_message(transcript)
 
-        instant_response = self._try_instant_activation(transcript)
+        instant_response = await self._try_instant_activation(transcript)
         if instant_response:
             return instant_response, instant_response
 
-        completion = self._gpt_call()
+        completion = await self._gpt_call()
 
         if completion is None:
             return None, None
 
-        response_message, tool_calls = self._process_completion(completion)
+        response_message, tool_calls = await self._process_completion(completion)
 
         # add message and dummy tool responses to conversation history
         self._add_gpt_response(response_message, tool_calls)
@@ -235,8 +211,8 @@ class OpenAiWingman(Wingman):
             return self._finalize_response(str(summarize_response))
 
         return response_message.content, response_message.content
-    
-    def _fix_tool_calls(self, tool_calls):
+
+    async def _fix_tool_calls(self, tool_calls):
         """Fixes tool calls that have a command name as function name.
 
         Args:
@@ -258,12 +234,14 @@ class OpenAiWingman(Wingman):
                     # update the tool call
                     tool_call.function.name = function_name
                     tool_call.function.arguments = json.dumps(function_args)
-                    
+
                     if self.debug:
-                        printr.print("Applied command call fix.", color=LogType.WARNING)
+                        await printr.print_async(
+                            "Applied command call fix.", color=LogType.WARNING
+                        )
 
         return tool_calls
-    
+
     def _add_gpt_response(self, message, tool_calls) -> None:
         """Adds a message from GPT to the conversation history as well as adding dummy tool responses for any tool calls.
 
@@ -298,7 +276,7 @@ class OpenAiWingman(Wingman):
         if tool_call.id and not completed:
             self.pending_tool_calls.append(tool_call.id)
 
-    def _update_tool_response(self, tool_call_id, response) -> bool:
+    async def _update_tool_response(self, tool_call_id, response) -> bool:
         """Updates a tool response in the conversation history. This also moves the message to the end of the history if all tool responses are given.
 
         Args:
@@ -310,21 +288,24 @@ class OpenAiWingman(Wingman):
         """
         if not tool_call_id:
             return False
-        
+
         completed = False
         index = len(self.messages)
 
         # go through message history to find and update the tool call
         for message in reversed(self.messages):
             index -= 1
-            if self.__get_message_role(message) == "tool" and message.get("tool_call_id") == tool_call_id:
+            if (
+                self.__get_message_role(message) == "tool"
+                and message.get("tool_call_id") == tool_call_id
+            ):
                 message["content"] = str(response)
                 if tool_call_id in self.pending_tool_calls:
                     self.pending_tool_calls.remove(tool_call_id)
                 break
         if not index:
             return False
-        
+
         # find the assistant message that triggered the tool call
         for message in reversed(self.messages[:index]):
             index -= 1
@@ -339,15 +320,15 @@ class OpenAiWingman(Wingman):
                 break
         if not completed:
             return True
-        
+
         # find the first user message(s) that triggered this assistant message
-        index -= 1 # skip the assistant message
+        index -= 1  # skip the assistant message
         for message in reversed(self.messages[:index]):
             index -= 1
             if self.__get_message_role(message) != "user":
                 index += 1
                 break
-        
+
         # built message block to move
         start_index = index
         end_index = start_index
@@ -360,23 +341,25 @@ class OpenAiWingman(Wingman):
                 break
             end_index += 1
         if end_index == len(self.messages):
-            end_index -= 1 # loop ended at the end of the message history, so we have to go back one index
-        message_block = self.messages[start_index:end_index+1]
+            end_index -= 1  # loop ended at the end of the message history, so we have to go back one index
+        message_block = self.messages[start_index : end_index + 1]
 
         # check if the message block is already at the end
         if end_index == len(self.messages) - 1:
             return True
-        
+
         # move message block to the end
-        del self.messages[start_index:end_index+1]
+        del self.messages[start_index : end_index + 1]
         self.messages.extend(message_block)
 
         if self.debug:
-            printr.print("Moved message block to the end.", color=LogType.INFO)
+            await printr.print_async(
+                "Moved message block to the end.", color=LogType.INFO
+            )
 
         return True
 
-    def _add_user_message(self, content: str):
+    async def _add_user_message(self, content: str):
         """Shortens the conversation history if needed and adds a user message to it.
 
         Args:
@@ -386,10 +369,10 @@ class OpenAiWingman(Wingman):
             name (Optional[str]): The name of the function associated with the tool call, if applicable.
         """
         msg = {"role": "user", "content": content}
-        self._cleanup_conversation_history()
+        await self._cleanup_conversation_history()
         self.messages.append(msg)
 
-    def _cleanup_conversation_history(self):
+    async def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
         remember_messages = self.config.features.remember_messages
 
@@ -419,17 +402,23 @@ class OpenAiWingman(Wingman):
 
         # Remove the pending tool calls that are no longer needed.
         for mesage in self.messages[context_offset:cutoff_index]:
-            if self.__get_message_role(mesage) == "tool" and mesage.get("tool_call_id") in self.pending_tool_calls:
+            if (
+                self.__get_message_role(mesage) == "tool"
+                and mesage.get("tool_call_id") in self.pending_tool_calls
+            ):
                 self.pending_tool_calls.remove(mesage.get("tool_call_id"))
                 if self.debug:
-                    printr.print(f"Removing pending tool call {mesage.get('tool_call_id')} due to message history clean up.", color=LogType.WARNING)
+                    await printr.print_async(
+                        f"Removing pending tool call {mesage.get('tool_call_id')} due to message history clean up.",
+                        color=LogType.WARNING,
+                    )
 
         # Remove the messages before the cutoff index, exclusive of the system message.
         del self.messages[context_offset:cutoff_index]
 
         # Optional debugging printout.
         if self.debug and total_deleted_messages > 0:
-            printr.print(
+            await printr.print_async(
                 f"Deleted {total_deleted_messages} messages from the conversation history.",
                 color=LogType.WARNING,
             )
@@ -440,7 +429,7 @@ class OpenAiWingman(Wingman):
         """Resets the conversation history by removing all messages except for the initial system message."""
         del self.messages[1:]
 
-    def _try_instant_activation(self, transcript: str) -> str:
+    async def _try_instant_activation(self, transcript: str) -> str:
         """Tries to execute an instant activation command if present in the transcript.
 
         Args:
@@ -449,20 +438,20 @@ class OpenAiWingman(Wingman):
         Returns:
             str: The response to the instant command or None if no such command was found.
         """
-        command = self._execute_instant_activation_command(transcript)
+        command = await self._execute_instant_activation_command(transcript)
         if command:
             response = self._select_command_response(command)
             return response
         return None
 
-    def _gpt_call(self):
+    async def _gpt_call(self):
         """Makes the primary GPT call with the conversation history and tools enabled.
 
         Returns:
             The GPT completion object or None if the call fails.
         """
         if self.debug:
-            printr.print(
+            await printr.print_async(
                 f"Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
                 color=LogType.INFO,
             )
@@ -488,14 +477,14 @@ class OpenAiWingman(Wingman):
 
         # if request isnt most recent, ignore the response
         if self.last_gpt_call != thiscall:
-            printr.print(
+            await printr.print_async(
                 "GPT call was cancelled due to a new call.", color=LogType.WARNING
             )
             return None
-        
+
         return completion
 
-    def _process_completion(self, completion):
+    async def _process_completion(self, completion):
         """Processes the completion returned by the GPT call.
 
         Args:
@@ -512,7 +501,9 @@ class OpenAiWingman(Wingman):
 
         # temporary fix for tool calls that have a command name as function name
         if response_message.tool_calls:
-            response_message.tool_calls = self._fix_tool_calls(response_message.tool_calls)
+            response_message.tool_calls = await self._fix_tool_calls(
+                response_message.tool_calls
+            )
 
         return response_message, response_message.tool_calls
 
@@ -540,7 +531,7 @@ class OpenAiWingman(Wingman):
 
             if tool_call.id:
                 # updating the dummy tool response with the actual response
-                self._update_tool_response(tool_call.id, function_response)
+                await self._update_tool_response(tool_call.id, function_response)
             else:
                 # adding a new tool response
                 self._add_tool_response(tool_call, function_response)
@@ -609,7 +600,7 @@ class OpenAiWingman(Wingman):
             # get the command based on the argument passed by GPT
             command = self._get_command(function_args["command_name"])
             # execute the command
-            function_response = self._execute_command(command)
+            function_response = await self._execute_command(command)
             # if the command has responses, we have to play one of them
             if command and command.responses:
                 instant_reponse = self._select_command_response(command)
@@ -644,18 +635,20 @@ class OpenAiWingman(Wingman):
                 config=self.config.xvasynth,
                 sound_config=self.config.sound,
             )
-        else:
+        elif self.tts_provider == TtsProvider.OPENAI:
             self.openai.play_audio(
                 text=text,
                 voice=self.config.openai.tts_voice,
                 sound_config=self.config.sound,
             )
+        else:
+            self.printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
 
-    def _execute_command(self, command: dict) -> str:
+    async def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
         Otherwise the AI will try to respond to the command and generate a "duplicate" response for instant_activation commands.
         """
-        super()._execute_command(command)
+        await super()._execute_command(command)
         return "Ok"
 
     def _build_tools(self) -> list[dict]:
@@ -692,7 +685,7 @@ class OpenAiWingman(Wingman):
         ]
         return tools
 
-    def __ask_gpt_for_locale(self, language: str) -> str:
+    async def __ask_gpt_for_locale(self, language: str) -> str:
         """OpenAI TTS returns a natural language name for the language of the transcript, e.g. "german" or "english".
         This method uses ChatGPT to find the corresponding locale, e.g. "de-DE" or "en-EN".
 
@@ -735,7 +728,7 @@ class OpenAiWingman(Wingman):
         answer = response.choices[0].message.content
         if answer == "None":
             return None
-        printr.print(
+        await printr.print_async(
             f"ChatGPT says this language maps to locale '{answer}'.",
             color=LogType.INFO,
         )

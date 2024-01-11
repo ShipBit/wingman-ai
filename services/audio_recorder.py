@@ -1,9 +1,11 @@
+from os import path
 import numpy
 import sounddevice
 import soundfile
 from api.enums import CommandTag, LogType
 from services.printr import Printr
-from services.file_creator import FileCreator
+from services.file import get_writable_dir
+
 
 RECORDING_PATH = "audio_output"
 RECORDING_FILE: str = "recording.wav"
@@ -11,16 +13,13 @@ RECORDING_FILE: str = "recording.wav"
 printr = Printr()
 
 
-class AudioRecorder(FileCreator):
+class AudioRecorder:
     def __init__(
         self,
-        app_root_dir: str,
         samplerate: int = 16000,
         channels: int = 1,
     ):
-        super().__init__(app_root_dir, RECORDING_PATH)
-        self.file_path = self.get_full_file_path(RECORDING_FILE)
-
+        self.file_path = path.join(get_writable_dir(RECORDING_PATH), RECORDING_FILE)
         self.samplerate = samplerate
         self.is_recording = False
         self.recording = None
