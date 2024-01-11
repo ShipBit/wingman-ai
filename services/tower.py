@@ -1,3 +1,4 @@
+import keyboard.keyboard as keyboard
 from api.enums import WingmanInitializationErrorType
 from api.interface import Config, WingmanInitializationError
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -13,7 +14,6 @@ class Tower:
         self.config = config
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
-        self.key_wingman_dict: dict[str, Wingman] = {}
 
     async def instantiate_wingmen(self):
         errors: list[WingmanInitializationError] = []
@@ -54,13 +54,13 @@ class Tower:
                     self.wingmen.append(wingman)
 
         for wingman in self.wingmen:
-            self.key_wingman_dict[wingman.get_record_key()] = wingman
+            scan_codes = keyboard.key_to_scan_codes(wingman.get_record_key())
+            if len(scan_codes) > 0:
+                scan_code = scan_codes[0]
+                self.key_wingman_dict[scan_code] = wingman
 
         return errors
 
     def get_wingman_from_key(self, key: any) -> Wingman | None:  # type: ignore
-        if hasattr(key, "char"):
-            wingman = self.key_wingman_dict.get(key.char, None)
-        else:
-            wingman = self.key_wingman_dict.get(key.name, None)
+        wingman = self.key_wingman_dict.get(key.scan_code, None)
         return wingman

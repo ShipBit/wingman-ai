@@ -46,6 +46,7 @@ class AzureApiVersion(Enum):
     A2023_07_01_PREVIEW = "2023-07-01-preview"
     A2023_08_01_PREVIEW = "2023-08-01-preview"
     A2023_09_01_PREVIEW = "2023-09-01-preview"
+    A2023_12_01_PREVIEW = "2023-12-01-preview"
 
 
 class AzureRegion(Enum):

@@ -173,11 +173,11 @@ class WingmanCore:
         if self.tower and self.active_recording["key"] == "":
             wingman = self.tower.get_wingman_from_key(key)
             if wingman:
-                self.active_recording = dict(key=key, wingman=wingman)
+                self.active_recording = dict(key=key.name, wingman=wingman)
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
     def on_release(self, key):
-        if self.tower and self.active_recording["key"] == key:
+        if self.tower and self.active_recording["key"] == key.name:
             wingman = self.active_recording["wingman"]
             recorded_audio_wav = self.audio_recorder.stop_recording(
                 wingman_name=wingman.name
@@ -198,6 +198,12 @@ class WingmanCore:
             if recorded_audio_wav:
                 play_thread = threading.Thread(target=run_async_process)
                 play_thread.start()
+
+    def on_key(self, key):
+        if key.event_type == "down":
+            self.on_press(key)
+        elif key.event_type == "up":
+            self.on_release(key)
 
     # GET /configs
     def get_configs(self):
