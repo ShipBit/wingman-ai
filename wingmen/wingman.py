@@ -1,6 +1,7 @@
 import random
 import time
 import keyboard as key_module
+import mouse
 from difflib import SequenceMatcher
 from importlib import import_module
 from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
@@ -371,15 +372,15 @@ class Wingman:
         for key_cfg in command.keys:
             if key_cfg.moveto:
                 x, y = key_cfg.moveto
-                key_module.moveTo(x, y)
+                mouse.move(x, y)
 
             if key_cfg.moveto_relative:
                 x, y = key_cfg.moveto_relative
-                key_module.move(x, y, duration=0.5)
+                mouse.move(x, y, absolute=False, duration=0.5)
 
             if key_cfg.key == "scroll":
                 if key_cfg.scroll_amount:
-                    key_module.scroll(key_cfg.scroll_amount)
+                    mouse.wheel(key_cfg.scroll_amount)
 
             if key_cfg.modifier:
                 modifiers = [mod.strip() for mod in key_cfg.modifier.split(",")]
@@ -388,16 +389,16 @@ class Wingman:
 
             if key_cfg.hold:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
-                    key_module.mouseDown(button=key_cfg.key)
+                    mouse.press(button=key_cfg.key)
                     time.sleep(key_cfg.hold)
-                    key_module.mouseUp(button=key_cfg.key)
+                    mouse.release(button=key_cfg.key)
                 elif key_cfg.key != "scroll":
                     key_module.press(key_cfg.key)
                     time.sleep(key_cfg.hold)
                     key_module.release(key_cfg.key)
             else:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
-                    key_module.click(button=key_cfg.key)
+                    mouse.click(button=key_cfg.key)
                 elif key_cfg.key != "scroll":
                     key_module.press(key_cfg.key)
 
