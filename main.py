@@ -189,6 +189,61 @@ async def ping():
     return "Ok"
 
 
+async def record_hotkey():
+    """hotkey = keyboard.read_hotkey()
+    print(hotkey)"""
+    recorded = keyboard.record(until="esc")
+    """ hotkey = keyboard.get_hotkey_name(
+        key.name for key in recorded if key.event_type == keyboard.KEY_DOWN
+    )
+    print(hotkey) """
+    """ for key in recorded:
+        print(key) """
+
+    key_down_time = {}  # Track initial down times for keys
+    last_up_time = None  # Track the last up time to measure durations of inactivity
+
+    # Initialize such that we consider the keyboard initially inactive
+    all_keys_released = True
+
+    # Process recorded key events to calculate press durations and inactivity
+    for key in recorded:
+        if key.event_type == "down":
+            # Ignore further processing if 'esc' was pressed
+            if key.name == "esc":
+                break
+
+            if all_keys_released:
+                # There was a period of inactivity, calculate its duration
+                if last_up_time is not None:
+                    inactivity_duration = key.time - last_up_time
+                    if inactivity_duration > 0.5:
+                        print(f"Inactivity Duration: {inactivity_duration:.1f} seconds")
+                all_keys_released = False
+
+            # Record only the first down event time for each key
+            if key.name not in key_down_time:
+                key_down_time[key.name] = key.time
+        elif key.event_type == "up":
+            if key.name == "esc":
+                break  # Stop processing if 'esc' was released as we don't need the last inactivity period
+
+            if key.name in key_down_time:
+                # Calculate the press duration for the current key
+                press_duration = key.time - key_down_time[key.name]
+                print(f"Key: {key.name}")
+                if press_duration > 0.2 and not keyboard.is_modifier(key.name):
+                    print(f"Press Duration: {press_duration:.2f} seconds")
+
+                # Remove the key from the dictionary after calculating press duration
+                del key_down_time[key.name]
+
+                # If no more keys are pressed, update last_up_time and set the keyboard to inactive
+                if not key_down_time:
+                    last_up_time = key.time
+                    all_keys_released = True
+
+
 async def async_main(host: str, port: int, sidecar: bool):
     errors, config_info = await core.load_config()
     saved_secrets: list[str] = []
@@ -247,4 +302,5 @@ if __name__ == "__main__":
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     finally:
-        loop.run_until_complete(async_main(host=host, port=port, sidecar=args.sidecar))
+        # loop.run_until_complete(async_main(host=host, port=port, sidecar=args.sidecar))
+        loop.run_until_complete(record_hotkey())
