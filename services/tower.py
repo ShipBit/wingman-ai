@@ -1,5 +1,5 @@
 import keyboard.keyboard as keyboard
-from api.enums import WingmanInitializationErrorType
+from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import Config, WingmanInitializationError
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -14,6 +14,7 @@ class Tower:
         self.config = config
         self.key_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
+        self.log_source_name = "Tower"
 
     async def instantiate_wingmen(self):
         errors: list[WingmanInitializationError] = []
@@ -23,6 +24,13 @@ class Tower:
 
         for wingman_name, wingman_config in self.config.wingmen.items():
             if wingman_config.disabled is True:
+                printr.print(
+                    f"Skipped instantiating disabled wingman {wingman_config.name}.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source_name=self.log_source_name,
+                    source=LogSource.SYSTEM,
+                )
                 continue
 
             wingman = None
@@ -59,6 +67,13 @@ class Tower:
                 scan_code = scan_codes[0]
                 self.key_wingman_dict[scan_code] = wingman
 
+        printr.print(
+            f"Instantiated wingmen: {', '.join([w.name for w in self.wingmen])}.",
+            color=LogType.INFO,
+            server_only=True,
+            source_name=self.log_source_name,
+            source=LogSource.SYSTEM,
+        )
         return errors
 
     def get_wingman_from_key(self, key: any) -> Wingman | None:  # type: ignore

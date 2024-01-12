@@ -1,5 +1,4 @@
 import asyncio
-from os import path
 import threading
 from fastapi import APIRouter
 import sounddevice as sd
@@ -57,6 +56,12 @@ class WingmanCore:
             methods=["DELETE"],
             path="/config/",
             endpoint=self.delete_config,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/config/wingman",
+            endpoint=self.delete_wingman_config,
             tags=["core"],
         )
         self.router.add_api_route(
@@ -208,7 +213,7 @@ class WingmanCore:
     # GET /configs
     def get_configs(self):
         return ConfigInfo(
-            configs=self.config_manager.config_dirs,
+            configs=self.config_manager.get_config_names(),
             currentConfig=self.current_config,
         )
 
@@ -218,7 +223,7 @@ class WingmanCore:
 
     # GET /default-config
     def get_default_config(self) -> Config:
-        return self.config_manager.load_default_config()
+        return self.config_manager.load_config()
 
     # POST config/create
     def create_config(self, config_name: str, template: str = None):
@@ -229,8 +234,9 @@ class WingmanCore:
         self.config_manager.delete_config(config_name=config_name)
 
     # DELETE config/wingman
-    def delete_wingman_config(self, config_name: str, wingman_name: str):
-        return self.config_manager.delete_wingman_config(config_name, wingman_name)
+    async def delete_wingman_config(self, config_name: str, wingman_name: str):
+        self.config_manager.delete_wingman_config(config_name, wingman_name)
+        await self.load_config(config_name)
 
     # POST config/save-wingman
     async def save_wingman_config(
@@ -251,7 +257,9 @@ class WingmanCore:
         except Exception:
             error_message = "Invalid Wingman configuration."
             if auto_recover:
-                deleted = self.delete_wingman_config(config_name, wingman_name)
+                deleted = self.config_manager.delete_wingman_config(
+                    config_name, wingman_name
+                )
                 if deleted:
                     self.config_manager.create_configs_from_templates()
 

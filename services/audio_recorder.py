@@ -60,7 +60,7 @@ class AudioRecorder:
 
         if self.recording is None:
             printr.print(
-                "Ignored empty recording",
+                f"Ignored empty recording ({wingman_name})",
                 color=LogType.WARNING,
                 source_name=wingman_name,
                 command_tag=CommandTag.IGNORED_RECORDING,
