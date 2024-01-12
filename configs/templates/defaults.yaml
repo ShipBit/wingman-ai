@@ -26,7 +26,7 @@ features:
   # ─────────────────────── Speech to text Provider ─────────────────────────
   # You can override the speech to text provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  stt_provider: azure_speech # available: openai, azure, azure_speech
+  stt_provider: azure_speech # available: openai, azure, azure_speech, whispercpp
 
   # ─────────────────────── Conversation Provider ─────────────────────────
   # You can override the conversation provider to use a different one than the default.
