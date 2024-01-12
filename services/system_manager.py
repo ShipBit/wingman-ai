@@ -5,7 +5,7 @@ from packaging import version
 from api.interface import SystemCore, SystemInfo
 from services.printr import Printr
 
-LOCAL_VERSION = "1.1.3b1"
+LOCAL_VERSION = "2.0.0b2"
 VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
 
 printr = Printr()

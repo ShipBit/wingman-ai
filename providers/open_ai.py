@@ -50,20 +50,19 @@ class BaseOpenAi(ABC):
         client: OpenAI | AzureOpenAI,
         filename: str,
         model: Literal["whisper-1"],
-        response_format: Literal["json", "text", "srt", "verbose_json", "vtt"],
     ):
         try:
             with open(filename, "rb") as audio_input:
                 transcript = client.audio.transcriptions.create(
-                    model=model, file=audio_input, response_format=response_format
+                    model=model, file=audio_input
                 )
                 return transcript
         except APIStatusError as e:
             self._handle_api_error(e)
-            return None
         except UnicodeEncodeError:
             self._handle_key_error()
-            return None
+
+        return None
 
     def _perform_ask(
         self,
@@ -125,14 +124,9 @@ class OpenAi(BaseOpenAi):
             base_url=base_url,
         )
 
-    def transcribe(
-        self, filename: str, model: str = "whisper-1", response_format: str = "json"
-    ):
+    def transcribe(self, filename: str, model: str = "whisper-1"):
         return self._perform_transcription(
-            client=self.client,
-            filename=filename,
-            model=model,
-            response_format=response_format,
+            client=self.client, filename=filename, model=model
         )
 
     def ask(
@@ -194,14 +188,12 @@ class OpenAiAzure(BaseOpenAi):
         api_key: str,
         config: AzureInstanceConfig,
         model: str = "whisper-1",
-        response_format: str = "json",
     ):
         azure_client = self._create_client(api_key=api_key, config=config)
         return self._perform_transcription(
             client=azure_client,
             filename=filename,
             model=model,
-            response_format=response_format,
         )
 
     def transcribe_with_azure(
@@ -219,7 +211,7 @@ class OpenAiAzure(BaseOpenAi):
                     languages=config.languages
                 )
             )
-            if config.detect_language
+            if len(config.languages) == 1 and "en-US" in config.languages
             else None
         )
 
@@ -262,18 +254,11 @@ class OpenAiAzure(BaseOpenAi):
             region=config.region.value,
         )
 
-        auto_detect_source_language_config = (
-            speechsdk.AutoDetectSourceLanguageConfig()
-            if config.detect_language
-            else None
-        )
-        if not config.detect_language:
-            speech_config.speech_synthesis_voice_name = config.voice
+        speech_config.speech_synthesis_voice_name = config.voice
 
         speech_synthesizer = speechsdk.SpeechSynthesizer(
             speech_config=speech_config,
             audio_config=None,
-            auto_detect_source_language_config=auto_detect_source_language_config,
         )
 
         result = speech_synthesizer.speak_text_async(text).get()

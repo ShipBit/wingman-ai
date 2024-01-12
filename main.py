@@ -3,17 +3,18 @@ import asyncio
 from enum import Enum
 from os import path
 import sys
-from contextlib import asynccontextmanager
 from typing import Any, Literal, get_args, get_origin
 import uvicorn
-from pynput import keyboard
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+import keyboard.keyboard as keyboard
 from api.commands import WebSocketCommandModel
-from api.enums import ENUM_TYPES, WingmanInitializationErrorType
+from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 from services.command_handler import CommandHandler
+from services.config_manager import ConfigManager
 from services.connection_manager import ConnectionManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
@@ -28,22 +29,27 @@ connection_manager = ConnectionManager()
 printr = Printr()
 Printr.set_connection_manager(connection_manager)
 
-
 app_is_bundled = getattr(sys, "frozen", False)
-app_root_dir = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__file__))
+app_root_path = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__file__))
 
-secret_keeper = SecretKeeper(app_root_dir)
+# creates all the configs from templates - do this first!
+config_manager = ConfigManager(app_root_path)
+printr.print(
+    f"Config directory: {config_manager.config_dir}",
+    server_only=True,
+    color=LogType.HIGHLIGHT,
+)
+
+secret_keeper = SecretKeeper()
 SecretKeeper.set_connection_manager(connection_manager)
 
 version_check = SystemManager()
 is_latest = version_check.check_version()
 
 # uses the Singletons above, so don't move this up!
-core = WingmanCore(
-    app_root_dir=app_root_dir,
-    app_is_bundled=app_is_bundled,
-)
-listener = keyboard.Listener(on_press=core.on_press, on_release=core.on_release)
+core = WingmanCore(config_manager=config_manager)
+
+keyboard.hook(core.on_key)
 
 
 def custom_generate_unique_id(route: APIRoute):
@@ -67,7 +73,7 @@ def modify_openapi():
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     # executed before the application starts
     modify_openapi()
 
@@ -75,7 +81,7 @@ async def lifespan(app: FastAPI):
 
     # executed after the application has finished
     await connection_manager.shutdown()
-    listener.stop()
+    keyboard.unhook_all()
 
 
 app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_unique_id)
@@ -168,7 +174,7 @@ async def websocket_endpoint(websocket: WebSocket):
             await command_handler.dispatch(message, websocket)
     except WebSocketDisconnect:
         await connection_manager.disconnect(websocket)
-        printr.print("Client disconnected", server_only=True)
+        await printr.print_async("Client disconnected", server_only=True)
 
 
 @app.post("/start-secrets", tags=["main"])
@@ -185,24 +191,24 @@ async def ping():
 
 async def async_main(host: str, port: int, sidecar: bool):
     errors = await core.load_config()
+    saved_secrets: list[str] = []
     for error in errors:
         if (
             not sidecar  # running standalone
             and error.error_type == WingmanInitializationErrorType.MISSING_SECRET
+            and not error.secret_name in saved_secrets
         ):
             secret = input(f"Please enter your '{error.secret_name}' API key/secret: ")
             if secret:
                 secret_keeper.secrets[error.secret_name] = secret
                 secret_keeper.save()
+                saved_secrets.append(error.secret_name)
             else:
                 return
         else:
             core.startup_errors.append(error)
 
     core.is_started = True
-
-    listener.start()
-    listener.wait()
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)

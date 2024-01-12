@@ -86,13 +86,11 @@ class AzureInstanceConfig(BaseModel):
 
 class AzureTtsConfig(BaseModel):
     region: AzureRegion
-    detect_language: bool
     voice: str
 
 
 class AzureSttConfig(BaseModel):
     region: AzureRegion
-    detect_language: bool
     languages: list[str]
 
 
@@ -150,41 +148,39 @@ class ElevenlabsConfig(BaseModel):
 
     voice: ElevenlabsVoiceConfig
     voice_settings: ElevenlabsVoiceSettingsConfig
-    use_sound_effects: Optional[bool] = False
     """Adds a delay"""
 
 
 class EdgeTtsConfig(BaseModel):
-    tts_voice: str
-    """The voice to use (only if detect_language is set to false).
-
+    voice: str
+    """
     All available EdgeTTS voices: https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/docs/available-edge-tts-voices.md
 
     Voice samples: https://speech.microsoft.com/portal/voicegallery
     """
 
-    detect_language: bool
-    """EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
-    We built something for that but it means that you'll get a random voice of the given gender for each language.
-    These voices can be weird, e.g. chidrens' voices for some languages.
-    Only enable this if you need to change languages on-the-fly(!) during your conversations.
-    Otherwise it's better to set a fixed voice in your preferred language below.
-    """
-
-    gender: TtsVoiceGender
-
 
 class XVASynthTtsConfig(BaseModel):
     xvasynth_path: str
+    """The path to your install of XVASynth.  If you do not provide this and try to use XVASynth there will be an error."""
     game_folder_name: str
+    """The game folder name of the voice you donwloaded to use as your primary XVASynth voice. This can be overwritten in a particular wingman. If you do not provide this and try to use XVASynth, there will be an error."""
     voice: str
+    """The name of the voice you downloaded to use.  This can be overwritten in a particular wingman. If you do not provide this and try to use XVASynth there will be an error."""
     language: Optional[str] = "en"
+    """The language the voice will speak in. Some XVASynth voices are trained to be multi-lingual. Defaults to 'en' (English)."""
     pace: Optional[float] = 1.0
+    """The speed of the voice playback. Defaults to 1."""
     use_sr: Optional[bool] = False
+    """Whether to use XVASynth's super resolution mode. Will take longer and generally not recommended. Defaults to false."""
     use_cleanup: Optional[bool] = False
+    """Whether to use XVASynth's cleanup mode. May make voice quality better or worse depending on the voice model. Defaults to false."""
     process_device: Optional[str] = "cpu"
+    """Can be cpu or gpu. You may need to take more steps to have xvasynth run on your GPU. Defaults to cpu."""
     synthesize_url: Optional[str] = "http://127.0.0.1:8008/synthesize"
+    """This should typically be left alone, changing it will cause errors unless you manually changed XVASynth's server."""
     load_model_url: Optional[str] = "http://127.0.0.1:8008/loadModel"
+    """This should be typically left alone, changing it will cause errors unless you manually changed XVASynth's server."""
 
 
 class OpenAiConfig(BaseModel):
@@ -280,8 +276,11 @@ class CommandConfig(BaseModel):
     """
 
     instant_activation: Optional[list[str]] = None
+    """Optional: Faster - like Voice Attack! Provide phrases that will instantly activate the command (without AI roundtripping). You need to say the exact phrase to execute the command"""
     responses: Optional[list[str]] = None
+    """Optional: Provide responses that will be used when the command is executed. A random one will be chosen (if multiple)."""
     keys: Optional[list[KeyPressConfig]] = None
+    """The key or keys to press when the command is executed."""
 
 
 class CustomWingmanClassConfig(BaseModel):
@@ -313,11 +312,17 @@ class WingmanConfig(NestedConfig):
     def __setitem__(self, key, value):
         self.extra_properties[key] = value
 
-    # these can only be strings because otherwise our schema generation will break (if they were of type Any)
     custom_properties: Optional[dict[str, str]] = {}
+    """You can add custom properties here to use in your custom wingman class. Strings only!"""
 
     disabled: Optional[bool] = False
+    """Set this to true if you want to disable this wingman. You can also just remove it from the config."""
     custom_class: Optional[CustomWingmanClassConfig] = None
+    """If you want to use a custom Wingman (Python) class, you can specify it here."""
+    name: str
+    """The "friendly" name of this Wingman. Can be changed by the user."""
+    description: str
+    """A short description of this Wingman."""
     record_key: str
     """The "push-to-talk" key for this wingman. Keep it pressed while talking!
     Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
@@ -329,3 +334,4 @@ class Config(NestedConfig):
     """
 
     wingmen: Optional[dict[str, WingmanConfig]] = None
+    """The Wingmen in this config. You can add as many as you want!"""

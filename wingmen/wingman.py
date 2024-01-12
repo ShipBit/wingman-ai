@@ -1,28 +1,19 @@
-import platform
 import random
 import time
 from difflib import SequenceMatcher
 from importlib import import_module
+import keyboard.keyboard as keyboard
+import mouse.mouse as mouse
 from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from services.audio_player import AudioPlayer
-from services.file_creator import FileCreator
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 
 printr = Printr()
 
-if platform.system() == "Windows":
-    import pydirectinput as key_module
-else:
-    import pyautogui as key_module
 
-    printr.toast_warning(
-        "pydirectinput is only supported on Windows. Falling back to pyautogui which might not work in games.",
-    )
-
-
-class Wingman(FileCreator):
+class Wingman:
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
 
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
@@ -32,17 +23,13 @@ class Wingman(FileCreator):
         self,
         name: str,
         config: WingmanConfig,
-        app_root_dir: str,
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
             name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
             config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
-            app_root_dir (str): The path to the root directory of the app. This is where the Wingman executable lives.
         """
-
-        super().__init__(app_root_dir=app_root_dir, subdir="wingman_data")
 
         self.config = config
         """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
@@ -62,9 +49,6 @@ class Wingman(FileCreator):
         self.debug: bool = self.config.features.debug_mode
         """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
 
-        self.app_root_dir = app_root_dir
-        """The path to the root directory of the app. This is where the Wingman executable lives."""
-
         self.tts_provider = self.config.features.tts_provider
         self.stt_provider = self.config.features.stt_provider
         self.conversation_provider = self.config.features.conversation_provider
@@ -74,7 +58,6 @@ class Wingman(FileCreator):
     def create_dynamically(
         name: str,
         config: WingmanConfig,
-        app_root_dir: str,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -83,7 +66,6 @@ class Wingman(FileCreator):
             class_name (str): The name of the class inside your custom-wingman.py, e.g. OpenAiWingman. Case-sensitive!
             name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
             config (Config): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
-            app_root_dir (str): The path to the root directory of the app. This is where the Wingman executable lives.
         """
 
         module = import_module(config.custom_class.module)
@@ -91,7 +73,6 @@ class Wingman(FileCreator):
         instance = DerivedWingmanClass(
             name=name,
             config=config,
-            app_root_dir=app_root_dir,
         )
         return instance
 
@@ -99,12 +80,14 @@ class Wingman(FileCreator):
         """Returns the activation or "push-to-talk" key for this Wingman."""
         return self.config.record_key
 
-    def print_execution_time(self, reset_timer=False):
+    async def print_execution_time(self, reset_timer=False):
         """Prints the current time since the execution started (in seconds)."""
         if self.execution_start:
             execution_stop = time.perf_counter()
             elapsed_seconds = execution_stop - self.execution_start
-            printr.print(f"...took {elapsed_seconds:.2f}s", color=LogType.INFO)
+            await printr.print_async(
+                f"...took {elapsed_seconds:.2f}s", color=LogType.INFO
+            )
         if reset_timer:
             self.start_execution_benchmark()
 
@@ -185,16 +168,16 @@ class Wingman(FileCreator):
         process_result = None
 
         if self.debug:
-            printr.print("Starting transcription...", color=LogType.INFO)
+            await printr.print_async("Starting transcription...", color=LogType.INFO)
 
         # transcribe the audio.
-        transcript, locale = await self._transcribe(audio_input_wav)
+        transcript = await self._transcribe(audio_input_wav)
 
         if self.debug:
-            self.print_execution_time(reset_timer=True)
+            await self.print_execution_time(reset_timer=True)
 
         if transcript:
-            printr.print(
+            await printr.print_async(
                 f"{transcript}",
                 color=LogType.PURPLE,
                 source_name="User",
@@ -202,19 +185,21 @@ class Wingman(FileCreator):
             )
 
             if self.debug:
-                printr.print("Getting response for transcript...", color=LogType.INFO)
+                await printr.print_async(
+                    "Getting response for transcript...", color=LogType.INFO
+                )
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
             process_result, instant_response = await self._get_response_for_transcript(
-                transcript, locale
+                transcript
             )
 
             if self.debug:
-                self.print_execution_time(reset_timer=True)
+                await self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
             if actual_response:
-                printr.print(
+                await printr.print_async(
                     f"{actual_response}",
                     color=LogType.POSITIVE,
                     source=LogSource.WINGMAN,
@@ -222,38 +207,37 @@ class Wingman(FileCreator):
                 )
 
         if self.debug:
-            printr.print("Playing response back to user...", color=LogType.INFO)
+            await printr.print_async(
+                "Playing response back to user...", color=LogType.INFO
+            )
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
             await self._play_to_user(str(process_result))
 
         if self.debug:
-            self.print_execution_time()
+            await self.print_execution_time()
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
-    async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
+    async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the audio to text. You can override this method if you want to use a different transcription service.
 
         Args:
             audio_input_wav (str): The path to the audio file that contains the user's speech. This is a recording of what you you said.
 
         Returns:
-            tuple[str | None, str | None]: The transcript of the audio file and the detected language as locale (if determined).
+            str | None: The transcript of the audio file and the detected language as locale (if determined).
         """
-        return None, None
+        return None
 
-    async def _get_response_for_transcript(
-        self, transcript: str, locale: str | None
-    ) -> tuple[str, str]:
+    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
 
         Args:
             transcript (str): The user's spoken text transcribed as text.
-            locale (str | None): The language that was detected to be used in the transcript, e.g. "de-DE".
 
         Returns:
             A tuple of strings representing the response to a function call and/or an instant response.
@@ -303,7 +287,7 @@ class Wingman(FileCreator):
 
         return random.choice(command_responses)
 
-    def _execute_instant_activation_command(self, transcript: str):
+    async def _execute_instant_activation_command(self, transcript: str):
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -328,14 +312,14 @@ class Wingman(FileCreator):
                 if (
                     ratio > 0.8
                 ):  # if the ratio is higher than 0.8, we assume that the command was spoken
-                    self._execute_command(command)
+                    await self._execute_command(command)
 
                     if command.responses:
                         return command
                     return None
         return None
 
-    def _execute_command(self, command: CommandConfig) -> str:
+    async def _execute_command(self, command: CommandConfig) -> str:
         """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
 
         Args:
@@ -348,10 +332,12 @@ class Wingman(FileCreator):
         if not command:
             return "Command not found"
 
-        printr.print(f"❖ Executing command: {command.name}", color=LogType.INFO)
+        await printr.print_async(
+            f"❖ Executing command: {command.name}", color=LogType.INFO
+        )
 
         if self.debug:
-            printr.print(
+            await printr.print_async(
                 "Skipping actual keypress execution in debug_mode...",
                 color=LogType.WARNING,
             )
@@ -366,7 +352,7 @@ class Wingman(FileCreator):
 
         if not self.debug:
             # in debug mode we already printed the separate execution times
-            self.print_execution_time()
+            await self.print_execution_time()
 
         return self._select_command_response(command) or "Ok"
 
@@ -385,51 +371,43 @@ class Wingman(FileCreator):
 
         for key_cfg in command.keys:
             if key_cfg.moveto:
-                x,y = key_cfg.moveto
-                key_module.moveTo(x,y)
-            
-            # Normally would use key_module.move(x,y,duration) but for some reason this seems broken on pydirectinput-rgx, so computing the relative position manually and using move absolute instead.
+                x, y = key_cfg.moveto
+                mouse.move(x, y)
+
             if key_cfg.moveto_relative:
-                x,y = key_cfg.moveto_relative
-                oldx, oldy = key_module.position()
-                x = oldx + x
-                y = oldy + y
-                key_module.moveTo(x,y, duration=0.5)
+                x, y = key_cfg.moveto_relative
+                mouse.move(x, y, absolute=False, duration=0.5)
 
             if key_cfg.key == "scroll":
                 if key_cfg.scroll_amount:
-                    key_module.scroll(key_cfg.scroll_amount)
+                    mouse.wheel(key_cfg.scroll_amount)
 
             if key_cfg.modifier:
-                modifiers = [mod.strip() for mod in key_cfg.modifier.split(',')]
+                modifiers = [mod.strip() for mod in key_cfg.modifier.split(",")]
                 for mod in modifiers:
-                    key_module.keyDown(mod)
+                    keyboard.press(mod)
 
             if key_cfg.hold:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
-                    key_module.mouseDown(button=key_cfg.key)
+                    mouse.press(button=key_cfg.key)
                     time.sleep(key_cfg.hold)
-                    key_module.mouseUp(button=key_cfg.key)
+                    mouse.release(button=key_cfg.key)
                 elif key_cfg.key != "scroll":
-                    key_module.keyDown(key_cfg.key)
+                    keyboard.press(key_cfg.key)
                     time.sleep(key_cfg.hold)
-                    key_module.keyUp(key_cfg.key)
+                    keyboard.release(key_cfg.key)
             else:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
-                    key_module.click(button=key_cfg.key)
+                    mouse.click(button=key_cfg.key)
                 elif key_cfg.key != "scroll":
-                    key_module.press(key_cfg.key)
+                    keyboard.press(key_cfg.key)
 
             if key_cfg.modifier:
                 for mod in reversed(modifiers):
-                    key_module.keyUp(mod)
+                    keyboard.release(mod)
 
-            # Pyautogui automatically detects if the indicated keys need a "shift" applied; pydirectinput / pydirectinput-rgx do not. Pydirectinput-rgx implements a flavor of this with an auto_shift parameter that is not in pyautogui.
             if key_cfg.write:
-                try:
-                    key_module.write(key_cfg.write, interval=0.10, auto_shift=True)
-                except:
-                    key_module.write(key_cfg.write, interval=0.10)
+                keyboard.write(key_cfg.write)
 
             if key_cfg.wait:
                 time.sleep(key_cfg.wait)
