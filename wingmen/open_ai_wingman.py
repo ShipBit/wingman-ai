@@ -193,7 +193,6 @@ class OpenAiWingman(Wingman):
         elif self.stt_provider == SttProvider.WHISPERCPP:
             transcript = self.whispercpp.transcribe(
                 filename=audio_input_wav,
-                response_format=response_format,
             )
         else:
             transcript = self.openai.transcribe(filename=audio_input_wav)
