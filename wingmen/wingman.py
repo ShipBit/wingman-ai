@@ -328,10 +328,7 @@ class Wingman:
                     ratio > 0.8
                 ):  # if the ratio is higher than 0.8, we assume that the command was spoken
                     await self._execute_command(command)
-
-                    if command.responses:
-                        return command
-                    return None
+                    return command
         return None
 
     async def _execute_command(self, command: CommandConfig) -> str:
