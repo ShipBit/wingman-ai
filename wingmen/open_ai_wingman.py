@@ -188,11 +188,14 @@ class OpenAiWingman(Wingman):
         """
         await self._add_user_message(transcript)
 
-        instant_response = await self._try_instant_activation(transcript)
+        instant_response, instant_command_executed = await self._try_instant_activation(transcript)
         if instant_response:
+            self._add_assistant_message(instant_response)
             return instant_response, instant_response
 
-        completion = await self._gpt_call()
+        # make a GPT call with the conversation history
+        # if an instant command got executed, prevent tool calls to avoid duplicate executions
+        completion = await self._gpt_call(instant_command_executed is False)
 
         if completion is None:
             return None, None
@@ -372,6 +375,15 @@ class OpenAiWingman(Wingman):
         await self._cleanup_conversation_history()
         self.messages.append(msg)
 
+    def _add_assistant_message(self, content: str):
+        """Adds an assistant message to the conversation history.
+
+        Args:
+            content (str): The message content to add.
+        """
+        msg = {"role": "assistant", "content": content}
+        self.messages.append(msg)
+
     async def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
         remember_messages = self.config.features.remember_messages
@@ -436,15 +448,17 @@ class OpenAiWingman(Wingman):
             transcript (str): The transcript to check for an instant activation command.
 
         Returns:
-            str: The response to the instant command or None if no such command was found.
+            tuple[str, bool]: A tuple containing the response to the instant command and a boolean indicating whether an instant command was executed.
         """
         command = await self._execute_instant_activation_command(transcript)
         if command:
-            response = self._select_command_response(command)
-            return response
-        return None
+            if command.responses:
+                response = self._select_command_response(command)
+                return response, True
+            return None, True
+        return None, False
 
-    async def _gpt_call(self):
+    async def _gpt_call(self, allow_tool_calls: bool = True):
         """Makes the primary GPT call with the conversation history and tools enabled.
 
         Returns:
@@ -460,18 +474,24 @@ class OpenAiWingman(Wingman):
         thiscall = time.time()
         self.last_gpt_call = thiscall
 
+        # build tools
+        if allow_tool_calls:
+            tools = self._build_tools()
+        else:
+            tools = None
+
         if self.conversation_provider == ConversationProvider.AZURE:
             completion = self.openai_azure.ask(
                 messages=self.messages,
                 api_key=self.azure_api_keys["conversation"],
                 config=self.config.azure.conversation,
-                tools=self._build_tools(),
+                tools=tools,
                 model=self.config.openai.conversation_model,
             )
         else:
             completion = self.openai.ask(
                 messages=self.messages,
-                tools=self._build_tools(),
+                tools=tools,
                 model=self.config.openai.conversation_model,
             )
 
@@ -661,7 +681,6 @@ class OpenAiWingman(Wingman):
         commands = [
             command.name
             for command in self.config.commands
-            if not command.instant_activation
         ]
         tools = [
             {
