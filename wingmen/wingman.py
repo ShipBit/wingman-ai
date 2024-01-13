@@ -1,7 +1,8 @@
 import random
 import time
 from difflib import SequenceMatcher
-from importlib import import_module
+from importlib import import_module, util
+from os import path
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
@@ -9,6 +10,7 @@ from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from services.audio_player import AudioPlayer
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
+from services.file import get_writable_dir
 
 printr = Printr()
 
@@ -68,7 +70,20 @@ class Wingman:
             config (Config): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
         """
 
-        module = import_module(config.custom_class.module)
+        try:
+            # try to load from app dir first
+            module = import_module(config.custom_class.module)
+        except ModuleNotFoundError:
+            # split module into name and path
+            module_name = config.custom_class.module.split(".")[-1]
+            module_path = ""
+            for sub_dir in config.custom_class.module.split(".")[:-1]:
+                module_path = path.join(module_path, sub_dir)
+            module_path = path.join(get_writable_dir(module_path), module_name + ".py")
+            # load from alternative absolute file path
+            spec = util.spec_from_file_location(module_name, module_path)
+            module = util.module_from_spec(spec)
+            spec.loader.exec_module(module)
         DerivedWingmanClass = getattr(module, config.custom_class.name)
         instance = DerivedWingmanClass(
             name=name,
