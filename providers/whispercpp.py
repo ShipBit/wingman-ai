@@ -8,15 +8,14 @@ from api.interface import WhispercppSttConfig, WhispercppTranscript, WingmanInit
 from os import path
 
 class Whispercpp:
-    def __init__(self, wingman_name: str, base_url: str, autostart: bool, whispercpp_exe_path: str, whispercpp_model_path: str, temperature: float, language: str, times_checked_whispercpp: int):
-        self.wingman_name = wingman_name if wingman_name else ""
-        self.base_url = base_url if base_url else "http://127.0.0.1:8080"
-        self.autostart = autostart if autostart else False
-        self.whispercpp_exe_path = whispercpp_exe_path if whispercpp_exe_path else None
-        self.whispercpp_model_path = whispercpp_model_path if whispercpp_model_path else None
-        self.temperature = temperature if temperature else 0.0
-        self.language = language if language else "en"
-        self.times_checked_whispercpp = 0
+    def __init__(self):
+        self.base_url: str = ""
+        self.autostart: bool = False
+        self.whispercpp_exe_path: str | None = None
+        self.whispercpp_model_path: str | None = None
+        self.temperature: float = 0.0
+        self.language: str = ""
+        self.times_checked_whispercpp: int = 0
         
     def validate_config(self, config: WhispercppSttConfig, errors: list[WingmanInitializationError]):
         if not errors:
@@ -40,13 +39,14 @@ class Whispercpp:
                 )
             )
 
-        self.base_url = config.base_url if config.base_url else "http://127.0.0.1:8080"
-        self.autostart = config.autostart if config.autostart else False
-        self.whispercpp_exe_path = config.whispercpp_exe_path if config.whispercpp_exe_path else None
-        self.whispercpp_model_path = config.whispercpp_model_path if config.whispercpp_model_path else None
-        self.temperature = config.temperature if config.temperature else 0.0
-        self.language = config.language if config.language else "en"
-        self.times_checked_whispercpp = 0
+        self.base_url = config.base_url
+        self.autostart = config.autostart
+        if config.whispercpp_exe_path:
+            self.whispercpp_exe_path = config.whispercpp_exe_path
+        if config.whispercpp_model_path:
+            self.whispercpp_model_path = config.whispercpp_model_path
+        self.temperature = config.temperature
+        self.language = config.language
         # check if whispercpp is running a few times, if cannot find it, send error
         while self.times_checked_whispercpp < 5:
             check = self.check_if_whispercpp_is_running()

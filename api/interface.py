@@ -102,12 +102,12 @@ class AudioSettings(BaseModel):
 
 
 class WhispercppSttConfig(BaseModel):
-    base_url: Optional[str] = "http://127.0.0.1:8080"
-    autostart: Optional[bool] = False
+    base_url: str
+    autostart: bool
     whispercpp_exe_path: Optional[str] = None
     whispercpp_model_path: Optional[str] = None
-    temperature: Optional[float] = 0.0
-    language: Optional[str] = "en"
+    temperature: float
+    language: str
 
 class WhispercppTranscript(BaseModel):
     text: str
