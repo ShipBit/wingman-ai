@@ -101,11 +101,14 @@ class AudioSettings(BaseModel):
     output: Optional[int] = None
 
 
+class WhispercppAutostartSettingsConfig(BaseModel):
+    whispercpp_exe_path: Optional[str] = None
+    whispercpp_model_path: Optional[str] = None
+
 class WhispercppSttConfig(BaseModel):
     base_url: str
     autostart: bool
-    whispercpp_exe_path: Optional[str] = None
-    whispercpp_model_path: Optional[str] = None
+    autostart_settings: WhispercppAutostartSettingsConfig
     temperature: float
     language: str
 

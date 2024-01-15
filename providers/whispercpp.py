@@ -30,7 +30,7 @@ class Whispercpp:
                 )
             )
 
-        if config.autostart == True and (config.whispercpp_exe_path == None or config.whispercpp_model_path == None or not os.path.exists(config.whispercpp_exe_path) or not os.path.exists(config.whispercpp_model_path)):
+        if config.autostart == True and (config.autostart_settings.whispercpp_exe_path == None or config.autostart_settings.whispercpp_model_path == None or not os.path.exists(config.autostart_settings.whispercpp_exe_path) or not os.path.exists(config.autostart_settings.whispercpp_model_path)):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman_name,
@@ -41,10 +41,10 @@ class Whispercpp:
 
         self.base_url = config.base_url
         self.autostart = config.autostart
-        if config.whispercpp_exe_path:
-            self.whispercpp_exe_path = config.whispercpp_exe_path
-        if config.whispercpp_model_path:
-            self.whispercpp_model_path = config.whispercpp_model_path
+        if config.autostart_settings.whispercpp_exe_path:
+            self.whispercpp_exe_path = config.autostart_settings.whispercpp_exe_path
+        if config.autostart_settings.whispercpp_model_path:
+            self.whispercpp_model_path = config.autostart_settings.whispercpp_model_path
         self.temperature = config.temperature
         self.language = config.language
         # check if whispercpp is running a few times, if cannot find it, send error

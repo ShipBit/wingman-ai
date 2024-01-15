@@ -155,8 +155,9 @@ azure:
 whispercpp:
     base_url: http://127.0.0.1:8080 # This is the default for whispercpp, though you can change the host and port manually when launching your server with command line arguments.
     autostart: false # Set this to true if you want to set paths to your whispercpp server.exe and model bin below and have wingman try to launch whispercpp server itself.
-    whispercpp_exe_path: C:\Whispercpp\server.exe # This is just an example, you will insert here the full path to your whispercpp server.exe file.  Only used if autostart is set to true.
-    whispercpp_model_path: C:\Whispercpp\models\ggml-base.bin # This is just an example, you will insert here the full path to the whispercpp ggml model file you downloaded.  Only used if autostart is set to true.
+    autostart_settings:
+        whispercpp_exe_path: C:\Whispercpp\server.exe # This is just an example, you will insert here the full path to your whispercpp server.exe file.  Only used if autostart is set to true.
+        whispercpp_model_path: C:\Whispercpp\models\ggml-base.bin # This is just an example, you will insert here the full path to the whispercpp ggml model file you downloaded.  Only used if autostart is set to true.
     temperature: 0.0 # Not typically changed, but you can review the whispercpp documentation to determine whether to experiment with this value.
     language: en # Insert the whispercpp two letter code for your language if you intend to speak in another language.  Also make sure you do not use a english only whispercpp model if this is not set for en.
 
