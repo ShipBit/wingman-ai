@@ -167,7 +167,7 @@ app.include_router(secret_keeper.router)
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await connection_manager.connect(websocket)
-    command_handler = CommandHandler(connection_manager, core, secret_keeper, printr)
+    command_handler = CommandHandler(connection_manager, core)
     try:
         while True:
             message = await websocket.receive_text()

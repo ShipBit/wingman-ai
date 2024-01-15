@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from typing import Optional
 from fastapi import APIRouter
 import sounddevice as sd
 from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
@@ -7,13 +8,15 @@ from api.interface import (
     AudioDevice,
     AudioSettings,
     AzureTtsConfig,
-    Config,
-    ConfigInfo,
+    ConfigDirInfo,
+    ConfigWithDirInfo,
+    ConfigsInfo,
     EdgeTtsConfig,
     ElevenlabsConfig,
     SoundConfig,
     VoiceInfo,
     WingmanConfig,
+    WingmanConfigFileInfo,
     WingmanInitializationError,
 )
 from providers.edge import Edge
@@ -23,7 +26,7 @@ from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
 from services.tower import Tower
-from services.config_manager import DEFAULT_CONFIG_DIR, ConfigManager
+from services.config_manager import ConfigManager
 
 printr = Printr()
 
@@ -35,27 +38,40 @@ class WingmanCore:
             methods=["GET"],
             path="/configs",
             endpoint=self.get_configs,
-            response_model=ConfigInfo,
+            response_model=ConfigsInfo,
             tags=["core"],
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/default-config/",
-            endpoint=self.get_default_config,
-            response_model=Config,
+            path="/configs/templates",
+            endpoint=self.get_config_templates,
+            response_model=list[ConfigDirInfo],
             tags=["core"],
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/config/",
+            path="/config",
             endpoint=self.get_config,
-            response_model=Config,
+            response_model=ConfigWithDirInfo,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config",
+            endpoint=self.load_config,
             tags=["core"],
         )
         self.router.add_api_route(
             methods=["DELETE"],
-            path="/config/",
+            path="/config",
             endpoint=self.delete_config,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/config/wingmen",
+            endpoint=self.get_wingmen_configs,
+            response_model=list[WingmanConfigFileInfo],
             tags=["core"],
         )
         self.router.add_api_route(
@@ -150,29 +166,13 @@ class WingmanCore:
         self.active_recording = {"key": "", "wingman": None}
         self.audio_recorder = AudioRecorder()
         self.tower: Tower = None
-        self.current_config: str = None
+        self.current_config: ConfigDirInfo = None
         self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
 
         # restore settings
         configured_devices = self.get_configured_audio_devices()
         sd.default.device = (configured_devices.input, configured_devices.output)
-
-    async def load_config(self, config_name: str = DEFAULT_CONFIG_DIR):
-        try:
-            config = self.config_manager.load_config(config_name)
-        except FileNotFoundError:
-            printr.toast_error(f"Could not find config.{config_name}.yaml")
-            raise
-        except Exception as e:
-            # Everything else...
-            printr.toast_error(str(e))
-            raise e
-
-        self.current_config = config_name
-        self.tower = Tower(config=config)
-        errors = await self.tower.instantiate_wingmen()
-        return errors
 
     def on_press(self, key):
         if self.tower and self.active_recording["key"] == "":
@@ -212,58 +212,79 @@ class WingmanCore:
 
     # GET /configs
     def get_configs(self):
-        return ConfigInfo(
-            configs=self.config_manager.get_config_names(),
-            currentConfig=self.current_config,
+        return ConfigsInfo(
+            configs=self.config_manager.get_config_dirs(),
+            current_config=self.current_config,
         )
 
-    # GET /config
-    def get_config(self, config_name: str) -> Config:
-        return self.config_manager.load_config(config_name)
+    # GET /configs/templates
+    def get_config_templates(self):
+        return self.config_manager.get_template_dirs()
 
-    # GET /default-config
-    def get_default_config(self) -> Config:
-        return self.config_manager.load_config()
+    # GET /config
+    def get_config(self, config_dir: Optional[ConfigDirInfo] = None):
+        # Type inference for tuples is bad...
+        config_dir, config = self.config_manager.load_config(config_dir)
+        return ConfigWithDirInfo(config=config, config_dir=config_dir)
+
+    # POST config
+    async def load_config(self, config_dir: Optional[ConfigDirInfo] = None):
+        try:
+            loaded_config_dir, config = self.config_manager.load_config(config_dir)
+        except Exception as e:
+            printr.toast_error(str(e))
+            raise e
+
+        self.current_config = loaded_config_dir
+        self.tower = Tower(config=config)
+        errors = await self.tower.instantiate_wingmen()
+        return errors
 
     # POST config/create
-    def create_config(self, config_name: str, template: str = None):
+    def create_config(self, config_name: str, template: Optional[ConfigDirInfo] = None):
         self.config_manager.create_config(config_name=config_name, template=template)
 
     # DELETE config
-    def delete_config(self, config_name: str):
-        self.config_manager.delete_config(config_name=config_name)
+    def delete_config(self, config_dir: ConfigDirInfo):
+        self.config_manager.delete_config(config=config_dir)
+
+    # GET config/wingmen
+    async def get_wingmen_configs(self, config_dir: ConfigDirInfo):
+        return self.config_manager.get_wingmen_configs(config_dir)
 
     # DELETE config/wingman
-    async def delete_wingman_config(self, config_name: str, wingman_name: str):
-        self.config_manager.delete_wingman_config(config_name, wingman_name)
-        await self.load_config(config_name)
+    async def delete_wingman_config(
+        self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
+    ):
+        self.config_manager.delete_wingman_config(config_dir, wingman_file)
+        await self.load_config(config_dir)  # refresh
 
     # POST config/save-wingman
     async def save_wingman_config(
         self,
-        config_name: str,
-        wingman_name: str,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
         auto_recover: bool = False,
     ):
         self.config_manager.save_wingman_config(
-            config_name=config_name,
-            wingman_name=wingman_name,
-            wingman_config=wingman_config,
+            config_dir,
+            wingman_file,
+            wingman_config,
         )
         try:
-            await self.load_config(config_name)
+            await self.load_config(config_dir)
             printr.toast("Wingman saved successfully.")
         except Exception:
             error_message = "Invalid Wingman configuration."
             if auto_recover:
                 deleted = self.config_manager.delete_wingman_config(
-                    config_name, wingman_name
+                    config_dir, wingman_file
                 )
                 if deleted:
                     self.config_manager.create_configs_from_templates()
 
-                await self.load_config(config_name)
+                await self.load_config(config_dir)
 
                 restored_message = (
                     "Deleted broken config (and restored default if there is a template for it)."

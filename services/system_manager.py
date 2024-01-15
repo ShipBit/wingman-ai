@@ -66,7 +66,7 @@ class SystemManager:
             os=platform.system(),
             core=SystemCore(
                 version=str(LOCAL_VERSION),
-                latest=str(self.latest_version),
-                isLatest=is_latest,
+                latest_version=str(self.latest_version),
+                is_latest=is_latest,
             ),
         )

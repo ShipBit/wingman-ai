@@ -17,15 +17,41 @@ from api.enums import (
 )
 
 
-class ConfigInfo(BaseModel):
-    configs: list[str]
-    currentConfig: str
+class WingmanConfigFileInfo(BaseModel):
+    name: str
+    """"The "friendly" name of this config used to display in the UI/Terminal without prefixes or file extension.
+
+    Examples: Board Computer"""
+    file: str
+    """The actual name of the file in the file system. May include meta prefixes and always includes file extension.
+
+    Examples: Board Computer.yaml or .Board Computer.yaml"""
+    is_deleted: bool
+    """Whether this file is logically deleted."""
+    # TODO: avatar(?)
+
+
+class ConfigDirInfo(BaseModel):
+    name: str
+    """"The "friendly" name of this config used to display in the UI/Terminal.
+
+    Examples: Star Citizen
+    """
+    directory: str
+    """The actual name of the directory in the file system. May include meta prefixes.
+
+    Examples: Star Citizen or _Star Citizen or .Star Citizen"""
+    is_default: bool
+    """Whether this config is the default config that is used on launch."""
+    is_deleted: bool
+    """Whether this directory is logically deleted."""
+    # TODO: icon(?)
 
 
 class SystemCore(TypedDict):
     version: str
-    latest: str
-    isLatest: bool
+    latest_version: str
+    is_latest: bool
 
 
 class SystemInfo(BaseModel):
@@ -335,3 +361,13 @@ class Config(NestedConfig):
 
     wingmen: Optional[dict[str, WingmanConfig]] = None
     """The Wingmen in this config. You can add as many as you want!"""
+
+
+class ConfigsInfo(BaseModel):
+    configs: list[ConfigDirInfo]
+    current_config: ConfigDirInfo
+
+
+class ConfigWithDirInfo(BaseModel):
+    config: Config
+    config_dir: ConfigDirInfo
