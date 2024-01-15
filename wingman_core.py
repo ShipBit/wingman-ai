@@ -37,7 +37,7 @@ class WingmanCore:
         self.router.add_api_route(
             methods=["GET"],
             path="/configs",
-            endpoint=self.get_configs,
+            endpoint=self.get_config_dirs,
             response_model=ConfigsInfo,
             tags=["core"],
         )
@@ -166,7 +166,7 @@ class WingmanCore:
         self.active_recording = {"key": "", "wingman": None}
         self.audio_recorder = AudioRecorder()
         self.tower: Tower = None
-        self.current_config: ConfigDirInfo = None
+        self.current_config_dir: ConfigDirInfo = None
         self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
 
@@ -211,10 +211,10 @@ class WingmanCore:
             self.on_release(key)
 
     # GET /configs
-    def get_configs(self):
+    def get_config_dirs(self):
         return ConfigsInfo(
-            configs=self.config_manager.get_config_dirs(),
-            current_config=self.current_config,
+            config_dirs=self.config_manager.get_config_dirs(),
+            current_config_dir=self.current_config_dir,
         )
 
     # GET /configs/templates
@@ -222,10 +222,13 @@ class WingmanCore:
         return self.config_manager.get_template_dirs()
 
     # GET /config
-    def get_config(self, config_dir: Optional[ConfigDirInfo] = None):
+    def get_config(self, config_name: Optional[str] = ""):
+        if config_name and len(config_name) > 0:
+            config_dir = self.config_manager.get_config_dir(config_name)
+
         # Type inference for tuples is bad...
-        config_dir, config = self.config_manager.load_config(config_dir)
-        return ConfigWithDirInfo(config=config, config_dir=config_dir)
+        cfg_dir, cfg = self.config_manager.load_config(config_dir)
+        return ConfigWithDirInfo(config=cfg, config_dir=cfg_dir)
 
     # POST config
     async def load_config(self, config_dir: Optional[ConfigDirInfo] = None):
@@ -235,7 +238,7 @@ class WingmanCore:
             printr.toast_error(str(e))
             raise e
 
-        self.current_config = loaded_config_dir
+        self.current_config_dir = loaded_config_dir
         self.tower = Tower(config=config)
         errors = await self.tower.instantiate_wingmen()
         return errors
@@ -249,7 +252,8 @@ class WingmanCore:
         self.config_manager.delete_config(config=config_dir)
 
     # GET config/wingmen
-    async def get_wingmen_configs(self, config_dir: ConfigDirInfo):
+    async def get_wingmen_configs(self, config_name: str):
+        config_dir = self.config_manager.get_config_dir(config_name)
         return self.config_manager.get_wingmen_configs(config_dir)
 
     # DELETE config/wingman

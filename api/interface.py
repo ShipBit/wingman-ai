@@ -283,10 +283,10 @@ class KeyPressConfig(BaseModel):
     scroll_amount: Optional[int] = None
     """The amount of clicks to scroll up (positive integer) or down (negative integer), example 10 or -10. Must have 'scroll' as key above to work."""
 
-    moveto: Optional[tuple] = None
+    moveto: Optional[list[int]] = None
     """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
 
-    moveto_relative: Optional[tuple] = None
+    moveto_relative: Optional[list[int]] = None
     """The x, y coordinates to move to relative to the current mouse position, expected [x,y] format in yaml.  Must have associated button press to work."""
 
     write: Optional[str] = None
@@ -364,8 +364,8 @@ class Config(NestedConfig):
 
 
 class ConfigsInfo(BaseModel):
-    configs: list[ConfigDirInfo]
-    current_config: ConfigDirInfo
+    config_dirs: list[ConfigDirInfo]
+    current_config_dir: ConfigDirInfo
 
 
 class ConfigWithDirInfo(BaseModel):

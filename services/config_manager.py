@@ -27,6 +27,7 @@ DEFAULT_PREFIX = "_"
 
 class ConfigManager:
     def __init__(self, app_root_path: str):
+        self.log_source_name = "ConfigManager"
         self.printr = Printr()
 
         self.config_dir = get_writable_dir(CONFIGS_DIR)
@@ -37,7 +38,6 @@ class ConfigManager:
         self.settings_config = self.load_settings_config()
 
         self.create_configs_from_templates()
-        self.log_source_name = "ConfigManager"
 
     def find_default_config(self) -> ConfigDirInfo:
         """Find the (first) default config (name starts with "_") found or another normal config as fallback."""
@@ -129,9 +129,24 @@ class ConfigManager:
                     logical_deleted = path.exists(
                         path.join(target_path, f".{new_filename}")
                     )
+                    if logical_deleted:
+                        self.printr.print(
+                            f"Skipping creation of {new_filepath} because it is marked as deleted.",
+                            color=LogType.WARNING,
+                            server_only=True,
+                            source=LogSource.SYSTEM,
+                            source_name=self.log_source_name,
+                        )
 
                     if force or (not already_exists and not logical_deleted):
                         shutil.copyfile(path.join(root, filename), new_filepath)
+                        self.printr.print(
+                            f"Created config {new_filepath} from template.",
+                            color=LogType.INFO,
+                            server_only=True,
+                            source=LogSource.SYSTEM,
+                            source_name=self.log_source_name,
+                        )
 
     def get_config_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config dirs."""
@@ -451,6 +466,13 @@ class ConfigManager:
             )
             for name in next(walk(configs_path))[1]
         ]
+
+    def get_config_dir(self, config_name: str) -> Optional[ConfigDirInfo]:
+        """Gets a config dir by name."""
+        for config in self.get_config_dirs():
+            if config.name == config_name:
+                return config
+        return None
 
     # Settings config:
 
