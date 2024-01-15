@@ -88,6 +88,12 @@ class WingmanCore:
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/config/default",
+            endpoint=self.set_default_config,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/config/save-wingman",
             endpoint=self.save_wingman_config,
             tags=["core"],
@@ -166,7 +172,11 @@ class WingmanCore:
         self.active_recording = {"key": "", "wingman": None}
         self.audio_recorder = AudioRecorder()
         self.tower: Tower = None
-        self.current_config_dir: ConfigDirInfo = None
+
+        self.current_config_dir: ConfigDirInfo = (
+            self.config_manager.find_default_config()
+        )
+
         self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
 
@@ -222,16 +232,17 @@ class WingmanCore:
         return self.config_manager.get_template_dirs()
 
     # GET /config
-    def get_config(self, config_name: Optional[str] = ""):
+    async def get_config(self, config_name: Optional[str] = "") -> ConfigWithDirInfo:
         if config_name and len(config_name) > 0:
             config_dir = self.config_manager.get_config_dir(config_name)
 
-        # Type inference for tuples is bad...
-        cfg_dir, cfg = self.config_manager.load_config(config_dir)
-        return ConfigWithDirInfo(config=cfg, config_dir=cfg_dir)
+        errors, config_info = await self.load_config(config_dir)
+        return config_info
 
     # POST config
-    async def load_config(self, config_dir: Optional[ConfigDirInfo] = None):
+    async def load_config(
+        self, config_dir: Optional[ConfigDirInfo] = None
+    ) -> tuple[list[WingmanInitializationError], ConfigWithDirInfo]:
         try:
             loaded_config_dir, config = self.config_manager.load_config(config_dir)
         except Exception as e:
@@ -241,11 +252,15 @@ class WingmanCore:
         self.current_config_dir = loaded_config_dir
         self.tower = Tower(config=config)
         errors = await self.tower.instantiate_wingmen()
-        return errors
+        return errors, ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
 
     # POST config/create
     def create_config(self, config_name: str, template: Optional[ConfigDirInfo] = None):
         self.config_manager.create_config(config_name=config_name, template=template)
+
+    # POST config/default
+    def set_default_config(self, config_dir: ConfigDirInfo):
+        self.config_manager.set_default_config(config=config_dir)
 
     # DELETE config
     def delete_config(self, config_dir: ConfigDirInfo):

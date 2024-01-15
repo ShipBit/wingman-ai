@@ -190,7 +190,7 @@ async def ping():
 
 
 async def async_main(host: str, port: int, sidecar: bool):
-    errors = await core.load_config()
+    errors, config_info = await core.load_config()
     saved_secrets: list[str] = []
     for error in errors:
         if (

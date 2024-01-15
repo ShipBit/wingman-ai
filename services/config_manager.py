@@ -99,16 +99,15 @@ class ConfigManager:
     def create_configs_from_templates(self, force: bool = False):
         for root, _, files in walk(self.templates_dir):
             relative_path = path.relpath(root, self.templates_dir)
-
-            # skip logical deleted configs (starting with ".")
-            if (
-                not force
-                and relative_path != "."
-                and path.exists(
-                    path.join(self.config_dir, f"{DELETED_PREFIX}{relative_path}")
+            if relative_path != ".":
+                config_dir = self.get_config_dir(
+                    relative_path.replace(DELETED_PREFIX, "", 1).replace(
+                        DEFAULT_PREFIX, "", 1
+                    )
                 )
-            ):
-                continue
+                if not force and config_dir:
+                    # skip logically deleted and default (renamed) config dirs
+                    continue
 
             # Create the same relative path in the target directory
             target_path = (
