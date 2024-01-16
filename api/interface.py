@@ -1,6 +1,14 @@
-from typing import Optional
+from typing import Any, Optional
 from typing_extensions import Annotated, TypedDict
-from pydantic import BaseModel, Field
+from pydantic import (
+    Base64Str,
+    BaseModel,
+    Field,
+    PlainSerializer,
+    PlainValidator,
+    WithJsonSchema,
+    errors,
+)
 from api.enums import (
     AzureApiVersion,
     AzureRegion,
@@ -28,7 +36,9 @@ class WingmanConfigFileInfo(BaseModel):
     Examples: Board Computer.yaml or .Board Computer.yaml"""
     is_deleted: bool
     """Whether this file is logically deleted."""
-    # TODO: avatar(?)
+
+    avatar: Annotated[str, Base64Str]
+    """The avatar of the wingman or the default avatar if none is set. Encoded as base64 string."""
 
 
 class ConfigDirInfo(BaseModel):
@@ -371,3 +381,8 @@ class ConfigsInfo(BaseModel):
 class ConfigWithDirInfo(BaseModel):
     config: Config
     config_dir: ConfigDirInfo
+
+
+class WingmanConfigWithFileInfo(BaseModel):
+    wingman_config: WingmanConfig
+    file: WingmanConfigFileInfo

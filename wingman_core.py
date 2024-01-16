@@ -1,7 +1,9 @@
 import asyncio
+import base64
 import threading
-from typing import Optional
-from fastapi import APIRouter
+from typing import Annotated, Optional
+from fastapi import APIRouter, UploadFile
+from pydantic import Base64Encoder, Base64Str
 import sounddevice as sd
 from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
 from api.interface import (
@@ -17,6 +19,7 @@ from api.interface import (
     VoiceInfo,
     WingmanConfig,
     WingmanConfigFileInfo,
+    WingmanConfigWithFileInfo,
     WingmanInitializationError,
 )
 from providers.edge import Edge
@@ -72,6 +75,19 @@ class WingmanCore:
             path="/config/wingmen",
             endpoint=self.get_wingmen_configs,
             response_model=list[WingmanConfigFileInfo],
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/config/new-wingman",
+            endpoint=self.get_new_wingmen_config,
+            response_model=WingmanConfigWithFileInfo,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/new-wingman",
+            endpoint=self.add_new_wingman,
             tags=["core"],
         )
         self.router.add_api_route(
@@ -260,11 +276,11 @@ class WingmanCore:
 
     # POST config/default
     def set_default_config(self, config_dir: ConfigDirInfo):
-        self.config_manager.set_default_config(config=config_dir)
+        self.config_manager.set_default_config(config_dir=config_dir)
 
     # DELETE config
     def delete_config(self, config_dir: ConfigDirInfo):
-        self.config_manager.delete_config(config=config_dir)
+        self.config_manager.delete_config(config_dir=config_dir)
 
     # GET config/wingmen
     async def get_wingmen_configs(self, config_name: str):
@@ -278,18 +294,71 @@ class WingmanCore:
         self.config_manager.delete_wingman_config(config_dir, wingman_file)
         await self.load_config(config_dir)  # refresh
 
+    # GET config/new-wingman/
+    async def get_new_wingmen_config(self, config_name: str):
+        config_dir = self.config_manager.get_config_dir(config_name)
+        return self.config_manager.get_new_wingman_template(config_dir)
+
+    # POST config/new-wingman
+    async def add_new_wingman(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        wingman_config: WingmanConfig,
+        avatar: Optional[UploadFile] = None,
+    ):
+        return await self.__add_or_save_wingman_config(
+            config_dir=config_dir,
+            wingman_file=wingman_file,
+            wingman_config=wingman_config,
+            avatar=avatar,
+            auto_recover=False,
+            is_new=True,
+        )
+
     # POST config/save-wingman
     async def save_wingman_config(
         self,
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
+        avatar: Optional[UploadFile] = None,
         auto_recover: bool = False,
     ):
+        return await self.__add_or_save_wingman_config(
+            config_dir=config_dir,
+            wingman_file=wingman_file,
+            wingman_config=wingman_config,
+            avatar=avatar,
+            auto_recover=auto_recover,
+            is_new=False,
+        )
+
+    async def __convert_uploadfile_to_base64(
+        self,
+        upload_file: UploadFile,
+    ) -> Annotated[str, Base64Str]:
+        file_content = await upload_file.read()
+        base64_encoded_str = base64.b64encode(file_content).decode("utf-8")
+        return base64_encoded_str
+
+    async def __add_or_save_wingman_config(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        wingman_config: WingmanConfig,
+        avatar: Optional[UploadFile] = None,
+        auto_recover: bool = False,
+        is_new: bool = False,
+    ):
+        if avatar:
+            wingman_file.avatar = await self.__convert_uploadfile_to_base64(avatar)
+
         self.config_manager.save_wingman_config(
-            config_dir,
-            wingman_file,
-            wingman_config,
+            config_dir=config_dir,
+            wingman_file=wingman_file,
+            wingman_config=wingman_config,
+            is_new=is_new,
         )
         try:
             await self.load_config(config_dir)

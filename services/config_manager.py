@@ -1,3 +1,4 @@
+import base64
 from enum import Enum
 from os import makedirs, path, remove, walk
 import copy
@@ -12,6 +13,7 @@ from api.interface import (
     SettingsConfig,
     WingmanConfig,
     WingmanConfigFileInfo,
+    WingmanConfigWithFileInfo,
 )
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -23,6 +25,7 @@ DEFAULT_TEMPLATE_FILE = "defaults.yaml"
 SECRETS_FILE = "secrets.yaml"
 DELETED_PREFIX = "."
 DEFAULT_PREFIX = "_"
+DEFAULT_WINGMAN_AVATAR = "default-avatar-wingman.png"
 
 
 class ConfigManager:
@@ -146,6 +149,24 @@ class ConfigManager:
                             source=LogSource.SYSTEM,
                             source_name=self.log_source_name,
                         )
+                # create avatar
+                elif (
+                    filename.endswith("avatar.png")
+                    or filename.endswith("avatar.jpg")
+                    or filename.endswith("avatar.jpeg")
+                ):
+                    new_filename = filename.replace(".avatar", "")
+                    new_filepath = path.join(target_path, new_filename)
+                    already_exists = path.exists(new_filepath)
+                    if force or not already_exists:
+                        shutil.copyfile(path.join(root, filename), new_filepath)
+                        self.printr.print(
+                            f"Created avatar {new_filepath} from template.",
+                            color=LogType.INFO,
+                            server_only=True,
+                            source=LogSource.SYSTEM,
+                            source_name=self.log_source_name,
+                        )
 
     def get_config_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config dirs."""
@@ -197,13 +218,55 @@ class ConfigManager:
                 ) and base_file_name == wingman_file.file.replace(
                     DELETED_PREFIX, "", 1
                 ):
-                    return (
-                        template_dir,
-                        WingmanConfigFileInfo(
-                            file=base_file_name, name=base_file_name, is_deleted=False
+                    file_info = WingmanConfigFileInfo(
+                        file=base_file_name,
+                        name=base_file_name,
+                        is_deleted=False,
+                        avatar=self.__load_image_as_base64(
+                            self.get_wingman_avatar_path(template_dir, base_file_name)
                         ),
                     )
+                    return (
+                        template_dir,
+                        file_info,
+                    )
         return (None, None)
+
+    def __load_image_as_base64(self, file_path: str):
+        with open(file_path, "rb") as image_file:
+            image_bytes = image_file.read()
+
+        base64_encoded_data = base64.b64encode(image_bytes)
+        base64_string = base64_encoded_data.decode("utf-8")
+        base64_data_uri = f"data:image/png;base64,{base64_string}"
+
+        return base64_data_uri
+
+    def get_new_wingman_template(self, config_dir: ConfigDirInfo):
+        parsed_config = self.__read_default_config()
+        wingman_config = {
+            "name": "",
+            "description": "",
+            "record_key": "",
+            "disabled": False,
+            "openai": {"context": ""},
+            "commands": [],
+        }
+        validated_config = self.__merge_configs(parsed_config, wingman_config)
+        wingman_file = WingmanConfigFileInfo(
+            file="New Wingman.yaml",
+            name="New Wingman",
+            is_deleted=False,
+            avatar=self.__load_image_as_base64(
+                path.join(self.templates_dir, DEFAULT_WINGMAN_AVATAR)
+            ),
+        )
+        # create the file
+        self.save_wingman_config(config_dir, wingman_file, validated_config)
+
+        return WingmanConfigWithFileInfo(
+            wingman_config=validated_config, file=wingman_file
+        )
 
     def load_config(
         self, config_dir: Optional[ConfigDirInfo] = None
@@ -237,11 +300,11 @@ class ConfigManager:
         )
         return config_dir, validated_config
 
-    def delete_config(self, config: ConfigDirInfo, force: bool = False):
-        config_path = path.join(self.config_dir, config.directory)
-        if config.is_deleted:
+    def delete_config(self, config_dir: ConfigDirInfo, force: bool = False):
+        config_path = path.join(self.config_dir, config_dir.directory)
+        if config_dir.is_deleted:
             self.printr.print(
-                f"Skip delete config {config.name} because it is already marked as deleted.",
+                f"Skip delete config {config_dir.name} because it is already marked as deleted.",
                 color=LogType.WARNING,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -250,16 +313,18 @@ class ConfigManager:
             return False
 
         if path.exists(config_path):
-            if not force and self.__get_template_dir(config):
+            if not force and self.__get_template_dir(config_dir):
                 # if we'd delete this, Wingman would recreate it on next launch -
                 # so we rename it to ".<name>" and interpret this as "logical delete" later.
                 shutil.move(
                     config_path,
-                    path.join(self.config_dir, f"{DELETED_PREFIX}{config.directory}"),
+                    path.join(
+                        self.config_dir, f"{DELETED_PREFIX}{config_dir.directory}"
+                    ),
                 )
-                config.is_deleted = True
+                config_dir.is_deleted = True
                 self.printr.print(
-                    f"Renamed config '{config.name}' to '{DELETED_PREFIX}{config.name}' (logical delete).",
+                    f"Renamed config '{config_dir.name}' to '{DELETED_PREFIX}{config_dir.name}' (logical delete).",
                     color=LogType.INFO,
                     server_only=True,
                     source=LogSource.SYSTEM,
@@ -275,7 +340,7 @@ class ConfigManager:
                     source_name=self.log_source_name,
                 )
 
-            if config.is_default:
+            if config_dir.is_default:
                 # will return the first normal config found because we already deleted the default one
                 new_default = self.find_default_config()
                 self.set_default_config(new_default)
@@ -294,11 +359,11 @@ class ConfigManager:
         )
         return False
 
-    def set_default_config(self, config: ConfigDirInfo):
+    def set_default_config(self, config_dir: ConfigDirInfo):
         """Sets a config as the new default config (and unsets the old one)."""
-        if config.is_deleted:
+        if config_dir.is_deleted:
             self.printr.print(
-                f"Unable to set deleted config {config.name} as default config.",
+                f"Unable to set deleted config {config_dir.name} as default config.",
                 color=LogType.ERROR,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -307,9 +372,9 @@ class ConfigManager:
             return False
 
         old_default = self.find_default_config()
-        if config.is_default or old_default.directory == config.directory:
+        if config_dir.is_default or old_default.directory == config_dir.directory:
             self.printr.print(
-                f"Config {config.name} is already the default config.",
+                f"Config {config_dir.name} is already the default config.",
                 color=LogType.WARNING,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -335,16 +400,16 @@ class ConfigManager:
                 source_name=self.log_source_name,
             )
 
-        new_dir = path.join(self.config_dir, f"{DEFAULT_PREFIX}{config.name}")
+        new_dir = path.join(self.config_dir, f"{DEFAULT_PREFIX}{config_dir.name}")
         shutil.move(
-            path.join(self.config_dir, config.directory),
+            path.join(self.config_dir, config_dir.directory),
             new_dir,
         )
-        config.directory = new_dir
-        config.is_default = True
+        config_dir.directory = new_dir
+        config_dir.is_default = True
 
         self.printr.print(
-            f"Set config {config.name} as default config.",
+            f"Set config {config_dir.name} as default config.",
             color=LogType.INFO,
             server_only=True,
             source=LogSource.SYSTEM,
@@ -352,30 +417,58 @@ class ConfigManager:
         )
         return True
 
-    def get_wingmen_configs(self, config: ConfigDirInfo):
+    def get_wingmen_configs(self, config_dir: ConfigDirInfo):
         """Gets all wingmen configs for a given config."""
-        config_path = path.join(self.config_dir, config.directory)
-        wingmen = []
-        for root, _, files in walk(config_path):
+        config_path = path.join(self.config_dir, config_dir.directory)
+        wingmen: list[WingmanConfigFileInfo] = []
+        for _, _, files in walk(config_path):
             for filename in files:
                 if filename.endswith(".yaml"):
-                    wingmen.append(
-                        WingmanConfigFileInfo(
-                            file=filename,
-                            name=filename.replace(".yaml", "").replace(".", "", 1),
-                            is_deleted=filename.startswith(DELETED_PREFIX),
-                        )
+                    base_file_name = filename.replace(".yaml", "").replace(".", "", 1)
+                    wingman_file = WingmanConfigFileInfo(
+                        file=filename,
+                        name=base_file_name,
+                        is_deleted=filename.startswith(DELETED_PREFIX),
+                        avatar=self.__load_image_as_base64(
+                            self.get_wingman_avatar_path(config_dir, base_file_name)
+                        ),
                     )
+                    wingmen.append(wingman_file)
         return wingmen
 
     def save_wingman_config(
         self,
-        config: ConfigDirInfo,
+        config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
+        is_new: bool = False,
     ):
-        config_path = path.join(self.config_dir, config.directory, wingman_file.file)
+        # write avatar base64 str to file
+        if wingman_file.avatar:
+            avatar_path = self.get_wingman_avatar_path(config_dir, wingman_file.name)
+            if "base64," in wingman_file.avatar:
+                avatar = wingman_file.avatar.split("base64,", 1)[1]
+            image_data = base64.b64decode(avatar)
+            with open(avatar_path, "wb") as file:
+                file.write(image_data)
+
+        config_path = path.join(
+            self.config_dir,
+            config_dir.directory,
+            wingman_file.file if not is_new else wingman_config.name,
+        )
+        if is_new:
+            self.delete_wingman_config(config_dir, wingman_file)
         return self.__write_config(config_path, wingman_config)
+
+    def get_wingman_avatar_path(
+        self, config_dir: ConfigDirInfo, wingman_file_base_name: str
+    ):
+        avatar_path = path.join(
+            self.config_dir, config_dir.directory, f"{wingman_file_base_name}.png"
+        )
+        default_avatar_path = path.join(self.templates_dir, DEFAULT_WINGMAN_AVATAR)
+        return avatar_path if path.exists(avatar_path) else default_avatar_path
 
     def delete_wingman_config(
         self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
