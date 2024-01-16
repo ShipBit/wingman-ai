@@ -445,7 +445,11 @@ class ConfigManager:
     ):
         # write avatar base64 str to file
         if wingman_file.avatar:
-            avatar_path = self.get_wingman_avatar_path(config_dir, wingman_file.name)
+            avatar_path = self.get_wingman_avatar_path(
+                config_dir=config_dir,
+                wingman_file_base_name=wingman_file.name,
+                create=True,
+            )
             if "base64," in wingman_file.avatar:
                 avatar = wingman_file.avatar.split("base64,", 1)[1]
             image_data = base64.b64decode(avatar)
@@ -462,13 +466,15 @@ class ConfigManager:
         return self.__write_config(config_path, wingman_config)
 
     def get_wingman_avatar_path(
-        self, config_dir: ConfigDirInfo, wingman_file_base_name: str
+        self, config_dir: ConfigDirInfo, wingman_file_base_name: str, create=False
     ):
         avatar_path = path.join(
             self.config_dir, config_dir.directory, f"{wingman_file_base_name}.png"
         )
         default_avatar_path = path.join(self.templates_dir, DEFAULT_WINGMAN_AVATAR)
-        return avatar_path if path.exists(avatar_path) else default_avatar_path
+        return (
+            avatar_path if create or path.exists(avatar_path) else default_avatar_path
+        )
 
     def delete_wingman_config(
         self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo

@@ -1,9 +1,7 @@
 import asyncio
-import base64
 import threading
-from typing import Annotated, Optional
-from fastapi import APIRouter, UploadFile
-from pydantic import Base64Encoder, Base64Str
+from typing import Optional
+from fastapi import APIRouter
 import sounddevice as sd
 from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
 from api.interface import (
@@ -305,13 +303,11 @@ class WingmanCore:
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
-        avatar: Optional[UploadFile] = None,
     ):
         return await self.__add_or_save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
-            avatar=avatar,
             auto_recover=False,
             is_new=True,
         )
@@ -322,38 +318,24 @@ class WingmanCore:
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
-        avatar: Optional[UploadFile] = None,
         auto_recover: bool = False,
     ):
         return await self.__add_or_save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
-            avatar=avatar,
             auto_recover=auto_recover,
             is_new=False,
         )
-
-    async def __convert_uploadfile_to_base64(
-        self,
-        upload_file: UploadFile,
-    ) -> Annotated[str, Base64Str]:
-        file_content = await upload_file.read()
-        base64_encoded_str = base64.b64encode(file_content).decode("utf-8")
-        return base64_encoded_str
 
     async def __add_or_save_wingman_config(
         self,
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
-        avatar: Optional[UploadFile] = None,
         auto_recover: bool = False,
         is_new: bool = False,
     ):
-        if avatar:
-            wingman_file.avatar = await self.__convert_uploadfile_to_base64(avatar)
-
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
