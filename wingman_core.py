@@ -275,20 +275,31 @@ class WingmanCore:
         return errors, ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
 
     # POST config/create
-    def create_config(self, config_name: str, template: Optional[ConfigDirInfo] = None):
-        self.config_manager.create_config(config_name=config_name, template=template)
+    async def create_config(
+        self, config_name: str, template: Optional[ConfigDirInfo] = None
+    ):
+        new_dir = self.config_manager.create_config(
+            config_name=config_name, template=template
+        )
+        await self.load_config(new_dir)
 
     # POST config/rename
-    def rename_config(self, config_dir: ConfigDirInfo, new_name: str):
-        self.config_manager.rename_config(config_dir=config_dir, new_name=new_name)
+    async def rename_config(self, config_dir: ConfigDirInfo, new_name: str):
+        new_config_dir = self.config_manager.rename_config(
+            config_dir=config_dir, new_name=new_name
+        )
+        if new_config_dir and config_dir.name == self.current_config_dir.name:
+            await self.load_config(new_config_dir)
 
     # POST config/default
     def set_default_config(self, config_dir: ConfigDirInfo):
         self.config_manager.set_default_config(config_dir=config_dir)
 
     # DELETE config
-    def delete_config(self, config_dir: ConfigDirInfo):
+    async def delete_config(self, config_dir: ConfigDirInfo):
         self.config_manager.delete_config(config_dir=config_dir)
+        if config_dir.name == self.current_config_dir.name:
+            await self.load_config()
 
     # GET config/wingmen
     async def get_wingmen_configs(self, config_name: str):

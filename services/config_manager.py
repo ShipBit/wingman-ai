@@ -98,6 +98,12 @@ class ConfigManager:
                             path.join(root, filename),
                             path.join(new_dir, filename.replace(".template", "")),
                         )
+        return ConfigDirInfo(
+            name=config_name,
+            directory=config_name,
+            is_default=False,
+            is_deleted=False,
+        )
 
     def create_configs_from_templates(self, force: bool = False):
         for root, _, files in walk(self.templates_dir):
@@ -297,12 +303,12 @@ class ConfigManager:
                 source=LogSource.SYSTEM,
                 source_name=self.log_source_name,
             )
-            return False
+            return None
         if new_name.startswith(DEFAULT_PREFIX) or new_name.startswith(DELETED_PREFIX):
             self.printr.toast_error(
                 f"Unable to rename '{config_dir.name}' to '{new_name}'. The name must not start with '{DEFAULT_PREFIX}' or '{DELETED_PREFIX}'."
             )
-            return False
+            return None
 
         old_path = path.join(self.config_dir, config_dir.directory)
         new_dir_name = (
@@ -314,7 +320,7 @@ class ConfigManager:
             self.printr.toast_error(
                 f"Unable to rename '{config_dir.name}' to '{new_name}'. The target already exists."
             )
-            return False
+            return None
 
         if self.__get_template_dir(config_dir):
             # if we'd rename this, Wingman will recreate it on next launch -
@@ -334,8 +340,6 @@ class ConfigManager:
             )
         else:
             shutil.move(path.join(self.config_dir, config_dir.directory), new_path)
-            config_dir.directory = new_path
-            config_dir.name = new_name
             self.printr.print(
                 f"Renamed config '{config_dir.directory}' to '{new_dir_name}'.",
                 color=LogType.INFO,
@@ -343,7 +347,12 @@ class ConfigManager:
                 source=LogSource.SYSTEM,
                 source_name=self.log_source_name,
             )
-        return True
+        return ConfigDirInfo(
+            name=new_name,
+            directory=new_dir_name,
+            is_default=new_dir_name.startswith(DEFAULT_PREFIX),
+            is_deleted=new_dir_name.startswith(DELETED_PREFIX),
+        )
 
     def delete_config(self, config_dir: ConfigDirInfo, force: bool = False):
         config_path = path.join(self.config_dir, config_dir.directory)
@@ -417,7 +426,7 @@ class ConfigManager:
             return False
 
         old_default = self.find_default_config()
-        if config_dir.is_default or old_default.directory == config_dir.directory:
+        if config_dir.is_default:
             self.printr.print(
                 f"Config {config_dir.name} is already the default config.",
                 color=LogType.WARNING,
