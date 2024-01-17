@@ -288,6 +288,63 @@ class ConfigManager:
         )
         return config_dir, validated_config
 
+    def rename_config(self, config_dir: ConfigDirInfo, new_name: str):
+        if new_name == config_dir.name:
+            self.printr.print(
+                f"Skip rename config {config_dir.name} because the name did not change.",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+            return False
+        if new_name.startswith(DEFAULT_PREFIX) or new_name.startswith(DELETED_PREFIX):
+            self.printr.toast_error(
+                f"Unable to rename '{config_dir.name}' to '{new_name}'. The name must not start with '{DEFAULT_PREFIX}' or '{DELETED_PREFIX}'."
+            )
+            return False
+
+        old_path = path.join(self.config_dir, config_dir.directory)
+        new_dir_name = (
+            new_name if not config_dir.is_default else f"{DEFAULT_PREFIX}{new_name}"
+        )
+        new_path = path.join(self.config_dir, new_dir_name)
+
+        if path.exists(new_path):
+            self.printr.toast_error(
+                f"Unable to rename '{config_dir.name}' to '{new_name}'. The target already exists."
+            )
+            return False
+
+        if self.__get_template_dir(config_dir):
+            # if we'd rename this, Wingman will recreate it on next launch -
+            # so we create the new one and rename the old dir to ".<name>" .
+            shutil.copytree(old_path, new_path)
+            shutil.move(
+                old_path,
+                path.join(self.config_dir, f"{DELETED_PREFIX}{config_dir.name}"),
+            )
+
+            self.printr.print(
+                f"Logically deleted config '{config_dir.name}' and created new config '{new_name}'.",
+                color=LogType.INFO,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+        else:
+            shutil.move(path.join(self.config_dir, config_dir.directory), new_path)
+            config_dir.directory = new_path
+            config_dir.name = new_name
+            self.printr.print(
+                f"Renamed config '{config_dir.directory}' to '{new_dir_name}'.",
+                color=LogType.INFO,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+        return True
+
     def delete_config(self, config_dir: ConfigDirInfo, force: bool = False):
         config_path = path.join(self.config_dir, config_dir.directory)
         if config_dir.is_deleted:

@@ -102,6 +102,12 @@ class WingmanCore:
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/config/rename",
+            endpoint=self.rename_config,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/config/default",
             endpoint=self.set_default_config,
             tags=["core"],
@@ -271,6 +277,10 @@ class WingmanCore:
     # POST config/create
     def create_config(self, config_name: str, template: Optional[ConfigDirInfo] = None):
         self.config_manager.create_config(config_name=config_name, template=template)
+
+    # POST config/rename
+    def rename_config(self, config_dir: ConfigDirInfo, new_name: str):
+        self.config_manager.rename_config(config_dir=config_dir, new_name=new_name)
 
     # POST config/default
     def set_default_config(self, config_dir: ConfigDirInfo):
