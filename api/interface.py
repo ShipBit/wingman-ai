@@ -1,6 +1,10 @@
 from typing import Optional
 from typing_extensions import Annotated, TypedDict
-from pydantic import BaseModel, Field
+from pydantic import (
+    Base64Str,
+    BaseModel,
+    Field,
+)
 from api.enums import (
     AzureApiVersion,
     AzureRegion,
@@ -17,15 +21,43 @@ from api.enums import (
 )
 
 
-class ConfigInfo(BaseModel):
-    configs: list[str]
-    currentConfig: str
+class WingmanConfigFileInfo(BaseModel):
+    name: str
+    """"The "friendly" name of this config used to display in the UI/Terminal without prefixes or file extension.
+
+    Examples: Board Computer"""
+    file: str
+    """The actual name of the file in the file system. May include meta prefixes and always includes file extension.
+
+    Examples: Board Computer.yaml or .Board Computer.yaml"""
+    is_deleted: bool
+    """Whether this file is logically deleted."""
+
+    avatar: Annotated[str, Base64Str]
+    """The avatar of the wingman or the default avatar if none is set. Encoded as base64 string."""
+
+
+class ConfigDirInfo(BaseModel):
+    name: str
+    """"The "friendly" name of this config used to display in the UI/Terminal.
+
+    Examples: Star Citizen
+    """
+    directory: str
+    """The actual name of the directory in the file system. May include meta prefixes.
+
+    Examples: Star Citizen or _Star Citizen or .Star Citizen"""
+    is_default: bool
+    """Whether this config is the default config that is used on launch."""
+    is_deleted: bool
+    """Whether this directory is logically deleted."""
+    # TODO: icon(?)
 
 
 class SystemCore(TypedDict):
     version: str
-    latest: str
-    isLatest: bool
+    latest_version: str
+    is_latest: bool
 
 
 class SystemInfo(BaseModel):
@@ -257,10 +289,10 @@ class KeyPressConfig(BaseModel):
     scroll_amount: Optional[int] = None
     """The amount of clicks to scroll up (positive integer) or down (negative integer), example 10 or -10. Must have 'scroll' as key above to work."""
 
-    moveto: Optional[tuple] = None
+    moveto: Optional[list[int]] = None
     """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
 
-    moveto_relative: Optional[tuple] = None
+    moveto_relative: Optional[list[int]] = None
     """The x, y coordinates to move to relative to the current mouse position, expected [x,y] format in yaml.  Must have associated button press to work."""
 
     write: Optional[str] = None
@@ -335,3 +367,18 @@ class Config(NestedConfig):
 
     wingmen: Optional[dict[str, WingmanConfig]] = None
     """The Wingmen in this config. You can add as many as you want!"""
+
+
+class ConfigsInfo(BaseModel):
+    config_dirs: list[ConfigDirInfo]
+    current_config_dir: ConfigDirInfo
+
+
+class ConfigWithDirInfo(BaseModel):
+    config: Config
+    config_dir: ConfigDirInfo
+
+
+class NewWingmanTemplate(BaseModel):
+    wingman_config: WingmanConfig
+    avatar: Annotated[str, Base64Str]
