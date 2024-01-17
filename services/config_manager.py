@@ -150,11 +150,7 @@ class ConfigManager:
                             source_name=self.log_source_name,
                         )
                 # create avatar
-                elif (
-                    filename.endswith("avatar.png")
-                    or filename.endswith("avatar.jpg")
-                    or filename.endswith("avatar.jpeg")
-                ):
+                elif filename.endswith("avatar.png"):
                     new_filename = filename.replace(".avatar", "")
                     new_filepath = path.join(target_path, new_filename)
                     already_exists = path.exists(new_filepath)
@@ -447,6 +443,41 @@ class ConfigManager:
             with open(avatar_path, "wb") as file:
                 file.write(image_data)
 
+        # wingman was renamed
+        if wingman_config.name != wingman_file.name:
+            old_config_path = path.join(
+                self.config_dir, config_dir.directory, wingman_file.file
+            )
+
+            # move the config
+            shutil.move(
+                old_config_path,
+                path.join(
+                    self.config_dir,
+                    config_dir.directory,
+                    wingman_config.name + ".yaml",
+                ),
+            )
+
+            # move the avatar
+            old_avatar_path = path.join(
+                self.config_dir,
+                config_dir.directory,
+                wingman_file.name + ".png",
+            )
+            if path.exists(old_avatar_path):
+                shutil.move(
+                    old_avatar_path,
+                    path.join(
+                        self.config_dir,
+                        config_dir.directory,
+                        wingman_config.name + ".png",
+                    ),
+                )
+
+            wingman_file.name = wingman_config.name
+            wingman_file.file = wingman_config.name + ".yaml"
+
         config_path = path.join(
             self.config_dir,
             config_dir.directory,
@@ -468,49 +499,38 @@ class ConfigManager:
     def delete_wingman_config(
         self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
     ):
-        file_path = path.join(self.config_dir, config_dir.directory, wingman_file.file)
+        config_path = path.join(
+            self.config_dir, config_dir.directory, wingman_file.file
+        )
+        avatar_path = path.join(
+            self.config_dir, config_dir.directory, f"{wingman_file.name}.png"
+        )
 
         try:
-            # if we'd delete this, Wingman would recreate it on next launch -
-            # so we rename it to ".<name>" and interpret this as "logical delete" later.
-            if self.__get_template(config_dir, wingman_file):
-                shutil.move(
-                    file_path,
-                    path.join(
-                        self.config_dir,
-                        config_dir.directory,
-                        f"{DELETED_PREFIX}{wingman_file.file}",
-                    ),
-                )
-                self.printr.print(
-                    f"Renamed wingman config '{wingman_file.file}' to '{DELETED_PREFIX}{wingman_file.file}' (logical delete).",
-                    color=LogType.INFO,
-                    server_only=True,
-                    source=LogSource.SYSTEM,
-                    source_name=self.log_source_name,
-                )
-            else:
-                remove(file_path)
-                self.printr.print(
-                    f"Deleted config {file_path}.",
-                    color=LogType.INFO,
-                    server_only=True,
-                    source=LogSource.SYSTEM,
-                    source_name=self.log_source_name,
-                )
+            if path.exists(avatar_path):
+                remove(avatar_path)
+
+            remove(config_path)
+            self.printr.print(
+                f"Deleted config {config_path}.",
+                color=LogType.INFO,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
             wingman_file.is_deleted = True
             return True
         except FileNotFoundError:
             self.printr.toast_error(
-                f"Unable to delete {file_path}. The file does not exist."
+                f"Unable to delete {config_path}. The file does not exist."
             )
         except PermissionError:
             self.printr.toast_error(
-                f"You do not have permissions to delete file {file_path}."
+                f"You do not have permissions to delete file {config_path}."
             )
         except OSError as e:
             self.printr.toast_error(
-                f"Error when trying to delete file {file_path}: {e.strerror}"
+                f"Error when trying to delete file {config_path}: {e.strerror}"
             )
         return False
 
