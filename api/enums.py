@@ -39,12 +39,6 @@ class CommandTag(Enum):
 
 
 class AzureApiVersion(Enum):
-    A2022_12_01 = "2022-12-01"
-    A2023_03_15_PREVIEW = "2023-03-15-preview"
-    A2023_05_15 = "2023-05-15"
-    A2023_06_01_PREVIEW = "2023-06-01-preview"
-    A2023_07_01_PREVIEW = "2023-07-01-preview"
-    A2023_08_01_PREVIEW = "2023-08-01-preview"
     A2023_09_01_PREVIEW = "2023-09-01-preview"
     A2023_12_01_PREVIEW = "2023-12-01-preview"
 
