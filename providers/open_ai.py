@@ -206,18 +206,17 @@ class OpenAiAzure(BaseOpenAi):
         audio_config = speechsdk.AudioConfig(filename=filename)
 
         auto_detect_source_language_config = (
-            (
-                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-                    languages=config.languages
-                )
+            speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                languages=config.languages
             )
-            if len(config.languages) == 1 and "en-US" in config.languages
-            else None
-        )
+        ) if len(config.languages) > 1 else None
+
+        language = config.languages[0] if len(config.languages) == 1 else None
 
         speech_recognizer = speechsdk.SpeechRecognizer(
             speech_config=speech_config,
             audio_config=audio_config,
+            language=language,
             auto_detect_source_language_config=auto_detect_source_language_config,
         )
         return speech_recognizer.recognize_once_async().get()
