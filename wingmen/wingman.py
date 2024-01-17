@@ -412,7 +412,7 @@ class Wingman:
                 if key_cfg.key in ["primary", "secondary", "middle"]:
                     mouse.click(button=key_cfg.key)
                 elif key_cfg.key != "scroll":
-                    keyboard.press(key_cfg.key)
+                    keyboard.send(key_cfg.key)
 
             if key_cfg.modifier:
                 for mod in reversed(modifiers):
