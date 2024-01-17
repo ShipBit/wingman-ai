@@ -1,13 +1,9 @@
-from typing import Any, Optional
+from typing import Optional
 from typing_extensions import Annotated, TypedDict
 from pydantic import (
     Base64Str,
     BaseModel,
     Field,
-    PlainSerializer,
-    PlainValidator,
-    WithJsonSchema,
-    errors,
 )
 from api.enums import (
     AzureApiVersion,
@@ -383,6 +379,6 @@ class ConfigWithDirInfo(BaseModel):
     config_dir: ConfigDirInfo
 
 
-class WingmanConfigWithFileInfo(BaseModel):
+class NewWingmanTemplate(BaseModel):
     wingman_config: WingmanConfig
-    file: WingmanConfigFileInfo
+    avatar: Annotated[str, Base64Str]

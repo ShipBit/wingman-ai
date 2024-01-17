@@ -13,11 +13,11 @@ from api.interface import (
     ConfigsInfo,
     EdgeTtsConfig,
     ElevenlabsConfig,
+    NewWingmanTemplate,
     SoundConfig,
     VoiceInfo,
     WingmanConfig,
     WingmanConfigFileInfo,
-    WingmanConfigWithFileInfo,
     WingmanInitializationError,
 )
 from providers.edge import Edge
@@ -78,8 +78,8 @@ class WingmanCore:
         self.router.add_api_route(
             methods=["GET"],
             path="/config/new-wingman",
-            endpoint=self.get_new_wingmen_config,
-            response_model=WingmanConfigWithFileInfo,
+            endpoint=self.get_new_wingmen_template,
+            response_model=NewWingmanTemplate,
             tags=["core"],
         )
         self.router.add_api_route(
@@ -293,23 +293,25 @@ class WingmanCore:
         await self.load_config(config_dir)  # refresh
 
     # GET config/new-wingman/
-    async def get_new_wingmen_config(self, config_name: str):
-        config_dir = self.config_manager.get_config_dir(config_name)
-        return self.config_manager.get_new_wingman_template(config_dir)
+    async def get_new_wingmen_template(self):
+        return self.config_manager.get_new_wingman_template()
 
     # POST config/new-wingman
     async def add_new_wingman(
-        self,
-        config_dir: ConfigDirInfo,
-        wingman_file: WingmanConfigFileInfo,
-        wingman_config: WingmanConfig,
+        self, config_dir: ConfigDirInfo, wingman_config: WingmanConfig, avatar: str
     ):
-        return await self.__add_or_save_wingman_config(
+        wingman_file = WingmanConfigFileInfo(
+            name=wingman_config.name,
+            file=f"{wingman_config.name}.yaml",
+            is_deleted=False,
+            avatar=avatar,
+        )
+
+        await self.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
             auto_recover=False,
-            is_new=True,
         )
 
     # POST config/save-wingman
@@ -320,27 +322,10 @@ class WingmanCore:
         wingman_config: WingmanConfig,
         auto_recover: bool = False,
     ):
-        return await self.__add_or_save_wingman_config(
-            config_dir=config_dir,
-            wingman_file=wingman_file,
-            wingman_config=wingman_config,
-            auto_recover=auto_recover,
-            is_new=False,
-        )
-
-    async def __add_or_save_wingman_config(
-        self,
-        config_dir: ConfigDirInfo,
-        wingman_file: WingmanConfigFileInfo,
-        wingman_config: WingmanConfig,
-        auto_recover: bool = False,
-        is_new: bool = False,
-    ):
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
-            is_new=is_new,
         )
         try:
             await self.load_config(config_dir)

@@ -10,10 +10,10 @@ from api.enums import LogSource, LogType, enum_representer
 from api.interface import (
     Config,
     ConfigDirInfo,
+    NewWingmanTemplate,
     SettingsConfig,
     WingmanConfig,
     WingmanConfigFileInfo,
-    WingmanConfigWithFileInfo,
 )
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -242,7 +242,7 @@ class ConfigManager:
 
         return base64_data_uri
 
-    def get_new_wingman_template(self, config_dir: ConfigDirInfo):
+    def get_new_wingman_template(self):
         parsed_config = self.__read_default_config()
         wingman_config = {
             "name": "",
@@ -253,19 +253,11 @@ class ConfigManager:
             "commands": [],
         }
         validated_config = self.__merge_configs(parsed_config, wingman_config)
-        wingman_file = WingmanConfigFileInfo(
-            file="New Wingman.yaml",
-            name="New Wingman",
-            is_deleted=False,
+        return NewWingmanTemplate(
+            wingman_config=validated_config,
             avatar=self.__load_image_as_base64(
                 path.join(self.templates_dir, DEFAULT_WINGMAN_AVATAR)
             ),
-        )
-        # create the file
-        self.save_wingman_config(config_dir, wingman_file, validated_config)
-
-        return WingmanConfigWithFileInfo(
-            wingman_config=validated_config, file=wingman_file
         )
 
     def load_config(
@@ -441,7 +433,6 @@ class ConfigManager:
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
-        is_new: bool = False,
     ):
         # write avatar base64 str to file
         if wingman_file.avatar:
@@ -459,10 +450,8 @@ class ConfigManager:
         config_path = path.join(
             self.config_dir,
             config_dir.directory,
-            wingman_file.file if not is_new else wingman_config.name,
+            wingman_file.file,
         )
-        if is_new:
-            self.delete_wingman_config(config_dir, wingman_file)
         return self.__write_config(config_path, wingman_config)
 
     def get_wingman_avatar_path(
