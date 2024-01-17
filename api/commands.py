@@ -15,11 +15,7 @@ class ClientReadyCommand(WebSocketCommandModel):
     command: Literal["client_ready"] = "client_ready"
 
 
-class ChangeConfigCommand(WebSocketCommandModel):
-    command: Literal["change_config"] = "change_config"
-    config: str
-
-
+# TODO: make this a regular POST request
 class SaveSecretCommand(WebSocketCommandModel):
     command: Literal["save_secret"] = "save_secret"
     secret_name: str

@@ -167,7 +167,7 @@ app.include_router(secret_keeper.router)
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await connection_manager.connect(websocket)
-    command_handler = CommandHandler(connection_manager, core, secret_keeper, printr)
+    command_handler = CommandHandler(connection_manager, core)
     try:
         while True:
             message = await websocket.receive_text()
@@ -190,7 +190,7 @@ async def ping():
 
 
 async def async_main(host: str, port: int, sidecar: bool):
-    errors = await core.load_config()
+    errors, config_info = await core.load_config()
     saved_secrets: list[str] = []
     for error in errors:
         if (
