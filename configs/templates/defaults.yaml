@@ -123,15 +123,15 @@ elevenlabs:
 azure:
   whisper:
     api_base_url: https://openai-w-eu.openai.azure.com/
-    api_version: 2023-09-01-preview
+    api_version: 2023-12-01-preview
     deployment_name: whisper
   conversation:
-    api_base_url: https://open-ai-fr-c.openai.azure.com/
-    api_version: 2023-09-01-preview
+    api_base_url: https://openai-sweden-c.openai.azure.com/
+    api_version: 2023-12-01-preview
     deployment_name: gpt-35-turbo
   summarize:
-    api_base_url: https://open-ai-fr-c.openai.azure.com/
-    api_version: 2023-09-01-preview
+    api_base_url: https://openai-sweden-c.openai.azure.com/
+    api_version: 2023-12-01-preview
     deployment_name: gpt-35-turbo
   tts:
     region: westeurope
