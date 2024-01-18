@@ -188,7 +188,9 @@ class OpenAiWingman(Wingman):
         """
         await self._add_user_message(transcript)
 
-        instant_response, instant_command_executed = await self._try_instant_activation(transcript)
+        instant_response, instant_command_executed = await self._try_instant_activation(
+            transcript
+        )
         if instant_response:
             self._add_assistant_message(instant_response)
             return instant_response, instant_response
@@ -678,10 +680,7 @@ class OpenAiWingman(Wingman):
         Returns:
             list[dict]: A list of tool descriptors in OpenAI format.
         """
-        commands = [
-            command.name
-            for command in self.config.commands
-        ]
+        commands = [command.name for command in self.config.commands]
         tools = [
             {
                 "type": "function",
