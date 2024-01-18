@@ -199,19 +199,19 @@ class XVASynthTtsConfig(BaseModel):
     """The game folder name of the voice you donwloaded to use as your primary XVASynth voice. This can be overwritten in a particular wingman. If you do not provide this and try to use XVASynth, there will be an error."""
     voice: str
     """The name of the voice you downloaded to use.  This can be overwritten in a particular wingman. If you do not provide this and try to use XVASynth there will be an error."""
-    language: Optional[str] = "en"
+    language: str
     """The language the voice will speak in. Some XVASynth voices are trained to be multi-lingual. Defaults to 'en' (English)."""
-    pace: Optional[float] = 1.0
+    pace: float
     """The speed of the voice playback. Defaults to 1."""
-    use_sr: Optional[bool] = False
+    use_sr: bool
     """Whether to use XVASynth's super resolution mode. Will take longer and generally not recommended. Defaults to false."""
-    use_cleanup: Optional[bool] = False
+    use_cleanup: bool
     """Whether to use XVASynth's cleanup mode. May make voice quality better or worse depending on the voice model. Defaults to false."""
-    process_device: Optional[str] = "cpu"
+    process_device: str
     """Can be cpu or gpu. You may need to take more steps to have xvasynth run on your GPU. Defaults to cpu."""
-    synthesize_url: Optional[str] = "http://127.0.0.1:8008/synthesize"
+    synthesize_url: str
     """This should typically be left alone, changing it will cause errors unless you manually changed XVASynth's server."""
-    load_model_url: Optional[str] = "http://127.0.0.1:8008/loadModel"
+    load_model_url: str
     """This should be typically left alone, changing it will cause errors unless you manually changed XVASynth's server."""
 
 
@@ -332,8 +332,8 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
-    xvasynth: XVASynthTtsConfig
     azure: AzureConfig
+    xvasynth: XVASynthTtsConfig
     commands: list[CommandConfig] | None = None
 
 
