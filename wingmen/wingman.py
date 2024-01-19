@@ -348,10 +348,10 @@ class Wingman:
             await printr.print_async(
                 f"❖ Executing command: {command.name}", color=LogType.INFO
             )
-            self.execute_action(command)
             if not self.debug:
                 # in debug mode we already printed the separate execution times
                 await self.print_execution_time()
+            self.execute_action(command)
 
         if len(command.actions or []) == 0:
             await printr.print_async(
@@ -404,12 +404,13 @@ class Wingman:
                 if action.mouse.scroll:
                     mouse.wheel(action.mouse.scroll)
 
-                if action.mouse.hold:
-                    mouse.press(button=action.mouse.button)
-                    time.sleep(action.mouse.hold)
-                    mouse.release(button=action.mouse.button)
-                else:
-                    mouse.click(button=action.mouse.button)
+                if action.mouse.button:
+                    if action.mouse.hold:
+                        mouse.press(button=action.mouse.button)
+                        time.sleep(action.mouse.hold)
+                        mouse.release(button=action.mouse.button)
+                    else:
+                        mouse.click(button=action.mouse.button)
 
             if action.write:
                 keyboard.write(action.write)
