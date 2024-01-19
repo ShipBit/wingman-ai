@@ -10,7 +10,7 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from api.interface import CommandActionConfig
+from api.interface import CommandActionConfig, CommandKeyboardConfig
 import keyboard.keyboard as keyboard
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
@@ -193,7 +193,7 @@ async def ping():
 async def record_hotkey():
     recorded = keyboard.record(until="esc")
 
-    keys: list[CommandActionConfig] = []
+    actions: list[CommandActionConfig] = []
 
     key_down_time = {}  # Track initial down times for keys
     last_up_time = None  # Track the last up time to measure durations of inactivity
@@ -214,7 +214,10 @@ async def record_hotkey():
                 if last_up_time is not None:
                     inactivity_duration = key.time - last_up_time
                     if inactivity_duration > 1.0:
-                        print(f"Inactivity Duration: {inactivity_duration:.1f} seconds")
+                        wait_config = CommandActionConfig()
+                        wait_config.wait = round(inactivity_duration, 2)
+                        actions.append(wait_config)
+
                 all_keys_released = False
 
             # Record only the first down event time for each key
@@ -241,15 +244,16 @@ async def record_hotkey():
                     hotkey_name = keyboard.get_hotkey_name(keys_pressed)
                     keys_pressed = []
 
-                    key_config = CommandActionConfig(key=hotkey_name)
+                    key_config = CommandActionConfig()
+                    key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
 
                     if press_duration > 0.2 and not keyboard.is_modifier(key.name):
-                        key_config.hold = round(press_duration, 2)
+                        key_config.keyboard.hold = round(press_duration, 2)
 
-                    keys.append(key_config)
+                    actions.append(key_config)
 
     # RETURN
-    print(keys)
+    print(actions)
 
 
 async def async_main(host: str, port: int, sidecar: bool):
