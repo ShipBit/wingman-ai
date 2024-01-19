@@ -10,6 +10,7 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from api.interface import CommandActionConfig
 import keyboard.keyboard as keyboard
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
@@ -190,18 +191,13 @@ async def ping():
 
 
 async def record_hotkey():
-    """hotkey = keyboard.read_hotkey()
-    print(hotkey)"""
     recorded = keyboard.record(until="esc")
-    """ hotkey = keyboard.get_hotkey_name(
-        key.name for key in recorded if key.event_type == keyboard.KEY_DOWN
-    )
-    print(hotkey) """
-    """ for key in recorded:
-        print(key) """
+
+    keys: list[CommandActionConfig] = []
 
     key_down_time = {}  # Track initial down times for keys
     last_up_time = None  # Track the last up time to measure durations of inactivity
+    keys_pressed = []  # Track the keys currently pressed
 
     # Initialize such that we consider the keyboard initially inactive
     all_keys_released = True
@@ -217,7 +213,7 @@ async def record_hotkey():
                 # There was a period of inactivity, calculate its duration
                 if last_up_time is not None:
                     inactivity_duration = key.time - last_up_time
-                    if inactivity_duration > 0.5:
+                    if inactivity_duration > 1.0:
                         print(f"Inactivity Duration: {inactivity_duration:.1f} seconds")
                 all_keys_released = False
 
@@ -231,17 +227,29 @@ async def record_hotkey():
             if key.name in key_down_time:
                 # Calculate the press duration for the current key
                 press_duration = key.time - key_down_time[key.name]
-                print(f"Key: {key.name}")
-                if press_duration > 0.2 and not keyboard.is_modifier(key.name):
-                    print(f"Press Duration: {press_duration:.2f} seconds")
 
                 # Remove the key from the dictionary after calculating press duration
                 del key_down_time[key.name]
+
+                keys_pressed.append(key.name)
 
                 # If no more keys are pressed, update last_up_time and set the keyboard to inactive
                 if not key_down_time:
                     last_up_time = key.time
                     all_keys_released = True
+
+                    hotkey_name = keyboard.get_hotkey_name(keys_pressed)
+                    keys_pressed = []
+
+                    key_config = CommandActionConfig(key=hotkey_name)
+
+                    if press_duration > 0.2 and not keyboard.is_modifier(key.name):
+                        key_config.hold = round(press_duration, 2)
+
+                    keys.append(key_config)
+
+    # RETURN
+    print(keys)
 
 
 async def async_main(host: str, port: int, sidecar: bool):
