@@ -76,14 +76,15 @@ commands:
       - Initiate scan
   # ───────────────────────────────────────────
   - name: JumpWithQuantumDrive
-    keys:
-      - key: b
-        hold: 0.8 # Optional: The duration the key will be pressed in seconds.
+    actions:
+      - keyboard:
+          hotkey: b
+          hold: 0.8 # Optional: The duration the key will be pressed in seconds.
   # ───────────────────────────────────────────
   - name: DisableLimiter
-    keys:
-      - key: c
-        modifier: alt
+    actions:
+      - keyboard:
+          hotkey: strg+n
   # ───────────────────────────────────────────
   - name: InitiateStartSequence
     keys: # You can have multiple keys per command!
@@ -95,12 +96,14 @@ commands:
       - key: s
   # ───────────────────────────────────────────
   - name: DeployLandingGear
-    keys:
-      - key: n
+    actions:
+      - keyboard:
+          hotkey: n
   # ───────────────────────────────────────────
   - name: RetractLandingGear
-    keys:
-      - key: n
+    actions:
+      - keyboard:
+          hotkey: n
   # ───────────────────────────────────────────
   - name: EnableQuantumDrive
     keys:
@@ -297,9 +300,9 @@ commands:
       - Display debug information
   # ───────────────────────────────────────────
   - name: ZoomIn
-    keys:
-      - key: scroll # use scroll command to simulate scrolling the mouse wheel
-        scroll_amount: 30 # use scroll_amount for how much to scroll, use whole numbers here, postive is scroll up, negative is scroll down
+    actions:
+      - mouse: # use scroll command to simulate scrolling the mouse wheel
+          scroll: 30 # use scroll_amount for how much to scroll, use whole numbers here, postive is scroll up, negative is scroll down
     instant_activation:
       - Zoom in
   # ───────────────────────────────────────────
@@ -318,9 +321,10 @@ commands:
       - Fire mining laser
   # ───────────────────────────────────────────
   - name: SwitchMiningLaser
-    keys:
-      - key: secondary
-        hold: 0.6
+    actions:
+      - mouse:
+          button: right
+          # hold: 0.6
     instant_activation:
       - Change mining laser
       - Switch mining laser
@@ -334,16 +338,16 @@ commands:
       - Fire Missile
   # ───────────────────────────────────────────
   - name: MoveTurretLeft
-    keys:
-      - key: primary
-        moveto_relative: [-100, 0] # use the moveto_relative command to move to x and y coordinates relative to current mouse position. If you have a speedy or accelerated mouse setting, this might trigger an error or unexpected behavior.
+    actions:
+      - mouse:
+          move: [-100, 0] # use the moveto_relative command to move to x and y coordinates relative to current mouse position. If you have a speedy or accelerated mouse setting, this might trigger an error or unexpected behavior.
     instant_activation:
       - Turret left
   # ───────────────────────────────────────────
   - name: MoveTurretRight
-    keys:
-      - key: primary
-        moveto_relative: [100, 0] # You can use just the move: keyword instead to move to an absolute position on your screen.  Not utilized in the examples because there isn't a real use case in Star Citizen.
+    actions:
+      - mouse:
+          move: [100, 0] # You can use just the move: keyword instead to move to an absolute position on your screen.  Not utilized in the examples because there isn't a real use case in Star Citizen.
     instant_activation:
       - Turret right
   # ───────────────────────────────────────────
