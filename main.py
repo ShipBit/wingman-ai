@@ -314,5 +314,5 @@ if __name__ == "__main__":
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     finally:
-        # loop.run_until_complete(async_main(host=host, port=port, sidecar=args.sidecar))
-        loop.run_until_complete(record_hotkey())
+        loop.run_until_complete(async_main(host=host, port=port, sidecar=args.sidecar))
+        # loop.run_until_complete(record_hotkey())

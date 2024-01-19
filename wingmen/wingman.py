@@ -344,9 +344,19 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        await printr.print_async(
-            f"❖ Executing command: {command.name}", color=LogType.INFO
-        )
+        if len(command.actions or []) > 0 and not self.debug:
+            await printr.print_async(
+                f"❖ Executing command: {command.name}", color=LogType.INFO
+            )
+            self.execute_action(command)
+            if not self.debug:
+                # in debug mode we already printed the separate execution times
+                await self.print_execution_time()
+
+        if len(command.actions or []) == 0:
+            await printr.print_async(
+                f"❖ No actions found for command: {command.name}", color=LogType.WARNING
+            )
 
         if self.debug:
             await printr.print_async(
@@ -354,21 +364,13 @@ class Wingman:
                 color=LogType.WARNING,
             )
 
-        if len(command.keys or []) > 0 and not self.debug:
-            self.execute_keypress(command)
-        # TODO: we could do mouse_events here, too...
-
         # handle the global special commands:
         if command.name == "ResetConversationHistory":
             self.reset_conversation_history()
 
-        if not self.debug:
-            # in debug mode we already printed the separate execution times
-            await self.print_execution_time()
-
         return self._select_command_response(command) or "Ok"
 
-    def execute_keypress(self, command: CommandConfig):
+    def execute_action(self, command: CommandConfig):
         """Executes the keypresses defined in the command in order.
 
         pydirectinput uses SIGEVENTS to send keypresses to the OS. This lib seems to be the only way to send keypresses to games reliably.
@@ -378,48 +380,39 @@ class Wingman:
         Args:
             command (dict): The command object from the config to execute
         """
-        if not command or not command.keys:
+        if not command or not command.actions:
             return
 
-        for key_cfg in command.keys:
-            if key_cfg.moveto:
-                x, y = key_cfg.moveto
-                mouse.move(x, y)
+        for action in command.actions:
+            if action.keyboard:
+                if action.keyboard.hold:
+                    keyboard.press(action.keyboard.hotkey)
+                    time.sleep(action.keyboard.hold)
+                    keyboard.release(action.keyboard.hotkey)
+                else:
+                    keyboard.send(action.keyboard.hotkey)
 
-            if key_cfg.moveto_relative:
-                x, y = key_cfg.moveto_relative
-                mouse.move(x, y, absolute=False, duration=0.5)
+            if action.mouse:
+                if action.mouse.move_to:
+                    x, y = action.mouse.move_to
+                    mouse.move(x, y)
 
-            if key_cfg.key == "scroll":
-                if key_cfg.scroll_amount:
-                    mouse.wheel(key_cfg.scroll_amount)
+                if action.mouse.move:
+                    x, y = action.mouse.move
+                    mouse.move(x, y, absolute=False, duration=0.5)
 
-            if key_cfg.modifier:
-                modifiers = [mod.strip() for mod in key_cfg.modifier.split(",")]
-                for mod in modifiers:
-                    keyboard.press(mod)
+                if action.mouse.scroll:
+                    mouse.wheel(action.mouse.scroll)
 
-            if key_cfg.hold:
-                if key_cfg.key in ["primary", "secondary", "middle"]:
-                    mouse.press(button=key_cfg.key)
-                    time.sleep(key_cfg.hold)
-                    mouse.release(button=key_cfg.key)
-                elif key_cfg.key != "scroll":
-                    keyboard.press(key_cfg.key)
-                    time.sleep(key_cfg.hold)
-                    keyboard.release(key_cfg.key)
-            else:
-                if key_cfg.key in ["primary", "secondary", "middle"]:
-                    mouse.click(button=key_cfg.key)
-                elif key_cfg.key != "scroll":
-                    keyboard.send(key_cfg.key)
+                if action.mouse.hold:
+                    mouse.press(button=action.mouse.button)
+                    time.sleep(action.mouse.hold)
+                    mouse.release(button=action.mouse.button)
+                else:
+                    mouse.click(button=action.mouse.button)
 
-            if key_cfg.modifier:
-                for mod in reversed(modifiers):
-                    keyboard.release(mod)
+            if action.write:
+                keyboard.write(action.write)
 
-            if key_cfg.write:
-                keyboard.write(key_cfg.write)
-
-            if key_cfg.wait:
-                time.sleep(key_cfg.wait)
+            if action.wait:
+                time.sleep(action.wait)

@@ -274,7 +274,7 @@ class FeaturesConfig(BaseModel):
 
 
 class CommandKeyboardConfig(BaseModel):
-    hotkey: str = None
+    hotkey: str
     """The hotkey. Can be a single key like 'a' or a combination like 'ctrl+shift+a'."""
 
     hold: Optional[float] = None
@@ -347,7 +347,7 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
-    commands: list[CommandConfig] | None = None
+    commands: Optional[list[CommandConfig]] = None
 
 
 class WingmanConfig(NestedConfig):
