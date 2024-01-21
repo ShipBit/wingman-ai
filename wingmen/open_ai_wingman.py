@@ -149,14 +149,13 @@ class OpenAiWingman(Wingman):
     async def validate_and_set_xvasynth(self, errors: list[WingmanInitializationError]):
         self.xvasynth = XVASynth(
             wingman_name=self.name,
-            xvasynth_path=self.config.xvasynth.xvasynth_path,
-            process_device=self.config.xvasynth.process_device,
-            times_checked_xvasynth=0,
         )
         self.xvasynth.validate_config(config=self.config.xvasynth, errors=errors)
         
     async def validate_and_set_whispercpp(self, errors: list[WingmanInitializationError]):
-        self.whispercpp = Whispercpp()
+        self.whispercpp = Whispercpp(
+            wingman_name=self.name,
+        )
         self.whispercpp.validate_config(config=self.config.whispercpp, errors=errors)
 
     async def _transcribe(self, audio_input_wav: str) -> str | None:

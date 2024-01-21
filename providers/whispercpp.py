@@ -1,14 +1,16 @@
-import requests
-import json
 import os
+from os import path
 import subprocess
 import time
+import requests
+import json
 from api.enums import WingmanInitializationErrorType
 from api.interface import WhispercppSttConfig, WhispercppTranscript, WingmanInitializationError
-from os import path
+from services.printr import Printr
 
 class Whispercpp:
-    def __init__(self):
+    def __init__(self, wingman_name: str):
+        self.wingman_name = wingman_name
         self.base_url: str = ""
         self.autostart: bool = False
         self.whispercpp_exe_path: str | None = None
@@ -16,8 +18,11 @@ class Whispercpp:
         self.temperature: float = 0.0
         self.language: str = ""
         self.times_checked_whispercpp: int = 0
+        self.printr = Printr()
         
-    def validate_config(self, config: WhispercppSttConfig, errors: list[WingmanInitializationError]):
+    def validate_config(
+        self, config: WhispercppSttConfig, errors: list[WingmanInitializationError]
+    ):
         if not errors:
             errors = []
 
@@ -30,34 +35,43 @@ class Whispercpp:
                 )
             )
 
-        if config.autostart == True and (config.autostart_settings.whispercpp_exe_path == None or config.autostart_settings.whispercpp_model_path == None or not os.path.exists(config.autostart_settings.whispercpp_exe_path) or not os.path.exists(config.autostart_settings.whispercpp_model_path)):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman_name,
-                    message="You chose to use whispercpp and chose autostart but did not provide proper paths to the whispercpp exe and model.  Please turn autostart off or set / confirm the paths to the exe and model.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+        if config.autostart == True:
+            if not config.autostart_settings:
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.wingman_name,
+                        message="You chose to use whispercpp and autostart but did not include autostart_settings in your config, which is required for autostart to work.",
+                        error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                    )
                 )
-            )
+            if config.autostart_settings:
+                if not os.path.exists(config.autostart_settings.whispercpp_exe_path) or not os.path.exists(config.autostart_settings.whispercpp_model_path):
+                    errors.append(
+                        WingmanInitializationError(
+                            wingman_name=self.wingman_name,
+                            message="You chose to use whispercpp and chose autostart but did not provide proper paths to the whispercpp exe and model.  The path you set for whispercpp_exe_path or whispercpp_model_path could not be found on your system.",
+                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                        )
+                    )
 
         self.base_url = config.base_url
         self.autostart = config.autostart
-        if config.autostart_settings.whispercpp_exe_path:
+        if self.autostart == True and config.autostart_settings:
             self.whispercpp_exe_path = config.autostart_settings.whispercpp_exe_path
-        if config.autostart_settings.whispercpp_model_path:
             self.whispercpp_model_path = config.autostart_settings.whispercpp_model_path
         self.temperature = config.temperature
         self.language = config.language
         # check if whispercpp is running a few times, if cannot find it, send error
         while self.times_checked_whispercpp < 5:
-            check = self.check_if_whispercpp_is_running()
-            if check == "ok":
+            is_running_error = self.__check_if_whispercpp_is_running()
+            if is_running_error == "ok":
                 break
             self.times_checked_whispercpp+=1
 
-        if check != "ok":
+        if is_running_error != "ok":
             errors.append(WingmanInitializationError(
                     wingman_name=self.wingman_name,
-                    message=check,
+                    message=is_running_error,
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                 ))
 
@@ -74,9 +88,12 @@ class Whispercpp:
             # Need to use a pydantic base model to enable openaiwingman to use same transcript.text call as it uses for openai which also uses a pydantic object, otherwise response.json would be fine here, which would return {"text":"transcription"}.
             return WhispercppTranscript(text=response.json()["text"].strip(),language=self.language)
         except:
-            return "There was an error with the whispercpp transcription.  The request to the server failed."
+            self.printr.toast_error(
+                text="There was an error with the whispercpp transcription.  The request to the server failed."
+            )
+            return None
 
-    def check_if_whispercpp_is_running(self):
+    def __check_if_whispercpp_is_running(self):
         try:
             response = requests.get(self.base_url)
             response.raise_for_status()
@@ -87,7 +104,7 @@ class Whispercpp:
                 #If not found, try to start whispercpp as a subprocess
                 subprocess.Popen([self.whispercpp_exe_path, "-m", self.whispercpp_model_path, "-l", self.language])
                 time.sleep(5)
-            return "ERROR: You chose Whispercpp for speech to text but the program does not appear to be running, and if you enabled autostart, autostart failed.  Please check your whispercpp install and your paths if you enabled autostart."
+            return "You chose Whispercpp for speech to text but the program does not appear to be running, and if you enabled autostart, autostart failed.  Please check your whispercpp install and your paths if you enabled autostart."
 
         return "ok"
 

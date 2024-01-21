@@ -148,14 +148,14 @@ azure:
 # There are executables for windows and mac, and for windows there are executables for just running on cpu (whisper-blas-bin) and Nvidia GPU (whisper-cublas)
 # The typical model used for multilingual is ggml-small.bin or ggml-base.bin. The typical model used for English only is ggml-base.en.bin.
 # The ideal setup is to start Whispercpp's server.exe file following its instructions and then run WingmanAI. 
-# However, if you want, you can set autostart: True and provide a path to your whispercpp server.exe and model .bin in the config below and wingmanai can try to start it for you.
+# However, if you want, you can set autostart: True and provide a path to your whispercpp server.exe and model .bin in the config below and wingmanai can try to start it for you.  Autostart currently works on Windows only.
 # You can expect quality to be worse than openai or azure whisper, but this method is free and may also be better for people with worse internet.  Speed will depend on your system resources.
 # Note that WingmanAI's support of whispercpp assumes you already know how to use the program.  It is just a connector.  If there are any issues with whispercpp you should direct them to the creator of whispercpp.
 # Only used if features > stt_provider is set to 'whispercpp' above.
 whispercpp:
     base_url: http://127.0.0.1:8080 # This is the default for whispercpp, though you can change the host and port manually when launching your server with command line arguments.
-    autostart: false # Set this to true if you want to set paths to your whispercpp server.exe and model bin below and have wingman try to launch whispercpp server itself.
-    autostart_settings:
+    autostart: false # Autostart currently works on Windows only.  Set this to true if you want to set paths to your whispercpp server.exe and model bin below and have wingman try to launch whispercpp server itself.
+    autostart_settings: # Required if autostart: true
         whispercpp_exe_path: C:\Whispercpp\server.exe # This is just an example, you will insert here the full path to your whispercpp server.exe file.  Only used if autostart is set to true.
         whispercpp_model_path: C:\Whispercpp\models\ggml-base.bin # This is just an example, you will insert here the full path to the whispercpp ggml model file you downloaded.  Only used if autostart is set to true.
     temperature: 0.0 # Not typically changed, but you can review the whispercpp documentation to determine whether to experiment with this value.
