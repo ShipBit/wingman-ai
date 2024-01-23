@@ -13,6 +13,7 @@ class Tower:
     def __init__(self, config: Config):
         self.config = config
         self.key_wingman_dict: dict[str, Wingman] = {}
+        self.mouse_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
         self.log_source_name = "Tower"
 
@@ -62,10 +63,18 @@ class Tower:
                     self.wingmen.append(wingman)
 
         for wingman in self.wingmen:
-            scan_codes = keyboard.key_to_scan_codes(wingman.get_record_key())
-            if len(scan_codes) > 0:
-                scan_code = scan_codes[0]
-                self.key_wingman_dict[scan_code] = wingman
+            # Keyboard
+            key = wingman.get_record_key()
+            if key:
+                scan_codes = keyboard.key_to_scan_codes(key)
+                if len(scan_codes) > 0:
+                    scan_code = scan_codes[0]
+                    self.key_wingman_dict[scan_code] = wingman
+
+            # Mouse
+            button = wingman.get_record_button()
+            if button:
+                self.mouse_wingman_dict[button] = wingman
 
         printr.print(
             f"Instantiated wingmen: {', '.join([w.name for w in self.wingmen])}.",
@@ -78,4 +87,8 @@ class Tower:
 
     def get_wingman_from_key(self, key: any) -> Wingman | None:  # type: ignore
         wingman = self.key_wingman_dict.get(key.scan_code, None)
+        return wingman
+
+    def get_wingman_from_mouse(self, mouse: any) -> Wingman | None:  # type: ignore
+        wingman = self.mouse_wingman_dict.get(mouse, None)
         return wingman
