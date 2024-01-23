@@ -1,5 +1,5 @@
 import json
-import threading
+import asyncio
 import keyboard.keyboard as keyboard
 from fastapi import WebSocket
 from api.commands import (
@@ -15,6 +15,7 @@ from api.interface import CommandActionConfig, CommandKeyboardConfig
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+from services.websocket_user import WebSocketUser
 from wingman_core import WingmanCore
 
 
@@ -25,6 +26,7 @@ class CommandHandler:
         self.core = core
         self.secret_keeper: SecretKeeper = SecretKeeper()
         self.printr: Printr = Printr()
+        self.timeout_task = None
 
     async def dispatch(self, message, websocket: WebSocket):
         try:
@@ -77,7 +79,6 @@ class CommandHandler:
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
     ):
-        # TODO: Start recording keyboard actions and build a list of CommandActionConfig
         await self.printr.print_async(
             "Recording keyboard actions...",
             toast=ToastType.NORMAL,
@@ -86,10 +87,8 @@ class CommandHandler:
             server_only=True,
         )
 
-        # Stop recording after a timeout
-        """ threading.Timer(
-            10.0, await self.handle_stop_recording, [command, websocket]
-        ).start() """
+        # Start timeout
+        self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
 
         keyboard.start_recording()
 
@@ -108,8 +107,9 @@ class CommandHandler:
     async def handle_stop_recording(
         self, command: StopRecordingCommand, websocket: WebSocket
     ):
-        # TODO: Send a ActionsRecordedCommand to the client with the resulting actions: list[CommandActionConfig]
         recorded_keys = keyboard.stop_recording()
+        if self.timeout_task:
+            self.timeout_task.cancel()
 
         actions = self._get_actions_from_recorded_keys(recorded_keys)
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
@@ -123,9 +123,11 @@ class CommandHandler:
             server_only=True,
         )
 
-    def _get_actions_from_recorded_keys(self, recorded):
-        # recorded = keyboard.record(until="esc")
+    async def _start_timeout(self, timeout):
+        await asyncio.sleep(timeout)
+        await self.handle_stop_recording(None, None)
 
+    def _get_actions_from_recorded_keys(self, recorded):
         actions: list[CommandActionConfig] = []
 
         key_down_time = {}  # Track initial down times for keys

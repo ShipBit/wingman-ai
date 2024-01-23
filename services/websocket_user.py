@@ -14,6 +14,7 @@ class WebSocketUser:
                 "connection_manager can only be set once during the singleton lifetime of Printr."
             )
 
+    @classmethod
     def ensure_async(self, coro):
         try:
             loop = asyncio.get_running_loop()
@@ -24,7 +25,9 @@ class WebSocketUser:
 
         if loop.is_running():
             # If the loop is running, create a task
-            loop.create_task(coro)
+            task = loop.create_task(coro)
         else:
             # If there's no running loop, we need to run the loop until the coro completes
-            loop.run_until_complete(coro)
+            task = loop.run_until_complete(coro)
+
+        return task
