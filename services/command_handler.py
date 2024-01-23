@@ -1,4 +1,6 @@
 import json
+import threading
+import keyboard.keyboard as keyboard
 from fastapi import WebSocket
 from api.commands import (
     ActionsRecordedCommand,
@@ -9,6 +11,7 @@ from api.commands import (
     WebSocketCommandModel,
 )
 from api.enums import LogSource, ToastType
+from api.interface import CommandActionConfig, CommandKeyboardConfig
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -83,6 +86,11 @@ class CommandHandler:
             server_only=True,
         )
 
+        # Stop recording after a timeout
+        threading.Timer(10.0, self.handle_stop_recording, [command, websocket]).start()
+
+        keyboard.start_recording()
+
     async def handle_record_mouse_actions(
         self, command: RecordMouseActionsCommand, websocket: WebSocket
     ):
@@ -99,7 +107,9 @@ class CommandHandler:
         self, command: StopRecordingCommand, websocket: WebSocket
     ):
         # TODO: Send a ActionsRecordedCommand to the client with the resulting actions: list[CommandActionConfig]
-        actions = []
+        recorded_keys = keyboard.stop_recording()
+
+        actions = self._get_actions_from_recorded_keys(recorded_keys)
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
 
@@ -110,3 +120,67 @@ class CommandHandler:
             source_name=self.source_name,
             server_only=True,
         )
+
+    def _get_actions_from_recorded_keys(recorded):
+        # recorded = keyboard.record(until="esc")
+
+        actions: list[CommandActionConfig] = []
+
+        key_down_time = {}  # Track initial down times for keys
+        last_up_time = None  # Track the last up time to measure durations of inactivity
+        keys_pressed = []  # Track the keys currently pressed
+
+        # Initialize such that we consider the keyboard initially inactive
+        all_keys_released = True
+
+        # Process recorded key events to calculate press durations and inactivity
+        for key in recorded:
+            if key.event_type == "down":
+                # Ignore further processing if 'esc' was pressed
+                if key.name == "esc":
+                    break
+
+                if all_keys_released:
+                    # There was a period of inactivity, calculate its duration
+                    if last_up_time is not None:
+                        inactivity_duration = key.time - last_up_time
+                        if inactivity_duration > 1.0:
+                            wait_config = CommandActionConfig()
+                            wait_config.wait = round(inactivity_duration, 2)
+                            actions.append(wait_config)
+
+                    all_keys_released = False
+
+                # Record only the first down event time for each key
+                if key.name not in key_down_time:
+                    key_down_time[key.name] = key.time
+            elif key.event_type == "up":
+                if key.name == "esc":
+                    break  # Stop processing if 'esc' was released as we don't need the last inactivity period
+
+                if key.name in key_down_time:
+                    # Calculate the press duration for the current key
+                    press_duration = key.time - key_down_time[key.name]
+
+                    # Remove the key from the dictionary after calculating press duration
+                    del key_down_time[key.name]
+
+                    keys_pressed.append(key.name)
+
+                    # If no more keys are pressed, update last_up_time and set the keyboard to inactive
+                    if not key_down_time:
+                        last_up_time = key.time
+                        all_keys_released = True
+
+                        hotkey_name = keyboard.get_hotkey_name(keys_pressed)
+                        keys_pressed = []
+
+                        key_config = CommandActionConfig()
+                        key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
+
+                        if press_duration > 0.2 and not keyboard.is_modifier(key.name):
+                            key_config.keyboard.hold = round(press_duration, 2)
+
+                        actions.append(key_config)
+
+        return actions
