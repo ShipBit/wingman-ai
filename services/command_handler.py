@@ -87,7 +87,9 @@ class CommandHandler:
         )
 
         # Stop recording after a timeout
-        threading.Timer(10.0, self.handle_stop_recording, [command, websocket]).start()
+        """ threading.Timer(
+            10.0, await self.handle_stop_recording, [command, websocket]
+        ).start() """
 
         keyboard.start_recording()
 
@@ -121,7 +123,7 @@ class CommandHandler:
             server_only=True,
         )
 
-    def _get_actions_from_recorded_keys(recorded):
+    def _get_actions_from_recorded_keys(self, recorded):
         # recorded = keyboard.record(until="esc")
 
         actions: list[CommandActionConfig] = []
