@@ -11,6 +11,7 @@ from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 import keyboard.keyboard as keyboard
+import mouse.mouse as mouse
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 from services.command_handler import CommandHandler
@@ -50,6 +51,9 @@ is_latest = version_check.check_version()
 core = WingmanCore(config_manager=config_manager)
 
 keyboard.hook(core.on_key)
+
+# TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
+mouse.hook(core.on_mouse)
 
 
 def custom_generate_unique_id(route: APIRoute):

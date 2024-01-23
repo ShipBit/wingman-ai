@@ -273,27 +273,40 @@ class FeaturesConfig(BaseModel):
     remember_messages: Optional[int] = None
 
 
-class KeyPressConfig(BaseModel):
-    key: str
-    """The key the wingman will press when executing the command.  Use 'primary', 'secondary' or 'middle' for mouse buttons. Use 'scroll' to scroll."""
-
-    modifier: Optional[str] = None
-    """This will press "modifier + key" instead of just "modifier". Optional."""
-
-    wait: Optional[float] = None
-    """Wait time in seconds before pressing the next key. Optional."""
+class CommandKeyboardConfig(BaseModel):
+    hotkey: str
+    """The hotkey. Can be a single key like 'a' or a combination like 'ctrl+shift+a'."""
 
     hold: Optional[float] = None
     """The duration the key will be pressed in seconds. Optional."""
 
-    scroll_amount: Optional[int] = None
-    """The amount of clicks to scroll up (positive integer) or down (negative integer), example 10 or -10. Must have 'scroll' as key above to work."""
 
-    moveto: Optional[list[int]] = None
+class CommandMouseConfig(BaseModel):
+    button: Optional[str] = None
+    """The mouse button to press. Optional."""
+
+    hold: Optional[float] = None
+    """The duration the button will be pressed in seconds. Optional."""
+
+    scroll: Optional[int] = None
+    """The amount to scroll up (positive integer) or down (negative integer), example 10 or -10. Must have 'scroll' as key above to work."""
+
+    move: Optional[list[int]] = None
+    """The x, y coordinates to move to relative to the current mouse position, expected [x,y] format in yaml.  Must have associated button press to work."""
+
+    move_to: Optional[list[int]] = None
     """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
 
-    moveto_relative: Optional[list[int]] = None
-    """The x, y coordinates to move to relative to the current mouse position, expected [x,y] format in yaml.  Must have associated button press to work."""
+
+class CommandActionConfig(BaseModel):
+    keyboard: Optional[CommandKeyboardConfig] = None
+    """The keyboard configuration for this action. Optional."""
+
+    wait: Optional[float] = None
+    """Wait time in seconds before pressing the next key. Optional."""
+
+    mouse: Optional[CommandMouseConfig] = None
+    """The mouse configuration for this action. Optional."""
 
     write: Optional[str] = None
     """The word or phrase to type, for example, to type text in a login screen.  Must have associated button press to work.  May need special formatting for special characters."""
@@ -311,8 +324,8 @@ class CommandConfig(BaseModel):
     """Optional: Faster - like Voice Attack! Provide phrases that will instantly activate the command (without AI roundtripping). You need to say the exact phrase to execute the command"""
     responses: Optional[list[str]] = None
     """Optional: Provide responses that will be used when the command is executed. A random one will be chosen (if multiple)."""
-    keys: Optional[list[KeyPressConfig]] = None
-    """The key or keys to press when the command is executed."""
+    actions: Optional[list[CommandActionConfig]] = None
+    """The actions to execute when the command is called. You can use keyboard, mouse and wait actions here."""
 
 
 class CustomWingmanClassConfig(BaseModel):
@@ -334,7 +347,7 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
-    commands: list[CommandConfig] | None = None
+    commands: Optional[list[CommandConfig]] = None
 
 
 class WingmanConfig(NestedConfig):
@@ -355,9 +368,12 @@ class WingmanConfig(NestedConfig):
     """The "friendly" name of this Wingman. Can be changed by the user."""
     description: str
     """A short description of this Wingman."""
-    record_key: str
+    record_key: Optional[str] = None
     """The "push-to-talk" key for this wingman. Keep it pressed while talking!
     Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
+    record_mouse_button: Optional[str] = None
+    """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking!
+    Don't use the same button for multiple wingmen!"""
 
 
 class Config(NestedConfig):

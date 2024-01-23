@@ -60,6 +60,7 @@ class MouseEventListener(object):
             Quartz.CGEventMaskBit(Quartz.kCGEventScrollWheel),
             self.handler,
             None)
+        time.sleep(1)
         loopsource = Quartz.CFMachPortCreateRunLoopSource(None, self.tap, 0)
         loop = Quartz.CFRunLoopGetCurrent()
         Quartz.CFRunLoopAddSource(loop, loopsource, Quartz.kCFRunLoopDefaultMode)
