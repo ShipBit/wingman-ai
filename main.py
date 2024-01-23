@@ -10,7 +10,6 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from api.interface import CommandActionConfig, CommandKeyboardConfig
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.commands import WebSocketCommandModel
