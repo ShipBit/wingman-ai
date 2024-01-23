@@ -95,6 +95,10 @@ class Wingman:
         """Returns the activation or "push-to-talk" key for this Wingman."""
         return self.config.record_key
 
+    def get_record_button(self) -> str:
+        """Returns the activation or "push-to-talk" mouse button for this Wingman."""
+        return self.config.record_mouse_button
+
     async def print_execution_time(self, reset_timer=False):
         """Prints the current time since the execution started (in seconds)."""
         if self.execution_start:

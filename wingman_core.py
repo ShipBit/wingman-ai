@@ -3,6 +3,7 @@ import threading
 from typing import Optional
 from fastapi import APIRouter
 import sounddevice as sd
+import mouse.mouse as mouse
 from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
 from api.interface import (
     AudioDevice,
@@ -204,15 +205,25 @@ class WingmanCore:
         configured_devices = self.get_configured_audio_devices()
         sd.default.device = (configured_devices.input, configured_devices.output)
 
-    def on_press(self, key):
+    def on_press(self, key=None, button=None):
         if self.tower and self.active_recording["key"] == "":
-            wingman = self.tower.get_wingman_from_key(key)
+            if key:
+                wingman = self.tower.get_wingman_from_key(key)
+            elif button:
+                wingman = self.tower.get_wingman_from_mouse(button)
             if wingman:
-                self.active_recording = dict(key=key.name, wingman=wingman)
+                if key:
+                    self.active_recording = dict(key=key.name, wingman=wingman)
+                elif button:
+                    self.active_recording = dict(key=button, wingman=wingman)
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
-    def on_release(self, key):
-        if self.tower and self.active_recording["key"] == key.name:
+    def on_release(self, key=None, button=None):
+        if self.tower and (
+            key is not None
+            and self.active_recording["key"] == key.name
+            or self.active_recording["key"] == button
+        ):
             wingman = self.active_recording["wingman"]
             recorded_audio_wav = self.audio_recorder.stop_recording(
                 wingman_name=wingman.name
@@ -236,9 +247,19 @@ class WingmanCore:
 
     def on_key(self, key):
         if key.event_type == "down":
-            self.on_press(key)
+            self.on_press(key=key)
         elif key.event_type == "up":
-            self.on_release(key)
+            self.on_release(key=key)
+
+    def on_mouse(self, event):
+        # Check if event is of type ButtonEvent
+        if not isinstance(event, mouse.ButtonEvent):
+            return
+
+        if event.event_type == "down":
+            self.on_press(button=event.button)
+        elif event.event_type == "up":
+            self.on_release(button=event.button)
 
     # GET /configs
     def get_config_dirs(self):

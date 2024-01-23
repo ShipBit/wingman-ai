@@ -368,9 +368,12 @@ class WingmanConfig(NestedConfig):
     """The "friendly" name of this Wingman. Can be changed by the user."""
     description: str
     """A short description of this Wingman."""
-    record_key: str
+    record_key: Optional[str] = None
     """The "push-to-talk" key for this wingman. Keep it pressed while talking!
     Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
+    record_mouse_button: Optional[str] = None
+    """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking!
+    Don't use the same button for multiple wingmen!"""
 
 
 class Config(NestedConfig):

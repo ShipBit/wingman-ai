@@ -85,12 +85,12 @@ commands:
   - name: DisableLimiter
     actions:
       - keyboard:
-          hotkey: strg+n
+          hotkey: ctrl+n
   # ───────────────────────────────────────────
   - name: InitiateStartSequence # You can have multiple keys per command!
     actions:
       - keyboard:
-          hotkey: altright+r
+          hotkey: right alt+r
       - wait: 2 # wait 2 second before pressing the next key
       - keyboard:
           hotkey: alt+n
@@ -221,32 +221,32 @@ commands:
   - name: Reload
     actions:
       - keyboard:
-          hotkey: "r"
+          hotkey: r
   # ───────────────────────────────────────────
   - name: UseMedPen
     actions:
       - keyboard:
-          hotkey: "c"
+          hotkey: c
   # ───────────────────────────────────────────
   - name: UseFlashLight
     actions:
       - keyboard:
-          hotkey: "t"
+          hotkey: t
   # ───────────────────────────────────────────
   - name: OpenInventory
     actions:
       - keyboard:
-          hotkey: "i"
+          hotkey: i
   # ───────────────────────────────────────────
   - name: DeployDecoy
     actions:
       - keyboard:
-          hotkey: "h"
+          hotkey: h
   # ───────────────────────────────────────────
   - name: DeployNoise
     actions:
       - keyboard:
-          hotkey: "j"
+          hotkey: j
   # ───────────────────────────────────────────
   - name: ShieldRaiseBack
     actions:
@@ -286,45 +286,45 @@ commands:
   - name: EmergencyEject
     actions:
       - keyboard:
-          hotkey: "altright+y"
+          hotkey: right alt+y
   # ───────────────────────────────────────────
   - name: SelfDestruct
     keys:
     actions:
       - keyboard:
-          hotkey: "backspace"
+          hotkey: backspace
           hold: 0.8
   # ───────────────────────────────────────────
   - name: SalvageMode
     actions:
       - keyboard:
-          hotkey: "g"
+          hotkey: g
   # ───────────────────────────────────────────
   - name: SpaceBrake
     actions:
       - keyboard:
-          hotkey: "x"
+          hotkey: x
   # ───────────────────────────────────────────
   - name: ExitSeat
     actions:
       - keyboard:
-          hotkey: "y"
+          hotkey: y
           hold: 0.8
   # ───────────────────────────────────────────
   - name: CycleGimbalAssist
     actions:
       - keyboard:
-          hotkey: "g"
+          hotkey: g
   # ───────────────────────────────────────────
   - name: RequestLandingPermission
     actions:
       - keyboard:
-          hotkey: "alt+n"
+          hotkey: alt+n
   # ───────────────────────────────────────────
   - name: RequestDeparture
     actions:
       - keyboard:
-          hotkey: "alt+n"
+          hotkey: alt+n
   # ───────────────────────────────────────────
   - name: DisplayDebuggingInfo
     actions:
@@ -401,7 +401,6 @@ commands:
       - mouse:
           button: left
           hold: 1
-      - mouse:
           move: [0, -100]
     instant_activation:
       - Turret up
@@ -411,7 +410,6 @@ commands:
       - mouse:
           button: left
           hold: 1
-      - mouse:
           move: [0, 100]
     instant_activation:
       - Turret down
