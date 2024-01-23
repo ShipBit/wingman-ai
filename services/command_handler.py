@@ -101,7 +101,7 @@ class CommandHandler:
         # TODO: Send a ActionsRecordedCommand to the client with the resulting actions: list[CommandActionConfig]
         actions = []
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
-        self.connection_manager.broadcast(command)
+        await self.connection_manager.broadcast(command)
 
         await self.printr.print_async(
             "Stopped recording actions.",
