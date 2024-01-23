@@ -1,6 +1,7 @@
 import json
 from fastapi import WebSocket
 from api.commands import (
+    ActionsRecordedCommand,
     RecordKeyboardActionsCommand,
     RecordMouseActionsCommand,
     SaveSecretCommand,
@@ -98,6 +99,9 @@ class CommandHandler:
         self, command: StopRecordingCommand, websocket: WebSocket
     ):
         # TODO: Send a ActionsRecordedCommand to the client with the resulting actions: list[CommandActionConfig]
+        actions = []
+        command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
+        self.connection_manager.broadcast(command)
 
         await self.printr.print_async(
             "Stopped recording actions.",
