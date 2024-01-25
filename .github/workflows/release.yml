@@ -35,7 +35,7 @@ jobs:
       - name: Upload Windows Exe Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WingmanAiCore-Windows
+          name: WingmanAiCore-Windows-Build # Unique name for the build artifact
           path: dist/WingmanAiCore/
 
   sign-windows-executable:
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v4 # for the action
       - uses: actions/download-artifact@v4
         with:
-          name: WingmanAiCore-Windows
+          name: WingmanAiCore-Windows-Build
           path: WingmanAiCore
 
       - name: Sign
@@ -62,7 +62,7 @@ jobs:
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: WingmanAiCore-Windows
+          name: WingmanAiCore-Windows-Signed # Unique name for the signed artifact
           path: WingmanAiCore
 
   release:
@@ -71,7 +71,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: WingmanAiCore-Windows
+          name: WingmanAiCore-Windows-Signed # Ensure this matches the unique signed artifact name
           path: .
 
       - name: Create Release
