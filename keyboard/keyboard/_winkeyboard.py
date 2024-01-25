@@ -14,6 +14,7 @@ from __future__ import unicode_literals
 import re
 import atexit
 import traceback
+import pydirectinput
 from threading import Lock
 from collections import defaultdict
 
@@ -575,10 +576,12 @@ def map_name(name):
         yield scan_code or -vk, modifiers
 
 def _send_event(code, event_type):
-    if code == 541:
-        # Alt-gr is made of ctrl+alt. Just sending even 541 doesn't do anything.
-        user32.keybd_event(0x11, code, event_type, 0)
-        user32.keybd_event(0x12, code, event_type, 0)
+    if code == 541 or code == 56 or code == 57400:
+        # Alt-gr is difficult to simulate. pydirectinput does work, so we are using it in this case.
+        if event_type == 0:
+            pydirectinput.keyDown("altright")
+        elif event_type == 2:
+            pydirectinput.keyUp("altright")
     elif code > 0:
         vk = scan_code_to_vk.get(code, 0)
         user32.keybd_event(vk, code, event_type, 0)
