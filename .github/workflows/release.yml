@@ -3,17 +3,17 @@ name: Build, Sign and Release
 on:
   push:
     branches:
-      - "ci-cd-core"
+      - 'ci-cd-core'
 
 jobs:
   build-windows:
     name: Build Windows Executable
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11.7'
 
@@ -33,7 +33,7 @@ jobs:
           pyinstaller main.py --name WingmanAiCore --noconfirm --icon assets/icons/wingman-ai.png --paths venv/Lib/site-packages --add-data "venv/Lib/site-packages/azure/cognitiveservices/speech;azure/cognitiveservices/speech" --add-data "assets;assets" --add-data "services;services" --add-data "configs/system/config.example.yaml;configs/system/." --add-data "wingmen;wingmen" --add-data "audio_samples;audio_samples" --add-data "LICENSE;."
 
       - name: Upload Windows Exe Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: WingmanAiCore-Windows
           path: dist/WingmanAiCore/
@@ -42,8 +42,8 @@ jobs:
     needs: build-windows
     runs-on: windows-2022
     steps:
-      - uses: actions/checkout@v3 # for the action
-      - uses: actions/download-artifact@v3
+      - uses: actions/checkout@v4 # for the action
+      - uses: actions/download-artifact@v4
         with:
           name: WingmanAiCore-Windows
           path: WingmanAiCore
@@ -60,7 +60,7 @@ jobs:
           path-to-binary: 'WingmanAiCore/WingmanAiCore.exe'
 
       - name: Upload Windows Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: WingmanAiCore-Windows
           path: WingmanAiCore
@@ -69,7 +69,7 @@ jobs:
     needs: [sign-windows-executable]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: WingmanAiCore-Windows
           path: .
