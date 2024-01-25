@@ -7,7 +7,7 @@ def get_writable_dir(subdir: str = None) -> str:
     dirs = PlatformDirs(
         appname="WingmanAI",
         appauthor="ShipBit",
-        version=LOCAL_VERSION,
+        version=LOCAL_VERSION.replace(".", "_"),
         ensure_exists=True,
         roaming=True,
     )
