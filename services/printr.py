@@ -1,5 +1,9 @@
+from datetime import datetime
+import logging
+from os import path
 from api.commands import LogCommand, ToastCommand
 from api.enums import CommandTag, LogSource, LogType, ToastType
+from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
 
 
@@ -20,10 +24,23 @@ class Printr(WebSocketUser):
     # PREVIOUS_LINE = "\033[2F"
 
     _instance = None
+    logger: logging.Logger
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Printr, cls).__new__(cls)
+            cls._instance.logger = logging.getLogger()
+            cls._instance.logger.setLevel(logging.INFO)
+            ch = logging.StreamHandler()
+            ch.setLevel(logging.INFO)
+            cls._instance.logger.addHandler(ch)
+            now = datetime.now()
+            dateTimeStr = now.strftime("%Y-%m-%d-%H-%M-%S")
+            fh = logging.FileHandler(
+                path.join(get_writable_dir("logs"), f"wingman-core.{dateTimeStr}.log")
+            )
+            fh.setLevel(logging.INFO)
+            cls._instance.logger.addHandler(fh)
         return cls._instance
 
     async def __send_to_gui(
@@ -138,4 +155,4 @@ class Printr(WebSocketUser):
         return f"{color}{text}{Printr.CLEAR}"
 
     def print_colored(self, text, color):
-        print(self.clr(text, color), flush=True)
+        self.logger.info(self.clr(text, color))
