@@ -3,12 +3,9 @@ from fastapi import APIRouter
 import requests
 from packaging import version
 from api.interface import SystemCore, SystemInfo
-from services.printr import Printr
 
 LOCAL_VERSION = "2.0.0b2"
 VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
-
-printr = Printr()
 
 
 class SystemManager:
@@ -41,11 +38,8 @@ class SystemManager:
             return app_version >= remote_version
 
         except requests.RequestException:
-            msg = "Could not reach version endpoint."
-            printr.toast_warning(f"Error fetching version information: \n{msg}")
             return False
         except ValueError as e:
-            printr.toast_warning(f"Error with version information: {e}")
             return False
 
     def current_version_is_latest(self):
@@ -59,7 +53,6 @@ class SystemManager:
 
     # GET /system-info
     def get_system_info(self):
-        printr.print("Checking for updates...", server_only=True)
         is_latest = self.check_version()
 
         return SystemInfo(
