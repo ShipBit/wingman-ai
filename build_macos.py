@@ -8,7 +8,7 @@ cmd = [
     "WingmanAiCore",  # name of your app
     "--noconfirm",
     "--icon",
-    "assets/icons/wingman-ai.png",
+    "assets/wingman-ai.ico",
     "--paths",
     f"{os.path.join('venv', 'lib', 'python3.11', 'site-packages')}",  # adapted with venv/lib/python3.11/site-packages
     "--add-data",
