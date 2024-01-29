@@ -11,7 +11,7 @@ cmd = [
     # "--onefile",
     # "--windowed",  # prevent console appearing, only use with ui.run(native=True, ...)
     "--icon",
-    "assets/icons/wingman-ai.png",
+    "assets/wingman-ai.ico",
     "--noconfirm",
     "--paths",
     "venv/Lib/site-packages",
