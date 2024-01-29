@@ -138,4 +138,4 @@ class Printr(WebSocketUser):
         return f"{color}{text}{Printr.CLEAR}"
 
     def print_colored(self, text, color):
-        print(self.clr(text, color))
+        print(self.clr(text, color), flush=True)
