@@ -277,6 +277,23 @@ class WingmanCore:
         elif event.event_type == "up":
             self.on_release(button=event.button)
 
+    def on_voice_recognition(self, voice_event):
+
+        async def call_wingman():
+            print("TEST")
+
+        def run_async_process():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(call_wingman())
+            finally:
+                loop.close()
+
+        if voice_event.result.text:
+            play_thread = threading.Thread(target=run_async_process)
+            play_thread.start()
+
     # GET /configs
     def get_config_dirs(self):
         return ConfigsInfo(

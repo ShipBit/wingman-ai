@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
+import azure.cognitiveservices.speech as speechsdk
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 from services.command_handler import CommandHandler
@@ -54,6 +55,14 @@ keyboard.hook(core.on_key)
 
 # TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
 mouse.hook(core.on_mouse)
+
+# Init voice activation
+speech_config = speechsdk.SpeechConfig(region="westeurope", subscription=secret_keeper.secrets["azure_tts"])
+# speech_config.set_property(speechsdk.PropertyId.Speech_LogFilename, "LogfilePathAndName")
+speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
+
+speech_recognizer.recognized.connect(core.on_voice_recognition)
+speech_recognizer.start_continuous_recognition()
 
 
 def custom_generate_unique_id(route: APIRoute):

@@ -1,4 +1,4 @@
-azure-cognitiveservices-speech==1.34.0
+azure-cognitiveservices-speech==1.34.1
 edge-tts==6.1.9
 elevenlabslib~=0.17.1
 fastapi~=0.108.0
