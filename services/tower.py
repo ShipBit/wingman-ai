@@ -92,3 +92,10 @@ class Tower:
     def get_wingman_from_mouse(self, mouse: any) -> Wingman | None:  # type: ignore
         wingman = self.mouse_wingman_dict.get(mouse, None)
         return wingman
+    
+    def get_wingman_from_text(self, text: str) -> Wingman | None:
+        for wingman in self.wingmen:
+            # Check if a wingman name is in the text
+            if wingman.name.lower() in text.lower():
+                return wingman
+        return None

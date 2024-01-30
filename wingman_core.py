@@ -252,7 +252,7 @@ class WingmanCore:
                 try:
                     if isinstance(wingman, Wingman):
                         loop.run_until_complete(
-                            wingman.process(str(recorded_audio_wav))
+                            wingman.process(audio_input_wav=str(recorded_audio_wav))
                         )
                 finally:
                     loop.close()
@@ -279,18 +279,18 @@ class WingmanCore:
 
     def on_voice_recognition(self, voice_event):
 
-        async def call_wingman():
-            print("TEST")
-
         def run_async_process():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(call_wingman())
+                loop.run_until_complete(wingman.process(transcript=text))
             finally:
                 loop.close()
 
-        if voice_event.result.text:
+        text = voice_event.result.text
+        wingman = self.tower.get_wingman_from_text(text)
+        print(f"Recognized: {text}")
+        if text and wingman:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
 
