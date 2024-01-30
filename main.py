@@ -223,6 +223,11 @@ async def async_main(host: str, port: int, sidecar: bool):
 
     core.is_started = True
 
+    if not config_info.config.voice_activation.enabled:
+        speech_recognizer.stop_continuous_recognition()
+
+    keyboard.add_hotkey(config_info.config.voice_activation.mute_toggle_key, core.on_mute_toggle, args=[speech_recognizer])
+
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)
     await server.serve()

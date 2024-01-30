@@ -216,6 +216,8 @@ class WingmanCore:
         self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
 
+        self.is_listening = True
+
         # restore settings
         configured_devices = self.get_configured_audio_devices()
         sd.default.device = (configured_devices.input, configured_devices.output)
@@ -292,6 +294,13 @@ class WingmanCore:
         if text and wingman:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
+
+    def on_mute_toggle(self, speech_recognizer):
+        self.is_listening = not self.is_listening
+        if self.is_listening:
+            speech_recognizer.start_continuous_recognition()
+        else:
+            speech_recognizer.stop_continuous_recognition()
 
     # GET /configs
     def get_config_dirs(self):
