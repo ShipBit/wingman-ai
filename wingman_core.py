@@ -289,7 +289,6 @@ class WingmanCore:
 
         text = voice_event.result.text
         wingman = self.tower.get_wingman_from_text(text)
-        print(f"Recognized: {text}")
         if text and wingman:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()

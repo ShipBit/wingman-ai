@@ -98,4 +98,10 @@ class Tower:
             # Check if a wingman name is in the text
             if wingman.name.lower() in text.lower():
                 return wingman
+            
+        # Check if there is a default wingman defined in the config
+        for wingman in self.wingmen:
+            if wingman.config.is_voice_activation_default:
+                return wingman
+
         return None

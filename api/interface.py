@@ -256,6 +256,15 @@ class SoundConfig(BaseModel):
     effects: list[SoundEffect]
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
+class VoiceActivationConfig(BaseModel):
+    """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
+
+    enabled: bool
+    """Whether to use voice activation or not. If you disable this, you need to use the record key to record your voice."""
+
+    mute_toggle_key: str
+    """If you want to use a key to toggle the microphone on/off, you can set it here. This is useful if you want to use voice activation but also want to be able to talk to other people without the Wingman interfering."""
+
 
 class FeaturesConfig(BaseModel):
     """You can override various AI providers if your Wingman supports it. Our OpenAI wingman does!
@@ -341,6 +350,7 @@ class CustomWingmanClassConfig(BaseModel):
 
 class NestedConfig(BaseModel):
     sound: SoundConfig
+    voice_activation: VoiceActivationConfig
     features: FeaturesConfig
     openai: OpenAiConfig
     edge_tts: EdgeTtsConfig
@@ -374,6 +384,7 @@ class WingmanConfig(NestedConfig):
     record_mouse_button: Optional[str] = None
     """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking!
     Don't use the same button for multiple wingmen!"""
+    is_voice_activation_default: Optional[bool] = None
 
 
 class Config(NestedConfig):
