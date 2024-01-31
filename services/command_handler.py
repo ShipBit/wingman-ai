@@ -88,7 +88,7 @@ class CommandHandler:
         )
 
         # Start timeout
-        self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
+        # self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
 
         keyboard.start_recording()
 
