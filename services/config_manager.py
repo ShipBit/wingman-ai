@@ -105,6 +105,11 @@ class ConfigManager:
             is_deleted=False,
         )
 
+    def get_config_dir_path(self, config_name: Optional[str] = "") -> str:
+        return (
+            path.join(self.config_dir, config_name) if config_name else self.config_dir
+        )
+
     def create_configs_from_templates(self, force: bool = False):
         for root, _, files in walk(self.templates_dir):
             relative_path = path.relpath(root, self.templates_dir)

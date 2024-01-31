@@ -60,6 +60,13 @@ class WingmanCore:
             tags=["core"],
         )
         self.router.add_api_route(
+            methods=["GET"],
+            path="/config-dir-path",
+            endpoint=self.get_config_dir_path,
+            response_model=str,
+            tags=["core"],
+        )
+        self.router.add_api_route(
             methods=["POST"],
             path="/config",
             endpoint=self.load_config,
@@ -287,6 +294,10 @@ class WingmanCore:
 
         errors, config_info = await self.load_config(config_dir)
         return config_info
+
+    # GET /config-dir-path
+    def get_config_dir_path(self, config_name: Optional[str] = ""):
+        return self.config_manager.get_config_dir_path(config_name)
 
     # POST config
     async def load_config(
