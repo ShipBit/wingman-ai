@@ -101,10 +101,6 @@ class AudioSettings(BaseModel):
     output: Optional[int] = None
 
 
-class SettingsConfig(BaseModel):
-    audio: Optional[AudioSettings] = None
-
-
 class AzureInstanceConfig(BaseModel):
     api_base_url: str
     """https://xxx.openai.azure.com/"""
@@ -352,7 +348,6 @@ class CustomWingmanClassConfig(BaseModel):
 
 class NestedConfig(BaseModel):
     sound: SoundConfig
-    voice_activation: VoiceActivationConfig
     features: FeaturesConfig
     openai: OpenAiConfig
     edge_tts: EdgeTtsConfig
@@ -411,3 +406,7 @@ class ConfigWithDirInfo(BaseModel):
 class NewWingmanTemplate(BaseModel):
     wingman_config: WingmanConfig
     avatar: Annotated[str, Base64Str]
+
+class SettingsConfig(BaseModel):
+    audio: Optional[AudioSettings] = None
+    voice_activation: VoiceActivationConfig

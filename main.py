@@ -68,11 +68,13 @@ async def init_voice_activation(config: Config):
         prompt_if_missing=True,
     )
 
+    settings = config_manager.settings_config.voice_activation
+
     speech_config = speechsdk.SpeechConfig(region=config.azure.tts.region.value, subscription=key)
 
     auto_detect_source_language_config = (
         speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-            languages=config.voice_activation.languages
+            languages=settings.languages
         )
     )
 
@@ -82,7 +84,7 @@ async def init_voice_activation(config: Config):
         auto_detect_source_language_config=auto_detect_source_language_config,
     )
 
-    keyboard.add_hotkey(config.voice_activation.mute_toggle_key, core.on_mute_toggle, args=[speech_recognizer])
+    keyboard.add_hotkey(settings.mute_toggle_key, core.on_mute_toggle, args=[speech_recognizer])
 
     speech_recognizer.recognized.connect(core.on_voice_recognition)
     speech_recognizer.start_continuous_recognition()
@@ -245,7 +247,7 @@ async def async_main(host: str, port: int, sidecar: bool):
 
     core.is_started = True
 
-    if config_info.config.voice_activation.enabled:
+    if config_manager.settings_config.voice_activation.enabled:
        loop = asyncio.get_running_loop()
        loop.create_task(init_voice_activation(config_info.config))
 
