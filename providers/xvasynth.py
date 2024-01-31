@@ -7,7 +7,11 @@ import requests
 from api.enums import WingmanInitializationErrorType
 from api.interface import XVASynthTtsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
+from services.file import get_writable_dir
 from services.printr import Printr
+
+RECORDING_PATH = "audio_output"
+OUTPUT_FILE: str = "xvasynth.wav"
 
 
 class XVASynth:
@@ -80,12 +84,10 @@ class XVASynth:
                 text="There was a problem loading your XVASynth voice. Check your voice name and game folder for your voice in XVAsynth."
             )
         voiceline = text
-        file_dir = path.abspath(path.dirname(__file__))
-        wingman_dir = path.abspath(path.dirname(file_dir))
-        final_voiceline_file = f"{wingman_dir}\\audio_output\\xvasynth.wav"
 
-        if path.exists(final_voiceline_file):
-            os.remove(final_voiceline_file)
+        file_path = path.join(get_writable_dir(RECORDING_PATH), OUTPUT_FILE)
+        if path.exists(file_path):
+            os.remove(file_path)
 
         # Synthesize voiceline
         synthesize_url = config.synthesize_url
@@ -94,7 +96,7 @@ class XVASynth:
             "modelType": "xVAPitch",
             "sequence": voiceline,
             "pace": config.pace,
-            "outfile": final_voiceline_file,
+            "outfile": file_path,
             "vocoder": "n/a",
             "base_lang": config.language,
             "base_emb": "[]",
@@ -103,7 +105,7 @@ class XVASynth:
         }
         response = requests.post(synthesize_url, json=data, timeout=10)
         audio_player = AudioPlayer()
-        audio, sample_rate = audio_player.get_audio_from_file(final_voiceline_file)
+        audio, sample_rate = audio_player.get_audio_from_file(file_path)
         audio_player.stream_with_effects(
             input_data=(audio, sample_rate), config=sound_config
         )
