@@ -84,7 +84,8 @@ async def init_voice_activation(config: Config):
         auto_detect_source_language_config=auto_detect_source_language_config,
     )
 
-    keyboard.add_hotkey(settings.mute_toggle_key, core.on_mute_toggle, args=[speech_recognizer])
+    core.speech_recognizer = speech_recognizer
+    keyboard.add_hotkey(settings.mute_toggle_key, core.on_mute_toggle)
 
     speech_recognizer.recognized.connect(core.on_voice_recognition)
     speech_recognizer.start_continuous_recognition()

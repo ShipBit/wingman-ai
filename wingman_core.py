@@ -216,6 +216,7 @@ class WingmanCore:
         self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
 
+        self.speech_recognizer = None
         self.is_listening = True
 
         # restore settings
@@ -234,6 +235,7 @@ class WingmanCore:
                     self.active_recording = dict(key=key.name, wingman=wingman)
                 elif button:
                     self.active_recording = dict(key=button, wingman=wingman)
+                self.mute_voice_recognition(True)
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
     def on_release(self, key=None, button=None):
@@ -247,6 +249,7 @@ class WingmanCore:
                 wingman_name=wingman.name
             )
             self.active_recording = {"key": "", "wingman": None}
+            self.mute_voice_recognition(False)
 
             def run_async_process():
                 loop = asyncio.new_event_loop()
@@ -295,12 +298,15 @@ class WingmanCore:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
 
-    def on_mute_toggle(self, speech_recognizer):
-        self.is_listening = not self.is_listening
-        if self.is_listening:
-            speech_recognizer.start_continuous_recognition()
+    def mute_voice_recognition(self, is_muted: bool):
+        if is_muted:
+            self.speech_recognizer.stop_continuous_recognition()
         else:
-            speech_recognizer.stop_continuous_recognition()
+            self.speech_recognizer.start_continuous_recognition()
+
+    def on_mute_toggle(self):
+        self.is_listening = not self.is_listening
+        self.mute_voice_recognition(not self.is_listening)
 
     # GET /configs
     def get_config_dirs(self):
