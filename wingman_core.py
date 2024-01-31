@@ -20,10 +20,12 @@ from api.interface import (
     WingmanConfig,
     WingmanConfigFileInfo,
     WingmanInitializationError,
+    XVASynthTtsConfig,
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
+from providers.xvasynth import XVASynth
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
@@ -186,6 +188,12 @@ class WingmanCore:
             methods=["POST"],
             path="/play/edgetts",
             endpoint=self.play_edge_tts,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/play/xvasynth",
+            endpoint=self.play_xvasynth_tts,
             tags=["core"],
         )
 
@@ -491,3 +499,10 @@ class WingmanCore:
     ):
         edge = Edge()
         await edge.play_audio(text=text, config=config, sound_config=sound_config)
+
+    # POST /play/xvasynth
+    async def play_xvasynth_tts(
+        self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
+    ):
+        xvasynth = XVASynth(wingman_name="")
+        await xvasynth.play_audio(text=text, config=config, sound_config=sound_config)
