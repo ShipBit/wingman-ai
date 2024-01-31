@@ -10,6 +10,7 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from api.interface import Config
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 import azure.cognitiveservices.speech as speechsdk
@@ -27,6 +28,8 @@ port = None
 host = None
 
 connection_manager = ConnectionManager()
+
+speech_recognizer = None
 
 printr = Printr()
 Printr.set_connection_manager(connection_manager)
@@ -56,14 +59,23 @@ keyboard.hook(core.on_key)
 # TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
 mouse.hook(core.on_mouse)
 
-# Init voice activation
-speech_config = speechsdk.SpeechConfig(region="westeurope", subscription=secret_keeper.secrets["azure_tts"])
-# speech_config.set_property(speechsdk.PropertyId.Speech_LogFilename, "LogfilePathAndName")
-speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
+async def init_voice_activation(config: Config):
+    global speech_recognizer
 
-speech_recognizer.recognized.connect(core.on_voice_recognition)
-speech_recognizer.start_continuous_recognition()
+    key = await secret_keeper.retrieve(
+        requester="Voice Activation",
+        key="azure_tts",
+        prompt_if_missing=True,
+    )
 
+    speech_config = speechsdk.SpeechConfig(region=config.azure.tts.region.value, subscription=key)
+    # speech_config.set_property(speechsdk.PropertyId.Speech_LogFilename, "LogfilePathAndName")
+    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
+
+    keyboard.add_hotkey(config.voice_activation.mute_toggle_key, core.on_mute_toggle, args=[speech_recognizer])
+
+    speech_recognizer.recognized.connect(core.on_voice_recognition)
+    speech_recognizer.start_continuous_recognition()
 
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
@@ -223,10 +235,9 @@ async def async_main(host: str, port: int, sidecar: bool):
 
     core.is_started = True
 
-    if not config_info.config.voice_activation.enabled:
-        speech_recognizer.stop_continuous_recognition()
-
-    keyboard.add_hotkey(config_info.config.voice_activation.mute_toggle_key, core.on_mute_toggle, args=[speech_recognizer])
+    if config_info.config.voice_activation.enabled:
+       loop = asyncio.get_running_loop()
+       loop.create_task(init_voice_activation(config_info.config))
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)
