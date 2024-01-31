@@ -69,8 +69,18 @@ async def init_voice_activation(config: Config):
     )
 
     speech_config = speechsdk.SpeechConfig(region=config.azure.tts.region.value, subscription=key)
+
+    auto_detect_source_language_config = (
+        speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+            languages=config.voice_activation.languages
+        )
+    )
+
     # speech_config.set_property(speechsdk.PropertyId.Speech_LogFilename, "LogfilePathAndName")
-    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config)
+    speech_recognizer = speechsdk.SpeechRecognizer(
+        speech_config=speech_config,
+        auto_detect_source_language_config=auto_detect_source_language_config,
+    )
 
     keyboard.add_hotkey(config.voice_activation.mute_toggle_key, core.on_mute_toggle, args=[speech_recognizer])
 

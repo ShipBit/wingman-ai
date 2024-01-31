@@ -66,6 +66,10 @@ voice_activation:
 
   mute_toggle_key: m # the key to toggle mute on/off
 
+  languages:
+    - en-US # you can add more languages here
+    - de-DE # you can add more languages here
+
 # ────────────────────────────────── OPEN AI ────────────────────────────────────
 openai:
   # The model to use for conversations aka "chit-chat" and for function calls.
