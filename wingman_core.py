@@ -428,7 +428,9 @@ class WingmanCore:
         return audio_devices
 
     # POST /audio-devices
-    def set_audio_devices(self, output_device: int, input_device: int):
+    def set_audio_devices(
+        self, output_device: Optional[int] = None, input_device: Optional[int] = None
+    ):
         # set the devices
         sd.default.device = input_device, output_device
 
