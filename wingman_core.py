@@ -431,11 +431,13 @@ class WingmanCore:
     def set_audio_devices(self, output_device: int, input_device: int):
         # set the devices
         sd.default.device = input_device, output_device
+
         # save settings
         self.config_manager.settings_config.audio = AudioSettings(
             input=input_device,
             output=output_device,
         )
+
         if self.config_manager.save_settings_config():
             printr.print(
                 "Audio devices updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE

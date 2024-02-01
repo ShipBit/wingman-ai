@@ -676,7 +676,7 @@ class ConfigManager:
                 self.printr.toast_error(
                     f"Invalid config '{self.settings_config_path}':\n{str(e)}"
                 )
-        return None
+        return SettingsConfig()
 
     def save_settings_config(self):
         """Write Settings config to file"""
