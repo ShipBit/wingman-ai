@@ -156,6 +156,12 @@ class WingmanCore:
             tags=["core"],
         )
         self.router.add_api_route(
+            methods=["POST"],
+            path="/mute-key",
+            endpoint=self.set_mute_key,
+            tags=["core"],
+        )
+        self.router.add_api_route(
             methods=["GET"],
             path="/settings",
             endpoint=self.get_settings,
@@ -521,6 +527,17 @@ class WingmanCore:
         if self.config_manager.save_settings_config():
             printr.print(
                 f"Voice activation {'enabled' if is_enabled else 'disabled'}.",
+                toast=ToastType.NORMAL,
+                color=LogType.POSITIVE,
+            )
+
+    # POST /mute-key
+    def set_mute_key(self, key: str):
+        self.config_manager.settings_config.voice_activation.mute_toggle_key = key
+
+        if self.config_manager.save_settings_config():
+            printr.print(
+                f"Mute key saved.",
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
             )
