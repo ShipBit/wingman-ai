@@ -4,12 +4,14 @@
 # If you're a developer and want to get crazy with your own wingmen, check out the "star_head_wingman" examples below!
 
 # The internal name of the wingman which is shown in the GUI. Has to be unique within this file!
-name: Board Computer
+name: Computer
 description: The computer of your ship. It's in in charge of all the systems on your ship and executes various commands.
 
 # The "push-to-talk" key for this wingman. Keep it pressed while talking!
 # Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!
 record_key: end
+
+is_voice_activation_default: True
 
 # Note how this overrides the default settings from the general config above!
 sound:
