@@ -3,7 +3,9 @@ import threading
 from typing import Optional
 from fastapi import APIRouter
 import sounddevice as sd
+import azure.cognitiveservices.speech as speechsdk
 import mouse.mouse as mouse
+from api.commands import VoiceActivationMutedCommand
 from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
 from api.interface import (
     AudioDevice,
@@ -28,6 +30,7 @@ from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.xvasynth import XVASynth
 from wingmen.wingman import Wingman
+from services.websocket_user import WebSocketUser
 from services.audio_recorder import AudioRecorder
 from services.printr import Printr
 from services.tower import Tower
@@ -36,7 +39,7 @@ from services.config_manager import ConfigManager
 printr = Printr()
 
 
-class WingmanCore:
+class WingmanCore(WebSocketUser):
     def __init__(self, config_manager: ConfigManager):
         self.router = APIRouter()
         self.router.add_api_route(
@@ -157,6 +160,12 @@ class WingmanCore:
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/voice-activation/mute",
+            endpoint=self.start_voice_recognition,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/mute-key",
             endpoint=self.set_mute_key,
             tags=["core"],
@@ -235,8 +244,8 @@ class WingmanCore:
         self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
 
-        self.speech_recognizer = None
-        self.is_listening = True
+        self.speech_recognizer: speechsdk.SpeechRecognizer = None
+        self.is_listening = False
 
         # restore settings
         settings = self.get_settings()
@@ -257,7 +266,7 @@ class WingmanCore:
                     self.active_recording = dict(key=key.name, wingman=wingman)
                 elif button:
                     self.active_recording = dict(key=button, wingman=wingman)
-                self.mute_voice_recognition(True)
+                self.start_voice_recognition(mute=True)
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
     def on_release(self, key=None, button=None):
@@ -271,7 +280,7 @@ class WingmanCore:
                 wingman_name=wingman.name
             )
             self.active_recording = {"key": "", "wingman": None}
-            self.mute_voice_recognition(False)
+            self.start_voice_recognition()
 
             def run_async_process():
                 loop = asyncio.new_event_loop()
@@ -305,7 +314,6 @@ class WingmanCore:
             self.on_release(button=event.button)
 
     def on_voice_recognition(self, voice_event):
-
         def run_async_process():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -319,16 +327,6 @@ class WingmanCore:
         if text and wingman:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
-
-    def mute_voice_recognition(self, is_muted: bool):
-        if is_muted:
-            self.speech_recognizer.stop_continuous_recognition()
-        else:
-            self.speech_recognizer.start_continuous_recognition()
-
-    def on_mute_toggle(self):
-        self.is_listening = not self.is_listening
-        self.mute_voice_recognition(not self.is_listening)
 
     # GET /configs
     def get_config_dirs(self):
@@ -523,6 +521,7 @@ class WingmanCore:
     # POST /voice-activation
     def set_voice_activation(self, is_enabled: bool):
         self.config_manager.settings_config.voice_activation.enabled = is_enabled
+        self.start_voice_recognition(mute=not is_enabled)
 
         if self.config_manager.save_settings_config():
             printr.print(
@@ -530,6 +529,28 @@ class WingmanCore:
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
             )
+
+    # POST /voice-activation/mute
+    def start_voice_recognition(self, mute: Optional[bool] = False):
+        self.is_listening = not mute
+        if mute:
+            self.speech_recognizer.stop_continuous_recognition()
+        else:
+            self.speech_recognizer.start_continuous_recognition()
+
+        command = VoiceActivationMutedCommand(muted=mute)
+        self.ensure_async(self._connection_manager.broadcast(command))
+
+        printr.print(
+            f"Voice recognition {'stopped (muted)' if mute else 'started'}.",
+            toast=ToastType.NORMAL,
+            color=LogType.POSITIVE,
+            server_only=True,
+        )
+
+    def toggle_voice_recognition(self):
+        mute = self.is_listening
+        self.start_voice_recognition(mute)
 
     # POST /mute-key
     def set_mute_key(self, key: str):

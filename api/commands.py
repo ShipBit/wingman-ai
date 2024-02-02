@@ -62,3 +62,8 @@ class ToastCommand(WebSocketCommandModel):
 class ActionsRecordedCommand(WebSocketCommandModel):
     command: Literal["actions_recorded"] = "actions_recorded"
     actions: list[CommandActionConfig]
+
+
+class VoiceActivationMutedCommand(WebSocketCommandModel):
+    command: Literal["voice_activation_muted"] = "voice_activation_muted"
+    muted: bool

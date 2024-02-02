@@ -28,8 +28,8 @@ port = None
 host = None
 
 connection_manager = ConnectionManager()
+speech_recognizer: speechsdk.SpeechRecognizer = None
 
-speech_recognizer = None
 
 printr = Printr()
 Printr.set_connection_manager(connection_manager)
@@ -53,6 +53,7 @@ is_latest = version_check.check_version()
 
 # uses the Singletons above, so don't move this up!
 core = WingmanCore(config_manager=config_manager)
+core.set_connection_manager(connection_manager)
 
 keyboard.hook(core.on_key)
 
@@ -69,15 +70,14 @@ async def init_voice_activation(config: Config):
         prompt_if_missing=True,
     )
 
-    settings = config_manager.settings_config.voice_activation
-
     speech_config = speechsdk.SpeechConfig(
         region=config.azure.tts.region.value, subscription=key
     )
 
+    voice_activation_settings = config_manager.settings_config.voice_activation
     auto_detect_source_language_config = (
         speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-            languages=settings.languages
+            languages=voice_activation_settings.languages
         )
     )
 
@@ -86,12 +86,15 @@ async def init_voice_activation(config: Config):
         speech_config=speech_config,
         auto_detect_source_language_config=auto_detect_source_language_config,
     )
+    speech_recognizer.recognized.connect(core.on_voice_recognition)
 
     core.speech_recognizer = speech_recognizer
-    keyboard.add_hotkey(settings.mute_toggle_key, core.on_mute_toggle)
+    if voice_activation_settings.enabled:
+        core.start_voice_recognition()
 
-    speech_recognizer.recognized.connect(core.on_voice_recognition)
-    speech_recognizer.start_continuous_recognition()
+    keyboard.add_hotkey(
+        voice_activation_settings.mute_toggle_key, core.toggle_voice_recognition
+    )
 
 
 def custom_generate_unique_id(route: APIRoute):
@@ -252,9 +255,8 @@ async def async_main(host: str, port: int, sidecar: bool):
 
     core.is_started = True
 
-    if config_manager.settings_config.voice_activation.enabled:
-        loop = asyncio.get_running_loop()
-        loop.create_task(init_voice_activation(config_info.config))
+    current_loop = asyncio.get_running_loop()
+    current_loop.create_task(init_voice_activation(config_info.config))
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)
