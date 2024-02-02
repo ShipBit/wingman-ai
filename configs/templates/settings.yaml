@@ -1,6 +1,6 @@
 audio: {}
 voice_activation:
-  enabled: true
+  enabled: false
   mute_toggle_key: "shift+x"
   languages:
     - en-US
