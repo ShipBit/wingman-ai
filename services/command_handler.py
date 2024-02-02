@@ -131,16 +131,17 @@ class CommandHandler:
 
         key_down_time = {}  # Track initial down times for keys
         last_up_time = None  # Track the last up time to measure durations of inactivity
-        keys_pressed = []  # Track the keys currently pressed
+        keys_pressed = []  # Track the keys currently pressed in the order they were pressed
 
         # Initialize such that we consider the keyboard initially inactive
         all_keys_released = True
 
         # Process recorded key events to calculate press durations and inactivity
         for key in recorded:
+            key_name = key.name.lower()
             if key.event_type == "down":
                 # Ignore further processing if 'esc' was pressed
-                if key.name == "esc":
+                if key_name == "esc":
                     break
 
                 if all_keys_released:
@@ -154,21 +155,21 @@ class CommandHandler:
 
                     all_keys_released = False
 
-                # Record only the first down event time for each key
-                if key.name not in key_down_time:
-                    key_down_time[key.name] = key.time
+                # Record only the first down event time for each key and add to keys_pressed
+                if key_name not in key_down_time:
+                    key_down_time[key_name] = key.time
+                    keys_pressed.append(key_name)  # Add key to keys_pressed when pressed down
+
             elif key.event_type == "up":
-                if key.name == "esc":
+                if key_name == "esc":
                     break  # Stop processing if 'esc' was released as we don't need the last inactivity period
 
-                if key.name in key_down_time:
+                if key_name in key_down_time:
                     # Calculate the press duration for the current key
-                    press_duration = key.time - key_down_time[key.name]
+                    press_duration = key.time - key_down_time[key_name]
 
                     # Remove the key from the dictionary after calculating press duration
-                    del key_down_time[key.name]
-
-                    keys_pressed.append(key.name)
+                    del key_down_time[key_name]
 
                     # If no more keys are pressed, update last_up_time and set the keyboard to inactive
                     if not key_down_time:
@@ -176,12 +177,12 @@ class CommandHandler:
                         all_keys_released = True
 
                         hotkey_name = keyboard.get_hotkey_name(keys_pressed)
-                        keys_pressed = []
+                        keys_pressed = []  # Clear keys_pressed after getting the hotkey_name
 
                         key_config = CommandActionConfig()
                         key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
 
-                        if press_duration > 0.2 and not keyboard.is_modifier(key.name):
+                        if press_duration > 0.2 and not keyboard.is_modifier(key_name):
                             key_config.keyboard.hold = round(press_duration, 2)
 
                         actions.append(key_config)
