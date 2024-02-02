@@ -21,13 +21,23 @@ class AudioRecorder:
     ):
         self.file_path = path.join(get_writable_dir(RECORDING_PATH), RECORDING_FILE)
         self.samplerate = samplerate
+        self.channels = channels
         self.is_recording = False
         self.recording = None
+        self.recstream = None
+
+        # default devices are fixed once this is called
+        # so this methods needs to be called every time a new device is configured
+        self.update_input_stream() 
+
+    def update_input_stream(self):
+        if self.recstream is not None:
+            self.recstream.close()
 
         self.recstream = sounddevice.InputStream(
             callback=self.__handle_input_stream,
-            channels=channels,
-            samplerate=samplerate,
+            channels=self.channels,
+            samplerate=self.samplerate,
         )
 
     def __handle_input_stream(self, indata, _frames, _time, _status):
