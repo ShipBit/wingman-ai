@@ -81,7 +81,7 @@ class WingmanCore:
         self.router.add_api_route(
             methods=["GET"],
             path="/config/wingmen",
-            endpoint=self.get_wingmen_configs,
+            endpoint=self.get_wingmen_config_files,
             response_model=list[WingmanConfigFileInfo],
             tags=["core"],
         )
@@ -96,6 +96,12 @@ class WingmanCore:
             methods=["POST"],
             path="/config/new-wingman",
             endpoint=self.add_new_wingman,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/wingman/default",
+            endpoint=self.set_default_wingman,
             tags=["core"],
         )
         self.router.add_api_route(
@@ -140,6 +146,12 @@ class WingmanCore:
             methods=["POST"],
             path="/audio-devices",
             endpoint=self.set_audio_devices,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voice-activation",
+            endpoint=self.set_voice_activation,
             tags=["core"],
         )
         self.router.add_api_route(
@@ -374,7 +386,7 @@ class WingmanCore:
             await self.load_config()
 
     # GET config/wingmen
-    async def get_wingmen_configs(self, config_name: str):
+    async def get_wingmen_config_files(self, config_name: str):
         config_dir = self.config_manager.get_config_dir(config_name)
         return self.config_manager.get_wingmen_configs(config_dir)
 
@@ -414,6 +426,7 @@ class WingmanCore:
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
         auto_recover: bool = False,
+        silent: bool = False,
     ):
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
@@ -422,7 +435,8 @@ class WingmanCore:
         )
         try:
             await self.load_config(config_dir)
-            printr.toast("Wingman saved successfully.")
+            if not silent:
+                printr.toast("Wingman saved successfully.")
         except Exception:
             error_message = "Invalid Wingman configuration."
             if auto_recover:
@@ -442,6 +456,31 @@ class WingmanCore:
                 printr.toast_error(f"{error_message} {restored_message}")
             else:
                 printr.toast_error(f"{error_message}")
+
+    # POST config/wingman/default
+    async def set_default_wingman(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_name: str,
+    ):
+        _dir, config = self.config_manager.load_config(config_dir)
+        wingman_config_files = await self.get_wingmen_config_files(config_dir.name)
+
+        for wingman_config_file in wingman_config_files:
+            wingman_config = config.wingmen[wingman_name]
+
+            wingman_config.is_voice_activation_default = (
+                wingman_config.name == wingman_name
+            )
+
+            await self.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_config_file,
+                wingman_config=wingman_config,
+                silent=True,
+            )
+
+        await self.load_config(config_dir)
 
     # GET /audio-devices/configured
     def get_configured_audio_devices(self):
@@ -476,6 +515,17 @@ class WingmanCore:
         if self.config_manager.save_settings_config():
             printr.print(
                 "Audio devices updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
+            )
+
+    # POST /voice-activation
+    def set_voice_activation(self, is_enabled: bool):
+        self.config_manager.settings_config.voice_activation.enabled = is_enabled
+
+        if self.config_manager.save_settings_config():
+            printr.print(
+                f"Voice activation {'enabled' if is_enabled else 'disabled'}.",
+                toast=ToastType.NORMAL,
+                color=LogType.POSITIVE,
             )
 
     # GET /startup-errors
