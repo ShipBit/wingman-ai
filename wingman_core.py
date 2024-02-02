@@ -219,6 +219,7 @@ class WingmanCore:
         # restore settings
         configured_devices = self.get_configured_audio_devices()
         sd.default.device = (configured_devices.input, configured_devices.output)
+        self.audio_recorder.update_input_stream()
 
     def on_press(self, key=None, button=None):
         if self.tower and self.active_recording["key"] == "":
@@ -433,6 +434,7 @@ class WingmanCore:
     ):
         # set the devices
         sd.default.device = input_device, output_device
+        self.audio_recorder.update_input_stream()
 
         # save settings
         self.config_manager.settings_config.audio = AudioSettings(
