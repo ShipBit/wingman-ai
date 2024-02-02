@@ -15,6 +15,7 @@ from api.interface import (
     EdgeTtsConfig,
     ElevenlabsConfig,
     NewWingmanTemplate,
+    SettingsConfig,
     SoundConfig,
     VoiceInfo,
     WingmanConfig,
@@ -156,9 +157,9 @@ class WingmanCore:
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/audio-devices/configured",
-            endpoint=self.get_configured_audio_devices,
-            response_model=AudioSettings,
+            path="/settings",
+            endpoint=self.get_settings,
+            response_model=SettingsConfig,
             tags=["core"],
         )
 
@@ -232,9 +233,12 @@ class WingmanCore:
         self.is_listening = True
 
         # restore settings
-        configured_devices = self.get_configured_audio_devices()
-        sd.default.device = (configured_devices.input, configured_devices.output)
-        self.audio_recorder.update_input_stream()
+        settings = self.get_settings()
+        if settings.audio:
+            input_device = settings.audio.input
+            output_device = settings.audio.output
+            sd.default.device = (input_device, output_device)
+            self.audio_recorder.update_input_stream()
 
     def on_press(self, key=None, button=None):
         if self.tower and self.active_recording["key"] == "":
@@ -482,16 +486,9 @@ class WingmanCore:
 
         await self.load_config(config_dir)
 
-    # GET /audio-devices/configured
-    def get_configured_audio_devices(self):
-        audio_devices = (
-            self.config_manager.settings_config.audio
-            if self.config_manager.settings_config
-            else None
-        )
-        input_device = audio_devices.input if audio_devices else None
-        output_device = audio_devices.output if audio_devices else None
-        return AudioSettings(input=input_device, output=output_device)
+    # GET /settings
+    def get_settings(self):
+        return self.config_manager.settings_config
 
     # GET /audio-devices
     def get_audio_devices(self):
