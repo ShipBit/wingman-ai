@@ -444,8 +444,8 @@ class WingmanCore:
             wingman_config=wingman_config,
         )
         try:
-            await self.load_config(config_dir)
             if not silent:
+                await self.load_config(config_dir)
                 printr.toast("Wingman saved successfully.")
         except Exception:
             error_message = "Invalid Wingman configuration."
@@ -477,7 +477,7 @@ class WingmanCore:
         wingman_config_files = await self.get_wingmen_config_files(config_dir.name)
 
         for wingman_config_file in wingman_config_files:
-            wingman_config = config.wingmen[wingman_name]
+            wingman_config = config.wingmen[wingman_config_file.name]
 
             wingman_config.is_voice_activation_default = (
                 wingman_config.name == wingman_name
