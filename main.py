@@ -10,12 +10,12 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from api.interface import Config
-import keyboard.keyboard as keyboard
-import mouse.mouse as mouse
 import azure.cognitiveservices.speech as speechsdk
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
+from api.interface import Config
+import keyboard.keyboard as keyboard
+import mouse.mouse as mouse
 from services.command_handler import CommandHandler
 from services.config_manager import ConfigManager
 from services.connection_manager import ConnectionManager
@@ -59,6 +59,7 @@ keyboard.hook(core.on_key)
 # TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
 mouse.hook(core.on_mouse)
 
+
 async def init_voice_activation(config: Config):
     global speech_recognizer
 
@@ -70,7 +71,9 @@ async def init_voice_activation(config: Config):
 
     settings = config_manager.settings_config.voice_activation
 
-    speech_config = speechsdk.SpeechConfig(region=config.azure.tts.region.value, subscription=key)
+    speech_config = speechsdk.SpeechConfig(
+        region=config.azure.tts.region.value, subscription=key
+    )
 
     auto_detect_source_language_config = (
         speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
@@ -89,6 +92,7 @@ async def init_voice_activation(config: Config):
 
     speech_recognizer.recognized.connect(core.on_voice_recognition)
     speech_recognizer.start_continuous_recognition()
+
 
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
@@ -249,8 +253,8 @@ async def async_main(host: str, port: int, sidecar: bool):
     core.is_started = True
 
     if config_manager.settings_config.voice_activation.enabled:
-       loop = asyncio.get_running_loop()
-       loop.create_task(init_voice_activation(config_info.config))
+        loop = asyncio.get_running_loop()
+        loop.create_task(init_voice_activation(config_info.config))
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)

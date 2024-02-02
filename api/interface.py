@@ -252,6 +252,7 @@ class SoundConfig(BaseModel):
     effects: list[SoundEffect]
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
+
 class VoiceActivationConfig(BaseModel):
     """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
 
@@ -263,6 +264,7 @@ class VoiceActivationConfig(BaseModel):
 
     languages: Optional[list[str]] = None
     """The languages to use for voice activation. You can add as many as you want. The Wingman will listen for all of them."""
+
 
 class FeaturesConfig(BaseModel):
     """You can override various AI providers if your Wingman supports it. Our OpenAI wingman does!
@@ -382,6 +384,7 @@ class WingmanConfig(NestedConfig):
     """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking!
     Don't use the same button for multiple wingmen!"""
     is_voice_activation_default: Optional[bool] = None
+    """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
 
 
 class Config(NestedConfig):
@@ -406,6 +409,7 @@ class ConfigWithDirInfo(BaseModel):
 class NewWingmanTemplate(BaseModel):
     wingman_config: WingmanConfig
     avatar: Annotated[str, Base64Str]
+
 
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
