@@ -1,7 +1,10 @@
 from typing import Optional
 import json
 import requests
-from api.interface import WingmanConfig, WingmanInitializationError
+from api.interface import (
+    WingmanConfig,
+    WingmanInitializationError,
+)
 from api.enums import LogType, WingmanInitializationErrorType
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -25,7 +28,7 @@ class StarHeadWingman(OpenAiWingman):
         )
 
         # config entry existence not validated yet. Assign later when checked!
-        self.star_head_url = ""
+        self.starhead_url = ""
         """The base URL of the StarHead API"""
 
         self.headers = {"x-origin": "wingman-ai"}
@@ -45,32 +48,38 @@ class StarHeadWingman(OpenAiWingman):
         errors: list[WingmanInitializationError] = await super().validate()
 
         # add custom errors
-        if not self.config.custom_properties["starhead_api_url"]:
+        starhead_api_url = next(
+            (
+                prop
+                for prop in self.config.custom_properties
+                if prop.id == "starhead_api_url"
+            ),
+            None,
+        )
+        if not starhead_api_url or not starhead_api_url.value:
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.name,
-                    message="Missing custom property 'starhead_api_url' in config.yaml",
+                    message="Missing required custom property 'starhead_api_url'.",
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                 )
             )
-
-        try:
-            await self._prepare_data()
-        except Exception as e:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.name,
-                    message=f"Failed to load data from StarHead API: {e}",
-                    error_type=WingmanInitializationErrorType.UNKNOWN,
+        else:
+            self.starhead_url = starhead_api_url.value
+            try:
+                await self._prepare_data()
+            except Exception as e:
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.name,
+                        message=f"Failed to load data from StarHead API: {e}",
+                        error_type=WingmanInitializationErrorType.UNKNOWN,
+                    )
                 )
-            )
 
         return errors
 
     async def _prepare_data(self):
-        # here validate() already ran, so we can safely access the config
-        self.star_head_url = self.config.custom_properties["starhead_api_url"]
-
         self.start_execution_benchmark()
 
         self.vehicles = await self._fetch_data("vehicle")
@@ -85,12 +94,14 @@ class StarHeadWingman(OpenAiWingman):
             celestial_object["name"] for celestial_object in self.celestial_objects
         ]
 
-        self.quantum_drives = await self._fetch_data("vehiclecomponent", {"typeFilter": 8})
+        self.quantum_drives = await self._fetch_data(
+            "vehiclecomponent", {"typeFilter": 8}
+        )
 
     async def _fetch_data(
         self, endpoint: str, params: Optional[dict[str, any]] = None
     ) -> list[dict[str, any]]:
-        url = f"{self.star_head_url}/{endpoint}"
+        url = f"{self.starhead_url}/{endpoint}"
 
         if self.debug:
             await printr.print_async(f"Retrieving {url}", color=LogType.INFO)
@@ -175,7 +186,7 @@ class StarHeadWingman(OpenAiWingman):
             "useOnlyWeaponFreeZones": False,
             "onlySingleSections": True,
         }
-        url = f"{self.star_head_url}/trading"
+        url = f"{self.starhead_url}/trading"
         response = requests.post(
             url=url,
             json=data,
@@ -232,7 +243,9 @@ class StarHeadWingman(OpenAiWingman):
                 return cargo, qd
         return None, None
 
-    async def _get_ship_loadout(self, ship_id: Optional[int]) -> Optional[dict[str, any]]:
+    async def _get_ship_loadout(
+        self, ship_id: Optional[int]
+    ) -> Optional[dict[str, any]]:
         """Retrieves loadout data for a given ship ID."""
         if ship_id:
             try:
