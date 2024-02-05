@@ -22,7 +22,11 @@ custom_class:
 # Do not put API keys or other sensitive data here! Use the secret_keeper class for that.
 # Note that the values can only be strings. You can convert them to other types in your code.
 custom_properties:
-  starhead_api_url: https://api-test.star-head.de
+  - id: starhead_api_url
+    value: https://api-test.star-head.de
+    name: StarHead API URL
+    description: The URL of the StarHead API.
+    required: true
 
 azure:
   conversation:

@@ -359,6 +359,19 @@ class NestedConfig(BaseModel):
     commands: Optional[list[CommandConfig]] = None
 
 
+class CustomWingmanProperty(BaseModel):
+    id: str
+    """The name of the property. Has to be unique"""
+    name: str
+    """The "friendly" name of the property, displayed in the UI."""
+    value: str
+    """The value of the property"""
+    hint: Optional[str] = None
+    """A hint for the user, displayed in the UI."""
+    required: Optional[bool] = False
+    """Marks the property as required in the UI."""
+
+
 class WingmanConfig(NestedConfig):
     def __getitem__(self, item):
         return self.extra_properties.get(item)
@@ -366,8 +379,8 @@ class WingmanConfig(NestedConfig):
     def __setitem__(self, key, value):
         self.extra_properties[key] = value
 
-    custom_properties: Optional[dict[str, str]] = {}
-    """You can add custom properties here to use in your custom wingman class. Strings only!"""
+    custom_properties: Optional[list[CustomWingmanProperty]] = None
+    """You can add custom properties here to use in your custom wingman class."""
 
     disabled: Optional[bool] = False
     """Set this to true if you want to disable this wingman. You can also just remove it from the config."""
