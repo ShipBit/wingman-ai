@@ -10,7 +10,6 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-import azure.cognitiveservices.speech as speechsdk
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 import keyboard.keyboard as keyboard
@@ -27,7 +26,6 @@ port = None
 host = None
 
 connection_manager = ConnectionManager()
-speech_recognizer: speechsdk.SpeechRecognizer = None
 
 
 printr = Printr()
