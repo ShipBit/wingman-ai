@@ -101,10 +101,6 @@ class AudioSettings(BaseModel):
     output: Optional[int] = None
 
 
-class SettingsConfig(BaseModel):
-    audio: Optional[AudioSettings] = None
-
-
 class AzureInstanceConfig(BaseModel):
     api_base_url: str
     """https://xxx.openai.azure.com/"""
@@ -257,6 +253,19 @@ class SoundConfig(BaseModel):
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
 
+class VoiceActivationConfig(BaseModel):
+    """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
+
+    enabled: bool
+    """Whether to use voice activation or not. If you disable this, you need to use the record key to record your voice."""
+
+    mute_toggle_key: str
+    """If you want to use a key to toggle the microphone on/off, you can set it here. This is useful if you want to use voice activation but also want to be able to talk to other people without the Wingman interfering."""
+
+    languages: Optional[list[str]] = None
+    """The languages to use for voice activation. You can add as many as you want. The Wingman will listen for all of them."""
+
+
 class FeaturesConfig(BaseModel):
     """You can override various AI providers if your Wingman supports it. Our OpenAI wingman does!
 
@@ -374,6 +383,8 @@ class WingmanConfig(NestedConfig):
     record_mouse_button: Optional[str] = None
     """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking!
     Don't use the same button for multiple wingmen!"""
+    is_voice_activation_default: Optional[bool] = None
+    """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
 
 
 class Config(NestedConfig):
@@ -398,3 +409,8 @@ class ConfigWithDirInfo(BaseModel):
 class NewWingmanTemplate(BaseModel):
     wingman_config: WingmanConfig
     avatar: Annotated[str, Base64Str]
+
+
+class SettingsConfig(BaseModel):
+    audio: Optional[AudioSettings] = None
+    voice_activation: VoiceActivationConfig

@@ -1,0 +1,7 @@
+audio: {}
+voice_activation:
+  enabled: false
+  mute_toggle_key: "shift+x"
+  languages:
+    - en-US
+    - de-DE

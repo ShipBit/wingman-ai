@@ -3,7 +3,10 @@ import threading
 from typing import Optional
 from fastapi import APIRouter
 import sounddevice as sd
+import azure.cognitiveservices.speech as speechsdk
+import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
+from api.commands import VoiceActivationMutedCommand
 from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
 from api.interface import (
     AudioDevice,
@@ -15,6 +18,7 @@ from api.interface import (
     EdgeTtsConfig,
     ElevenlabsConfig,
     NewWingmanTemplate,
+    SettingsConfig,
     SoundConfig,
     VoiceInfo,
     WingmanConfig,
@@ -28,14 +32,16 @@ from providers.open_ai import OpenAi, OpenAiAzure
 from providers.xvasynth import XVASynth
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
-from services.printr import Printr
-from services.tower import Tower
 from services.config_manager import ConfigManager
+from services.printr import Printr
+from services.secret_keeper import SecretKeeper
+from services.tower import Tower
+from services.websocket_user import WebSocketUser
 
 printr = Printr()
 
 
-class WingmanCore:
+class WingmanCore(WebSocketUser):
     def __init__(self, config_manager: ConfigManager):
         self.router = APIRouter()
         self.router.add_api_route(
@@ -81,7 +87,7 @@ class WingmanCore:
         self.router.add_api_route(
             methods=["GET"],
             path="/config/wingmen",
-            endpoint=self.get_wingmen_configs,
+            endpoint=self.get_wingmen_config_files,
             response_model=list[WingmanConfigFileInfo],
             tags=["core"],
         )
@@ -96,6 +102,12 @@ class WingmanCore:
             methods=["POST"],
             path="/config/new-wingman",
             endpoint=self.add_new_wingman,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/wingman/default",
+            endpoint=self.set_default_wingman,
             tags=["core"],
         )
         self.router.add_api_route(
@@ -143,10 +155,28 @@ class WingmanCore:
             tags=["core"],
         )
         self.router.add_api_route(
+            methods=["POST"],
+            path="/voice-activation",
+            endpoint=self.set_voice_activation,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voice-activation/mute",
+            endpoint=self.start_voice_recognition,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/mute-key",
+            endpoint=self.set_mute_key,
+            tags=["core"],
+        )
+        self.router.add_api_route(
             methods=["GET"],
-            path="/audio-devices/configured",
-            endpoint=self.get_configured_audio_devices,
-            response_model=AudioSettings,
+            path="/settings",
+            endpoint=self.get_settings,
+            response_model=SettingsConfig,
             tags=["core"],
         )
 
@@ -212,14 +242,25 @@ class WingmanCore:
         self.current_config_dir: ConfigDirInfo = (
             self.config_manager.find_default_config()
         )
+        self.current_config = None
 
         self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
 
+        self.speech_recognizer: speechsdk.SpeechRecognizer = None
+        self.is_listening = False
+
         # restore settings
-        configured_devices = self.get_configured_audio_devices()
-        sd.default.device = (configured_devices.input, configured_devices.output)
-        self.audio_recorder.update_input_stream()
+        self.settings = self.get_settings()
+        if self.settings.audio:
+            input_device = self.settings.audio.input
+            output_device = self.settings.audio.output
+            sd.default.device = (input_device, output_device)
+            self.audio_recorder.update_input_stream()
+
+    async def startup(self):
+        if self.settings.voice_activation.enabled:
+            await self.set_voice_activation(True)
 
     def on_press(self, key=None, button=None):
         if self.tower and self.active_recording["key"] == "":
@@ -232,6 +273,7 @@ class WingmanCore:
                     self.active_recording = dict(key=key.name, wingman=wingman)
                 elif button:
                     self.active_recording = dict(key=button, wingman=wingman)
+                self.start_voice_recognition(mute=True)
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
     def on_release(self, key=None, button=None):
@@ -245,6 +287,7 @@ class WingmanCore:
                 wingman_name=wingman.name
             )
             self.active_recording = {"key": "", "wingman": None}
+            self.start_voice_recognition()
 
             def run_async_process():
                 loop = asyncio.new_event_loop()
@@ -252,7 +295,7 @@ class WingmanCore:
                 try:
                     if isinstance(wingman, Wingman):
                         loop.run_until_complete(
-                            wingman.process(str(recorded_audio_wav))
+                            wingman.process(audio_input_wav=str(recorded_audio_wav))
                         )
                 finally:
                     loop.close()
@@ -276,6 +319,54 @@ class WingmanCore:
             self.on_press(button=event.button)
         elif event.event_type == "up":
             self.on_release(button=event.button)
+
+    def on_voice_recognition(self, voice_event):
+        def run_async_process():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(wingman.process(transcript=text))
+            finally:
+                loop.close()
+
+        text = voice_event.result.text
+        wingman = self.tower.get_wingman_from_text(text)
+        if text and wingman:
+            play_thread = threading.Thread(target=run_async_process)
+            play_thread.start()
+
+    async def __init_voice_activation(self):
+        if self.speech_recognizer or not self.current_config:
+            return
+
+        secret_keeper = SecretKeeper()
+        key = await secret_keeper.retrieve(
+            requester="Voice Activation",
+            key="azure_tts",
+            prompt_if_missing=True,
+        )
+
+        speech_config = speechsdk.SpeechConfig(
+            region=self.current_config.azure.tts.region.value, subscription=key
+        )
+
+        voice_activation_settings = self.config_manager.settings_config.voice_activation
+        auto_detect_source_language_config = (
+            speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                languages=voice_activation_settings.languages
+            )
+        )
+
+        # speech_config.set_property(speechsdk.PropertyId.Speech_LogFilename, "LogfilePathAndName")
+        self.speech_recognizer = speechsdk.SpeechRecognizer(
+            speech_config=speech_config,
+            auto_detect_source_language_config=auto_detect_source_language_config,
+        )
+        self.speech_recognizer.recognized.connect(self.on_voice_recognition)
+
+        keyboard.add_hotkey(
+            voice_activation_settings.mute_toggle_key, self.toggle_voice_recognition
+        )
 
     # GET /configs
     def get_config_dirs(self):
@@ -311,6 +402,7 @@ class WingmanCore:
             raise e
 
         self.current_config_dir = loaded_config_dir
+        self.current_config = config
         self.tower = Tower(config=config)
         errors = await self.tower.instantiate_wingmen()
         return errors, ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
@@ -343,7 +435,7 @@ class WingmanCore:
             await self.load_config()
 
     # GET config/wingmen
-    async def get_wingmen_configs(self, config_name: str):
+    async def get_wingmen_config_files(self, config_name: str):
         config_dir = self.config_manager.get_config_dir(config_name)
         return self.config_manager.get_wingmen_configs(config_dir)
 
@@ -383,6 +475,7 @@ class WingmanCore:
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
         auto_recover: bool = False,
+        silent: bool = False,
     ):
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
@@ -390,8 +483,9 @@ class WingmanCore:
             wingman_config=wingman_config,
         )
         try:
-            await self.load_config(config_dir)
-            printr.toast("Wingman saved successfully.")
+            if not silent:
+                await self.load_config(config_dir)
+                printr.toast("Wingman saved successfully.")
         except Exception:
             error_message = "Invalid Wingman configuration."
             if auto_recover:
@@ -412,16 +506,34 @@ class WingmanCore:
             else:
                 printr.toast_error(f"{error_message}")
 
-    # GET /audio-devices/configured
-    def get_configured_audio_devices(self):
-        audio_devices = (
-            self.config_manager.settings_config.audio
-            if self.config_manager.settings_config
-            else None
-        )
-        input_device = audio_devices.input if audio_devices else None
-        output_device = audio_devices.output if audio_devices else None
-        return AudioSettings(input=input_device, output=output_device)
+    # POST config/wingman/default
+    async def set_default_wingman(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_name: str,
+    ):
+        _dir, config = self.config_manager.load_config(config_dir)
+        wingman_config_files = await self.get_wingmen_config_files(config_dir.name)
+
+        for wingman_config_file in wingman_config_files:
+            wingman_config = config.wingmen[wingman_config_file.name]
+
+            wingman_config.is_voice_activation_default = (
+                wingman_config.name == wingman_name
+            )
+
+            await self.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_config_file,
+                wingman_config=wingman_config,
+                silent=True,
+            )
+
+        await self.load_config(config_dir)
+
+    # GET /settings
+    def get_settings(self):
+        return self.config_manager.settings_config
 
     # GET /audio-devices
     def get_audio_devices(self):
@@ -445,6 +557,54 @@ class WingmanCore:
         if self.config_manager.save_settings_config():
             printr.print(
                 "Audio devices updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
+            )
+
+    # POST /voice-activation
+    async def set_voice_activation(self, is_enabled: bool):
+        if not self.speech_recognizer:
+            await self.__init_voice_activation()
+
+        self.start_voice_recognition(mute=not is_enabled)
+
+        self.config_manager.settings_config.voice_activation.enabled = is_enabled
+        if self.config_manager.save_settings_config():
+            printr.print(
+                f"Voice activation {'enabled' if is_enabled else 'disabled'}.",
+                toast=ToastType.NORMAL,
+                color=LogType.POSITIVE,
+            )
+
+    # POST /voice-activation/mute
+    def start_voice_recognition(self, mute: Optional[bool] = False):
+        self.is_listening = not mute
+        if mute:
+            self.speech_recognizer.stop_continuous_recognition()
+        else:
+            self.speech_recognizer.start_continuous_recognition()
+
+        command = VoiceActivationMutedCommand(muted=mute)
+        self.ensure_async(self._connection_manager.broadcast(command))
+
+        printr.print(
+            f"Voice recognition {'stopped (muted)' if mute else 'started'}.",
+            toast=ToastType.NORMAL,
+            color=LogType.POSITIVE,
+            server_only=True,
+        )
+
+    def toggle_voice_recognition(self):
+        mute = self.is_listening
+        self.start_voice_recognition(mute)
+
+    # POST /mute-key
+    def set_mute_key(self, key: str):
+        self.config_manager.settings_config.voice_activation.mute_toggle_key = key
+
+        if self.config_manager.save_settings_config():
+            printr.print(
+                f"Mute key saved.",
+                toast=ToastType.NORMAL,
+                color=LogType.POSITIVE,
             )
 
     # GET /startup-errors
