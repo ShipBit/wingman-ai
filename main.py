@@ -13,7 +13,6 @@ from fastapi.openapi.utils import get_openapi
 import azure.cognitiveservices.speech as speechsdk
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
-from api.interface import Config
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from services.command_handler import CommandHandler
@@ -59,42 +58,6 @@ keyboard.hook(core.on_key)
 
 # TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
 mouse.hook(core.on_mouse)
-
-
-async def init_voice_activation(config: Config):
-    global speech_recognizer
-
-    key = await secret_keeper.retrieve(
-        requester="Voice Activation",
-        key="azure_tts",
-        prompt_if_missing=True,
-    )
-
-    speech_config = speechsdk.SpeechConfig(
-        region=config.azure.tts.region.value, subscription=key
-    )
-
-    voice_activation_settings = config_manager.settings_config.voice_activation
-    auto_detect_source_language_config = (
-        speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-            languages=voice_activation_settings.languages
-        )
-    )
-
-    # speech_config.set_property(speechsdk.PropertyId.Speech_LogFilename, "LogfilePathAndName")
-    speech_recognizer = speechsdk.SpeechRecognizer(
-        speech_config=speech_config,
-        auto_detect_source_language_config=auto_detect_source_language_config,
-    )
-    speech_recognizer.recognized.connect(core.on_voice_recognition)
-
-    core.speech_recognizer = speech_recognizer
-    if voice_activation_settings.enabled:
-        core.start_voice_recognition()
-
-    keyboard.add_hotkey(
-        voice_activation_settings.mute_toggle_key, core.toggle_voice_recognition
-    )
 
 
 def custom_generate_unique_id(route: APIRoute):
@@ -253,10 +216,9 @@ async def async_main(host: str, port: int, sidecar: bool):
         else:
             core.startup_errors.append(error)
 
-    core.is_started = True
+    await core.startup()
 
-    current_loop = asyncio.get_running_loop()
-    current_loop.create_task(init_voice_activation(config_info.config))
+    core.is_started = True
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)

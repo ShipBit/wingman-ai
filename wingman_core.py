@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter
 import sounddevice as sd
 import azure.cognitiveservices.speech as speechsdk
+import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.commands import VoiceActivationMutedCommand
 from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
@@ -30,11 +31,12 @@ from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.xvasynth import XVASynth
 from wingmen.wingman import Wingman
-from services.websocket_user import WebSocketUser
 from services.audio_recorder import AudioRecorder
-from services.printr import Printr
-from services.tower import Tower
 from services.config_manager import ConfigManager
+from services.printr import Printr
+from services.secret_keeper import SecretKeeper
+from services.tower import Tower
+from services.websocket_user import WebSocketUser
 
 printr = Printr()
 
@@ -240,6 +242,7 @@ class WingmanCore(WebSocketUser):
         self.current_config_dir: ConfigDirInfo = (
             self.config_manager.find_default_config()
         )
+        self.current_config = None
 
         self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
@@ -248,12 +251,16 @@ class WingmanCore(WebSocketUser):
         self.is_listening = False
 
         # restore settings
-        settings = self.get_settings()
-        if settings.audio:
-            input_device = settings.audio.input
-            output_device = settings.audio.output
+        self.settings = self.get_settings()
+        if self.settings.audio:
+            input_device = self.settings.audio.input
+            output_device = self.settings.audio.output
             sd.default.device = (input_device, output_device)
             self.audio_recorder.update_input_stream()
+
+    async def startup(self):
+        if self.settings.voice_activation.enabled:
+            await self.set_voice_activation(True)
 
     def on_press(self, key=None, button=None):
         if self.tower and self.active_recording["key"] == "":
@@ -328,6 +335,39 @@ class WingmanCore(WebSocketUser):
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
 
+    async def __init_voice_activation(self):
+        if self.speech_recognizer or not self.current_config:
+            return
+
+        secret_keeper = SecretKeeper()
+        key = await secret_keeper.retrieve(
+            requester="Voice Activation",
+            key="azure_tts",
+            prompt_if_missing=True,
+        )
+
+        speech_config = speechsdk.SpeechConfig(
+            region=self.current_config.azure.tts.region.value, subscription=key
+        )
+
+        voice_activation_settings = self.config_manager.settings_config.voice_activation
+        auto_detect_source_language_config = (
+            speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                languages=voice_activation_settings.languages
+            )
+        )
+
+        # speech_config.set_property(speechsdk.PropertyId.Speech_LogFilename, "LogfilePathAndName")
+        self.speech_recognizer = speechsdk.SpeechRecognizer(
+            speech_config=speech_config,
+            auto_detect_source_language_config=auto_detect_source_language_config,
+        )
+        self.speech_recognizer.recognized.connect(self.on_voice_recognition)
+
+        keyboard.add_hotkey(
+            voice_activation_settings.mute_toggle_key, self.toggle_voice_recognition
+        )
+
     # GET /configs
     def get_config_dirs(self):
         return ConfigsInfo(
@@ -362,6 +402,7 @@ class WingmanCore(WebSocketUser):
             raise e
 
         self.current_config_dir = loaded_config_dir
+        self.current_config = config
         self.tower = Tower(config=config)
         errors = await self.tower.instantiate_wingmen()
         return errors, ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
@@ -519,10 +560,13 @@ class WingmanCore(WebSocketUser):
             )
 
     # POST /voice-activation
-    def set_voice_activation(self, is_enabled: bool):
-        self.config_manager.settings_config.voice_activation.enabled = is_enabled
+    async def set_voice_activation(self, is_enabled: bool):
+        if not self.speech_recognizer:
+            await self.__init_voice_activation()
+
         self.start_voice_recognition(mute=not is_enabled)
 
+        self.config_manager.settings_config.voice_activation.enabled = is_enabled
         if self.config_manager.save_settings_config():
             printr.print(
                 f"Voice activation {'enabled' if is_enabled else 'disabled'}.",
