@@ -273,7 +273,10 @@ class WingmanCore(WebSocketUser):
                     self.active_recording = dict(key=key.name, wingman=wingman)
                 elif button:
                     self.active_recording = dict(key=button, wingman=wingman)
-                self.start_voice_recognition(mute=True)
+
+                if self.speech_recognizer:
+                    self.start_voice_recognition(mute=True)
+
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
     def on_release(self, key=None, button=None):
@@ -287,7 +290,9 @@ class WingmanCore(WebSocketUser):
                 wingman_name=wingman.name
             )
             self.active_recording = {"key": "", "wingman": None}
-            self.start_voice_recognition()
+
+            if self.speech_recognizer:
+                self.start_voice_recognition()
 
             def run_async_process():
                 loop = asyncio.new_event_loop()
