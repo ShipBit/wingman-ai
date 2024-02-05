@@ -106,7 +106,9 @@ class SecretKeeper(WebSocketUser):
         if not secrets or len(secrets) == 0:
             return
 
-        self.secrets = secrets
+        for key, value in secrets.items():
+            self.secrets[key] = value
+
         self.save()
         self.printr.print(
             "Secrets updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
