@@ -36,11 +36,11 @@ class ConfigManager:
         self.config_dir = get_writable_dir(CONFIGS_DIR)
         self.templates_dir = path.join(app_root_path, TEMPLATES_DIR)
 
+        self.create_configs_from_templates()
+
         self.settings_config_path = path.join(self.config_dir, SETTINGS_CONFIG_FILE)
         self.create_settings_config()
         self.settings_config = self.load_settings_config()
-
-        self.create_configs_from_templates()
 
     def find_default_config(self) -> ConfigDirInfo:
         """Find the (first) default config (name starts with "_") found or another normal config as fallback."""
@@ -706,9 +706,9 @@ class ConfigManager:
         # Use a dictionary to ensure unique names and allow easy overrides
         merged_commands = {cmd["name"]: cmd for cmd in general_commands}
         for cmd in wingman_commands:
-            merged_commands[
-                cmd["name"]
-            ] = cmd  # Will override or add the wingman-specific command
+            merged_commands[cmd["name"]] = (
+                cmd  # Will override or add the wingman-specific command
+            )
         # Convert merged commands back to a list since that's the expected format
         return list(merged_commands.values())
 

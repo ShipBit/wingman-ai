@@ -165,7 +165,7 @@ class Wingman:
 
     # ──────────────────────────── The main processing loop ──────────────────────────── #
 
-    async def process(self, audio_input_wav: str):
+    async def process(self, audio_input_wav: str = None, transcript: str = None):
         """The main method that gets called when the wingman is activated. This method controls what your wingman actually does and you can override it if you want to.
 
         The base implementation here triggers the transcription and processing of the given audio input.
@@ -186,11 +186,12 @@ class Wingman:
 
         process_result = None
 
-        if self.debug:
+        if self.debug and not transcript:
             await printr.print_async("Starting transcription...", color=LogType.INFO)
 
-        # transcribe the audio.
-        transcript = await self._transcribe(audio_input_wav)
+        if not transcript:
+            # transcribe the audio.
+            transcript = await self._transcribe(audio_input_wav)
 
         if self.debug:
             await self.print_execution_time(reset_timer=True)

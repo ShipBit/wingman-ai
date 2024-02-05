@@ -1,7 +1,7 @@
 import json
 import asyncio
-import keyboard.keyboard as keyboard
 from fastapi import WebSocket
+import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
     RecordKeyboardActionsCommand,
@@ -15,7 +15,6 @@ from api.interface import CommandActionConfig, CommandKeyboardConfig
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
-from services.websocket_user import WebSocketUser
 from wingman_core import WingmanCore
 
 

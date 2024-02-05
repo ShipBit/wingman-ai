@@ -10,10 +10,11 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-import keyboard.keyboard as keyboard
-import mouse.mouse as mouse
+import azure.cognitiveservices.speech as speechsdk
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
+import keyboard.keyboard as keyboard
+import mouse.mouse as mouse
 from services.command_handler import CommandHandler
 from services.config_manager import ConfigManager
 from services.connection_manager import ConnectionManager
@@ -26,6 +27,8 @@ port = None
 host = None
 
 connection_manager = ConnectionManager()
+speech_recognizer: speechsdk.SpeechRecognizer = None
+
 
 printr = Printr()
 Printr.set_connection_manager(connection_manager)
@@ -49,6 +52,7 @@ is_latest = version_check.check_version()
 
 # uses the Singletons above, so don't move this up!
 core = WingmanCore(config_manager=config_manager)
+core.set_connection_manager(connection_manager)
 
 keyboard.hook(core.on_key)
 
@@ -211,6 +215,8 @@ async def async_main(host: str, port: int, sidecar: bool):
                 return
         else:
             core.startup_errors.append(error)
+
+    await core.startup()
 
     core.is_started = True
 
