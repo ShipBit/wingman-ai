@@ -139,6 +139,7 @@ class CommandHandler:
         # Process recorded key events to calculate press durations and inactivity
         for key in recorded:
             key_name = key.name.lower()
+            key_code = key.scan_code
             if key.event_type == "down":
                 # Ignore further processing if 'esc' was pressed
                 if key_name == "esc":
@@ -156,20 +157,20 @@ class CommandHandler:
                     all_keys_released = False
 
                 # Record only the first down event time for each key and add to keys_pressed
-                if key_name not in key_down_time:
-                    key_down_time[key_name] = key.time
+                if key_code not in key_down_time:
+                    key_down_time[key_code] = key.time
                     keys_pressed.append(key_name)  # Add key to keys_pressed when pressed down
 
             elif key.event_type == "up":
                 if key_name == "esc":
                     break  # Stop processing if 'esc' was released as we don't need the last inactivity period
 
-                if key_name in key_down_time:
+                if key_code in key_down_time:
                     # Calculate the press duration for the current key
-                    press_duration = key.time - key_down_time[key_name]
+                    press_duration = key.time - key_down_time[key_code]
 
                     # Remove the key from the dictionary after calculating press duration
-                    del key_down_time[key_name]
+                    del key_down_time[key_code]
 
                     # If no more keys are pressed, update last_up_time and set the keyboard to inactive
                     if not key_down_time:
@@ -181,7 +182,7 @@ class CommandHandler:
                         key_config = CommandActionConfig()
                         key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
 
-                        if press_duration > 0.2 and not keyboard.is_modifier(key_name) and len(keys_pressed) == 1:
+                        if press_duration > 0.2 and len(keys_pressed) == 1:
                             key_config.keyboard.hold = round(press_duration, 2)
 
                         keys_pressed = []  # Clear keys_pressed after getting the hotkey_name
