@@ -176,15 +176,15 @@ class CommandHandler:
                         last_up_time = key.time
                         all_keys_released = True
 
-                        hotkey_name = keyboard.get_hotkey_name(keys_pressed)
-                        keys_pressed = []  # Clear keys_pressed after getting the hotkey_name
+                        hotkey_name = "+".join(keys_pressed)
 
                         key_config = CommandActionConfig()
                         key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
 
-                        if press_duration > 0.2 and not keyboard.is_modifier(key_name):
+                        if press_duration > 0.2 and not keyboard.is_modifier(key_name) and len(keys_pressed) == 1:
                             key_config.keyboard.hold = round(press_duration, 2)
 
+                        keys_pressed = []  # Clear keys_pressed after getting the hotkey_name
                         actions.append(key_config)
 
         return actions
