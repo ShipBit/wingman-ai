@@ -140,6 +140,7 @@ azure:
     region: westeurope
     languages:
       - en-US
+      - de-DE
 
 # ────────────────────────────────── WHISPERCPP ────────────────────────────────────
 # Whispercpp is a free, open source, MIT-licensed program on Github that uses your local computer resources to generate speech to text using free models from whisper.

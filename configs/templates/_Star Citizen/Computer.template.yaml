@@ -46,7 +46,7 @@ commands:
   # We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
   # If the Wingman doesn't call your command, try to rephrase the name here.
   # ───────────────────────────────────────────
-  - name: HoldCurrentSpeed
+  - name: ToggleCruiseControlOrToggleHoldCurrentSpeed
     actions:
       - keyboard:
           hotkey: alt+c
@@ -54,7 +54,7 @@ commands:
   - name: FlightReady
     actions:
       - keyboard:
-          hotkey: alt+r
+          hotkey: alt gr+r
     # Optional: Faster "instant activation" commands!
     # Provide phrases that will instantly activate the command (without AI roundtripping).
     # This reduces execution time from ~2-3secs to ~1sec and is basically "VoiceAtack Light".
@@ -92,7 +92,7 @@ commands:
   - name: InitiateStartSequence # You can have multiple keys per command!
     actions:
       - keyboard:
-          hotkey: right alt+r
+          hotkey: alt gr+r
       - wait: 2 # wait 2 second before pressing the next key
       - keyboard:
           hotkey: alt+n
@@ -163,17 +163,40 @@ commands:
   - name: IncreasePowerToShields
     actions:
       - keyboard:
-          hotkey: f6
+          hotkey: f7
   # ───────────────────────────────────────────
   - name: IncreasePowerToEngines
     actions:
       - keyboard:
+          hotkey: f6
+  # ───────────────────────────────────────────
+  - name: IncreasePowerToWeapons
+    actions:
+      - keyboard:
           hotkey: f5
   # ───────────────────────────────────────────
-  - name: IncreasePowerToGuns
+  - name: MaximumPowerToShields
     actions:
       - keyboard:
           hotkey: f7
+          hold: 0.8
+  # ───────────────────────────────────────────
+  - name: MaximumPowerToEngines
+    actions:
+      - keyboard:
+          hotkey: f6
+          hold: 0.8
+  # ───────────────────────────────────────────
+  - name: MaximumPowerToWeapons
+    actions:
+      - keyboard:
+          hotkey: f5
+          hold: 0.8
+  # ───────────────────────────────────────────
+  - name: ToggleVTOL
+    actions:
+      - keyboard:
+          hotkey: k
   # ───────────────────────────────────────────
   - name: Lock
     actions:
