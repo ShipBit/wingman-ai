@@ -10,11 +10,12 @@ from api.commands import (
     StopRecordingCommand,
     WebSocketCommandModel,
 )
-from api.enums import LogSource, ToastType
+from api.enums import KeyboardRecordingType, LogSource, ToastType
 from api.interface import CommandActionConfig, CommandKeyboardConfig
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+from services.websocket_user import WebSocketUser
 from wingman_core import WingmanCore
 
 
@@ -26,6 +27,8 @@ class CommandHandler:
         self.secret_keeper: SecretKeeper = SecretKeeper()
         self.printr: Printr = Printr()
         self.timeout_task = None
+        self.recorded_keys = []
+        self.hook_callback = None
 
     async def dispatch(self, message, websocket: WebSocket):
         try:
@@ -75,6 +78,23 @@ class CommandHandler:
             source_name=self.source_name,
         )
 
+    def _is_hotkey_recording_finished(self, recorded_keys):
+        # Check if for all down events there is a corresponding up event
+        for key in recorded_keys:
+            if key.event_type == "down":
+                key_up_event = next(
+                    (
+                        k
+                        for k in recorded_keys
+                        if k.event_type == "up" and k.scan_code == key.scan_code
+                    ),
+                    None,
+                )
+                if not key_up_event:
+                    return False
+        return True
+
+
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
     ):
@@ -89,7 +109,12 @@ class CommandHandler:
         # Start timeout
         # self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
 
-        keyboard.start_recording()
+        def _on_key_event(event):
+            self.recorded_keys.append(event)
+            if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None))
+
+        self.hook_callback = keyboard.hook(_on_key_event)
 
     async def handle_record_mouse_actions(
         self, command: RecordMouseActionsCommand, websocket: WebSocket
@@ -106,13 +131,17 @@ class CommandHandler:
     async def handle_stop_recording(
         self, command: StopRecordingCommand, websocket: WebSocket
     ):
-        recorded_keys = keyboard.stop_recording()
+        if self.hook_callback:
+            keyboard.unhook(self.hook_callback)
+        recorded_keys = self.recorded_keys
         if self.timeout_task:
             self.timeout_task.cancel()
 
         actions = self._get_actions_from_recorded_keys(recorded_keys)
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
+
+        self.recorded_keys = []
 
         await self.printr.print_async(
             "Stopped recording actions.",
