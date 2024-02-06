@@ -151,8 +151,10 @@ class OpenAiWingman(Wingman):
             wingman_name=self.name,
         )
         self.xvasynth.validate_config(config=self.config.xvasynth, errors=errors)
-        
-    async def validate_and_set_whispercpp(self, errors: list[WingmanInitializationError]):
+
+    async def validate_and_set_whispercpp(
+        self, errors: list[WingmanInitializationError]
+    ):
         self.whispercpp = Whispercpp(
             wingman_name=self.name,
         )
@@ -182,7 +184,7 @@ class OpenAiWingman(Wingman):
             )
         elif self.stt_provider == SttProvider.WHISPERCPP:
             transcript = self.whispercpp.transcribe(
-                filename=audio_input_wav,
+                filename=audio_input_wav, config=self.config.whispercpp
             )
         else:
             transcript = self.openai.transcribe(filename=audio_input_wav)

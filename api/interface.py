@@ -105,6 +105,7 @@ class WhispercppAutostartSettingsConfig(BaseModel):
     whispercpp_exe_path: str
     whispercpp_model_path: str
 
+
 class WhispercppSttConfig(BaseModel):
     base_url: str
     autostart: bool
@@ -112,9 +113,11 @@ class WhispercppSttConfig(BaseModel):
     temperature: float
     language: str
 
+
 class WhispercppTranscript(BaseModel):
     text: str
     language: str
+
 
 class AzureInstanceConfig(BaseModel):
     api_base_url: str
@@ -201,6 +204,7 @@ class EdgeTtsConfig(BaseModel):
 
     Voice samples: https://speech.microsoft.com/portal/voicegallery
     """
+
 
 class XVASynthTtsConfig(BaseModel):
     xvasynth_path: str
