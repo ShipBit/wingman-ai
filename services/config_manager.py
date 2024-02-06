@@ -725,6 +725,7 @@ class ConfigManager:
             "elevenlabs",
             "azure",
             "xvasynth",
+            "whispercpp",
         ]:
             if key in general:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.

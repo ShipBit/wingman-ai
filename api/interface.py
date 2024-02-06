@@ -101,6 +101,24 @@ class AudioSettings(BaseModel):
     output: Optional[int] = None
 
 
+class WhispercppAutostartSettingsConfig(BaseModel):
+    whispercpp_exe_path: str
+    whispercpp_model_path: str
+
+
+class WhispercppSttConfig(BaseModel):
+    base_url: str
+    autostart: bool
+    autostart_settings: Optional[WhispercppAutostartSettingsConfig] = None
+    temperature: float
+    language: str
+
+
+class WhispercppTranscript(BaseModel):
+    text: str
+    language: str
+
+
 class AzureInstanceConfig(BaseModel):
     api_base_url: str
     """https://xxx.openai.azure.com/"""
@@ -356,6 +374,7 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
+    whispercpp: WhispercppSttConfig
     commands: Optional[list[CommandConfig]] = None
 
 
