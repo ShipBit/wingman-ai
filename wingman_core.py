@@ -604,10 +604,10 @@ class WingmanCore(WebSocketUser):
         self.start_voice_recognition(mute)
 
     # POST /mute-key
-    def set_mute_key(self, key: str, keycode: Optional[int] = None):
+    def set_mute_key(self, key: str, keycodes: Optional[list[int]] = None):
         self.config_manager.settings_config.voice_activation.mute_toggle_key = key
         self.config_manager.settings_config.voice_activation.mute_toggle_key_codes = (
-            keycode
+            keycodes
         )
 
         if self.config_manager.save_settings_config():
