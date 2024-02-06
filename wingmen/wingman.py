@@ -91,9 +91,9 @@ class Wingman:
         )
         return instance
 
-    def get_record_key(self) -> str:
+    def get_record_key(self) -> str | int:
         """Returns the activation or "push-to-talk" key for this Wingman."""
-        return self.config.record_key
+        return self.config.record_key_code or self.config.record_key
 
     def get_record_button(self) -> str:
         """Returns the activation or "push-to-talk" mouse button for this Wingman."""
@@ -391,11 +391,11 @@ class Wingman:
         for action in command.actions:
             if action.keyboard:
                 if action.keyboard.hold:
-                    keyboard.press(action.keyboard.hotkey)
+                    keyboard.press(action.keyboard.hotkey_codes or action.keyboard.hotkey)
                     time.sleep(action.keyboard.hold)
-                    keyboard.release(action.keyboard.hotkey)
+                    keyboard.release(action.keyboard.hotkey_codes or action.keyboard.hotkey)
                 else:
-                    keyboard.send(action.keyboard.hotkey)
+                    keyboard.send(action.keyboard.hotkey_codes or action.keyboard.hotkey)
 
             if action.mouse:
                 if action.mouse.move_to:
