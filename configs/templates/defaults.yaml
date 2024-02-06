@@ -135,7 +135,7 @@ azure:
     deployment_name: gpt-35-turbo
   tts:
     region: westeurope
-    voice: en-US-JaneNeural
+    voice: en-US-JennyMultilingualV2Neural
   stt:
     region: westeurope
     languages:

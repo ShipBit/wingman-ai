@@ -23,6 +23,7 @@ openai:
     - Emergency protocols for unexpected events like piracy, system failures, or distress signals.
     Always answer as quick as possible. No more than 1-2 sentences per response.
     Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
+    If you answer in german, always be non-formal. So never use "Sie" or "Ihnen". Always use "Du" and "Dir".
 
 commands:
   # ───────────────────────────────────────────
