@@ -27,14 +27,14 @@ openai:
 commands:
   # ───────────────────────────────────────────
   - name: RequestLandingPermission
-    keys:
-      - key: n
-        modifier: alt
+    actions:
+      - keyboard:
+          hotkey: alt+n
   # ───────────────────────────────────────────
   - name: RequestDeparture
-    keys:
-      - key: n
-        modifier: alt
+    actions:
+      - keyboard:
+          hotkey: alt+n
   # ───────────────────────── HOW TO INSERT NEW COMMANDS: ───────────────────────────
   #   - Please make sure the indentation aligns with the commands above perfectly.
   #   - Use a single "TAB" character for indentation. No spaces!

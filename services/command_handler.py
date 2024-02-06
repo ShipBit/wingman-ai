@@ -211,6 +211,9 @@ class CommandHandler:
                         key_config = CommandActionConfig()
                         key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
 
+                        key_codes = keyboard.parse_hotkey(hotkey_name)
+                        key_config.keyboard.hotkey_codes = [item[0] for tup in key_codes for item in tup]
+
                         if press_duration > 0.2 and len(keys_pressed) == 1:
                             key_config.keyboard.hold = round(press_duration, 2)
 

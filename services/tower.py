@@ -66,7 +66,11 @@ class Tower:
             # Keyboard
             key = wingman.get_record_key()
             if key:
-                scan_codes = keyboard.key_to_scan_codes(key)
+                # check if key is str or int
+                if isinstance(key, int):
+                    scan_codes = [key]
+                else:
+                    scan_codes = keyboard.key_to_scan_codes(key)
                 if len(scan_codes) > 0:
                     scan_code = scan_codes[0]
                     self.key_wingman_dict[scan_code] = wingman

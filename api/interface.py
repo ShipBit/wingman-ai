@@ -304,6 +304,9 @@ class CommandKeyboardConfig(BaseModel):
     hotkey: str
     """The hotkey. Can be a single key like 'a' or a combination like 'ctrl+shift+a'."""
 
+    hotkey_codes: Optional[list[int]] = None
+    """The hotkey codes. Can be a single key like 65 or a combination like 162+160+65. Optional."""
+
     hold: Optional[float] = None
     """The duration the key will be pressed in seconds. Optional."""
 
@@ -411,6 +414,9 @@ class WingmanConfig(NestedConfig):
     """A short description of this Wingman."""
     record_key: Optional[str] = None
     """The "push-to-talk" key for this wingman. Keep it pressed while talking!
+    Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
+    record_key_code: Optional[int] = None
+    """The "push-to-talk" key code for this wingman. Keep it pressed while talking!
     Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
     record_mouse_button: Optional[str] = None
     """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking!
