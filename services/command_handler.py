@@ -188,7 +188,7 @@ class CommandHandler:
                 # Record only the first down event time for each key and add to keys_pressed
                 if key_code not in key_down_time:
                     key_down_time[key_code] = key.time
-                    keys_pressed.append(key_name)  # Add key to keys_pressed when pressed down
+                    keys_pressed.append(key)  # Add key to keys_pressed when pressed down
 
             elif key.event_type == "up":
                 if key_name == "esc":
@@ -206,10 +206,12 @@ class CommandHandler:
                         last_up_time = key.time
                         all_keys_released = True
 
-                        hotkey_name = "+".join(keys_pressed)
+                        hotkey_name = "+".join(key.name.lower() for key in keys_pressed)
 
                         key_config = CommandActionConfig()
                         key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
+
+                        key_config.keyboard.hotkey_codes = [key.scan_code for key in keys_pressed]
 
                         if press_duration > 0.2 and len(keys_pressed) == 1:
                             key_config.keyboard.hold = round(press_duration, 2)
