@@ -280,6 +280,9 @@ class VoiceActivationConfig(BaseModel):
     mute_toggle_key: str
     """If you want to use a key to toggle the microphone on/off, you can set it here. This is useful if you want to use voice activation but also want to be able to talk to other people without the Wingman interfering."""
 
+    mute_toggle_key_code: str
+    """If you want to use a key code to toggle the microphone on/off, you can set it here. This is useful if you want to use voice activation but also want to be able to talk to other people without the Wingman interfering."""
+
     languages: Optional[list[str]] = None
     """The languages to use for voice activation. You can add as many as you want. The Wingman will listen for all of them."""
 

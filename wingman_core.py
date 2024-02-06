@@ -370,7 +370,7 @@ class WingmanCore(WebSocketUser):
         self.speech_recognizer.recognized.connect(self.on_voice_recognition)
 
         keyboard.add_hotkey(
-            voice_activation_settings.mute_toggle_key, self.toggle_voice_recognition
+            voice_activation_settings.mute_toggle_key_code or voice_activation_settings.mute_toggle_key, self.toggle_voice_recognition
         )
 
     # GET /configs
