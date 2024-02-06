@@ -370,7 +370,7 @@ class WingmanCore(WebSocketUser):
         self.speech_recognizer.recognized.connect(self.on_voice_recognition)
 
         keyboard.add_hotkey(
-            voice_activation_settings.mute_toggle_key_code
+            voice_activation_settings.mute_toggle_key_codes
             or voice_activation_settings.mute_toggle_key,
             self.toggle_voice_recognition,
         )
@@ -606,7 +606,7 @@ class WingmanCore(WebSocketUser):
     # POST /mute-key
     def set_mute_key(self, key: str, keycode: Optional[int] = None):
         self.config_manager.settings_config.voice_activation.mute_toggle_key = key
-        self.config_manager.settings_config.voice_activation.mute_toggle_key_code = (
+        self.config_manager.settings_config.voice_activation.mute_toggle_key_codes = (
             keycode
         )
 
