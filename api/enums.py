@@ -106,6 +106,10 @@ class SummarizeProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
 
+class KeyboardRecordingType(Enum):
+    SINGLE = "single"
+    MACRO = "macro"
+
 
 # Pydantic models for enums
 class BaseEnumModel(BaseModel):
@@ -179,6 +183,9 @@ class ConversationProviderEnumModel(BaseEnumModel):
 class SummarizeProviderEnumModel(BaseEnumModel):
     summarize_provider: SummarizeProvider
 
+class KeyboardRecordingTypeModel(BaseEnumModel):
+    recording_type: KeyboardRecordingType
+
 
 # Add all additional Pydantic models for enums as needed
 
@@ -201,6 +208,7 @@ ENUM_TYPES = {
     "SttProvider": SttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
     "SummarizeProvider": SummarizeProviderEnumModel,
+    "KeyboardRecordingType": KeyboardRecordingTypeModel,
     # Add new enums here as key-value pairs
 }
 

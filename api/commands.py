@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 from pydantic import BaseModel
-from api.enums import CommandTag, LogSource, LogType, ToastType
+from api.enums import CommandTag, KeyboardRecordingType, LogSource, LogType, ToastType
 from api.interface import CommandActionConfig
 
 
@@ -25,6 +25,7 @@ class SaveSecretCommand(WebSocketCommandModel):
 
 class RecordKeyboardActionsCommand(WebSocketCommandModel):
     command: Literal["record_keyboard_actions"] = "record_keyboard_actions"
+    recording_type: KeyboardRecordingType
 
 
 class RecordMouseActionsCommand(WebSocketCommandModel):
