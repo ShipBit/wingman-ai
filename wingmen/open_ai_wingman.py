@@ -14,6 +14,7 @@ from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.xvasynth import XVASynth
+from providers.whispercpp import Whispercpp
 from services.printr import Printr
 from wingmen.wingman import Wingman
 
@@ -50,6 +51,7 @@ class OpenAiWingman(Wingman):
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
         self.xvasynth: XVASynth = None
+        self.whispercpp: Whispercpp = None
 
         self.pending_tool_calls = []
         self.last_gpt_call = None
@@ -72,8 +74,12 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
+
         if self.uses_provider("xvasynth"):
             await self.validate_and_set_xvasynth(errors)
+
+        if self.uses_provider("whispercpp"):
+            await self.validate_and_set_whispercpp(errors)
 
         await self.validate_and_set_azure(errors)
 
@@ -105,6 +111,8 @@ class OpenAiWingman(Wingman):
             return self.tts_provider == TtsProvider.ELEVENLABS
         elif provider_type == "xvasynth":
             return self.tts_provider == TtsProvider.XVASYNTH
+        elif provider_type == "whispercpp":
+            return self.stt_provider == SttProvider.WHISPERCPP
         return False
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
@@ -141,11 +149,16 @@ class OpenAiWingman(Wingman):
     async def validate_and_set_xvasynth(self, errors: list[WingmanInitializationError]):
         self.xvasynth = XVASynth(
             wingman_name=self.name,
-            xvasynth_path=self.config.xvasynth.xvasynth_path,
-            process_device=self.config.xvasynth.process_device,
-            times_checked_xvasynth=0,
         )
         self.xvasynth.validate_config(config=self.config.xvasynth, errors=errors)
+
+    async def validate_and_set_whispercpp(
+        self, errors: list[WingmanInitializationError]
+    ):
+        self.whispercpp = Whispercpp(
+            wingman_name=self.name,
+        )
+        self.whispercpp.validate_config(config=self.config.whispercpp, errors=errors)
 
     async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
@@ -168,6 +181,10 @@ class OpenAiWingman(Wingman):
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["tts"],
                 config=self.config.azure.stt,
+            )
+        elif self.stt_provider == SttProvider.WHISPERCPP:
+            transcript = self.whispercpp.transcribe(
+                filename=audio_input_wav, config=self.config.whispercpp
             )
         else:
             transcript = self.openai.transcribe(filename=audio_input_wav)
