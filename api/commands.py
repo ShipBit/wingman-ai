@@ -25,7 +25,7 @@ class SaveSecretCommand(WebSocketCommandModel):
 
 class RecordKeyboardActionsCommand(WebSocketCommandModel):
     command: Literal["record_keyboard_actions"] = "record_keyboard_actions"
-    recording_type: KeyboardRecordingType
+    recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
 
 
 class RecordMouseActionsCommand(WebSocketCommandModel):
