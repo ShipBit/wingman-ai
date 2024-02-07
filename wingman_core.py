@@ -251,6 +251,8 @@ class WingmanCore(WebSocketUser):
         self.is_listening = False
         self.was_listening_before_ptt = False
 
+        self.key_events = {}
+
         # restore settings
         self.settings = self.get_settings()
         if self.settings.audio:
@@ -263,7 +265,28 @@ class WingmanCore(WebSocketUser):
         if self.settings.voice_activation.enabled:
             await self.set_voice_activation(True)
 
+    def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
+        codes = []
+        
+        if isinstance(hotkey, str):
+            hotkey_codes = keyboard.parse_hotkey(hotkey)
+            codes = [item[0] for tup in hotkey_codes for item in tup]
+
+        if isinstance(hotkey, list):
+            codes = hotkey
+
+        is_pressed = set(codes) == set(self.key_events.keys())
+
+        return is_pressed
+
+
     def on_press(self, key=None, button=None):
+        is_mute_hotkey_pressed = self.is_hotkey_pressed(
+            self.settings.voice_activation.mute_toggle_key_codes
+            or self.settings.voice_activation.mute_toggle_key
+        )
+        print(is_mute_hotkey_pressed)
+
         if self.tower and self.active_recording["key"] == "":
             if key:
                 wingman = self.tower.get_wingman_from_key(key)
@@ -317,8 +340,12 @@ class WingmanCore(WebSocketUser):
 
     def on_key(self, key):
         if key.event_type == "down":
+            if key.scan_code not in self.key_events:
+                self.key_events[key.scan_code] = key
             self.on_press(key=key)
         elif key.event_type == "up":
+            if key.scan_code in self.key_events:
+                del self.key_events[key.scan_code]
             self.on_release(key=key)
 
     def on_mouse(self, event):
@@ -375,11 +402,11 @@ class WingmanCore(WebSocketUser):
         )
         self.speech_recognizer.recognized.connect(self.on_voice_recognition)
 
-        keyboard.add_hotkey(
+        """ keyboard.add_hotkey(
             voice_activation_settings.mute_toggle_key_codes
             or voice_activation_settings.mute_toggle_key,
             self.toggle_voice_recognition,
-        )
+        ) """
 
     # GET /configs
     def get_config_dirs(self):
