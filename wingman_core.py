@@ -522,12 +522,26 @@ class WingmanCore(WebSocketUser):
         _dir, config = self.config_manager.load_config(config_dir)
         wingman_config_files = await self.get_wingmen_config_files(config_dir.name)
 
+        # Check if the wingman_name is already the default
+        already_default = any(
+            (
+                config.wingmen[file.name].name == wingman_name
+                and config.wingmen[file.name].is_voice_activation_default
+            )
+            for file in wingman_config_files
+        )
+
         for wingman_config_file in wingman_config_files:
             wingman_config = config.wingmen[wingman_config_file.name]
 
-            wingman_config.is_voice_activation_default = (
-                wingman_config.name == wingman_name
-            )
+            if already_default:
+                # If wingman_name is already default, undefault it
+                wingman_config.is_voice_activation_default = False
+            else:
+                # Set the new default
+                wingman_config.is_voice_activation_default = (
+                    wingman_config.name == wingman_name
+                )
 
             await self.save_wingman_config(
                 config_dir=config_dir,
