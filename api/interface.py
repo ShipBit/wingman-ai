@@ -420,7 +420,7 @@ class WingmanConfig(NestedConfig):
     record_key: Optional[str] = None
     """The "push-to-talk" key for this wingman. Keep it pressed while talking!
     Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
-    record_key_code: Optional[int] = None
+    record_key_codes: Optional[list[int]] = None
     """The "push-to-talk" key code for this wingman. Keep it pressed while talking!
     Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
     record_mouse_button: Optional[str] = None

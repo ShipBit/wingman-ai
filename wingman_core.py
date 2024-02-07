@@ -290,8 +290,11 @@ class WingmanCore(WebSocketUser):
                 self.toggle_voice_recognition()
 
         if self.tower and self.active_recording["key"] == "":
+            wingman = None
             if key:
-                wingman = self.tower.get_wingman_from_key(key)
+                for potential_wingman in self.tower.wingmen:
+                    if self.is_hotkey_pressed(potential_wingman.get_record_key()):
+                        wingman = potential_wingman
             elif button:
                 wingman = self.tower.get_wingman_from_mouse(button)
             if wingman:
