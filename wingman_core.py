@@ -249,6 +249,7 @@ class WingmanCore(WebSocketUser):
 
         self.speech_recognizer: speechsdk.SpeechRecognizer = None
         self.is_listening = False
+        self.was_listening_before_ptt = False
 
         # restore settings
         self.settings = self.get_settings()
@@ -274,7 +275,8 @@ class WingmanCore(WebSocketUser):
                 elif button:
                     self.active_recording = dict(key=button, wingman=wingman)
 
-                if self.speech_recognizer:
+                self.was_listening_before_ptt = self.is_listening
+                if self.speech_recognizer and self.is_listening:
                     self.start_voice_recognition(mute=True)
 
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
@@ -291,7 +293,11 @@ class WingmanCore(WebSocketUser):
             )
             self.active_recording = {"key": "", "wingman": None}
 
-            if self.speech_recognizer:
+            if (
+                self.speech_recognizer
+                and not self.is_listening
+                and self.was_listening_before_ptt
+            ):
                 self.start_voice_recognition()
 
             def run_async_process():
@@ -582,10 +588,13 @@ class WingmanCore(WebSocketUser):
 
     # POST /voice-activation
     async def set_voice_activation(self, is_enabled: bool):
-        if not self.speech_recognizer:
-            await self.__init_voice_activation()
+        if is_enabled:
+            if not self.speech_recognizer:
+                await self.__init_voice_activation()
 
-        self.start_voice_recognition(mute=not is_enabled)
+            self.start_voice_recognition(mute=not is_enabled)
+        else:
+            self.speech_recognizer = None
 
         self.config_manager.settings_config.voice_activation.enabled = is_enabled
         if self.config_manager.save_settings_config():
@@ -607,7 +616,7 @@ class WingmanCore(WebSocketUser):
         self.ensure_async(self._connection_manager.broadcast(command))
 
         printr.print(
-            f"Voice recognition {'stopped (muted)' if mute else 'started'}.",
+            f"Continous voice recognition {'stopped (muted)' if mute else 'started'}.",
             toast=ToastType.NORMAL,
             color=LogType.POSITIVE,
             server_only=True,
