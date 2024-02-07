@@ -25,7 +25,7 @@ custom_properties:
   - id: starhead_api_url
     value: https://api-test.star-head.de
     name: StarHead API URL
-    description: The URL of the StarHead API.
+    hint: The URL of the StarHead API.
     required: true
 
 azure:
