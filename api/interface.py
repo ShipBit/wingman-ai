@@ -351,7 +351,8 @@ class CommandConfig(BaseModel):
     We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
     If the Wingman doesn't call your command, try to rephrase the name here.
     """
-
+    is_system_command: Optional[bool] = False
+    """Whether this is a system command that cannot be deleted or edited by the user."""
     instant_activation: Optional[list[str]] = None
     """Optional: Faster - like Voice Attack! Provide phrases that will instantly activate the command (without AI roundtripping). You need to say the exact phrase to execute the command"""
     force_instant_activation: Optional[bool] = False
