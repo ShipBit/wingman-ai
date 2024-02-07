@@ -281,11 +281,13 @@ class WingmanCore(WebSocketUser):
 
 
     def on_press(self, key=None, button=None):
-        is_mute_hotkey_pressed = self.is_hotkey_pressed(
-            self.settings.voice_activation.mute_toggle_key_codes
-            or self.settings.voice_activation.mute_toggle_key
-        )
-        print(is_mute_hotkey_pressed)
+        if self.speech_recognizer:
+            is_mute_hotkey_pressed = self.is_hotkey_pressed(
+                self.settings.voice_activation.mute_toggle_key_codes
+                or self.settings.voice_activation.mute_toggle_key
+            )
+            if is_mute_hotkey_pressed:
+                self.toggle_voice_recognition()
 
         if self.tower and self.active_recording["key"] == "":
             if key:
@@ -401,12 +403,6 @@ class WingmanCore(WebSocketUser):
             auto_detect_source_language_config=auto_detect_source_language_config,
         )
         self.speech_recognizer.recognized.connect(self.on_voice_recognition)
-
-        """ keyboard.add_hotkey(
-            voice_activation_settings.mute_toggle_key_codes
-            or voice_activation_settings.mute_toggle_key,
-            self.toggle_voice_recognition,
-        ) """
 
     # GET /configs
     def get_config_dirs(self):
