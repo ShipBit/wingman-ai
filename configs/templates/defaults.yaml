@@ -191,5 +191,6 @@ commands:
     instant_activation:
       - Forget everything!
       - Clear conversation history!
+    force_instant_activation: true
     responses:
       - Conversation history cleared.

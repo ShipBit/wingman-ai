@@ -697,7 +697,7 @@ class OpenAiWingman(Wingman):
         Returns:
             list[dict]: A list of tool descriptors in OpenAI format.
         """
-        commands = [command.name for command in self.config.commands]
+        commands = [command.name for command in self.config.commands if not command.force_instant_activation]
         tools = [
             {
                 "type": "function",
