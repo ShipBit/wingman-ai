@@ -15,6 +15,9 @@ printr = Printr()
 
 
 class AudioPlayer:
+    on_playback_started: Optional[Callable[[str]]] = None
+    on_playback_finished: Optional[Callable[[str]]] = None
+
     def __init__(self) -> None:
         self.is_playing = False
 
@@ -48,7 +51,6 @@ class AudioPlayer:
         input_data: bytes | tuple,
         config: SoundConfig,
         wingman_name: str = None,
-        on_finished: Optional[Callable[[str], None]] = None,
     ):
         if isinstance(input_data, bytes):
             audio, sample_rate = self._get_audio_from_stream(input_data)
@@ -69,9 +71,8 @@ class AudioPlayer:
 
         def finished_callback():
             self.is_playing = False
-
-            if on_finished:
-                on_finished(wingman_name)
+            if callable(self.on_playback_finished):
+                self.on_playback_finished(wingman_name)
 
             printr.print(
                 f"Playback finished ({wingman_name})",
@@ -80,6 +81,8 @@ class AudioPlayer:
             )
 
         self.is_playing = True
+        if callable(self.on_playback_started):
+            self.on_playback_started(wingman_name)
 
         printr.print(
             f"Playback started ({wingman_name})",
