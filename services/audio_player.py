@@ -6,12 +6,8 @@ import numpy as np
 import soundfile as sf
 import sounddevice as sd
 from scipy.signal import resample
-from api.enums import CommandTag
 from api.interface import SoundConfig
-from services.printr import Printr
 from services.sound_effects import get_sound_effects
-
-printr = Printr()
 
 
 class AudioPlayer:
@@ -74,27 +70,16 @@ class AudioPlayer:
             if callable(self.on_playback_finished):
                 self.on_playback_finished(wingman_name)
 
-            printr.print(
-                f"Playback finished ({wingman_name})",
-                source_name=wingman_name,
-                command_tag=CommandTag.PLAYBACK_STOPPED,
-            )
-
-        self.is_playing = True
-        if callable(self.on_playback_started):
-            self.on_playback_started(wingman_name)
-
-        printr.print(
-            f"Playback started ({wingman_name})",
-            source_name=wingman_name,
-            command_tag=CommandTag.PLAYBACK_STARTED,
-        )
-
         playback_thread = Thread(
             target=self.start_playback,
             args=(audio, sample_rate, channels, finished_callback),
         )
         playback_thread.start()
+
+        self.is_playing = True
+
+        if callable(self.on_playback_started):
+            self.on_playback_started(wingman_name)
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")

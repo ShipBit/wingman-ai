@@ -7,7 +7,7 @@ import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.commands import VoiceActivationMutedCommand
-from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
+from api.enums import AzureRegion, CommandTag, LogType, OpenAiTtsVoice, ToastType
 from api.interface import (
     AudioDevice,
     AudioSettings,
@@ -30,8 +30,8 @@ from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.xvasynth import XVASynth
-from services.audio_player import AudioPlayer
 from wingmen.wingman import Wingman
+from services.audio_player import AudioPlayer
 from services.audio_recorder import AudioRecorder
 from services.config_manager import ConfigManager
 from services.printr import Printr
@@ -235,23 +235,26 @@ class WingmanCore(WebSocketUser):
             tags=["core"],
         )
 
-        self.audio_player = AudioPlayer()
         self.config_manager = config_manager
-        self.active_recording = {"key": "", "wingman": None}
         self.audio_recorder = AudioRecorder()
+        self.audio_player = AudioPlayer()
+        self.audio_player.on_playback_started = self.on_playback_started
+        self.audio_player.on_playback_finished = self.on_playback_finished
         self.tower: Tower = None
 
         self.current_config_dir: ConfigDirInfo = (
             self.config_manager.find_default_config()
         )
         self.current_config = None
+        self.active_recording = {"key": "", "wingman": None}
 
-        self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
+        self.startup_errors: list[WingmanInitializationError] = []
 
         self.speech_recognizer: speechsdk.SpeechRecognizer = None
         self.is_listening = False
         self.was_listening_before_ptt = False
+        self.was_listening_before_playback = False
 
         self.key_events = {}
 
@@ -407,6 +410,31 @@ class WingmanCore(WebSocketUser):
             auto_detect_source_language_config=auto_detect_source_language_config,
         )
         self.speech_recognizer.recognized.connect(self.on_voice_recognition)
+
+    def on_playback_started(self, wingman_name: str):
+        printr.print(
+            f"Playback started ({wingman_name})",
+            source_name=wingman_name,
+            command_tag=CommandTag.PLAYBACK_STARTED,
+        )
+
+        self.was_listening_before_playback = self.is_listening
+        if self.speech_recognizer and self.is_listening:
+            self.start_voice_recognition(mute=True)
+
+    def on_playback_finished(self, wingman_name: str):
+        printr.print(
+            f"Playback finished ({wingman_name})",
+            source_name=wingman_name,
+            command_tag=CommandTag.PLAYBACK_STOPPED,
+        )
+
+        if (
+            self.speech_recognizer
+            and not self.is_listening
+            and self.was_listening_before_playback
+        ):
+            self.start_voice_recognition()
 
     # GET /configs
     def get_config_dirs(self):
