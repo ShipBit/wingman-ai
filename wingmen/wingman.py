@@ -93,7 +93,7 @@ class Wingman:
 
     def get_record_key(self) -> str | int:
         """Returns the activation or "push-to-talk" key for this Wingman."""
-        return self.config.record_key_code or self.config.record_key
+        return self.config.record_key_codes or self.config.record_key
 
     def get_record_button(self) -> str:
         """Returns the activation or "push-to-talk" mouse button for this Wingman."""
