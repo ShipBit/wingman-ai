@@ -38,6 +38,7 @@ class ElevenLabs:
         config: ElevenlabsConfig,
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
+        wingman_name: str,
     ):
         user = ElevenLabsUser(self.api_key)
         voice = (
@@ -69,7 +70,9 @@ class ElevenLabs:
             )
             if audio_bytes:
                 audio_player.stream_with_effects(
-                    input_data=audio_bytes, config=sound_config
+                    input_data=audio_bytes,
+                    config=sound_config,
+                    wingman_name=wingman_name,
                 )
         else:
             voice.generate_stream_audio_v2(
