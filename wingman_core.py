@@ -237,9 +237,13 @@ class WingmanCore(WebSocketUser):
 
         self.config_manager = config_manager
         self.audio_recorder = AudioRecorder()
+
         self.audio_player = AudioPlayer()
+        self.event_queue = asyncio.Queue()
+        self.audio_player.event_queue = self.event_queue
         self.audio_player.on_playback_started = self.on_playback_started
         self.audio_player.on_playback_finished = self.on_playback_finished
+
         self.tower: Tower = None
 
         self.current_config_dir: ConfigDirInfo = (
@@ -413,7 +417,7 @@ class WingmanCore(WebSocketUser):
 
     def on_playback_started(self, wingman_name: str):
         printr.print(
-            f"Playback started ({wingman_name})",
+            text=f"Playback started ({wingman_name})",
             source_name=wingman_name,
             command_tag=CommandTag.PLAYBACK_STARTED,
         )
@@ -422,9 +426,9 @@ class WingmanCore(WebSocketUser):
         if self.speech_recognizer and self.is_listening:
             self.start_voice_recognition(mute=True)
 
-    def on_playback_finished(self, wingman_name: str):
+    async def on_playback_finished(self, wingman_name: str):
         printr.print(
-            f"Playback finished ({wingman_name})",
+            text=f"Playback finished ({wingman_name})",
             source_name=wingman_name,
             command_tag=CommandTag.PLAYBACK_STOPPED,
         )
@@ -434,7 +438,17 @@ class WingmanCore(WebSocketUser):
             and not self.is_listening
             and self.was_listening_before_playback
         ):
+            print("restarting voice recognition")
             self.start_voice_recognition()
+
+    async def process_events(self):
+        while True:
+            callback, wingman_name = await self.event_queue.get()
+            await callback(wingman_name)
+
+    async def run(self):
+        while True:
+            await self.process_events()
 
     # GET /configs
     def get_config_dirs(self):
@@ -734,6 +748,7 @@ class WingmanCore(WebSocketUser):
             voice=voice,
             sound_config=sound_config,
             audio_player=self.audio_player,
+            wingman_name="system",
         )
 
     # POST /play/azure
@@ -747,6 +762,7 @@ class WingmanCore(WebSocketUser):
             config=config,
             sound_config=sound_config,
             audio_player=self.audio_player,
+            wingman_name="system",
         )
 
     # POST /play/elevenlabs
@@ -763,6 +779,7 @@ class WingmanCore(WebSocketUser):
             config=config,
             sound_config=sound_config,
             audio_player=self.audio_player,
+            wingman_name="system",
         )
 
     # POST /play/edgetts
@@ -775,6 +792,7 @@ class WingmanCore(WebSocketUser):
             config=config,
             sound_config=sound_config,
             audio_player=self.audio_player,
+            wingman_name="system",
         )
 
     # POST /play/xvasynth
@@ -787,4 +805,5 @@ class WingmanCore(WebSocketUser):
             config=config,
             sound_config=sound_config,
             audio_player=self.audio_player,
+            wingman_name="system",
         )

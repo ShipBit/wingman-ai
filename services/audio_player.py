@@ -1,3 +1,4 @@
+import asyncio
 import io
 from os import path
 from threading import Thread
@@ -16,6 +17,11 @@ class AudioPlayer:
 
     def __init__(self) -> None:
         self.is_playing = False
+        self.event_queue = None
+        self.event_loop = None
+
+    def set_event_loop(self, loop):
+        self.event_loop = loop
 
     def start_playback(self, audio, sample_rate, channels, finished_callback):
         def callback(outdata, frames, time, status):
@@ -67,8 +73,11 @@ class AudioPlayer:
 
         def finished_callback():
             self.is_playing = False
-            if callable(self.on_playback_finished):
-                self.on_playback_finished(wingman_name)
+            if self.event_queue is not None and callable(self.on_playback_finished):
+                finished_event = (self.on_playback_finished, wingman_name)
+                coroutine = self.event_queue.put(finished_event)
+                if self.event_loop:
+                    asyncio.run_coroutine_threadsafe(coroutine, self.event_loop)
 
         playback_thread = Thread(
             target=self.start_playback,

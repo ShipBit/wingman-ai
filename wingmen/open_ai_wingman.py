@@ -664,6 +664,7 @@ class OpenAiWingman(Wingman):
                 config=self.config.edge_tts,
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.ELEVENLABS:
             self.elevenlabs.play_audio(
@@ -671,6 +672,7 @@ class OpenAiWingman(Wingman):
                 config=self.config.elevenlabs,
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.AZURE:
             self.openai_azure.play_audio(
@@ -679,6 +681,7 @@ class OpenAiWingman(Wingman):
                 config=self.config.azure.tts,
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.XVASYNTH:
             self.xvasynth.play_audio(
@@ -686,6 +689,7 @@ class OpenAiWingman(Wingman):
                 config=self.config.xvasynth,
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.OPENAI:
             self.openai.play_audio(
@@ -693,6 +697,7 @@ class OpenAiWingman(Wingman):
                 voice=self.config.openai.tts_voice,
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         else:
             printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
