@@ -438,7 +438,6 @@ class WingmanCore(WebSocketUser):
             and not self.is_listening
             and self.was_listening_before_playback
         ):
-            print("restarting voice recognition")
             self.start_voice_recognition()
 
     async def process_events(self):

@@ -12,8 +12,7 @@ from pedalboard import (
     Delay,
     Gain,
 )
-
-from api.interface import Config, SoundConfig
+from api.interface import SoundConfig
 
 
 # Credits to Discord community member @psigen aka GH @JaydiCodes!
@@ -97,7 +96,5 @@ def get_sound_effects(config: SoundConfig):
         effect = mapping.get(effect_name)
         if effect:
             sound_effects.append(effect)
-        else:
-            print(f"Unknown sound effect: {effect_name}")
 
     return sound_effects
