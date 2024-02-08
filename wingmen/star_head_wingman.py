@@ -6,6 +6,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from api.enums import LogType, WingmanInitializationErrorType
+from services.audio_player import AudioPlayer
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 
@@ -18,14 +19,9 @@ class StarHeadWingman(OpenAiWingman):
     """
 
     def __init__(
-        self,
-        name: str,
-        config: WingmanConfig,
+        self, name: str, config: WingmanConfig, audio_player: AudioPlayer
     ) -> None:
-        super().__init__(
-            name=name,
-            config=config,
-        )
+        super().__init__(name=name, config=config, audio_player=audio_player)
 
         # config entry existence not validated yet. Assign later when checked!
         self.starhead_url = ""

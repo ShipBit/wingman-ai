@@ -11,8 +11,8 @@ from services.sound_effects import get_sound_effects
 
 
 class AudioPlayer:
-    on_playback_started: Optional[Callable[[str]]] = None
-    on_playback_finished: Optional[Callable[[str]]] = None
+    on_playback_started: Optional[Callable[[str], None]] = None
+    on_playback_finished: Optional[Callable[[str], None]] = None
 
     def __init__(self) -> None:
         self.is_playing = False

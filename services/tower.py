@@ -55,7 +55,7 @@ class Tower:
                 errors.append(
                     WingmanInitializationError(
                         wingman_name=wingman_name,
-                        msg=msg,
+                        message=msg,
                         error_type=WingmanInitializationErrorType.UNKNOWN,
                     )
                 )
