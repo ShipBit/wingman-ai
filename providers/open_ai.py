@@ -151,6 +151,7 @@ class OpenAi(BaseOpenAi):
         text: str,
         voice: OpenAiTtsVoice,
         sound_config: SoundConfig,
+        audio_player: AudioPlayer,
     ):
         try:
             if not voice:
@@ -162,7 +163,6 @@ class OpenAi(BaseOpenAi):
                 input=text,
             )
             if response is not None:
-                audio_player = AudioPlayer()
                 audio_player.stream_with_effects(
                     input_data=response.content, config=sound_config
                 )
@@ -206,10 +206,14 @@ class OpenAiAzure(BaseOpenAi):
         audio_config = speechsdk.AudioConfig(filename=filename)
 
         auto_detect_source_language_config = (
-            speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-                languages=config.languages
+            (
+                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                    languages=config.languages
+                )
             )
-        ) if len(config.languages) > 1 else None
+            if len(config.languages) > 1
+            else None
+        )
 
         language = config.languages[0] if len(config.languages) == 1 else None
 
@@ -247,6 +251,7 @@ class OpenAiAzure(BaseOpenAi):
         api_key: str,
         config: AzureTtsConfig,
         sound_config: SoundConfig,
+        audio_player: AudioPlayer,
     ):
         speech_config = speechsdk.SpeechConfig(
             subscription=api_key,
@@ -262,7 +267,6 @@ class OpenAiAzure(BaseOpenAi):
 
         result = speech_synthesizer.speak_text_async(text).get()
         if result is not None:
-            audio_player = AudioPlayer()
             audio_player.stream_with_effects(
                 input_data=result.audio_data, config=sound_config
             )

@@ -33,7 +33,11 @@ class ElevenLabs:
         return errors
 
     def play_audio(
-        self, text: str, config: ElevenlabsConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        config: ElevenlabsConfig,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
     ):
         user = ElevenLabsUser(self.api_key)
         voice = (
@@ -50,9 +54,11 @@ class ElevenLabs:
             use_speaker_boost=config.voice_settings.use_speaker_boost,
             stability=config.voice_settings.stability,
             similarity_boost=config.voice_settings.similarity_boost,
-            style=config.voice_settings.style
-            if config.model != ElevenlabsModel.ELEVEN_TURBO_V2
-            else None,
+            style=(
+                config.voice_settings.style
+                if config.model != ElevenlabsModel.ELEVEN_TURBO_V2
+                else None
+            ),
         )
 
         if sound_config.play_beep or len(sound_config.effects) > 0:
@@ -62,7 +68,6 @@ class ElevenLabs:
                 generationOptions=generation_options,
             )
             if audio_bytes:
-                audio_player = AudioPlayer()
                 audio_player.stream_with_effects(
                     input_data=audio_bytes, config=sound_config
                 )

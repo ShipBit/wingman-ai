@@ -30,6 +30,7 @@ from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.xvasynth import XVASynth
+from services.audio_player import AudioPlayer
 from wingmen.wingman import Wingman
 from services.audio_recorder import AudioRecorder
 from services.config_manager import ConfigManager
@@ -234,6 +235,7 @@ class WingmanCore(WebSocketUser):
             tags=["core"],
         )
 
+        self.audio_player = AudioPlayer()
         self.config_manager = config_manager
         self.active_recording = {"key": "", "wingman": None}
         self.audio_recorder = AudioRecorder()
@@ -267,7 +269,7 @@ class WingmanCore(WebSocketUser):
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []
-        
+
         if isinstance(hotkey, str):
             hotkey_codes = keyboard.parse_hotkey(hotkey)
             codes = [item[0] for tup in hotkey_codes for item in tup]
@@ -278,7 +280,6 @@ class WingmanCore(WebSocketUser):
         is_pressed = set(codes) == set(self.key_events.keys())
 
         return is_pressed
-
 
     def on_press(self, key=None, button=None):
         if self.speech_recognizer:
@@ -442,7 +443,7 @@ class WingmanCore(WebSocketUser):
 
         self.current_config_dir = loaded_config_dir
         self.current_config = config
-        self.tower = Tower(config=config)
+        self.tower = Tower(config=config, audio_player=self.audio_player)
         errors = await self.tower.instantiate_wingmen()
         return errors, ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
 
@@ -700,7 +701,12 @@ class WingmanCore(WebSocketUser):
         self, text: str, api_key: str, voice: OpenAiTtsVoice, sound_config: SoundConfig
     ):
         openai = OpenAi(api_key=api_key)
-        openai.play_audio(text=text, voice=voice, sound_config=sound_config)
+        openai.play_audio(
+            text=text,
+            voice=voice,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+        )
 
     # POST /play/azure
     def play_azure_tts(
@@ -712,6 +718,7 @@ class WingmanCore(WebSocketUser):
             api_key=api_key,
             config=config,
             sound_config=sound_config,
+            audio_player=self.audio_player,
         )
 
     # POST /play/elevenlabs
@@ -727,6 +734,7 @@ class WingmanCore(WebSocketUser):
             text=text,
             config=config,
             sound_config=sound_config,
+            audio_player=self.audio_player,
         )
 
     # POST /play/edgetts
@@ -734,11 +742,21 @@ class WingmanCore(WebSocketUser):
         self, text: str, config: EdgeTtsConfig, sound_config: SoundConfig
     ):
         edge = Edge()
-        await edge.play_audio(text=text, config=config, sound_config=sound_config)
+        await edge.play_audio(
+            text=text,
+            config=config,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+        )
 
     # POST /play/xvasynth
     async def play_xvasynth_tts(
         self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
     ):
         xvasynth = XVASynth(wingman_name="")
-        await xvasynth.play_audio(text=text, config=config, sound_config=sound_config)
+        await xvasynth.play_audio(
+            text=text,
+            config=config,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+        )

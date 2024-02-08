@@ -16,12 +16,15 @@ class Edge:
         self.random_voices = {}
 
     async def play_audio(
-        self, text: str, config: EdgeTtsConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        config: EdgeTtsConfig,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
     ):
         communicate, output_file = await self.__generate_speech(
             text=text, voice=config.voice
         )
-        audio_player = AudioPlayer()
         audio, sample_rate = audio_player.get_audio_from_file(output_file)
 
         audio_player.stream_with_effects(

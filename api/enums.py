@@ -36,6 +36,8 @@ class CommandTag(Enum):
     RECORDING_STARTED = "recording_started"
     RECORDING_STOPPED = "recording_stopped"
     IGNORED_RECORDING = "ignored_recording"
+    PLAYBACK_STARTED = "playback_started"
+    PLAYBACK_STOPPED = "playback_stopped"
 
 
 class AzureApiVersion(Enum):
@@ -105,6 +107,7 @@ class ConversationProvider(Enum):
 class SummarizeProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
+
 
 class KeyboardRecordingType(Enum):
     SINGLE = "single"
@@ -182,6 +185,7 @@ class ConversationProviderEnumModel(BaseEnumModel):
 
 class SummarizeProviderEnumModel(BaseEnumModel):
     summarize_provider: SummarizeProvider
+
 
 class KeyboardRecordingTypeModel(BaseEnumModel):
     recording_type: KeyboardRecordingType

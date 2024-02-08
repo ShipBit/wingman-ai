@@ -21,11 +21,7 @@ class Wingman:
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
     """
 
-    def __init__(
-        self,
-        name: str,
-        config: WingmanConfig,
-    ):
+    def __init__(self, name: str, config: WingmanConfig, audio_player: AudioPlayer):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
@@ -42,7 +38,7 @@ class Wingman:
         self.name = name
         """The name of the wingman. This is the key you gave it in the config, e.g. "atc"."""
 
-        self.audio_player = AudioPlayer()
+        self.audio_player = audio_player
         """A service that allows you to play audio files and add sound effects to them."""
 
         self.execution_start: None | float = None
@@ -60,6 +56,7 @@ class Wingman:
     def create_dynamically(
         name: str,
         config: WingmanConfig,
+        audio_player: AudioPlayer,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -88,6 +85,7 @@ class Wingman:
         instance = DerivedWingmanClass(
             name=name,
             config=config,
+            audio_player=audio_player,
         )
         return instance
 
@@ -391,11 +389,17 @@ class Wingman:
         for action in command.actions:
             if action.keyboard:
                 if action.keyboard.hold:
-                    keyboard.press(action.keyboard.hotkey_codes or action.keyboard.hotkey)
+                    keyboard.press(
+                        action.keyboard.hotkey_codes or action.keyboard.hotkey
+                    )
                     time.sleep(action.keyboard.hold)
-                    keyboard.release(action.keyboard.hotkey_codes or action.keyboard.hotkey)
+                    keyboard.release(
+                        action.keyboard.hotkey_codes or action.keyboard.hotkey
+                    )
                 else:
-                    keyboard.send(action.keyboard.hotkey_codes or action.keyboard.hotkey)
+                    keyboard.send(
+                        action.keyboard.hotkey_codes or action.keyboard.hotkey
+                    )
 
             if action.mouse:
                 if action.mouse.move_to:
