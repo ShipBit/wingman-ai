@@ -234,6 +234,12 @@ class WingmanCore(WebSocketUser):
             endpoint=self.play_xvasynth_tts,
             tags=["core"],
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stop-playback",
+            endpoint=self.stop_playback,
+            tags=["core"],
+        )
 
         self.config_manager = config_manager
         self.audio_recorder = AudioRecorder()
@@ -807,5 +813,6 @@ class WingmanCore(WebSocketUser):
             wingman_name="system",
         )
 
-    def stop_playback(self):
-        self.audio_player.stop_playback()
+    # POST /stop-playback
+    async def stop_playback(self):
+        await self.audio_player.stop_playback()

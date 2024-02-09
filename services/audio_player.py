@@ -49,14 +49,13 @@ class AudioPlayer:
         self.stream.start()
         sd.sleep(int(len(audio) / sample_rate * 1000))
 
-    def stop_playback(self):
+    async def stop_playback(self):
         if self.stream is not None:
             self.stream.stop()
-            self.stream.close()
             self.stream = None
             self.is_playing = False
             if callable(self.on_playback_finished):
-                self.on_playback_finished(self.wingman_name)
+                await self.on_playback_finished(self.wingman_name)
 
     def stream_with_effects(
         self,
