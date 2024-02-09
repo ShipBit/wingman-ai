@@ -271,8 +271,6 @@ class OpenAiAzure(BaseOpenAi):
             audio_config=None,
         )
 
-        # text ="Once upon a time, in a distant galaxy, there was a brave space explorer named Luna. Luna embarked on a perilous mission to uncover the secrets of a mysterious nebula. Along the way, Luna encountered unexpected challenges, made new friends, and ultimately discovered the key to unlocking the ancient knowledge hidden within the nebula. The adventure of Luna remains an inspiring tale of curiosity, courage, and the boundless wonders of the universe."
-
         result = speech_synthesizer.start_speaking_text_async(text).get()
         audio_data_stream = speechsdk.AudioDataStream(result)
 
