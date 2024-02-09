@@ -138,3 +138,42 @@ class AudioPlayer:
         resampled_audio = resample(audio, num_target_samples)
 
         return resampled_audio
+    
+    def output_audio_streaming(
+            self, 
+            buffer_callback, 
+            buffer_size = 500, 
+            sample_rate = 16000, 
+            channels = 1, 
+            dtype = "int16"
+            ):
+        buffer = bytearray()
+        stream_finished = False
+        data_received = False
+        
+        def callback(outdata, frames, time, status):
+            nonlocal buffer, stream_finished, data_received
+
+            if data_received and len(buffer) == 0:
+                stream_finished = True
+            outdata[:len(buffer)] = buffer[:len(outdata)]
+            buffer = buffer[len(outdata):]
+
+        with sd.RawOutputStream(
+            samplerate=sample_rate,
+            channels=channels,
+            dtype=dtype,
+            callback=callback,
+        ) as stream:
+
+            stream.start()
+
+            audio_buffer = bytes(buffer_size)
+            filled_size = buffer_callback(audio_buffer)
+            while filled_size > 0:
+                buffer += audio_buffer[:filled_size]
+                filled_size = buffer_callback(audio_buffer)
+
+            data_received = True
+            while not stream_finished:
+                sd.sleep(100)

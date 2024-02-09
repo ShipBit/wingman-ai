@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import re
+import numpy as np
 from typing import Literal
 from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
@@ -257,6 +258,7 @@ class OpenAiAzure(BaseOpenAi):
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
+        global buffer, stream_finished, data_received, robot
         speech_config = speechsdk.SpeechConfig(
             subscription=api_key,
             region=config.region.value,
@@ -269,7 +271,58 @@ class OpenAiAzure(BaseOpenAi):
             audio_config=None,
         )
 
-        result = speech_synthesizer.speak_text_async(text).get()
+        # text ="Once upon a time, in a distant galaxy, there was a brave space explorer named Luna. Luna embarked on a perilous mission to uncover the secrets of a mysterious nebula. Along the way, Luna encountered unexpected challenges, made new friends, and ultimately discovered the key to unlocking the ancient knowledge hidden within the nebula. The adventure of Luna remains an inspiring tale of curiosity, courage, and the boundless wonders of the universe."
+
+        result = speech_synthesizer.start_speaking_text_async(text).get()
+        audio_data_stream = speechsdk.AudioDataStream(result)
+
+        audio_player = AudioPlayer()
+        audio_player.output_audio_streaming(audio_data_stream.read_data)
+
+        return
+
+        def callback(outdata, frames, time, status):
+            global buffer, stream_finished, data_received, robot
+            if status:
+                print(status)
+            if data_received and len(buffer) == 0:
+                stream_finished = True
+
+            bytes_needed = frames * 1 * np.dtype(np.int16).itemsize
+
+            buffer_chunk = buffer[:bytes_needed]
+            buffer = buffer[bytes_needed:]
+
+            int16_array = np.frombuffer(buffer_chunk, dtype=np.int16)
+            input_chunk = int16_array.astype(np.float32) / np.iinfo(np.int16).max
+
+            hans = (input_chunk * np.iinfo(np.int16).max).astype(np.int16)
+
+            outdata[:len(hans)] = hans[:len(outdata)]
+
+            """ buffer_chunk = buffer[:len(outdata)]
+
+            int16_array = np.frombuffer(buffer_chunk, dtype=np.int16)
+            INT16_TO_FLOAT32_SCALE = 1.0 / 32768.0
+            chunk = int16_array.astype(np.float32) * INT16_TO_FLOAT32_SCALE
+            print(chunk)
+            p = robot(chunk, 16000)
+            print(p)
+
+            if len(p) == 0:
+                hans = b'\x00'
+                outdata[:len(hans)] = hans
+            else:
+                outdata[:len(p)] = p[:len(outdata)]
+                buffer = buffer[len(outdata):] """
+
+        """ stream = sd.OutputStream(
+            samplerate=16000,
+            channels=1,
+            dtype='int16',
+            callback=callback,
+            ) """
+
         if result is not None:
             audio_player.stream_with_effects(
                 input_data=result.audio_data,
