@@ -424,7 +424,7 @@ class OpenAiWingman(Wingman):
             if function_name is not None:
                 msg["name"] = function_name
 
-            # Don't use self._add_user_message_to_history here because we never want to skip this because of history limitions
+            # Don't use self._add_user_message_to_history here because we never want to skip this because of history limitations
             self.messages.append(msg)
 
         return instant_response
@@ -471,7 +471,7 @@ class OpenAiWingman(Wingman):
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str]:
         """
-        Uses an OpenAI function call to execute a command. If it's an instant activation_command, one if its reponses will be played.
+        Uses an OpenAI function call to execute a command. If it's an instant activation_command, one if its responses will be played.
 
         Args:
             function_name (str): The name of the function to be executed.
@@ -483,7 +483,7 @@ class OpenAiWingman(Wingman):
             - instant_response (str): An immediate response or action to be taken, if any (e.g., play audio).
         """
         function_response = ""
-        instant_reponse = ""
+        instant_response = ""
         if function_name == "execute_command":
             # get the command based on the argument passed by GPT
             command = self._get_command(function_args["command_name"])
@@ -491,10 +491,10 @@ class OpenAiWingman(Wingman):
             function_response = self._execute_command(command)
             # if the command has responses, we have to play one of them
             if command and command.get("responses"):
-                instant_reponse = self._select_command_response(command)
-                await self._play_to_user(instant_reponse)
+                instant_response = self._select_command_response(command)
+                await self._play_to_user(instant_response)
 
-        return function_response, instant_reponse
+        return function_response, instant_response
 
     async def _play_to_user(self, text: str):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
