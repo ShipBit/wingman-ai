@@ -19,6 +19,8 @@ class AudioPlayer:
         self.is_playing = False
         self.event_queue = None
         self.event_loop = None
+        self.stream = None
+        self.wingman_name = ""
 
     def set_event_loop(self, loop):
         self.event_loop = loop
@@ -38,15 +40,23 @@ class AudioPlayer:
 
         playhead = 0  # Tracks the position in the audio
 
-        with sd.OutputStream(
+        self.stream = sd.OutputStream(
             samplerate=sample_rate,
             channels=channels,
             callback=callback,
             finished_callback=finished_callback,
-        ):
-            sd.sleep(
-                int(len(audio) / sample_rate * 1000)
-            )  # Wait for the stream to finish
+        )
+        self.stream.start()
+        sd.sleep(int(len(audio) / sample_rate * 1000))
+
+    def stop_playback(self):
+        if self.stream is not None:
+            self.stream.stop()
+            self.stream.close()
+            self.stream = None
+            self.is_playing = False
+            if callable(self.on_playback_finished):
+                self.on_playback_finished(self.wingman_name)
 
     def stream_with_effects(
         self,
@@ -72,6 +82,9 @@ class AudioPlayer:
         channels = audio.shape[1] if audio.ndim > 1 else 1
 
         def finished_callback():
+            if self.stream is not None:
+                self.stream.close()
+                self.stream = None
             self.is_playing = False
             if self.event_queue is not None and callable(self.on_playback_finished):
                 finished_event = (self.on_playback_finished, wingman_name)
@@ -86,6 +99,7 @@ class AudioPlayer:
         playback_thread.start()
 
         self.is_playing = True
+        self.wingman_name = wingman_name
 
         if callable(self.on_playback_started):
             self.on_playback_started(wingman_name)

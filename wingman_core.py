@@ -806,3 +806,6 @@ class WingmanCore(WebSocketUser):
             audio_player=self.audio_player,
             wingman_name="system",
         )
+
+    def stop_playback(self):
+        self.audio_player.stop_playback()
