@@ -277,7 +277,7 @@ class OpenAiAzure(BaseOpenAi):
         audio_data_stream = speechsdk.AudioDataStream(result)
 
         audio_player = AudioPlayer()
-        audio_player.output_audio_streaming(audio_data_stream.read_data)
+        audio_player.output_audio_streaming(audio_data_stream.read_data, sound_config)
 
         return
 

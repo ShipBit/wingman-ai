@@ -140,11 +140,12 @@ class AudioPlayer:
         return resampled_audio
     
     def output_audio_streaming(
-            self, 
-            buffer_callback, 
-            buffer_size = 500, 
-            sample_rate = 16000, 
-            channels = 1, 
+            self,
+            buffer_callback,
+            config: SoundConfig,
+            buffer_size = 500,
+            sample_rate = 16000,
+            channels = 1,
             dtype = "int16"
             ):
         buffer = bytearray()
@@ -169,8 +170,16 @@ class AudioPlayer:
             stream.start()
 
             audio_buffer = bytes(buffer_size)
+            sound_effects = get_sound_effects(config)
             filled_size = buffer_callback(audio_buffer)
             while filled_size > 0:
+                data_in_numpy = np.frombuffer(audio_buffer, dtype=np.int16).astype(np.float32)
+
+                for sound_effect in sound_effects:
+                    data_in_numpy = sound_effect(data_in_numpy, sample_rate)
+
+                audio_buffer = data_in_numpy.astype(np.int16).tobytes()
+                
                 buffer += audio_buffer[:filled_size]
                 filled_size = buffer_callback(audio_buffer)
 
