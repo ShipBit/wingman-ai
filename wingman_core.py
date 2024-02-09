@@ -7,7 +7,7 @@ import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.commands import VoiceActivationMutedCommand
-from api.enums import AzureRegion, LogType, OpenAiTtsVoice, ToastType
+from api.enums import AzureRegion, CommandTag, LogType, OpenAiTtsVoice, ToastType
 from api.interface import (
     AudioDevice,
     AudioSettings,
@@ -31,6 +31,7 @@ from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.xvasynth import XVASynth
 from wingmen.wingman import Wingman
+from services.audio_player import AudioPlayer
 from services.audio_recorder import AudioRecorder
 from services.config_manager import ConfigManager
 from services.printr import Printr
@@ -233,23 +234,37 @@ class WingmanCore(WebSocketUser):
             endpoint=self.play_xvasynth_tts,
             tags=["core"],
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stop-playback",
+            endpoint=self.stop_playback,
+            tags=["core"],
+        )
 
         self.config_manager = config_manager
-        self.active_recording = {"key": "", "wingman": None}
         self.audio_recorder = AudioRecorder()
+
+        self.audio_player = AudioPlayer()
+        self.event_queue = asyncio.Queue()
+        self.audio_player.event_queue = self.event_queue
+        self.audio_player.on_playback_started = self.on_playback_started
+        self.audio_player.on_playback_finished = self.on_playback_finished
+
         self.tower: Tower = None
 
         self.current_config_dir: ConfigDirInfo = (
             self.config_manager.find_default_config()
         )
         self.current_config = None
+        self.active_recording = {"key": "", "wingman": None}
 
-        self.startup_errors: list[WingmanInitializationError] = []
         self.is_started = False
+        self.startup_errors: list[WingmanInitializationError] = []
 
         self.speech_recognizer: speechsdk.SpeechRecognizer = None
         self.is_listening = False
         self.was_listening_before_ptt = False
+        self.was_listening_before_playback = False
 
         self.key_events = {}
 
@@ -267,7 +282,7 @@ class WingmanCore(WebSocketUser):
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []
-        
+
         if isinstance(hotkey, str):
             hotkey_codes = keyboard.parse_hotkey(hotkey)
             codes = [item[0] for tup in hotkey_codes for item in tup]
@@ -278,7 +293,6 @@ class WingmanCore(WebSocketUser):
         is_pressed = set(codes) == set(self.key_events.keys())
 
         return is_pressed
-
 
     def on_press(self, key=None, button=None):
         if self.speech_recognizer:
@@ -407,6 +421,40 @@ class WingmanCore(WebSocketUser):
         )
         self.speech_recognizer.recognized.connect(self.on_voice_recognition)
 
+    def on_playback_started(self, wingman_name: str):
+        printr.print(
+            text=f"Playback started ({wingman_name})",
+            source_name=wingman_name,
+            command_tag=CommandTag.PLAYBACK_STARTED,
+        )
+
+        self.was_listening_before_playback = self.is_listening
+        if self.speech_recognizer and self.is_listening:
+            self.start_voice_recognition(mute=True)
+
+    async def on_playback_finished(self, wingman_name: str):
+        printr.print(
+            text=f"Playback finished ({wingman_name})",
+            source_name=wingman_name,
+            command_tag=CommandTag.PLAYBACK_STOPPED,
+        )
+
+        if (
+            self.speech_recognizer
+            and not self.is_listening
+            and self.was_listening_before_playback
+        ):
+            self.start_voice_recognition()
+
+    async def process_events(self):
+        while True:
+            callback, wingman_name = await self.event_queue.get()
+            await callback(wingman_name)
+
+    async def run(self):
+        while True:
+            await self.process_events()
+
     # GET /configs
     def get_config_dirs(self):
         return ConfigsInfo(
@@ -442,7 +490,7 @@ class WingmanCore(WebSocketUser):
 
         self.current_config_dir = loaded_config_dir
         self.current_config = config
-        self.tower = Tower(config=config)
+        self.tower = Tower(config=config, audio_player=self.audio_player)
         errors = await self.tower.instantiate_wingmen()
         return errors, ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
 
@@ -700,7 +748,13 @@ class WingmanCore(WebSocketUser):
         self, text: str, api_key: str, voice: OpenAiTtsVoice, sound_config: SoundConfig
     ):
         openai = OpenAi(api_key=api_key)
-        openai.play_audio(text=text, voice=voice, sound_config=sound_config)
+        openai.play_audio(
+            text=text,
+            voice=voice,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+        )
 
     # POST /play/azure
     def play_azure_tts(
@@ -712,6 +766,8 @@ class WingmanCore(WebSocketUser):
             api_key=api_key,
             config=config,
             sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
         )
 
     # POST /play/elevenlabs
@@ -727,6 +783,8 @@ class WingmanCore(WebSocketUser):
             text=text,
             config=config,
             sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
         )
 
     # POST /play/edgetts
@@ -734,11 +792,27 @@ class WingmanCore(WebSocketUser):
         self, text: str, config: EdgeTtsConfig, sound_config: SoundConfig
     ):
         edge = Edge()
-        await edge.play_audio(text=text, config=config, sound_config=sound_config)
+        await edge.play_audio(
+            text=text,
+            config=config,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+        )
 
     # POST /play/xvasynth
     async def play_xvasynth_tts(
         self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
     ):
         xvasynth = XVASynth(wingman_name="")
-        await xvasynth.play_audio(text=text, config=config, sound_config=sound_config)
+        await xvasynth.play_audio(
+            text=text,
+            config=config,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+        )
+
+    # POST /stop-playback
+    async def stop_playback(self):
+        await self.audio_player.stop_playback()

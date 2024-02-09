@@ -1,16 +1,17 @@
-import keyboard.keyboard as keyboard
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import Config, WingmanInitializationError
+from services.audio_player import AudioPlayer
+from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
-from services.printr import Printr
 
 
 printr = Printr()
 
 
 class Tower:
-    def __init__(self, config: Config):
+    def __init__(self, config: Config, audio_player: AudioPlayer):
+        self.audio_player = audio_player
         self.config = config
         self.mouse_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
@@ -40,16 +41,21 @@ class Tower:
                     wingman = Wingman.create_dynamically(
                         name=wingman_name,
                         config=wingman_config,
+                        audio_player=self.audio_player,
                     )
                 else:
-                    wingman = OpenAiWingman(name=wingman_name, config=wingman_config)
+                    wingman = OpenAiWingman(
+                        name=wingman_name,
+                        config=wingman_config,
+                        audio_player=self.audio_player,
+                    )
             except Exception as e:  # pylint: disable=broad-except
                 # just in case we missed something
                 msg = str(e).strip() or type(e).__name__
                 errors.append(
                     WingmanInitializationError(
                         wingman_name=wingman_name,
-                        msg=msg,
+                        message=msg,
                         error_type=WingmanInitializationErrorType.UNKNOWN,
                     )
                 )
@@ -78,13 +84,13 @@ class Tower:
     def get_wingman_from_mouse(self, mouse: any) -> Wingman | None:  # type: ignore
         wingman = self.mouse_wingman_dict.get(mouse, None)
         return wingman
-    
+
     def get_wingman_from_text(self, text: str) -> Wingman | None:
         for wingman in self.wingmen:
             # Check if a wingman name is in the text
             if wingman.name.lower() in text.lower():
                 return wingman
-            
+
         # Check if there is a default wingman defined in the config
         for wingman in self.wingmen:
             if wingman.config.is_voice_activation_default:

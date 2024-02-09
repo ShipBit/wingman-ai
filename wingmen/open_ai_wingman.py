@@ -15,6 +15,7 @@ from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.xvasynth import XVASynth
 from providers.whispercpp import Whispercpp
+from services.audio_player import AudioPlayer
 from services.printr import Printr
 from wingmen.wingman import Wingman
 
@@ -38,10 +39,12 @@ class OpenAiWingman(Wingman):
         self,
         name: str,
         config: WingmanConfig,
+        audio_player: AudioPlayer,
     ):
         super().__init__(
             name=name,
             config=config,
+            audio_player=audio_player,
         )
 
         self.edge_tts = Edge()
@@ -657,31 +660,47 @@ class OpenAiWingman(Wingman):
 
         if self.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(
-                text, self.config.edge_tts, self.config.sound
+                text=text,
+                config=self.config.edge_tts,
+                sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.ELEVENLABS:
-            self.elevenlabs.play_audio(text, self.config.elevenlabs, self.config.sound)
+            self.elevenlabs.play_audio(
+                text=text,
+                config=self.config.elevenlabs,
+                sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
+            )
         elif self.tts_provider == TtsProvider.AZURE:
             self.openai_azure.play_audio(
                 text=text,
                 api_key=self.azure_api_keys["tts"],
                 config=self.config.azure.tts,
                 sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.XVASYNTH:
             self.xvasynth.play_audio(
                 text=text,
                 config=self.config.xvasynth,
                 sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.OPENAI:
             self.openai.play_audio(
                 text=text,
                 voice=self.config.openai.tts_voice,
                 sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
             )
         else:
-            self.printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
+            printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
 
     async def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
@@ -697,7 +716,11 @@ class OpenAiWingman(Wingman):
         Returns:
             list[dict]: A list of tool descriptors in OpenAI format.
         """
-        commands = [command.name for command in self.config.commands if not command.force_instant_activation]
+        commands = [
+            command.name
+            for command in self.config.commands
+            if not command.force_instant_activation
+        ]
         tools = [
             {
                 "type": "function",

@@ -70,7 +70,12 @@ class XVASynth:
         return errors
 
     def play_audio(
-        self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
+        self,
+        text: str,
+        config: XVASynthTtsConfig,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
     ):
         model_loaded_error = self.__load_model(
             path_to_xvasynth=config.xvasynth_path,
@@ -104,10 +109,12 @@ class XVASynth:
             "useCleanup": config.use_cleanup,
         }
         response = requests.post(synthesize_url, json=data, timeout=10)
-        audio_player = AudioPlayer()
         audio, sample_rate = audio_player.get_audio_from_file(file_path)
+
         audio_player.stream_with_effects(
-            input_data=(audio, sample_rate), config=sound_config
+            input_data=(audio, sample_rate),
+            config=sound_config,
+            wingman_name=wingman_name,
         )
 
     def __check_if_running(self, url: str):

@@ -215,7 +215,9 @@ async def async_main(host: str, port: int, sidecar: bool):
             core.startup_errors.append(error)
 
     await core.startup()
-
+    event_loop = asyncio.get_running_loop()
+    core.audio_player.set_event_loop(event_loop)
+    asyncio.create_task(core.process_events())
     core.is_started = True
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
