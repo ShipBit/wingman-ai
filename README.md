@@ -1,8 +1,10 @@
 # Wingman AI Core
 
-![Wingman AI Header](assets/header.webp)
-
 Wingman AI allows you to use your voice to talk to various AI providers and LLMs, process your conversations, and ultimately trigger actions such as pressing buttons or reading answers. Our _Wingmen_ are like characters and your interface to this world, and you can easily control their behavior and characteristics, even if you're not a developer.
+
+**Release trailer (older version!):**
+
+[![IMAGE ALT TEXT](https://img.youtube.com/vi/temLcjFDiVU/0.jpg)](https://www.youtube.com/watch?v=temLcjFDiVU 'Wingman AI Release Trailer')
 
 AI is complex and it scares people. It's also **not just ChatGPT**. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.
 
@@ -16,14 +18,6 @@ The idea is simple, but the possibilities are endless. For example, you could:
 - Automate tasks on your computer
 - improve accessibility
 - ... and much more
-
-### Release trailer (YouTube)
-
-[![IMAGE ALT TEXT](https://img.youtube.com/vi/temLcjFDiVU/0.jpg)](https://www.youtube.com/watch?v=temLcjFDiVU 'Wingman AI Release Trailer')
-
-## Who is this for?
-
-The project is intended for two different groups of users:
 
 ## Features
 
@@ -54,7 +48,7 @@ Since version 2.0, Wingman AI Core acts as a "backend" API (using FastAPI and Py
 
 We (Team ShipBit) offer an additional [client with a neat GUI](https://www.shipbit.de/wingman-ai) that you can use to configure everything in Wingman AI Core.
 
-<img src="assets/wingman-ui-1.png" width="23%"></img> <img src="assets/wingman-ui-2.png" width="23%"></img> <img src="assets/wingman-ui-3.png" width="23%"></img> <img src="assets/wingman-ui-4.png" width="23%"></img>
+<img src="assets/wingman-ui-1.png" width="23%"></img> <img src="assets/wingman-ui-3.png" width="23%"></img> <img src="assets/wingman-ui-4.png" width="23%"></img> <img src="assets/wingman-ui-2.png" width="23%"></img>
 
 ## Is this a "Star Citizen" thing?
 
@@ -66,6 +60,10 @@ The video that started it all:
 
 Wingman AI is an external, universal tool that you can run alongside any game or program. As such, it does not currently interact directly with _Star Citizen_ or any other game, other than its ability to trigger system-wide keystrokes, which of course can have an effect on the game.
 However, if you find a way to interact with a game, either through an API or by reading the game's memory, you could - in theory - use it to directly trigger in-game actions or feed your models with live data. This is **not** the focus of Wingman AI, though.
+
+## Who is this for?
+
+The project is intended for two different groups of users:
 
 ### Developers
 
