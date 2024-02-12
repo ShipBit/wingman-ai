@@ -4,6 +4,8 @@
 
 You need Python 3.11.7 and some dependencies to run Wingman. We recommend using a virtual environment to keep your system clean. If you don't know what that is, don't worry, we'll guide you through the process. If you don't want to use a virtual environment, you can skip the `pyenv` parts and just run `pip install -r requirements.txt` in the repository root once you have Python installed.
 
+We do NOT recommend to install Python from the Microsoft Store because this runs in a sandbox environment and will create the Wingman config files in weird directories which we can't detect properly.
+
 ### The quick and easy way
 
 Install Python 3.11.7 and add it to your `PATH`. Make sure to check the box **Add Python 3.11 to PATH** during the installation. If you forgot to do so, you can add it manually.
