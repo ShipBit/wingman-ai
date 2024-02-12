@@ -211,7 +211,7 @@ This list will inevitably remain incomplete. If you miss your name here, please 
 
 To our greatest supporters we say: `o7` Commanders!
 
-- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew) (Core contributor)
+- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew)
 - [**Rodney W. Harper aka Mactavious-Actual**](https://linktr.ee/rwhnc)
 
 ### Premium Donators
@@ -230,9 +230,9 @@ To our greatest supporters we say: `o7` Commanders!
 ## Open Source Acknowledgements
 
 Wingman makes use of other Open Source projects internally (without modifying them in any way).
-We would like to thank their creators for their great work and contributions to the Open Source community, especially:
+We would like to thank their creators for their great work and contributions to the Open Source community.
 
-- [azure-cognitiveservices-speech](https://learn.microsoft.com/en-GB/azure/ai-services/speech-service/), Proprietary license, Microsoft
+- [azure-cognitiveservices-speech](https://learn.microsoft.com/en-GB/azure/ai-services/speech-service/) - Proprietary license, Microsoft
 - [edge-tts](https://github.com/rany2/edge-tts) - GPL-3.0
 - [elevenlabslib](https://github.com/lugia19/elevenlabslib) - MIT, © 2018 The Python Packaging Authority
 - [FastAPI](https://github.com/tiangolo/fastapi) - MIT, © 2018 Sebastián Ramírez
@@ -249,3 +249,10 @@ We would like to thank their creators for their great work and contributions to 
 - [sounddevice](https://github.com/spatialaudio/python-sounddevice/) - MIT, © 2015-2023 Matthias Geier
 - [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
 - [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-presen, Encode OSS Ltd. All rights reserved.
+
+### Special thanks to individual persons
+
+- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew) and @teddybear082 for outstanding moderation in Discord, constant feedback and valuable core contributions
+- @lugia19 for developing and improving the amazing [elevenlabslib](https://github.com/lugia19/elevenlabslib).
+- [Knebel](https://www.youtube.com/@Knebel_DE) who helped us kickstart Wingman AI by showing it on stream and grants us access to the [StarHead API](https://star-head.de/) for Star Citizen.
+- @Zatecc from [UEX Corp](https://uexcorp.space/) who supports our community developers and Wingmen with live trading data for Star Citizen using the [UEX Corp API](https://uexcorp.space/api.html).
