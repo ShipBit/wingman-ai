@@ -201,33 +201,11 @@ If you want to read some code first and understand how it all works, we recommen
 
 If you're planning to develop a major feature or new integration, please contact us on [Discord](https://discord.com/invite/k8tTBar3gZ) first and let us know what you're up to. We'll be happy to help you get started and make sure your work isn't wasted because we're already working on something similar.
 
-## Our Patreons & Early Access Testers
+## Acknowledgements
 
 Thank you so much for your support. We really appreciate it!
 
-This list will inevitably remain incomplete. If you miss your name here, please let us know in [Discord](https://discord.com/invite/k8tTBar3gZ) or via [Patreon](https://www.patreon.com/ShipBit).
-
-### Commanders
-
-To our greatest supporters we say: `o7` Commanders!
-
-- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew)
-- [**Rodney W. Harper aka Mactavious-Actual**](https://linktr.ee/rwhnc)
-
-### Premium Donators
-
-- [The Announcer](https://www.youtube.com/TheAnnouncerLive)
-- [Weyland](https://robertsspaceindustries.com/orgs/corp)
-- Morthius
-- [Grobi](https://www.twitch.tv/grobitalks)
-- Paradox
-- Gopalfreak aka Rockhound
-
-### Wingmen
-
-[Ira Robinson aka Serene/BlindDadDoes](http://twitch.tv/BlindDadDoes), Zenith, DiVille, [Hiwada], Hades aka Architeutes, Raziel317, [CptToastey](https://www.twitch.tv/cpttoastey), NeyMR AKA EagleOne (Capt.Epic), a Bit Brutal, AlexeiX, [Dragon Aura](https://robertsspaceindustries.com/citizens/Dragon_Aura), Perry-x-Rhodan, DoublarThackery, SilentCid, Bytebool, Exaust A.K.A Nikoyevitch, Tycoon3000, N.T.G, Jolan97, Greywolfe, [Dayel Ostraco aka BlakeSlate](https://dayelostra.co/), Nielsjuh01, Manasy, Sierra-Noble, Simon says aka Asgard, JillyTheSnail, [Admiral-Chaos aka Darth-Igi], The Don, Tristan Import Error, Munkey the pirate, Norman Pham aka meMidgety, [meenie](https://github.com/meenie), [Tilawan](https://github.com/jlaluces123), Mr. Moo42, Geekdomo, Jenpai, Blitz, [Aaron Sadler](https://github.com/AaronSadler687), [SleeperActual](https://vngd.net/), parawho, [HypeMunkey] https://robertsspaceindustries.com/citizens/HypeMunkey, Huniken, SuperTruck, [NozDog], Skipster [Skipster Actual], Fredek, Ruls-23, Dexonist
-
-## Open Source Acknowledgements
+### Open Source community
 
 Wingman makes use of other Open Source projects internally (without modifying them in any way).
 We would like to thank their creators for their great work and contributions to the Open Source community.
@@ -250,9 +228,33 @@ We would like to thank their creators for their great work and contributions to 
 - [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
 - [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-presen, Encode OSS Ltd. All rights reserved.
 
-### Special thanks to individual persons
+### Individual persons
+
+This list will inevitably remain incomplete. If you miss your name here, please let us know in [Discord](https://discord.com/invite/k8tTBar3gZ) or via [Patreon](https://www.patreon.com/ShipBit).
+
+#### Special thanks
 
 - [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew) and @teddybear082 for outstanding moderation in Discord, constant feedback and valuable core contributions
 - @lugia19 for developing and improving the amazing [elevenlabslib](https://github.com/lugia19/elevenlabslib).
 - [Knebel](https://www.youtube.com/@Knebel_DE) who helped us kickstart Wingman AI by showing it on stream and grants us access to the [StarHead API](https://star-head.de/) for Star Citizen.
 - @Zatecc from [UEX Corp](https://uexcorp.space/) who supports our community developers and Wingmen with live trading data for Star Citizen using the [UEX Corp API](https://uexcorp.space/api.html).
+
+#### Commanders (Patreons)
+
+To our greatest Patreon supporters we say: `o7` Commanders!
+
+- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew)
+- [**Rodney W. Harper aka Mactavious-Actual**](https://linktr.ee/rwhnc)
+
+#### Premium Donators (Patreons)
+
+- [The Announcer](https://www.youtube.com/TheAnnouncerLive)
+- [Weyland](https://robertsspaceindustries.com/orgs/corp)
+- Morthius
+- [Grobi](https://www.twitch.tv/grobitalks)
+- Paradox
+- Gopalfreak aka Rockhound
+
+#### Wingmen (Patreons)
+
+[Ira Robinson aka Serene/BlindDadDoes](http://twitch.tv/BlindDadDoes), Zenith, DiVille, [Hiwada], Hades aka Architeutes, Raziel317, [CptToastey](https://www.twitch.tv/cpttoastey), NeyMR AKA EagleOne (Capt.Epic), a Bit Brutal, AlexeiX, [Dragon Aura](https://robertsspaceindustries.com/citizens/Dragon_Aura), Perry-x-Rhodan, DoublarThackery, SilentCid, Bytebool, Exaust A.K.A Nikoyevitch, Tycoon3000, N.T.G, Jolan97, Greywolfe, [Dayel Ostraco aka BlakeSlate](https://dayelostra.co/), Nielsjuh01, Manasy, Sierra-Noble, Simon says aka Asgard, JillyTheSnail, [Admiral-Chaos aka Darth-Igi], The Don, Tristan Import Error, Munkey the pirate, Norman Pham aka meMidgety, [meenie](https://github.com/meenie), [Tilawan](https://github.com/jlaluces123), Mr. Moo42, Geekdomo, Jenpai, Blitz, [Aaron Sadler](https://github.com/AaronSadler687), [SleeperActual](https://vngd.net/), parawho, [HypeMunkey](https://robertsspaceindustries.com/citizens/HypeMunkey), Huniken, SuperTruck, [NozDog], Skipster [Skipster Actual], Fredek, Ruls-23, Dexonist
