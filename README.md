@@ -211,8 +211,8 @@ This list will inevitably remain incomplete. If you miss your name here, please 
 
 To our greatest supporters we say: `o7` Commanders!
 
+- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew) (Core contributor)
 - [**Rodney W. Harper aka Mactavious-Actual**](https://linktr.ee/rwhnc)
-- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew)
 
 ### Premium Donators
 
@@ -221,26 +221,31 @@ To our greatest supporters we say: `o7` Commanders!
 - Morthius
 - [Grobi](https://www.twitch.tv/grobitalks)
 - Paradox
+- Gopalfreak aka Rockhound
 
 ### Wingmen
 
-[Ira Robinson aka Serene/BlindDadDoes](http://twitch.tv/BlindDadDoes), Zenith, DiVille, [Hiwada], Hades aka Architeutes, Raziel317, [CptToastey](https://www.twitch.tv/cpttoastey), NeyMR AKA EagleOne (Capt.Epic), a Bit Brutal, AlexeiX, [Dragon Aura](https://robertsspaceindustries.com/citizens/Dragon_Aura), Perry-x-Rhodan, DoublarThackery, SilentCid, Bytebool, Exaust A.K.A Nikoyevitch, Tycoon3000, N.T.G, Jolan97, Greywolfe, [Dayel Ostraco aka BlakeSlate](https://dayelostra.co/), Nielsjuh01, Manasy, Sierra-Noble, Simon says aka Asgard, JillyTheSnail, [Admiral-Chaos aka Darth-Igi], The Don, Tristan Import Error, Munkey the pirate, Norman Pham aka meMidgety, [meenie](https://github.com/meenie), [Tilawan](https://github.com/jlaluces123), Mr. Moo42, Geekdomo, Jenpai, Blitz, [Aaron Sadler](https://github.com/AaronSadler687), [SleeperActual](https://vngd.net/), parawho, [HypeMunkey] https://robertsspaceindustries.com/citizens/HypeMunkey, Huniken, SuperTruck, [NozDog]
+[Ira Robinson aka Serene/BlindDadDoes](http://twitch.tv/BlindDadDoes), Zenith, DiVille, [Hiwada], Hades aka Architeutes, Raziel317, [CptToastey](https://www.twitch.tv/cpttoastey), NeyMR AKA EagleOne (Capt.Epic), a Bit Brutal, AlexeiX, [Dragon Aura](https://robertsspaceindustries.com/citizens/Dragon_Aura), Perry-x-Rhodan, DoublarThackery, SilentCid, Bytebool, Exaust A.K.A Nikoyevitch, Tycoon3000, N.T.G, Jolan97, Greywolfe, [Dayel Ostraco aka BlakeSlate](https://dayelostra.co/), Nielsjuh01, Manasy, Sierra-Noble, Simon says aka Asgard, JillyTheSnail, [Admiral-Chaos aka Darth-Igi], The Don, Tristan Import Error, Munkey the pirate, Norman Pham aka meMidgety, [meenie](https://github.com/meenie), [Tilawan](https://github.com/jlaluces123), Mr. Moo42, Geekdomo, Jenpai, Blitz, [Aaron Sadler](https://github.com/AaronSadler687), [SleeperActual](https://vngd.net/), parawho, [HypeMunkey] https://robertsspaceindustries.com/citizens/HypeMunkey, Huniken, SuperTruck, [NozDog], Skipster [Skipster Actual], Fredek, Ruls-23, Dexonist
 
 ## Open Source Acknowledgements
 
 Wingman makes use of other Open Source projects internally (without modifying them in any way).
 We would like to thank their creators for their great work and contributions to the Open Source community, especially:
 
+- [azure-cognitiveservices-speech](https://learn.microsoft.com/en-GB/azure/ai-services/speech-service/), Proprietary license, Microsoft
 - [edge-tts](https://github.com/rany2/edge-tts) - GPL-3.0
-- [openai](https://github.com/openai/openai-python) - Apache-2.0
-- [openai-whisper](https://github.com/openai/whisper) - MIT
 - [elevenlabslib](https://github.com/lugia19/elevenlabslib) - MIT, © 2018 The Python Packaging Authority
-- [pydirectinput](https://github.com/learncodebygaming/pydirectinput) - MIT, © 2020 Ben Johnson
-- [PyAutoGUI](https://github.com/asweigart/pyautogui) - BSD 3, © 2014 Al Sweigart
+- [FastAPI](https://github.com/tiangolo/fastapi) - MIT, © 2018 Sebastián Ramírez
+- [numpy](https://github.com/numpy/numpy) - BSD 3, © 2005-2023 NumPy Developers
+- [openai](https://github.com/openai/openai-python) - Apache-2.0
+- [packaging](https://github.com/pypa/packaging) - Apache/BSD, © Donald Stufft and individual contributors
+- [pedalboard](https://github.com/spotify/pedalboard) - GPL-3.0, © 2021-2023 Spotify AB
+- [platformdirs](https://github.com/platformdirs/platformdirs) - MIT, © 2010-202x plaformdirs developers
+- [pydantic](https://github.com/pydantic/pydantic) - MIT, © 2017 to present Pydantic Services Inc. and individual contributors
+- [pydirectinput-rgx](https://github.com/ReggX/pydirectinput_rgx) - MIT, © 2022 dev@reggx.eu, 2020 Ben Johnson
+- [pyinstaller](https://github.com/pyinstaller/pyinstaller) - extended GPL 2.0, © 2010-2023 PyInstaller Development Team
+- [PyYAML](https://github.com/yaml/pyyaml) - MIT, © 2017-2021 Ingy döt Net, 2006-2016 Kirill Simonov
+- [scipy](https://github.com/scipy/scipy) - BSD 3, © 2001-2002 Enthought, Inc. 2003-2023, SciPy Developers
 - [sounddevice](https://github.com/spatialaudio/python-sounddevice/) - MIT, © 2015-2023 Matthias Geier
 - [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
-- [scipy](https://github.com/scipy/scipy) - BSD 3, © 2001-2002 Enthought, Inc. 2003-2023, SciPy Developers
-- [numpy](https://github.com/numpy/numpy) - BSD 3, © 2005-2023, NumPy Developers
-- [packaging](https://github.com/pypa/packaging) - Apache/BSD, © Donald Stufft and individual contributors
-- [pyinstaller](https://github.com/pyinstaller/pyinstaller) - extended GPL 2.0, © 2010-2023, PyInstaller Development Team
-- [faqtory](https://github.com/willmcgugan/faqtory) - MIT, © 2022 Will McGugan
+- [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-presen, Encode OSS Ltd. All rights reserved.
