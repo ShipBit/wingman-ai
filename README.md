@@ -1,10 +1,10 @@
-# Wingman AI
+# Wingman AI Core
 
 ![Wingman AI Header](assets/header.webp)
 
 Wingman AI allows you to use your voice to talk to various AI providers and LLMs, process your conversations, and ultimately trigger actions such as pressing buttons or reading answers. Our _Wingmen_ are like characters and your interface to this world, and you can easily control their behavior and characteristics, even if you're not a developer.
 
-AI is complex and it scares people. It's also not 'just ChatGPT'. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.
+AI is complex and it scares people. It's also **not just ChatGPT**. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.
 
 ![Wingman Flow](assets/wingman-flow.png)
 
@@ -16,6 +16,37 @@ The idea is simple, but the possibilities are endless. For example, you could:
 - Automate tasks on your computer
 - improve accessibility
 - ... and much more
+
+## Features
+
+Since version 2.0, Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the following features:
+
+- **Push-to-talk or voice activation** to capture user audio
+- OpenAI **text generation** and **function calling**
+- **Speech-to-text** providers (STT) for transcription:
+  - OpenAI Whisper
+  - OpenAI Whisper via Azure
+  - Azure Speech
+  - whispercpp (local)
+- **Text-to-speech** (TTS) providers:
+  - OpenAI TTS
+  - Azure TTS
+  - Elevenlabs
+  - Edge TTS (free)
+  - XVASynth (local)
+- **Sound effects** that work with every supported TTS provider
+- **Multilingual** by default
+- **Command recording & execution** (keyboard & mouse)
+  - **AI-powered**: OpenAI decides when to execute commands based on user input. Users don't need to say exact phrases.
+  - **Instant activation**: Users can (almost) instantly trigger commands by saying exact phrases.
+  - Optional: Predetermined responses
+- **Custom Wingman** support: Developers can easily plug-in their own Python scripts with custom implementations
+- **directory/file-based configuration** for different use cases (e.g. games) and Wingmen. No database needed.
+- Wingman AI Core exposes a lot of its functionality via **REST services** (with an OpenAPI/Swagger spec) and can send and receive messages from clients, games etc. using **WebSockets**.
+
+We (Team ShipBit) offer an additional [client with a neat GUI](https://www.shipbit.de/wingman-ai) that you can use to configure everything in Wingman AI Core.
+
+<img src="assets/wingman-ui-1.png" width="23%"></img> <img src="assets/wingman-ui-2.png" width="23%"></img> <img src="assets/wingman-ui-3.png" width="23%"></img> <img src="assets/wingman-ui-4.png" width="23%"></img>
 
 ## Is this a "Star Citizen" thing?
 
@@ -32,17 +63,37 @@ The project is intended for two different groups of users:
 
 ### Developers
 
-If you're a developer, you can just clone the repository and start building your own Wingmen. We try to keep the codebase as open and hackable as possible, with lots of hooks and extension points. The base classes you'll need are well documented, and we're happy to help you get started. We also provide a [development guide](#develop-with-wingman-ai) to help you witht the setup. Wingman is currently 100% written in Python.
+If you're a developer, you can just clone the repository and start building your own Wingmen. We try to keep the codebase as open and hackable as possible, with lots of hooks and extension points. The base classes you'll need are well documented, and we're happy to help you get started. We also provide a [development guide](#develop-with-wingman-ai) to help you witht the setup. Wingman AI Core is currently 100% written in Python.
 
 ### Gamers & other interested people
 
-If you're not a developer, you can start with pre-built Wingmen from us or from the community and [reconfigure](#configure-wingmen) them to your needs. We take a very _configuration-heavy_ approach, and while it might be a bit overwhelming and confusing to edit our (very identation-sensitive) YAML config file right now, we're working on a more user-friendly UI to make it easier for you in the future.
+If you're not a developer, you can start with pre-built Wingmen from us or from the community and adapt them to your needs. Since version 2, we offer an [eay-to-use client](https://www.shipbit.de/wingman-ai) for Windows that you can use to cofigure every single detail of your Wingmen. It also handles multiple configurations and offers system-wide settings like audio device selection.
 
-## Is this free? What about these API keys? Do I need a subscription?
+## Providers & cost
 
-Wingman AI is free and open source, but the AI providers you'll be using are not.
+Wingman AI Core is free but the AI providers you'll be using might not be. We know that this is a big concern for many people, so we want to offer an easier solution. We're working on "Wingman Pro" which will offer a subscription-based service with a flat fee for all the AI providers you need (and additional GUI features). This way, you won't have to worry about intransparent "pay-per-use" costs. But we're not ready yet.
 
-### OpenAI
+### Unlimited access for Patreons for just $5/month
+
+**Until Wingman Pro is ready**, we offer our [Patreon](https://www.patreon.com/ShipBit) supporters unlimited access to the following services via our Azure infrastructure:
+
+- Open AI GPT-3.5 Turbo via Azure
+- Open AI Whisper via Azure (STT)
+- Azure Speech (STT)
+- Azure TTS
+
+Wingman AI also supports local providers that you have to setup on your own but can then use and connect with our client for free:
+
+- [whispercpp](https://github.com/ggerganov/whisper.cpp) (STT)
+- [XVASynth](https://store.steampowered.com/app/1765720/xVASynth/) (TTS)
+
+You can basically get everything (except 11Labs and OpenAI TTS) for $5 per month using one of our [Patreon packages](https://www.patreon.com/shipbit/membership). We also offer [one-time purchases](https://www.patreon.com/shipbit/shop) for people who hate subscriptions.
+
+### Other providers
+
+You can also use your own API key to use the following services:
+
+#### OpenAI
 
 Our Wingmen use OpenAI's APIs and they charge by usage. That means: You don't pay a flat subscription fee, but rather for each call you make to their APIs. You can find more information about the APIs and their [pricing](https://openai.com/pricing) on the [OpenAI website](https://beta.openai.com/docs/introduction). You will need to create your API key:
 
@@ -56,15 +107,7 @@ Our Wingmen use OpenAI's APIs and they charge by usage. That means: You don't pa
 - Go to "Billing" and add a payment method.
 - Select "API Key" from the menu on the left and create one. Copy it! If you forget it, you can always create a new one.
 
-**Our sample Wingmen use the following OpenAI APIs:**.
-
-- Whisper for transcription
-- Any GPT model you configure, e.g. `gpt-3.5-turbo-1106`. More complex Wingmen examples require a more powerful model like `gpt-4-1106-preview` to work correctly.
-- TTS / Text-to-Speech
-
-We are also working on a Vision API implementation, but it's not ready yet.
-
-### ElevenLabs
+#### ElevenLabs
 
 You don't have to use [ElevenLabs](https://elevenlabs.io/) as TTS provider, but their voices are great. You can also clone your own with less than 5 minutes of sample audio, e.g. your friend, an actor or a recording of an NPC in your game.
 
@@ -72,73 +115,51 @@ They have a free tier with a limited number of characters generated per month so
 
 Signing up is very similar to OpenAI: Create your account, set up your payment method, and create an API key.
 
-### Edge TTS
+#### Edge TTS (Free)
 
 Microsoft Edge TTS is actually free and you don't need an API key to use it. However, it's not as "good" as the others in terms of quality. Their voices are split by language, so the same voice can't speak different languages - you have to choose a new voice for the new language instead. Wingman does this for you, but it's still "Windows TTS" and not as good as the other providers.
 
-### Is this possible for free? I have my own local LLM running
+### Are local LLMs replacing OpenAI supported?
 
-Yes, it is. If you're a developer.
+Wingman AI exposes the `base_url` property that the OpenAI Python client uses. So if you have a plug-in replacement for OpenAI's client, you can easily connect it to Wingman AI Core. You can also write your own custom Wingman that uses your local LLM.
 
-We're also working on a "Free Wingman" that uses only free APIs and services. But it's not ready yet.
+Integrating specific LLMs oder models is currently not on our (ShipBit) priority list [as explained here](https://github.com/ShipBit/wingman-ai/issues/108) and we do not offer live support for it. Check out or Discord server if you're interested in local LLMs - there is a vibrant community discussing and testing different solutions and if we ever find one that satisfies our requirements, we might consider supporting it officially.
 
 ## Installing Wingman AI
 
 ### Windows
 
-- Download the latest version from [wingman-ai.com](https://www.wingman-ai.com).
-- Extract it to a new directory of your choice. **DO NOT** extract it to `C:\Program Files` or you'll need admin priviledges to execute it. Pick a user directory, your Desktop, Downloads etc instead. Extract all the files, not just the `.exe`.
-- Run `WingmanAI.exe` from that directory.
-- There will be a Windows SmartScreen security warning (see screenshots below) because our package is currently unsigned. Sorry about that, we're working on it. Just click `More Info` and then `Run anyway` to start the application.
-- Follow the instructions and enter your API key(s).
-- Try talking to our default/example Wingmen. It's **push to talk**, so keep the activation key pressed while talking. Release the key when you're done talking. We're already working on a voice activation feature, but it's not ready yet.
-  - _DELETE_: Board computer
-  - _END_: ATC
-  - _UP_: StarHead
+- Download the installer of the latest version from [wingman-ai.com](https://www.wingman-ai.com).
+- Install it to a directory of your choice and start the client `Wingman AI.exe`.
+  - The client will will auto-start `Wingman AI Core.exe` in the background
 
-You can ask them anything you want, so just try something like: _"Hey, what can you do for me?"_. You can change their activation keys and other settings in the `config.yaml` file in your Wingman directory.
+If that doesn't work for some reason, try starting `Wingman AI Core.exe` manually and check the terminal or your **logs** directory for errors.
 
-![Alt text](assets/win-smartscreen-1.png)
-
-![Alt text](assets/win-smartscreen-2.png)
-
-**If you're a developer**, we always recommend to [run from source](#develop-with-wingman-ai). This way you can pull our latest changes and debug the code.
+**If you're a developer**, you can also [run from source](#develop-with-wingman-ai). This way you can preview our latest changes on the `develop` branch and debug the code.
 
 ### MacOS
 
-Wingman **does** run on MacOS. While we don't have a precompiled package for it yet but you can [run it from source](#develop-with-wingman-ai).
+Wingman runs well on MacOS. While we don't offer a precompiled package for it, you can [run it from source](#develop-with-wingman-ai). Note that the TTS provider XVASynth is Windows-only and therefore not supported on MacOS.
 
-Also note that we have to rely on [PyAutoGUI](https://github.com/asweigart/pyautogui) for key presses on MacOS, which does not work well in many games. Developing on MacOS is perfectly fine, though.
+### Linux
 
-## Running Wingman AI
-
-// TODO when GUI is ready
-
-<!-- Wait for the welcome screen to appear. It will show you the available wingmen and their activation keys.
-
-![Wingman welcome screen](assets/welcome-screen.png)
-
-You can have multiple wingmen active at the same time. Each one is bound to a different activation key. When you see the welcome screen, you're ready to go. Press and hold a specific activation key while talking to your wingman (push-to-talk). Release the key when you're done.
-
-The Wingman AI console doesn't need to be focused, so you can leave it running in the background while you play. You will see your wingman's replies and other helpful output in the console.
-
-To exit Wingman AI, simply press `CTRL+C` in the console or close the console window. -->
+Linux is not officially supported but some of our community members were able to run it anyways. Check out [their documentation](docs/develop-linux.md).
 
 ## Who are these Wingmen?
 
-Our default Wingmen serve as examples and starting points for your own Wingmen, and you can easily reconfigure them in the `config.yaml` file. You can also add your own Wingmen to this config file.
+Our default Wingmen serve as examples and starting points for your own Wingmen, and you can easily reconfigure them using the client. You can also add your own Wingmen.
 
-### board-computer & atc
+### Computer & ATC
 
-Our first two Wingmen are based on OpenAI's APIs. The basic process is as follows:
+Our first two default Wingmen are using OpenAI's APIs. The basic process is as follows:
 
-- Your speech is transcribed by the **Whisper API**.
-- The transcript is then sent as text to the **GPT-4 Turbo API**, which responds with a text.
-- The response is then read out to you by the **OpenAI Text-to-Speech API**.
+- Your speech is transcribed by the configured TTS provider.
+- The transcript is then sent as text to the **GPT-3.5 Turbo API**, which responds with a text and maybe function calls.
+- Wingman AI Core executes function calls which equals a command execution.
+- The response is then read out to you by the configured TTS provider.
+- Clients connected to Wingman AI Core are notified about progress and changes live and display them in the UI.
 
-Before you ask: You can change all of these providers in the `config.yaml` file. We're not affiliated with any of them, and we're not paid by them.
-
-Talking to a Wingman is like chatting with ChatGPT. This means that you can customize their behavior by giving them a `context` (or `system`) prompt as starting point for your conversation. You can also just tell them how to behave and they will remember that during your conversation. ATC and board-computer use very different prompts, so they behave very differently. See `config.yaml` for more information.
+Talking to a Wingman is like chatting with ChatGPT. This means that you can customize their behavior by giving them a `context` (or `system`) prompt as starting point for your conversation. You can also just tell them how to behave and they will remember that during your conversation. ATC and Computer use very different prompts, so they behave very differently.
 
 The magic happens when you configure _commands_ or key bindings. GPT will then try to match your request with the configured commands and execute them for you. It will automatically choose the best matching command based only on its name, so make sure you give it a good one (e.g. `RequestLandingPermission`).
 
@@ -159,29 +180,31 @@ For updates and more information, visit the [StarHead website](https://star-head
 - [Twitch](https://www.twitch.tv/knebeltv)
 - [YouTube](https://www.youtube.com/@Knebel_DE)
 
-## Configuring Wingman
+### Noteworthy community projects
 
-This is the most complex part of Wingman AI right now, but we're working on a more user-friendly UI to make it easier for you. For now, you have to edit the [config.yaml](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/config.example.yaml) file directly. It is well-documented and contains a lot of examples and comments to help you get started.
+- [UEXCorp](https://discord.com/channels/1173573578604687360/1179594417926066196) by @JayMatthew: A custom Wingman that utilizes the UEX Corp API to pull live data for Star Citizen. Think StarHead on steroids.
+- [Cora](https://discord.com/channels/1173573578604687360/1205649611470016512) by @eXpG_kalumet: A fork offering automatic keybinding, multiple Wingmen using a single key, bi-directional UEXCorp communication, screenshot analysis and much more for Star Citizen. Note that Cora is a standalone fork that you cannot easily integrate into the latest Wingman AI Core release.
 
-It's very indentation-sensitive, so please be careful. We recommend using [VSCode](https://code.visualstudio.com/) with the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) to edit it.
+<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/5eE5VLuKtTw?si=GF6PT4ufNLYfQ7Hy" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
 
-Check out the [FAQ](FAQ.md) section for more information and documentation.
+## Can I configure Wingman AI Core without using your client?
+
+Yes, you can! You can edit all the configs in your `%APP_DATA%/Roaming/ShipBit/WingmanAI/[version]` directory.
+
+The YAML configs are very indentation-sensitive, so please be careful. We recommend using [VSCode](https://code.visualstudio.com/) with the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) to edit them.
 
 ## Does it support my language?
 
 Wingman supports all languages that OpenAI (or your configured AI provider) supports. Setting this up in Wingman is really easy:
 
-Find the `context` setting in `config.xaml` for the Wingman you want to change.
+Find the `context` setting for the Wingman you want to change.
 
-Now add a simple sentence to the `context` prompt:
-
-`Always answer in the language I'm using to talk to you.`
-
-or something like:
-
-`Always answer in Portuguese.`
+Now add a simple sentence to the `context` prompt: `Always answer in the language I'm using to talk to you.`
+or something like `Always answer in Portuguese.`
 
 The cool thing is that you can now trigger commands in the language of your choice without changing/translating the `name` of the commands - the AI will do that for you.
+
+Also note that depending on your TTS provider, you might have to pick a voice that can actually speak your desired language or you'll end up with something really funny (like an American voice trying to speak German).
 
 ## Develop with Wingman AI
 
@@ -194,10 +217,12 @@ Please follow our guides to setup your dev environment:
 
 If you want to read some code first and understand how it all works, we recommend you start here (in this order):
 
-- [config.yaml](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/config.example.yaml) - the configuration file
-- [Wingman.py](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/wingmen/wingman.py) - the base class for all Wingmen
-- [OpenAIWingman.py](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/wingmen/open_ai_wingman.py) - derived from Wingman
-- [Tower.py](https://github.com/ShipBit/wingman-ai/blob/4c1168f8ef2a94dae8c4dbb55c30adbc6bf328c3/services/tower.py) - the factory that creates Wingmen
+- `http://127.0.0.1:8000/docs` - The OpenAPI (ex: Swagger) spec
+- `wingman_core.py` - most of the public API endpoints that Wingman AI exposes
+- The config files in `%APP_DATA%/Roaming/ShipBit/WingmanAI/[version]` to get an idea of what's configurable.
+- `Wingman.py` - the base class for all Wingmen
+- `OpenAIWingman.py` - derived from Wingman, using all the providers
+- `Tower.py` - the factory that creates Wingmen
 
 If you're planning to develop a major feature or new integration, please contact us on [Discord](https://discord.com/invite/k8tTBar3gZ) first and let us know what you're up to. We'll be happy to help you get started and make sure your work isn't wasted because we're already working on something similar.
 
