@@ -17,6 +17,14 @@ The idea is simple, but the possibilities are endless. For example, you could:
 - improve accessibility
 - ... and much more
 
+### Release trailer (YouTube)
+
+[![IMAGE ALT TEXT](https://img.youtube.com/vi/temLcjFDiVU/0.jpg)](https://www.youtube.com/watch?v=temLcjFDiVU 'Wingman AI Release Trailer')
+
+## Who is this for?
+
+The project is intended for two different groups of users:
+
 ## Features
 
 Since version 2.0, Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the following features:
@@ -52,14 +60,12 @@ We (Team ShipBit) offer an additional [client with a neat GUI](https://www.shipb
 
 **No, it is not!** We presented an early prototype of Wingman AI in _Star Citizen_ on YouTube, which caused a lot of excitement and interest in the community. Star Citizen is a great game, we love it and it has a lot of interesting use-cases for Wingmen but it's not the only game we play and not the core of our interest. We're also not affiliated with CIG or _Star Citizen_ in any way.
 
+The video that started it all:
+
 [![Early prototype on Wingman in Star Citizen](https://img.youtube.com/vi/hHy7OZQX_nQ/0.jpg)](https://www.youtube.com/watch?v=hHy7OZQX_nQ)
 
 Wingman AI is an external, universal tool that you can run alongside any game or program. As such, it does not currently interact directly with _Star Citizen_ or any other game, other than its ability to trigger system-wide keystrokes, which of course can have an effect on the game.
 However, if you find a way to interact with a game, either through an API or by reading the game's memory, you could - in theory - use it to directly trigger in-game actions or feed your models with live data. This is **not** the focus of Wingman AI, though.
-
-## Who is this for?
-
-The project is intended for two different groups of users:
 
 ### Developers
 
@@ -185,7 +191,9 @@ For updates and more information, visit the [StarHead website](https://star-head
 - [UEXCorp](https://discord.com/channels/1173573578604687360/1179594417926066196) by @JayMatthew: A custom Wingman that utilizes the UEX Corp API to pull live data for Star Citizen. Think StarHead on steroids.
 - [Cora](https://discord.com/channels/1173573578604687360/1205649611470016512) by @eXpG_kalumet: A fork offering automatic keybinding, multiple Wingmen using a single key, bi-directional UEXCorp communication, screenshot analysis and much more for Star Citizen. Note that Cora is a standalone fork that you cannot easily integrate into the latest Wingman AI Core release.
 
-<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/5eE5VLuKtTw?si=GF6PT4ufNLYfQ7Hy" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+Cora Showcase Video:
+
+[![IMAGE ALT TEXT](https://img.youtube.com/vi/5eE5VLuKtTw/0.jpg)](https://www.youtube.com/watch?v=5eE5VLuKtTw 'Wingman AI Release Trailer')
 
 ## Can I configure Wingman AI Core without using your client?
 
