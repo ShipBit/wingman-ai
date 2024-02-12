@@ -199,6 +199,26 @@ Yes, you can! You can edit all the configs in your `%APP_DATA%/Roaming/ShipBit/W
 
 The YAML configs are very indentation-sensitive, so please be careful. We recommend using [VSCode](https://code.visualstudio.com/) with the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) to edit them.
 
+**There is no hot reloading**, so you have to restart Wingman AI Core after you made changes to the configs.
+
+### Directory/file-based configuration
+
+Use these naming conventions to create different configurations for different games or scenarios:
+
+- any subdirectory in your config dir is a "configuration" or use case. Do not use special characters.
+  - `_[name]` (underscore): marks the default configuration that is launched on start, e.g. `_Star Citizen`.
+- Inside of a configuration directory, you can create different `wingmen` by adding `[name].yaml` files. Do not use special characters.
+  - `.[name].yaml` (dot): marks the Wingman as "hidden" and skips it in the UI and on start, e.g. `.Computer.yaml`.
+  - `[name].png` (image): Sets an avatar for the Wingman in the client, e.g. `StarHead.png`.
+
+There are a couple of other files and directories in the config directory that you can use to configure Wingman AI.
+
+- `defaults.yaml` - contains the default settings for all Wingmen. This is merged with the settings of the individual Wingmen at runtime. Specific wingman settings always override the defaults. Once a wingman is saved using the client, it contains all the settings it needs to run and will no longer fallback to the defaults.
+- `settings.yaml` - contains user settings like the selected audio input and output devices
+- `secrets.yaml` - contains the API keys for different providers.
+
+Access secrets in code by using `secret_keeper.py`. You can access everything else with `config_manager.py`.
+
 ## Does it support my language?
 
 Wingman supports all languages that OpenAI (or your configured AI provider) supports. Setting this up in Wingman is really easy:
