@@ -18,6 +18,7 @@ from api.enums import (
     SummarizeProvider,
     TtsProvider,
     WingmanInitializationErrorType,
+    WingmanProRegion,
 )
 
 
@@ -264,6 +265,11 @@ class OpenAiConfig(BaseModel):
     """If you have an organization key, you can set it here."""
 
 
+class WingmanProConfig(BaseModel):
+    base_url: str
+    region: WingmanProRegion
+
+
 class SoundConfig(BaseModel):
     play_beep: bool
     """adds a beep/Quindar sound before and after the wingman talks"""
@@ -384,6 +390,7 @@ class NestedConfig(BaseModel):
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
+    wingman_pro: WingmanProConfig
     commands: Optional[list[CommandConfig]] = None
 
 

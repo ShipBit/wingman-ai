@@ -104,16 +104,22 @@ class SttProvider(Enum):
 class ConversationProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
+    WINGMAN_PRO = "wingman_pro"
 
 
 class SummarizeProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
+    WINGMAN_PRO = "wingman_pro"
 
 
 class KeyboardRecordingType(Enum):
     SINGLE = "single"
     MACRO = "macro"
+
+
+class WingmanProRegion(Enum):
+    EUROPE = "europe"
 
 
 # Pydantic models for enums
@@ -193,6 +199,10 @@ class KeyboardRecordingTypeModel(BaseEnumModel):
     recording_type: KeyboardRecordingType
 
 
+class WingmanProRegionModel(BaseEnumModel):
+    region: WingmanProRegion
+
+
 # Add all additional Pydantic models for enums as needed
 
 
@@ -215,6 +225,7 @@ ENUM_TYPES = {
     "ConversationProvider": ConversationProviderEnumModel,
     "SummarizeProvider": SummarizeProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
+    "WingmanProRegion": WingmanProRegionModel,
     # Add new enums here as key-value pairs
 }
 
