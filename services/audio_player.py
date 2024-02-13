@@ -143,7 +143,7 @@ class AudioPlayer:
             self,
             buffer_callback,
             config: SoundConfig,
-            buffer_size = 1024,
+            buffer_size = 2048,
             sample_rate = 16000,
             channels = 1,
             dtype = "int16"
@@ -176,7 +176,7 @@ class AudioPlayer:
                 data_in_numpy = np.frombuffer(audio_buffer, dtype=dtype).astype(np.float32)
 
                 for sound_effect in sound_effects:
-                    data_in_numpy = sound_effect(data_in_numpy, sample_rate)
+                    data_in_numpy = sound_effect(data_in_numpy, sample_rate, reset=False)
 
                 audio_buffer = data_in_numpy.astype(dtype).tobytes()
                 

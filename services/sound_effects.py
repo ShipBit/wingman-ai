@@ -19,7 +19,7 @@ from api.interface import SoundConfig
 class SoundEffects(Enum):
     ROBOT = Pedalboard(
         [
-            PitchShift(semitones=-1),
+            # PitchShift(semitones=-1),
             Delay(delay_seconds=0.01, feedback=0.5, mix=0.2),
             Chorus(rate_hz=0.5, depth=0.8, mix=0.5, centre_delay_ms=2, feedback=0.3),
             Reverb(
@@ -34,8 +34,8 @@ class SoundEffects(Enum):
             LowpassFilter(5000),
             Resample(10000),
             Gain(gain_db=3),
-            Compressor(threshold_db=-21, ratio=3.5, attack_ms=1, release_ms=50),
-            Gain(gain_db=6),
+            # Compressor(threshold_db=-21, ratio=3.5, attack_ms=1, release_ms=50),
+            # Gain(gain_db=6),
         ]
     )
     INTERIOR_HELMET = Pedalboard(
