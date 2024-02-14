@@ -165,7 +165,7 @@ class OpenAi(BaseOpenAi):
                 input=text,
             )
             if response is not None:
-                await audio_player.stream_with_effects(
+                await audio_player.play_with_effects(
                     input_data=response.content,
                     config=sound_config,
                     wingman_name=wingman_name,
@@ -275,7 +275,7 @@ class OpenAiAzure(BaseOpenAi):
         audio_data_stream = speechsdk.AudioDataStream(result)
 
         if result is not None:
-            await audio_player.output_audio_streaming(
+            await audio_player.stream_with_effects(
                 audio_data_stream.read_data,
                 sound_config,
                 wingman_name=wingman_name,

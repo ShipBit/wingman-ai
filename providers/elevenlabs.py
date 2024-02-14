@@ -58,12 +58,15 @@ class ElevenLabs:
             return audio_chunk
         
         def notify_playback_finished():
+            if sound_config.play_beep:
+                audio_player.play_beep()
             WebSocketUser.ensure_async(audio_player.notify_playback_finished(wingman_name))
 
         def notify_playback_started():
+            if sound_config.play_beep:
+                audio_player.play_beep()
             WebSocketUser.ensure_async(audio_player.notify_playback_started(wingman_name))
 
-        # todo: add start/end callbacks to play Quindar beep even if use_sound_effects is disabled
         playback_options = PlaybackOptions(
             runInBackground = True,
             onPlaybackStart = notify_playback_started,

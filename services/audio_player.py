@@ -20,6 +20,7 @@ class AudioPlayer:
         self.event_queue = None
         self.event_loop = None
         self.stream = None
+        self.raw_stream = None
         self.wingman_name = ""
 
     def set_event_loop(self, loop):
@@ -53,10 +54,15 @@ class AudioPlayer:
         if self.stream is not None:
             self.stream.stop()
             self.stream = None
-            self.is_playing = False
-            await self.notify_playback_finished(self.wingman_name)
 
-    async def stream_with_effects(
+        if self.raw_stream is not None:
+            self.raw_stream.stop()
+            self.raw_stream = None
+
+        self.is_playing = False
+        await self.notify_playback_finished(self.wingman_name)
+
+    async def play_with_effects(
         self,
         input_data: bytes | tuple,
         config: SoundConfig,
@@ -109,6 +115,13 @@ class AudioPlayer:
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
 
+    def play_beep(self):
+        bundle_dir = path.abspath(path.dirname(__file__))
+        beep_audio, beep_sample_rate = self.get_audio_from_file(
+            path.join(bundle_dir, "../audio_samples/beep.wav")
+        )
+        self.start_playback(beep_audio, beep_sample_rate, 1, None)
+
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")
         return audio, sample_rate
@@ -145,7 +158,7 @@ class AudioPlayer:
 
         return resampled_audio
     
-    async def output_audio_streaming(
+    async def stream_with_effects(
             self,
             buffer_callback,
             config: SoundConfig,
@@ -173,9 +186,11 @@ class AudioPlayer:
             dtype=dtype,
             callback=callback,
         ) as stream:
+            self.raw_stream = stream
+
             await self.notify_playback_started(wingman_name)
 
-            stream.start()
+            self.raw_stream.start()
 
             audio_buffer = bytes(buffer_size)
             sound_effects = get_sound_effects(config)

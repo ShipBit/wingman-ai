@@ -779,7 +779,7 @@ class WingmanCore(WebSocketUser):
         sound_config: SoundConfig,
     ):
         elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
-        elevenlabs.play_audio(
+        await elevenlabs.play_audio(
             text=text,
             config=config,
             sound_config=sound_config,
