@@ -51,6 +51,9 @@ class ElevenLabs:
         )
 
         def notify_playback_finished():
+            audio_player.playback_events.unsubscribe(
+                "finished", playback_finished
+            )
             if sound_config.play_beep:
                 audio_player.play_beep()
             WebSocketUser.ensure_async(
@@ -111,10 +114,18 @@ class ElevenLabs:
                     wingman_name=wingman_name,
                 )
         else:
-            voice.generate_stream_audio_v2(
+            _, output_stream_future, _ = voice.generate_stream_audio_v2(
                 prompt=text,
                 generationOptions=generation_options,
                 playbackOptions=playback_options,
+            )
+            output_stream = output_stream_future.result()
+
+            def playback_finished(wingman_name):
+                output_stream.abort()
+
+            audio_player.playback_events.subscribe(
+                "finished", playback_finished
             )
 
     def get_available_voices(self):
