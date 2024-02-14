@@ -644,7 +644,7 @@ class OpenAiWingman(Wingman):
             # execute the command
             function_response = await self._execute_command(command)
             # if the command has responses, we have to play one of them
-            if command and command.get("responses"):
+            if command and command.responses:
                 instant_response = self._select_command_response(command)
                 await self._play_to_user(instant_response)
 
