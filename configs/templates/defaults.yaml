@@ -101,7 +101,7 @@ elevenlabs:
   # available: eleven_multilingual_v2, eleven_turbo_v2, eleven_monolingual_v1
   # see https://elevenlabs.io/docs/speech-synthesis/models
   model: eleven_multilingual_v2
-  latency: 3 # optimization, 0 - 4. Higher values are faster but can produce audio stuttering.
+  latency: 2 # optimization, 0 - 4. Higher values are faster but can produce audio stuttering.
 
   voice:
     # You can configure "Premade voices" from the dropdown on https://elevenlabs.io/speech-synthesis by name.
