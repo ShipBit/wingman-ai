@@ -11,6 +11,24 @@ from api.interface import SoundConfig
 from services.sound_effects import get_sound_effects
 
 
+class PubSub:
+    def __init__(self):
+        self.subscribers = dict()
+
+    def subscribe(self, event_type, fn):
+        if not event_type in self.subscribers:
+            self.subscribers[event_type] = []
+        self.subscribers[event_type].append(fn)
+
+    def unsubscribe(self, event_type, fn):
+        if event_type in self.subscribers:
+            self.subscribers[event_type].remove(fn)
+
+    def publish(self, event_type, data):
+        if event_type in self.subscribers:
+            for fn in self.subscribers[event_type]:
+                fn(data)
+
 class AudioPlayer:
     on_playback_started: Optional[Callable[[str], None]] = None
     on_playback_finished: Optional[Callable[[str], None]] = None
@@ -22,6 +40,7 @@ class AudioPlayer:
         self.stream = None
         self.raw_stream = None
         self.wingman_name = ""
+        self.playback_events = PubSub()
 
     def set_event_loop(self, loop):
         self.event_loop = loop
@@ -112,10 +131,12 @@ class AudioPlayer:
 
     async def notify_playback_started(self, wingman_name: str):
         if callable(self.on_playback_started):
+            self.playback_events.publish("started", wingman_name)
             await self.on_playback_started(wingman_name)
 
     async def notify_playback_finished(self, wingman_name: str):
         if callable(self.on_playback_finished):
+            self.playback_events.publish("finished", wingman_name)
             await self.on_playback_finished(wingman_name)
 
     def play_beep(self):
