@@ -257,8 +257,8 @@ class OpenAiAzure(BaseOpenAi):
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
+        stream: bool,
     ):
-        global buffer, stream_finished, data_received, robot
         speech_config = speechsdk.SpeechConfig(
             subscription=api_key,
             region=config.region.value,
@@ -271,14 +271,26 @@ class OpenAiAzure(BaseOpenAi):
             audio_config=None,
         )
 
-        result = speech_synthesizer.start_speaking_text_async(text).get()
-        audio_data_stream = speechsdk.AudioDataStream(result)
+        result = (
+            speech_synthesizer.start_speaking_text_async(text).get()
+            if stream
+            else speech_synthesizer.speak_text_async(text).get()
+        )
 
         if result is not None:
-            await audio_player.stream_with_effects(
-                audio_data_stream.read_data,
-                sound_config,
-                wingman_name=wingman_name,
+            if stream:
+                audio_data_stream = speechsdk.AudioDataStream(result)
+
+                await audio_player.stream_with_effects(
+                    audio_data_stream.read_data,
+                    sound_config,
+                    wingman_name=wingman_name,
+                )
+            else:
+                await audio_player.play_with_effects(
+                    input_data=result.audio_data,
+                    config=sound_config,
+                    wingman_name=wingman_name,
                 )
 
     def get_available_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
