@@ -190,6 +190,8 @@ class AudioPlayer:
 
             await self.notify_playback_started(wingman_name)
 
+            if config.play_beep:
+                self.play_beep()
             self.raw_stream.start()
 
             audio_buffer = bytes(buffer_size)
@@ -210,4 +212,6 @@ class AudioPlayer:
             while not stream_finished:
                 sd.sleep(100)
 
+            if config.play_beep:
+                self.play_beep()
             await self.notify_playback_finished(wingman_name)
