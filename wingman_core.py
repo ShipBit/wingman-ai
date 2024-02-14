@@ -768,6 +768,7 @@ class WingmanCore(WebSocketUser):
             sound_config=sound_config,
             audio_player=self.audio_player,
             wingman_name="system",
+            stream=False,
         )
 
     # POST /play/elevenlabs
@@ -785,6 +786,7 @@ class WingmanCore(WebSocketUser):
             sound_config=sound_config,
             audio_player=self.audio_player,
             wingman_name="system",
+            stream=False,
         )
 
     # POST /play/edgetts

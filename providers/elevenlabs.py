@@ -41,6 +41,7 @@ class ElevenLabs:
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
+        stream: bool,
     ):
         user = ElevenLabsUser(self.api_key)
         voice = (
@@ -49,6 +50,20 @@ class ElevenLabs:
             else user.get_voices_by_name(config.voice.name)[0]
         )
 
+        def notify_playback_finished():
+            if sound_config.play_beep:
+                audio_player.play_beep()
+            WebSocketUser.ensure_async(
+                audio_player.notify_playback_finished(wingman_name)
+            )
+
+        def notify_playback_started():
+            if sound_config.play_beep:
+                audio_player.play_beep()
+            WebSocketUser.ensure_async(
+                audio_player.notify_playback_started(wingman_name)
+            )
+
         sound_effects = get_sound_effects(sound_config)
 
         def audio_post_processor(audio_chunk, sample_rate):
@@ -56,23 +71,18 @@ class ElevenLabs:
                 audio_chunk = sound_effect(audio_chunk, sample_rate, reset=False)
 
             return audio_chunk
-        
-        def notify_playback_finished():
-            if sound_config.play_beep:
-                audio_player.play_beep()
-            WebSocketUser.ensure_async(audio_player.notify_playback_finished(wingman_name))
 
-        def notify_playback_started():
-            if sound_config.play_beep:
-                audio_player.play_beep()
-            WebSocketUser.ensure_async(audio_player.notify_playback_started(wingman_name))
-
-        playback_options = PlaybackOptions(
-            runInBackground = True,
-            onPlaybackStart = notify_playback_started,
-            onPlaybackEnd = notify_playback_finished,
+        playback_options = (
+            PlaybackOptions(
+                runInBackground=True,
+                onPlaybackStart=notify_playback_started,
+                onPlaybackEnd=notify_playback_finished,
             )
-        if len(sound_effects) > 0:
+            if stream
+            else PlaybackOptions(runInBackground=True)
+        )
+
+        if stream and len(sound_effects) > 0:
             playback_options.audioPostProcessor = audio_post_processor
 
         generation_options = GenerationOptions(
@@ -88,11 +98,24 @@ class ElevenLabs:
             ),
         )
 
-        voice.generate_stream_audio_v2(
-            prompt=text,
-            generationOptions=generation_options,
-            playbackOptions=playback_options,
-        )
+        if not stream and (sound_config.play_beep or len(sound_config.effects) > 0):
+            # play with effects - slower
+            audio_bytes, _history_id = voice.generate_audio_v2(
+                prompt=text,
+                generationOptions=generation_options,
+            )
+            if audio_bytes:
+                await audio_player.play_with_effects(
+                    input_data=audio_bytes,
+                    config=sound_config,
+                    wingman_name=wingman_name,
+                )
+        else:
+            voice.generate_stream_audio_v2(
+                prompt=text,
+                generationOptions=generation_options,
+                playbackOptions=playback_options,
+            )
 
     def get_available_voices(self):
         user = ElevenLabsUser(self.api_key)

@@ -133,6 +133,7 @@ class AzureInstanceConfig(BaseModel):
 class AzureTtsConfig(BaseModel):
     region: AzureRegion
     voice: str
+    output_streaming: bool
 
 
 class AzureSttConfig(BaseModel):
@@ -194,7 +195,7 @@ class ElevenlabsConfig(BaseModel):
 
     voice: ElevenlabsVoiceConfig
     voice_settings: ElevenlabsVoiceSettingsConfig
-    """Adds a delay"""
+    output_streaming: bool
 
 
 class EdgeTtsConfig(BaseModel):

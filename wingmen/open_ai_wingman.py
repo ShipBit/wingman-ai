@@ -673,6 +673,7 @@ class OpenAiWingman(Wingman):
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
+                stream=self.config.elevenlabs.output_streaming,
             )
         elif self.tts_provider == TtsProvider.AZURE:
             await self.openai_azure.play_audio(
@@ -682,6 +683,7 @@ class OpenAiWingman(Wingman):
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
+                stream=self.config.azure.tts.output_streaming,
             )
         elif self.tts_provider == TtsProvider.XVASYNTH:
             await self.xvasynth.play_audio(
