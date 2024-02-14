@@ -667,7 +667,7 @@ class OpenAiWingman(Wingman):
                 wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.ELEVENLABS:
-            self.elevenlabs.play_audio(
+            await self.elevenlabs.play_audio(
                 text=text,
                 config=self.config.elevenlabs,
                 sound_config=self.config.sound,
@@ -675,7 +675,7 @@ class OpenAiWingman(Wingman):
                 wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.AZURE:
-            self.openai_azure.play_audio(
+            await self.openai_azure.play_audio(
                 text=text,
                 api_key=self.azure_api_keys["tts"],
                 config=self.config.azure.tts,
@@ -684,7 +684,7 @@ class OpenAiWingman(Wingman):
                 wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.XVASYNTH:
-            self.xvasynth.play_audio(
+            await self.xvasynth.play_audio(
                 text=text,
                 config=self.config.xvasynth,
                 sound_config=self.config.sound,
@@ -692,7 +692,7 @@ class OpenAiWingman(Wingman):
                 wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.OPENAI:
-            self.openai.play_audio(
+            await self.openai.play_audio(
                 text=text,
                 voice=self.config.openai.tts_voice,
                 sound_config=self.config.sound,

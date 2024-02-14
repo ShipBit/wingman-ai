@@ -20,6 +20,7 @@ class AudioPlayer:
         self.event_queue = None
         self.event_loop = None
         self.stream = None
+        self.raw_stream = None
         self.wingman_name = ""
 
     def set_event_loop(self, loop):
@@ -53,11 +54,15 @@ class AudioPlayer:
         if self.stream is not None:
             self.stream.stop()
             self.stream = None
-            self.is_playing = False
-            if callable(self.on_playback_finished):
-                await self.on_playback_finished(self.wingman_name)
 
-    def stream_with_effects(
+        if self.raw_stream is not None:
+            self.raw_stream.stop()
+            self.raw_stream = None
+
+        self.is_playing = False
+        await self.notify_playback_finished(self.wingman_name)
+
+    async def play_with_effects(
         self,
         input_data: bytes | tuple,
         config: SoundConfig,
@@ -100,8 +105,22 @@ class AudioPlayer:
         self.is_playing = True
         self.wingman_name = wingman_name
 
+        await self.notify_playback_started(wingman_name)
+
+    async def notify_playback_started(self, wingman_name: str):
         if callable(self.on_playback_started):
-            self.on_playback_started(wingman_name)
+            await self.on_playback_started(wingman_name)
+
+    async def notify_playback_finished(self, wingman_name: str):
+        if callable(self.on_playback_finished):
+            await self.on_playback_finished(wingman_name)
+
+    def play_beep(self):
+        bundle_dir = path.abspath(path.dirname(__file__))
+        beep_audio, beep_sample_rate = self.get_audio_from_file(
+            path.join(bundle_dir, "../audio_samples/beep.wav")
+        )
+        self.start_playback(beep_audio, beep_sample_rate, 1, None)
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")
@@ -138,3 +157,61 @@ class AudioPlayer:
         resampled_audio = resample(audio, num_target_samples)
 
         return resampled_audio
+    
+    async def stream_with_effects(
+            self,
+            buffer_callback,
+            config: SoundConfig,
+            wingman_name: str,
+            buffer_size = 2048,
+            sample_rate = 16000,
+            channels = 1,
+            dtype = "int16"
+            ):
+        buffer = bytearray()
+        stream_finished = False
+        data_received = False
+        
+        def callback(outdata, frames, time, status):
+            nonlocal buffer, stream_finished, data_received
+
+            if data_received and len(buffer) == 0:
+                stream_finished = True
+            outdata[:len(buffer)] = buffer[:len(outdata)]
+            buffer = buffer[len(outdata):]
+
+        with sd.RawOutputStream(
+            samplerate=sample_rate,
+            channels=channels,
+            dtype=dtype,
+            callback=callback,
+        ) as stream:
+            self.raw_stream = stream
+
+            await self.notify_playback_started(wingman_name)
+
+            if config.play_beep:
+                self.play_beep()
+            self.raw_stream.start()
+
+            audio_buffer = bytes(buffer_size)
+            sound_effects = get_sound_effects(config)
+            filled_size = buffer_callback(audio_buffer)
+            while filled_size > 0:
+                data_in_numpy = np.frombuffer(audio_buffer, dtype=dtype).astype(np.float32)
+
+                for sound_effect in sound_effects:
+                    data_in_numpy = sound_effect(data_in_numpy, sample_rate, reset=False)
+
+                audio_buffer = data_in_numpy.astype(dtype).tobytes()
+                
+                buffer += audio_buffer[:filled_size]
+                filled_size = buffer_callback(audio_buffer)
+
+            data_received = True
+            while not stream_finished:
+                sd.sleep(100)
+
+            if config.play_beep:
+                self.play_beep()
+            await self.notify_playback_finished(wingman_name)

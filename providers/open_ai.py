@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import re
+import numpy as np
 from typing import Literal
 from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
@@ -146,7 +147,7 @@ class OpenAi(BaseOpenAi):
             tools=tools,
         )
 
-    def play_audio(
+    async def play_audio(
         self,
         text: str,
         voice: OpenAiTtsVoice,
@@ -164,7 +165,7 @@ class OpenAi(BaseOpenAi):
                 input=text,
             )
             if response is not None:
-                audio_player.stream_with_effects(
+                await audio_player.play_with_effects(
                     input_data=response.content,
                     config=sound_config,
                     wingman_name=wingman_name,
@@ -248,7 +249,7 @@ class OpenAiAzure(BaseOpenAi):
             tools=tools,
         )
 
-    def play_audio(
+    async def play_audio(
         self,
         text: str,
         api_key: str,
@@ -257,6 +258,7 @@ class OpenAiAzure(BaseOpenAi):
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
+        global buffer, stream_finished, data_received, robot
         speech_config = speechsdk.SpeechConfig(
             subscription=api_key,
             region=config.region.value,
@@ -269,13 +271,15 @@ class OpenAiAzure(BaseOpenAi):
             audio_config=None,
         )
 
-        result = speech_synthesizer.speak_text_async(text).get()
+        result = speech_synthesizer.start_speaking_text_async(text).get()
+        audio_data_stream = speechsdk.AudioDataStream(result)
+
         if result is not None:
-            audio_player.stream_with_effects(
-                input_data=result.audio_data,
-                config=sound_config,
+            await audio_player.stream_with_effects(
+                audio_data_stream.read_data,
+                sound_config,
                 wingman_name=wingman_name,
-            )
+                )
 
     def get_available_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
         speech_config = speechsdk.SpeechConfig(subscription=api_key, region=region)
