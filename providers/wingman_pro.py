@@ -17,33 +17,17 @@ class WingmanPro:
     def __init__(self, wingman_name: str):
         self.wingman_name: str = wingman_name
 
-    def transcribe(self, filename: str, api_key: str, config: AzureSttConfig):
-        pass
-        # speech_config = speechsdk.SpeechConfig(
-        #     subscription=api_key,
-        #     region=config.region.value,
-        # )
-        # audio_config = speechsdk.AudioConfig(filename=filename)
-
-        # auto_detect_source_language_config = (
-        #     (
-        #         speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-        #             languages=config.languages
-        #         )
-        #     )
-        #     if len(config.languages) > 1
-        #     else None
-        # )
-
-        # language = config.languages[0] if len(config.languages) == 1 else None
-
-        # speech_recognizer = speechsdk.SpeechRecognizer(
-        #     speech_config=speech_config,
-        #     audio_config=audio_config,
-        #     language=language,
-        #     auto_detect_source_language_config=auto_detect_source_language_config,
-        # )
-        # return speech_recognizer.recognize_once_async().get()
+    def transcribe(self, filename: str, config: WingmanProConfig):
+        with open(filename, "rb") as audio_input:
+            data = {"audio_file": audio_input}
+            response = requests.post(
+                url=f"{config.base_url}/transcribe?region={config.region.value}",
+                json=data,
+                timeout=20,
+            )
+            response.raise_for_status()
+            json = response.json()
+            return json
 
     def ask(
         self,
