@@ -7,6 +7,7 @@ from api.enums import ElevenlabsModel, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
 from services.secret_keeper import SecretKeeper
+from services.sound_effects import get_sound_effects
 
 
 class ElevenLabs:
@@ -47,8 +48,19 @@ class ElevenLabs:
             else user.get_voices_by_name(config.voice.name)[0]
         )
 
+        sound_effects = get_sound_effects(sound_config)
+
+        def audio_post_processor(audio_chunk, sample_rate):
+            for sound_effect in sound_effects:
+                audio_chunk = sound_effect(audio_chunk, sample_rate, reset=False)
+
+            return audio_chunk
+
         # todo: add start/end callbacks to play Quindar beep even if use_sound_effects is disabled
         playback_options = PlaybackOptions(runInBackground=True)
+        if len(sound_effects) > 0:
+            playback_options.audioPostProcessor = audio_post_processor
+
         generation_options = GenerationOptions(
             model=config.model.value,
             latencyOptimizationLevel=config.latency,
@@ -61,6 +73,14 @@ class ElevenLabs:
                 else None
             ),
         )
+
+        voice.generate_stream_audio_v2(
+            prompt=text,
+            generationOptions=generation_options,
+            playbackOptions=playback_options,
+        )
+
+        return
 
         if sound_config.play_beep or len(sound_config.effects) > 0:
             # play with effects - slower

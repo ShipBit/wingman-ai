@@ -274,52 +274,11 @@ class OpenAiAzure(BaseOpenAi):
         result = speech_synthesizer.start_speaking_text_async(text).get()
         audio_data_stream = speechsdk.AudioDataStream(result)
 
-        audio_player = AudioPlayer()
-        audio_player.output_audio_streaming(audio_data_stream.read_data, sound_config)
+        if result is not None:
+            audio_player = AudioPlayer()
+            audio_player.output_audio_streaming(audio_data_stream.read_data, sound_config)
 
         return
-
-        def callback(outdata, frames, time, status):
-            global buffer, stream_finished, data_received, robot
-            if status:
-                print(status)
-            if data_received and len(buffer) == 0:
-                stream_finished = True
-
-            bytes_needed = frames * 1 * np.dtype(np.int16).itemsize
-
-            buffer_chunk = buffer[:bytes_needed]
-            buffer = buffer[bytes_needed:]
-
-            int16_array = np.frombuffer(buffer_chunk, dtype=np.int16)
-            input_chunk = int16_array.astype(np.float32) / np.iinfo(np.int16).max
-
-            hans = (input_chunk * np.iinfo(np.int16).max).astype(np.int16)
-
-            outdata[:len(hans)] = hans[:len(outdata)]
-
-            """ buffer_chunk = buffer[:len(outdata)]
-
-            int16_array = np.frombuffer(buffer_chunk, dtype=np.int16)
-            INT16_TO_FLOAT32_SCALE = 1.0 / 32768.0
-            chunk = int16_array.astype(np.float32) * INT16_TO_FLOAT32_SCALE
-            print(chunk)
-            p = robot(chunk, 16000)
-            print(p)
-
-            if len(p) == 0:
-                hans = b'\x00'
-                outdata[:len(hans)] = hans
-            else:
-                outdata[:len(p)] = p[:len(outdata)]
-                buffer = buffer[len(outdata):] """
-
-        """ stream = sd.OutputStream(
-            samplerate=16000,
-            channels=1,
-            dtype='int16',
-            callback=callback,
-            ) """
 
         if result is not None:
             audio_player.stream_with_effects(
