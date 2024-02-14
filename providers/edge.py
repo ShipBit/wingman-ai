@@ -28,7 +28,7 @@ class Edge:
         )
         audio, sample_rate = audio_player.get_audio_from_file(output_file)
 
-        audio_player.stream_with_effects(
+        await audio_player.stream_with_effects(
             input_data=(audio, sample_rate),
             config=sound_config,
             wingman_name=wingman_name,

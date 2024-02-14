@@ -147,7 +147,7 @@ class OpenAi(BaseOpenAi):
             tools=tools,
         )
 
-    def play_audio(
+    async def play_audio(
         self,
         text: str,
         voice: OpenAiTtsVoice,
@@ -165,7 +165,7 @@ class OpenAi(BaseOpenAi):
                 input=text,
             )
             if response is not None:
-                audio_player.stream_with_effects(
+                await audio_player.stream_with_effects(
                     input_data=response.content,
                     config=sound_config,
                     wingman_name=wingman_name,
@@ -249,7 +249,7 @@ class OpenAiAzure(BaseOpenAi):
             tools=tools,
         )
 
-    def play_audio(
+    async def play_audio(
         self,
         text: str,
         api_key: str,
@@ -275,17 +275,11 @@ class OpenAiAzure(BaseOpenAi):
         audio_data_stream = speechsdk.AudioDataStream(result)
 
         if result is not None:
-            audio_player = AudioPlayer()
-            audio_player.output_audio_streaming(audio_data_stream.read_data, sound_config)
-
-        return
-
-        if result is not None:
-            audio_player.stream_with_effects(
-                input_data=result.audio_data,
-                config=sound_config,
+            await audio_player.output_audio_streaming(
+                audio_data_stream.read_data,
+                sound_config,
                 wingman_name=wingman_name,
-            )
+                )
 
     def get_available_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
         speech_config = speechsdk.SpeechConfig(subscription=api_key, region=region)

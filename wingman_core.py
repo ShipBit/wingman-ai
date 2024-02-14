@@ -421,8 +421,8 @@ class WingmanCore(WebSocketUser):
         )
         self.speech_recognizer.recognized.connect(self.on_voice_recognition)
 
-    def on_playback_started(self, wingman_name: str):
-        printr.print(
+    async def on_playback_started(self, wingman_name: str):
+        await printr.print_async(
             text=f"Playback started ({wingman_name})",
             source_name=wingman_name,
             command_tag=CommandTag.PLAYBACK_STARTED,
@@ -433,7 +433,7 @@ class WingmanCore(WebSocketUser):
             self.start_voice_recognition(mute=True)
 
     async def on_playback_finished(self, wingman_name: str):
-        printr.print(
+        await printr.print_async(
             text=f"Playback finished ({wingman_name})",
             source_name=wingman_name,
             command_tag=CommandTag.PLAYBACK_STOPPED,
@@ -744,11 +744,11 @@ class WingmanCore(WebSocketUser):
         return result
 
     # POST /play/openai
-    def play_openai_tts(
+    async def play_openai_tts(
         self, text: str, api_key: str, voice: OpenAiTtsVoice, sound_config: SoundConfig
     ):
         openai = OpenAi(api_key=api_key)
-        openai.play_audio(
+        await openai.play_audio(
             text=text,
             voice=voice,
             sound_config=sound_config,
@@ -757,11 +757,11 @@ class WingmanCore(WebSocketUser):
         )
 
     # POST /play/azure
-    def play_azure_tts(
+    async def play_azure_tts(
         self, text: str, api_key: str, config: AzureTtsConfig, sound_config: SoundConfig
     ):
         azure = OpenAiAzure()
-        azure.play_audio(
+        await azure.play_audio(
             text=text,
             api_key=api_key,
             config=config,
@@ -771,7 +771,7 @@ class WingmanCore(WebSocketUser):
         )
 
     # POST /play/elevenlabs
-    def play_elevenlabs_tts(
+    async def play_elevenlabs_tts(
         self,
         text: str,
         api_key: str,

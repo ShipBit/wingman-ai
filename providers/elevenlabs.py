@@ -8,6 +8,7 @@ from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationEr
 from services.audio_player import AudioPlayer
 from services.secret_keeper import SecretKeeper
 from services.sound_effects import get_sound_effects
+from services.websocket_user import WebSocketUser
 
 
 class ElevenLabs:
@@ -33,7 +34,7 @@ class ElevenLabs:
             )
         return errors
 
-    def play_audio(
+    async def play_audio(
         self,
         text: str,
         config: ElevenlabsConfig,
@@ -55,9 +56,19 @@ class ElevenLabs:
                 audio_chunk = sound_effect(audio_chunk, sample_rate, reset=False)
 
             return audio_chunk
+        
+        def notify_playback_finished():
+            WebSocketUser.ensure_async(audio_player.notify_playback_finished(wingman_name))
+
+        def notify_playback_started():
+            WebSocketUser.ensure_async(audio_player.notify_playback_started(wingman_name))
 
         # todo: add start/end callbacks to play Quindar beep even if use_sound_effects is disabled
-        playback_options = PlaybackOptions(runInBackground=True)
+        playback_options = PlaybackOptions(
+            runInBackground = True,
+            onPlaybackStart = notify_playback_started,
+            onPlaybackEnd = notify_playback_finished,
+            )
         if len(sound_effects) > 0:
             playback_options.audioPostProcessor = audio_post_processor
 
@@ -79,27 +90,6 @@ class ElevenLabs:
             generationOptions=generation_options,
             playbackOptions=playback_options,
         )
-
-        return
-
-        if sound_config.play_beep or len(sound_config.effects) > 0:
-            # play with effects - slower
-            audio_bytes, _history_id = voice.generate_audio_v2(
-                prompt=text,
-                generationOptions=generation_options,
-            )
-            if audio_bytes:
-                audio_player.stream_with_effects(
-                    input_data=audio_bytes,
-                    config=sound_config,
-                    wingman_name=wingman_name,
-                )
-        else:
-            voice.generate_stream_audio_v2(
-                prompt=text,
-                playbackOptions=playback_options,
-                generationOptions=generation_options,
-            )
 
     def get_available_voices(self):
         user = ElevenLabsUser(self.api_key)

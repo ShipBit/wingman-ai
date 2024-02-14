@@ -54,10 +54,9 @@ class AudioPlayer:
             self.stream.stop()
             self.stream = None
             self.is_playing = False
-            if callable(self.on_playback_finished):
-                await self.on_playback_finished(self.wingman_name)
+            await self.notify_playback_finished(self.wingman_name)
 
-    def stream_with_effects(
+    async def stream_with_effects(
         self,
         input_data: bytes | tuple,
         config: SoundConfig,
@@ -100,8 +99,15 @@ class AudioPlayer:
         self.is_playing = True
         self.wingman_name = wingman_name
 
+        await self.notify_playback_started(wingman_name)
+
+    async def notify_playback_started(self, wingman_name: str):
         if callable(self.on_playback_started):
-            self.on_playback_started(wingman_name)
+            await self.on_playback_started(wingman_name)
+
+    async def notify_playback_finished(self, wingman_name: str):
+        if callable(self.on_playback_finished):
+            await self.on_playback_finished(wingman_name)
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")
@@ -139,10 +145,11 @@ class AudioPlayer:
 
         return resampled_audio
     
-    def output_audio_streaming(
+    async def output_audio_streaming(
             self,
             buffer_callback,
             config: SoundConfig,
+            wingman_name: str,
             buffer_size = 2048,
             sample_rate = 16000,
             channels = 1,
@@ -166,6 +173,7 @@ class AudioPlayer:
             dtype=dtype,
             callback=callback,
         ) as stream:
+            await self.notify_playback_started(wingman_name)
 
             stream.start()
 
@@ -186,3 +194,5 @@ class AudioPlayer:
             data_received = True
             while not stream_finished:
                 sd.sleep(100)
+
+            await self.notify_playback_finished(wingman_name)
