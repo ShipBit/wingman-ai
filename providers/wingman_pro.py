@@ -35,13 +35,15 @@ class WingmanPro:
 
     def transcribe_azure_speech(self, filename: str, config: AzureSttConfig):
         with open(filename, "rb") as audio_input:
-            files = {"audio_file": (filename, audio_input)}
+            files = {"file": (filename, audio_input)}
             response = requests.post(
                 url=f"{self.settings.base_url}/transcribe-azure-speech",
-                params={"region": self.settings.region.value},
-                json={"languages": config.languages},
+                params={
+                    "region": self.settings.region.value,
+                    "languages": ",".join(config.languages),
+                },
                 files=files,
-                # timeout=30,
+                timeout=30,
             )
         response.raise_for_status()
         json = response.json()

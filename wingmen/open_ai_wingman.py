@@ -226,7 +226,14 @@ class OpenAiWingman(Wingman):
         elif self.stt_provider == SttProvider.OPENAI:
             transcript = self.openai.transcribe(filename=audio_input_wav)
 
-        return transcript.text if transcript else None
+        if not transcript:
+            return None
+
+        # Wingman Pro might returns a serialized dict instead of a real Azure Speech transcription object
+        if isinstance(transcript, dict):
+            return transcript.get("_text")
+
+        return transcript.text
 
     async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
         """Gets the response for a given transcript.
