@@ -1,4 +1,5 @@
 import io
+import httpx
 import openai
 import requests
 import azure.cognitiveservices.speech as speechsdk
@@ -98,30 +99,37 @@ class WingmanPro:
             "voice_name": config.voice,
             "stream": config.output_streaming,
         }
-        response = requests.post(
-            url=f"{self.settings.base_url}/generate-speech",
-            params={"region": self.settings.region.value},
-            json=data,
-            timeout=10,
-        )
-        response.raise_for_status()
-
-        audio_data = response.content
-
-        if audio_data:
-            sound_output = io.BytesIO(audio_data)
-            if config.output_streaming:
-                await audio_player.stream_with_effects(
-                    sound_output.read,
-                    sound_config,
-                    wingman_name=wingman_name,
+        async with httpx.AsyncClient() as client:
+            try:
+                response = await client.post(
+                    url=f"{self.settings.base_url}/generate-speech",
+                    params={"region": self.settings.region.value},
+                    json=data,
+                    timeout=10,
                 )
-            else:
-                await audio_player.play_with_effects(
-                    input_data=audio_data,
-                    config=sound_config,
-                    wingman_name=wingman_name,
-                )
+                response.raise_for_status()
+
+                if config.output_streaming:
+                    # Process the audio stream directly
+                    async for chunk in response.aiter_raw():
+                        # Process the chunks as they arrive
+                        await audio_player.stream_with_effects(
+                            chunk,
+                            sound_config,
+                            wingman_name=wingman_name,
+                        )
+                else:
+                    # For non-streaming, we can read the entire content
+                    audio_data = await response.aread()
+                    await audio_player.play_with_effects(
+                        input_data=audio_data,
+                        config=sound_config,
+                        wingman_name=wingman_name,
+                    )
+            except httpx.RequestError as e:
+                print(f"An error occurred while requesting: {e}")
+            except httpx.HTTPError as e:
+                print(f"An HTTP error occurred: {e}")
 
     def get_available_voices(self, locale: str = ""):
         response = requests.get(
