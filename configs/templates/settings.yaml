@@ -5,3 +5,6 @@ voice_activation:
   languages:
     - en-US
     - de-DE
+wingman_pro:
+  base_url: http://127.0.0.1:8001
+  region: europe

@@ -19,6 +19,7 @@ from api.enums import (
     TtsProvider,
     WingmanInitializationErrorType,
     WingmanProRegion,
+    WingmanProSttProvider,
 )
 
 
@@ -266,6 +267,10 @@ class OpenAiConfig(BaseModel):
 
 
 class WingmanProConfig(BaseModel):
+    stt_provider: WingmanProSttProvider
+
+
+class WingmanProSettings(BaseModel):
     base_url: str
     region: WingmanProRegion
 
@@ -278,7 +283,7 @@ class SoundConfig(BaseModel):
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
 
-class VoiceActivationConfig(BaseModel):
+class VoiceActivationSettings(BaseModel):
     """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
 
     enabled: bool
@@ -464,4 +469,5 @@ class NewWingmanTemplate(BaseModel):
 
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
-    voice_activation: VoiceActivationConfig
+    voice_activation: VoiceActivationSettings
+    wingman_pro: WingmanProSettings

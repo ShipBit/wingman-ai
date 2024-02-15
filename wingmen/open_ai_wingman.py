@@ -1,7 +1,7 @@
 import json
 import time
 from typing import Mapping
-from api.interface import WingmanConfig, WingmanInitializationError
+from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
     LogType,
     OpenAiModel,
@@ -40,12 +40,11 @@ class OpenAiWingman(Wingman):
         self,
         name: str,
         config: WingmanConfig,
+        settings: SettingsConfig,
         audio_player: AudioPlayer,
     ):
         super().__init__(
-            name=name,
-            config=config,
-            audio_player=audio_player,
+            name=name, config=config, audio_player=audio_player, settings=settings
         )
 
         self.edge_tts = Edge()
@@ -127,6 +126,8 @@ class OpenAiWingman(Wingman):
                 [
                     self.conversation_provider == ConversationProvider.WINGMAN_PRO,
                     self.summarize_provider == SummarizeProvider.WINGMAN_PRO,
+                    self.tts_provider == TtsProvider.WINGMAN_PRO,
+                    self.stt_provider == SttProvider.WINGMAN_PRO,
                 ]
             )
         return False
@@ -180,7 +181,7 @@ class OpenAiWingman(Wingman):
         self, errors: list[WingmanInitializationError]
     ):
         self.wingman_pro = WingmanPro(
-            wingman_name=self.name,
+            wingman_name=self.name, settings=self.settings.wingman_pro
         )
 
     async def _transcribe(self, audio_input_wav: str) -> str | None:
@@ -209,7 +210,11 @@ class OpenAiWingman(Wingman):
             transcript = self.whispercpp.transcribe(
                 filename=audio_input_wav, config=self.config.whispercpp
             )
-        else:
+        elif self.stt_provider == SttProvider.WINGMAN_PRO:
+            transcript = self.wingman_pro.transcribe(
+                filename=audio_input_wav, config=self.config.wingman_pro
+            )
+        elif self.stt_provider == SttProvider.OPENAI:
             transcript = self.openai.transcribe(filename=audio_input_wav)
 
         return transcript.text if transcript else None
@@ -540,7 +545,6 @@ class OpenAiWingman(Wingman):
             completion = self.wingman_pro.ask(
                 messages=self.messages,
                 model=self.config.openai.conversation_model,
-                config=self.config.wingman_pro,
                 tools=tools,
             )
 

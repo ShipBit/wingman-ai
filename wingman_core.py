@@ -144,6 +144,13 @@ class WingmanCore(WebSocketUser):
 
         self.router.add_api_route(
             methods=["GET"],
+            path="/settings",
+            endpoint=self.get_settings,
+            response_model=SettingsConfig,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
             path="/audio-devices",
             endpoint=self.get_audio_devices,
             response_model=list[AudioDevice],
@@ -151,33 +158,32 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/audio-devices",
+            path="/settings/audio-devices",
             endpoint=self.set_audio_devices,
             tags=["core"],
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/voice-activation",
+            path="/settings/voice-activation",
             endpoint=self.set_voice_activation,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/mute-key",
+            endpoint=self.set_mute_key,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/wingman-pro",
+            endpoint=self.set_wingman_pro_settings,
             tags=["core"],
         )
         self.router.add_api_route(
             methods=["POST"],
             path="/voice-activation/mute",
             endpoint=self.start_voice_recognition,
-            tags=["core"],
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/mute-key",
-            endpoint=self.set_mute_key,
-            tags=["core"],
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/settings",
-            endpoint=self.get_settings,
-            response_model=SettingsConfig,
             tags=["core"],
         )
 
@@ -491,7 +497,9 @@ class WingmanCore(WebSocketUser):
         self.current_config_dir = loaded_config_dir
         self.current_config = config
         self.tower = Tower(config=config, audio_player=self.audio_player)
-        errors = await self.tower.instantiate_wingmen()
+        errors = await self.tower.instantiate_wingmen(
+            self.config_manager.settings_config
+        )
         return errors, ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
 
     # POST config/create
@@ -632,16 +640,16 @@ class WingmanCore(WebSocketUser):
 
         await self.load_config(config_dir)
 
-    # GET /settings
-    def get_settings(self):
-        return self.config_manager.settings_config
-
     # GET /audio-devices
     def get_audio_devices(self):
         audio_devices = sd.query_devices()
         return audio_devices
 
-    # POST /audio-devices
+    # GET /settings
+    def get_settings(self):
+        return self.config_manager.settings_config
+
+    # POST /settings/audio-devices
     def set_audio_devices(
         self, output_device: Optional[int] = None, input_device: Optional[int] = None
     ):
@@ -660,7 +668,7 @@ class WingmanCore(WebSocketUser):
                 "Audio devices updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
             )
 
-    # POST /voice-activation
+    # POST /settings/voice-activation
     async def set_voice_activation(self, is_enabled: bool):
         if is_enabled:
             if not self.speech_recognizer:
@@ -674,6 +682,32 @@ class WingmanCore(WebSocketUser):
         if self.config_manager.save_settings_config():
             printr.print(
                 f"Voice activation {'enabled' if is_enabled else 'disabled'}.",
+                toast=ToastType.NORMAL,
+                color=LogType.POSITIVE,
+            )
+
+    # POST /settings/mute-key
+    def set_mute_key(self, key: str, keycodes: Optional[list[int]] = None):
+        self.config_manager.settings_config.voice_activation.mute_toggle_key = key
+        self.config_manager.settings_config.voice_activation.mute_toggle_key_codes = (
+            keycodes
+        )
+
+        if self.config_manager.save_settings_config():
+            printr.print(
+                "Mute key saved.",
+                toast=ToastType.NORMAL,
+                color=LogType.POSITIVE,
+            )
+
+    # POST /settings/wingman-pro
+    async def set_wingman_pro_settings(self, base_url: str, region: str):
+        self.config_manager.settings_config.wingman_pro.base_url = base_url
+        self.config_manager.settings_config.wingman_pro.region = region
+
+        if self.config_manager.save_settings_config():
+            printr.print(
+                "Wingman Pro settings updated.",
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
             )
@@ -699,20 +733,6 @@ class WingmanCore(WebSocketUser):
     def toggle_voice_recognition(self):
         mute = self.is_listening
         self.start_voice_recognition(mute)
-
-    # POST /mute-key
-    def set_mute_key(self, key: str, keycodes: Optional[list[int]] = None):
-        self.config_manager.settings_config.voice_activation.mute_toggle_key = key
-        self.config_manager.settings_config.voice_activation.mute_toggle_key_codes = (
-            keycodes
-        )
-
-        if self.config_manager.save_settings_config():
-            printr.print(
-                f"Mute key saved.",
-                toast=ToastType.NORMAL,
-                color=LogType.POSITIVE,
-            )
 
     # GET /startup-errors
     def get_startup_errors(self):

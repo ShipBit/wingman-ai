@@ -92,6 +92,7 @@ class TtsProvider(Enum):
     EDGE_TTS = "edge_tts"
     AZURE = "azure"
     XVASYNTH = "xvasynth"
+    WINGMAN_PRO = "wingman_pro"
 
 
 class SttProvider(Enum):
@@ -99,6 +100,7 @@ class SttProvider(Enum):
     AZURE = "azure"
     AZURE_SPEECH = "azure_speech"
     WHISPERCPP = "whispercpp"
+    WINGMAN_PRO = "wingman_pro"
 
 
 class ConversationProvider(Enum):
@@ -120,6 +122,11 @@ class KeyboardRecordingType(Enum):
 
 class WingmanProRegion(Enum):
     EUROPE = "europe"
+
+
+class WingmanProSttProvider(Enum):
+    WHISPER = "whisper"
+    AZURE_SPEECH = "azure_speech"
 
 
 # Pydantic models for enums
@@ -203,6 +210,10 @@ class WingmanProRegionModel(BaseEnumModel):
     region: WingmanProRegion
 
 
+class WingmanProSttProviderModel(BaseEnumModel):
+    stt_provider: WingmanProSttProvider
+
+
 # Add all additional Pydantic models for enums as needed
 
 
@@ -226,6 +237,7 @@ ENUM_TYPES = {
     "SummarizeProvider": SummarizeProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
     "WingmanProRegion": WingmanProRegionModel,
+    "WingmanProSttProvider": WingmanProSttProviderModel,
     # Add new enums here as key-value pairs
 }
 
