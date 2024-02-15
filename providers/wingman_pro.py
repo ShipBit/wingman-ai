@@ -1,3 +1,4 @@
+import io
 import openai
 import requests
 import azure.cognitiveservices.speech as speechsdk
@@ -7,9 +8,11 @@ from api.enums import (
 )
 from api.interface import (
     AzureSttConfig,
+    AzureTtsConfig,
     SoundConfig,
     WingmanProSettings,
 )
+from services.audio_player import AudioPlayer
 from services.printr import Printr
 
 
@@ -82,45 +85,43 @@ class WingmanPro:
         completion = openai.types.chat.ChatCompletion.model_validate(json_response)
         return completion
 
-    def __remove_nones(self, obj):
-        """Recursive function to remove None values from a data structure."""
-        if isinstance(obj, (list, tuple, set)):
-            return type(obj)(self.__remove_nones(x) for x in obj if x is not None)
-        elif isinstance(obj, dict):
-            return type(obj)(
-                (k, self.__remove_nones(v)) for k, v in obj.items() if v is not None
-            )
-        else:
-            return obj
+    async def play_audio(
+        self,
+        text: str,
+        config: AzureTtsConfig,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+    ):
+        data = {
+            "text": text,
+            "voice_name": config.voice,
+            "stream": config.output_streaming,
+        }
+        response = requests.post(
+            url=f"{self.settings.base_url}/generate-speech",
+            params={"region": self.settings.region.value},
+            json=data,
+            timeout=10,
+        )
+        response.raise_for_status()
 
-    # def play_audio(
-    #     self,
-    #     text: str,
-    #     api_key: str,
-    #     config: AzureTtsConfig,
-    #     sound_config: SoundConfig,
-    #     audio_player: AudioPlayer,
-    #     wingman_name: str,
-    # ):
-    # speech_config = speechsdk.SpeechConfig(
-    #     subscription=api_key,
-    #     region=config.region.value,
-    # )
+        audio_data = response.content
 
-    # speech_config.speech_synthesis_voice_name = config.voice
-
-    # speech_synthesizer = speechsdk.SpeechSynthesizer(
-    #     speech_config=speech_config,
-    #     audio_config=None,
-    # )
-
-    # result = speech_synthesizer.speak_text_async(text).get()
-    # if result is not None:
-    #     audio_player.stream_with_effects(
-    #         input_data=result.audio_data,
-    #         config=sound_config,
-    #         wingman_name=wingman_name,
-    #     )
+        if audio_data:
+            sound_output = io.BytesIO(audio_data)
+            if config.output_streaming:
+                await audio_player.stream_with_effects(
+                    sound_output.read,
+                    sound_config,
+                    wingman_name=wingman_name,
+                )
+            else:
+                await audio_player.play_with_effects(
+                    input_data=audio_data,
+                    config=sound_config,
+                    wingman_name=wingman_name,
+                )
 
     def get_available_voices(self, locale: str = ""):
         response = requests.get(
@@ -150,3 +151,14 @@ class WingmanPro:
         if enum_value == 3:
             return "Neutral"
         return "Unknown"
+
+    def __remove_nones(self, obj):
+        """Recursive function to remove None values from a data structure."""
+        if isinstance(obj, (list, tuple, set)):
+            return type(obj)(self.__remove_nones(x) for x in obj if x is not None)
+        elif isinstance(obj, dict):
+            return type(obj)(
+                (k, self.__remove_nones(v)) for k, v in obj.items() if v is not None
+            )
+        else:
+            return obj

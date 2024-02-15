@@ -196,13 +196,13 @@ class OpenAiWingman(Wingman):
         """
 
         if self.stt_provider == SttProvider.AZURE:
-            transcript = self.openai_azure.transcribe(
+            transcript = self.openai_azure.transcribe_whisper(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["whisper"],
                 config=self.config.azure.whisper,
             )
         elif self.stt_provider == SttProvider.AZURE_SPEECH:
-            transcript = self.openai_azure.transcribe_with_azure(
+            transcript = self.openai_azure.transcribe_azure_speech(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["tts"],
                 config=self.config.azure.stt,
@@ -731,7 +731,6 @@ class OpenAiWingman(Wingman):
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
-                stream=self.config.azure.tts.output_streaming,
             )
         elif self.tts_provider == TtsProvider.XVASYNTH:
             await self.xvasynth.play_audio(
@@ -745,6 +744,14 @@ class OpenAiWingman(Wingman):
             await self.openai.play_audio(
                 text=text,
                 voice=self.config.openai.tts_voice,
+                sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
+            )
+        elif self.tts_provider == TtsProvider.WINGMAN_PRO:
+            await self.wingman_pro.play_audio(
+                text=text,
+                config=self.config.azure.tts,
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
                 wingman_name=self.name,

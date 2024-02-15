@@ -186,7 +186,7 @@ class OpenAiAzure(BaseOpenAi):
             azure_deployment=config.deployment_name,
         )
 
-    def transcribe(
+    def transcribe_whisper(
         self,
         filename: str,
         api_key: str,
@@ -200,7 +200,7 @@ class OpenAiAzure(BaseOpenAi):
             model=model,
         )
 
-    def transcribe_with_azure(
+    def transcribe_azure_speech(
         self, filename: str, api_key: str, config: AzureSttConfig
     ):
         speech_config = speechsdk.SpeechConfig(
@@ -257,7 +257,6 @@ class OpenAiAzure(BaseOpenAi):
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
-        stream: bool,
     ):
         speech_config = speechsdk.SpeechConfig(
             subscription=api_key,
@@ -273,12 +272,12 @@ class OpenAiAzure(BaseOpenAi):
 
         result = (
             speech_synthesizer.start_speaking_text_async(text).get()
-            if stream
+            if config.output_streaming
             else speech_synthesizer.speak_text_async(text).get()
         )
 
         if result is not None:
-            if stream:
+            if config.output_streaming:
                 audio_data_stream = speechsdk.AudioDataStream(result)
 
                 await audio_player.stream_with_effects(
