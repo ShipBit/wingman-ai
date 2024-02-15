@@ -29,6 +29,7 @@ from api.interface import (
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
+from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
 from wingmen.wingman import Wingman
 from services.audio_player import AudioPlayer
@@ -206,6 +207,13 @@ class WingmanCore(WebSocketUser):
             methods=["GET"],
             path="/voices/azure",
             endpoint=self.get_azure_voices,
+            response_model=list[VoiceInfo],
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voices/azure/wingman-pro",
+            endpoint=self.get_wingman_pro_azure_voices,
             response_model=list[VoiceInfo],
             tags=["core"],
         )
@@ -747,20 +755,40 @@ class WingmanCore(WebSocketUser):
 
         return result
 
+    def __convert_azure_voice(self, voice):
+        # retrieved from Wingman Pro as serialized dict
+        if isinstance(voice, dict):
+            return VoiceInfo(
+                id=voice.get("short_name"),
+                name=voice.get("local_name"),
+                gender=voice.get("gender"),
+                locale=voice.get("locale"),
+            )
+        # coming directly from Azure API as a voice object
+        else:
+            return VoiceInfo(
+                id=voice.short_name,
+                name=voice.local_name,
+                gender=voice.gender.name,
+                locale=voice.locale,
+            )
+
     # GET /voices/azure
     def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
         azure = OpenAiAzure()
         voices = azure.get_available_voices(
             api_key=api_key, region=region.value, locale=locale
         )
-        convert = lambda voice: VoiceInfo(
-            id=voice.short_name,
-            name=voice.local_name,
-            gender=voice.gender.name,
-            locale=voice.locale,
-        )
-        result = [convert(voice) for voice in voices]
+        result = [self.__convert_azure_voice(voice) for voice in voices]
+        return result
 
+    # GET /voices/azure/wingman-pro
+    def get_wingman_pro_azure_voices(self, locale: str = ""):
+        wingman_pro = WingmanPro(
+            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
+        )
+        voices = wingman_pro.get_available_voices(locale=locale)
+        result = [self.__convert_azure_voice(voice) for voice in voices]
         return result
 
     # POST /play/openai

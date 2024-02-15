@@ -268,6 +268,7 @@ class OpenAiConfig(BaseModel):
 
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
+    # we'll reuse the Azure STT config here for languages
 
 
 class WingmanProSettings(BaseModel):

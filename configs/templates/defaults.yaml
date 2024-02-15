@@ -199,4 +199,4 @@ commands:
       - Conversation history cleared.
 
 wingman_pro:
-  stt_provider: whisper # or azure_speech
+  stt_provider: azure_speech # or whisper

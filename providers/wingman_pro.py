@@ -1,12 +1,13 @@
 import openai
 import requests
+import azure.cognitiveservices.speech as speechsdk
 from api.enums import (
     LogType,
     OpenAiModel,
 )
 from api.interface import (
+    AzureSttConfig,
     SoundConfig,
-    WingmanProConfig,
     WingmanProSettings,
 )
 from services.printr import Printr
@@ -18,19 +19,33 @@ class WingmanPro:
         self.settings: WingmanProSettings = settings
         self.printr = Printr()
 
-    def transcribe(self, filename: str, config: WingmanProConfig):
+    def transcribe_whisper(self, filename: str):
         with open(filename, "rb") as audio_input:
             files = {"audio_file": (filename, audio_input)}
             response = requests.post(
-                url=f"{self.settings.base_url}/transcribe-{config.stt_provider.value}",
+                url=f"{self.settings.base_url}/transcribe-whisper",
                 params={"region": self.settings.region.value},
                 files=files,
-                # timeout=30,
+                timeout=30,
             )
             response.raise_for_status()
             json = response.json()
             transcription = openai.types.audio.Transcription.model_validate(json)
             return transcription
+
+    def transcribe_azure_speech(self, filename: str, config: AzureSttConfig):
+        with open(filename, "rb") as audio_input:
+            files = {"audio_file": (filename, audio_input)}
+            response = requests.post(
+                url=f"{self.settings.base_url}/transcribe-azure-speech",
+                params={"region": self.settings.region.value},
+                json={"languages": config.languages},
+                files=files,
+                # timeout=30,
+            )
+        response.raise_for_status()
+        json = response.json()
+        return json
 
     def ask(
         self,
@@ -105,17 +120,31 @@ class WingmanPro:
     #         wingman_name=wingman_name,
     #     )
 
-    # def get_available_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
-    # speech_config = speechsdk.SpeechConfig(subscription=api_key, region=region)
-    # speech_synthesizer = speechsdk.SpeechSynthesizer(
-    #     speech_config=speech_config, audio_config=None
-    # )
-    # result = speech_synthesizer.get_voices_async(locale).get()
+    def get_available_voices(self, locale: str = ""):
+        response = requests.get(
+            url=f"{self.settings.base_url}/azure-voices",
+            params={"region": self.settings.region.value, "locale": locale},
+            timeout=10,
+        )
+        response.raise_for_status()
+        voices_dict = response.json()
+        voice_infos = [
+            {
+                "short_name": entry.get("_short_name", ""),
+                "name": entry.get("_local_name", ""),
+                "locale": entry.get("_locale", ""),
+                "gender": self.__resolve_gender(entry.get("_gender")),
+            }
+            for entry in voices_dict
+        ]
 
-    # if result.reason == speechsdk.ResultReason.VoicesListRetrieved:
-    #     return result.voices
-    # if result.reason == speechsdk.ResultReason.Canceled:
-    #     printr.toast_error(
-    #         f"Unable to retrieve Azure voices: {result.error_details}"
-    #     )
-    # return None
+        return voice_infos
+
+    def __resolve_gender(self, enum_value: int):
+        if enum_value == 1:
+            return "Male"
+        if enum_value == 2:
+            return "Female"
+        if enum_value == 3:
+            return "Neutral"
+        return "Unknown"

@@ -9,6 +9,7 @@ from api.enums import (
     SttProvider,
     ConversationProvider,
     SummarizeProvider,
+    WingmanProSttProvider,
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
@@ -211,9 +212,17 @@ class OpenAiWingman(Wingman):
                 filename=audio_input_wav, config=self.config.whispercpp
             )
         elif self.stt_provider == SttProvider.WINGMAN_PRO:
-            transcript = self.wingman_pro.transcribe(
-                filename=audio_input_wav, config=self.config.wingman_pro
-            )
+            if self.config.wingman_pro.stt_provider == WingmanProSttProvider.WHISPER:
+                transcript = self.wingman_pro.transcribe_whisper(
+                    filename=audio_input_wav
+                )
+            elif (
+                self.config.wingman_pro.stt_provider
+                == WingmanProSttProvider.AZURE_SPEECH
+            ):
+                transcript = self.wingman_pro.transcribe_azure_speech(
+                    filename=audio_input_wav, config=self.config.azure.stt
+                )
         elif self.stt_provider == SttProvider.OPENAI:
             transcript = self.openai.transcribe(filename=audio_input_wav)
 
