@@ -642,8 +642,13 @@ class OpenAiWingman(Wingman):
                 config=self.config.azure.summarize,
                 model=self.config.openai.summarize_model,
             )
-        else:
+        elif self.summarize_provider == SummarizeProvider.OPENAI:
             summarize_response = self.openai.ask(
+                messages=self.messages,
+                model=self.config.openai.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
+            summarize_response = self.wingman_pro.ask(
                 messages=self.messages,
                 model=self.config.openai.summarize_model,
             )
@@ -799,55 +804,6 @@ class OpenAiWingman(Wingman):
             },
         ]
         return tools
-
-    async def __ask_gpt_for_locale(self, language: str) -> str:
-        """OpenAI TTS returns a natural language name for the language of the transcript, e.g. "german" or "english".
-        This method uses ChatGPT to find the corresponding locale, e.g. "de-DE" or "en-EN".
-
-        Args:
-            language (str): The natural, lowercase language name returned by OpenAI TTS. Thank you for that btw.. WTF OpenAI?
-        """
-
-        messages = (
-            [
-                {
-                    "content": """
-                        I'll say a natural language name in lowercase and you'll just return the IETF country code / locale for this language.
-                        Your answer always has exactly 2 lowercase letters, a dash, then two more letters in uppercase.
-                        If I say "german", you answer with "de-DE". If I say "russian", you answer with "ru-RU".
-                        If it's ambiguous and you don't know which locale to pick ("en-GB" vs "en-US"), you pick the most commonly used one.
-                        You only answer with valid country codes according to most common standards.
-                        If you can't, you respond with "None".
-                    """,
-                    "role": "system",
-                },
-                {
-                    "content": language,
-                    "role": "user",
-                },
-            ],
-        )
-        model = OpenAiModel.GPT_35_TURBO_1106
-
-        response = (
-            self.openai.ask(model=model.value, messages=messages)
-            if self.summarize_provider == ConversationProvider.OPENAI
-            else self.openai_azure.ask(
-                model=model.value,
-                messages=messages,
-                api_key=self.azure_api_keys["summarize"],
-                config=self.config.azure.summarize,
-            )
-        )
-
-        answer = response.choices[0].message.content
-        if answer == "None":
-            return None
-        await printr.print_async(
-            f"ChatGPT says this language maps to locale '{answer}'.",
-            color=LogType.INFO,
-        )
-        return answer
 
     def __get_message_role(self, message):
         """Helper method to get the role of the message regardless of its type."""
