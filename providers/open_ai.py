@@ -276,12 +276,18 @@ class OpenAiAzure(BaseOpenAi):
             else speech_synthesizer.speak_text_async(text).get()
         )
 
+        def buffer_callback(audio_buffer):
+            buffer = bytes(2048)
+            size = audio_data_stream.read_data(buffer)
+            audio_buffer[:size] = buffer
+            return size
+
         if result is not None:
             if config.output_streaming:
                 audio_data_stream = speechsdk.AudioDataStream(result)
 
                 await audio_player.stream_with_effects(
-                    audio_data_stream.read_data,
+                    buffer_callback,
                     sound_config,
                     wingman_name=wingman_name,
                 )

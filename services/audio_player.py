@@ -238,7 +238,6 @@ class AudioPlayer:
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(processed_buffer)
 
-                audio_buffer = bytearray(buffer_size)
                 filled_size = buffer_callback(audio_buffer)
 
             data_received = True
