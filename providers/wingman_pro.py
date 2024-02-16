@@ -100,36 +100,27 @@ class WingmanPro:
             "stream": config.output_streaming,
         }
         async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(
-                    url=f"{self.settings.base_url}/generate-speech",
-                    params={"region": self.settings.region.value},
-                    json=data,
-                    timeout=10,
-                )
-                response.raise_for_status()
+            response = await client.post(
+                url=f"{self.settings.base_url}/generate-speech",
+                params={"region": self.settings.region.value},
+                json=data,
+                timeout=10,
+            )
+            response.raise_for_status()
 
-                if config.output_streaming:
-                    # Process the audio stream directly
-                    async for chunk in response.aiter_raw():
-                        # Process the chunks as they arrive
-                        await audio_player.stream_with_effects(
-                            chunk,
-                            sound_config,
-                            wingman_name=wingman_name,
-                        )
-                else:
-                    # For non-streaming, we can read the entire content
-                    audio_data = await response.aread()
-                    await audio_player.play_with_effects(
-                        input_data=audio_data,
-                        config=sound_config,
-                        wingman_name=wingman_name,
-                    )
-            except httpx.RequestError as e:
-                print(f"An error occurred while requesting: {e}")
-            except httpx.HTTPError as e:
-                print(f"An HTTP error occurred: {e}")
+            if config.output_streaming:
+                # Directly passing the aiter_raw() to the audio player
+                await audio_player.stream_with_effects(
+                    response.aiter_raw(), sound_config, wingman_name
+                )
+            else:
+                audio_data = await response.aread()
+                await audio_player.play_with_effects(
+                    audio_data, sound_config, wingman_name
+                )
+
+            # Close the response after processing
+            await response.aclose()
 
     def get_available_voices(self, locale: str = ""):
         response = requests.get(
