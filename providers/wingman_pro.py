@@ -1,4 +1,6 @@
+import asyncio
 import io
+import threading
 import httpx
 import openai
 import requests
@@ -99,28 +101,63 @@ class WingmanPro:
             "voice_name": config.voice,
             "stream": config.output_streaming,
         }
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                url=f"{self.settings.base_url}/generate-speech",
-                params={"region": self.settings.region.value},
-                json=data,
-                timeout=10,
-            )
+        response = requests.post(
+            url=f"{self.settings.base_url}/generate-speech",
+            params={"region": self.settings.region.value},
+            json=data,
+            stream=True,  # Important to enable streaming
+            timeout=10,
+        )
+
+        try:
             response.raise_for_status()
 
             if config.output_streaming:
-                # Directly passing the aiter_raw() to the audio player
+
+                def buffer_generator():
+                    with requests.post(
+                        url=f"{self.settings.base_url}/generate-speech",
+                        params={"region": self.settings.region.value},
+                        json=data,
+                        stream=True,  # Important to enable streaming
+                        timeout=10,
+                    ) as response:
+                        response.raise_for_status()
+                        for chunk in response.iter_content(chunk_size=2048):
+                            if (
+                                not chunk
+                            ):  # End of stream signified by an empty bytes object
+                                break
+                            yield chunk
+
+                # We will create a proxy function that provides the chunks
+                generator_instance = buffer_generator()
+
+                def buffer_callback(audio_buffer):
+                    try:
+                        chunk = next(generator_instance)
+                        audio_buffer[: len(chunk)] = chunk
+                        return len(chunk)
+                    except StopIteration:
+                        return (
+                            0  # Signal that buffer is empty and streaming is finished
+                        )
+
                 await audio_player.stream_with_effects(
-                    response.aiter_raw(), sound_config, wingman_name
+                    buffer_callback=buffer_callback,
+                    config=sound_config,
+                    wingman_name=wingman_name,
                 )
             else:
-                audio_data = await response.aread()
+                # For non-streaming, use the response content
+                audio_data = response.content  # This loads content at once
                 await audio_player.play_with_effects(
-                    audio_data, sound_config, wingman_name
+                    input_data=audio_data,
+                    config=sound_config,
+                    wingman_name=wingman_name,
                 )
-
-            # Close the response after processing
-            await response.aclose()
+        finally:
+            response.close()
 
     def get_available_voices(self, locale: str = ""):
         response = requests.get(

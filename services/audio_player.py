@@ -29,6 +29,7 @@ class PubSub:
             for fn in self.subscribers[event_type]:
                 fn(data)
 
+
 class AudioPlayer:
     on_playback_started: Optional[Callable[[str], None]] = None
     on_playback_finished: Optional[Callable[[str], None]] = None
@@ -221,22 +222,23 @@ class AudioPlayer:
                 self.play_beep()
             self.raw_stream.start()
 
-            audio_buffer = bytes(buffer_size)
             sound_effects = get_sound_effects(config)
+            audio_buffer = bytearray(buffer_size)
             filled_size = buffer_callback(audio_buffer)
             while filled_size > 0:
-                data_in_numpy = np.frombuffer(audio_buffer, dtype=dtype).astype(
-                    np.float32
-                )
+                data_in_numpy = np.frombuffer(
+                    audio_buffer[:filled_size], dtype=dtype
+                ).astype(np.float32)
 
                 for sound_effect in sound_effects:
                     data_in_numpy = sound_effect(
                         data_in_numpy, sample_rate, reset=False
                     )
 
-                audio_buffer = data_in_numpy.astype(dtype).tobytes()
+                processed_buffer = data_in_numpy.astype(dtype).tobytes()
+                buffer.extend(processed_buffer)
 
-                buffer += audio_buffer[:filled_size]
+                audio_buffer = bytearray(buffer_size)
                 filled_size = buffer_callback(audio_buffer)
 
             data_received = True
