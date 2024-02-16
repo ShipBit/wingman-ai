@@ -151,6 +151,7 @@ class WingmanPro:
             {
                 "short_name": entry.get("_short_name", ""),
                 "name": entry.get("_local_name", ""),
+                "local_name": entry.get("_local_name", ""),
                 "locale": entry.get("_locale", ""),
                 "gender": self.__resolve_gender(entry.get("_gender")),
             }
