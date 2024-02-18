@@ -336,6 +336,11 @@ class CommandKeyboardConfig(BaseModel):
     hold: Optional[float] = None
     """The duration the key will be pressed in seconds. Optional."""
 
+    press: Optional[bool] = None
+    """Whether to press the key. Optional."""
+
+    release: Optional[bool] = None
+    """Whether to release the key. Optional."""
 
 class CommandMouseConfig(BaseModel):
     button: Optional[str] = None
