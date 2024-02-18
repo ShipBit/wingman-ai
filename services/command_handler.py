@@ -111,8 +111,6 @@ class CommandHandler:
         # self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
 
         def _on_key_event(event):
-            print(event.name, event.event_type, event.scan_code, event.time)
-
             self.recorded_keys.append(event)
             if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
                 WebSocketUser.ensure_async(self.handle_stop_recording(None, None))
