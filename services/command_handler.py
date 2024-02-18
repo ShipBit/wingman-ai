@@ -109,13 +109,16 @@ class CommandHandler:
 
         # Start timeout
         # self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
+        self.recorded_keys = []
 
         def _on_key_event(event):
+            if event.event_type == "down" and event.name == "esc":
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None))
             self.recorded_keys.append(event)
             if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
                 WebSocketUser.ensure_async(self.handle_stop_recording(None, None))
 
-        self.hook_callback = keyboard.hook(_on_key_event)
+        self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
 
     async def handle_record_mouse_actions(
         self, command: RecordMouseActionsCommand, websocket: WebSocket
@@ -160,7 +163,7 @@ class CommandHandler:
         actions: list[CommandActionConfig] = []
 
         last_action_time = None
-        keys_pressed = 0
+        keys_pressed = []
 
         # Process recorded key events to calculate press durations and inactivity
         for key in recorded:
@@ -173,9 +176,15 @@ class CommandHandler:
                     # Ignore further processing if 'esc' was pressed
                     if key_name == "esc":
                         break
-                    keys_pressed += 1
+                    if key_name not in keys_pressed:
+                        keys_pressed.append(key_name)
+                    else:
+                        continue
                 else:
-                    keys_pressed -= 1
+                    if key_name in keys_pressed:
+                        keys_pressed.remove(key_name)
+                    else:
+                        continue
 
                 # add wait time
                 if last_action_time is not None:
@@ -195,7 +204,8 @@ class CommandHandler:
                 actions.append(key_config)
 
         #still a key pressed - could do something here
-        # if keys_pressed > 0:
+        if len(keys_pressed) > 0:
+            pass
 
         return actions
 
