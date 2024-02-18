@@ -414,6 +414,9 @@ def _setup_name_tables():
                         # Remember the "id" of the name, as the first techniques
                         # have better results and therefore priority.
                         for i, name in enumerate(map(normalize_name, names + lowercase_names)):
+                            if name == 'alt gr' and entry[0] == 56:
+                                # skip left alt (56) for alt gr
+                                continue
                             from_name[name].append((i, entry))
 
         # TODO: single quotes on US INTL is returning the dead key (?), and therefore
@@ -576,7 +579,7 @@ def map_name(name):
         yield scan_code or -vk, modifiers
 
 def _send_event(code, event_type):
-    if code == 541 or code == 56 or code == 57400:
+    if code == 541 or code == 57400:
         # Alt-gr is difficult to simulate. pydirectinput does work, so we are using it in this case.
         if event_type == 0:
             pydirectinput.keyDown("altright")
