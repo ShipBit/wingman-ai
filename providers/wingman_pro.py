@@ -9,6 +9,7 @@ from api.interface import (
 )
 from services.audio_player import AudioPlayer
 from services.printr import Printr
+from services.secret_keeper import SecretKeeper
 
 
 class WingmanPro:
@@ -16,6 +17,7 @@ class WingmanPro:
         self.wingman_name: str = wingman_name
         self.settings: WingmanProSettings = settings
         self.printr = Printr()
+        self.secret_keeper: SecretKeeper = SecretKeeper()
 
     def transcribe_whisper(self, filename: str):
         with open(filename, "rb") as audio_input:
@@ -40,6 +42,7 @@ class WingmanPro:
                     "region": self.settings.region.value,
                     "languages": ",".join(config.languages),
                 },
+                headers=self._get_headers(),
                 files=files,
                 timeout=30,
             )
@@ -71,6 +74,7 @@ class WingmanPro:
         response = requests.post(
             url=f"{self.settings.base_url}/ask",
             params={"region": self.settings.region.value},
+            headers=self._get_headers(),
             json=data,
             timeout=10,
         )
@@ -100,6 +104,7 @@ class WingmanPro:
                     url=f"{self.settings.base_url}/generate-speech",
                     params={"region": self.settings.region.value},
                     json=data,
+                    headers=self._get_headers(),
                     timeout=10,
                     stream=True,
                 ) as response:
@@ -150,6 +155,7 @@ class WingmanPro:
             response = requests.post(
                 url=f"{self.settings.base_url}/generate-speech",
                 params={"region": self.settings.region.value},
+                headers=self._get_headers(),
                 json=data,
                 timeout=10,
             )
@@ -166,6 +172,7 @@ class WingmanPro:
             url=f"{self.settings.base_url}/azure-voices",
             params={"region": self.settings.region.value, "locale": locale},
             timeout=10,
+            headers=self._get_headers(),
         )
         response.raise_for_status()
         voices_dict = response.json()
@@ -181,6 +188,12 @@ class WingmanPro:
         ]
 
         return voice_infos
+    
+    def _get_headers(self):
+        token = self.secret_keeper.secrets.get("wingman_pro_access_token", "")
+        return {
+            'Authorization': f'Bearer {token}',
+        }
 
     def __resolve_gender(self, enum_value: int):
         if enum_value == 1:
