@@ -110,13 +110,35 @@ class WingmanPro:
                         yield chunk
 
             generator_instance = buffer_generator()
+            # Initialize an incomplete buffer storage
+            incomplete_buffer = b""
 
             def buffer_callback(audio_buffer):
+                nonlocal incomplete_buffer
                 try:
                     chunk = next(generator_instance)
+                    # Prepend any previously incomplete buffer to the chunk
+                    chunk = incomplete_buffer + chunk
+                    # Compute new incomplete buffer size if any
+                    remainder = len(chunk) % 2  # 2 bytes for 'int16'
+                    if remainder:
+                        # Store incomplete bytes for next callback
+                        incomplete_buffer = chunk[-remainder:]
+                        # Exclude the incomplete buffer from the current chunk
+                        chunk = chunk[:-remainder]
+                    else:
+                        # No incomplete bytes, reset the incomplete buffer
+                        incomplete_buffer = b""
+                    
                     audio_buffer[: len(chunk)] = chunk
                     return len(chunk)
                 except StopIteration:
+                    if incomplete_buffer:
+                        # Handle any remaining incomplete buffer, if present, when the stream ends
+                        audio_buffer[: len(incomplete_buffer)] = incomplete_buffer
+                        chunk_length = len(incomplete_buffer)
+                        incomplete_buffer = b""  # Clear the storage
+                        return chunk_length
                     return 0
 
             await audio_player.stream_with_effects(

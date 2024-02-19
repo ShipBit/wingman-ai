@@ -7,7 +7,7 @@ import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.commands import VoiceActivationMutedCommand
-from api.enums import AzureRegion, CommandTag, LogType, OpenAiTtsVoice, ToastType
+from api.enums import AzureRegion, CommandTag, LogType, OpenAiTtsVoice, ToastType, WingmanProRegion
 from api.interface import (
     AudioDevice,
     AudioSettings,
@@ -718,6 +718,7 @@ class WingmanCore(WebSocketUser):
     # POST /settings/wingman-pro
     async def set_wingman_pro_settings(self, base_url: str, region: str):
         self.config_manager.settings_config.wingman_pro.base_url = base_url
+        region = WingmanProRegion(region)
         self.config_manager.settings_config.wingman_pro.region = region
 
         if self.config_manager.save_settings_config():
