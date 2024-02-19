@@ -103,6 +103,13 @@ class SttProvider(Enum):
     WINGMAN_PRO = "wingman_pro"
 
 
+class VoiceActivationSttProvider(Enum):
+    OPENAI = "openai"
+    AZURE = "azure"
+    WHISPERCPP = "whispercpp"
+    WINGMAN_PRO = "wingman_pro"
+
+
 class ConversationProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
@@ -194,6 +201,10 @@ class SttProviderEnumModel(BaseEnumModel):
     stt_provider: SttProvider
 
 
+class VoiceActivationSttProviderEnumModel(BaseEnumModel):
+    stt_provider: VoiceActivationSttProvider
+
+
 class ConversationProviderEnumModel(BaseEnumModel):
     conversation_provider: ConversationProvider
 
@@ -233,6 +244,7 @@ ENUM_TYPES = {
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
     "SttProvider": SttProviderEnumModel,
+    "VoiceActivationSttProvider": VoiceActivationSttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
     "SummarizeProvider": SummarizeProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,

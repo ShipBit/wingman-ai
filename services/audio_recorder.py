@@ -4,6 +4,7 @@ import numpy
 import sounddevice
 import soundfile
 from api.enums import CommandTag, LogType
+from api.interface import VoiceActivationSettings
 from services.printr import Printr
 from services.file import get_writable_dir
 from services.pub_sub import PubSub
@@ -11,24 +12,21 @@ from services.pub_sub import PubSub
 
 RECORDING_PATH = "audio_output"
 RECORDING_FILE: str = "recording.wav"
+CONTINUOUS_RECORDING_FILE: str = "continuous_recording.wav"
 
 
 class AudioRecorder:
     def __init__(
         self,
+        settings: VoiceActivationSettings,
         samplerate: int = 16000,
         channels: int = 1,
-        threshold: float = 0.01,
-        min_speech_length: int = 1,
-        silence_threshold: int = 1,
     ):
         self.printr = Printr()
+        self.settings = settings
         self.file_path = path.join(get_writable_dir(RECORDING_PATH), RECORDING_FILE)
         self.samplerate = samplerate
         self.channels = channels
-        self.threshold = threshold
-        self.min_speech_length = min_speech_length
-        self.silence_threshold = silence_threshold
         self.is_recording = False
         self.recording = None
         self.continuous_listening = False
@@ -65,7 +63,7 @@ class AudioRecorder:
         # Handling continuous listening
         if self.continuous_listening:
             rms = numpy.sqrt(numpy.mean(indata**2))
-            if rms > self.threshold:
+            if rms > self.settings.threshold:
                 if self.start_time is None:
                     self.start_time = datetime.now()
                     self.continuous_recording = indata.copy()
@@ -77,11 +75,11 @@ class AudioRecorder:
             elif (
                 self.start_time is not None
                 and (datetime.now() - self.last_sound_time).total_seconds()
-                > self.silence_threshold
+                > self.settings.silence_threshold
             ):
                 if (
                     datetime.now() - self.start_time
-                ).total_seconds() >= self.min_speech_length:
+                ).total_seconds() >= self.settings.min_speech_length:
                     self.save_continuous_recording()
                 self.start_time = None
                 self.continuous_recording = None
@@ -138,9 +136,8 @@ class AudioRecorder:
             return None
 
     def save_continuous_recording(self):
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         file_path = path.join(
-            get_writable_dir(RECORDING_PATH), f"continuous_recording_{timestamp}.wav"
+            get_writable_dir(RECORDING_PATH), CONTINUOUS_RECORDING_FILE
         )
         soundfile.write(file_path, self.continuous_recording, self.samplerate)
         self.recording_events.publish("speech_recorded", file_path)
@@ -155,7 +152,7 @@ class AudioRecorder:
         if self.start_time is not None:
             if (
                 datetime.now() - self.start_time
-            ).total_seconds() >= self.min_speech_length:
+            ).total_seconds() >= self.settings.min_speech_length:
                 self.save_continuous_recording()
         self.recstream.stop()
         self.start_time = None

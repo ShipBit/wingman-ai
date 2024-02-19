@@ -17,6 +17,7 @@ from api.enums import (
     SttProvider,
     SummarizeProvider,
     TtsProvider,
+    VoiceActivationSttProvider,
     WingmanInitializationErrorType,
     WingmanProRegion,
     WingmanProSttProvider,
@@ -295,8 +296,14 @@ class VoiceActivationSettings(BaseModel):
 
     mute_toggle_key_codes: Optional[list[int]] = None
 
-    languages: Optional[list[str]] = None
-    """The languages to use for voice activation. You can add as many as you want. The Wingman will listen for all of them."""
+    stt_provider: VoiceActivationSttProvider
+
+    threshold: float
+    min_speech_length: float
+    silence_threshold: float
+
+    azure: AzureSttConfig
+    whispercpp: WhispercppSttConfig
 
 
 class FeaturesConfig(BaseModel):

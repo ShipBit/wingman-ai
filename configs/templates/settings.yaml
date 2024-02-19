@@ -2,9 +2,31 @@ audio: {}
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
-  languages:
-    - en-US
-    - de-DE
+
+  stt_provider: wingman_pro # or azure, whispercpp, openai
+
+  # local detection settings
+  threshold: 0.01
+  min_speech_length: 1
+  silence_threshold: 1
+
+  azure:
+    region: westeurope
+    languages:
+      - en-US
+      - de-DE
+
+  whispercpp:
+    base_url: http://127.0.0.1:8080
+    autostart: false
+    autostart_settings:
+      whispercpp_exe_path: C:\Whispercpp\server.exe
+      whispercpp_model_path: C:\Whispercpp\models\ggml-base.bin
+    temperature: 0.0
+    language: en
+
+# todo: OpenAI base_url and organization
+
 wingman_pro:
   base_url: http://127.0.0.1:8001
   region: europe

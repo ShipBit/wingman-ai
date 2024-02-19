@@ -7,7 +7,15 @@ import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.commands import VoiceActivationMutedCommand
-from api.enums import AzureRegion, CommandTag, LogType, OpenAiTtsVoice, ToastType, WingmanProRegion
+from api.enums import (
+    AzureRegion,
+    CommandTag,
+    LogType,
+    OpenAiTtsVoice,
+    ToastType,
+    VoiceActivationSttProvider,
+    WingmanProRegion,
+)
 from api.interface import (
     AudioDevice,
     AudioSettings,
@@ -22,6 +30,7 @@ from api.interface import (
     SettingsConfig,
     SoundConfig,
     VoiceInfo,
+    WhispercppSttConfig,
     WingmanConfig,
     WingmanConfigFileInfo,
     WingmanInitializationError,
@@ -30,6 +39,7 @@ from api.interface import (
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
+from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
 from wingmen.wingman import Wingman
@@ -264,10 +274,7 @@ class WingmanCore(WebSocketUser):
         )
 
         self.config_manager = config_manager
-        self.audio_recorder = AudioRecorder()
-        self.audio_recorder.recording_events.subscribe(
-            "speech_recorded", self.on_speech_recorded
-        )
+        self.secret_keeper: SecretKeeper = SecretKeeper()
 
         self.audio_player = AudioPlayer()
         self.event_queue = asyncio.Queue()
@@ -286,7 +293,7 @@ class WingmanCore(WebSocketUser):
         self.is_started = False
         self.startup_errors: list[WingmanInitializationError] = []
 
-        self.speech_recognizer: speechsdk.SpeechRecognizer = None
+        self.azure_speech_recognizer: speechsdk.SpeechRecognizer = None
         self.is_listening = False
         self.was_listening_before_ptt = False
         self.was_listening_before_playback = False
@@ -295,6 +302,11 @@ class WingmanCore(WebSocketUser):
 
         # restore settings
         self.settings = self.get_settings()
+        self.audio_recorder = AudioRecorder(settings=self.settings.voice_activation)
+        self.audio_recorder.recording_events.subscribe(
+            "speech_recorded", self.on_audio_recorder_speech_recorded
+        )
+
         if self.settings.audio:
             input_device = self.settings.audio.input
             output_device = self.settings.audio.output
@@ -320,13 +332,12 @@ class WingmanCore(WebSocketUser):
         return is_pressed
 
     def on_press(self, key=None, button=None):
-        if self.speech_recognizer:
-            is_mute_hotkey_pressed = self.is_hotkey_pressed(
-                self.settings.voice_activation.mute_toggle_key_codes
-                or self.settings.voice_activation.mute_toggle_key
-            )
-            if is_mute_hotkey_pressed:
-                self.toggle_voice_recognition()
+        is_mute_hotkey_pressed = self.is_hotkey_pressed(
+            self.settings.voice_activation.mute_toggle_key_codes
+            or self.settings.voice_activation.mute_toggle_key
+        )
+        if is_mute_hotkey_pressed:
+            self.toggle_voice_recognition()
 
         if self.tower and self.active_recording["key"] == "":
             wingman = None
@@ -343,7 +354,7 @@ class WingmanCore(WebSocketUser):
                     self.active_recording = dict(key=button, wingman=wingman)
 
                 self.was_listening_before_ptt = self.is_listening
-                if self.speech_recognizer and self.is_listening:
+                if self.is_listening:
                     self.start_voice_recognition(mute=True)
 
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
@@ -360,11 +371,7 @@ class WingmanCore(WebSocketUser):
             )
             self.active_recording = {"key": "", "wingman": None}
 
-            if (
-                self.speech_recognizer
-                and not self.is_listening
-                and self.was_listening_before_ptt
-            ):
+            if not self.is_listening and self.was_listening_before_ptt:
                 self.start_voice_recognition()
 
             def run_async_process():
@@ -402,7 +409,8 @@ class WingmanCore(WebSocketUser):
         elif event.event_type == "up":
             self.on_release(button=event.button)
 
-    def on_speech_recorded(self, recording_file: str):
+    # called when AudioRecorder regonized voice
+    def on_audio_recorder_speech_recorded(self, recording_file: str):
         def run_async_process():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -411,24 +419,43 @@ class WingmanCore(WebSocketUser):
             finally:
                 loop.close()
 
-        wingman_pro = WingmanPro(
-            wingman_name="system", settings=self.settings.wingman_pro
-        )
-        transcription = wingman_pro.transcribe_azure_speech(
-            recording_file,
-            config=AzureSttConfig(
-                languages=["en-US", "de-DE"], region=AzureRegion.WESTEUROPE
-            ),
-        )
-        text = transcription.get("_text")
+        provider = self.settings.voice_activation.stt_provider
+        text = None
+
+        if provider == VoiceActivationSttProvider.WINGMAN_PRO:
+            wingman_pro = WingmanPro(
+                wingman_name="system", settings=self.settings.wingman_pro
+            )
+            transcription = wingman_pro.transcribe_azure_speech(
+                filename=recording_file,
+                config=AzureSttConfig(
+                    languages=self.settings.voice_activation.languages,
+                    # unused as Wingman Pro sets this at API level - just for Pydantic:
+                    region=AzureRegion.WESTEUROPE,
+                ),
+            )
+            text = transcription.get("_text")
+        elif provider == VoiceActivationSttProvider.WHISPERCPP:
+            whisperccp = Whispercpp(wingman_name="system")
+            transcription = whisperccp.transcribe(
+                filename=recording_file,
+                config=self.settings.voice_activation.whispercpp,
+            )
+            text = transcription.text
+        elif provider == VoiceActivationSttProvider.OPENAI:
+            # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
+            openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
+            transcription = openai.transcribe(filename=recording_file)
+            text = transcription.text
 
         if text:
             wingman = self.tower.get_wingman_from_text(text)
-            if text and wingman:
+            if wingman:
                 play_thread = threading.Thread(target=run_async_process)
                 play_thread.start()
 
-    def on_voice_recognition(self, voice_event):
+    # called when Azure Speech Recognizer recognized voice
+    def on_azure_voice_recognition(self, voice_event):
         def run_async_process():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
@@ -443,34 +470,31 @@ class WingmanCore(WebSocketUser):
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
 
-    async def __init_voice_activation(self):
-        if self.speech_recognizer or not self.current_config:
+    async def __init_azure_voice_activation(self):
+        if self.azure_speech_recognizer or not self.current_config:
             return
 
-        secret_keeper = SecretKeeper()
-        key = await secret_keeper.retrieve(
+        key = await self.secret_keeper.retrieve(
             requester="Voice Activation",
             key="azure_tts",
             prompt_if_missing=True,
         )
 
         speech_config = speechsdk.SpeechConfig(
-            region=self.current_config.azure.tts.region.value, subscription=key
+            region=self.settings.voice_activation.azure.region.value, subscription=key
         )
 
-        voice_activation_settings = self.config_manager.settings_config.voice_activation
         auto_detect_source_language_config = (
             speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-                languages=voice_activation_settings.languages
+                languages=self.settings.voice_activation.azure.languages
             )
         )
 
-        # speech_config.set_property(speechsdk.PropertyId.Speech_LogFilename, "LogfilePathAndName")
-        self.speech_recognizer = speechsdk.SpeechRecognizer(
+        self.azure_speech_recognizer = speechsdk.SpeechRecognizer(
             speech_config=speech_config,
             auto_detect_source_language_config=auto_detect_source_language_config,
         )
-        self.speech_recognizer.recognized.connect(self.on_voice_recognition)
+        self.azure_speech_recognizer.recognized.connect(self.on_azure_voice_recognition)
 
     async def on_playback_started(self, wingman_name: str):
         await printr.print_async(
@@ -480,7 +504,7 @@ class WingmanCore(WebSocketUser):
         )
 
         self.was_listening_before_playback = self.is_listening
-        if self.speech_recognizer and self.is_listening:
+        if self.is_listening:
             self.start_voice_recognition(mute=True)
 
     async def on_playback_finished(self, wingman_name: str):
@@ -490,21 +514,13 @@ class WingmanCore(WebSocketUser):
             command_tag=CommandTag.PLAYBACK_STOPPED,
         )
 
-        if (
-            self.speech_recognizer
-            and not self.is_listening
-            and self.was_listening_before_playback
-        ):
+        if not self.is_listening and self.was_listening_before_playback:
             self.start_voice_recognition()
 
     async def process_events(self):
         while True:
             callback, wingman_name = await self.event_queue.get()
             await callback(wingman_name)
-
-    async def run(self):
-        while True:
-            await self.process_events()
 
     # GET /configs
     def get_config_dirs(self):
@@ -716,12 +732,19 @@ class WingmanCore(WebSocketUser):
     # POST /settings/voice-activation
     async def set_voice_activation(self, is_enabled: bool):
         if is_enabled:
-            # if not self.speech_recognizer:
-            #     await self.__init_voice_activation()
+            if (
+                self.settings.voice_activation.stt_provider
+                == VoiceActivationSttProvider.AZURE
+                and not self.azure_speech_recognizer
+            ):
+                await self.__init_azure_voice_activation()
 
             self.start_voice_recognition(mute=not is_enabled)
-        # else:
-        #     self.speech_recognizer = None
+        else:
+            self.azure_speech_recognizer = None
+            self.audio_recorder.recording_events.unsubscribe(
+                "speech_recorded", self.on_audio_recorder_speech_recorded
+            )
 
         self.config_manager.settings_config.voice_activation.enabled = is_enabled
 
@@ -747,10 +770,30 @@ class WingmanCore(WebSocketUser):
             )
 
     # POST /settings/wingman-pro
-    async def set_wingman_pro_settings(self, base_url: str, region: str):
+    async def set_wingman_pro_settings(
+        self,
+        base_url: str,
+        region: WingmanProRegion,
+        stt_provider: VoiceActivationSttProvider,
+        threshold: float,
+        min_speech_length: float,
+        silence_threshold: float,
+        azure: AzureSttConfig,
+        whispercpp: WhispercppSttConfig,
+    ):
         self.config_manager.settings_config.wingman_pro.base_url = base_url
-        region = WingmanProRegion(region)
         self.config_manager.settings_config.wingman_pro.region = region
+
+        self.config_manager.settings_config.voice_activation.stt_provider = stt_provider
+        self.config_manager.settings_config.voice_activation.threshold = threshold
+        self.config_manager.settings_config.voice_activation.min_speech_length = (
+            min_speech_length
+        )
+        self.config_manager.settings_config.voice_activation.silence_threshold = (
+            silence_threshold
+        )
+        self.config_manager.settings_config.voice_activation.azure = azure
+        self.config_manager.settings_config.voice_activation.whispercpp = whispercpp
 
         if self.config_manager.save_settings_config():
             printr.print(
@@ -763,11 +806,21 @@ class WingmanCore(WebSocketUser):
     def start_voice_recognition(self, mute: Optional[bool] = False):
         self.is_listening = not mute
         if mute:
-            # self.speech_recognizer.stop_continuous_recognition()
-            self.audio_recorder.stop_continuous_listening()
+            if (
+                self.settings.voice_activation.stt_provider
+                == VoiceActivationSttProvider.AZURE
+            ):
+                self.speech_recognizer.stop_continuous_recognition()
+            else:
+                self.audio_recorder.stop_continuous_listening()
         else:
-            self.audio_recorder.start_continuous_listening()
-            # self.speech_recognizer.start_continuous_recognition()
+            if (
+                self.settings.voice_activation.stt_provider
+                == VoiceActivationSttProvider.AZURE
+            ):
+                self.speech_recognizer.start_continuous_recognition()
+            else:
+                self.audio_recorder.start_continuous_listening()
 
         command = VoiceActivationMutedCommand(muted=mute)
         self.ensure_async(self._connection_manager.broadcast(command))
@@ -795,24 +848,6 @@ class WingmanCore(WebSocketUser):
         result = [convert(voice) for voice in voices]
 
         return result
-
-    def __convert_azure_voice(self, voice):
-        # retrieved from Wingman Pro as serialized dict
-        if isinstance(voice, dict):
-            return VoiceInfo(
-                id=voice.get("short_name"),
-                name=voice.get("local_name"),
-                gender=voice.get("gender"),
-                locale=voice.get("locale"),
-            )
-        # coming directly from Azure API as a voice object
-        else:
-            return VoiceInfo(
-                id=voice.short_name,
-                name=voice.local_name,
-                gender=voice.gender.name,
-                locale=voice.locale,
-            )
 
     # GET /voices/azure
     def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
@@ -922,3 +957,21 @@ class WingmanCore(WebSocketUser):
     # POST /stop-playback
     async def stop_playback(self):
         await self.audio_player.stop_playback()
+
+    def __convert_azure_voice(self, voice):
+        # retrieved from Wingman Pro as serialized dict
+        if isinstance(voice, dict):
+            return VoiceInfo(
+                id=voice.get("short_name"),
+                name=voice.get("local_name"),
+                gender=voice.get("gender"),
+                locale=voice.get("locale"),
+            )
+        # coming directly from Azure API as a voice object
+        else:
+            return VoiceInfo(
+                id=voice.short_name,
+                name=voice.local_name,
+                gender=voice.gender.name,
+                locale=voice.locale,
+            )
