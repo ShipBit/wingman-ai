@@ -113,10 +113,10 @@ class CommandHandler:
 
         def _on_key_event(event):
             if event.event_type == "down" and event.name == "esc":
-                WebSocketUser.ensure_async(self.handle_stop_recording(None, None))
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type == KeyboardRecordingType.SINGLE))
             self.recorded_keys.append(event)
             if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
-                WebSocketUser.ensure_async(self.handle_stop_recording(None, None))
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, True))
 
         self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
 
@@ -133,7 +133,7 @@ class CommandHandler:
         )
 
     async def handle_stop_recording(
-        self, command: StopRecordingCommand, websocket: WebSocket
+        self, command: StopRecordingCommand, websocket: WebSocket, single: bool = True
     ):
         if self.hook_callback:
             keyboard.unhook(self.hook_callback)
@@ -141,7 +141,7 @@ class CommandHandler:
         if self.timeout_task:
             self.timeout_task.cancel()
 
-        actions = self._get_actions_from_recorded_keys(recorded_keys)
+        actions = self._get_actions_from_recorded_keys(recorded_keys) if single else self._get_actions_from_recorded_keys_press_release(recorded_keys)
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
 
@@ -159,7 +159,7 @@ class CommandHandler:
         await asyncio.sleep(timeout)
         await self.handle_stop_recording(None, None)
 
-    def _get_actions_from_recorded_keys(self, recorded):
+    def _get_actions_from_recorded_keys_press_release(self, recorded):
         actions: list[CommandActionConfig] = []
 
         last_action_time = None
@@ -209,7 +209,7 @@ class CommandHandler:
 
         return actions
 
-    def _get_actions_from_recorded_keys_old(self, recorded):
+    def _get_actions_from_recorded_keys(self, recorded):
         actions: list[CommandActionConfig] = []
 
         key_down_time = {}  # Track initial down times for keys

@@ -404,8 +404,8 @@ class Wingman:
 
         for action in command.actions:
             if action.keyboard:
-                # legacy key presses
-                if ( not action.keyboard.press and not action.keyboard.release) or ( action.keyboard.press is True and action.keyboard.release is True ):
+                # grouped key presses
+                if action.keyboard.press == action.keyboard.release:
                     if action.keyboard.hold:
                         keyboard.press(
                             action.keyboard.hotkey_codes or action.keyboard.hotkey
@@ -418,7 +418,7 @@ class Wingman:
                         keyboard.send(
                             action.keyboard.hotkey_codes or action.keyboard.hotkey
                         )
-                # accurate key presses
+                # timelined key presses
                 else:
                     if action.keyboard.press:
                         keyboard.press(
