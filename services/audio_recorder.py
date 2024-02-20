@@ -53,12 +53,10 @@ class AudioRecorder:
     def __handle_input_stream(self, indata, _frames, _time, _status):
         # Handling push to talk
         if self.is_recording:
-            if self.continuous_recording is None:
-                self.continuous_recording = indata.copy()
+            if self.recording is None:
+                self.recording = indata.copy()
             else:
-                self.continuous_recording = numpy.concatenate(
-                    (self.continuous_recording, indata)
-                )
+                self.recording = numpy.concatenate((self.recording, indata))
 
         # Handling continuous listening
         if self.continuous_listening:

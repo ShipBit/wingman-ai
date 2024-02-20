@@ -354,7 +354,7 @@ class WingmanCore(WebSocketUser):
                     self.active_recording = dict(key=button, wingman=wingman)
 
                 self.was_listening_before_ptt = self.is_listening
-                if self.is_listening:
+                if self.settings.voice_activation.enabled and self.is_listening:
                     self.start_voice_recognition(mute=True)
 
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
@@ -371,7 +371,11 @@ class WingmanCore(WebSocketUser):
             )
             self.active_recording = {"key": "", "wingman": None}
 
-            if not self.is_listening and self.was_listening_before_ptt:
+            if (
+                self.settings.voice_activation.enabled
+                and not self.is_listening
+                and self.was_listening_before_ptt
+            ):
                 self.start_voice_recognition()
 
             def run_async_process():
@@ -508,7 +512,7 @@ class WingmanCore(WebSocketUser):
         )
 
         self.was_listening_before_playback = self.is_listening
-        if self.is_listening:
+        if self.settings.voice_activation.enabled and self.is_listening:
             self.start_voice_recognition(mute=True)
 
     async def on_playback_finished(self, wingman_name: str):
@@ -518,7 +522,11 @@ class WingmanCore(WebSocketUser):
             command_tag=CommandTag.PLAYBACK_STOPPED,
         )
 
-        if not self.is_listening and self.was_listening_before_playback:
+        if (
+            self.settings.voice_activation.enabled
+            and not self.is_listening
+            and self.was_listening_before_playback
+        ):
             self.start_voice_recognition()
 
     async def process_events(self):
