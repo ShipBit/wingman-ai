@@ -2,7 +2,7 @@ import asyncio
 import io
 from os import path
 from threading import Thread
-from typing import Callable, Optional
+from typing import Callable
 import numpy as np
 import soundfile as sf
 import sounddevice as sd
@@ -13,19 +13,23 @@ from services.sound_effects import get_sound_effects
 
 
 class AudioPlayer:
-    on_playback_started: Optional[Callable[[str], None]] = None
-    on_playback_finished: Optional[Callable[[str], None]] = None
-
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        event_queue: asyncio.Queue,
+        on_playback_started: Callable[[str], None],
+        on_playback_finished: Callable[[str], None],
+    ) -> None:
         self.is_playing = False
-        self.event_queue = None
+        self.event_queue = event_queue
         self.event_loop = None
         self.stream = None
         self.raw_stream = None
         self.wingman_name = ""
         self.playback_events = PubSub()
+        self.on_playback_started = on_playback_started
+        self.on_playback_finished = on_playback_finished
 
-    def set_event_loop(self, loop):
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self.event_loop = loop
 
     def start_playback(self, audio, sample_rate, channels, finished_callback):

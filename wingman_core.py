@@ -276,11 +276,12 @@ class WingmanCore(WebSocketUser):
         self.config_manager = config_manager
         self.secret_keeper: SecretKeeper = SecretKeeper()
 
-        self.audio_player = AudioPlayer()
         self.event_queue = asyncio.Queue()
-        self.audio_player.event_queue = self.event_queue
-        self.audio_player.on_playback_started = self.on_playback_started
-        self.audio_player.on_playback_finished = self.on_playback_finished
+        self.audio_player = AudioPlayer(
+            event_queue=self.event_queue,
+            on_playback_started=self.on_playback_started,
+            on_playback_finished=self.on_playback_finished,
+        )
 
         self.tower: Tower = None
 
@@ -302,9 +303,8 @@ class WingmanCore(WebSocketUser):
 
         # restore settings
         self.settings = self.get_settings()
-        self.audio_recorder = AudioRecorder(settings=self.settings.voice_activation)
-        self.audio_recorder.recording_events.subscribe(
-            "speech_recorded", self.on_audio_recorder_speech_recorded
+        self.audio_recorder = AudioRecorder(
+            on_speech_recorded=self.on_audio_recorder_speech_recorded
         )
 
         if self.settings.audio:
@@ -751,12 +751,10 @@ class WingmanCore(WebSocketUser):
             ):
                 await self.__init_azure_voice_activation()
 
+            self.audio_recorder.adjust_for_ambient_noise()
             self.start_voice_recognition(mute=not is_enabled)
         else:
             self.azure_speech_recognizer = None
-            self.audio_recorder.recording_events.unsubscribe(
-                "speech_recorded", self.on_audio_recorder_speech_recorded
-            )
 
         self.config_manager.settings_config.voice_activation.enabled = is_enabled
 

@@ -1,13 +1,13 @@
-from datetime import datetime
 from os import path
+from threading import Lock
+from typing import Callable
 import numpy
 import sounddevice
 import soundfile
+import speech_recognition as sr
 from api.enums import CommandTag, LogType
-from api.interface import VoiceActivationSettings
 from services.printr import Printr
 from services.file import get_writable_dir
-from services.pub_sub import PubSub
 
 
 RECORDING_PATH = "audio_output"
@@ -18,23 +18,24 @@ CONTINUOUS_RECORDING_FILE: str = "continuous_recording.wav"
 class AudioRecorder:
     def __init__(
         self,
-        settings: VoiceActivationSettings,
+        on_speech_recorded: Callable[[str], None],
         samplerate: int = 16000,
         channels: int = 1,
     ):
         self.printr = Printr()
-        self.settings = settings
+        self.on_speech_recorded = on_speech_recorded
         self.file_path = path.join(get_writable_dir(RECORDING_PATH), RECORDING_FILE)
         self.samplerate = samplerate
         self.channels = channels
         self.is_recording = False
-        self.recording = None
-        self.continuous_listening = False
-        self.continuous_recording = None
+        self.recording_data = None
         self.recstream = None
-        self.recording_events = PubSub()
-        self.start_time = None
-        self.last_sound_time = None
+
+        self.lock = Lock()
+        self.is_listening_continuously = False
+        self.microphone = sr.Microphone(sample_rate=samplerate)
+        self.recognizer = sr.Recognizer()
+        self.stop_function = None
 
         # default devices are fixed once this is called
         # so this methods needs to be called every time a new device is configured
@@ -51,36 +52,13 @@ class AudioRecorder:
         )
 
     def __handle_input_stream(self, indata, _frames, _time, _status):
-        # Handling push to talk
         if self.is_recording:
-            if self.recording is None:
-                self.recording = indata.copy()
+            if self.recording_data is None:
+                self.recording_data = indata.copy()
             else:
-                self.recording = numpy.concatenate((self.recording, indata))
+                self.recording_data = numpy.concatenate((self.recording_data, indata))
 
-        # Handling continuous listening
-        if self.continuous_listening:
-            rms = numpy.sqrt(numpy.mean(indata**2))
-            if rms > self.settings.threshold:
-                if self.start_time is None:
-                    self.start_time = datetime.now()
-                    self.continuous_recording = indata.copy()
-                else:
-                    self.continuous_recording = numpy.concatenate(
-                        (self.continuous_recording, indata)
-                    )
-                self.last_sound_time = datetime.now()
-            elif (
-                self.start_time is not None
-                and (datetime.now() - self.last_sound_time).total_seconds()
-                > self.settings.silence_threshold
-            ):
-                if (
-                    datetime.now() - self.start_time
-                ).total_seconds() >= self.settings.min_speech_length:
-                    self.save_continuous_recording()
-                self.start_time = None
-                self.continuous_recording = None
+    # Push to talk:
 
     def start_recording(self, wingman_name: str):
         if self.is_recording:
@@ -103,7 +81,7 @@ class AudioRecorder:
             command_tag=CommandTag.RECORDING_STOPPED,
         )
 
-        if self.recording is None:
+        if self.recording_data is None:
             self.printr.print(
                 f"Ignored empty recording ({wingman_name})",
                 color=LogType.WARNING,
@@ -111,7 +89,7 @@ class AudioRecorder:
                 command_tag=CommandTag.IGNORED_RECORDING,
             )
             return None
-        if (len(self.recording) / self.samplerate) < 0.15:
+        if (len(self.recording_data) / self.samplerate) < 0.15:
             self.printr.print(
                 f"Recording was too short to be handled by {wingman_name}",
                 color=LogType.WARNING,
@@ -121,8 +99,8 @@ class AudioRecorder:
             return None
 
         try:
-            soundfile.write(self.file_path, self.recording, self.samplerate)
-            self.recording = None
+            soundfile.write(self.file_path, self.recording_data, self.samplerate)
+            self.recording_data = None
             return self.file_path
         except IndexError:
             self.printr.print(
@@ -133,26 +111,49 @@ class AudioRecorder:
             )
             return None
 
-    def save_continuous_recording(self):
+    # Continuous listening:
+
+    def __handle_continuous_listening(self, _recognizer, audio):
         file_path = path.join(
             get_writable_dir(RECORDING_PATH), CONTINUOUS_RECORDING_FILE
         )
-        soundfile.write(file_path, self.continuous_recording, self.samplerate)
-        self.recording_events.publish("speech_recorded", file_path)
-        self.printr.print("detected mic input", server_only=True)
+        with open(file_path, "wb") as audio_file:
+            audio_file.write(audio.get_wav_data())
+
+        if callable(self.on_speech_recorded):
+            self.on_speech_recorded(file_path)
+
+    def adjust_for_ambient_noise(self):
+        with self.lock:
+            try:
+                with self.microphone as mic:
+                    self.recognizer.adjust_for_ambient_noise(mic)
+            except Exception as e:
+                self.printr.print(
+                    f"Error adjusting for ambient noise: {e}",
+                    server_only=True,
+                    color=LogType.ERROR,
+                )
 
     def start_continuous_listening(self):
-        self.continuous_listening = True
-        self.recstream.start()
+        with self.lock:
+            if not self.is_listening_continuously:
+                self.is_listening_continuously = True
+                try:
+                    self.stop_function = self.recognizer.listen_in_background(
+                        self.microphone, self.__handle_continuous_listening
+                    )
+                except AssertionError as e:
+                    self.printr.print(
+                        f"Attempted to start continuous listening while another session is active: {e}",
+                        server_only=True,
+                        color=LogType.ERROR,
+                    )
+                    self.is_listening_continuously = False
 
     def stop_continuous_listening(self):
-        self.continuous_listening = False
-        # Final check to save any recordings that meet criteria upon stopping
-        if self.start_time is not None:
-            if (
-                datetime.now() - self.start_time
-            ).total_seconds() >= self.settings.min_speech_length:
-                self.save_continuous_recording()
-        self.recstream.stop()
-        self.start_time = None
-        self.continuous_recording = None
+        with self.lock:
+            if self.is_listening_continuously:
+                self.is_listening_continuously = False
+                if self.stop_function:
+                    self.stop_function(wait_for_stop=False)
