@@ -429,7 +429,7 @@ class WingmanCore(WebSocketUser):
             transcription = wingman_pro.transcribe_azure_speech(
                 filename=recording_file,
                 config=AzureSttConfig(
-                    languages=self.settings.voice_activation.languages,
+                    languages=self.settings.voice_activation.azure.languages,
                     # unused as Wingman Pro sets this at API level - just for Pydantic:
                     region=AzureRegion.WESTEUROPE,
                 ),
@@ -453,6 +453,10 @@ class WingmanCore(WebSocketUser):
             if wingman:
                 play_thread = threading.Thread(target=run_async_process)
                 play_thread.start()
+        else:
+            printr.print(
+                "ignored empty transcription - probably just noise.", server_only=True
+            )
 
     # called when Azure Speech Recognizer recognized voice
     def on_azure_voice_recognition(self, voice_event):
@@ -810,7 +814,7 @@ class WingmanCore(WebSocketUser):
                 self.settings.voice_activation.stt_provider
                 == VoiceActivationSttProvider.AZURE
             ):
-                self.speech_recognizer.stop_continuous_recognition()
+                self.azure_speech_recognizer.stop_continuous_recognition()
             else:
                 self.audio_recorder.stop_continuous_listening()
         else:
@@ -818,7 +822,7 @@ class WingmanCore(WebSocketUser):
                 self.settings.voice_activation.stt_provider
                 == VoiceActivationSttProvider.AZURE
             ):
-                self.speech_recognizer.start_continuous_recognition()
+                self.azure_speech_recognizer.start_continuous_recognition()
             else:
                 self.audio_recorder.start_continuous_listening()
 
@@ -828,7 +832,7 @@ class WingmanCore(WebSocketUser):
         printr.print(
             f"Continous voice recognition {'stopped (muted)' if mute else 'started'}.",
             toast=ToastType.NORMAL,
-            color=LogType.POSITIVE,
+            color=LogType.INFO,
             server_only=True,
         )
 

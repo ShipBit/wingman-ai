@@ -141,6 +141,7 @@ class AudioRecorder:
         )
         soundfile.write(file_path, self.continuous_recording, self.samplerate)
         self.recording_events.publish("speech_recorded", file_path)
+        self.printr.print("detected mic input", server_only=True)
 
     def start_continuous_listening(self):
         self.continuous_listening = True
