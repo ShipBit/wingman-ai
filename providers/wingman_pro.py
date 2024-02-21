@@ -22,6 +22,13 @@ class WingmanPro:
         self.secret_keeper: SecretKeeper = SecretKeeper()
         self.timeout = timeout
 
+    def send_unauthorized_error(self):
+        self.printr.print(
+                text="Unauthorized",
+                command_tag=CommandTag.UNAUTHORIZED,
+                color=LogType.ERROR,
+                )
+
     def transcribe_whisper(self, filename: str):
         with open(filename, "rb") as audio_input:
             files = {"audio_file": (filename, audio_input)}
@@ -31,7 +38,11 @@ class WingmanPro:
                 files=files,
                 timeout=self.timeout,
             )
-            response.raise_for_status()
+            if response.status_code == 401:
+                self.send_unauthorized_error()
+                return None
+            else:
+                response.raise_for_status()
             json = response.json()
             transcription = openai.types.audio.Transcription.model_validate(json)
             return transcription
@@ -50,11 +61,7 @@ class WingmanPro:
                 timeout=self.timeout,
             )
         if response.status_code == 401:
-            self.printr.print(
-                text="Unauthorized",
-                command_tag=CommandTag.UNAUTHORIZED,
-                color=LogType.ERROR,
-                )
+            self.send_unauthorized_error()
             return None
         else:
             response.raise_for_status()
@@ -89,7 +96,11 @@ class WingmanPro:
             json=data,
             timeout=self.timeout,
         )
-        response.raise_for_status()
+        if response.status_code == 401:
+            self.send_unauthorized_error()
+            return None
+        else:
+            response.raise_for_status()
 
         json_response = response.json()
         completion = openai.types.chat.ChatCompletion.model_validate(json_response)
@@ -119,7 +130,11 @@ class WingmanPro:
                     timeout=self.timeout,
                     stream=True,
                 ) as response:
-                    response.raise_for_status()
+                    if response.status_code == 401:
+                        self.send_unauthorized_error()
+                        return None
+                    else:
+                        response.raise_for_status()
                     for chunk in response.iter_content(chunk_size=2048):
                         if not chunk:
                             break
@@ -170,6 +185,11 @@ class WingmanPro:
                 json=data,
                 timeout=self.timeout,
             )
+            if response.status_code == 401:
+                self.send_unauthorized_error()
+                return
+            else:
+                response.raise_for_status()
 
             audio_data = response.content
             await audio_player.play_with_effects(
@@ -201,6 +221,11 @@ class WingmanPro:
             timeout=self.timeout,
         )
         if response is not None:
+            if response.status_code == 401:
+                self.send_unauthorized_error()
+                return
+            else:
+                response.raise_for_status()
             await audio_player.play_with_effects(
                 input_data=response.content,
                 config=sound_config,
@@ -214,7 +239,11 @@ class WingmanPro:
             timeout=self.timeout,
             headers=self._get_headers(),
         )
-        response.raise_for_status()
+        if response.status_code == 401:
+            self.send_unauthorized_error()
+            return None
+        else:
+            response.raise_for_status()
         voices_dict = response.json()
         voice_infos = [
             {
