@@ -442,19 +442,25 @@ class WingmanCore(WebSocketUser):
             text = transcription.get("_text")
         elif provider == VoiceActivationSttProvider.WHISPERCPP:
 
-            def filter_noise_transcriptions(text):
-                # Patterns to match: (anything), [anything], *anything*
+            def filter_and_clean_text(text):
+                # Remove the ambient noise descriptions
                 noise_pattern = r"(\(.*?\))|(\[.*?\])|(\*.*?\*)"
-                filtered_text = re.sub(noise_pattern, "", text)
-                filtered_text = filtered_text.strip()
-                return filtered_text
+                text = re.sub(noise_pattern, "", text)
+                # Remove extra spaces, newlines, and commas
+                # This pattern matches 1 or more occurrences of spaces, newlines, and commas
+                cleanup_pattern = r"[\s,]+"
+                # Substitute the found patterns with a single space to normalize the text
+                text = re.sub(cleanup_pattern, " ", text)
+                # Strip leading and trailing whitespaces that might be left
+                text = text.strip()
+                return text
 
             whisperccp = Whispercpp(wingman_name="system")
             transcription = whisperccp.transcribe(
                 filename=recording_file,
                 config=self.settings.voice_activation.whispercpp,
             )
-            text = filter_noise_transcriptions(transcription.text)
+            text = filter_and_clean_text(transcription.text)
         elif provider == VoiceActivationSttProvider.OPENAI:
             # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
             openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
