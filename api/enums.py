@@ -38,6 +38,7 @@ class CommandTag(Enum):
     IGNORED_RECORDING = "ignored_recording"
     PLAYBACK_STARTED = "playback_started"
     PLAYBACK_STOPPED = "playback_stopped"
+    UNAUTHORIZED = "unauthorized"
 
 
 class AzureApiVersion(Enum):

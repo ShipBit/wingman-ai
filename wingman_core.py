@@ -439,7 +439,8 @@ class WingmanCore(WebSocketUser):
                     region=AzureRegion.WESTEUROPE,
                 ),
             )
-            text = transcription.get("_text")
+            if transcription:
+                text = transcription.get("_text")
         elif provider == VoiceActivationSttProvider.WHISPERCPP:
 
             def filter_and_clean_text(text):

@@ -1,6 +1,6 @@
 import openai
 import requests
-from api.enums import OpenAiModel
+from api.enums import CommandTag, LogType, OpenAiModel
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
@@ -46,7 +46,15 @@ class WingmanPro:
                 files=files,
                 timeout=30,
             )
-        response.raise_for_status()
+        if response.status_code == 401:
+            self.printr.print(
+                text="Unauthorized",
+                command_tag=CommandTag.UNAUTHORIZED,
+                color=LogType.ERROR,
+                )
+            return None
+        else:
+            response.raise_for_status()
         json = response.json()
         return json
 
