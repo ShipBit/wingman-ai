@@ -1,4 +1,5 @@
 import asyncio
+import re
 import threading
 from typing import Optional
 from fastapi import APIRouter
@@ -440,12 +441,20 @@ class WingmanCore(WebSocketUser):
             )
             text = transcription.get("_text")
         elif provider == VoiceActivationSttProvider.WHISPERCPP:
+
+            def filter_noise_transcriptions(text):
+                # Patterns to match: (anything), [anything], *anything*
+                noise_pattern = r"(\(.*?\))|(\[.*?\])|(\*.*?\*)"
+                filtered_text = re.sub(noise_pattern, "", text)
+                filtered_text = filtered_text.strip()
+                return filtered_text
+
             whisperccp = Whispercpp(wingman_name="system")
             transcription = whisperccp.transcribe(
                 filename=recording_file,
                 config=self.settings.voice_activation.whispercpp,
             )
-            text = transcription.text
+            text = filter_noise_transcriptions(transcription.text)
         elif provider == VoiceActivationSttProvider.OPENAI:
             # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
             openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
