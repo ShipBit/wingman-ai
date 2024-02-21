@@ -262,8 +262,14 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/play/wingman-pro",
-            endpoint=self.play_wingman_pro,
+            path="/play/wingman-pro/azure",
+            endpoint=self.play_wingman_pro_azure,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/play/wingman-pro/openai",
+            endpoint=self.play_wingman_pro_openai,
             tags=["core"],
         )
 
@@ -971,17 +977,33 @@ class WingmanCore(WebSocketUser):
             wingman_name="system",
         )
 
-    # POST /play/wingman-pro
-    async def play_wingman_pro(
+    # POST /play/wingman-pro/azure
+    async def play_wingman_pro_azure(
         self, text: str, config: AzureTtsConfig, sound_config: SoundConfig
     ):
         wingman_pro = WingmanPro(
             wingman_name="system",
             settings=self.config_manager.settings_config.wingman_pro,
         )
-        await wingman_pro.play_audio(
+        await wingman_pro.generate_azure_speech(
             text=text,
             config=config,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+        )
+
+    # POST /play/wingman-pro/azure
+    async def play_wingman_pro_openai(
+        self, text: str, voice: OpenAiTtsVoice, sound_config: SoundConfig
+    ):
+        wingman_pro = WingmanPro(
+            wingman_name="system",
+            settings=self.config_manager.settings_config.wingman_pro,
+        )
+        await wingman_pro.generate_openai_speech(
+            text=text,
+            voice=voice,
             sound_config=sound_config,
             audio_player=self.audio_player,
             wingman_name="system",

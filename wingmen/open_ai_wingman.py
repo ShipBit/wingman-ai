@@ -10,6 +10,7 @@ from api.enums import (
     ConversationProvider,
     SummarizeProvider,
     WingmanProSttProvider,
+    WingmanProTtsProvider,
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
@@ -754,13 +755,22 @@ class OpenAiWingman(Wingman):
                 wingman_name=self.name,
             )
         elif self.tts_provider == TtsProvider.WINGMAN_PRO:
-            await self.wingman_pro.play_audio(
-                text=text,
-                config=self.config.azure.tts,
-                sound_config=self.config.sound,
-                audio_player=self.audio_player,
-                wingman_name=self.name,
-            )
+            if self.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
+                await self.wingman_pro.generate_openai_speech(
+                    text=text,
+                    voice=self.config.openai.tts_voice,
+                    sound_config=self.config.sound,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
+            elif self.config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+                await self.wingman_pro.generate_azure_speech(
+                    text=text,
+                    config=self.config.azure.tts,
+                    sound_config=self.config.sound,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
         else:
             printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
 

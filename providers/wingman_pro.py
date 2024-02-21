@@ -1,6 +1,6 @@
 import openai
 import requests
-from api.enums import CommandTag, LogType, OpenAiModel
+from api.enums import CommandTag, LogType, OpenAiModel, OpenAiTtsVoice
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
@@ -13,11 +13,14 @@ from services.secret_keeper import SecretKeeper
 
 
 class WingmanPro:
-    def __init__(self, wingman_name: str, settings: WingmanProSettings):
+    def __init__(
+        self, wingman_name: str, settings: WingmanProSettings, timeout: int = 30
+    ):
         self.wingman_name: str = wingman_name
         self.settings: WingmanProSettings = settings
         self.printr = Printr()
         self.secret_keeper: SecretKeeper = SecretKeeper()
+        self.timeout = timeout
 
     def transcribe_whisper(self, filename: str):
         with open(filename, "rb") as audio_input:
@@ -26,7 +29,7 @@ class WingmanPro:
                 url=f"{self.settings.base_url}/transcribe-whisper",
                 params={"region": self.settings.region.value},
                 files=files,
-                timeout=30,
+                timeout=self.timeout,
             )
             response.raise_for_status()
             json = response.json()
@@ -44,7 +47,7 @@ class WingmanPro:
                 },
                 headers=self._get_headers(),
                 files=files,
-                timeout=30,
+                timeout=self.timeout,
             )
         if response.status_code == 401:
             self.printr.print(
@@ -84,7 +87,7 @@ class WingmanPro:
             params={"region": self.settings.region.value},
             headers=self._get_headers(),
             json=data,
-            timeout=10,
+            timeout=self.timeout,
         )
         response.raise_for_status()
 
@@ -92,7 +95,7 @@ class WingmanPro:
         completion = openai.types.chat.ChatCompletion.model_validate(json_response)
         return completion
 
-    async def play_audio(
+    async def generate_azure_speech(
         self,
         text: str,
         config: AzureTtsConfig,
@@ -109,11 +112,11 @@ class WingmanPro:
 
             def buffer_generator():
                 with requests.post(
-                    url=f"{self.settings.base_url}/generate-speech",
+                    url=f"{self.settings.base_url}/generate-azure-speech",
                     params={"region": self.settings.region.value},
                     json=data,
                     headers=self._get_headers(),
-                    timeout=10,
+                    timeout=self.timeout,
                     stream=True,
                 ) as response:
                     response.raise_for_status()
@@ -142,7 +145,7 @@ class WingmanPro:
                     else:
                         # No incomplete bytes, reset the incomplete buffer
                         incomplete_buffer = b""
-                    
+
                     audio_buffer[: len(chunk)] = chunk
                     return len(chunk)
                 except StopIteration:
@@ -161,11 +164,11 @@ class WingmanPro:
             )
         else:  # non-streaming
             response = requests.post(
-                url=f"{self.settings.base_url}/generate-speech",
+                url=f"{self.settings.base_url}/generate-azure-speech",
                 params={"region": self.settings.region.value},
                 headers=self._get_headers(),
                 json=data,
-                timeout=10,
+                timeout=self.timeout,
             )
 
             audio_data = response.content
@@ -175,11 +178,40 @@ class WingmanPro:
                 wingman_name=wingman_name,
             )
 
+    async def generate_openai_speech(
+        self,
+        text: str,
+        voice: OpenAiTtsVoice,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+    ):
+        data = {
+            "text": text,
+            "voice_name": voice.value,
+            "stream": False,
+        }
+        response = requests.post(
+            url=f"{self.settings.base_url}/generate-openai-speech",
+            params={
+                "region": self.settings.region.value,
+            },
+            headers=self._get_headers(),
+            json=data,
+            timeout=self.timeout,
+        )
+        if response is not None:
+            await audio_player.play_with_effects(
+                input_data=response.content,
+                config=sound_config,
+                wingman_name=wingman_name,
+            )
+
     def get_available_voices(self, locale: str = ""):
         response = requests.get(
             url=f"{self.settings.base_url}/azure-voices",
             params={"region": self.settings.region.value, "locale": locale},
-            timeout=10,
+            timeout=self.timeout,
             headers=self._get_headers(),
         )
         response.raise_for_status()
@@ -196,11 +228,11 @@ class WingmanPro:
         ]
 
         return voice_infos
-    
+
     def _get_headers(self):
         token = self.secret_keeper.secrets.get("wingman_pro_access_token", "")
         return {
-            'Authorization': f'Bearer {token}',
+            "Authorization": f"Bearer {token}",
         }
 
     def __resolve_gender(self, enum_value: int):

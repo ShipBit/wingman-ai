@@ -42,8 +42,8 @@ class CommandTag(Enum):
 
 
 class AzureApiVersion(Enum):
-    A2023_09_01_PREVIEW = "2023-09-01-preview"
     A2023_12_01_PREVIEW = "2023-12-01-preview"
+    A2024_02_15_PREVIEW = "2024-02-15-preview"
 
 
 class AzureRegion(Enum):
@@ -137,6 +137,11 @@ class WingmanProSttProvider(Enum):
     AZURE_SPEECH = "azure_speech"
 
 
+class WingmanProTtsProvider(Enum):
+    AZURE = "azure"
+    OPENAI = "openai"
+
+
 # Pydantic models for enums
 class BaseEnumModel(BaseModel):
     class Config:
@@ -226,6 +231,10 @@ class WingmanProSttProviderModel(BaseEnumModel):
     stt_provider: WingmanProSttProvider
 
 
+class WingmanProTtsProviderModel(BaseEnumModel):
+    tts_provider: WingmanProTtsProvider
+
+
 # Add all additional Pydantic models for enums as needed
 
 
@@ -251,6 +260,7 @@ ENUM_TYPES = {
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
     "WingmanProRegion": WingmanProRegionModel,
     "WingmanProSttProvider": WingmanProSttProviderModel,
+    "WingmanProTtsProvider": WingmanProTtsProviderModel,
     # Add new enums here as key-value pairs
 }
 
