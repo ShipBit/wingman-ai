@@ -1,5 +1,6 @@
 from os import path
 from threading import Lock
+import time
 from typing import Callable
 import numpy
 import sounddevice
@@ -136,24 +137,29 @@ class AudioRecorder:
                 )
 
     def start_continuous_listening(self):
-        with self.lock:
-            if not self.is_listening_continuously:
-                self.is_listening_continuously = True
-                try:
+        # Wait if a stopping process is ongoing.
+        while True:
+            with self.lock:
+                if not self.is_listening_continuously and self.stop_function is None:
+                    self.is_listening_continuously = True
+                    break
+            time.sleep(0.1)
+
+        def safe_start():
+            with self.lock:
+                # Double-check to avoid race conditions
+                if self.is_listening_continuously:
                     self.stop_function = self.recognizer.listen_in_background(
                         self.microphone, self.__handle_continuous_listening
                     )
-                except AssertionError as e:
-                    self.printr.print(
-                        f"Attempted to start continuous listening while another session is active: {e}",
-                        server_only=True,
-                        color=LogType.ERROR,
-                    )
-                    self.is_listening_continuously = False
+
+        safe_start()
 
     def stop_continuous_listening(self):
+        # New attempt to enhance synchronization.
         with self.lock:
-            if self.is_listening_continuously:
+            if self.is_listening_continuously and self.stop_function:
+                self.stop_function(wait_for_stop=True)  # Ensure the listener stops.
+                self.stop_function = None
                 self.is_listening_continuously = False
-                if self.stop_function:
-                    self.stop_function(wait_for_stop=False)
+        time.sleep(0.1)  # Time might need adjustment based on testing.
