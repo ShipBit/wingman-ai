@@ -137,7 +137,6 @@ class AudioRecorder:
                 )
 
     def start_continuous_listening(self):
-        # Wait if a stopping process is ongoing.
         while True:
             with self.lock:
                 if not self.is_listening_continuously and self.stop_function is None:
@@ -156,7 +155,6 @@ class AudioRecorder:
         safe_start()
 
     def stop_continuous_listening(self):
-        # New attempt to enhance synchronization.
         with self.lock:
             if self.is_listening_continuously and self.stop_function:
                 self.stop_function(wait_for_stop=True)  # Ensure the listener stops.
