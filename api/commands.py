@@ -21,6 +21,7 @@ class SaveSecretCommand(WebSocketCommandModel):
     command: Literal["save_secret"] = "save_secret"
     secret_name: str
     secret_value: str
+    show_message: bool = True
 
 
 class RecordKeyboardActionsCommand(WebSocketCommandModel):
