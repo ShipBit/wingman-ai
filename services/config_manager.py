@@ -726,6 +726,7 @@ class ConfigManager:
             "azure",
             "xvasynth",
             "whispercpp",
+            "wingman_pro",
         ]:
             if key in general:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.

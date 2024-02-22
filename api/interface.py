@@ -17,7 +17,11 @@ from api.enums import (
     SttProvider,
     SummarizeProvider,
     TtsProvider,
+    VoiceActivationSttProvider,
     WingmanInitializationErrorType,
+    WingmanProRegion,
+    WingmanProSttProvider,
+    WingmanProTtsProvider,
 )
 
 
@@ -264,6 +268,17 @@ class OpenAiConfig(BaseModel):
     """If you have an organization key, you can set it here."""
 
 
+class WingmanProConfig(BaseModel):
+    stt_provider: WingmanProSttProvider
+    tts_provider: WingmanProTtsProvider
+    # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
+
+
+class WingmanProSettings(BaseModel):
+    base_url: str
+    region: WingmanProRegion
+
+
 class SoundConfig(BaseModel):
     play_beep: bool
     """adds a beep/Quindar sound before and after the wingman talks"""
@@ -272,7 +287,7 @@ class SoundConfig(BaseModel):
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
 
-class VoiceActivationConfig(BaseModel):
+class VoiceActivationSettings(BaseModel):
     """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
 
     enabled: bool
@@ -283,8 +298,10 @@ class VoiceActivationConfig(BaseModel):
 
     mute_toggle_key_codes: Optional[list[int]] = None
 
-    languages: Optional[list[str]] = None
-    """The languages to use for voice activation. You can add as many as you want. The Wingman will listen for all of them."""
+    stt_provider: VoiceActivationSttProvider
+
+    azure: AzureSttConfig
+    whispercpp: WhispercppSttConfig
 
 
 class FeaturesConfig(BaseModel):
@@ -384,6 +401,7 @@ class NestedConfig(BaseModel):
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
+    wingman_pro: WingmanProConfig
     commands: Optional[list[CommandConfig]] = None
 
 
@@ -457,4 +475,5 @@ class NewWingmanTemplate(BaseModel):
 
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
-    voice_activation: VoiceActivationConfig
+    voice_activation: VoiceActivationSettings
+    wingman_pro: WingmanProSettings

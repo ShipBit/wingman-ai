@@ -71,12 +71,13 @@ class CommandHandler:
         self.secret_keeper.secrets[secret_name] = secret_value
         self.secret_keeper.save()
 
-        await self.printr.print_async(
-            f"Secret '{secret_name}' saved",
-            toast=ToastType.NORMAL,
-            source=LogSource.SYSTEM,
-            source_name=self.source_name,
-        )
+        if command.show_message:
+            await self.printr.print_async(
+                f"Secret '{secret_name}' saved",
+                toast=ToastType.NORMAL,
+                source=LogSource.SYSTEM,
+                source_name=self.source_name,
+            )
 
     def _is_hotkey_recording_finished(self, recorded_keys):
         # Check if for all down events there is a corresponding up event
