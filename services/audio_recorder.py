@@ -37,7 +37,6 @@ class AudioRecorder:
         self.microphone = sr.Microphone(sample_rate=samplerate)
         self.recognizer = sr.Recognizer()
         self.stop_function = None
-
         # default devices are fixed once this is called
         # so this methods needs to be called every time a new device is configured
         self.update_input_stream()
@@ -128,7 +127,13 @@ class AudioRecorder:
         with self.lock:
             try:
                 with self.microphone as mic:
-                    self.recognizer.adjust_for_ambient_noise(mic)
+                    self.recognizer.adjust_for_ambient_noise(source=mic, duration=1.5)
+                    self.printr.print(
+                        "Microphone adjusted for ambient noise.",
+                        color=LogType.INFO,
+                        server_only=True,
+                    )
+
             except Exception as e:
                 self.printr.print(
                     f"Error adjusting for ambient noise: {e}",
@@ -146,18 +151,26 @@ class AudioRecorder:
 
         def safe_start():
             with self.lock:
-                # Double-check to avoid race conditions
                 if self.is_listening_continuously:
                     self.stop_function = self.recognizer.listen_in_background(
                         self.microphone, self.__handle_continuous_listening
+                    )
+                    self.printr.print(
+                        "Continous voice recognition started.",
+                        color=LogType.INFO,
+                        server_only=True,
                     )
 
         safe_start()
 
     def stop_continuous_listening(self):
-        with self.lock:
-            if self.is_listening_continuously and self.stop_function:
-                self.stop_function(wait_for_stop=True)  # Ensure the listener stops.
-                self.stop_function = None
-                self.is_listening_continuously = False
-        time.sleep(0.1)  # Time might need adjustment based on testing.
+        if self.is_listening_continuously and self.stop_function:
+            self.stop_function(wait_for_stop=True)
+            self.stop_function = None
+            self.is_listening_continuously = False
+            time.sleep(0.1)  # Time might need adjustment based on testing.
+            self.printr.print(
+                "Continous voice recognition stopped.",
+                color=LogType.INFO,
+                server_only=True,
+            )

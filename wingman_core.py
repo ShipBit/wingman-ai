@@ -322,7 +322,7 @@ class WingmanCore(WebSocketUser):
 
     async def startup(self):
         if self.settings.voice_activation.enabled:
-            await self.set_voice_activation(True)
+            await self.set_voice_activation(is_enabled=True)
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []
@@ -779,11 +779,12 @@ class WingmanCore(WebSocketUser):
                 and not self.azure_speech_recognizer
             ):
                 await self.__init_azure_voice_activation()
-
-            self.audio_recorder.adjust_for_ambient_noise()
-            self.start_voice_recognition(mute=not is_enabled)
         else:
             self.azure_speech_recognizer = None
+
+        self.start_voice_recognition(
+            mute=not is_enabled, adjust_for_ambient_noise=is_enabled
+        )
 
         self.config_manager.settings_config.voice_activation.enabled = is_enabled
 
@@ -842,9 +843,23 @@ class WingmanCore(WebSocketUser):
             )
 
     # POST /voice-activation/mute
-    def start_voice_recognition(self, mute: Optional[bool] = False):
+    def start_voice_recognition(
+        self,
+        mute: Optional[bool] = False,
+        adjust_for_ambient_noise: Optional[bool] = False,
+    ):
         self.is_listening = not mute
-        if mute:
+        if self.is_listening:
+            if (
+                self.settings.voice_activation.stt_provider
+                == VoiceActivationSttProvider.AZURE
+            ):
+                self.azure_speech_recognizer.start_continuous_recognition()
+            else:
+                if adjust_for_ambient_noise:
+                    self.audio_recorder.adjust_for_ambient_noise()
+                self.audio_recorder.start_continuous_listening()
+        else:
             if (
                 self.settings.voice_activation.stt_provider
                 == VoiceActivationSttProvider.AZURE
@@ -852,24 +867,9 @@ class WingmanCore(WebSocketUser):
                 self.azure_speech_recognizer.stop_continuous_recognition()
             else:
                 self.audio_recorder.stop_continuous_listening()
-        else:
-            if (
-                self.settings.voice_activation.stt_provider
-                == VoiceActivationSttProvider.AZURE
-            ):
-                self.azure_speech_recognizer.start_continuous_recognition()
-            else:
-                self.audio_recorder.start_continuous_listening()
 
         command = VoiceActivationMutedCommand(muted=mute)
         self.ensure_async(self._connection_manager.broadcast(command))
-
-        printr.print(
-            f"Continous voice recognition {'stopped (muted)' if mute else 'started'}.",
-            toast=ToastType.NORMAL,
-            color=LogType.INFO,
-            server_only=True,
-        )
 
     def toggle_voice_recognition(self):
         mute = self.is_listening
