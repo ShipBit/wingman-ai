@@ -4,7 +4,6 @@ from typing import Mapping
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
     LogType,
-    OpenAiModel,
     TtsProvider,
     SttProvider,
     ConversationProvider,
