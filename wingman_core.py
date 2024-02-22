@@ -815,9 +815,6 @@ class WingmanCore(WebSocketUser):
         base_url: str,
         region: WingmanProRegion,
         stt_provider: VoiceActivationSttProvider,
-        threshold: float,
-        min_speech_length: float,
-        silence_threshold: float,
         azure: AzureSttConfig,
         whispercpp: WhispercppSttConfig,
     ):
@@ -825,13 +822,6 @@ class WingmanCore(WebSocketUser):
         self.config_manager.settings_config.wingman_pro.region = region
 
         self.config_manager.settings_config.voice_activation.stt_provider = stt_provider
-        self.config_manager.settings_config.voice_activation.threshold = threshold
-        self.config_manager.settings_config.voice_activation.min_speech_length = (
-            min_speech_length
-        )
-        self.config_manager.settings_config.voice_activation.silence_threshold = (
-            silence_threshold
-        )
         self.config_manager.settings_config.voice_activation.azure = azure
         self.config_manager.settings_config.voice_activation.whispercpp = whispercpp
 

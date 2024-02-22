@@ -300,10 +300,6 @@ class VoiceActivationSettings(BaseModel):
 
     stt_provider: VoiceActivationSttProvider
 
-    threshold: float
-    min_speech_length: float
-    silence_threshold: float
-
     azure: AzureSttConfig
     whispercpp: WhispercppSttConfig
 

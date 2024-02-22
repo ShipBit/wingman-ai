@@ -5,11 +5,6 @@ voice_activation:
 
   stt_provider: wingman_pro # or azure, whispercpp, openai
 
-  # local detection settings
-  threshold: 0.01
-  min_speech_length: 1
-  silence_threshold: 1
-
   azure:
     region: westeurope
     languages:
@@ -28,5 +23,5 @@ voice_activation:
 # todo: OpenAI base_url and organization
 
 wingman_pro:
-  base_url: http://127.0.0.1:8001
+  base_url: https://wingman-ai.azurewebsites.net
   region: europe
