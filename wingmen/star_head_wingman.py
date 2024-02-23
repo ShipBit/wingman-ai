@@ -2,6 +2,7 @@ from typing import Optional
 import json
 import requests
 from api.interface import (
+    SettingsConfig,
     WingmanConfig,
     WingmanInitializationError,
 )
@@ -19,9 +20,15 @@ class StarHeadWingman(OpenAiWingman):
     """
 
     def __init__(
-        self, name: str, config: WingmanConfig, audio_player: AudioPlayer
+        self,
+        name: str,
+        config: WingmanConfig,
+        settings: SettingsConfig,
+        audio_player: AudioPlayer,
     ) -> None:
-        super().__init__(name=name, config=config, audio_player=audio_player)
+        super().__init__(
+            name=name, config=config, settings=settings, audio_player=audio_player
+        )
 
         # config entry existence not validated yet. Assign later when checked!
         self.starhead_url = ""

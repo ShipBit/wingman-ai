@@ -5,7 +5,12 @@ from importlib import import_module, util
 from os import path
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
-from api.interface import CommandConfig, WingmanConfig, WingmanInitializationError
+from api.interface import (
+    CommandConfig,
+    SettingsConfig,
+    WingmanConfig,
+    WingmanInitializationError,
+)
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from services.audio_player import AudioPlayer
 from services.secret_keeper import SecretKeeper
@@ -21,7 +26,13 @@ class Wingman:
     Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
     """
 
-    def __init__(self, name: str, config: WingmanConfig, audio_player: AudioPlayer):
+    def __init__(
+        self,
+        name: str,
+        config: WingmanConfig,
+        settings: SettingsConfig,
+        audio_player: AudioPlayer,
+    ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
         Args:
@@ -31,6 +42,9 @@ class Wingman:
 
         self.config = config
         """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
+
+        self.settings = settings
+        """The general user settings."""
 
         self.secret_keeper = SecretKeeper()
         """A service that allows you to store and retrieve secrets like API keys. It can prompt the user for secrets if necessary."""
@@ -56,15 +70,16 @@ class Wingman:
     def create_dynamically(
         name: str,
         config: WingmanConfig,
+        settings: SettingsConfig,
         audio_player: AudioPlayer,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
         Args:
-            module_path (str): The module path, e.g. wingmen.open_ai_wingman. It's like the filepath from root to your custom-wingman.py but with dots instead of slashes and without the .py extension. Case-sensitive!
-            class_name (str): The name of the class inside your custom-wingman.py, e.g. OpenAiWingman. Case-sensitive!
             name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
-            config (Config): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
+            config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
+            settings (SettingsConfig): The general user settings.
+            audio_player (AudioPlayer): The audio player handling the playback of audio files.
         """
 
         try:
@@ -85,6 +100,7 @@ class Wingman:
         instance = DerivedWingmanClass(
             name=name,
             config=config,
+            settings=settings,
             audio_player=audio_player,
         )
         return instance

@@ -1,5 +1,5 @@
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
-from api.interface import Config, WingmanInitializationError
+from api.interface import Config, SettingsConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -17,7 +17,7 @@ class Tower:
         self.wingmen: list[Wingman] = []
         self.log_source_name = "Tower"
 
-    async def instantiate_wingmen(self):
+    async def instantiate_wingmen(self, settings: SettingsConfig):
         errors: list[WingmanInitializationError] = []
 
         if not self.config.wingmen:
@@ -41,12 +41,14 @@ class Tower:
                     wingman = Wingman.create_dynamically(
                         name=wingman_name,
                         config=wingman_config,
+                        settings=settings,
                         audio_player=self.audio_player,
                     )
                 else:
                     wingman = OpenAiWingman(
                         name=wingman_name,
                         config=wingman_config,
+                        settings=settings,
                         audio_player=self.audio_player,
                     )
             except Exception as e:  # pylint: disable=broad-except
