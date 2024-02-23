@@ -1,18 +1,20 @@
 import json
 import time
 from typing import Mapping
-from api.interface import WingmanConfig, WingmanInitializationError
+from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
     LogType,
-    OpenAiModel,
     TtsProvider,
     SttProvider,
     ConversationProvider,
     SummarizeProvider,
+    WingmanProSttProvider,
+    WingmanProTtsProvider,
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
+from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
 from providers.whispercpp import Whispercpp
 from services.audio_player import AudioPlayer
@@ -39,12 +41,11 @@ class OpenAiWingman(Wingman):
         self,
         name: str,
         config: WingmanConfig,
+        settings: SettingsConfig,
         audio_player: AudioPlayer,
     ):
         super().__init__(
-            name=name,
-            config=config,
-            audio_player=audio_player,
+            name=name, config=config, audio_player=audio_player, settings=settings
         )
 
         self.edge_tts = Edge()
@@ -55,6 +56,7 @@ class OpenAiWingman(Wingman):
         self.elevenlabs: ElevenLabs = None
         self.xvasynth: XVASynth = None
         self.whispercpp: Whispercpp = None
+        self.wingman_pro: WingmanPro = None
 
         self.pending_tool_calls = []
         self.last_gpt_call = None
@@ -84,7 +86,11 @@ class OpenAiWingman(Wingman):
         if self.uses_provider("whispercpp"):
             await self.validate_and_set_whispercpp(errors)
 
-        await self.validate_and_set_azure(errors)
+        if self.uses_provider("azure"):
+            await self.validate_and_set_azure(errors)
+
+        if self.uses_provider("wingman_pro"):
+            await self.validate_and_set_wingman_pro(errors)
 
         return errors
 
@@ -116,6 +122,15 @@ class OpenAiWingman(Wingman):
             return self.tts_provider == TtsProvider.XVASYNTH
         elif provider_type == "whispercpp":
             return self.stt_provider == SttProvider.WHISPERCPP
+        elif provider_type == "wingman_pro":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.WINGMAN_PRO,
+                    self.summarize_provider == SummarizeProvider.WINGMAN_PRO,
+                    self.tts_provider == TtsProvider.WINGMAN_PRO,
+                    self.stt_provider == SttProvider.WINGMAN_PRO,
+                ]
+            )
         return False
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
@@ -163,6 +178,13 @@ class OpenAiWingman(Wingman):
         )
         self.whispercpp.validate_config(config=self.config.whispercpp, errors=errors)
 
+    async def validate_and_set_wingman_pro(
+        self, errors: list[WingmanInitializationError]
+    ):
+        self.wingman_pro = WingmanPro(
+            wingman_name=self.name, settings=self.settings.wingman_pro
+        )
+
     async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
 
@@ -174,13 +196,13 @@ class OpenAiWingman(Wingman):
         """
 
         if self.stt_provider == SttProvider.AZURE:
-            transcript = self.openai_azure.transcribe(
+            transcript = self.openai_azure.transcribe_whisper(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["whisper"],
                 config=self.config.azure.whisper,
             )
         elif self.stt_provider == SttProvider.AZURE_SPEECH:
-            transcript = self.openai_azure.transcribe_with_azure(
+            transcript = self.openai_azure.transcribe_azure_speech(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["tts"],
                 config=self.config.azure.stt,
@@ -189,10 +211,29 @@ class OpenAiWingman(Wingman):
             transcript = self.whispercpp.transcribe(
                 filename=audio_input_wav, config=self.config.whispercpp
             )
-        else:
+        elif self.stt_provider == SttProvider.WINGMAN_PRO:
+            if self.config.wingman_pro.stt_provider == WingmanProSttProvider.WHISPER:
+                transcript = self.wingman_pro.transcribe_whisper(
+                    filename=audio_input_wav
+                )
+            elif (
+                self.config.wingman_pro.stt_provider
+                == WingmanProSttProvider.AZURE_SPEECH
+            ):
+                transcript = self.wingman_pro.transcribe_azure_speech(
+                    filename=audio_input_wav, config=self.config.azure.stt
+                )
+        elif self.stt_provider == SttProvider.OPENAI:
             transcript = self.openai.transcribe(filename=audio_input_wav)
 
-        return transcript.text if transcript else None
+        if not transcript:
+            return None
+
+        # Wingman Pro might returns a serialized dict instead of a real Azure Speech transcription object
+        if isinstance(transcript, dict):
+            return transcript.get("_text")
+
+        return transcript.text
 
     async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
         """Gets the response for a given transcript.
@@ -510,11 +551,17 @@ class OpenAiWingman(Wingman):
                 tools=tools,
                 model=self.config.openai.conversation_model,
             )
-        else:
+        elif self.conversation_provider == ConversationProvider.OPENAI:
             completion = self.openai.ask(
                 messages=self.messages,
                 tools=tools,
                 model=self.config.openai.conversation_model,
+            )
+        elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
+            completion = self.wingman_pro.ask(
+                messages=self.messages,
+                model=self.config.openai.conversation_model,
+                tools=tools,
             )
 
         # if request isnt most recent, ignore the response
@@ -535,6 +582,7 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple containing the message response and tool calls from the completion.
         """
+
         response_message = completion.choices[0].message
 
         content = response_message.content
@@ -594,8 +642,13 @@ class OpenAiWingman(Wingman):
                 config=self.config.azure.summarize,
                 model=self.config.openai.summarize_model,
             )
-        else:
+        elif self.summarize_provider == SummarizeProvider.OPENAI:
             summarize_response = self.openai.ask(
+                messages=self.messages,
+                model=self.config.openai.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
+            summarize_response = self.wingman_pro.ask(
                 messages=self.messages,
                 model=self.config.openai.summarize_model,
             )
@@ -683,7 +736,6 @@ class OpenAiWingman(Wingman):
                 sound_config=self.config.sound,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
-                stream=self.config.azure.tts.output_streaming,
             )
         elif self.tts_provider == TtsProvider.XVASYNTH:
             await self.xvasynth.play_audio(
@@ -701,6 +753,23 @@ class OpenAiWingman(Wingman):
                 audio_player=self.audio_player,
                 wingman_name=self.name,
             )
+        elif self.tts_provider == TtsProvider.WINGMAN_PRO:
+            if self.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
+                await self.wingman_pro.generate_openai_speech(
+                    text=text,
+                    voice=self.config.openai.tts_voice,
+                    sound_config=self.config.sound,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
+            elif self.config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+                await self.wingman_pro.generate_azure_speech(
+                    text=text,
+                    config=self.config.azure.tts,
+                    sound_config=self.config.sound,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
         else:
             printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
 
@@ -744,55 +813,6 @@ class OpenAiWingman(Wingman):
             },
         ]
         return tools
-
-    async def __ask_gpt_for_locale(self, language: str) -> str:
-        """OpenAI TTS returns a natural language name for the language of the transcript, e.g. "german" or "english".
-        This method uses ChatGPT to find the corresponding locale, e.g. "de-DE" or "en-EN".
-
-        Args:
-            language (str): The natural, lowercase language name returned by OpenAI TTS. Thank you for that btw.. WTF OpenAI?
-        """
-
-        messages = (
-            [
-                {
-                    "content": """
-                        I'll say a natural language name in lowercase and you'll just return the IETF country code / locale for this language.
-                        Your answer always has exactly 2 lowercase letters, a dash, then two more letters in uppercase.
-                        If I say "german", you answer with "de-DE". If I say "russian", you answer with "ru-RU".
-                        If it's ambiguous and you don't know which locale to pick ("en-GB" vs "en-US"), you pick the most commonly used one.
-                        You only answer with valid country codes according to most common standards.
-                        If you can't, you respond with "None".
-                    """,
-                    "role": "system",
-                },
-                {
-                    "content": language,
-                    "role": "user",
-                },
-            ],
-        )
-        model = OpenAiModel.GPT_35_TURBO_1106
-
-        response = (
-            self.openai.ask(model=model.value, messages=messages)
-            if self.summarize_provider == ConversationProvider.OPENAI
-            else self.openai_azure.ask(
-                model=model.value,
-                messages=messages,
-                api_key=self.azure_api_keys["summarize"],
-                config=self.config.azure.summarize,
-            )
-        )
-
-        answer = response.choices[0].message.content
-        if answer == "None":
-            return None
-        await printr.print_async(
-            f"ChatGPT says this language maps to locale '{answer}'.",
-            color=LogType.INFO,
-        )
-        return answer
 
     def __get_message_role(self, message):
         """Helper method to get the role of the message regardless of its type."""
