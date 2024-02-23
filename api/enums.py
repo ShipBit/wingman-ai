@@ -38,11 +38,12 @@ class CommandTag(Enum):
     IGNORED_RECORDING = "ignored_recording"
     PLAYBACK_STARTED = "playback_started"
     PLAYBACK_STOPPED = "playback_stopped"
+    UNAUTHORIZED = "unauthorized"
 
 
 class AzureApiVersion(Enum):
-    A2023_09_01_PREVIEW = "2023-09-01-preview"
     A2023_12_01_PREVIEW = "2023-12-01-preview"
+    A2024_02_15_PREVIEW = "2024-02-15-preview"
 
 
 class AzureRegion(Enum):
@@ -92,6 +93,7 @@ class TtsProvider(Enum):
     EDGE_TTS = "edge_tts"
     AZURE = "azure"
     XVASYNTH = "xvasynth"
+    WINGMAN_PRO = "wingman_pro"
 
 
 class SttProvider(Enum):
@@ -99,21 +101,45 @@ class SttProvider(Enum):
     AZURE = "azure"
     AZURE_SPEECH = "azure_speech"
     WHISPERCPP = "whispercpp"
+    WINGMAN_PRO = "wingman_pro"
+
+
+class VoiceActivationSttProvider(Enum):
+    OPENAI = "openai"
+    AZURE = "azure"
+    WHISPERCPP = "whispercpp"
+    WINGMAN_PRO = "wingman_pro"
 
 
 class ConversationProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
+    WINGMAN_PRO = "wingman_pro"
 
 
 class SummarizeProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
+    WINGMAN_PRO = "wingman_pro"
 
 
 class KeyboardRecordingType(Enum):
     SINGLE = "single"
     MACRO = "macro"
+
+
+class WingmanProRegion(Enum):
+    EUROPE = "europe"
+
+
+class WingmanProSttProvider(Enum):
+    WHISPER = "whisper"
+    AZURE_SPEECH = "azure_speech"
+
+
+class WingmanProTtsProvider(Enum):
+    AZURE = "azure"
+    OPENAI = "openai"
 
 
 # Pydantic models for enums
@@ -181,6 +207,10 @@ class SttProviderEnumModel(BaseEnumModel):
     stt_provider: SttProvider
 
 
+class VoiceActivationSttProviderEnumModel(BaseEnumModel):
+    stt_provider: VoiceActivationSttProvider
+
+
 class ConversationProviderEnumModel(BaseEnumModel):
     conversation_provider: ConversationProvider
 
@@ -191,6 +221,18 @@ class SummarizeProviderEnumModel(BaseEnumModel):
 
 class KeyboardRecordingTypeModel(BaseEnumModel):
     recording_type: KeyboardRecordingType
+
+
+class WingmanProRegionModel(BaseEnumModel):
+    region: WingmanProRegion
+
+
+class WingmanProSttProviderModel(BaseEnumModel):
+    stt_provider: WingmanProSttProvider
+
+
+class WingmanProTtsProviderModel(BaseEnumModel):
+    tts_provider: WingmanProTtsProvider
 
 
 # Add all additional Pydantic models for enums as needed
@@ -212,9 +254,13 @@ ENUM_TYPES = {
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
     "SttProvider": SttProviderEnumModel,
+    "VoiceActivationSttProvider": VoiceActivationSttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
     "SummarizeProvider": SummarizeProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
+    "WingmanProRegion": WingmanProRegionModel,
+    "WingmanProSttProvider": WingmanProSttProviderModel,
+    "WingmanProTtsProvider": WingmanProTtsProviderModel,
     # Add new enums here as key-value pairs
 }
 

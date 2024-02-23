@@ -2,47 +2,34 @@ import asyncio
 import io
 from os import path
 from threading import Thread
-from typing import Callable, Optional
+from typing import Callable
 import numpy as np
 import soundfile as sf
 import sounddevice as sd
 from scipy.signal import resample
 from api.interface import SoundConfig
+from services.pub_sub import PubSub
 from services.sound_effects import get_sound_effects
 
 
-class PubSub:
-    def __init__(self):
-        self.subscribers = dict()
-
-    def subscribe(self, event_type, fn):
-        if not event_type in self.subscribers:
-            self.subscribers[event_type] = []
-        self.subscribers[event_type].append(fn)
-
-    def unsubscribe(self, event_type, fn):
-        if event_type in self.subscribers:
-            self.subscribers[event_type].remove(fn)
-
-    def publish(self, event_type, data):
-        if event_type in self.subscribers:
-            for fn in self.subscribers[event_type]:
-                fn(data)
-
 class AudioPlayer:
-    on_playback_started: Optional[Callable[[str], None]] = None
-    on_playback_finished: Optional[Callable[[str], None]] = None
-
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        event_queue: asyncio.Queue,
+        on_playback_started: Callable[[str], None],
+        on_playback_finished: Callable[[str], None],
+    ) -> None:
         self.is_playing = False
-        self.event_queue = None
+        self.event_queue = event_queue
         self.event_loop = None
         self.stream = None
         self.raw_stream = None
         self.wingman_name = ""
         self.playback_events = PubSub()
+        self.on_playback_started = on_playback_started
+        self.on_playback_finished = on_playback_finished
 
-    def set_event_loop(self, loop):
+    def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self.event_loop = loop
 
     def start_playback(self, audio, sample_rate, channels, finished_callback):
@@ -221,22 +208,22 @@ class AudioPlayer:
                 self.play_beep()
             self.raw_stream.start()
 
-            audio_buffer = bytes(buffer_size)
             sound_effects = get_sound_effects(config)
+            audio_buffer = bytearray(buffer_size)
             filled_size = buffer_callback(audio_buffer)
             while filled_size > 0:
-                data_in_numpy = np.frombuffer(audio_buffer, dtype=dtype).astype(
-                    np.float32
-                )
+                data_in_numpy = np.frombuffer(
+                    audio_buffer[:filled_size], dtype=dtype
+                ).astype(np.float32)
 
                 for sound_effect in sound_effects:
                     data_in_numpy = sound_effect(
                         data_in_numpy, sample_rate, reset=False
                     )
 
-                audio_buffer = data_in_numpy.astype(dtype).tobytes()
+                processed_buffer = data_in_numpy.astype(dtype).tobytes()
+                buffer.extend(processed_buffer)
 
-                buffer += audio_buffer[:filled_size]
                 filled_size = buffer_callback(audio_buffer)
 
             data_received = True
