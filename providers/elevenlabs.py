@@ -1,5 +1,5 @@
 from elevenlabslib import (
-    ElevenLabsUser,
+    User,
     GenerationOptions,
     PlaybackOptions,
 )
@@ -43,7 +43,7 @@ class ElevenLabs:
         wingman_name: str,
         stream: bool,
     ):
-        user = ElevenLabsUser(self.api_key)
+        user = User(self.api_key)
         voice = (
             user.get_voice_by_ID(config.voice.id)
             if config.voice.id
@@ -51,9 +51,7 @@ class ElevenLabs:
         )
 
         def notify_playback_finished():
-            audio_player.playback_events.unsubscribe(
-                "finished", playback_finished
-            )
+            audio_player.playback_events.unsubscribe("finished", playback_finished)
             if sound_config.play_beep:
                 audio_player.play_beep()
             WebSocketUser.ensure_async(
@@ -124,10 +122,8 @@ class ElevenLabs:
             def playback_finished(wingman_name):
                 output_stream.abort()
 
-            audio_player.playback_events.subscribe(
-                "finished", playback_finished
-            )
+            audio_player.playback_events.subscribe("finished", playback_finished)
 
     def get_available_voices(self):
-        user = ElevenLabsUser(self.api_key)
+        user = User(self.api_key)
         return user.get_available_voices()
