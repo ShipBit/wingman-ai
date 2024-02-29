@@ -24,10 +24,10 @@ class WingmanPro:
 
     def send_unauthorized_error(self):
         self.printr.print(
-                text="Unauthorized",
-                command_tag=CommandTag.UNAUTHORIZED,
-                color=LogType.ERROR,
-                )
+            text="Unauthorized",
+            command_tag=CommandTag.UNAUTHORIZED,
+            color=LogType.ERROR,
+        )
 
     def transcribe_whisper(self, filename: str):
         with open(filename, "rb") as audio_input:
@@ -259,7 +259,7 @@ class WingmanPro:
         return voice_infos
 
     def _get_headers(self):
-        token = self.secret_keeper.secrets.get("wingman_pro_access_token", "")
+        token = self.secret_keeper.secrets.get("wingman_pro", "")
         return {
             "Authorization": f"Bearer {token}",
         }
