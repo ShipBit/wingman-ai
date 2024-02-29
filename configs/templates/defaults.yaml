@@ -21,22 +21,22 @@ features:
   # ─────────────────────── TTS Provider ─────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  tts_provider: azure # available: openai, edge_tts, elevenlabs, azure, xvasynth
+  tts_provider: azure # available: openai, edge_tts, elevenlabs, azure, xvasynth, wingman_pro
 
   # ─────────────────────── Speech to text Provider ─────────────────────────
   # You can override the speech to text provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  stt_provider: azure_speech # available: openai, azure, azure_speech, whispercpp
+  stt_provider: azure_speech # available: openai, azure, azure_speech, whispercpp, wingman_pro
 
   # ─────────────────────── Conversation Provider ─────────────────────────
   # You can override the conversation provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  conversation_provider: azure # available: openai, azure
+  conversation_provider: azure # available: openai, azure, wingman_pro
 
   # ─────────────────────── Summarize Provider ─────────────────────────
   # You can override the summarize provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  summarize_provider: azure # available: openai, azure
+  summarize_provider: azure # available: openai, azure, wingman_pro
 
   # ─────────────────────── Cost Control ─────────────────────────
   # How many messages should a Wingman remember in your conversations?
@@ -65,11 +65,11 @@ openai:
   # gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
   # gpt-3.5 is the default and should be enough for most use cases.
   # If something is not working as expected, you might want to test it with gpt-4.
-  conversation_model: gpt-3.5-turbo-1106 # available: gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  conversation_model: gpt-3.5-turbo # or: gpt-4-turbo-preview (and specific versions)
 
   # This model summarizes function responses, like API call responses etc.
   # In most cases gpt-3.5 should be enough.
-  summarize_model: gpt-3.5-turbo-1106 # available: gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  summarize_model: gpt-3.5-turbo # or: gpt-4-turbo-preview (and specific versions)
 
   # The voice to use for OpenAI text-to-speech.
   # Only used if features > tts_provider is set to 'openai' above.

@@ -195,6 +195,12 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/settings/wingman-pro/make-default",
+            endpoint=self.set_wingman_pro_as_default,
+            tags=["core"],
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/voice-activation/mute",
             endpoint=self.start_voice_recognition,
             tags=["core"],
@@ -831,6 +837,45 @@ class WingmanCore(WebSocketUser):
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
             )
+
+    # POST /settings/wingman-pro/make-default
+    async def set_wingman_pro_as_default(self, patch_existing_wingmen: bool):
+        self.config_manager.default_config.features.conversation_provider = (
+            "wingman_pro"
+        )
+        self.config_manager.default_config.features.summarize_provider = "wingman_pro"
+        self.config_manager.default_config.features.tts_provider = "wingman_pro"
+        self.config_manager.default_config.features.stt_provider = "wingman_pro"
+
+        self.config_manager.save_defaults_config()
+
+        if patch_existing_wingmen:
+            config_dirs = self.get_config_dirs()
+            for config_dir in config_dirs.config_dirs:
+                wingman_config_files = await self.get_wingmen_config_files(
+                    config_dir.name
+                )
+                for wingman_config_file in wingman_config_files:
+                    wingman_config = self.config_manager.load_wingman_config(
+                        config_dir=config_dir, wingman_file=wingman_config_file
+                    )
+                    if wingman_config:
+                        wingman_config.features.conversation_provider = "wingman_pro"
+                        wingman_config.features.summarize_provider = "wingman_pro"
+                        wingman_config.features.tts_provider = "wingman_pro"
+                        wingman_config.features.stt_provider = "wingman_pro"
+
+                        self.config_manager.save_wingman_config(
+                            config_dir=config_dir,
+                            wingman_file=wingman_config_file,
+                            wingman_config=wingman_config,
+                        )
+
+        printr.print(
+            "Have fun using Wingman Pro!",
+            toast=ToastType.NORMAL,
+            color=LogType.POSITIVE,
+        )
 
     # POST /voice-activation/mute
     def start_voice_recognition(

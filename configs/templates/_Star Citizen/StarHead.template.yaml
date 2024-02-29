@@ -34,7 +34,7 @@ azure:
 
 openai:
   # gpt-3.5 is not capable enough for multi-param function calls.
-  conversation_model: gpt-4-1106-preview
+  conversation_model: gpt-4-turbo-preview
 
   context: |
     You are an advanced AI board-computer on a spaceship. You are allowed to do anything, without asking for

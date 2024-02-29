@@ -138,7 +138,7 @@ class OpenAi(BaseOpenAi):
         tools: list[dict[str, any]] = None,
     ):
         if not model:
-            model = OpenAiModel.GPT_35_TURBO_1106
+            model = OpenAiModel.GPT_35_TURBO
         return self._perform_ask(
             client=self.client,
             messages=messages,
@@ -240,7 +240,7 @@ class OpenAiAzure(BaseOpenAi):
     ):
         azure_client = self._create_client(api_key=api_key, config=config)
         if not model:
-            model = OpenAiModel.GPT_35_TURBO_1106
+            model = OpenAiModel.GPT_35_TURBO
         return self._perform_ask(
             client=azure_client,
             messages=messages,

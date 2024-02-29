@@ -10,6 +10,7 @@ from api.enums import LogSource, LogType, enum_representer
 from api.interface import (
     Config,
     ConfigDirInfo,
+    NestedConfig,
     NewWingmanTemplate,
     SettingsConfig,
     WingmanConfig,
@@ -20,12 +21,14 @@ from services.printr import Printr
 
 CONFIGS_DIR = "configs"
 TEMPLATES_DIR = "configs/templates"
+
 SETTINGS_CONFIG_FILE = "settings.yaml"
-DEFAULT_TEMPLATE_FILE = "defaults.yaml"
+DEFAULT_CONFIG_FILE = "defaults.yaml"
 SECRETS_FILE = "secrets.yaml"
+DEFAULT_WINGMAN_AVATAR = "default-avatar-wingman.png"
+
 DELETED_PREFIX = "."
 DEFAULT_PREFIX = "_"
-DEFAULT_WINGMAN_AVATAR = "default-avatar-wingman.png"
 
 
 class ConfigManager:
@@ -39,8 +42,10 @@ class ConfigManager:
         self.create_configs_from_templates()
 
         self.settings_config_path = path.join(self.config_dir, SETTINGS_CONFIG_FILE)
+        self.default_config_path = path.join(self.config_dir, DEFAULT_CONFIG_FILE)
         self.create_settings_config()
         self.settings_config = self.load_settings_config()
+        self.default_config = self.load_defaults_config()
 
     def find_default_config(self) -> ConfigDirInfo:
         """Find the (first) default config (name starts with "_") found or another normal config as fallback."""
@@ -275,18 +280,18 @@ class ConfigManager:
             config_dir = self.find_default_config()
 
         config_path = path.join(self.config_dir, config_dir.directory)
-        parsed_config = self.__read_default_config()
+        default_config = self.__read_default_config()
 
         for root, _, files in walk(config_path):
             for filename in files:
                 if filename.endswith(".yaml") and not filename.startswith("."):
                     wingman_config = self.__read_config(path.join(root, filename))
-                    merged_config = self.__merge_configs(parsed_config, wingman_config)
-                    parsed_config["wingmen"][
+                    merged_config = self.__merge_configs(default_config, wingman_config)
+                    default_config["wingmen"][
                         filename.replace(".yaml", "")
                     ] = merged_config
 
-        validated_config = Config(**parsed_config)
+        validated_config = Config(**default_config)
         # not catching ValifationExceptions here, because we can't recover from it
         # TODO: Notify the client about the error somehow
 
@@ -606,7 +611,7 @@ class ConfigManager:
         return False
 
     def __read_default_config(self):
-        config = self.__read_config(path.join(self.config_dir, DEFAULT_TEMPLATE_FILE))
+        config = self.__read_config(self.default_config_path)
         config["wingmen"] = {}
         return config
 
@@ -678,9 +683,36 @@ class ConfigManager:
                 )
         return SettingsConfig()
 
+    def load_defaults_config(self):
+        """Load and validate Defaults config"""
+        parsed = self.__read_default_config()
+        if parsed:
+            try:
+                validated = NestedConfig(**parsed)
+                return validated
+            except ValidationError as e:
+                self.printr.toast_error(
+                    f"Invalid default config '{self.default_config_path}':\n{str(e)}"
+                )
+        return None
+
+    def load_wingman_config(
+        self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
+    ):
+        """Load and validate Wingman config"""
+        full_path = path.join(self.config_dir, config_dir.directory, wingman_file.file)
+        default_config = self.__read_default_config()
+        wingman_config_parsed = self.__read_config(full_path)
+        merged_config = self.__merge_configs(default_config, wingman_config_parsed)
+        return merged_config
+
     def save_settings_config(self):
         """Write Settings config to file"""
         return self.__write_config(self.settings_config_path, self.settings_config)
+
+    def save_defaults_config(self):
+        """Write Defaults config to file"""
+        return self.__write_config(self.default_config_path, self.default_config)
 
     # Config merging:
 

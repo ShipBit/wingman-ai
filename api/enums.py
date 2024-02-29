@@ -63,10 +63,8 @@ class TtsVoiceGender(Enum):
 
 
 class OpenAiModel(Enum):
-    GPT_35_TURBO_0125 = "gpt-3.5-turbo-0125"
-    GPT_4_0125_PREVIEW = "gpt-4-0125-preview"
-    GPT_35_TURBO_1106 = "gpt-3.5-turbo-1106"
-    GPT_4_1106_PREVIEW = "gpt-4-1106-preview"
+    GPT_35_TURBO = "gpt-3.5-turbo"
+    GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview"
 
 
 class OpenAiTtsVoice(Enum):
