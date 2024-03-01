@@ -870,6 +870,7 @@ class WingmanCore(WebSocketUser):
                             wingman_file=wingman_config_file,
                             wingman_config=wingman_config,
                         )
+        await self.load_config(self.current_config_dir)
 
         printr.print(
             "Have fun using Wingman Pro!",
