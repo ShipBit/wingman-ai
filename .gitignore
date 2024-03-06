@@ -174,3 +174,7 @@ apikeys.yaml
 api_keys.yaml
 
 configs/system/secrets.yaml
+
+.frontmatter/database/taxonomyDb.json
+
+frontmatter.json
