@@ -38,7 +38,7 @@ class WingmanPro:
                 files=files,
                 timeout=self.timeout,
             )
-            if response.status_code == 401:
+            if response.status_code == 403:
                 self.send_unauthorized_error()
                 return None
             else:
@@ -61,7 +61,7 @@ class WingmanPro:
                 files=files,
                 timeout=self.timeout,
             )
-        if response.status_code == 401:
+        if response.status_code == 403:
             self.send_unauthorized_error()
             return None
         else:
@@ -97,7 +97,7 @@ class WingmanPro:
             json=data,
             timeout=self.timeout,
         )
-        if response.status_code == 401:
+        if response.status_code == 403:
             self.send_unauthorized_error()
             return None
         else:
@@ -131,7 +131,7 @@ class WingmanPro:
                     timeout=self.timeout,
                     stream=True,
                 ) as response:
-                    if response.status_code == 401:
+                    if response.status_code == 403:
                         self.send_unauthorized_error()
                         return None
                     else:
@@ -186,7 +186,7 @@ class WingmanPro:
                 json=data,
                 timeout=self.timeout,
             )
-            if response.status_code == 401:
+            if response.status_code == 403:
                 self.send_unauthorized_error()
                 return
             else:
@@ -222,7 +222,7 @@ class WingmanPro:
             timeout=self.timeout,
         )
         if response is not None:
-            if response.status_code == 401:
+            if response.status_code == 403:
                 self.send_unauthorized_error()
                 return
             else:
@@ -240,7 +240,7 @@ class WingmanPro:
             timeout=self.timeout,
             headers=self._get_headers(),
         )
-        if response.status_code == 401:
+        if response.status_code == 403:
             self.send_unauthorized_error()
             return None
         else:
