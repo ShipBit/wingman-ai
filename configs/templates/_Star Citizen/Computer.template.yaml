@@ -313,7 +313,13 @@ commands:
           hotkey: right alt+y
   # ───────────────────────────────────────────
   - name: SelfDestruct
-    keys:
+    force_instant_activation: true
+    instant_activation:
+      - initiate self destruct
+      - activate self destruct
+    responses:
+      - Self-destruct engaged. Evacuation procedures recommended.
+      - Confirmed. Self-destruct in progress.
     actions:
       - keyboard:
           hotkey: backspace
