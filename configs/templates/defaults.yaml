@@ -21,22 +21,22 @@ features:
   # ─────────────────────── TTS Provider ─────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  tts_provider: openai # available: openai, edge_tts, elevenlabs, azure, xvasynth, wingman_pro
+  tts_provider: wingman_pro # available: openai, edge_tts, elevenlabs, azure, xvasynth, wingman_pro
 
   # ─────────────────────── Speech to text Provider ─────────────────────────
   # You can override the speech to text provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  stt_provider: openai # available: openai, azure, azure_speech, whispercpp, wingman_pro
+  stt_provider: wingman_pro # available: openai, azure, azure_speech, whispercpp, wingman_pro
 
   # ─────────────────────── Conversation Provider ─────────────────────────
   # You can override the conversation provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  conversation_provider: openai # available: openai, azure, wingman_pro
+  conversation_provider: wingman_pro # available: openai, azure, wingman_pro
 
   # ─────────────────────── Summarize Provider ─────────────────────────
   # You can override the summarize provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  summarize_provider: openai # available: openai, azure, wingman_pro
+  summarize_provider: wingman_pro # available: openai, azure, wingman_pro
 
   # ─────────────────────── Cost Control ─────────────────────────
   # How many messages should a Wingman remember in your conversations?
