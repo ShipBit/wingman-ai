@@ -67,6 +67,11 @@ class OpenAiModel(Enum):
     GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview"
 
 
+class WingmanProAzureDeployment(Enum):
+    GPT_35_TURBO = "gpt-35-turbo"
+    GPT_4_TURBO = "gpt-4-turbo"
+
+
 class OpenAiTtsVoice(Enum):
     NOVA = "nova"
     ALLOY = "alloy"
@@ -189,6 +194,10 @@ class OpenAiModelEnumModel(BaseEnumModel):
     model: OpenAiModel
 
 
+class WingmanProAzureDeploymentEnumModel(BaseEnumModel):
+    deployment_name: WingmanProAzureDeployment
+
+
 class OpenAiTtsVoiceEnumModel(BaseEnumModel):
     voice: OpenAiTtsVoice
 
@@ -248,6 +257,7 @@ ENUM_TYPES = {
     "ElevenlabsModel": ElevenlabsModelEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "OpenAiModel": OpenAiModelEnumModel,
+    "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,

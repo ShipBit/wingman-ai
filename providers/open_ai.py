@@ -233,18 +233,16 @@ class OpenAiAzure(BaseOpenAi):
         self,
         messages: list[dict[str, str]],
         api_key: str,
-        config: AzureConfig,
-        model: OpenAiModel,
+        config: AzureInstanceConfig,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):
         azure_client = self._create_client(api_key=api_key, config=config)
-        if not model:
-            model = OpenAiModel.GPT_35_TURBO
         return self._perform_ask(
             client=azure_client,
             messages=messages,
-            model=model,
+            # Azure uses the deployment name as the model
+            model=config.deployment_name,
             stream=stream,
             tools=tools,
         )
