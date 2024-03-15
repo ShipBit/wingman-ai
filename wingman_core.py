@@ -939,11 +939,7 @@ class WingmanCore(WebSocketUser):
         wingman_pro = WingmanPro(
             wingman_name="", settings=self.config_manager.settings_config.wingman_pro
         )
-        try:
-            voices = wingman_pro.get_available_voices(locale=locale)
-        except:
-            printr.toast_error("Failed to retrieve voices.")
-            voices = []
+        voices = wingman_pro.get_available_voices(locale=locale)
         if not voices:
             return []
         result = [self.__convert_azure_voice(voice) for voice in voices]

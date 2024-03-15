@@ -195,42 +195,37 @@ class OpenAiWingman(Wingman):
             str | None: The transcript of the audio file or None if the transcription failed.
         """
         transcript = None
-        try:
-            if self.stt_provider == SttProvider.AZURE:
-                transcript = self.openai_azure.transcribe_whisper(
-                    filename=audio_input_wav,
-                    api_key=self.azure_api_keys["whisper"],
-                    config=self.config.azure.whisper,
+
+        if self.stt_provider == SttProvider.AZURE:
+            transcript = self.openai_azure.transcribe_whisper(
+                filename=audio_input_wav,
+                api_key=self.azure_api_keys["whisper"],
+                config=self.config.azure.whisper,
+            )
+        elif self.stt_provider == SttProvider.AZURE_SPEECH:
+            transcript = self.openai_azure.transcribe_azure_speech(
+                filename=audio_input_wav,
+                api_key=self.azure_api_keys["tts"],
+                config=self.config.azure.stt,
+            )
+        elif self.stt_provider == SttProvider.WHISPERCPP:
+            transcript = self.whispercpp.transcribe(
+                filename=audio_input_wav, config=self.config.whispercpp
+            )
+        elif self.stt_provider == SttProvider.WINGMAN_PRO:
+            if self.config.wingman_pro.stt_provider == WingmanProSttProvider.WHISPER:
+                transcript = self.wingman_pro.transcribe_whisper(
+                    filename=audio_input_wav
                 )
-            elif self.stt_provider == SttProvider.AZURE_SPEECH:
-                transcript = self.openai_azure.transcribe_azure_speech(
-                    filename=audio_input_wav,
-                    api_key=self.azure_api_keys["tts"],
-                    config=self.config.azure.stt,
+            elif (
+                self.config.wingman_pro.stt_provider
+                == WingmanProSttProvider.AZURE_SPEECH
+            ):
+                transcript = self.wingman_pro.transcribe_azure_speech(
+                    filename=audio_input_wav, config=self.config.azure.stt
                 )
-            elif self.stt_provider == SttProvider.WHISPERCPP:
-                transcript = self.whispercpp.transcribe(
-                    filename=audio_input_wav, config=self.config.whispercpp
-                )
-            elif self.stt_provider == SttProvider.WINGMAN_PRO:
-                if (
-                    self.config.wingman_pro.stt_provider
-                    == WingmanProSttProvider.WHISPER
-                ):
-                    transcript = self.wingman_pro.transcribe_whisper(
-                        filename=audio_input_wav
-                    )
-                elif (
-                    self.config.wingman_pro.stt_provider
-                    == WingmanProSttProvider.AZURE_SPEECH
-                ):
-                    transcript = self.wingman_pro.transcribe_azure_speech(
-                        filename=audio_input_wav, config=self.config.azure.stt
-                    )
-            elif self.stt_provider == SttProvider.OPENAI:
-                transcript = self.openai.transcribe(filename=audio_input_wav)
-        except:
-            printr.toast_error("Transcription failed.")
+        elif self.stt_provider == SttProvider.OPENAI:
+            transcript = self.openai.transcribe(filename=audio_input_wav)
 
         if not transcript:
             return None
