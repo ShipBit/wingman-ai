@@ -1,6 +1,6 @@
 import openai
 import requests
-from api.enums import CommandTag, LogType, OpenAiModel, OpenAiTtsVoice
+from api.enums import CommandTag, LogType, OpenAiTtsVoice
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
@@ -72,7 +72,7 @@ class WingmanPro:
     def ask(
         self,
         messages: list[dict[str, str]],
-        model: OpenAiModel,
+        deployment: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):
@@ -86,7 +86,7 @@ class WingmanPro:
 
         data = {
             "messages": serialized_messages,
-            "model": model.value,
+            "deployment": deployment,
             "stream": stream,
             "tools": tools,
         }

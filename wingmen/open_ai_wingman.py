@@ -560,7 +560,7 @@ class OpenAiWingman(Wingman):
         elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
             completion = self.wingman_pro.ask(
                 messages=self.messages,
-                model=self.config.openai.conversation_model,
+                deployment=self.config.azure.conversation.deployment_name,
                 tools=tools,
             )
 
@@ -649,7 +649,7 @@ class OpenAiWingman(Wingman):
         elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
             summarize_response = self.wingman_pro.ask(
                 messages=self.messages,
-                model=self.config.openai.summarize_model,
+                deployment=self.config.azure.summarize.deployment_name,
             )
 
         if summarize_response is None:
