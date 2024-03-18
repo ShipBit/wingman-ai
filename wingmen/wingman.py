@@ -404,18 +404,30 @@ class Wingman:
 
         for action in command.actions:
             if action.keyboard:
-                if action.keyboard.hold:
-                    keyboard.press(
-                        action.keyboard.hotkey_codes or action.keyboard.hotkey
-                    )
-                    time.sleep(action.keyboard.hold)
-                    keyboard.release(
-                        action.keyboard.hotkey_codes or action.keyboard.hotkey
-                    )
+                # grouped key presses
+                if action.keyboard.press == action.keyboard.release:
+                    if action.keyboard.hold:
+                        keyboard.press(
+                            action.keyboard.hotkey_codes or action.keyboard.hotkey
+                        )
+                        time.sleep(action.keyboard.hold)
+                        keyboard.release(
+                            action.keyboard.hotkey_codes or action.keyboard.hotkey
+                        )
+                    else:
+                        keyboard.send(
+                            action.keyboard.hotkey_codes or action.keyboard.hotkey
+                        )
+                # timelined key presses
                 else:
-                    keyboard.send(
-                        action.keyboard.hotkey_codes or action.keyboard.hotkey
-                    )
+                    if action.keyboard.press:
+                        keyboard.press(
+                            action.keyboard.hotkey_codes or action.keyboard.hotkey
+                        )
+                    if action.keyboard.release:
+                        keyboard.release(
+                            action.keyboard.hotkey_codes or action.keyboard.hotkey
+                        )
 
             if action.mouse:
                 if action.mouse.move_to:

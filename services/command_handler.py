@@ -109,13 +109,16 @@ class CommandHandler:
 
         # Start timeout
         # self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
+        self.recorded_keys = []
 
         def _on_key_event(event):
+            if event.event_type == "down" and event.name == "esc":
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type == KeyboardRecordingType.SINGLE))
             self.recorded_keys.append(event)
             if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
-                WebSocketUser.ensure_async(self.handle_stop_recording(None, None))
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, True))
 
-        self.hook_callback = keyboard.hook(_on_key_event)
+        self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
 
     async def handle_record_mouse_actions(
         self, command: RecordMouseActionsCommand, websocket: WebSocket
@@ -130,7 +133,7 @@ class CommandHandler:
         )
 
     async def handle_stop_recording(
-        self, command: StopRecordingCommand, websocket: WebSocket
+        self, command: StopRecordingCommand, websocket: WebSocket, single: bool = True
     ):
         if self.hook_callback:
             keyboard.unhook(self.hook_callback)
@@ -138,7 +141,7 @@ class CommandHandler:
         if self.timeout_task:
             self.timeout_task.cancel()
 
-        actions = self._get_actions_from_recorded_keys(recorded_keys)
+        actions = self._get_actions_from_recorded_keys(recorded_keys) if single else self._get_actions_from_recorded_keys_press_release(recorded_keys)
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
 
@@ -155,6 +158,56 @@ class CommandHandler:
     async def _start_timeout(self, timeout):
         await asyncio.sleep(timeout)
         await self.handle_stop_recording(None, None)
+
+    def _get_actions_from_recorded_keys_press_release(self, recorded):
+        actions: list[CommandActionConfig] = []
+
+        last_action_time = None
+        keys_pressed = []
+
+        # Process recorded key events to calculate press durations and inactivity
+        for key in recorded:
+            key_name = key.name.lower()
+            key_code = key.scan_code
+
+            if key.event_type == "down" or key.event_type == "up":
+                # update status
+                if key.event_type == "down":
+                    # Ignore further processing if 'esc' was pressed
+                    if key_name == "esc":
+                        break
+                    if key_name not in keys_pressed:
+                        keys_pressed.append(key_name)
+                    else:
+                        continue
+                else:
+                    if key_name in keys_pressed:
+                        keys_pressed.remove(key_name)
+                    else:
+                        continue
+
+                # add wait time
+                if last_action_time is not None:
+                    inactivity_duration = key.time - last_action_time
+                    wait_config = CommandActionConfig()
+                    wait_config.wait = round(inactivity_duration, 2)
+                    actions.append(wait_config)
+                last_action_time = key.time
+
+                # add keyboard action
+                key_config = CommandActionConfig()
+                key_config.keyboard = CommandKeyboardConfig(hotkey=key_name, hotkey_codes=[key_code])
+                if key.event_type == "down":
+                    key_config.keyboard.press = True
+                else:
+                    key_config.keyboard.release = True
+                actions.append(key_config)
+
+        #still a key pressed - could do something here
+        if len(keys_pressed) > 0:
+            pass
+
+        return actions
 
     def _get_actions_from_recorded_keys(self, recorded):
         actions: list[CommandActionConfig] = []
