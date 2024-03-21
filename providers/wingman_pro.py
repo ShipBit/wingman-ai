@@ -36,6 +36,7 @@ class WingmanPro:
                 url=f"{self.settings.base_url}/transcribe-whisper",
                 params={"region": self.settings.region.value},
                 files=files,
+                headers=self._get_headers(),
                 timeout=self.timeout,
             )
             if response.status_code == 403:
