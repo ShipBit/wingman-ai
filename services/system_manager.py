@@ -4,7 +4,7 @@ import requests
 from packaging import version
 from api.interface import SystemCore, SystemInfo
 
-LOCAL_VERSION = "2.2.0b2"
+LOCAL_VERSION = "1.0.0"
 VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
 
 
@@ -39,7 +39,7 @@ class SystemManager:
 
         except requests.RequestException:
             return False
-        except ValueError as e:
+        except ValueError:
             return False
 
     def current_version_is_latest(self):

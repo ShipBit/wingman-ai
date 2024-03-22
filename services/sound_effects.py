@@ -1,12 +1,10 @@
 from enum import Enum
 from pedalboard import (
-    Compressor,
     HighpassFilter,
     LowpassFilter,
     PeakFilter,
     Pedalboard,
     Chorus,
-    PitchShift,
     Resample,
     Reverb,
     Delay,
