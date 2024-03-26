@@ -48,6 +48,7 @@ class AzureApiVersion(Enum):
 
 class AzureRegion(Enum):
     WESTEUROPE = "westeurope"
+    NORTHCENTRALUS = "northcentralus"
 
 
 class ElevenlabsModel(Enum):
@@ -133,6 +134,7 @@ class KeyboardRecordingType(Enum):
 
 class WingmanProRegion(Enum):
     EUROPE = "europe"
+    USA = "usa"
 
 
 class WingmanProSttProvider(Enum):

@@ -201,3 +201,5 @@ commands:
 wingman_pro:
   stt_provider: azure_speech # or whisper
   tts_provider: azure # or openai
+  summarize_deployment: gpt-35-turbo # or gpt-4-turbo
+  conversation_deployment: gpt-35-turbo # or gpt-4-turbo

@@ -1,6 +1,6 @@
 import openai
 import requests
-from api.enums import CommandTag, LogType, OpenAiTtsVoice
+from api.enums import CommandTag, LogType, OpenAiTtsVoice, WingmanProAzureDeployment
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
@@ -73,7 +73,7 @@ class WingmanPro:
     def ask(
         self,
         messages: list[dict[str, str]],
-        deployment: str,
+        deployment: WingmanProAzureDeployment,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):
@@ -87,7 +87,7 @@ class WingmanPro:
 
         data = {
             "messages": serialized_messages,
-            "deployment": deployment,
+            "deployment": deployment.value,
             "stream": stream,
             "tools": tools,
         }

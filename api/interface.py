@@ -19,6 +19,7 @@ from api.enums import (
     TtsProvider,
     VoiceActivationSttProvider,
     WingmanInitializationErrorType,
+    WingmanProAzureDeployment,
     WingmanProRegion,
     WingmanProSttProvider,
     WingmanProTtsProvider,
@@ -271,6 +272,8 @@ class OpenAiConfig(BaseModel):
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
+    summarize_deployment: WingmanProAzureDeployment
+    conversation_deployment: WingmanProAzureDeployment
     # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
 
 
