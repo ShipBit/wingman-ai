@@ -1,9 +1,9 @@
 azure-cognitiveservices-speech==1.36.0
 edge-tts==6.1.10
-elevenlabslib~=0.20.0
+elevenlabslib~=0.21.0
 fastapi~=0.110.0
 numpy~=1.26.4
-openai~=1.14.2
+openai~=1.14.3
 packaging~=24.0
 pedalboard~=0.9.3
 platformdirs~=4.2.0

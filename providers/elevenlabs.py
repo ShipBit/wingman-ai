@@ -99,24 +99,27 @@ class ElevenLabs:
             ),
         )
 
-        if not stream and (sound_config.play_beep or len(sound_config.effects) > 0):
-            # play with effects - slower
-            audio_bytes, _history_id = voice.generate_audio_v2(
+        if not stream:
+            # play with our audio player so that we call our started and ended callbacks
+            audio_bytes, generation_info = voice.generate_audio_v3(
                 prompt=text,
-                generationOptions=generation_options,
+                generation_options=generation_options,
             )
             if audio_bytes:
                 await audio_player.play_with_effects(
-                    input_data=audio_bytes,
+                    input_data=audio_bytes.result(),
                     config=sound_config,
                     wingman_name=wingman_name,
                 )
         else:
-            _, output_stream_future, _ = voice.generate_stream_audio_v2(
+            # playback using elevenlabslib
+            _, _, output_stream_future, _ = voice.stream_audio_v3(
                 prompt=text,
-                generationOptions=generation_options,
-                playbackOptions=playback_options,
+                generation_options=generation_options,
+                playback_options=playback_options,
             )
+
+            # if the user cancels the playback...
             output_stream = output_stream_future.result()
 
             def playback_finished(wingman_name):
