@@ -32,6 +32,9 @@ azure:
   conversation:
     deployment_name: gpt-4-turbo
 
+wingman_pro:
+  conversation_deployment: gpt-4-turbo
+
 openai:
   # gpt-3.5 is not capable enough for multi-param function calls.
   conversation_model: gpt-4-turbo-preview
