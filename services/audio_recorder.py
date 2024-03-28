@@ -6,6 +6,7 @@ import numpy
 import sounddevice
 import soundfile
 import speech_recognition as sr
+from speech_recognition import AudioData
 from api.enums import CommandTag, LogType
 from services.printr import Printr
 from services.file import get_writable_dir
@@ -113,12 +114,30 @@ class AudioRecorder:
 
     # Continuous listening:
 
-    def __handle_continuous_listening(self, _recognizer, audio):
+    # def determine_length(self, audio_data: bytes):
+    #     with io.BytesIO(audio_data) as audio_file:
+    #         with wave.open(audio_file, "rb") as wave_file:
+    #             num_frames = wave_file.getnframes()
+    #             frame_rate = wave_file.getframerate()
+    #             duration_in_seconds = num_frames / float(frame_rate)
+    #     return duration_in_seconds
+
+    def __handle_continuous_listening(self, _recognizer, audio: AudioData):
+        audio_bytes = audio.get_wav_data()
+        # duration_in_seconds = self.determine_length(audio_bytes)
+
+        # if duration_in_seconds < 1:
+        #     self.printr.print(
+        #         "Skipped very short recording during VA",
+        #         color=LogType.WARNING,
+        #         command_tag=CommandTag.IGNORED_RECORDING,
+        #     )
+        # else:
         file_path = path.join(
             get_writable_dir(RECORDING_PATH), CONTINUOUS_RECORDING_FILE
         )
         with open(file_path, "wb") as audio_file:
-            audio_file.write(audio.get_wav_data())
+            audio_file.write(audio_bytes)
 
         if callable(self.on_speech_recorded):
             self.on_speech_recorded(file_path)
