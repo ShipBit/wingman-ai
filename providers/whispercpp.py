@@ -17,11 +17,8 @@ class Whispercpp:
         self.times_checked_whispercpp: int = 0
         self.printr = Printr()
 
-    def validate_config(
-        self, config: WhispercppSttConfig, errors: list[WingmanInitializationError]
-    ):
-        if not errors:
-            errors = []
+    def validate_config(self, config: WhispercppSttConfig):
+        errors: list[WingmanInitializationError] = []
 
         if not config.base_url:
             errors.append(
@@ -102,12 +99,12 @@ class Whispercpp:
 
     def __check_if_whispercpp_is_running(self, config: WhispercppSttConfig):
         try:
-            response = requests.get(config.base_url, timeout=10)
+            response = requests.get(config.base_url, timeout=5)
             response.raise_for_status()
 
         except requests.RequestException:
-            time.sleep(1)
             if self.times_checked_whispercpp == 1 and config.autostart:
+                time.sleep(1)
                 # If not found, try to start whispercpp as a subprocess
                 subprocess.Popen(
                     [

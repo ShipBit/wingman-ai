@@ -587,6 +587,10 @@ class WingmanCore(WebSocketUser):
             config_dir = self.config_manager.get_config_dir(config_name)
 
         errors, config_info = await self.load_config(config_dir)
+
+        for error in errors:
+            printr.toast_error(error.message)
+
         return config_info
 
     # GET /config-dir-path
@@ -606,9 +610,11 @@ class WingmanCore(WebSocketUser):
         self.current_config_dir = loaded_config_dir
         self.current_config = config
         self.tower = Tower(config=config, audio_player=self.audio_player)
+
         errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
         )
+
         return errors, ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
 
     # POST config/create

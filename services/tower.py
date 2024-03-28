@@ -64,7 +64,8 @@ class Tower:
                 printr.toast_error(f"Could not instantiate {wingman_name}:\n{str(e)}")
             else:
                 # additional validation check if no exception was raised
-                errors.extend(await wingman.validate())
+                validation_errors = await wingman.validate()
+                errors.extend(validation_errors)
                 if not errors or len(errors) == 0:
                     wingman.prepare()
                     self.wingmen.append(wingman)

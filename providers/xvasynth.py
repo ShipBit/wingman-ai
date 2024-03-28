@@ -23,18 +23,15 @@ class XVASynth:
         self.current_voice = ""
         self.printr = Printr()
 
-    def validate_config(
-        self, config: XVASynthTtsConfig, errors: list[WingmanInitializationError]
-    ):
-        if not errors:
-            errors = []
+    def validate_config(self, config: XVASynthTtsConfig):
+        errors: list[WingmanInitializationError] = []
 
         self.xvasynth_path = config.xvasynth_path
         self.process_device = config.process_device
         self.times_checked_xvasynth = 0
 
         # check if xvasynth is running a few times, if cannot find it, send error
-        while self.times_checked_xvasynth < 5:
+        while self.times_checked_xvasynth < 3:
             is_running_error = self.__check_if_running(config.synthesize_url)
             if is_running_error == "ok":
                 break

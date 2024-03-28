@@ -168,7 +168,8 @@ class OpenAiWingman(Wingman):
         self.xvasynth = XVASynth(
             wingman_name=self.name,
         )
-        self.xvasynth.validate_config(config=self.config.xvasynth, errors=errors)
+        validation_errors = self.xvasynth.validate_config(config=self.config.xvasynth)
+        errors.extend(validation_errors)
 
     async def validate_and_set_whispercpp(
         self, errors: list[WingmanInitializationError]
@@ -176,7 +177,10 @@ class OpenAiWingman(Wingman):
         self.whispercpp = Whispercpp(
             wingman_name=self.name,
         )
-        self.whispercpp.validate_config(config=self.config.whispercpp, errors=errors)
+        validation_errors = self.whispercpp.validate_config(
+            config=self.config.whispercpp
+        )
+        errors.extend(validation_errors)
 
     async def validate_and_set_wingman_pro(
         self, errors: list[WingmanInitializationError]
