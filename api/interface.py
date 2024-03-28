@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Callable, Optional
 from typing_extensions import Annotated, TypedDict
 from pydantic import (
     Base64Str,
@@ -364,6 +364,29 @@ class CommandConfig(BaseModel):
     """The actions to execute when the command is called. You can use keyboard, mouse and wait actions here."""
 
 
+class FunctionParameter(BaseModel):
+    name: str
+    value: str
+
+class SkillActionConfig(BaseModel):
+    name: str
+    parameters: Optional[list[FunctionParameter]] = None
+
+
+class SkillEventConfig(BaseModel):
+    name: str
+    handler: Optional[Callable[[dict[str, str]], None]] = None
+    responses: Optional[list[str]] = None
+    """Optional: Provide responses that will be used when the command is executed. A random one will be chosen (if multiple)."""
+    actions: Optional[list[CommandActionConfig]] = None
+    """Optional: The actions to execute when the event fires. You can use keyboard, mouse and wait actions here."""
+
+class SkillConfig(BaseModel):
+    name: str
+    actions: Optional[list[SkillActionConfig]] = None
+    events: Optional[list[SkillEventConfig]] = None
+
+
 class CustomWingmanClassConfig(BaseModel):
     module: str
     """Where your code is located. Use '.' as path separator!
@@ -385,6 +408,7 @@ class NestedConfig(BaseModel):
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
     commands: Optional[list[CommandConfig]] = None
+    skills: Optional[list[SkillConfig]] = None
 
 
 class CustomWingmanProperty(BaseModel):
