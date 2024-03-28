@@ -743,6 +743,28 @@ class OpenAiWingman(Wingman):
                 },
             },
         ]
+
+        if self.config.skills is not None:
+            for skills in self.config.skills:
+                if skills.actions is not None:
+                    for action in skills.actions:
+                        # @TODO: load actions and parameters from skill manager
+                        tools.append({
+                            "type": "function",
+                            "function": {
+                                "name": action.name,
+                                # "description": "Executes a skill", @TODO: required?!
+                                "parameters": {
+                                    "type": "object",
+                                    "properties": {
+                                        # @TODO: load from skill manager?
+                                    },
+                                    # @TODO: load from skill manager
+                                    # "required": ["command_name"],
+                                },
+                            },
+                        })
+
         return tools
 
     async def __ask_gpt_for_locale(self, language: str) -> str:
