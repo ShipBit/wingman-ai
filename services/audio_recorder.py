@@ -2,11 +2,13 @@ from os import path
 from threading import Lock
 import time
 from typing import Callable
+import io
 import numpy
 import sounddevice
 import soundfile
 import speech_recognition as sr
 from speech_recognition import AudioData
+from scipy.signal import butter, filtfilt
 from api.enums import CommandTag, LogType
 from services.printr import Printr
 from services.file import get_writable_dir
@@ -117,8 +119,56 @@ class AudioRecorder:
 
     # Continuous listening:
 
+    # def determine_length(self, audio_data: bytes):
+    #     with io.BytesIO(audio_data) as audio_file:
+    #         with wave.open(audio_file, "rb") as wave_file:
+    #             num_frames = wave_file.getnframes()
+    #             frame_rate = wave_file.getframerate()
+    #             duration_in_seconds = num_frames / float(frame_rate)
+    #     return duration_in_seconds
+    
+    
+    def audio_contains_spoken_words(self, audio_bytes, lowcut=85, highcut=250, energy_threshold=0.01):
+        def butter_bandpass(lowcut, highcut, fs, order=5):
+            nyq = 0.5 * fs
+            low = lowcut / nyq
+            high = highcut / nyq
+            b, a = butter(order, [low, high], btype='band')
+            return b, a
+
+        def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+            b, a = butter_bandpass(lowcut, highcut, fs, order=order)
+            y = filtfilt(b, a, data)
+            return y
+
+        audio_data, sample_rate = soundfile.read(io.BytesIO(audio_bytes))
+        filtered_audio = butter_bandpass_filter(audio_data, lowcut, highcut, sample_rate)
+        rms_energy = numpy.sqrt(numpy.mean(filtered_audio ** 2))
+        if rms_energy > energy_threshold:
+            return True
+        return False
+
     def __handle_continuous_listening(self, _recognizer, audio: AudioData):
         audio_bytes = audio.get_wav_data()
+
+        # duration check
+        # duration_in_seconds = self.determine_length(audio_bytes)
+        # if duration_in_seconds < 1:
+        #     self.printr.print(
+        #         "Skipped very short recording during VA",
+        #         color=LogType.WARNING,
+        #         command_tag=CommandTag.IGNORED_RECORDING,
+        #     )
+        #     return
+
+        # voice frequency check
+        if not self.audio_contains_spoken_words(audio_bytes=audio_bytes):
+            self.printr.print(
+                "Skipped recording without detected voice during VA",
+                color=LogType.WARNING,
+                command_tag=CommandTag.IGNORED_RECORDING,
+            )
+            return
 
         file_path = path.join(
             get_writable_dir(RECORDING_PATH), CONTINUOUS_RECORDING_FILE
