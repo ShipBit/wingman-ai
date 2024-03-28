@@ -839,6 +839,7 @@ class WingmanCore(WebSocketUser):
         self.config_manager.settings_config.voice_activation.whispercpp = whispercpp
 
         if self.config_manager.save_settings_config():
+            await self.load_config()
             printr.print(
                 "Wingman Pro settings updated.",
                 toast=ToastType.NORMAL,
