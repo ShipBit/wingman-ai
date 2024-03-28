@@ -37,6 +37,9 @@ class AudioRecorder:
         self.is_listening_continuously = False
         self.microphone = sr.Microphone(sample_rate=samplerate)
         self.recognizer = sr.Recognizer()
+        self.recognizer.dynamic_energy_threshold = (
+            False  # seems to be causing super long recordings / threading issues
+        )
         self.stop_function = None
         # default devices are fixed once this is called
         # so this methods needs to be called every time a new device is configured
@@ -114,25 +117,9 @@ class AudioRecorder:
 
     # Continuous listening:
 
-    # def determine_length(self, audio_data: bytes):
-    #     with io.BytesIO(audio_data) as audio_file:
-    #         with wave.open(audio_file, "rb") as wave_file:
-    #             num_frames = wave_file.getnframes()
-    #             frame_rate = wave_file.getframerate()
-    #             duration_in_seconds = num_frames / float(frame_rate)
-    #     return duration_in_seconds
-
     def __handle_continuous_listening(self, _recognizer, audio: AudioData):
         audio_bytes = audio.get_wav_data()
-        # duration_in_seconds = self.determine_length(audio_bytes)
 
-        # if duration_in_seconds < 1:
-        #     self.printr.print(
-        #         "Skipped very short recording during VA",
-        #         color=LogType.WARNING,
-        #         command_tag=CommandTag.IGNORED_RECORDING,
-        #     )
-        # else:
         file_path = path.join(
             get_writable_dir(RECORDING_PATH), CONTINUOUS_RECORDING_FILE
         )
