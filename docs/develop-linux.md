@@ -9,6 +9,24 @@ Install required packages
 apt install python3-tk python3.10-venv portaudio
 ```
 
+for NixOs shell.nix
+```nix
+{ pkgs ? import <unstable> {} }:
+  pkgs.mkShell {
+    packages = with pkgs; [
+    python311Full
+    portaudio
+    pyenv
+    linuxHeaders
+    nix-index
+    pkg-config
+  ];
+
+  C_INCLUDE_PATH = "${pkgs.linuxHeaders}/include";
+}
+```
+
+
 ## Setup virtual environment (venv)
 ```bash
 python -m venv venv                 # create a virtual environment
