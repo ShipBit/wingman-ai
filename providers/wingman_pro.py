@@ -268,9 +268,9 @@ class WingmanPro:
 
     def __resolve_gender(self, enum_value: int):
         if enum_value == 1:
-            return "Male"
-        if enum_value == 2:
             return "Female"
+        if enum_value == 2:
+            return "Male"
         if enum_value == 3:
             return "Neutral"
         return "Unknown"
