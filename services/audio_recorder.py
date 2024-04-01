@@ -2,12 +2,15 @@ from os import path
 from threading import Lock
 import time
 from typing import Callable
+import io
 import numpy
 import sounddevice
 import soundfile
 import speech_recognition as sr
 from speech_recognition import AudioData
+from scipy.signal import butter, filtfilt
 from api.enums import CommandTag, LogType
+from api.interface import VoiceActivationSettings
 from services.printr import Printr
 from services.file import get_writable_dir
 
@@ -32,6 +35,7 @@ class AudioRecorder:
         self.is_recording = False
         self.recording_data = None
         self.recstream = None
+        self.va_settings: VoiceActivationSettings = None
 
         self.lock = Lock()
         self.is_listening_continuously = False
@@ -117,8 +121,50 @@ class AudioRecorder:
 
     # Continuous listening:
 
+    def contains_speech(self, audio_bytes: bytes, energy_threshold: float):
+        def butter_bandpass(lowcut: int, highcut: int, sample_rate, order):
+            nyq = 0.5 * sample_rate
+            low = lowcut / nyq
+            high = highcut / nyq
+            b, a = butter(order, [low, high], btype="band")
+            return b, a
+
+        def butter_bandpass_filter(
+            audio_data, lowcut: int, highcut: int, sample_rate, order: int
+        ):
+            b, a = butter_bandpass(
+                lowcut=lowcut, highcut=highcut, sample_rate=sample_rate, order=order
+            )
+            y = filtfilt(b, a, audio_data)
+            return y
+
+        audio_data, sample_rate = soundfile.read(io.BytesIO(audio_bytes))
+        filtered_audio = butter_bandpass_filter(
+            audio_data=audio_data,
+            sample_rate=sample_rate,
+            lowcut=85,
+            highcut=250,
+            order=5,
+        )
+        rms_energy = numpy.sqrt(numpy.mean(filtered_audio**2))
+
+        if rms_energy > energy_threshold:
+            return True, rms_energy
+        return False, rms_energy
+
     def __handle_continuous_listening(self, _recognizer, audio: AudioData):
         audio_bytes = audio.get_wav_data()
+
+        # skip early if the recording is just noise
+        contains_speech, recorded_energy = self.contains_speech(
+            audio_bytes=audio_bytes, energy_threshold=self.va_settings.energy_threshold
+        )
+        if not contains_speech:
+            self.printr.print(
+                f"Skipped recording with energy threshold {recorded_energy} < {self.va_settings.energy_threshold}",
+                command_tag=CommandTag.IGNORED_RECORDING,
+            )
+            return
 
         file_path = path.join(
             get_writable_dir(RECORDING_PATH), CONTINUOUS_RECORDING_FILE
@@ -147,7 +193,8 @@ class AudioRecorder:
                     color=LogType.ERROR,
                 )
 
-    def start_continuous_listening(self):
+    def start_continuous_listening(self, va_settings: VoiceActivationSettings):
+        self.va_settings = va_settings
         while True:
             with self.lock:
                 if not self.is_listening_continuously and self.stop_function is None:

@@ -2,6 +2,7 @@ audio: {}
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
+  energy_threshold: 0.01
 
   stt_provider: wingman_pro # or azure, whispercpp, openai
 
