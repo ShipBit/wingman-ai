@@ -830,6 +830,7 @@ class WingmanCore(WebSocketUser):
         stt_provider: VoiceActivationSttProvider,
         azure: AzureSttConfig,
         whispercpp: WhispercppSttConfig,
+        va_energy_threshold: float,
     ):
         self.config_manager.settings_config.wingman_pro.base_url = base_url
         self.config_manager.settings_config.wingman_pro.region = region
@@ -838,6 +839,13 @@ class WingmanCore(WebSocketUser):
         self.config_manager.settings_config.voice_activation.azure = azure
         self.config_manager.settings_config.voice_activation.whispercpp = whispercpp
 
+        old_va_threshold = (
+            self.config_manager.settings_config.voice_activation.energy_threshold
+        )
+        self.config_manager.settings_config.voice_activation.energy_threshold = (
+            va_energy_threshold
+        )
+
         if self.config_manager.save_settings_config():
             await self.load_config()
             printr.print(
@@ -845,6 +853,11 @@ class WingmanCore(WebSocketUser):
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
             )
+
+        # restart VA with new settings
+        if self.is_listening and old_va_threshold != va_energy_threshold:
+            self.start_voice_recognition(mute=True)
+            self.start_voice_recognition(mute=False, adjust_for_ambient_noise=True)
 
     # POST /settings/wingman-pro/make-default
     async def set_wingman_pro_as_default(self, patch_existing_wingmen: bool):
@@ -902,7 +915,9 @@ class WingmanCore(WebSocketUser):
             else:
                 if adjust_for_ambient_noise:
                     self.audio_recorder.adjust_for_ambient_noise()
-                self.audio_recorder.start_continuous_listening()
+                self.audio_recorder.start_continuous_listening(
+                    va_settings=self.settings.voice_activation
+                )
         else:
             if (
                 self.settings.voice_activation.stt_provider

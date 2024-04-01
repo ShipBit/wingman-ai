@@ -301,6 +301,9 @@ class VoiceActivationSettings(BaseModel):
 
     mute_toggle_key_codes: Optional[list[int]] = None
 
+    energy_threshold: float
+    """The minimum energy threshold a recording must pass in a certain frequency band to be considererd as spoken voice."""
+
     stt_provider: VoiceActivationSttProvider
 
     azure: AzureSttConfig

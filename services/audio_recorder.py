@@ -10,6 +10,7 @@ import speech_recognition as sr
 from speech_recognition import AudioData
 from scipy.signal import butter, filtfilt
 from api.enums import CommandTag, LogType
+from api.interface import VoiceActivationSettings
 from services.printr import Printr
 from services.file import get_writable_dir
 
@@ -34,6 +35,7 @@ class AudioRecorder:
         self.is_recording = False
         self.recording_data = None
         self.recstream = None
+        self.va_settings: VoiceActivationSettings = None
 
         self.lock = Lock()
         self.is_listening_continuously = False
@@ -119,53 +121,47 @@ class AudioRecorder:
 
     # Continuous listening:
 
-    # def determine_length(self, audio_data: bytes):
-    #     with io.BytesIO(audio_data) as audio_file:
-    #         with wave.open(audio_file, "rb") as wave_file:
-    #             num_frames = wave_file.getnframes()
-    #             frame_rate = wave_file.getframerate()
-    #             duration_in_seconds = num_frames / float(frame_rate)
-    #     return duration_in_seconds
-    
-    
-    def audio_contains_spoken_words(self, audio_bytes, lowcut=85, highcut=250, energy_threshold=0.01):
-        def butter_bandpass(lowcut, highcut, fs, order=5):
-            nyq = 0.5 * fs
+    def contains_speech(self, audio_bytes: bytes, energy_threshold: float):
+        def butter_bandpass(lowcut: int, highcut: int, sample_rate, order):
+            nyq = 0.5 * sample_rate
             low = lowcut / nyq
             high = highcut / nyq
-            b, a = butter(order, [low, high], btype='band')
+            b, a = butter(order, [low, high], btype="band")
             return b, a
 
-        def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
-            b, a = butter_bandpass(lowcut, highcut, fs, order=order)
-            y = filtfilt(b, a, data)
+        def butter_bandpass_filter(
+            audio_data, lowcut: int, highcut: int, sample_rate, order: int
+        ):
+            b, a = butter_bandpass(
+                lowcut=lowcut, highcut=highcut, sample_rate=sample_rate, order=order
+            )
+            y = filtfilt(b, a, audio_data)
             return y
 
         audio_data, sample_rate = soundfile.read(io.BytesIO(audio_bytes))
-        filtered_audio = butter_bandpass_filter(audio_data, lowcut, highcut, sample_rate)
-        rms_energy = numpy.sqrt(numpy.mean(filtered_audio ** 2))
+        filtered_audio = butter_bandpass_filter(
+            audio_data=audio_data,
+            sample_rate=sample_rate,
+            lowcut=85,
+            highcut=250,
+            order=5,
+        )
+        rms_energy = numpy.sqrt(numpy.mean(filtered_audio**2))
+
         if rms_energy > energy_threshold:
-            return True
-        return False
+            return True, rms_energy
+        return False, rms_energy
 
     def __handle_continuous_listening(self, _recognizer, audio: AudioData):
         audio_bytes = audio.get_wav_data()
 
-        # duration check
-        # duration_in_seconds = self.determine_length(audio_bytes)
-        # if duration_in_seconds < 1:
-        #     self.printr.print(
-        #         "Skipped very short recording during VA",
-        #         color=LogType.WARNING,
-        #         command_tag=CommandTag.IGNORED_RECORDING,
-        #     )
-        #     return
-
-        # voice frequency check
-        if not self.audio_contains_spoken_words(audio_bytes=audio_bytes):
+        # skip early if the recording is just noise
+        contains_speech, recorded_energy = self.contains_speech(
+            audio_bytes=audio_bytes, energy_threshold=self.va_settings.energy_threshold
+        )
+        if not contains_speech:
             self.printr.print(
-                "Skipped recording without detected voice during VA",
-                color=LogType.WARNING,
+                f"Skipped recording with energy threshold {recorded_energy} < {self.va_settings.energy_threshold}",
                 command_tag=CommandTag.IGNORED_RECORDING,
             )
             return
@@ -197,7 +193,8 @@ class AudioRecorder:
                     color=LogType.ERROR,
                 )
 
-    def start_continuous_listening(self):
+    def start_continuous_listening(self, va_settings: VoiceActivationSettings):
+        self.va_settings = va_settings
         while True:
             with self.lock:
                 if not self.is_listening_continuously and self.stop_function is None:
