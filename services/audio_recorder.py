@@ -143,7 +143,7 @@ class AudioRecorder:
             audio_data=audio_data,
             sample_rate=sample_rate,
             lowcut=85,
-            highcut=250,
+            highcut=500,
             order=5,
         )
         rms_energy = numpy.sqrt(numpy.mean(filtered_audio**2))
