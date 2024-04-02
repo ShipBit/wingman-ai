@@ -1,8 +1,14 @@
 from typing import Optional
 import json
 import requests
+from api.interface import (
+    SettingsConfig,
+    WingmanConfig,
+    WingmanInitializationError,
+)
+from api.enums import LogType, WingmanInitializationErrorType
+from services.audio_player import AudioPlayer
 from services.printr import Printr
-from services.secret_keeper import SecretKeeper
 from wingmen.open_ai_wingman import OpenAiWingman
 
 printr = Printr()
@@ -16,19 +22,16 @@ class StarHeadWingman(OpenAiWingman):
     def __init__(
         self,
         name: str,
-        config: dict[str, any],
-        secret_keeper: SecretKeeper,
-        app_root_dir: str,
+        config: WingmanConfig,
+        settings: SettingsConfig,
+        audio_player: AudioPlayer,
     ) -> None:
         super().__init__(
-            name=name,
-            config=config,
-            secret_keeper=secret_keeper,
-            app_root_dir=app_root_dir,
+            name=name, config=config, settings=settings, audio_player=audio_player
         )
 
         # config entry existence not validated yet. Assign later when checked!
-        self.star_head_url = ""
+        self.starhead_url = ""
         """The base URL of the StarHead API"""
 
         self.headers = {"x-origin": "wingman-ai"}
@@ -43,55 +46,75 @@ class StarHeadWingman(OpenAiWingman):
         self.celestial_object_names = []
         self.quantum_drives = []
 
-    def validate(self):
+    async def validate(self):
         # collect errors from the base class (if any)
-        errors: list[str] = super().validate()
+        errors: list[WingmanInitializationError] = await super().validate()
 
         # add custom errors
-        if not self.config.get("starhead_api_url"):
-            errors.append("Missing 'starhead_api_url' in config.yaml")
-
-        try:
-            self._prepare_data()
-        except Exception as e:
-            errors.append(f"Failed to load data from StarHead API: {e}")
+        starhead_api_url = next(
+            (
+                prop
+                for prop in self.config.custom_properties
+                if prop.id == "starhead_api_url"
+            ),
+            None,
+        )
+        if not starhead_api_url or not starhead_api_url.value:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.name,
+                    message="Missing required custom property 'starhead_api_url'.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+        else:
+            self.starhead_url = starhead_api_url.value
+            try:
+                await self._prepare_data()
+            except Exception as e:
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.name,
+                        message=f"Failed to load data from StarHead API: {e}",
+                        error_type=WingmanInitializationErrorType.UNKNOWN,
+                    )
+                )
 
         return errors
 
-    def _prepare_data(self):
-        # here validate() already ran, so we can safely access the config
-        self.star_head_url = self.config.get("starhead_api_url")
-
+    async def _prepare_data(self):
         self.start_execution_benchmark()
 
-        self.vehicles = self._fetch_data("vehicle")
+        self.vehicles = await self._fetch_data("vehicle")
         self.ship_names = [
             self._format_ship_name(vehicle)
             for vehicle in self.vehicles
             if vehicle["type"] == "Ship"
         ]
 
-        self.celestial_objects = self._fetch_data("celestialobject")
+        self.celestial_objects = await self._fetch_data("celestialobject")
         self.celestial_object_names = [
             celestial_object["name"] for celestial_object in self.celestial_objects
         ]
 
-        self.quantum_drives = self._fetch_data("vehiclecomponent", {"typeFilter": 8})
+        self.quantum_drives = await self._fetch_data(
+            "vehiclecomponent", {"typeFilter": 8}
+        )
 
-    def _fetch_data(
+    async def _fetch_data(
         self, endpoint: str, params: Optional[dict[str, any]] = None
     ) -> list[dict[str, any]]:
-        url = f"{self.star_head_url}/{endpoint}"
+        url = f"{self.starhead_url}/{endpoint}"
 
         if self.debug:
-            printr.print(f"Retrieving {url}", tags="info")
+            await printr.print_async(f"Retrieving {url}", color=LogType.INFO)
 
         response = requests.get(
             url, params=params, timeout=self.timeout, headers=self.headers
         )
         response.raise_for_status()
         if self.debug:
-            self.print_execution_time(reset_timer=True)
+            await self.print_execution_time(reset_timer=True)
 
         return response.json()
 
@@ -114,7 +137,7 @@ class StarHeadWingman(OpenAiWingman):
             function_name, function_args
         )
         if function_name == "get_best_trading_route":
-            function_response = self._get_best_trading_route(**function_args)
+            function_response = await self._get_best_trading_route(**function_args)
         return function_response, instant_response
 
     def _build_tools(self) -> list[dict[str, any]]:
@@ -143,14 +166,14 @@ class StarHeadWingman(OpenAiWingman):
         )
         return tools
 
-    def _get_best_trading_route(
+    async def _get_best_trading_route(
         self, ship: str, position: str, moneyToSpend: float
     ) -> str:
         """Calculates the best trading route for the specified ship and position.
         Note that the function arguments have to match the funtion_args from OpenAI, hence the camelCase!
         """
 
-        cargo, qd = self._get_ship_details(ship)
+        cargo, qd = await self._get_ship_details(ship)
         if not cargo or not qd:
             return f"Could not find ship '{ship}' in the StarHead database."
 
@@ -166,7 +189,7 @@ class StarHeadWingman(OpenAiWingman):
             "useOnlyWeaponFreeZones": False,
             "onlySingleSections": True,
         }
-        url = f"{self.star_head_url}/trading"
+        url = f"{self.starhead_url}/trading"
         response = requests.post(
             url=url,
             json=data,
@@ -192,7 +215,7 @@ class StarHeadWingman(OpenAiWingman):
             None,
         )
 
-    def _get_ship_details(
+    async def _get_ship_details(
         self, ship_name: str
     ) -> tuple[Optional[int], Optional[dict[str, any]]]:
         """Gets ship details including cargo capacity and quantum drive information."""
@@ -206,7 +229,7 @@ class StarHeadWingman(OpenAiWingman):
         )
         if vehicle:
             cargo = vehicle.get("scuCargo")
-            loadouts = self._get_ship_loadout(vehicle.get("id"))
+            loadouts = await self._get_ship_loadout(vehicle.get("id"))
             if loadouts:
                 loadout = next(
                     (l for l in loadouts.get("loadouts") if l["isDefaultLayout"]), None
@@ -223,15 +246,17 @@ class StarHeadWingman(OpenAiWingman):
                 return cargo, qd
         return None, None
 
-    def _get_ship_loadout(self, ship_id: Optional[int]) -> Optional[dict[str, any]]:
+    async def _get_ship_loadout(
+        self, ship_id: Optional[int]
+    ) -> Optional[dict[str, any]]:
         """Retrieves loadout data for a given ship ID."""
         if ship_id:
             try:
-                loadout = self._fetch_data(f"vehicle/{ship_id}/loadout")
+                loadout = await self._fetch_data(f"vehicle/{ship_id}/loadout")
                 return loadout or None
             except requests.HTTPError:
-                printr.print(
+                await printr.print_async(
                     f"Failed to fetch loadout data for ship with ID: {ship_id}",
-                    tags="err",
+                    color=LogType.ERROR,
                 )
         return None

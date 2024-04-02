@@ -1,0 +1,205 @@
+# ───────────────────────────── Questions? ──────────────────────────────
+# Discord server: https://discord.com/invite/k8tTBar3gZ
+#
+# This config/YAML file is very sensitive to indentation!
+# Make sure you use a single "TAB" character for indentation. Do NOT use the spacebar to indent.
+# More docs and useful tools to edit this here:
+#   https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/FAQ.md
+
+# ==================================== GLOBAL CONFIGURATION ====================================
+# This is the default config for all wingmen.
+# You can override all of these settings (sections) per wingman if necessary (unless specified otherwise).
+# To do so, simply copy and paste the config section(s) below and indent/nest them under your wingman config.
+# Always keep the structure intact!
+#
+# ──────────────────────────────── FEATURES ─────────────────────────────────
+features:
+  # If enabled, the Wingman will skip executing any keypresses.
+  # It will also print more debug messages and benchmark results.
+  debug_mode: false
+
+  # ─────────────────────── TTS Provider ─────────────────────────
+  # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  tts_provider: wingman_pro # available: openai, edge_tts, elevenlabs, azure, xvasynth, wingman_pro
+
+  # ─────────────────────── Speech to text Provider ─────────────────────────
+  # You can override the speech to text provider to use a different one than the default.
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  stt_provider: wingman_pro # available: openai, azure, azure_speech, whispercpp, wingman_pro
+
+  # ─────────────────────── Conversation Provider ─────────────────────────
+  # You can override the conversation provider to use a different one than the default.
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  conversation_provider: wingman_pro # available: openai, azure, wingman_pro
+
+  # ─────────────────────── Summarize Provider ─────────────────────────
+  # You can override the summarize provider to use a different one than the default.
+  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  summarize_provider: wingman_pro # available: openai, azure, wingman_pro
+
+  # ─────────────────────── Cost Control ─────────────────────────
+  # How many messages should a Wingman remember in your conversations?
+  # "0" means you start fresh with just the context after every message. This is like restarting Wingman after every interaction.
+  # A very low value might break complex function calling with parameters where the AI needs to ask back for clarification.
+  #
+  # Use this to limit the number of tokens used in your conversations and to reduce the cost of using the OpenAI API.
+  # Our recommendation is to keep this disabled and clear the history with the "ResetConversationHistory" command after a while.
+  #
+  # uncomment this (=remove the "# in front) to enable!
+  #remember_messages: 3
+
+# ────────────────────────────── SOUND SETTINGS ───────────────────────────────
+# If you want to use sound effects with 11Labs, you need to enable them in the elevenlabs config below.
+sound:
+  # You can put as many sound effects here as you want. They stack and are added in the defined order here.
+  # Available: RADIO, ROBOT, INTERIOR_HELMET, INTERIOR_SMALL, INTERIOR_MEDIUM, INTERIOR_LARGE
+  effects: []
+
+  # adds a beep/Quindar sound before and after the wingman talks
+  play_beep: false
+
+# ────────────────────────────────── OPEN AI ────────────────────────────────────
+openai:
+  # The model to use for conversations aka "chit-chat" and for function calls.
+  # gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
+  # gpt-3.5 is the default and should be enough for most use cases.
+  # If something is not working as expected, you might want to test it with gpt-4.
+  conversation_model: gpt-3.5-turbo # or: gpt-4-turbo-preview (and specific versions)
+
+  # This model summarizes function responses, like API call responses etc.
+  # In most cases gpt-3.5 should be enough.
+  summarize_model: gpt-3.5-turbo # or: gpt-4-turbo-preview (and specific versions)
+
+  # The voice to use for OpenAI text-to-speech.
+  # Only used if features > tts_provider is set to 'openai' above.
+  tts_voice: nova # available: nova, alloy, echo, fable, onyx, shimmer
+
+  # ADVANCED:
+  # If you want to use a different API endpoint, uncomment this and configure it here.
+  # Use this to hook up your local in-place OpenAI replacement like Ollama or if you want to use a proxy.
+  #base_url: https://api.openai.com # or the localhost address of your local LLM etc.
+  #organization: whatever # If you have an organization key, you can set it here.
+
+# ────────────────────────────────── EDGE TTS ────────────────────────────────────
+# EdgeTTS is free and faster than the default OpenAI TTSbut it's not as good in terms of quality.
+# Only used if features > tts_provider is set to 'edge_tts' above.
+edge_tts:
+  # The voice to use (only if detect_language is set to false).
+  # All available EdgeTTS voices:
+  #   https://github.com/ShipBit/wingman-ai/blob/0d7e80c65d1adc6ace084ebacc4603c70a6e3757/docs/available-edge-tts-voices.md
+  # Voice samples:
+  #   https://speech.microsoft.com/portal/voicegallery
+  voice: en-US-GuyNeural
+
+# ────────────────────────────────── ELEVENLABS ────────────────────────────────────
+# https://elevenlabs.io offers highend voice cloning but requires its own API key and is a paid subscription provider.
+# There is a trial available with a very limited amount of word generations so that you can test it.
+# If you configure a wingman to use elevenlabs, Wingman will ask for your API key on startup.
+# Only used if tts_provider in features is set to 'elevenlabs' above.
+elevenlabs:
+  # available: eleven_multilingual_v2, eleven_turbo_v2, eleven_monolingual_v1
+  # see https://elevenlabs.io/docs/speech-synthesis/models
+  model: eleven_multilingual_v2
+  output_streaming: true
+  latency: 2 # optimization, 0 - 4. Higher values are faster but can produce audio stuttering.
+
+  voice:
+    # You can configure "Premade voices" from the dropdown on https://elevenlabs.io/speech-synthesis by name.
+    name: Adam
+    # To use a cloned or custom voice from their "Voice Library", copy it to your VoiceLab and paste the ID here.
+    # Only you(r) API key has acces to these voice IDs, so you can't share them.
+    #id: xxx  # id overrules name if both are set!
+
+  voice_settings:
+    stability: 0.71 # 0.0 - 1.0
+    similarity_boost: 0.5 # 0.0 - 1.0
+    style: 0.0 # 0.0 - 1.0, not available for eleven_turbo_v2
+    use_speaker_boost: true # true or false
+
+# ────────────────────────────────── AZURE ────────────────────────────────────
+# Azure is a paid subscription provider from Microsoft which also offers OpenAI API access.
+# If you configured some providers above to use Azure, you need to provide your Azure settings here.
+# Please also provide your Azure API keys in the secrets.yaml.
+azure:
+  whisper:
+    api_base_url: https://openai-w-eu.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: whisper
+  conversation:
+    api_base_url: https://openai-sweden-c.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: gpt-35-turbo
+  summarize:
+    api_base_url: https://openai-sweden-c.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: gpt-35-turbo
+  tts:
+    region: westeurope
+    voice: en-US-JennyMultilingualV2Neural
+    output_streaming: true
+  stt:
+    region: westeurope
+    languages:
+      - en-US
+      - de-DE
+
+# ────────────────────────────────── WHISPERCPP ────────────────────────────────────
+# Whispercpp is a free, open source, MIT-licensed program on Github that uses your local computer resources to generate speech to text using free models from whisper.
+# You can find the program here: https://github.com/ggerganov/whisper.cpp with downloadable .zip file releases for executables for your system here: https://github.com/ggerganov/whisper.cpp/releases
+# Models to use with whispercpp are available here: https://huggingface.co/ggerganov/whisper.cpp/tree/main and also the ggml versions of distil-whisper models here: https://huggingface.co/collections/distil-whisper/distil-whisper-models-65411987e6727569748d2eb6
+# There are executables for windows and mac, and for windows there are executables for just running on cpu (whisper-blas-bin) and Nvidia GPU (whisper-cublas)
+# The typical model used for multilingual is ggml-small.bin or ggml-base.bin. The typical model used for English only is ggml-base.en.bin.
+# The ideal setup is to start Whispercpp's server.exe file following its instructions and then run WingmanAI.
+# However, if you want, you can set autostart: True and provide a path to your whispercpp server.exe and model .bin in the config below and wingmanai can try to start it for you.  Autostart currently works on Windows only.
+# You can expect quality to be worse than openai or azure whisper, but this method is free and may also be better for people with worse internet.  Speed will depend on your system resources.
+# Note that WingmanAI's support of whispercpp assumes you already know how to use the program.  It is just a connector.  If there are any issues with whispercpp you should direct them to the creator of whispercpp.
+# Only used if features > stt_provider is set to 'whispercpp' above.
+whispercpp:
+  base_url: http://127.0.0.1:8080 # This is the default for whispercpp, though you can change the host and port manually when launching your server with command line arguments.
+  autostart: false # Autostart currently works on Windows only.  Set this to true if you want to set paths to your whispercpp server.exe and model bin below and have wingman try to launch whispercpp server itself.
+  autostart_settings: # Required if autostart: true
+    whispercpp_exe_path: C:\Whispercpp\server.exe # This is just an example, you will insert here the full path to your whispercpp server.exe file.  Only used if autostart is set to true.
+    whispercpp_model_path: C:\Whispercpp\models\ggml-base.bin # This is just an example, you will insert here the full path to the whispercpp ggml model file you downloaded.  Only used if autostart is set to true.
+  temperature: 0.0 # Not typically changed, but you can review the whispercpp documentation to determine whether to experiment with this value.
+  language: en # Insert the whispercpp two letter code for your language if you intend to speak in another language.  Also make sure you do not use a english only whispercpp model if this is not set for en.
+
+# ────────────────────────────────── XVASYNTH ────────────────────────────────────
+# XVASynth is a free program on Steam that uses your local computer resources to generate text to speech using free voice models created by the community.
+# You can find the program here: https://store.steampowered.com/app/1765720/xVASynth/
+# The ideal setup is to start XVASynth and then run WingmanAI. However, if you do not do so, WingmanAI will try to run XVASynth if you use it for a wingman.
+# This implementation only supports XVASynth v3 voices.
+# You can find the voice folders you have installed in the [your xVASynth directory]/resources/app/models folder, and inside of each will be the voices.
+# An example below is where "terminator" is the name of the game folder inside of "models" and "tn-850" is the name of the voice.
+# The name of the voice is the name without the .pt or .json file extensions.
+# Only used if features > tts_provider is set to 'xvasynth' above.
+xvasynth:
+  xvasynth_path: C:\Program Files (x86)\Steam\steamapps\common\xVASynth # The path to your install of XVASynth.  If you do not provide this and try to use xvasynth there will be an error.
+  process_device: cpu # Can be cpu or gpu, if gpu you may need to take more steps to have xvasynth run on gpu.  Defaults to cpu.
+  game_folder_name: terminator # The game folder name of the voice you donwloaded to use as your primary xvasynth voice.  This can be overwritten in a particular wingman.  If you do not provide this and try to use xvasynth there will be an error.
+  voice: tn-T850 # The name of the voice you downloaded to use.  This can be overwritten in a particular wingman.  If you do not provide this and try to use xvasynth there will be an error.
+  language: en # The language the voice will speak in. Some XVASynth voices are trained to be multi-lingual.  Defaults to english, 'en'.
+  pace: 1.0 # The speed of the voice playback. Defaults to 1.0.
+  use_sr: false # Whether to use XVASynth's super resolution mode.  Will take longer and generally not recommended.  Defaults to false.
+  use_cleanup: false # Whether to use XVASynth's cleanup mode.  May make voice quality better or worse depending on the voice model.  Defaults to false.
+  synthesize_url: http://127.0.0.1:8008/synthesize # This should typically be left alone, changing it will cause errors unless you manually changed xvasynth's server
+  load_model_url: http://127.0.0.1:8008/loadModel # This should be typically left alone, changing it will cause errors unless you manually changed xvasynth's server
+# ────────────────────────────── GLOBAL COMMANDS ───────────────────────────────
+# You can use these in all wingmen and you can put your own here, too.
+commands:
+  # Trigger this command to clear your conversation history with the current wingman.
+  # This is like setting "remember_messages" to 0 above, but "on-demand". You'll restart with just the context.
+  - name: ResetConversationHistory # don't rename this!
+    instant_activation:
+      - Forget everything!
+      - Clear conversation history!
+    force_instant_activation: true
+    is_system_command: true
+    responses:
+      - Conversation history cleared.
+
+wingman_pro:
+  stt_provider: azure_speech # or whisper
+  tts_provider: azure # or openai
+  summarize_deployment: gpt-35-turbo # or gpt-4-turbo
+  conversation_deployment: gpt-35-turbo # or gpt-4-turbo

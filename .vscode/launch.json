@@ -10,7 +10,14 @@
             "request": "launch",
             "program": "main.py",
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": true,
+            // "args": [
+            //     "--host",
+            //     "127.0.0.1",
+            //     "--port",
+            //     "9000",
+            //     "--sidecar"
+            // ]
         }
     ]
 }

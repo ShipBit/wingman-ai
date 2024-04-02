@@ -1,24 +1,22 @@
 from enum import Enum
 from pedalboard import (
-    Compressor,
     HighpassFilter,
     LowpassFilter,
     PeakFilter,
     Pedalboard,
     Chorus,
-    PitchShift,
     Resample,
     Reverb,
     Delay,
     Gain,
 )
+from api.interface import SoundConfig
 
 
 # Credits to Discord community member @psigen aka GH @JaydiCodes!
 class SoundEffects(Enum):
     ROBOT = Pedalboard(
         [
-            PitchShift(semitones=-1),
             Delay(delay_seconds=0.01, feedback=0.5, mix=0.2),
             Chorus(rate_hz=0.5, depth=0.8, mix=0.5, centre_delay_ms=2, feedback=0.3),
             Reverb(
@@ -33,8 +31,6 @@ class SoundEffects(Enum):
             LowpassFilter(5000),
             Resample(10000),
             Gain(gain_db=3),
-            Compressor(threshold_db=-21, ratio=3.5, attack_ms=1, release_ms=50),
-            Gain(gain_db=6),
         ]
     )
     INTERIOR_HELMET = Pedalboard(
@@ -75,9 +71,8 @@ class SoundEffects(Enum):
     )
 
 
-def get_sound_effects_from_config(config: dict):
-    sound_effects_config = config.get("sound", {}).get("effects", [])
-    if not sound_effects_config or len(sound_effects_config) == 0:
+def get_sound_effects(config: SoundConfig):
+    if config is None or not config.effects or len(config.effects) == 0:
         return []
 
     sound_effects = []
@@ -91,11 +86,10 @@ def get_sound_effects_from_config(config: dict):
         "INTERIOR_LARGE": SoundEffects.INTERIOR_LARGE.value,
     }
 
-    for effect_name in sound_effects_config:
+    for effect in config.effects:
+        effect_name = effect.value
         effect = mapping.get(effect_name)
         if effect:
             sound_effects.append(effect)
-        else:
-            print(f"Unknown sound effect: {effect_name}")
 
     return sound_effects

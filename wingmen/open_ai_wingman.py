@@ -1,19 +1,24 @@
 import json
+import time
 from typing import Mapping
-import azure.cognitiveservices.speech as speechsdk
-from elevenlabslib import (
-    ElevenLabsUser,
-    GenerationOptions,
-    PlaybackOptions,
-    ElevenLabsVoice,
-    ElevenLabsDesignedVoice,
-    ElevenLabsClonedVoice,
-    ElevenLabsProfessionalVoice,
+from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
+from api.enums import (
+    LogType,
+    TtsProvider,
+    SttProvider,
+    ConversationProvider,
+    SummarizeProvider,
+    WingmanProSttProvider,
+    WingmanProTtsProvider,
 )
-from services.open_ai import AzureConfig, OpenAi
-from services.edge import EdgeTTS
+from providers.edge import Edge
+from providers.elevenlabs import ElevenLabs
+from providers.open_ai import OpenAi, OpenAiAzure
+from providers.wingman_pro import WingmanPro
+from providers.xvasynth import XVASynth
+from providers.whispercpp import Whispercpp
+from services.audio_player import AudioPlayer
 from services.printr import Printr
-from services.secret_keeper import SecretKeeper
 from wingmen.wingman import Wingman
 
 printr = Printr()
@@ -25,169 +30,166 @@ class OpenAiWingman(Wingman):
     It transcribes speech to text using Whisper, uses the Completion API for conversation and implements the Tools API to execute functions.
     """
 
+    AZURE_SERVICES = {
+        "tts": TtsProvider.AZURE,
+        "whisper": [SttProvider.AZURE, SttProvider.AZURE_SPEECH],
+        "conversation": ConversationProvider.AZURE,
+        "summarize": SummarizeProvider.AZURE,
+    }
+
     def __init__(
         self,
         name: str,
-        config: dict[str, any],
-        secret_keeper: SecretKeeper,
-        app_root_dir: str,
+        config: WingmanConfig,
+        settings: SettingsConfig,
+        audio_player: AudioPlayer,
     ):
         super().__init__(
-            name=name,
-            config=config,
-            secret_keeper=secret_keeper,
-            app_root_dir=app_root_dir,
+            name=name, config=config, audio_player=audio_player, settings=settings
         )
 
-        self.openai: OpenAi = None  # validate will set this
-        """Our OpenAI API wrapper"""
+        self.edge_tts = Edge()
+
+        # validate will set these:
+        self.openai: OpenAi = None
+        self.openai_azure: OpenAiAzure = None
+        self.elevenlabs: ElevenLabs = None
+        self.xvasynth: XVASynth = None
+        self.whispercpp: Whispercpp = None
+        self.wingman_pro: WingmanPro = None
+
+        self.pending_tool_calls = []
+        self.last_gpt_call = None
 
         # every conversation starts with the "context" that the user has configured
-        self.messages = [
-            {"role": "system", "content": self.config["openai"].get("context")}
-        ]
+        self.messages = (
+            [{"role": "system", "content": self.config.openai.context}]
+            if self.config.openai.context
+            else []
+        )
         """The conversation history that is used for the GPT calls"""
 
-        self.edge_tts = EdgeTTS(app_root_dir)
-        self.last_transcript_locale = None
-        self.elevenlabs_api_key = None
-        self.azure_keys = {
-            "tts": None,
-            "whisper": None,
-            "conversation": None,
-            "summarize": None,
-        }
-        self.stt_provider = self.config["features"].get("stt_provider", None)
-        self.conversation_provider = self.config["features"].get(
-            "conversation_provider", None
-        )
-        self.summarize_provider = self.config["features"].get(
-            "summarize_provider", None
-        )
+        self.azure_api_keys = {key: None for key in self.AZURE_SERVICES}
 
-    def validate(self):
-        errors = super().validate()
-        openai_api_key = self.secret_keeper.retrieve(
-            requester=self.name,
-            key="openai",
-            friendly_key_name="OpenAI API key",
-            prompt_if_missing=True,
-        )
-        if not openai_api_key:
-            errors.append(
-                "Missing 'openai' API key. Please provide a valid key in the settings."
-            )
-        else:
-            openai_organization = self.config["openai"].get("organization")
-            openai_base_url = self.config["openai"].get("base_url")
-            self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
+    async def validate(self):
+        errors = await super().validate()
 
-        self.__validate_elevenlabs_config(errors)
+        if self.uses_provider("openai"):
+            await self.validate_and_set_openai(errors)
 
-        self.__validate_azure_config(errors)
+        if self.uses_provider("elevenlabs"):
+            await self.validate_and_set_elevenlabs(errors)
+
+        if self.uses_provider("xvasynth"):
+            await self.validate_and_set_xvasynth(errors)
+
+        if self.uses_provider("whispercpp"):
+            await self.validate_and_set_whispercpp(errors)
+
+        if self.uses_provider("azure"):
+            await self.validate_and_set_azure(errors)
+
+        if self.uses_provider("wingman_pro"):
+            await self.validate_and_set_wingman_pro(errors)
 
         return errors
 
-    def __validate_elevenlabs_config(self, errors):
-        if self.tts_provider == "elevenlabs":
-            self.elevenlabs_api_key = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="elevenlabs",
-                friendly_key_name="Elevenlabs API key",
-                prompt_if_missing=True,
+    def uses_provider(self, provider_type):
+        if provider_type == "openai":
+            return any(
+                [
+                    self.tts_provider == TtsProvider.OPENAI,
+                    self.stt_provider == SttProvider.OPENAI,
+                    self.conversation_provider == ConversationProvider.OPENAI,
+                    self.summarize_provider == SummarizeProvider.OPENAI,
+                ]
             )
-            if not self.elevenlabs_api_key:
-                errors.append(
-                    "Missing 'elevenlabs' API key. Please provide a valid key in the settings or use another tts_provider."
-                )
-                return
-            elevenlabs_settings = self.config.get("elevenlabs")
-            if not elevenlabs_settings:
-                errors.append(
-                    "Missing 'elevenlabs' section in config. Please provide a valid config or change the TTS provider."
-                )
-                return
-            if not elevenlabs_settings.get("model"):
-                errors.append("Missing 'model' setting in 'elevenlabs' config.")
-                return
-            voice_settings = elevenlabs_settings.get("voice")
-            if not voice_settings:
-                errors.append(
-                    "Missing 'voice' section in 'elevenlabs' config. Please provide a voice configuration as shown in our example config."
-                )
-                return
-            if not voice_settings.get("id") and not voice_settings.get("name"):
-                errors.append(
-                    "Missing 'id' or 'name' in 'voice' section of 'elevenlabs' config. Please provide a valid name or id for the voice in your config."
-                )
-
-    def __validate_azure_config(self, errors):
-        if (
-            self.tts_provider == "azure"
-            or self.stt_provider == "azure"
-            or self.conversation_provider == "azure"
-            or self.summarize_provider == "azure"
-        ):
-            azure_settings = self.config.get("azure")
-            if not azure_settings:
-                errors.append(
-                    "Missing 'azure' section in config. Please provide a valid config."
-                )
-                return
-
-        if self.tts_provider == "azure":
-            self.azure_keys["tts"] = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="azure_tts",
-                friendly_key_name="Azure TTS API key",
-                prompt_if_missing=True,
+        elif provider_type == "azure":
+            return any(
+                [
+                    self.tts_provider == TtsProvider.AZURE,
+                    self.stt_provider == SttProvider.AZURE,
+                    self.stt_provider == SttProvider.AZURE_SPEECH,
+                    self.conversation_provider == ConversationProvider.AZURE,
+                    self.summarize_provider == SummarizeProvider.AZURE,
+                ]
             )
-            if not self.azure_keys["tts"]:
-                errors.append(
-                    "Missing 'azure' tts API key. Please provide a valid key in the settings."
-                )
-                return
-
-        if self.stt_provider == "azure":
-            self.azure_keys["whisper"] = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="azure_whisper",
-                friendly_key_name="Azure Whisper API key",
-                prompt_if_missing=True,
+        elif provider_type == "edge_tts":
+            return self.tts_provider == TtsProvider.EDGE_TTS
+        elif provider_type == "elevenlabs":
+            return self.tts_provider == TtsProvider.ELEVENLABS
+        elif provider_type == "xvasynth":
+            return self.tts_provider == TtsProvider.XVASYNTH
+        elif provider_type == "whispercpp":
+            return self.stt_provider == SttProvider.WHISPERCPP
+        elif provider_type == "wingman_pro":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.WINGMAN_PRO,
+                    self.summarize_provider == SummarizeProvider.WINGMAN_PRO,
+                    self.tts_provider == TtsProvider.WINGMAN_PRO,
+                    self.stt_provider == SttProvider.WINGMAN_PRO,
+                ]
             )
-            if not self.azure_keys["whisper"]:
-                errors.append(
-                    "Missing 'azure' whisper API key. Please provide a valid key in the settings."
-                )
-                return
+        return False
 
-        if self.conversation_provider == "azure":
-            self.azure_keys["conversation"] = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="azure_conversation",
-                friendly_key_name="Azure Conversation API key",
-                prompt_if_missing=True,
+    async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("openai", errors)
+        if api_key:
+            self.openai = OpenAi(
+                api_key=api_key,
+                organization=self.config.openai.organization,
+                base_url=self.config.openai.base_url,
             )
-            if not self.azure_keys["conversation"]:
-                errors.append(
-                    "Missing 'azure' conversation API key. Please provide a valid key in the settings."
-                )
-                return
 
-        if self.summarize_provider == "azure":
-            self.azure_keys["summarize"] = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="azure_summarize",
-                friendly_key_name="Azure Summarize API key",
-                prompt_if_missing=True,
+    async def validate_and_set_elevenlabs(
+        self, errors: list[WingmanInitializationError]
+    ):
+        api_key = await self.retrieve_secret("elevenlabs", errors)
+        if api_key:
+            self.elevenlabs = ElevenLabs(
+                api_key=api_key,
+                wingman_name=self.name,
             )
-            if not self.azure_keys["summarize"]:
-                errors.append(
-                    "Missing 'azure' summarize API key. Please provide a valid key in the settings."
-                )
-                return
+            self.elevenlabs.validate_config(
+                config=self.config.elevenlabs, errors=errors
+            )
 
-    async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
+    async def validate_and_set_azure(self, errors: list[WingmanInitializationError]):
+        for key_type in self.AZURE_SERVICES:
+            if self.uses_provider("azure"):
+                api_key = await self.retrieve_secret(f"azure_{key_type}", errors)
+                if api_key:
+                    self.azure_api_keys[key_type] = api_key
+        if len(errors) == 0:
+            self.openai_azure = OpenAiAzure()
+
+    async def validate_and_set_xvasynth(self, errors: list[WingmanInitializationError]):
+        self.xvasynth = XVASynth(
+            wingman_name=self.name,
+        )
+        validation_errors = self.xvasynth.validate_config(config=self.config.xvasynth)
+        errors.extend(validation_errors)
+
+    async def validate_and_set_whispercpp(
+        self, errors: list[WingmanInitializationError]
+    ):
+        self.whispercpp = Whispercpp(
+            wingman_name=self.name,
+        )
+        validation_errors = self.whispercpp.validate_config(
+            config=self.config.whispercpp
+        )
+        errors.extend(validation_errors)
+
+    async def validate_and_set_wingman_pro(
+        self, errors: list[WingmanInitializationError]
+    ):
+        self.wingman_pro = WingmanPro(
+            wingman_name=self.name, settings=self.settings.wingman_pro
+        )
+
+    async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
 
         Args:
@@ -196,54 +198,49 @@ class OpenAiWingman(Wingman):
         Returns:
             str | None: The transcript of the audio file or None if the transcription failed.
         """
-        detect_language = self.config["edge_tts"].get("detect_language")
+        transcript = None
 
-        response_format = (
-            "verbose_json"  # verbose_json will return the language detected in the transcript.
-            if self.tts_provider == "edge_tts" and detect_language
-            else "json"
-        )
-
-        azure_config = None
-        if self.stt_provider == "azure":
-            azure_config = self._get_azure_config("whisper")
-
-        transcript = self.openai.transcribe(
-            audio_input_wav, response_format=response_format, azure_config=azure_config
-        )
-
-        locale = None
-        # skip the GPT call if we didn't change the language
-        if (
-            response_format == "verbose_json"
-            and transcript
-            and transcript.language != self.last_transcript_locale  # type: ignore
-        ):
-            printr.print(
-                f"   EdgeTTS detected language '{transcript.language}'.", tags="info"  # type: ignore
+        if self.stt_provider == SttProvider.AZURE:
+            transcript = self.openai_azure.transcribe_whisper(
+                filename=audio_input_wav,
+                api_key=self.azure_api_keys["whisper"],
+                config=self.config.azure.whisper,
             )
-            locale = self.__ask_gpt_for_locale(transcript.language)  # type: ignore
+        elif self.stt_provider == SttProvider.AZURE_SPEECH:
+            transcript = self.openai_azure.transcribe_azure_speech(
+                filename=audio_input_wav,
+                api_key=self.azure_api_keys["tts"],
+                config=self.config.azure.stt,
+            )
+        elif self.stt_provider == SttProvider.WHISPERCPP:
+            transcript = self.whispercpp.transcribe(
+                filename=audio_input_wav, config=self.config.whispercpp
+            )
+        elif self.stt_provider == SttProvider.WINGMAN_PRO:
+            if self.config.wingman_pro.stt_provider == WingmanProSttProvider.WHISPER:
+                transcript = self.wingman_pro.transcribe_whisper(
+                    filename=audio_input_wav
+                )
+            elif (
+                self.config.wingman_pro.stt_provider
+                == WingmanProSttProvider.AZURE_SPEECH
+            ):
+                transcript = self.wingman_pro.transcribe_azure_speech(
+                    filename=audio_input_wav, config=self.config.azure.stt
+                )
+        elif self.stt_provider == SttProvider.OPENAI:
+            transcript = self.openai.transcribe(filename=audio_input_wav)
 
-        return transcript.text if transcript else None, locale
+        if not transcript:
+            return None
 
-    def _get_azure_config(self, section: str):
-        azure_api_key = self.azure_keys[section]
-        azure_config = AzureConfig(
-            api_key=azure_api_key,
-            api_base_url=self.config["azure"]
-            .get(section, {})
-            .get("api_base_url", None),
-            api_version=self.config["azure"].get(section, {}).get("api_version", None),
-            deployment_name=self.config["azure"]
-            .get(section, {})
-            .get("deployment_name", None),
-        )
+        # Wingman Pro might returns a serialized dict instead of a real Azure Speech transcription object
+        if isinstance(transcript, dict):
+            return transcript.get("_text")
 
-        return azure_config
+        return transcript.text
 
-    async def _get_response_for_transcript(
-        self, transcript: str, locale: str | None
-    ) -> tuple[str, str]:
+    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
         """Gets the response for a given transcript.
 
         This function interprets the transcript, runs instant commands if triggered,
@@ -255,22 +252,26 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple of strings representing the response to a function call and an instant response.
         """
-        self.last_transcript_locale = locale
-        self._add_user_message(transcript)
+        await self._add_user_message(transcript)
 
-        instant_response = self._try_instant_activation(transcript)
+        instant_response, instant_command_executed = await self._try_instant_activation(
+            transcript
+        )
         if instant_response:
+            self._add_assistant_message(instant_response)
             return instant_response, instant_response
 
-        completion = self._gpt_call()
+        # make a GPT call with the conversation history
+        # if an instant command got executed, prevent tool calls to avoid duplicate executions
+        completion = await self._gpt_call(instant_command_executed is False)
 
         if completion is None:
             return None, None
 
-        response_message, tool_calls = self._process_completion(completion)
+        response_message, tool_calls = await self._process_completion(completion)
 
-        # do not tamper with this message as it will lead to 400 errors!
-        self.messages.append(response_message)
+        # add message and dummy tool responses to conversation history
+        self._add_gpt_response(response_message, tool_calls)
 
         if tool_calls:
             instant_response = await self._handle_tool_calls(tool_calls)
@@ -282,7 +283,154 @@ class OpenAiWingman(Wingman):
 
         return response_message.content, response_message.content
 
-    def _add_user_message(self, content: str):
+    async def _fix_tool_calls(self, tool_calls):
+        """Fixes tool calls that have a command name as function name.
+
+        Args:
+            tool_calls (list): The tool calls to fix.
+
+        Returns:
+            list: The fixed tool calls.
+        """
+        if tool_calls and len(tool_calls) > 0:
+            for tool_call in tool_calls:
+                function_name = tool_call.function.name
+                function_args = json.loads(tool_call.function.arguments)
+
+                # try to resolve function name to a command name
+                if len(function_args) == 0 and self._get_command(function_name):
+                    function_args["command_name"] = function_name
+                    function_name = "execute_command"
+
+                    # update the tool call
+                    tool_call.function.name = function_name
+                    tool_call.function.arguments = json.dumps(function_args)
+
+                    if self.debug:
+                        await printr.print_async(
+                            "Applied command call fix.", color=LogType.WARNING
+                        )
+
+        return tool_calls
+
+    def _add_gpt_response(self, message, tool_calls) -> None:
+        """Adds a message from GPT to the conversation history as well as adding dummy tool responses for any tool calls.
+
+        Args:
+            message (dict): The message to add.
+            tool_calls (list): The tool calls associated with the message.
+        """
+        # do not tamper with this message as it will lead to 400 errors!
+        self.messages.append(message)
+
+        # adding dummy tool responses to prevent corrupted message history on parallel requests
+        if tool_calls:
+            for tool_call in tool_calls:
+                if not tool_call.id:
+                    continue
+                # adding a dummy tool response to get updated later
+                self._add_tool_response(tool_call, "Loading..", False)
+
+    def _add_tool_response(self, tool_call, response: str, completed: bool = True):
+        """Adds a tool response to the conversation history.
+
+        Args:
+            tool_call (dict): The tool call to add the dummy response for.
+        """
+        msg = {"role": "tool", "content": response}
+        if tool_call.id is not None:
+            msg["tool_call_id"] = tool_call.id
+        if tool_call.function.name is not None:
+            msg["name"] = tool_call.function.name
+        self.messages.append(msg)
+
+        if tool_call.id and not completed:
+            self.pending_tool_calls.append(tool_call.id)
+
+    async def _update_tool_response(self, tool_call_id, response) -> bool:
+        """Updates a tool response in the conversation history. This also moves the message to the end of the history if all tool responses are given.
+
+        Args:
+            tool_call_id (str): The identifier of the tool call to update the response for.
+            response (str): The new response to set.
+
+        Returns:
+            bool: True if the response was updated, False if the tool call was not found.
+        """
+        if not tool_call_id:
+            return False
+
+        completed = False
+        index = len(self.messages)
+
+        # go through message history to find and update the tool call
+        for message in reversed(self.messages):
+            index -= 1
+            if (
+                self.__get_message_role(message) == "tool"
+                and message.get("tool_call_id") == tool_call_id
+            ):
+                message["content"] = str(response)
+                if tool_call_id in self.pending_tool_calls:
+                    self.pending_tool_calls.remove(tool_call_id)
+                break
+        if not index:
+            return False
+
+        # find the assistant message that triggered the tool call
+        for message in reversed(self.messages[:index]):
+            index -= 1
+            if self.__get_message_role(message) == "assistant":
+                break
+
+        # check if all tool calls are completed
+        completed = True
+        for tool_call in self.messages[index].tool_calls:
+            if tool_call.id in self.pending_tool_calls:
+                completed = False
+                break
+        if not completed:
+            return True
+
+        # find the first user message(s) that triggered this assistant message
+        index -= 1  # skip the assistant message
+        for message in reversed(self.messages[:index]):
+            index -= 1
+            if self.__get_message_role(message) != "user":
+                index += 1
+                break
+
+        # built message block to move
+        start_index = index
+        end_index = start_index
+        reached_tool_call = False
+        for message in self.messages[start_index:]:
+            if not reached_tool_call and self.__get_message_role(message) == "tool":
+                reached_tool_call = True
+            if reached_tool_call and self.__get_message_role(message) == "user":
+                end_index -= 1
+                break
+            end_index += 1
+        if end_index == len(self.messages):
+            end_index -= 1  # loop ended at the end of the message history, so we have to go back one index
+        message_block = self.messages[start_index : end_index + 1]
+
+        # check if the message block is already at the end
+        if end_index == len(self.messages) - 1:
+            return True
+
+        # move message block to the end
+        del self.messages[start_index : end_index + 1]
+        self.messages.extend(message_block)
+
+        if self.debug:
+            await printr.print_async(
+                "Moved message block to the end.", color=LogType.INFO
+            )
+
+        return True
+
+    async def _add_user_message(self, content: str):
         """Shortens the conversation history if needed and adds a user message to it.
 
         Args:
@@ -292,14 +440,21 @@ class OpenAiWingman(Wingman):
             name (Optional[str]): The name of the function associated with the tool call, if applicable.
         """
         msg = {"role": "user", "content": content}
-        self._cleanup_conversation_history()
+        await self._cleanup_conversation_history()
         self.messages.append(msg)
 
-    def _cleanup_conversation_history(self):
+    def _add_assistant_message(self, content: str):
+        """Adds an assistant message to the conversation history.
+
+        Args:
+            content (str): The message content to add.
+        """
+        msg = {"role": "assistant", "content": content}
+        self.messages.append(msg)
+
+    async def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
-        remember_messages = self.config.get("features", {}).get(
-            "remember_messages", None
-        )
+        remember_messages = self.config.features.remember_messages
 
         if remember_messages is None or len(self.messages) == 0:
             return 0  # Configuration not set, nothing to delete.
@@ -325,14 +480,27 @@ class OpenAiWingman(Wingman):
 
         total_deleted_messages = cutoff_index - context_offset  # Messages to delete.
 
+        # Remove the pending tool calls that are no longer needed.
+        for mesage in self.messages[context_offset:cutoff_index]:
+            if (
+                self.__get_message_role(mesage) == "tool"
+                and mesage.get("tool_call_id") in self.pending_tool_calls
+            ):
+                self.pending_tool_calls.remove(mesage.get("tool_call_id"))
+                if self.debug:
+                    await printr.print_async(
+                        f"Removing pending tool call {mesage.get('tool_call_id')} due to message history clean up.",
+                        color=LogType.WARNING,
+                    )
+
         # Remove the messages before the cutoff index, exclusive of the system message.
         del self.messages[context_offset:cutoff_index]
 
         # Optional debugging printout.
         if self.debug and total_deleted_messages > 0:
-            printr.print(
+            await printr.print_async(
                 f"Deleted {total_deleted_messages} messages from the conversation history.",
-                tags="warn",
+                color=LogType.WARNING,
             )
 
         return total_deleted_messages
@@ -341,45 +509,75 @@ class OpenAiWingman(Wingman):
         """Resets the conversation history by removing all messages except for the initial system message."""
         del self.messages[1:]
 
-    def _try_instant_activation(self, transcript: str) -> str:
+    async def _try_instant_activation(self, transcript: str) -> str:
         """Tries to execute an instant activation command if present in the transcript.
 
         Args:
             transcript (str): The transcript to check for an instant activation command.
 
         Returns:
-            str: The response to the instant command or None if no such command was found.
+            tuple[str, bool]: A tuple containing the response to the instant command and a boolean indicating whether an instant command was executed.
         """
-        command = self._execute_instant_activation_command(transcript)
+        command = await self._execute_instant_activation_command(transcript)
         if command:
-            response = self._select_command_response(command)
-            return response
-        return None
+            if command.responses:
+                response = self._select_command_response(command)
+                return response, True
+            return None, True
+        return None, False
 
-    def _gpt_call(self):
+    async def _gpt_call(self, allow_tool_calls: bool = True):
         """Makes the primary GPT call with the conversation history and tools enabled.
 
         Returns:
             The GPT completion object or None if the call fails.
         """
         if self.debug:
-            printr.print(
-                f"   Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
-                tags="info",
+            await printr.print_async(
+                f"Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
+                color=LogType.INFO,
             )
 
-        azure_config = None
-        if self.conversation_provider == "azure":
-            azure_config = self._get_azure_config("conversation")
+        # save request time for later comparison
+        thiscall = time.time()
+        self.last_gpt_call = thiscall
 
-        return self.openai.ask(
-            messages=self.messages,
-            tools=self._build_tools(),
-            model=self.config["openai"].get("conversation_model"),
-            azure_config=azure_config,
-        )
+        # build tools
+        if allow_tool_calls:
+            tools = self._build_tools()
+        else:
+            tools = None
 
-    def _process_completion(self, completion):
+        if self.conversation_provider == ConversationProvider.AZURE:
+            completion = self.openai_azure.ask(
+                messages=self.messages,
+                api_key=self.azure_api_keys["conversation"],
+                config=self.config.azure.conversation,
+                tools=tools,
+            )
+        elif self.conversation_provider == ConversationProvider.OPENAI:
+            completion = self.openai.ask(
+                messages=self.messages,
+                tools=tools,
+                model=self.config.openai.conversation_model,
+            )
+        elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
+            completion = self.wingman_pro.ask(
+                messages=self.messages,
+                deployment=self.config.wingman_pro.conversation_deployment,
+                tools=tools,
+            )
+
+        # if request isnt most recent, ignore the response
+        if self.last_gpt_call != thiscall:
+            await printr.print_async(
+                "GPT call was cancelled due to a new call.", color=LogType.WARNING
+            )
+            return None
+
+        return completion
+
+    async def _process_completion(self, completion):
         """Processes the completion returned by the GPT call.
 
         Args:
@@ -388,11 +586,18 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple containing the message response and tool calls from the completion.
         """
+
         response_message = completion.choices[0].message
 
         content = response_message.content
         if content is None:
             response_message.content = ""
+
+        # temporary fix for tool calls that have a command name as function name
+        if response_message.tool_calls:
+            response_message.tool_calls = await self._fix_tool_calls(
+                response_message.tool_calls
+            )
 
         return response_message, response_message.tool_calls
 
@@ -418,14 +623,12 @@ class OpenAiWingman(Wingman):
                 function_name, function_args
             )
 
-            msg = {"role": "tool", "content": function_response}
-            if tool_call.id is not None:
-                msg["tool_call_id"] = tool_call.id
-            if function_name is not None:
-                msg["name"] = function_name
-
-            # Don't use self._add_user_message_to_history here because we never want to skip this because of history limitations
-            self.messages.append(msg)
+            if tool_call.id:
+                # updating the dummy tool response with the actual response
+                await self._update_tool_response(tool_call.id, function_response)
+            else:
+                # adding a new tool response
+                self._add_tool_response(tool_call, function_response)
 
         return instant_response
 
@@ -435,16 +638,23 @@ class OpenAiWingman(Wingman):
         Returns:
             The content of the GPT response to the function call summaries.
         """
-        azure_config = None
-        if self.summarize_provider == "azure":
-            azure_config = self._get_azure_config("summarize")
 
-        summarize_model = self.config["openai"].get("summarize_model")
-        summarize_response = self.openai.ask(
-            messages=self.messages,
-            model=summarize_model,
-            azure_config=azure_config,
-        )
+        if self.summarize_provider == SummarizeProvider.AZURE:
+            summarize_response = self.openai_azure.ask(
+                messages=self.messages,
+                api_key=self.azure_api_keys["summarize"],
+                config=self.config.azure.summarize,
+            )
+        elif self.summarize_provider == SummarizeProvider.OPENAI:
+            summarize_response = self.openai.ask(
+                messages=self.messages,
+                model=self.config.openai.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
+            summarize_response = self.wingman_pro.ask(
+                messages=self.messages,
+                deployment=self.config.wingman_pro.summarize_deployment,
+            )
 
         if summarize_response is None:
             return None
@@ -488,9 +698,9 @@ class OpenAiWingman(Wingman):
             # get the command based on the argument passed by GPT
             command = self._get_command(function_args["command_name"])
             # execute the command
-            function_response = self._execute_command(command)
+            function_response = await self._execute_command(command)
             # if the command has responses, we have to play one of them
-            if command and command.get("responses"):
+            if command and command.responses:
                 instant_response = self._select_command_response(command)
                 await self._play_to_user(instant_response)
 
@@ -504,129 +714,73 @@ class OpenAiWingman(Wingman):
             text (str): The text to play as audio.
         """
 
-        if self.tts_provider == "edge_tts":
-            await self._play_with_edge_tts(text)
-        elif self.tts_provider == "elevenlabs":
-            self._play_with_elevenlabs(text)
-        elif self.tts_provider == "azure":
-            self._play_with_azure(text)
+        if self.tts_provider == TtsProvider.EDGE_TTS:
+            await self.edge_tts.play_audio(
+                text=text,
+                config=self.config.edge_tts,
+                sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
+            )
+        elif self.tts_provider == TtsProvider.ELEVENLABS:
+            await self.elevenlabs.play_audio(
+                text=text,
+                config=self.config.elevenlabs,
+                sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
+                stream=self.config.elevenlabs.output_streaming,
+            )
+        elif self.tts_provider == TtsProvider.AZURE:
+            await self.openai_azure.play_audio(
+                text=text,
+                api_key=self.azure_api_keys["tts"],
+                config=self.config.azure.tts,
+                sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
+            )
+        elif self.tts_provider == TtsProvider.XVASYNTH:
+            await self.xvasynth.play_audio(
+                text=text,
+                config=self.config.xvasynth,
+                sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
+            )
+        elif self.tts_provider == TtsProvider.OPENAI:
+            await self.openai.play_audio(
+                text=text,
+                voice=self.config.openai.tts_voice,
+                sound_config=self.config.sound,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
+            )
+        elif self.tts_provider == TtsProvider.WINGMAN_PRO:
+            if self.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
+                await self.wingman_pro.generate_openai_speech(
+                    text=text,
+                    voice=self.config.openai.tts_voice,
+                    sound_config=self.config.sound,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
+            elif self.config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+                await self.wingman_pro.generate_azure_speech(
+                    text=text,
+                    config=self.config.azure.tts,
+                    sound_config=self.config.sound,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
         else:
-            self._play_with_openai(text)
+            printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
 
-    def _play_with_openai(self, text):
-        response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
-        if response is not None:
-            self.audio_player.stream_with_effects(response.content, self.config)
-
-    def _play_with_azure(self, text):
-        azure_config = self.config["azure"].get("tts", None)
-
-        if azure_config is None:
-            return
-
-        speech_config = speechsdk.SpeechConfig(
-            subscription=self.azure_keys["tts"],
-            region=azure_config["region"],
-        )
-        speech_config.speech_synthesis_voice_name = azure_config["voice"]
-
-        if azure_config["detect_language"]:
-            auto_detect_source_language_config = (
-                speechsdk.AutoDetectSourceLanguageConfig()
-            )
-
-        speech_synthesizer = speechsdk.SpeechSynthesizer(
-            speech_config=speech_config,
-            audio_config=None,
-            auto_detect_source_language_config=auto_detect_source_language_config
-            if azure_config["detect_language"]
-            else None,
-        )
-
-        result = speech_synthesizer.speak_text_async(text).get()
-        if result is not None:
-            self.audio_player.stream_with_effects(result.audio_data, self.config)
-
-    async def _play_with_edge_tts(self, text: str):
-        edge_config = self.config["edge_tts"]
-
-        tts_voice = edge_config.get("tts_voice")
-        detect_language = edge_config.get("detect_language")
-        if detect_language:
-            gender = edge_config.get("gender")
-            tts_voice = await self.edge_tts.get_same_random_voice_for_language(
-                gender, self.last_transcript_locale
-            )
-
-        communicate, output_file = await self.edge_tts.generate_speech(
-            text, voice=tts_voice
-        )
-        audio, sample_rate = self.audio_player.get_audio_from_file(output_file)
-
-        self.audio_player.stream_with_effects((audio, sample_rate), self.config)
-
-    def _play_with_elevenlabs(self, text: str):
-        # presence already validated in validate()
-        elevenlabs_config = self.config["elevenlabs"]
-        # validate() already checked that either id or name is set
-        voice_id = elevenlabs_config["voice"].get("id")
-        voice_name = elevenlabs_config["voice"].get("name")
-
-        voice_settings = elevenlabs_config.get("voice_settings", {})
-        user = ElevenLabsUser(self.elevenlabs_api_key)
-        model = elevenlabs_config.get("model", "eleven_multilingual_v2")
-
-        voice: (
-            ElevenLabsVoice
-            | ElevenLabsDesignedVoice
-            | ElevenLabsClonedVoice
-            | ElevenLabsProfessionalVoice
-        ) = None
-        if voice_id:
-            voice = user.get_voice_by_ID(voice_id)
-        else:
-            voice = user.get_voices_by_name(voice_name)[0]
-
-        # todo: add start/end callbacks to play Quindar beep even if use_sound_effects is disabled
-        playback_options = PlaybackOptions(runInBackground=True)
-        generation_options = GenerationOptions(
-            model=model,
-            latencyOptimizationLevel=elevenlabs_config.get("latency", 0),
-            style=voice_settings.get("style", 0),
-            use_speaker_boost=voice_settings.get("use_speaker_boost", True),
-        )
-        stability = voice_settings.get("stability")
-        if stability is not None:
-            generation_options.stability = stability
-
-        similarity_boost = voice_settings.get("similarity_boost")
-        if similarity_boost is not None:
-            generation_options.similarity_boost = similarity_boost
-
-        style = voice_settings.get("style")
-        if style is not None and model != "eleven_turbo_v2":
-            generation_options.style = style
-
-        use_sound_effects = elevenlabs_config.get("use_sound_effects", False)
-        if use_sound_effects:
-            audio_bytes, _history_id = voice.generate_audio_v2(
-                prompt=text,
-                generationOptions=generation_options,
-            )
-            if audio_bytes:
-                self.audio_player.stream_with_effects(audio_bytes, self.config)
-        else:
-            voice.generate_stream_audio_v2(
-                prompt=text,
-                playbackOptions=playback_options,
-                generationOptions=generation_options,
-            )
-
-    def _execute_command(self, command: dict) -> str:
+    async def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
         Otherwise the AI will try to respond to the command and generate a "duplicate" response for instant_activation commands.
         """
-        super()._execute_command(command)
+        await super()._execute_command(command)
         return "Ok"
 
     def _build_tools(self) -> list[dict]:
@@ -637,9 +791,9 @@ class OpenAiWingman(Wingman):
             list[dict]: A list of tool descriptors in OpenAI format.
         """
         commands = [
-            command["name"]
-            for command in self.config.get("commands", [])
-            if not command.get("instant_activation")
+            command.name
+            for command in self.config.commands
+            if not command.force_instant_activation
         ]
         tools = [
             {
@@ -662,44 +816,6 @@ class OpenAiWingman(Wingman):
             },
         ]
         return tools
-
-    def __ask_gpt_for_locale(self, language: str) -> str:
-        """OpenAI TTS returns a natural language name for the language of the transcript, e.g. "german" or "english".
-        This method uses ChatGPT to find the corresponding locale, e.g. "de-DE" or "en-EN".
-
-        Args:
-            language (str): The natural, lowercase language name returned by OpenAI TTS. Thank you for that btw.. WTF OpenAI?
-        """
-
-        response = self.openai.ask(
-            messages=[
-                {
-                    "content": """
-                        I'll say a natural language name in lowercase and you'll just return the IETF country code / locale for this language.
-                        Your answer always has exactly 2 lowercase letters, a dash, then two more letters in uppercase.
-                        If I say "german", you answer with "de-DE". If I say "russian", you answer with "ru-RU".
-                        If it's ambiguous and you don't know which locale to pick ("en-GB" vs "en-US"), you pick the most commonly used one.
-                        You only answer with valid country codes according to most common standards.
-                        If you can't, you respond with "None".
-                    """,
-                    "role": "system",
-                },
-                {
-                    "content": language,
-                    "role": "user",
-                },
-            ],
-            model="gpt-3.5-turbo-1106",
-        )
-        answer = response.choices[0].message.content
-
-        if answer == "None":
-            return None
-
-        printr.print(
-            f"   ChatGPT says this language maps to locale '{answer}'.", tags="info"
-        )
-        return answer
 
     def __get_message_role(self, message):
         """Helper method to get the role of the message regardless of its type."""
