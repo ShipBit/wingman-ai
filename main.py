@@ -220,6 +220,12 @@ async def async_main(host: str, port: int, sidecar: bool):
     asyncio.create_task(core.process_events())
     core.is_started = True
 
+    if not is_latest:
+        printr.print(
+            "A new Wingman AI version is available! Download at https://www.wingman-ai.com",
+            color=LogType.WARNING,
+        )
+
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)
     await server.serve()
