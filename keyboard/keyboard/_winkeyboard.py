@@ -576,7 +576,7 @@ def map_name(name):
         yield scan_code or -vk, modifiers
 
 def _send_event(code, event_type):
-    if code == 541 or code == 56 or code == 57400:
+    if code == 541 or code == 57400:
         # Alt-gr is difficult to simulate. pydirectinput does work, so we are using it in this case.
         if event_type == 0:
             pydirectinput.keyDown("altright")
