@@ -46,7 +46,19 @@ secret_keeper = SecretKeeper()
 SecretKeeper.set_connection_manager(connection_manager)
 
 version_check = SystemManager()
+printr.print(
+    f"Wingman AI Core v{version_check.local_version}",
+    server_only=True,
+    color=LogType.HIGHLIGHT,
+)
+
 is_latest = version_check.check_version()
+if not is_latest:
+    printr.print(
+        "A new Wingman AI version is available! Download at https://www.wingman-ai.com",
+        server_only=True,
+        color=LogType.WARNING,
+    )
 
 # uses the Singletons above, so don't move this up!
 core = WingmanCore(config_manager=config_manager)
@@ -219,12 +231,6 @@ async def async_main(host: str, port: int, sidecar: bool):
     core.audio_player.set_event_loop(event_loop)
     asyncio.create_task(core.process_events())
     core.is_started = True
-
-    if not is_latest:
-        printr.print(
-            "A new Wingman AI version is available! Download at https://www.wingman-ai.com",
-            color=LogType.WARNING,
-        )
 
     config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
     server = uvicorn.Server(config)
