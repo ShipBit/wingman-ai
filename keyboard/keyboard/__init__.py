@@ -506,6 +506,13 @@ def send(hotkey, do_press=True, do_release=True):
 
     _listener.is_replaying = False
 
+def direct_event(scancode, event_type):
+    """
+    Sends a key event directly to the OS, without any processing.
+    """
+    print(f"direct_event({scancode}, {event_type})")
+    _os_keyboard.direct_event(scancode, event_type)
+
 # Alias.
 press_and_release = send
 

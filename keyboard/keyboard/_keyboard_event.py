@@ -20,20 +20,22 @@ class KeyboardEvent(object):
     device = None
     modifiers = None
     is_keypad = None
+    is_extended = None
 
-    def __init__(self, event_type, scan_code, name=None, time=None, device=None, modifiers=None, is_keypad=None):
+    def __init__(self, event_type, scan_code, name=None, time=None, device=None, modifiers=None, is_keypad=None, is_extended=None):
         self.event_type = event_type
         self.scan_code = scan_code
         self.time = now() if time is None else time
         self.device = device
         self.is_keypad = is_keypad
         self.modifiers = modifiers
+        self.is_extended = is_extended
         if name:
             self.name = normalize_name(name)
 
     def to_json(self, ensure_ascii=False):
         attrs = dict(
-            (attr, getattr(self, attr)) for attr in ['event_type', 'scan_code', 'name', 'time', 'device', 'is_keypad', 'modifiers']
+            (attr, getattr(self, attr)) for attr in ['event_type', 'scan_code', 'name', 'time', 'device', 'is_keypad', 'modifiers', 'is_extended']
             if not attr.startswith('_')
         )
         return json.dumps(attrs, ensure_ascii=ensure_ascii)
