@@ -49,8 +49,10 @@ class CommandHandler:
                     RecordMouseActionsCommand(**command), websocket
                 )
             elif command_name == "stop_recording":
+                # Get Enum from string
+                recording_type = KeyboardRecordingType(command["recording_type"])
                 await self.handle_stop_recording(
-                    StopRecordingCommand(**command), websocket
+                    StopRecordingCommand(**command), websocket, recording_type
                 )
             else:
                 raise ValueError("Unknown command")
@@ -114,14 +116,14 @@ class CommandHandler:
 
         def _on_key_event(event):
             if event.event_type == "down" and event.name == "esc":
-                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type == KeyboardRecordingType.SINGLE))
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type))
             if event.scan_code == 58 or event.scan_code == 70 or (event.scan_code == 69 and event.is_extended):
                 # let capslock, numlock or scrolllock through, as it changes following keypresses
                 keyboard.direct_event(event.scan_code, (0 if event.event_type == "down" else 2)+event.is_extended)
 
             self.recorded_keys.append(event)
             if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
-                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, True))
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type))
 
         self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
 
@@ -138,7 +140,7 @@ class CommandHandler:
         )
 
     async def handle_stop_recording(
-        self, command: StopRecordingCommand, websocket: WebSocket, single: bool = False
+        self, command: StopRecordingCommand, websocket: WebSocket, recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
     ):
         if self.hook_callback:
             keyboard.unhook(self.hook_callback)
@@ -146,7 +148,7 @@ class CommandHandler:
         if self.timeout_task:
             self.timeout_task.cancel()
 
-        actions = self._get_actions_from_recorded_hotkey(recorded_keys) if single else self._get_actions_from_recorded_keys(recorded_keys)
+        actions = self._get_actions_from_recorded_keys(recorded_keys) if recording_type == KeyboardRecordingType.MACRO_ADVANCED else self._get_actions_from_recorded_hotkey(recorded_keys)
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
 
