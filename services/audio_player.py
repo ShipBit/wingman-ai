@@ -117,13 +117,13 @@ class AudioPlayer:
         await self.notify_playback_started(wingman_name)
 
     async def notify_playback_started(self, wingman_name: str):
+        await self.playback_events.publish("started", wingman_name)
         if callable(self.on_playback_started):
-            self.playback_events.publish("started", wingman_name)
             await self.on_playback_started(wingman_name)
 
     async def notify_playback_finished(self, wingman_name: str):
+        await self.playback_events.publish("finished", wingman_name)
         if callable(self.on_playback_finished):
-            self.playback_events.publish("finished", wingman_name)
             await self.on_playback_finished(wingman_name)
 
     def play_beep(self):
