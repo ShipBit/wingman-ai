@@ -119,7 +119,7 @@ class CommandHandler:
                 WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type))
             if event.scan_code == 58 or event.scan_code == 70 or (event.scan_code == 69 and event.is_extended):
                 # let capslock, numlock or scrolllock through, as it changes following keypresses
-                keyboard.direct_event(event.scan_code, (0 if event.event_type == "down" else 2)+event.is_extended)
+                keyboard.direct_event(event.scan_code, (0 if event.event_type == "down" else 2)+int(event.is_extended))
 
             self.recorded_keys.append(event)
             if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
