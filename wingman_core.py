@@ -18,6 +18,7 @@ from api.interface import (
     AudioDevice,
     AzureSttConfig,
     ConfigWithDirInfo,
+    WingmanConfigFileInfo,
     WingmanInitializationError,
 )
 from providers.open_ai import OpenAi
@@ -68,6 +69,13 @@ class WingmanCore(WebSocketUser):
             endpoint=self.stop_playback,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/send-text-to-wingman",
+            endpoint=self.send_text_to_wingman,
+            tags=tags,
+        )
+
         self.config_manager = config_manager
         self.config_service = ConfigService(config_manager=config_manager)
         self.config_service.config_events.subscribe(
@@ -454,3 +462,19 @@ class WingmanCore(WebSocketUser):
     # POST /stop-playback
     async def stop_playback(self):
         await self.audio_player.stop_playback()
+
+    # POST /send-text-to-wingman
+    async def send_text_to_wingman(self, text: str, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+
+        def run_async_process():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(wingman.process(transcript=text))
+            finally:
+                loop.close()
+
+        if wingman and text:
+            play_thread = threading.Thread(target=run_async_process)
+            play_thread.start()

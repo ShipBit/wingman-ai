@@ -100,3 +100,9 @@ class Tower:
                 return wingman
 
         return None
+
+    def get_wingman_by_name(self, wingman_name: str):
+        for wingman in self.wingmen:
+            if wingman.name == wingman_name:
+                return wingman
+        return None
