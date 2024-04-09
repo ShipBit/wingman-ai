@@ -12,6 +12,7 @@ from api.enums import (
     AzureRegion,
     CommandTag,
     LogType,
+    ToastType,
     VoiceActivationSttProvider,
 )
 from api.interface import (
@@ -73,6 +74,12 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/send-text-to-wingman",
             endpoint=self.send_text_to_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/reset_conversation_history",
+            endpoint=self.reset_conversation_history,
             tags=tags,
         )
 
@@ -478,3 +485,20 @@ class WingmanCore(WebSocketUser):
         if wingman and text:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
+
+    # POST /reset-conversation-history
+    def reset_conversation_history(self, wingman_name: Optional[str]):
+        if wingman_name:
+            wingman = self.tower.get_wingman_by_name(wingman_name)
+            if wingman:
+                wingman.reset_conversation_history()
+                self.printr.toast(
+                    f"Conversation history cleared for {wingman_name}.",
+                )
+        else:
+            for wingman in self.tower.wingmen:
+                wingman.reset_conversation_history()
+            self.printr.toast(
+                "Conversation history cleared.",
+            )
+        return True
