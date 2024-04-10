@@ -152,6 +152,9 @@ def listen(callback):
         is_keypad = scan_code in keypad_scan_codes
         callback(KeyboardEvent(event_type=event_type, scan_code=scan_code, name=name, time=time, device=device_id, is_keypad=is_keypad, modifiers=pressed_modifiers_tuple))
 
+def direct_event(scan_code, event_type):
+    write_event(scan_code, event_type == 0 or event_type == 1)
+
 def write_event(scan_code, is_down):
     build_device()
     device.write_event(EV_KEY, scan_code, int(is_down))

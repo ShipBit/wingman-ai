@@ -1,5 +1,6 @@
 import json
 import asyncio
+import math
 from fastapi import WebSocket
 import keyboard.keyboard as keyboard
 from api.commands import (
@@ -48,8 +49,10 @@ class CommandHandler:
                     RecordMouseActionsCommand(**command), websocket
                 )
             elif command_name == "stop_recording":
+                # Get Enum from string
+                recording_type = KeyboardRecordingType(command["recording_type"])
                 await self.handle_stop_recording(
-                    StopRecordingCommand(**command), websocket
+                    StopRecordingCommand(**command), websocket, recording_type
                 )
             else:
                 raise ValueError("Unknown command")
@@ -109,13 +112,20 @@ class CommandHandler:
 
         # Start timeout
         # self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
+        self.recorded_keys = []
 
         def _on_key_event(event):
+            if event.event_type == "down" and event.name == "esc":
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type))
+            if event.scan_code == 58 or event.scan_code == 70 or (event.scan_code == 69 and event.is_extended):
+                # let capslock, numlock or scrolllock through, as it changes following keypresses
+                keyboard.direct_event(event.scan_code, (0 if event.event_type == "down" else 2)+int(event.is_extended))
+
             self.recorded_keys.append(event)
             if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
-                WebSocketUser.ensure_async(self.handle_stop_recording(None, None))
+                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type))
 
-        self.hook_callback = keyboard.hook(_on_key_event)
+        self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
 
     async def handle_record_mouse_actions(
         self, command: RecordMouseActionsCommand, websocket: WebSocket
@@ -130,7 +140,7 @@ class CommandHandler:
         )
 
     async def handle_stop_recording(
-        self, command: StopRecordingCommand, websocket: WebSocket
+        self, command: StopRecordingCommand, websocket: WebSocket, recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
     ):
         if self.hook_callback:
             keyboard.unhook(self.hook_callback)
@@ -138,7 +148,7 @@ class CommandHandler:
         if self.timeout_task:
             self.timeout_task.cancel()
 
-        actions = self._get_actions_from_recorded_keys(recorded_keys)
+        actions = self._get_actions_from_recorded_keys(recorded_keys) if recording_type == KeyboardRecordingType.MACRO_ADVANCED else self._get_actions_from_recorded_hotkey(recorded_keys)
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
 
@@ -157,6 +167,90 @@ class CommandHandler:
         await self.handle_stop_recording(None, None)
 
     def _get_actions_from_recorded_keys(self, recorded):
+        actions: list[CommandActionConfig] = []
+
+        def add_action(name, code, extended, press, release, hold):
+            if(press or release):
+                hold = None # reduces yaml size
+            else:
+                hold = round(hold, 2)
+                if(hold < 0.1):
+                    hold = 0.1 # 100ms min hold time
+                else:
+                    hold = round(round(hold / 0.05) * 0.05, 3)
+
+            if(not extended):
+                extended = None # reduces yaml size
+
+            # add keyboard action
+            actions.append(CommandActionConfig(keyboard=CommandKeyboardConfig(
+                hotkey=name,
+                hotkey_codes=[code],
+                hotkey_extended=extended,
+                press=press,
+                release=release,
+                hold=hold)
+            ))
+
+        def add_wait(duration):
+            if not duration:
+                return
+            duration = round(duration, 2)
+            if duration < 0.05:
+                duration = 0.05 # 50ms min wait time
+            else :
+                duration = round(round(duration / 0.05) * 0.05, 3)
+            actions.append(CommandActionConfig(wait=duration))
+
+        last_last_key_data = []
+        last_key_data = []
+        key_data = []
+
+        # Process recorded key events to calculate press durations and wait times
+        # We are trying to compress press and release events into one action.
+        # This reduces the amount of actions and increases readability of yaml files.
+        # Tradeoff is a bit confusing logic below.
+        for key in recorded:
+            key_data = [key.name.lower(), key.scan_code, bool(key.is_extended), key.event_type, key.time, 0]
+
+            if(last_key_data):
+                if key_data[1] == last_key_data[1] and key_data[2] == last_key_data[2] and key_data[3] == last_key_data[3]:
+                    # skip double actions
+                    continue
+                key_data[5] = key_data[4] - last_key_data[4] # set time diff
+
+            # check if last key was down event
+            if last_key_data and last_key_data[3] == "down":
+                # same key?
+                if key_data[1] == last_key_data[1] and key_data[2] == last_key_data[2]:
+                    # write as compressed action
+                    add_wait(last_key_data[5])
+                    add_action(key_data[0], key_data[1], key_data[2], None, None, key_data[5])
+                else:
+                    # write as separate action
+                    add_wait(last_key_data[5])
+                    add_action(last_key_data[0], last_key_data[1], last_key_data[2], True, None, 0)
+
+            if last_key_data and last_key_data[3] == "up":
+                if(last_last_key_data and last_last_key_data[1] != last_key_data[1] or last_last_key_data[2] != last_key_data[2]):
+                        add_wait(last_key_data[5])
+                        add_action(last_key_data[0], last_key_data[1], last_key_data[2], None, True, 0)
+
+            last_last_key_data = last_key_data
+            last_key_data = key_data
+
+        # add last action
+        if key_data and key_data[3] == "down":
+            add_wait(key_data[5])
+            add_action(key_data[0], key_data[1], key_data[2], True, None, 0)
+        elif key_data and last_key_data and last_last_key_data and key_data[3] == "up" and (last_last_key_data[1] != last_key_data[1] or last_last_key_data[2] != last_key_data[2]):
+            add_wait(key_data[5])
+            add_action(key_data[0], key_data[1], key_data[2], None, True, 0)
+
+        return actions
+    
+    def _get_actions_from_recorded_hotkey(self, recorded):
+        # legacy function used for single key recording
         actions: list[CommandActionConfig] = []
 
         key_down_time = {}  # Track initial down times for keys
@@ -211,8 +305,8 @@ class CommandHandler:
 
                         key_config = CommandActionConfig()
                         key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
-
                         key_config.keyboard.hotkey_codes = [key.scan_code for key in keys_pressed]
+                        key_config.keyboard.hotkey_extended = bool(key.is_extended)
 
                         if press_duration > 0.2 and len(keys_pressed) == 1:
                             key_config.keyboard.hold = round(press_duration, 2)

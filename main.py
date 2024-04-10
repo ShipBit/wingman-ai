@@ -178,6 +178,10 @@ app.add_middleware(
 )
 # if a class adds GET/POST endpoints, add them here:
 app.include_router(core.router)
+app.include_router(core.config_service.router)
+app.include_router(core.settings_service.router)
+app.include_router(core.voice_service.router)
+
 app.include_router(version_check.router)
 app.include_router(secret_keeper.router)
 
@@ -199,7 +203,7 @@ async def websocket_endpoint(websocket: WebSocket):
 async def start_secrets(secrets: dict[str, Any]):
     secret_keeper.post_secrets(secrets)
     core.startup_errors = []
-    await core.load_config()
+    await core.config_service.load_config()
 
 
 @app.get("/ping", tags=["main"])
@@ -208,9 +212,9 @@ async def ping():
 
 
 async def async_main(host: str, port: int, sidecar: bool):
-    errors, config_info = await core.load_config()
+    await core.config_service.load_config()
     saved_secrets: list[str] = []
-    for error in errors:
+    for error in core.tower_errors:
         if (
             not sidecar  # running standalone
             and error.error_type == WingmanInitializationErrorType.MISSING_SECRET

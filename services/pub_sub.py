@@ -1,3 +1,6 @@
+import asyncio
+
+
 class PubSub:
     def __init__(self):
         self.subscribers = {}
@@ -11,7 +14,10 @@ class PubSub:
         if event_type in self.subscribers:
             self.subscribers[event_type].remove(fn)
 
-    def publish(self, event_type, data):
+    async def publish(self, event_type, data):
         if event_type in self.subscribers:
             for fn in self.subscribers[event_type]:
-                fn(data)
+                if asyncio.iscoroutinefunction(fn):
+                    await fn(data)
+                else:
+                    fn(data)
