@@ -130,6 +130,7 @@ class SummarizeProvider(Enum):
 class KeyboardRecordingType(Enum):
     SINGLE = "single"
     MACRO = "macro"
+    MACRO_ADVANCED = "macro_advanced"
 
 
 class WingmanProRegion(Enum):

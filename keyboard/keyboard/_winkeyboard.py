@@ -5,16 +5,10 @@ invoking the Win32 API through the ctypes module. This is error prone
 and can introduce very unpythonic failure modes, such as segfaults and
 low level memory leaks. But it is also dependency-free, very performant
 well documented on Microsoft's website and scattered examples.
-
-# TODO:
-- Keypad numbers still print as numbers even when numlock is off.
-- No way to specify if user wants a keypad key or not in `map_char`.
 """
 from __future__ import unicode_literals
-import re
 import atexit
 import traceback
-import pydirectinput
 from threading import Lock
 from collections import defaultdict
 
@@ -26,23 +20,10 @@ try:
 except NameError:
     pass
 
-# This part is just declaring Win32 API structures using ctypes. In C
-# this would be simply #include "windows.h".
-
 import ctypes
-from ctypes import c_short, c_char, c_uint8, c_int32, c_int, c_uint, c_uint32, c_long, Structure, WINFUNCTYPE, POINTER
-from ctypes.wintypes import WORD, DWORD, BOOL, HHOOK, MSG, LPWSTR, WCHAR, WPARAM, LPARAM, LONG, HMODULE, LPCWSTR, HINSTANCE, HWND
-LPMSG = POINTER(MSG)
-ULONG_PTR = POINTER(DWORD)
+from ctypes import wintypes
 
-kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
-GetModuleHandleW = kernel32.GetModuleHandleW
-GetModuleHandleW.restype = HMODULE
-GetModuleHandleW.argtypes = [LPCWSTR]
-
-#https://github.com/boppreh/mouse/issues/1
-#user32 = ctypes.windll.user32
-user32 = ctypes.WinDLL('user32', use_last_error = True)
+LPMSG = ctypes.POINTER(wintypes.MSG)
 
 VK_PACKET = 0xE7
 
@@ -50,36 +31,55 @@ INPUT_MOUSE = 0
 INPUT_KEYBOARD = 1
 INPUT_HARDWARE = 2
 
+KEYEVENTF_KEYDOWN = 0x00
+KEYEVENTF_EXTENDED = 0x01
 KEYEVENTF_KEYUP = 0x02
 KEYEVENTF_UNICODE = 0x04
+KEYEVENTF_SCANCODE = 0x08
 
-class KBDLLHOOKSTRUCT(Structure):
-    _fields_ = [("vk_code", DWORD),
-                ("scan_code", DWORD),
-                ("flags", DWORD),
-                ("time", c_int),
-                ("dwExtraInfo", ULONG_PTR)]
+# https://msdn.microsoft.com/en-us/library/windows/desktop/ms646307(v=vs.85).aspx
+MAPVK_VK_TO_CHAR = 2
+MAPVK_VK_TO_VSC = 0
+MAPVK_VSC_TO_VK = 1
+MAPVK_VK_TO_VSC_EX = 4
+MAPVK_VSC_TO_VK_EX = 3
+
+LLKHF_INJECTED = 0x00000010
+
+user32 = ctypes.WinDLL('user32', use_last_error = True)
+kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+GetModuleHandleW = kernel32.GetModuleHandleW
+GetModuleHandleW.restype = wintypes.HMODULE
+GetModuleHandleW.argtypes = [wintypes.LPCWSTR]
+wintypes.ULONG_PTR = wintypes.WPARAM
+
+class KBDLLHOOKSTRUCT(ctypes.Structure):
+    _fields_ = [("vk_code", wintypes.DWORD),
+                ("scan_code", wintypes.DWORD),
+                ("flags", wintypes.DWORD),
+                ("time", ctypes.c_int),
+                ("dwExtraInfo", wintypes.ULONG_PTR)]
 
 # Included for completeness.
 class MOUSEINPUT(ctypes.Structure):
-    _fields_ = (('dx', LONG),
-                ('dy', LONG),
-                ('mouseData', DWORD),
-                ('dwFlags', DWORD),
-                ('time', DWORD),
-                ('dwExtraInfo', ULONG_PTR))
+    _fields_ = (('dx', wintypes.LONG),
+                ('dy', wintypes.LONG),
+                ('mouseData', wintypes.DWORD),
+                ('dwFlags', wintypes.DWORD),
+                ('time', wintypes.DWORD),
+                ('dwExtraInfo', wintypes.ULONG_PTR))
 
 class KEYBDINPUT(ctypes.Structure):
-    _fields_ = (('wVk', WORD),
-                ('wScan', WORD),
-                ('dwFlags', DWORD),
-                ('time', DWORD),
-                ('dwExtraInfo', ULONG_PTR))
+    _fields_ = (("wVk",         wintypes.WORD),
+                ("wScan",       wintypes.WORD),
+                ("dwFlags",     wintypes.DWORD),
+                ("time",        wintypes.DWORD),
+                ("dwExtraInfo", wintypes.ULONG_PTR))
 
 class HARDWAREINPUT(ctypes.Structure):
-    _fields_ = (('uMsg', DWORD),
-                ('wParamL', WORD),
-                ('wParamH', WORD))
+    _fields_ = (('uMsg', wintypes.DWORD),
+                ('wParamL', wintypes.WORD),
+                ('wParamH', wintypes.WORD))
 
 class _INPUTunion(ctypes.Union):
     _fields_ = (('mi', MOUSEINPUT),
@@ -87,84 +87,51 @@ class _INPUTunion(ctypes.Union):
                 ('hi', HARDWAREINPUT))
 
 class INPUT(ctypes.Structure):
-    _fields_ = (('type', DWORD),
-                ('union', _INPUTunion))
+    class _INPUT(ctypes.Union):
+        _fields_ = (("ki", KEYBDINPUT),
+                    ("mi", MOUSEINPUT),
+                    ("hi", HARDWAREINPUT))
+    _anonymous_ = ("_input",)
+    _fields_ = (("type",   wintypes.DWORD),
+                ("_input", _INPUT))
 
-LowLevelKeyboardProc = WINFUNCTYPE(c_int, WPARAM, LPARAM, POINTER(KBDLLHOOKSTRUCT))
+LowLevelKeyboardProc = ctypes.WINFUNCTYPE(ctypes.c_int, wintypes.WPARAM, wintypes.LPARAM, ctypes.POINTER(KBDLLHOOKSTRUCT))
 
 SetWindowsHookEx = user32.SetWindowsHookExW
-SetWindowsHookEx.argtypes = [c_int, LowLevelKeyboardProc, HINSTANCE , DWORD]
-SetWindowsHookEx.restype = HHOOK
+SetWindowsHookEx.argtypes = [ctypes.c_int, LowLevelKeyboardProc, wintypes.HINSTANCE , wintypes.DWORD]
+SetWindowsHookEx.restype = wintypes.HHOOK
 
 CallNextHookEx = user32.CallNextHookEx
-#CallNextHookEx.argtypes = [c_int , c_int, c_int, POINTER(KBDLLHOOKSTRUCT)]
-CallNextHookEx.restype = c_int
+CallNextHookEx.restype = ctypes.c_int
 
 UnhookWindowsHookEx = user32.UnhookWindowsHookEx
-UnhookWindowsHookEx.argtypes = [HHOOK]
-UnhookWindowsHookEx.restype = BOOL
+UnhookWindowsHookEx.argtypes = [wintypes.HHOOK]
+UnhookWindowsHookEx.restype = wintypes.BOOL
 
 GetMessage = user32.GetMessageW
-GetMessage.argtypes = [LPMSG, HWND, c_uint, c_uint]
-GetMessage.restype = BOOL
+GetMessage.argtypes = [LPMSG, wintypes.HWND, ctypes.c_uint, ctypes.c_uint]
+GetMessage.restype = wintypes.BOOL
 
 TranslateMessage = user32.TranslateMessage
 TranslateMessage.argtypes = [LPMSG]
-TranslateMessage.restype = BOOL
+TranslateMessage.restype = wintypes.BOOL
 
 DispatchMessage = user32.DispatchMessageA
 DispatchMessage.argtypes = [LPMSG]
 
-
-keyboard_state_type = c_uint8 * 256
+keyboard_state_type = ctypes.c_uint8 * 256
 
 GetKeyboardState = user32.GetKeyboardState
 GetKeyboardState.argtypes = [keyboard_state_type]
-GetKeyboardState.restype = BOOL
+GetKeyboardState.restype = wintypes.BOOL
 
 GetKeyNameText = user32.GetKeyNameTextW
-GetKeyNameText.argtypes = [c_long, LPWSTR, c_int]
-GetKeyNameText.restype = c_int
-
-MapVirtualKey = user32.MapVirtualKeyW
-MapVirtualKey.argtypes = [c_uint, c_uint]
-MapVirtualKey.restype = c_uint
+GetKeyNameText.argtypes = [ctypes.c_long, wintypes.LPWSTR, ctypes.c_int]
+GetKeyNameText.restype = ctypes.c_int
 
 ToUnicode = user32.ToUnicode
-ToUnicode.argtypes = [c_uint, c_uint, keyboard_state_type, LPWSTR, c_int, c_uint]
-ToUnicode.restype = c_int
-
-SendInput = user32.SendInput
-SendInput.argtypes = [c_uint, POINTER(INPUT), c_int]
-SendInput.restype = c_uint
-
-# https://msdn.microsoft.com/en-us/library/windows/desktop/ms646307(v=vs.85).aspx
-MAPVK_VK_TO_CHAR = 2
-MAPVK_VK_TO_VSC = 0
-MAPVK_VSC_TO_VK = 1
-MAPVK_VK_TO_VSC_EX = 4
-MAPVK_VSC_TO_VK_EX = 3 
-
-VkKeyScan = user32.VkKeyScanW
-VkKeyScan.argtypes = [WCHAR]
-VkKeyScan.restype = c_short
-
-LLKHF_INJECTED = 0x00000010
-
-WM_KEYDOWN = 0x0100
-WM_KEYUP = 0x0101
-WM_SYSKEYDOWN = 0x104 # Used for ALT key
-WM_SYSKEYUP = 0x105
-
-
-# This marks the end of Win32 API declarations. The rest is ours.
-
-keyboard_event_types = {
-    WM_KEYDOWN: KEY_DOWN,
-    WM_KEYUP: KEY_UP,
-    WM_SYSKEYDOWN: KEY_DOWN,
-    WM_SYSKEYUP: KEY_UP,
-}
+ToUnicode.argtypes = [ctypes.c_uint, ctypes.c_uint, keyboard_state_type, wintypes.LPWSTR, ctypes.c_int, ctypes.c_uint]
+ToUnicode.restype = ctypes.c_int
 
 # List taken from the official documentation, but stripped of the OEM-specific keys.
 # Keys are virtual key codes, values are pairs (name, is_keypad).
@@ -364,10 +331,6 @@ def get_event_names(scan_code, vk, is_extended, modifiers):
     unicode_ret = ToUnicode(vk, scan_code, keyboard_state, unicode_buffer, len(unicode_buffer), 0)
     if unicode_ret and unicode_buffer.value:
         yield unicode_buffer.value
-        # unicode_ret == -1 -> is dead key
-        # ToUnicode has the side effect of setting global flags for dead keys.
-        # Therefore we need to call it twice to clear those flags.
-        # If your 6 and 7 keys are named "^6" and "^7", this is the reason.
         ToUnicode(vk, scan_code, keyboard_state, unicode_buffer, len(unicode_buffer), 0)
 
     name_ret = GetKeyNameText(scan_code << 16 | is_extended << 24, name_buffer, 1024)
@@ -527,7 +490,7 @@ def prepare_intercept(callback):
             altgr_is_pressed = event_type == KEY_DOWN
 
         is_keypad = (scan_code, vk, is_extended) in keypad_keys
-        return callback(KeyboardEvent(event_type=event_type, scan_code=scan_code or -vk, name=name, is_keypad=is_keypad))
+        return callback(KeyboardEvent(event_type=event_type, scan_code=scan_code or -vk, name=name, is_keypad=is_keypad, is_extended=is_extended))
 
     def low_level_keyboard_handler(nCode, wParam, lParam):
         try:
@@ -548,10 +511,10 @@ def prepare_intercept(callback):
 
         return CallNextHookEx(None, nCode, wParam, lParam)
 
-    WH_KEYBOARD_LL = c_int(13)
+    WH_KEYBOARD_LL = ctypes.c_int(13)
     keyboard_callback = LowLevelKeyboardProc(low_level_keyboard_handler)
     handle =  GetModuleHandleW(None)
-    thread_id = DWORD(0)
+    thread_id = wintypes.DWORD(0)
     keyboard_hook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_callback, handle, thread_id)
 
     # Register to remove the hook when the interpreter exits. Unfortunately a
@@ -575,26 +538,51 @@ def map_name(name):
         scan_code, vk, is_extended, modifiers = entry
         yield scan_code or -vk, modifiers
 
+def direct_event(code, event_type):
+    _send_event(code, event_type)
+
 def _send_event(code, event_type):
-    if code == 541 or code == 57400:
-        # Alt-gr is difficult to simulate. pydirectinput does work, so we are using it in this case.
-        if event_type == 0:
-            pydirectinput.keyDown("altright")
-        elif event_type == 2:
-            pydirectinput.keyUp("altright")
-    elif code > 0:
-        vk = scan_code_to_vk.get(code, 0)
+    def _send_event_new(code, vk, event_type, attach_input: bool = False):
+        # doesnt work without wVk
+        if not vk:
+            return 0
+
+        if attach_input:
+            fore_thread = user32.GetWindowThreadProcessId(user32.GetForegroundWindow(), None)
+            app_thread = kernel32.GetCurrentThreadId()
+            user32.AttachThreadInput(app_thread, fore_thread, True)
+
+        i = INPUT(type=INPUT_KEYBOARD,ki=KEYBDINPUT(wVk=vk,wScan=code,dwFlags=event_type))
+        result = user32.SendInput(1, ctypes.byref(i), ctypes.sizeof(i))
+
+        if attach_input:
+            user32.AttachThreadInput(app_thread, fore_thread, False)
+
+        return result
+
+    ## keybd_event does work but is deprecated
+    def _send_event_old(code, vk, event_type):
         user32.keybd_event(vk, code, event_type, 0)
+
+    # alt gr is 541, but it's actually right alt (56, extended)
+    if code == 541:
+            code = 56
+            event_type = event_type+1
+    vk = 0
+    if code < 0:
+        vk = -code
     else:
-        # Negative scan code is a way to indicate we don't have a scan code,
-        # and the value actually contains the Virtual key code.
-        user32.keybd_event(-code, 0, event_type, 0)
+        vk = scan_code_to_vk.get(code, 0)
 
-def press(code):
-    _send_event(code, 0)
+    result = _send_event_new(code, vk, event_type, False)
+    if result == 0:
+        return _send_event_old(code, vk, event_type)
+    
+def press(code, extended: bool = False):
+    _send_event(code, 0+int(extended))
 
-def release(code):
-    _send_event(code, 2)
+def release(code, extended: bool = False):
+    _send_event(code, 2+int(extended))
 
 def type_unicode(character):
     # This code and related structures are based on
@@ -604,20 +592,17 @@ def type_unicode(character):
     releases = []
     for i in range(0, len(surrogates), 2):
         higher, lower = surrogates[i:i+2]
-        structure = KEYBDINPUT(0, (lower << 8) + higher, KEYEVENTF_UNICODE, 0, None)
-        presses.append(INPUT(INPUT_KEYBOARD, _INPUTunion(ki=structure)))
-        structure = KEYBDINPUT(0, (lower << 8) + higher, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, None)
-        releases.append(INPUT(INPUT_KEYBOARD, _INPUTunion(ki=structure)))
+        presses.append(INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(wVk=0, wScan=(lower << 8) + higher, dwFlags=KEYEVENTF_UNICODE)))
+        releases.append(INPUT(type=INPUT_KEYBOARD, ki=KEYBDINPUT(wVk=0, wScan=(lower << 8) + higher, dwFlags=KEYEVENTF_UNICODE | KEYEVENTF_KEYUP)))
     inputs = presses + releases
     nInputs = len(inputs)
     LPINPUT = INPUT * nInputs
     pInputs = LPINPUT(*inputs)
-    cbSize = c_int(ctypes.sizeof(INPUT))
-    SendInput(nInputs, pInputs, cbSize)
+    cbSize = ctypes.c_int(ctypes.sizeof(INPUT))
+    user32.SendInput(nInputs, pInputs, cbSize)
 
 if __name__ == '__main__':
     _setup_name_tables()
     import pprint
     pprint.pprint(to_name)
     pprint.pprint(from_name)
-    #listen(lambda e: print(e.to_json()) or True)

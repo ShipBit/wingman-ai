@@ -333,9 +333,17 @@ class CommandKeyboardConfig(BaseModel):
     hotkey_codes: Optional[list[int]] = None
     """The hotkey codes. Can be a single key like 65 or a combination like 162+160+65. Optional."""
 
+    hotkey_extended: Optional[bool] = None
+    """Whether the hotkey is an extended key. Optional."""
+
     hold: Optional[float] = None
     """The duration the key will be pressed in seconds. Optional."""
 
+    press: Optional[bool] = None
+    """Whether to press the key. Optional."""
+
+    release: Optional[bool] = None
+    """Whether to release the key. Optional."""
 
 class CommandMouseConfig(BaseModel):
     button: Optional[str] = None

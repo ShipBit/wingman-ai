@@ -365,7 +365,7 @@ class Wingman:
 
         if len(command.actions or []) > 0 and not self.debug:
             await printr.print_async(
-                f"❖ Executing command: {command.name}", color=LogType.INFO
+                f"Executing command: {command.name}", color=LogType.INFO
             )
             if not self.debug:
                 # in debug mode we already printed the separate execution times
@@ -374,7 +374,7 @@ class Wingman:
 
         if len(command.actions or []) == 0:
             await printr.print_async(
-                f"❖ No actions found for command: {command.name}", color=LogType.WARNING
+                f"No actions found for command: {command.name}", color=LogType.WARNING
             )
 
         if self.debug:
@@ -404,18 +404,23 @@ class Wingman:
 
         for action in command.actions:
             if action.keyboard:
-                if action.keyboard.hold:
-                    keyboard.press(
-                        action.keyboard.hotkey_codes or action.keyboard.hotkey
-                    )
-                    time.sleep(action.keyboard.hold)
-                    keyboard.release(
-                        action.keyboard.hotkey_codes or action.keyboard.hotkey
-                    )
+                if action.keyboard.press == action.keyboard.release:
+                    # compressed key events
+                    hold = action.keyboard.hold or 0.1
+                    if(action.keyboard.hotkey_codes and len(action.keyboard.hotkey_codes) == 1):
+                        keyboard.direct_event(action.keyboard.hotkey_codes[0], 0+(1 if action.keyboard.hotkey_extended else 0))
+                        time.sleep(hold)
+                        keyboard.direct_event(action.keyboard.hotkey_codes[0], 2+(1 if action.keyboard.hotkey_extended else 0))
+                    else:
+                        keyboard.press(action.keyboard.hotkey_codes or action.keyboard.hotkey)
+                        time.sleep(hold)
+                        keyboard.release(action.keyboard.hotkey_codes or action.keyboard.hotkey)
                 else:
-                    keyboard.send(
-                        action.keyboard.hotkey_codes or action.keyboard.hotkey
-                    )
+                    # single key events
+                    if(action.keyboard.hotkey_codes and len(action.keyboard.hotkey_codes) == 1):
+                        keyboard.direct_event(action.keyboard.hotkey_codes[0], (0 if action.keyboard.press else 2)+(1 if action.keyboard.hotkey_extended else 0))
+                    else:
+                        keyboard.send(action.keyboard.hotkey_codes or action.keyboard.hotkey, action.keyboard.press, action.keyboard.release)
 
             if action.mouse:
                 if action.mouse.move_to:

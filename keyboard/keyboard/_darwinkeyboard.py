@@ -472,6 +472,13 @@ key_controller = KeyController()
 def init():
     key_controller = KeyController()
 
+def direct_event(scan_code, event_type):
+    """ Sends a key event directly, without any processing """
+    if event_type == 0 or event_type == 1:
+        key_controller.press(scan_code)
+    elif event_type == 2 or event_type == 3:
+        key_controller.release(scan_code)
+
 def press(scan_code):
     """ Sends a 'down' event for the specified scan code """
     key_controller.press(scan_code)
