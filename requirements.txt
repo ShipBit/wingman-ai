@@ -1,9 +1,9 @@
-azure-cognitiveservices-speech==1.36.0
+azure-cognitiveservices-speech==1.37.0
 edge-tts==6.1.10
-elevenlabslib~=0.21.0
-fastapi~=0.110.0
+elevenlabslib~=0.22.1
+fastapi~=0.110.1
 numpy~=1.26.4
-openai~=1.14.3
+openai~=1.17.0
 packaging~=24.0
 pedalboard~=0.9.3
 platformdirs~=4.2.0
@@ -13,9 +13,9 @@ pydirectinput-rgx==2.1.1
 pyinstaller==6.5.0
 PyYAML~=6.0.1
 requests~=2.31.0
-scipy~=1.12.0
+scipy~=1.13.0
 sounddevice~=0.4.6
 soundfile~=0.12.1
-SpeechRecognition~=3.10.1
+SpeechRecognition~=3.10.3
 typing_extensions~=4.10.0
 uvicorn~=0.29.0
