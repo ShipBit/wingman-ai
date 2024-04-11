@@ -295,7 +295,13 @@ class OpenAiWingman(Wingman):
         if tool_calls and len(tool_calls) > 0:
             for tool_call in tool_calls:
                 function_name = tool_call.function.name
-                function_args = json.loads(tool_call.function.arguments)
+                function_args = (
+                    tool_call.function.arguments
+                    # Mistral returns a dict
+                    if isinstance(tool_call.function.arguments, dict)
+                    # OpenAI returns a string
+                    else json.loads(tool_call.function.arguments)
+                )
 
                 # try to resolve function name to a command name
                 if len(function_args) == 0 and self._get_command(function_name):
@@ -615,7 +621,13 @@ class OpenAiWingman(Wingman):
 
         for tool_call in tool_calls:
             function_name = tool_call.function.name
-            function_args = json.loads(tool_call.function.arguments)
+            function_args = (
+                tool_call.function.arguments
+                # Mistral returns a dict
+                if isinstance(tool_call.function.arguments, dict)
+                # OpenAI returns a string
+                else json.loads(tool_call.function.arguments)
+            )
             (
                 function_response,
                 instant_response,
@@ -806,7 +818,7 @@ class OpenAiWingman(Wingman):
                         "properties": {
                             "command_name": {
                                 "type": "string",
-                                "description": "The command to execute",
+                                "description": "The name of the command to execute",
                                 "enum": commands,
                             },
                         },
