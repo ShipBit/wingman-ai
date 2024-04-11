@@ -145,7 +145,7 @@ class ConfigService:
     # POST /config
     async def load_config(
         self, config_dir: Optional[ConfigDirInfo] = None
-    ) -> tuple[list[WingmanInitializationError], ConfigWithDirInfo]:
+    ) -> ConfigWithDirInfo:
         try:
             loaded_config_dir, config = self.config_manager.load_config(config_dir)
         except Exception as e:

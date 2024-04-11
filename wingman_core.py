@@ -12,14 +12,12 @@ from api.enums import (
     AzureRegion,
     CommandTag,
     LogType,
-    ToastType,
     VoiceActivationSttProvider,
 )
 from api.interface import (
     AudioDevice,
     AzureSttConfig,
     ConfigWithDirInfo,
-    WingmanConfigFileInfo,
     WingmanInitializationError,
 )
 from providers.open_ai import OpenAi
