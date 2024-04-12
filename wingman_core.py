@@ -1,8 +1,9 @@
 import asyncio
+import os
 import re
 import threading
 from typing import Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 import sounddevice as sd
 import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
@@ -24,6 +25,7 @@ from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
 from wingmen.wingman import Wingman
+from services.file import get_writable_dir
 from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
@@ -72,6 +74,12 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/send-text-to-wingman",
             endpoint=self.send_text_to_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/send_audio-to-wingman",
+            endpoint=self.send_audio_to_wingman,
             tags=tags,
         )
         self.router.add_api_route(
@@ -481,6 +489,39 @@ class WingmanCore(WebSocketUser):
                 loop.close()
 
         if wingman and text:
+            play_thread = threading.Thread(target=run_async_process)
+            play_thread.start()
+
+    # POST /send-audio-to-wingman
+    async def send_audio_to_wingman(
+        self, wingman_name: str, file: UploadFile = File(...)
+    ):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman:
+            return
+
+        contents = await file.read()
+
+        filename = os.path.join(
+            get_writable_dir("audio_output"), "client_recording.wav"
+        )
+        with open(filename, "wb") as f:
+            f.write(contents)
+
+        def run_async_process():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                if isinstance(wingman, Wingman):
+                    loop.run_until_complete(
+                        wingman.process(audio_input_wav=str(filename))
+                    )
+            finally:
+                # Remove the uploaded file after processing
+                os.remove(filename)
+                loop.close()
+
+        if filename:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
 
