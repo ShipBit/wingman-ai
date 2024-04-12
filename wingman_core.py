@@ -30,7 +30,7 @@ from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
 from services.audio_player import AudioPlayer
-from services.audio_recorder import AudioRecorder
+from services.audio_recorder import RECORDING_PATH, AudioRecorder
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -503,7 +503,7 @@ class WingmanCore(WebSocketUser):
         contents = await file.read()
 
         filename = os.path.join(
-            get_writable_dir("audio_output"), "client_recording.wav"
+            get_writable_dir(RECORDING_PATH), "client_recording.wav"
         )
         with open(filename, "wb") as f:
             f.write(contents)
@@ -517,8 +517,6 @@ class WingmanCore(WebSocketUser):
                         wingman.process(audio_input_wav=str(filename))
                     )
             finally:
-                # Remove the uploaded file after processing
-                os.remove(filename)
                 loop.close()
 
         if filename:
