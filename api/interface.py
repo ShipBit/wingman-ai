@@ -100,11 +100,13 @@ class AudioDevice(BaseModel):
 
 # CONFIG MODELS
 
+class AudioDeviceSettings(BaseModel):
+    hostapi: Optional[int] = 0
+    name: str
 
 class AudioSettings(BaseModel):
-    input: Optional[int] = None
-    output: Optional[int] = None
-
+    input: Optional[int|AudioDeviceSettings] = None
+    output: Optional[int|AudioDeviceSettings] = None
 
 class WhispercppAutostartSettingsConfig(BaseModel):
     whispercpp_exe_path: str

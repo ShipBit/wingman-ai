@@ -1,8 +1,10 @@
 from typing import Optional
 from fastapi import APIRouter
+import sounddevice as sd
 from api.enums import LogType, ToastType, VoiceActivationSttProvider, WingmanProRegion
 from api.interface import (
     AudioSettings,
+    AudioDeviceSettings,
     AzureSttConfig,
     SettingsConfig,
     WhispercppSttConfig,
@@ -64,15 +66,145 @@ class SettingsService:
 
     # GET /settings
     def get_settings(self):
-        return self.config_manager.settings_config
+        config = self.config_manager.settings_config
+        config.audio = self.get_audio_settings_indexed()
+        return config
+    
+    def get_audio_settings_indexed(self, write: bool = True) -> AudioSettings:
+        input_device = None
+        output_device = None
+        if self.config_manager.settings_config.audio:
+            input_settings_orig = input_settings = self.config_manager.settings_config.audio.input
+            output_settings_orig = output_settings = self.config_manager.settings_config.audio.output
+
+            # check input
+            if input_settings is not None:
+                input_name = None
+                input_hostapi = None
+
+                if isinstance(input_settings, int):
+                    # if integer - check if audio device exists
+                    if input_settings < len(sd.query_devices()):
+                        input_device = input_settings
+                        device = sd.query_devices(input_settings)
+                        if not device["max_input_channels"]:
+                            self.printr.print(
+                                "Configured input device is not an input device. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                            )
+                            input_device = None
+                        else:
+                            input_name = sd.query_devices()[input_settings]["name"]
+                            input_hostapi = sd.query_devices()[input_settings]["hostapi"]
+                            input_settings = AudioDeviceSettings(
+                                name=input_name, hostapi=input_hostapi
+                            )
+                            self.printr.print(
+                                f"Using input device '{input_name}'.", color=LogType.INFO, server_only=True
+                            )
+                    else:
+                        self.printr.print(
+                            "Configured input device not found. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                        )
+                        input_device = None
+                elif isinstance(input_settings, AudioDeviceSettings):
+                    # get id with name and hostapi
+                    for device in sd.query_devices():
+                        if device["max_input_channels"] > 0 and device["name"] == input_settings.name and device["hostapi"] == input_settings.hostapi:
+                            self.printr.print(
+                                f"Using input device '{device["name"]}'.", color=LogType.INFO, server_only=True
+                            )
+                            input_device = device["index"]
+                            break
+                    if input_device is None:
+                        self.printr.print(
+                            f"Configured input device '{input_settings.name}' not found. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                        )
+            else:
+                self.printr.print(
+                    "No input device set. Using default.", color=LogType.INFO, server_only=True
+                )
+
+            # check output
+            if output_settings is not None:
+                output_name = None
+                output_hostapi = None
+
+                if isinstance(output_settings, int):
+                    # if integer - check if audio device exists
+                    if output_settings < len(sd.query_devices()):
+                        output_device = output_settings
+                        device = sd.query_devices(output_settings)
+                        if not device["max_output_channels"]:
+                            self.printr.print(
+                                "Configured output device is not an output device. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                            )
+                            output_device = None
+                        else:
+                            output_name = sd.query_devices()[output_settings]["name"]
+                            output_hostapi = sd.query_devices()[output_settings]["hostapi"]
+                            output_settings = AudioDeviceSettings(
+                                name=output_name, hostapi=output_hostapi
+                            )
+                            self.printr.print(
+                                f"Using output device '{output_name}'.", color=LogType.INFO, server_only=True
+                            )
+                    else:
+                        self.printr.print(
+                            "Configured output device not found. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                        )
+                        output_device = None
+                # check if instance of AudioDeviceSettings
+                elif isinstance(output_settings, AudioDeviceSettings):
+                    # get id with name and hostapi
+                    for device in sd.query_devices():
+                        if device["max_output_channels"] > 0 and device["name"] == output_settings.name and device["hostapi"] == output_settings.hostapi:
+                            self.printr.print(
+                                f"Using output device '{device["name"]}'.", color=LogType.INFO, server_only=True
+                            )
+                            output_device = device["index"]
+                            break
+                    if output_device is None:
+                        self.printr.print(
+                            f"Configured audio output device '{output_settings.name}' not found. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                        )
+            else:
+                self.printr.print(
+                    "No output device set. Using default.", color=LogType.INFO, server_only=True
+                )
+
+            # overwrite settings with new structure, if needed
+            if write and (input_settings_orig != input_settings or output_settings_orig != output_settings):
+                self.config_manager.settings_config.audio = AudioSettings(input=input_settings, output=output_settings)
+                self.config_manager.save_settings_config()
+                print("Audio settings updated.")
+        return AudioSettings(input=input_device, output=output_device)
 
     # POST /settings/audio-devices
     async def set_audio_devices(
         self, output_device: Optional[int] = None, input_device: Optional[int] = None
     ):
+        input_settings = None
+        output_settings = None
+
+        if input_device is not None:
+            # get name and hostapi with id
+            device = sd.query_devices(input_device)
+            input_settings = AudioDeviceSettings(
+                name=device["name"],
+                hostapi=device["hostapi"],
+            )
+
+        if output_device is not None:
+            # get name and hostapi with id
+            device = sd.query_devices(output_device)
+            output_settings = AudioDeviceSettings(
+                name=device["name"],
+                hostapi=device["hostapi"],
+            )
+
         self.config_manager.settings_config.audio = AudioSettings(
-            input=input_device,
-            output=output_device,
+            input=input_settings,
+            output=output_settings,
         )
 
         if self.config_manager.save_settings_config():
