@@ -224,9 +224,9 @@ class SettingsService:
                 "Audio devices updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
             )
             await self.settings_events.publish(
-                "audio_devices_changed", (output_device, input_device)
+                "audio_devices_changed", (input_device, output_device)
             )
-        return output_device, input_device
+        return input_device, output_device
 
     # POST /settings/voice-activation
     async def set_voice_activation(self, is_enabled: bool):
