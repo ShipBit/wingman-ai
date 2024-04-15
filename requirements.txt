@@ -11,6 +11,7 @@ pyaudio~=0.2.14
 pydantic~=2.6.4
 pydirectinput-rgx==2.1.1
 pyinstaller==6.5.0
+python-multipart==0.0.9
 PyYAML~=6.0.1
 requests~=2.31.0
 scipy~=1.13.0

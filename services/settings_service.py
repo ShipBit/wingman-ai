@@ -68,7 +68,9 @@ class SettingsService:
     # GET /settings
     def get_settings(self):
         config = self.config_manager.settings_config
-        config.audio = self.get_audio_settings_indexed(not self.converted_audio_settings)
+        config.audio = self.get_audio_settings_indexed(
+            not self.converted_audio_settings
+        )
         self.converted_audio_settings = True
         return config
 
@@ -76,8 +78,12 @@ class SettingsService:
         input_device = None
         output_device = None
         if self.config_manager.settings_config.audio:
-            input_settings_orig = input_settings = self.config_manager.settings_config.audio.input
-            output_settings_orig = output_settings = self.config_manager.settings_config.audio.output
+            input_settings_orig = input_settings = (
+                self.config_manager.settings_config.audio.input
+            )
+            output_settings_orig = output_settings = (
+                self.config_manager.settings_config.audio.output
+            )
 
             # check input
             if input_settings is not None:
@@ -92,43 +98,62 @@ class SettingsService:
                         if not device["max_input_channels"]:
                             if write:
                                 self.printr.print(
-                                    "Configured input device is not an input device. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                                    "Configured input device is not an input device. Using default.",
+                                    toast=ToastType.NORMAL,
+                                    color=LogType.WARNING,
                                 )
                             input_device = None
                         else:
                             input_name = sd.query_devices()[input_settings]["name"]
-                            input_hostapi = sd.query_devices()[input_settings]["hostapi"]
+                            input_hostapi = sd.query_devices()[input_settings][
+                                "hostapi"
+                            ]
                             input_settings = AudioDeviceSettings(
                                 name=input_name, hostapi=input_hostapi
                             )
                             if write:
                                 self.printr.print(
-                                    f"Using input device '{input_name}'.", color=LogType.INFO, server_only=True
+                                    f"Using input device '{input_name}'.",
+                                    color=LogType.INFO,
+                                    server_only=True,
                                 )
                     else:
                         if write:
                             self.printr.print(
-                                "Configured input device not found. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                                "Configured input device not found. Using default.",
+                                toast=ToastType.NORMAL,
+                                color=LogType.WARNING,
                             )
                         input_device = None
                 elif isinstance(input_settings, AudioDeviceSettings):
                     # get id with name and hostapi
                     for device in sd.query_devices():
-                        if device["max_input_channels"] > 0 and device["name"] == input_settings.name and device["hostapi"] == input_settings.hostapi:
+                        if (
+                            device["max_input_channels"] > 0
+                            and device["name"] == input_settings.name
+                            and device["hostapi"] == input_settings.hostapi
+                        ):
                             if write:
+                                device_name = device["name"]
                                 self.printr.print(
-                                    f"Using input device '{device["name"]}'.", color=LogType.INFO, server_only=True
+                                    f"Using input device '{device_name}'.",
+                                    color=LogType.INFO,
+                                    server_only=True,
                                 )
                             input_device = device["index"]
                             break
                     if input_device is None:
                         if write:
                             self.printr.print(
-                                f"Configured input device '{input_settings.name}' not found. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                                f"Configured input device '{input_settings.name}' not found. Using default.",
+                                toast=ToastType.NORMAL,
+                                color=LogType.WARNING,
                             )
             elif write:
                 self.printr.print(
-                    "No input device set. Using default.", color=LogType.INFO, server_only=True
+                    "No input device set. Using default.",
+                    color=LogType.INFO,
+                    server_only=True,
                 )
 
             # check output
@@ -144,49 +169,73 @@ class SettingsService:
                         if not device["max_output_channels"]:
                             if write:
                                 self.printr.print(
-                                    "Configured output device is not an output device. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                                    "Configured output device is not an output device. Using default.",
+                                    toast=ToastType.NORMAL,
+                                    color=LogType.WARNING,
                                 )
                             output_device = None
                         else:
                             output_name = sd.query_devices()[output_settings]["name"]
-                            output_hostapi = sd.query_devices()[output_settings]["hostapi"]
+                            output_hostapi = sd.query_devices()[output_settings][
+                                "hostapi"
+                            ]
                             output_settings = AudioDeviceSettings(
                                 name=output_name, hostapi=output_hostapi
                             )
                             if write:
                                 self.printr.print(
-                                    f"Using output device '{output_name}'.", color=LogType.INFO, server_only=True
+                                    f"Using output device '{output_name}'.",
+                                    color=LogType.INFO,
+                                    server_only=True,
                                 )
                     else:
                         if write:
                             self.printr.print(
-                                "Configured output device not found. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                                "Configured output device not found. Using default.",
+                                toast=ToastType.NORMAL,
+                                color=LogType.WARNING,
                             )
                         output_device = None
                 # check if instance of AudioDeviceSettings
                 elif isinstance(output_settings, AudioDeviceSettings):
                     # get id with name and hostapi
                     for device in sd.query_devices():
-                        if device["max_output_channels"] > 0 and device["name"] == output_settings.name and device["hostapi"] == output_settings.hostapi:
+                        if (
+                            device["max_output_channels"] > 0
+                            and device["name"] == output_settings.name
+                            and device["hostapi"] == output_settings.hostapi
+                        ):
                             if write:
+                                device_name = device["name"]
                                 self.printr.print(
-                                    f"Using output device '{device["name"]}'.", color=LogType.INFO, server_only=True
+                                    f"Using output device '{device_name}'.",
+                                    color=LogType.INFO,
+                                    server_only=True,
                                 )
                             output_device = device["index"]
                             break
                     if output_device is None:
                         if write:
                             self.printr.print(
-                                f"Configured audio output device '{output_settings.name}' not found. Using default.", toast=ToastType.NORMAL, color=LogType.WARNING
+                                f"Configured audio output device '{output_settings.name}' not found. Using default.",
+                                toast=ToastType.NORMAL,
+                                color=LogType.WARNING,
                             )
             elif write:
                 self.printr.print(
-                    "No output device set. Using default.", color=LogType.INFO, server_only=True
+                    "No output device set. Using default.",
+                    color=LogType.INFO,
+                    server_only=True,
                 )
 
             # overwrite settings with new structure, if needed
-            if write and (input_settings_orig != input_settings or output_settings_orig != output_settings):
-                self.config_manager.settings_config.audio = AudioSettings(input=input_settings, output=output_settings)
+            if write and (
+                input_settings_orig != input_settings
+                or output_settings_orig != output_settings
+            ):
+                self.config_manager.settings_config.audio = AudioSettings(
+                    input=input_settings, output=output_settings
+                )
                 self.config_manager.save_settings_config()
                 print("Audio settings updated.")
         return AudioSettings(input=input_device, output=output_device)
