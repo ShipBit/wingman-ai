@@ -142,9 +142,7 @@ class WingmanCore(WebSocketUser):
         )
 
         if self.settings_service.settings.audio:
-            input_device = self.settings_service.settings.audio.input
-            output_device = self.settings_service.settings.audio.output
-            sd.default.device = (input_device, output_device)
+            sd.default.device = [self.settings_service.settings.audio.input, self.settings_service.settings.audio.output]
             self.audio_recorder.update_input_stream()
 
     async def startup(self):
