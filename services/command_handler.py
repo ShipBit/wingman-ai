@@ -1,12 +1,11 @@
 import json
 import asyncio
-import math
 from fastapi import WebSocket
 import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
     RecordKeyboardActionsCommand,
-    RecordMouseActionsCommand,
+    RecordNonKeyboardActionsCommand,
     SaveSecretCommand,
     StopRecordingCommand,
     WebSocketCommandModel,
@@ -44,9 +43,9 @@ class CommandHandler:
                 await self.handle_record_keyboard_actions(
                     RecordKeyboardActionsCommand(**command), websocket
                 )
-            elif command_name == "record_mouse_actions":
-                await self.handle_record_mouse_actions(
-                    RecordMouseActionsCommand(**command), websocket
+            elif command_name == "record_non_keyboard_actions":
+                await self.handle_record_non_keyboard_actions(
+                    RecordNonKeyboardActionsCommand(**command), websocket
                 )
             elif command_name == "stop_recording":
                 # Get Enum from string
@@ -98,7 +97,6 @@ class CommandHandler:
                     return False
         return True
 
-
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
     ):
@@ -116,31 +114,45 @@ class CommandHandler:
 
         def _on_key_event(event):
             if event.event_type == "down" and event.name == "esc":
-                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type))
-            if event.scan_code == 58 or event.scan_code == 70 or (event.scan_code == 69 and event.is_extended):
+                WebSocketUser.ensure_async(
+                    self.handle_stop_recording(None, None, command.recording_type)
+                )
+            if (
+                event.scan_code == 58
+                or event.scan_code == 70
+                or (event.scan_code == 69 and event.is_extended)
+            ):
                 # let capslock, numlock or scrolllock through, as it changes following keypresses
-                keyboard.direct_event(event.scan_code, (0 if event.event_type == "down" else 2)+int(event.is_extended))
+                keyboard.direct_event(
+                    event.scan_code,
+                    (0 if event.event_type == "down" else 2) + int(event.is_extended),
+                )
 
             self.recorded_keys.append(event)
-            if command.recording_type == KeyboardRecordingType.SINGLE and self._is_hotkey_recording_finished(self.recorded_keys):
-                WebSocketUser.ensure_async(self.handle_stop_recording(None, None, command.recording_type))
+            if (
+                command.recording_type == KeyboardRecordingType.SINGLE
+                and self._is_hotkey_recording_finished(self.recorded_keys)
+            ):
+                WebSocketUser.ensure_async(
+                    self.handle_stop_recording(None, None, command.recording_type)
+                )
 
         self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
 
-    async def handle_record_mouse_actions(
-        self, command: RecordMouseActionsCommand, websocket: WebSocket
+    async def handle_record_non_keyboard_actions(
+        self, command: RecordNonKeyboardActionsCommand, websocket: WebSocket
     ):
-        # TODO: Start recording mouse actions and build a list of CommandActionConfig
-        await self.printr.print_async(
-            "Recording mouse actions...",
-            toast=ToastType.NORMAL,
-            source=LogSource.SYSTEM,
-            source_name=self.source_name,
-            server_only=True,
-        )
+        for action in command.actions:
+            if action.mouse:
+                pass
+            elif action.write:
+                pass
 
     async def handle_stop_recording(
-        self, command: StopRecordingCommand, websocket: WebSocket, recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
+        self,
+        command: StopRecordingCommand,
+        websocket: WebSocket,
+        recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE,
     ):
         if self.hook_callback:
             keyboard.unhook(self.hook_callback)
@@ -148,7 +160,11 @@ class CommandHandler:
         if self.timeout_task:
             self.timeout_task.cancel()
 
-        actions = self._get_actions_from_recorded_keys(recorded_keys) if recording_type == KeyboardRecordingType.MACRO_ADVANCED else self._get_actions_from_recorded_hotkey(recorded_keys)
+        actions = (
+            self._get_actions_from_recorded_keys(recorded_keys)
+            if recording_type == KeyboardRecordingType.MACRO_ADVANCED
+            else self._get_actions_from_recorded_hotkey(recorded_keys)
+        )
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
 
@@ -170,35 +186,39 @@ class CommandHandler:
         actions: list[CommandActionConfig] = []
 
         def add_action(name, code, extended, press, release, hold):
-            if(press or release):
-                hold = None # reduces yaml size
+            if press or release:
+                hold = None  # reduces yaml size
             else:
                 hold = round(hold, 2)
-                if(hold < 0.1):
-                    hold = 0.1 # 100ms min hold time
+                if hold < 0.1:
+                    hold = 0.1  # 100ms min hold time
                 else:
                     hold = round(round(hold / 0.05) * 0.05, 3)
 
-            if(not extended):
-                extended = None # reduces yaml size
+            if not extended:
+                extended = None  # reduces yaml size
 
             # add keyboard action
-            actions.append(CommandActionConfig(keyboard=CommandKeyboardConfig(
-                hotkey=name,
-                hotkey_codes=[code],
-                hotkey_extended=extended,
-                press=press,
-                release=release,
-                hold=hold)
-            ))
+            actions.append(
+                CommandActionConfig(
+                    keyboard=CommandKeyboardConfig(
+                        hotkey=name,
+                        hotkey_codes=[code],
+                        hotkey_extended=extended,
+                        press=press,
+                        release=release,
+                        hold=hold,
+                    )
+                )
+            )
 
         def add_wait(duration):
             if not duration:
                 return
             duration = round(duration, 2)
             if duration < 0.05:
-                duration = 0.05 # 50ms min wait time
-            else :
+                duration = 0.05  # 50ms min wait time
+            else:
                 duration = round(round(duration / 0.05) * 0.05, 3)
             actions.append(CommandActionConfig(wait=duration))
 
@@ -211,13 +231,24 @@ class CommandHandler:
         # This reduces the amount of actions and increases readability of yaml files.
         # Tradeoff is a bit confusing logic below.
         for key in recorded:
-            key_data = [key.name.lower(), key.scan_code, bool(key.is_extended), key.event_type, key.time, 0]
+            key_data = [
+                key.name.lower(),
+                key.scan_code,
+                bool(key.is_extended),
+                key.event_type,
+                key.time,
+                0,
+            ]
 
-            if(last_key_data):
-                if key_data[1] == last_key_data[1] and key_data[2] == last_key_data[2] and key_data[3] == last_key_data[3]:
+            if last_key_data:
+                if (
+                    key_data[1] == last_key_data[1]
+                    and key_data[2] == last_key_data[2]
+                    and key_data[3] == last_key_data[3]
+                ):
                     # skip double actions
                     continue
-                key_data[5] = key_data[4] - last_key_data[4] # set time diff
+                key_data[5] = key_data[4] - last_key_data[4]  # set time diff
 
             # check if last key was down event
             if last_key_data and last_key_data[3] == "down":
@@ -225,16 +256,36 @@ class CommandHandler:
                 if key_data[1] == last_key_data[1] and key_data[2] == last_key_data[2]:
                     # write as compressed action
                     add_wait(last_key_data[5])
-                    add_action(key_data[0], key_data[1], key_data[2], None, None, key_data[5])
+                    add_action(
+                        key_data[0], key_data[1], key_data[2], None, None, key_data[5]
+                    )
                 else:
                     # write as separate action
                     add_wait(last_key_data[5])
-                    add_action(last_key_data[0], last_key_data[1], last_key_data[2], True, None, 0)
+                    add_action(
+                        last_key_data[0],
+                        last_key_data[1],
+                        last_key_data[2],
+                        True,
+                        None,
+                        0,
+                    )
 
             if last_key_data and last_key_data[3] == "up":
-                if(last_last_key_data and last_last_key_data[1] != last_key_data[1] or last_last_key_data[2] != last_key_data[2]):
-                        add_wait(last_key_data[5])
-                        add_action(last_key_data[0], last_key_data[1], last_key_data[2], None, True, 0)
+                if (
+                    last_last_key_data
+                    and last_last_key_data[1] != last_key_data[1]
+                    or last_last_key_data[2] != last_key_data[2]
+                ):
+                    add_wait(last_key_data[5])
+                    add_action(
+                        last_key_data[0],
+                        last_key_data[1],
+                        last_key_data[2],
+                        None,
+                        True,
+                        0,
+                    )
 
             last_last_key_data = last_key_data
             last_key_data = key_data
@@ -243,20 +294,30 @@ class CommandHandler:
         if key_data and key_data[3] == "down":
             add_wait(key_data[5])
             add_action(key_data[0], key_data[1], key_data[2], True, None, 0)
-        elif key_data and last_key_data and last_last_key_data and key_data[3] == "up" and (last_last_key_data[1] != last_key_data[1] or last_last_key_data[2] != last_key_data[2]):
+        elif (
+            key_data
+            and last_key_data
+            and last_last_key_data
+            and key_data[3] == "up"
+            and (
+                last_last_key_data[1] != last_key_data[1]
+                or last_last_key_data[2] != last_key_data[2]
+            )
+        ):
             add_wait(key_data[5])
             add_action(key_data[0], key_data[1], key_data[2], None, True, 0)
 
         return actions
-    
+
     def _get_actions_from_recorded_hotkey(self, recorded):
         # legacy function used for single key recording
         actions: list[CommandActionConfig] = []
 
         key_down_time = {}  # Track initial down times for keys
         last_up_time = None  # Track the last up time to measure durations of inactivity
-        keys_pressed = []  # Track the keys currently pressed in the order they were pressed
 
+        # Track the keys currently pressed in the order they were pressed
+        keys_pressed = []
         # Initialize such that we consider the keyboard initially inactive
         all_keys_released = True
 
@@ -283,7 +344,8 @@ class CommandHandler:
                 # Record only the first down event time for each key and add to keys_pressed
                 if key_code not in key_down_time:
                     key_down_time[key_code] = key.time
-                    keys_pressed.append(key)  # Add key to keys_pressed when pressed down
+                    # Add key to keys_pressed when pressed down
+                    keys_pressed.append(key)
 
             elif key.event_type == "up":
                 if key_name == "esc":
@@ -305,13 +367,17 @@ class CommandHandler:
 
                         key_config = CommandActionConfig()
                         key_config.keyboard = CommandKeyboardConfig(hotkey=hotkey_name)
-                        key_config.keyboard.hotkey_codes = [key.scan_code for key in keys_pressed]
+                        key_config.keyboard.hotkey_codes = [
+                            key.scan_code for key in keys_pressed
+                        ]
                         key_config.keyboard.hotkey_extended = bool(key.is_extended)
 
                         if press_duration > 0.2 and len(keys_pressed) == 1:
                             key_config.keyboard.hold = round(press_duration, 2)
 
-                        keys_pressed = []  # Clear keys_pressed after getting the hotkey_name
+                        keys_pressed = (
+                            []
+                        )  # Clear keys_pressed after getting the hotkey_name
                         actions.append(key_config)
 
         return actions

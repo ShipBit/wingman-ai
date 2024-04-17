@@ -21,7 +21,7 @@ class SaveSecretCommand(WebSocketCommandModel):
     command: Literal["save_secret"] = "save_secret"
     secret_name: str
     secret_value: str
-    show_message: bool = True
+    show_message: Optional[bool] = True
 
 
 class RecordKeyboardActionsCommand(WebSocketCommandModel):
@@ -29,8 +29,9 @@ class RecordKeyboardActionsCommand(WebSocketCommandModel):
     recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
 
 
-class RecordMouseActionsCommand(WebSocketCommandModel):
-    command: Literal["record_mouse_actions"] = "record_mouse_actions"
+class RecordNonKeyboardActionsCommand(WebSocketCommandModel):
+    command: Literal["record_non_keyboard_actions"] = "record_non_keyboard_actions"
+    actions: list[CommandActionConfig]
 
 
 class StopRecordingCommand(WebSocketCommandModel):
@@ -44,7 +45,7 @@ class LogCommand(WebSocketCommandModel):
     command: Literal["log"] = "log"
     text: str
     log_type: LogType
-    source_name: str = None
+    source_name: Optional[str] = None
     source: LogSource = "system"
     tag: Optional[CommandTag] = None
 
