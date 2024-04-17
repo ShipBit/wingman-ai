@@ -81,6 +81,11 @@ openai:
   #base_url: https://api.openai.com # or the localhost address of your local LLM etc.
   #organization: whatever # If you have an organization key, you can set it here.
 
+mistral:
+  conversation_model: mistral-large-latest
+  summarize_model: mistral-medium-latest
+  endpoint: https://api.mistral.ai/v1
+
 # ────────────────────────────────── EDGE TTS ────────────────────────────────────
 # EdgeTTS is free and faster than the default OpenAI TTSbut it's not as good in terms of quality.
 # Only used if features > tts_provider is set to 'edge_tts' above.
