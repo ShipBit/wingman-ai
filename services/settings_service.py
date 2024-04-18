@@ -60,8 +60,8 @@ class SettingsService:
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/settings/wingman-pro/make-default",
-            endpoint=self.set_wingman_pro_as_default,
+            path="/settings/default-provider",
+            endpoint=self.set_default_provider,
             tags=tags,
         )
 
@@ -339,14 +339,18 @@ class SettingsService:
                     "va_treshold_changed", va_energy_threshold
                 )
 
-    # POST /settings/wingman-pro/make-default
-    async def set_wingman_pro_as_default(self, patch_existing_wingmen: bool):
-        self.config_manager.default_config.features.conversation_provider = (
-            "wingman_pro"
-        )
-        self.config_manager.default_config.features.summarize_provider = "wingman_pro"
-        self.config_manager.default_config.features.tts_provider = "wingman_pro"
-        self.config_manager.default_config.features.stt_provider = "wingman_pro"
+    # POST /settings/default-provider
+    async def set_default_provider(self, provider: str, patch_existing_wingmen: bool):
+        if provider != "wingman_pro" and provider != "openai":
+            self.printr.toast_error(
+                "Only 'wingman_pro' and 'openai' are valid default providers for summarization, conversation, TTS and STT.",
+            )
+            return
+
+        self.config_manager.default_config.features.conversation_provider = provider
+        self.config_manager.default_config.features.summarize_provider = provider
+        self.config_manager.default_config.features.tts_provider = provider
+        self.config_manager.default_config.features.stt_provider = provider
 
         self.config_manager.save_defaults_config()
 
@@ -361,10 +365,10 @@ class SettingsService:
                         config_dir=config_dir, wingman_file=wingman_config_file
                     )
                     if wingman_config:
-                        wingman_config.features.conversation_provider = "wingman_pro"
-                        wingman_config.features.summarize_provider = "wingman_pro"
-                        wingman_config.features.tts_provider = "wingman_pro"
-                        wingman_config.features.stt_provider = "wingman_pro"
+                        wingman_config.features.conversation_provider = provider
+                        wingman_config.features.summarize_provider = provider
+                        wingman_config.features.tts_provider = provider
+                        wingman_config.features.stt_provider = provider
 
                         self.config_manager.save_wingman_config(
                             config_dir=config_dir,
@@ -373,8 +377,8 @@ class SettingsService:
                         )
         await self.config_service.load_config(self.config_service.current_config_dir)
 
-        self.printr.print(
-            "Have fun using Wingman Pro!",
+        await self.printr.print_async(
+            "Default providers updated.",
             toast=ToastType.NORMAL,
             color=LogType.POSITIVE,
         )
