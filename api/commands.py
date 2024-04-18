@@ -29,11 +29,6 @@ class RecordKeyboardActionsCommand(WebSocketCommandModel):
     recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
 
 
-class RecordNonKeyboardActionsCommand(WebSocketCommandModel):
-    command: Literal["record_non_keyboard_actions"] = "record_non_keyboard_actions"
-    actions: list[CommandActionConfig]
-
-
 class StopRecordingCommand(WebSocketCommandModel):
     command: Literal["stop_recording"] = "stop_recording"
 

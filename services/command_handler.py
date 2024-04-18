@@ -5,7 +5,6 @@ import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
     RecordKeyboardActionsCommand,
-    RecordNonKeyboardActionsCommand,
     SaveSecretCommand,
     StopRecordingCommand,
     WebSocketCommandModel,
@@ -42,10 +41,6 @@ class CommandHandler:
             elif command_name == "record_keyboard_actions":
                 await self.handle_record_keyboard_actions(
                     RecordKeyboardActionsCommand(**command), websocket
-                )
-            elif command_name == "record_non_keyboard_actions":
-                await self.handle_record_non_keyboard_actions(
-                    RecordNonKeyboardActionsCommand(**command), websocket
                 )
             elif command_name == "stop_recording":
                 # Get Enum from string
@@ -138,15 +133,6 @@ class CommandHandler:
                 )
 
         self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
-
-    async def handle_record_non_keyboard_actions(
-        self, command: RecordNonKeyboardActionsCommand, websocket: WebSocket
-    ):
-        for action in command.actions:
-            if action.mouse:
-                pass
-            elif action.write:
-                pass
 
     async def handle_stop_recording(
         self,
