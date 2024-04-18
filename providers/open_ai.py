@@ -4,7 +4,7 @@ import numpy as np
 from typing import Literal
 from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
-from api.enums import AzureRegion, LogType, OpenAiModel, OpenAiTtsVoice
+from api.enums import AzureRegion, LogType, MistralModel, OpenAiModel, OpenAiTtsVoice
 from api.interface import (
     AzureConfig,
     AzureInstanceConfig,
@@ -69,7 +69,7 @@ class BaseOpenAi(ABC):
         self,
         client: OpenAI | AzureOpenAI,
         messages: list[dict[str, str]],
-        model: OpenAiModel,
+        model: OpenAiModel | MistralModel,
         stream: bool,
         tools: list[dict[str, any]],
     ):
@@ -133,7 +133,7 @@ class OpenAi(BaseOpenAi):
     def ask(
         self,
         messages: list[dict[str, str]],
-        model: OpenAiModel,
+        model: OpenAiModel | MistralModel,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):
