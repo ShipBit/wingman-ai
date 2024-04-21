@@ -753,6 +753,7 @@ class ConfigManager:
             "sound",
             "openai",
             "mistral",
+            "llama",
             "features",
             "edge_tts",
             "elevenlabs",

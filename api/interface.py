@@ -9,6 +9,7 @@ from api.enums import (
     AzureApiVersion,
     AzureRegion,
     ConversationProvider,
+    LlamaModel,
     MistralModel,
     TtsVoiceGender,
     ElevenlabsModel,
@@ -281,6 +282,12 @@ class MistralConfig(BaseModel):
     endpoint: str
 
 
+class LlamaConfig(BaseModel):
+    conversation_model: LlamaModel
+    summarize_model: LlamaModel
+    endpoint: str
+
+
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
@@ -424,6 +431,7 @@ class NestedConfig(BaseModel):
     features: FeaturesConfig
     openai: OpenAiConfig
     mistral: MistralConfig
+    llama: LlamaConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig

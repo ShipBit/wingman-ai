@@ -53,6 +53,7 @@ class OpenAiWingman(Wingman):
         # validate will set these:
         self.openai: OpenAi = None
         self.mistral: OpenAi = None
+        self.llama: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
         self.xvasynth: XVASynth = None
@@ -80,6 +81,9 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("mistral"):
             await self.validate_and_set_mistral(errors)
+
+        if self.uses_provider("llama"):
+            await self.validate_and_set_llama(errors)
 
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
@@ -113,6 +117,13 @@ class OpenAiWingman(Wingman):
                 [
                     self.conversation_provider == ConversationProvider.MISTRAL,
                     self.summarize_provider == SummarizeProvider.MISTRAL,
+                ]
+            )
+        elif provider_type == "llama":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.LLAMA,
+                    self.summarize_provider == SummarizeProvider.LLAMA,
                 ]
             )
         elif provider_type == "azure":
@@ -161,6 +172,16 @@ class OpenAiWingman(Wingman):
                 api_key=api_key,
                 organization=self.config.openai.organization,
                 base_url=self.config.mistral.endpoint,
+            )
+
+    async def validate_and_set_llama(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("llama", errors)
+        if api_key:
+            # TODO: maybe use their native client (or LangChain) instead of OpenAI(?)
+            self.llama = OpenAi(
+                api_key=api_key,
+                organization=self.config.openai.organization,
+                base_url=self.config.llama.endpoint,
             )
 
     async def validate_and_set_elevenlabs(
@@ -594,6 +615,12 @@ class OpenAiWingman(Wingman):
                 tools=tools,
                 model=self.config.mistral.conversation_model,
             )
+        elif self.conversation_provider == ConversationProvider.LLAMA:
+            completion = self.llama.ask(
+                messages=self.messages,
+                tools=tools,
+                model=self.config.llama.conversation_model,
+            )
         elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
             completion = self.wingman_pro.ask(
                 messages=self.messages,
@@ -691,6 +718,11 @@ class OpenAiWingman(Wingman):
             )
         elif self.summarize_provider == SummarizeProvider.MISTRAL:
             summarize_response = self.mistral.ask(
+                messages=self.messages,
+                model=self.config.mistral.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.LLAMA:
+            summarize_response = self.llama.ask(
                 messages=self.messages,
                 model=self.config.mistral.summarize_model,
             )
