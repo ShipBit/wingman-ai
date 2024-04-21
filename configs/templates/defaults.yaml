@@ -89,7 +89,7 @@ mistral:
 llama:
   conversation_model: llama3-70b
   summarize_model: llama3-8b
-  endpoint: https://api.llama-api.com/v1
+  endpoint: https://api.groq.com/openai/v1
 
 # ────────────────────────────────── EDGE TTS ────────────────────────────────────
 # EdgeTTS is free and faster than the default OpenAI TTSbut it's not as good in terms of quality.

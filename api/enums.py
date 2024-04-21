@@ -78,7 +78,9 @@ class MistralModel(Enum):
 
 class LlamaModel(Enum):
     LLAMA3_8B = "llama3-8b"
+    LLAMA3_8B_8192 = "llama3-8b-8192"
     LLAMA3_70B = "llama3-70b"
+    LLAMA3_70B_8192 = "llama3-70b-8192"
 
 
 class WingmanProAzureDeployment(Enum):
