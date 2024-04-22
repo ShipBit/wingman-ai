@@ -390,11 +390,7 @@ class Wingman:
         return self._select_command_response(command) or "Ok"
 
     def execute_action(self, command: CommandConfig):
-        """Executes the keypresses defined in the command in order.
-
-        pydirectinput uses SIGEVENTS to send keypresses to the OS. This lib seems to be the only way to send keypresses to games reliably.
-
-        It only works on Windows. For MacOS, we fall back to PyAutoGUI (which has the exact same API as pydirectinput is built on top of it).
+        """Executes the actions defined in the command (in order).
 
         Args:
             command (dict): The command object from the config to execute
@@ -407,20 +403,44 @@ class Wingman:
                 if action.keyboard.press == action.keyboard.release:
                     # compressed key events
                     hold = action.keyboard.hold or 0.1
-                    if(action.keyboard.hotkey_codes and len(action.keyboard.hotkey_codes) == 1):
-                        keyboard.direct_event(action.keyboard.hotkey_codes[0], 0+(1 if action.keyboard.hotkey_extended else 0))
+                    if (
+                        action.keyboard.hotkey_codes
+                        and len(action.keyboard.hotkey_codes) == 1
+                    ):
+                        keyboard.direct_event(
+                            action.keyboard.hotkey_codes[0],
+                            0 + (1 if action.keyboard.hotkey_extended else 0),
+                        )
                         time.sleep(hold)
-                        keyboard.direct_event(action.keyboard.hotkey_codes[0], 2+(1 if action.keyboard.hotkey_extended else 0))
+                        keyboard.direct_event(
+                            action.keyboard.hotkey_codes[0],
+                            2 + (1 if action.keyboard.hotkey_extended else 0),
+                        )
                     else:
-                        keyboard.press(action.keyboard.hotkey_codes or action.keyboard.hotkey)
+                        keyboard.press(
+                            action.keyboard.hotkey_codes or action.keyboard.hotkey
+                        )
                         time.sleep(hold)
-                        keyboard.release(action.keyboard.hotkey_codes or action.keyboard.hotkey)
+                        keyboard.release(
+                            action.keyboard.hotkey_codes or action.keyboard.hotkey
+                        )
                 else:
                     # single key events
-                    if(action.keyboard.hotkey_codes and len(action.keyboard.hotkey_codes) == 1):
-                        keyboard.direct_event(action.keyboard.hotkey_codes[0], (0 if action.keyboard.press else 2)+(1 if action.keyboard.hotkey_extended else 0))
+                    if (
+                        action.keyboard.hotkey_codes
+                        and len(action.keyboard.hotkey_codes) == 1
+                    ):
+                        keyboard.direct_event(
+                            action.keyboard.hotkey_codes[0],
+                            (0 if action.keyboard.press else 2)
+                            + (1 if action.keyboard.hotkey_extended else 0),
+                        )
                     else:
-                        keyboard.send(action.keyboard.hotkey_codes or action.keyboard.hotkey, action.keyboard.press, action.keyboard.release)
+                        keyboard.send(
+                            action.keyboard.hotkey_codes or action.keyboard.hotkey,
+                            action.keyboard.press,
+                            action.keyboard.release,
+                        )
 
             if action.mouse:
                 if action.mouse.move_to:

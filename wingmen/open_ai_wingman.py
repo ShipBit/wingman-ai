@@ -52,6 +52,8 @@ class OpenAiWingman(Wingman):
 
         # validate will set these:
         self.openai: OpenAi = None
+        self.mistral: OpenAi = None
+        self.llama: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
         self.xvasynth: XVASynth = None
@@ -77,6 +79,12 @@ class OpenAiWingman(Wingman):
         if self.uses_provider("openai"):
             await self.validate_and_set_openai(errors)
 
+        if self.uses_provider("mistral"):
+            await self.validate_and_set_mistral(errors)
+
+        if self.uses_provider("llama"):
+            await self.validate_and_set_llama(errors)
+
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
 
@@ -94,7 +102,7 @@ class OpenAiWingman(Wingman):
 
         return errors
 
-    def uses_provider(self, provider_type):
+    def uses_provider(self, provider_type: str):
         if provider_type == "openai":
             return any(
                 [
@@ -102,6 +110,20 @@ class OpenAiWingman(Wingman):
                     self.stt_provider == SttProvider.OPENAI,
                     self.conversation_provider == ConversationProvider.OPENAI,
                     self.summarize_provider == SummarizeProvider.OPENAI,
+                ]
+            )
+        elif provider_type == "mistral":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.MISTRAL,
+                    self.summarize_provider == SummarizeProvider.MISTRAL,
+                ]
+            )
+        elif provider_type == "llama":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.LLAMA,
+                    self.summarize_provider == SummarizeProvider.LLAMA,
                 ]
             )
         elif provider_type == "azure":
@@ -140,6 +162,26 @@ class OpenAiWingman(Wingman):
                 api_key=api_key,
                 organization=self.config.openai.organization,
                 base_url=self.config.openai.base_url,
+            )
+
+    async def validate_and_set_mistral(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("mistral", errors)
+        if api_key:
+            # TODO: maybe use their native client (or LangChain) instead of OpenAI(?)
+            self.mistral = OpenAi(
+                api_key=api_key,
+                organization=self.config.openai.organization,
+                base_url=self.config.mistral.endpoint,
+            )
+
+    async def validate_and_set_llama(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("llama", errors)
+        if api_key:
+            # TODO: maybe use their native client (or LangChain) instead of OpenAI(?)
+            self.llama = OpenAi(
+                api_key=api_key,
+                organization=self.config.openai.organization,
+                base_url=self.config.llama.endpoint,
             )
 
     async def validate_and_set_elevenlabs(
@@ -295,7 +337,13 @@ class OpenAiWingman(Wingman):
         if tool_calls and len(tool_calls) > 0:
             for tool_call in tool_calls:
                 function_name = tool_call.function.name
-                function_args = json.loads(tool_call.function.arguments)
+                function_args = (
+                    tool_call.function.arguments
+                    # Mistral returns a dict
+                    if isinstance(tool_call.function.arguments, dict)
+                    # OpenAI returns a string
+                    else json.loads(tool_call.function.arguments)
+                )
 
                 # try to resolve function name to a command name
                 if len(function_args) == 0 and self._get_command(function_name):
@@ -561,6 +609,18 @@ class OpenAiWingman(Wingman):
                 tools=tools,
                 model=self.config.openai.conversation_model,
             )
+        elif self.conversation_provider == ConversationProvider.MISTRAL:
+            completion = self.mistral.ask(
+                messages=self.messages,
+                tools=tools,
+                model=self.config.mistral.conversation_model,
+            )
+        elif self.conversation_provider == ConversationProvider.LLAMA:
+            completion = self.llama.ask(
+                messages=self.messages,
+                tools=tools,
+                model=self.config.llama.conversation_model,
+            )
         elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
             completion = self.wingman_pro.ask(
                 messages=self.messages,
@@ -615,7 +675,13 @@ class OpenAiWingman(Wingman):
 
         for tool_call in tool_calls:
             function_name = tool_call.function.name
-            function_args = json.loads(tool_call.function.arguments)
+            function_args = (
+                tool_call.function.arguments
+                # Mistral returns a dict
+                if isinstance(tool_call.function.arguments, dict)
+                # OpenAI returns a string
+                else json.loads(tool_call.function.arguments)
+            )
             (
                 function_response,
                 instant_response,
@@ -649,6 +715,16 @@ class OpenAiWingman(Wingman):
             summarize_response = self.openai.ask(
                 messages=self.messages,
                 model=self.config.openai.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.MISTRAL:
+            summarize_response = self.mistral.ask(
+                messages=self.messages,
+                model=self.config.mistral.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.LLAMA:
+            summarize_response = self.llama.ask(
+                messages=self.messages,
+                model=self.config.mistral.summarize_model,
             )
         elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
             summarize_response = self.wingman_pro.ask(
@@ -806,7 +882,7 @@ class OpenAiWingman(Wingman):
                         "properties": {
                             "command_name": {
                                 "type": "string",
-                                "description": "The command to execute",
+                                "description": "The name of the command to execute",
                                 "enum": commands,
                             },
                         },

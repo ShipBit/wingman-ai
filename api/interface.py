@@ -9,6 +9,8 @@ from api.enums import (
     AzureApiVersion,
     AzureRegion,
     ConversationProvider,
+    LlamaModel,
+    MistralModel,
     TtsVoiceGender,
     ElevenlabsModel,
     OpenAiModel,
@@ -101,9 +103,14 @@ class AudioDevice(BaseModel):
 # CONFIG MODELS
 
 
+class AudioDeviceSettings(BaseModel):
+    hostapi: Optional[int] = 0
+    name: str
+
+
 class AudioSettings(BaseModel):
-    input: Optional[int] = None
-    output: Optional[int] = None
+    input: Optional[int | AudioDeviceSettings] = None
+    output: Optional[int | AudioDeviceSettings] = None
 
 
 class WhispercppAutostartSettingsConfig(BaseModel):
@@ -269,6 +276,18 @@ class OpenAiConfig(BaseModel):
     """If you have an organization key, you can set it here."""
 
 
+class MistralConfig(BaseModel):
+    conversation_model: MistralModel
+    summarize_model: MistralModel
+    endpoint: str
+
+
+class LlamaConfig(BaseModel):
+    conversation_model: LlamaModel
+    summarize_model: LlamaModel
+    endpoint: str
+
+
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
@@ -345,6 +364,7 @@ class CommandKeyboardConfig(BaseModel):
     release: Optional[bool] = None
     """Whether to release the key. Optional."""
 
+
 class CommandMouseConfig(BaseModel):
     button: Optional[str] = None
     """The mouse button to press. Optional."""
@@ -410,6 +430,8 @@ class NestedConfig(BaseModel):
     sound: SoundConfig
     features: FeaturesConfig
     openai: OpenAiConfig
+    mistral: MistralConfig
+    llama: LlamaConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig

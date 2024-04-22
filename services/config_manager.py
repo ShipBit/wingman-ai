@@ -752,6 +752,8 @@ class ConfigManager:
         for key in [
             "sound",
             "openai",
+            "mistral",
+            "llama",
             "features",
             "edge_tts",
             "elevenlabs",
