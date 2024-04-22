@@ -7,7 +7,6 @@ from api.interface import (
     NewWingmanTemplate,
     WingmanConfig,
     WingmanConfigFileInfo,
-    WingmanInitializationError,
 )
 from services.config_manager import ConfigManager
 from services.printr import Printr
