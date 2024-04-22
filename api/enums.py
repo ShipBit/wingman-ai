@@ -76,10 +76,19 @@ class MistralModel(Enum):
     MISTRAL_LARGE = "mistral-large-latest"
 
 
+class LlamaModel(Enum):
+    LLAMA3_8B = "llama3-8b"
+    LLAMA3_8B_8192 = "llama3-8b-8192"
+    LLAMA3_70B = "llama3-70b"
+    LLAMA3_70B_8192 = "llama3-70b-8192"
+
+
 class WingmanProAzureDeployment(Enum):
     GPT_35_TURBO = "gpt-35-turbo"
     GPT_4_TURBO = "gpt-4-turbo"
     MISTRAL_LARGE = "mistral-large-latest"
+    LLAMA3_8B = "llama3-8b"
+    LLAMA3_70B = "llama3-70b"
 
 
 class OpenAiTtsVoice(Enum):
@@ -127,6 +136,7 @@ class VoiceActivationSttProvider(Enum):
 class ConversationProvider(Enum):
     OPENAI = "openai"
     MISTRAL = "mistral"
+    LLAMA = "llama"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
 
@@ -134,6 +144,7 @@ class ConversationProvider(Enum):
 class SummarizeProvider(Enum):
     OPENAI = "openai"
     MISTRAL = "mistral"
+    LLAMA = "llama"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
 
@@ -212,6 +223,10 @@ class MistralModelEnumModel(BaseEnumModel):
     model: MistralModel
 
 
+class LlamaModelEnumModel(BaseEnumModel):
+    model: LlamaModel
+
+
 class WingmanProAzureDeploymentEnumModel(BaseEnumModel):
     deployment_name: WingmanProAzureDeployment
 
@@ -276,6 +291,7 @@ ENUM_TYPES = {
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "OpenAiModel": OpenAiModelEnumModel,
     "MistralModel": MistralModelEnumModel,
+    "LLamaModel": LlamaModelEnumModel,
     "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,
