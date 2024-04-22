@@ -3,7 +3,7 @@ edge-tts==6.1.10
 elevenlabslib~=0.22.1
 fastapi~=0.110.1
 numpy~=1.26.4
-openai~=1.21.1
+openai~=1.23.2
 packaging~=24.0
 pedalboard~=0.9.3
 platformdirs~=4.2.0
