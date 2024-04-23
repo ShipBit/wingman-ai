@@ -790,6 +790,9 @@ class OpenAiWingman(Wingman):
             text (str): The text to play as audio.
         """
 
+        # remove emotes between asterisks for voice responses
+        text = self._remove_emote_text(text)
+
         if self.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(
                 text=text,
@@ -903,3 +906,23 @@ class OpenAiWingman(Wingman):
             raise TypeError(
                 f"Message is neither a mapping nor has a 'role' attribute: {message}"
             )
+
+    def _remove_emote_text(self, input_string):
+        """Removes emotes from text responses, which LLMs tend to place between *.
+
+        Args:
+            input_string (str): The response text passed, which may contain emotes.
+
+        Returns:
+            input_string: The response string with any strings between * removed.
+        """
+        print("calling remove emote text")
+        while True:
+            start = input_string.find("*")
+            if start == -1:
+                break
+            end = input_string.find("*", start + 1)
+            if end == -1:
+                break
+            input_string = input_string[:start] + input_string[end + 1:]
+        return input_string
