@@ -120,11 +120,7 @@ class StarHeadWingman(OpenAiWingman):
 
     def _format_ship_name(self, vehicle: dict[str, any]) -> str:
         """Formats name by combining model and name, avoiding repetition"""
-        return (
-            f"{vehicle['model']} {vehicle['name']}"
-            if vehicle["name"] != vehicle["model"]
-            else vehicle["name"]
-        )
+        return vehicle["name"]
 
     async def _execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
