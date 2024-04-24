@@ -27,6 +27,11 @@ custom_properties:
     name: StarHead API URL
     hint: The URL of the StarHead API.
     required: true
+  - id: star_citizen_wiki_api_url
+    value: https://api.star-citizen.wiki/api/v2
+    name: Star Citizen Wiki API URL
+    hint: The URL of the Star Citizen Wiki API.
+    required: true
 
 azure:
   conversation:
