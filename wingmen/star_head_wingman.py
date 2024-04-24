@@ -40,6 +40,8 @@ class StarHeadWingman(OpenAiWingman):
         self.timeout = 5
         """Global timeout for calls to the the StarHead API (in seconds)"""
 
+        self.star_citizen_wiki_url = ""
+
         self.vehicles = []
         self.ship_names = []
         self.celestial_objects = []
@@ -59,6 +61,15 @@ class StarHeadWingman(OpenAiWingman):
             ),
             None,
         )
+        star_citizen_wiki_api_url = next(
+            (
+                prop
+                for prop in self.config.custom_properties
+                if prop.id == "star_citizen_wiki_api_url"
+            ),
+            None,
+        )
+
         if not starhead_api_url or not starhead_api_url.value:
             errors.append(
                 WingmanInitializationError(
@@ -67,8 +78,17 @@ class StarHeadWingman(OpenAiWingman):
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                 )
             )
+        elif not star_citizen_wiki_api_url or not star_citizen_wiki_api_url.value:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.name,
+                    message="Missing required custom property 'star_citizen_wiki_api_url'.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
         else:
             self.starhead_url = starhead_api_url.value
+            self.star_citizen_wiki_url = star_citizen_wiki_api_url.value
             try:
                 await self._prepare_data()
             except Exception as e:
@@ -120,11 +140,7 @@ class StarHeadWingman(OpenAiWingman):
 
     def _format_ship_name(self, vehicle: dict[str, any]) -> str:
         """Formats name by combining model and name, avoiding repetition"""
-        return (
-            f"{vehicle['model']} {vehicle['name']}"
-            if vehicle["name"] != vehicle["model"]
-            else vehicle["name"]
-        )
+        return vehicle["name"]
 
     async def _execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
@@ -138,6 +154,8 @@ class StarHeadWingman(OpenAiWingman):
         )
         if function_name == "get_best_trading_route":
             function_response = await self._get_best_trading_route(**function_args)
+        if function_name == "get_ship_information":
+            function_response = await self._get_ship_information(**function_args)
         return function_response, instant_response
 
     def _build_tools(self) -> list[dict[str, any]]:
@@ -164,7 +182,36 @@ class StarHeadWingman(OpenAiWingman):
                 },
             }
         )
+        tools.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_ship_information",
+                    "description": "Gives information about the given ship.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "ship": {"type": "string", "enum": self.ship_names},
+                        },
+                        "required": ["ship"],
+                    },
+                },
+            }
+        )
         return tools
+    
+    async def _get_ship_information(self, ship: str) -> str:
+        try:
+            response = requests.get(
+                url=f"{self.star_citizen_wiki_url}/vehicles/{ship}",
+                timeout=self.timeout,
+                headers=self.headers,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            return f"Failed to fetch ship information: {e}"
+        ship_details = json.dumps(response.json())
+        return ship_details
 
     async def _get_best_trading_route(
         self, ship: str, position: str, moneyToSpend: float
@@ -190,13 +237,16 @@ class StarHeadWingman(OpenAiWingman):
             "onlySingleSections": True,
         }
         url = f"{self.starhead_url}/trading"
-        response = requests.post(
-            url=url,
-            json=data,
-            timeout=self.timeout,
-            headers=self.headers,
-        )
-        response.raise_for_status()
+        try:
+            response = requests.post(
+                url=url,
+                json=data,
+                timeout=self.timeout,
+                headers=self.headers,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            return f"Failed to fetch trading route: {e}"
 
         parsed_response = response.json()
         if parsed_response:

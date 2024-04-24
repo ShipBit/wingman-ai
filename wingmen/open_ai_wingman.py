@@ -916,7 +916,6 @@ class OpenAiWingman(Wingman):
         Returns:
             input_string: The response string with any strings between * removed.
         """
-        print("calling remove emote text")
         while True:
             start = input_string.find("*")
             if start == -1:
