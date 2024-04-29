@@ -1,0 +1,18 @@
+additional_context: Pretend you are in the Star Citizen Universe. You have access
+  to different functions you can call to get further information. For some functions,
+  you need to provide values / parameters. Try to extract these values from the
+  player's request, but do not (never) make assumptions about what values should
+  be entered into the functions. Ask for clarification if you do not know the values.
+  One part of your job is to find good trading routes for the player.
+custom_properties:
+- hint: The URL of the StarHead API.
+  id: starhead_api_url
+  name: StarHead API URL
+  required: true
+  value: https://api.star-head.de
+debug_mode: false
+module: skills.star_head.main
+name: StarHead
+description: The StarHead skill provides information about the Star Citizen universe.
+  You can ask for information about ships, components, weapons, and more. You can
+  also ask for trading routes.

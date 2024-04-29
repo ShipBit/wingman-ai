@@ -11,6 +11,7 @@ from api.enums import (
     ConversationProvider,
     GroqModel,
     MistralModel,
+    CustomPropertyType,
     TtsVoiceGender,
     ElevenlabsModel,
     OpenAiModel,
@@ -438,6 +439,36 @@ class CustomWingmanClassConfig(BaseModel):
     """The name of your class within your file/module."""
 
 
+class CustomWingmanProperty(BaseModel):
+    id: str
+    """The name of the property. Has to be unique"""
+    name: str
+    """The "friendly" name of the property, displayed in the UI."""
+    value: str | int | float | bool | None
+    """The value of the property"""
+    hint: Optional[str] = None
+    """A hint for the user, displayed in the UI."""
+    required: Optional[bool] = False
+    """Marks the property as required in the UI."""
+    type: Optional[CustomPropertyType] = CustomPropertyType.STRING
+    
+class SkillConfig(CustomWingmanClassConfig):
+    description: Optional[str] = None
+    additional_context: Optional[str] = None
+    commands: Optional[list[CommandConfig]] = None
+    custom_properties: Optional[list[CustomWingmanProperty]] = None
+    """You can add custom properties here to use in your custom skill class."""
+    debug_mode: Optional[bool] = False
+    """If enabled, the skill will also print more debug messages."""
+
+
+class SkillBase(BaseModel):
+    name: str
+    config: SkillConfig
+    logo: Optional[Annotated[str, Base64Str]] = None
+    description: Optional[str] = None
+
+
 class NestedConfig(BaseModel):
     sound: SoundConfig
     features: FeaturesConfig
@@ -453,20 +484,7 @@ class NestedConfig(BaseModel):
     whispercpp: WhispercppSttConfig
     wingman_pro: WingmanProConfig
     commands: Optional[list[CommandConfig]] = None
-
-
-class CustomWingmanProperty(BaseModel):
-    id: str
-    """The name of the property. Has to be unique"""
-    name: str
-    """The "friendly" name of the property, displayed in the UI."""
-    value: str
-    """The value of the property"""
-    hint: Optional[str] = None
-    """A hint for the user, displayed in the UI."""
-    required: Optional[bool] = False
-    """Marks the property as required in the UI."""
-
+    skills: Optional[list[SkillConfig]] = None
 
 class WingmanConfig(NestedConfig):
     def __getitem__(self, item):

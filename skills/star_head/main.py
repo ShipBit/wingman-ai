@@ -1,35 +1,16 @@
-from typing import Optional
 import json
+from typing import Optional
 import requests
-from api.interface import (
-    SettingsConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
 from api.enums import LogType, WingmanInitializationErrorType
-from services.audio_player import AudioPlayer
-from services.printr import Printr
-from wingmen.open_ai_wingman import OpenAiWingman
-
-printr = Printr()
+from api.interface import WingmanConfig, WingmanInitializationError
+from skills.skill_base import Skill
 
 
-class StarHeadWingman(OpenAiWingman):
-    """Our StarHead Wingman uses the StarHead API to find the best trading route for a given spaceship, position and the money to spend.
-    If it's missing any of these parameters, it will ask the user for them.
-    """
+class StarHead(Skill):
 
-    def __init__(
-        self,
-        name: str,
-        config: WingmanConfig,
-        settings: SettingsConfig,
-        audio_player: AudioPlayer,
-    ) -> None:
-        super().__init__(
-            name=name, config=config, settings=settings, audio_player=audio_player
-        )
-
+    def __init__(self, config: WingmanConfig) -> None:
+        super().__init__(config=config)
+        
         # config entry existence not validated yet. Assign later when checked!
         self.starhead_url = ""
         """The base URL of the StarHead API"""
@@ -48,9 +29,8 @@ class StarHeadWingman(OpenAiWingman):
         self.celestial_object_names = []
         self.quantum_drives = []
 
-    async def validate(self):
-        # collect errors from the base class (if any)
-        errors: list[WingmanInitializationError] = await super().validate()
+    async def validate(self) -> list[WingmanInitializationError]:
+        errors = await super().validate()
 
         # add custom errors
         starhead_api_url = next(
@@ -101,10 +81,8 @@ class StarHeadWingman(OpenAiWingman):
                 )
 
         return errors
-
+    
     async def _prepare_data(self):
-        self.start_execution_benchmark()
-
         self.vehicles = await self._fetch_data("vehicle")
         self.ship_names = [
             self._format_ship_name(vehicle)
@@ -126,18 +104,16 @@ class StarHeadWingman(OpenAiWingman):
     ) -> list[dict[str, any]]:
         url = f"{self.starhead_url}/{endpoint}"
 
-        if self.debug:
-            await printr.print_async(f"Retrieving {url}", color=LogType.INFO)
+        if self.config.debug_mode:
+            await self.printr.print_async(f"Retrieving {url}", color=LogType.INFO)
 
         response = requests.get(
             url, params=params, timeout=self.timeout, headers=self.headers
         )
         response.raise_for_status()
-        if self.debug:
-            await self.print_execution_time(reset_timer=True)
 
         return response.json()
-
+    
     def _format_ship_name(self, vehicle: dict[str, any]) -> str:
         """Formats name by combining model and name, avoiding repetition"""
         return vehicle["name"]
@@ -213,6 +189,11 @@ class StarHeadWingman(OpenAiWingman):
         ship_details = json.dumps(response.json())
         return ship_details
 
+        if tool_name == "get_best_trading_route":
+            function_response = await self._get_best_trading_route(**parameters)
+
+        return function_response, instant_response
+    
     async def _get_best_trading_route(
         self, ship: str, position: str, moneyToSpend: float
     ) -> str:
@@ -252,8 +233,8 @@ class StarHeadWingman(OpenAiWingman):
         if parsed_response:
             section = parsed_response[0]
             return json.dumps(section)
-        return "No route found. This might be an issue with the StarHead API."
-
+        return f"No route found for ship '{ship}' at '{position}' with '{moneyToSpend}' aUEC."
+    
     def _get_celestial_object_id(self, name: str) -> Optional[int]:
         """Finds the ID of the celestial object with the specified name."""
         return next(
@@ -295,7 +276,7 @@ class StarHeadWingman(OpenAiWingman):
                 )
                 return cargo, qd
         return None, None
-
+    
     async def _get_ship_loadout(
         self, ship_id: Optional[int]
     ) -> Optional[dict[str, any]]:
@@ -305,7 +286,7 @@ class StarHeadWingman(OpenAiWingman):
                 loadout = await self._fetch_data(f"vehicle/{ship_id}/loadout")
                 return loadout or None
             except requests.HTTPError:
-                await printr.print_async(
+                await self.printr.print_async(
                     f"Failed to fetch loadout data for ship with ID: {ship_id}",
                     color=LogType.ERROR,
                 )

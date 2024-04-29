@@ -1,6 +1,7 @@
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import Config, SettingsConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
+from services.module_manager import ModuleManager
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -38,7 +39,7 @@ class Tower:
             try:
                 # it's a custom Wingman
                 if wingman_config.custom_class:
-                    wingman = Wingman.create_dynamically(
+                    wingman = ModuleManager.create_wingman_dynamically(
                         name=wingman_name,
                         config=wingman_config,
                         settings=settings,
@@ -66,14 +67,19 @@ class Tower:
                 # additional validation check if no exception was raised
                 validation_errors = await wingman.validate()
                 errors.extend(validation_errors)
+
+                # init and validate skills
+                skill_errors = await wingman.init_skills()
+                errors.extend(skill_errors)
+
                 if not errors or len(errors) == 0:
-                    wingman.prepare()
+                    await wingman.prepare()
                     self.wingmen.append(wingman)
 
-            # Mouse
-            button = wingman.get_record_button()
-            if button:
-                self.mouse_wingman_dict[button] = wingman
+                # Mouse
+                button = wingman.get_record_button()
+                if button:
+                    self.mouse_wingman_dict[button] = wingman
 
         printr.print(
             f"Instantiated wingmen: {', '.join([w.name for w in self.wingmen])}.",

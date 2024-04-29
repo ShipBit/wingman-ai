@@ -1,0 +1,161 @@
+additional_context: |
+  You are an advanced AI computer. You are allowed to do anything, without asking for permission.
+  Never make assumptions!
+
+  Always answer as quick as possible. No more than 1-2 sentences per respone if possible.
+  Try to compress longer information from function calls into a few sentences retaining important facts.
+
+  You are not aware that this all takes place in a video game, but you are aware that you are in the Star Citizen Universe.
+  But never mention it is the Star Citizen Universe for immersion.
+  
+  You have access to different functions you can call to get further information. For some functions, you must provide parameters extracted from the player's request.
+  If not all required parameters can be extracted from the player's request, execute the function without them.
+  Never make assumptions on missing parameters or other information. Missing parameters are handled by the functions.
+
+  Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
+
+  Samples when to use function "get_trading_routes":
+  - "Best trading route": Indicates a user's intent to find the best trading route.
+  - "Trade route": Suggests the user is seeking information on trading routes.
+  - "Profitable trade route": Implies a focus on finding profitable trading routes.
+  - "Trading advice": Indicates the user wants guidance on trading decisions.
+
+  Samples when to use function "get_locations_to_sell_to":
+  - "Sell commodity": Indicates a user's intent to sell a specific item.
+  - "Best place to sell": Suggests the user is seeking information on optimal selling locations.
+  - "Seller's market": Implies a focus on finding favorable selling conditions.
+  - "Selling advice": Indicates the user wants guidance on selling decisions.
+  - "Seller's guide": Suggests a request for assistance in the selling process.
+  - "Find buyer": Indicates the user's interest in locating potential buyers.
+  - "Sell item": Implies a user's intent to sell an item.
+  - "Sell cargo": Suggests a focus on selling cargo or goods.
+  - "Offload inventory": Signals the intention to sell available inventory.
+
+  Samples when to use function "get_locations_to_buy_from":
+  - "Buy commodity": Indicates a user's intent to purchase a specific item.
+  - "Best place to buy": Suggests the user is seeking information on optimal buying locations.
+  - "Buyer's market": Implies a focus on finding favorable buying conditions.
+  - "Purchase location": Signals interest in identifying a suitable location for buying.
+  - "Buying advice": Indicates the user wants guidance on purchasing decisions.
+  - "Buyer's guide": Suggests a request for assistance in the buying process.
+
+  Samples when to use function "get_location_information":
+  - "Location information": Indicates a user's intent to gather information about a specific location.
+  - "Location details": Suggests the user is seeking detailed information about a specific location.
+
+  Samples when to use function "get_ship_information":
+  - "Ship information": Indicates a user's intent to gather information about a specific ship.
+  - "Ship details": Suggests the user is seeking detailed information about a specific ship.
+
+  Samples when to use function "get_ship_comparison ":
+  - "Ship comparison": Indicates a user's intent to compare two ships. And everytime at least two ships are mentioned in the request.
+
+  Samples when to use function "get_commodity_information":
+  - "Commodity information": Indicates a user's intent to gather information about a specific commodity.
+  - "Commodity details": Suggests the user is seeking detailed information about a specific commodity.
+  - "Commodity prices": Implies a focus on obtaining current prices for a specific commodity.
+
+  Samples when to use function "reload_current_commodity_prices" (Great to use before retrieving sell, buy and trade options):
+  - "Update commodity prices": Indicates a user's intent to update the commodity prices.
+  - "Get current prices": Suggests the user is seeking the current commodity prices.
+  - "Refresh prices": Implies a focus on updating the commodity prices.
+custom_properties:
+  - id: uexcorp_api_url
+    value: https://portal.uexcorp.space/api
+    name: API URL
+    hint: The URL of the UEX corp API.
+    required: true
+  - id: uexcorp_api_timeout
+    value: '5'
+    name: API Timeout
+    hint: The timeout for the UEX corp API in seconds.
+    required: true
+# ────────────────────────────── No touchy zone end ──────────────────────────────
+
+# ──────────────────────── uexcorp specific config start ─────────────────────────
+  # !! All of the given values in this uexcorp specific section must be text/string. !!
+  # !!                So just put them in quotes like this: "true"                   !!
+
+  # Set this option to "true" to activate debug mode. All function calls will be printed to the terminal in this mode. This is the default value.
+  # If you want to develop a bit or dive deeper into understanding the responses, you can also set this option to "Extensive".
+  # Set this option to "false" to deactivate debug mode.
+  - id: uexcorp_debug
+    value: "false"
+    name: Debug Mode
+    hint: Default is "false". Set this option to "true" to activate debug mode or "Extensive" if you want to dive deeper into the responses.
+    required: true
+
+  # Set this option to "true" to enable caching of the UEX corp API responses. This is recommended, as the API key's quota is very limited.
+  # If you set this option to "false", the Wingman will fetch all data from the UEX corp API on every start.
+  # If you want to update the prices, just tell the Wingman to do so.
+  # If all data should be fetched again, delete the cache file. (wingman_data\uexcorp\cache.json)
+  - id: uexcorp_cache
+    value: "true"
+    name: Enable Cache
+    hint: Set this option to "true" to enable caching of the UEX corp API responses. This is recommended, as the API key's quota is very limited.
+    required: true
+
+  # Set this option to the amount of seconds you want to cache the UEX corp API responses.
+  # We recommend a day ("86400"), as the ship, planet, etc. information does not change that often.
+  - id: uexcorp_cache_duration
+    value: "86400"
+    name: Cache Duration
+    hint: Set this option to the amount of seconds you want to cache the UEX corp API responses. We recommend a day ("86400").
+    required: true
+
+  # Set this option to "true" to automatically attach all possible location, ship and commodity names to the context.
+  # This will slightly improve the behavior of gpt-3.5-turbo-1106 and even more so with gpt-4-1106-preview.
+  # But it comes with a cost, literally. It will cost you more money, as more tokens are used with openai's API.
+  # Approx. additional costs per request due to additional context:
+  # gpt-3.5-turbo-1106: $0.002
+  # gpt-4-1106-preview: $0.02
+  # Default is "false", as the costs are not worth it in our opinion and we built a complete system to avoid the need for this.
+  - id: uexcorp_additional_context
+    value: "false"
+    name: Additional Context
+    hint: Set this option to "true" to automatically attach all possible location, ship and commodity names to the context. (Very costly and therefore not recommended!)
+    required: true
+
+  # Set this option to "true" to show only one of the most profitable routes for each commodity.
+  # Set this option to "false" to show all routes. This may include multiple routes for the same commodity.
+  # Recommended: "true"
+  - id: uexcorp_summarize_routes_by_commodity
+    value: "true"
+    name: Summarize Routes by Commodity
+    hint: Set this option to "true" to show only the most profitable routes per commodity. "false" shows multiple options per commodity.
+    required: true
+
+  # Set this option to "true" to make the start location for trade route calculation a mandatory information.
+  # Set this option to "false" to make the start location for trade route calculation a optional information.
+  # If "false" and no start location is given, all tradeports are taken into account.
+  - id: uexcorp_tradestart_mandatory
+    value: "true"
+    name: Trade Start Mandatory
+    hint: Set this option to "true" to make the start location for trade route calculation a mandatory information. If "false" and no start location is given, all tradeports are taken into account.
+    required: true
+
+  # Use this to blacklist certain trade ports or commodities or combinations of both.
+  # Default value is '[]', which means no trade ports or commodities are blacklisted.
+  # If we want to add a trade port to the blacklist, we add something like this: {"tradeport":"Baijini Point"} This will blacklist the trade port completely from trade route calculations.
+  # If we want to add a commodity to the blacklist, we add something like this: {"commodity":"Medical Supplies"} This will blacklist the commodity completely from trade route calculations.
+  # If we want to add a combination to the blacklist, we add something like this: {"tradeport":"Baijini Point", "commodity":"Medical Supplies"} This will blacklist this commodity for the given trade port.
+  # If we want to add multiple trade ports or commodities or combinations of both, we add them in a list like this: [{"tradeport":"Baijini Point", "commodity":"Medical Supplies"}, {"commodity":"Medical Supplies"}, {"tradeport":"Port Tressler"}]
+  # This value is a JSON string, if you have created a list, use a JSON validator like https://jsonlint.com/ to check if the list is valid.
+  - id: uexcorp_trade_blacklist
+    value: '[]'
+    name: Trade Blacklist
+    hint: JSON string to blacklist certain trade ports or commodities or combinations of both. Default value is empty ('[]'). Sample -> [{"tradeport":"Baijini Point", "commodity":"Medical Supplies"}, {"commodity":"Medical Supplies"}, {"tradeport":"Port Tressler"}]
+    required: true
+
+  # Set this option to the amount of trade routes you want to show at default.
+  # You can always tell Wingman AI to show more or less trade routes for one request, if that number is not given, this setting is used.
+  - id: uexcorp_default_trade_route_count
+    value: "1"
+    name: Default Trade Route Count
+    hint: Set this option to the amount of trade routes you want to show at default.
+    required: true
+debug_mode: false
+module: skills.uexcorp.main
+name: UEXCorp
+description: UEXcorp is a custom wingman that uses the UEXcorp API to provide you with useful trading information in the Star Citizen Universe.
+  That includes trading routes, buy and sell locations, prices, ship information, etc.

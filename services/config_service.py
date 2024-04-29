@@ -5,10 +5,12 @@ from api.interface import (
     ConfigWithDirInfo,
     ConfigsInfo,
     NewWingmanTemplate,
+    SkillBase,
     WingmanConfig,
     WingmanConfigFileInfo,
 )
 from services.config_manager import ConfigManager
+from services.module_manager import ModuleManager
 from services.printr import Printr
 from services.pub_sub import PubSub
 
@@ -116,6 +118,23 @@ class ConfigService:
             endpoint=self.save_wingman_config,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/available-skills",
+            endpoint=self.get_available_skills,
+            response_model=list[SkillBase],
+            tags=tags,
+        )
+
+    # GET /available-skills
+    def get_available_skills(self):
+        try:
+            skills = ModuleManager.read_available_skills()
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            raise e
+        
+        return skills
 
     # GET /configs
     def get_config_dirs(self):

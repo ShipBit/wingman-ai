@@ -263,6 +263,7 @@ class ConfigManager:
             "disabled": False,
             "openai": {"context": ""},
             "commands": [],
+            "skills": [],
         }
         validated_config = self.__merge_configs(parsed_config, wingman_config)
         return NewWingmanTemplate(
