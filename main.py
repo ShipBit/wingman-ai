@@ -203,9 +203,11 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 # Open Interpreter Client
+to_device = asyncio.Queue()
+
 @app.websocket("/")
 async def oi_websocket_endpoint(websocket: WebSocket):
-    await connection_manager.connect(websocket)
+    await websocket.accept()
     receive_task = asyncio.create_task(receive_messages(websocket))
     send_task = asyncio.create_task(send_messages(websocket))
     try:
@@ -235,6 +237,9 @@ async def receive_messages(websocket: WebSocket):
                         await loop.run_in_executor(None, save_wav, byte_string, nchannels, sampwidth, framerate)
                         await core.send_audio_to_wingman_by_path("Computer", file_path="audio.wav")
 
+                        for chunk in stream_tts("audio.wav"):
+                            await to_device.put(chunk)
+
             except json.JSONDecodeError:
                 pass  # data is not JSON, leave it as is
         if "bytes" in data:
@@ -248,10 +253,36 @@ def save_wav(data, nchannels, sampwidth, framerate):
         wf.setframerate(framerate)
         wf.writeframes(data)
 
+def stream_tts(audio_file):
+    with open(audio_file, "rb") as f:
+        audio_bytes = f.read()
+    # os.remove(audio_file)
+
+    file_type = "bytes.raw"
+    chunk_size = 1024
+
+    # Stream the audio
+    yield {"role": "assistant", "type": "audio", "format": file_type, "start": True}
+    for i in range(0, len(audio_bytes), chunk_size):
+        chunk = audio_bytes[i : i + chunk_size]
+        yield chunk
+    yield {"role": "assistant", "type": "audio", "format": file_type, "end": True}
+
 async def send_messages(websocket: WebSocket):
     while True:
-        await websocket.send_text("Hello, client!")
-        await asyncio.sleep(1)
+        # await websocket.send_text("Hello, client!")
+        message = await to_device.get()
+        try:
+            if isinstance(message, dict):
+                await websocket.send_json(message)
+            elif isinstance(message, bytes):
+                await websocket.send_bytes(message)
+            else:
+                raise TypeError("Message must be a dict or bytes")
+        except:
+            # Make sure to put the message back in the queue if you failed to send it
+            await to_device.put(message)
+            raise
 
 
 @app.post("/start-secrets", tags=["main"])
