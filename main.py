@@ -233,6 +233,8 @@ async def receive_messages(websocket: WebSocket):
 
                         # Save the received stream of bytes as a WAV file
                         await loop.run_in_executor(None, save_wav, byte_string, nchannels, sampwidth, framerate)
+                        await core.send_audio_to_wingman_by_path("Computer", file_path="audio.wav")
+
             except json.JSONDecodeError:
                 pass  # data is not JSON, leave it as is
         if "bytes" in data:
