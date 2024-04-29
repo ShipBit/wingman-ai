@@ -724,7 +724,7 @@ class OpenAiWingman(Wingman):
         elif self.summarize_provider == SummarizeProvider.LLAMA:
             summarize_response = self.llama.ask(
                 messages=self.messages,
-                model=self.config.mistral.summarize_model,
+                model=self.config.llama.summarize_model,
             )
         elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
             summarize_response = self.wingman_pro.ask(
@@ -923,5 +923,5 @@ class OpenAiWingman(Wingman):
             end = input_string.find("*", start + 1)
             if end == -1:
                 break
-            input_string = input_string[:start] + input_string[end + 1:]
+            input_string = input_string[:start] + input_string[end + 1 :]
         return input_string
