@@ -1,8 +1,10 @@
 import argparse
 import asyncio
 from enum import Enum
+import json
 from os import path
 import sys
+import traceback
 from typing import Any, Literal, get_args, get_origin
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -21,6 +23,7 @@ from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.system_manager import SystemManager
 from wingman_core import WingmanCore
+import wave
 
 port = None
 host = None
@@ -67,7 +70,7 @@ core.set_connection_manager(connection_manager)
 keyboard.hook(core.on_key)
 
 # TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
-mouse.hook(core.on_mouse)
+#mouse.hook(core.on_mouse)
 
 
 def custom_generate_unique_id(route: APIRoute):
@@ -197,6 +200,56 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         await connection_manager.disconnect(websocket)
         await printr.print_async("Client disconnected", server_only=True)
+
+
+# Open Interpreter Client
+@app.websocket("/")
+async def oi_websocket_endpoint(websocket: WebSocket):
+    await connection_manager.connect(websocket)
+    receive_task = asyncio.create_task(receive_messages(websocket))
+    send_task = asyncio.create_task(send_messages(websocket))
+    try:
+        await asyncio.gather(receive_task, send_task)
+    except Exception as e:
+        print(traceback.format_exc())
+        print(f"Connection lost. Error: {e}")
+
+async def receive_messages(websocket: WebSocket):
+    loop = asyncio.get_event_loop()
+    byte_string = b''
+    while True:
+        data = await websocket.receive()
+        if "text" in data:
+            try:
+                data = json.loads(data["text"])
+                if data["role"] == "user":
+                    if "start" in data:
+                        byte_string = b''
+                    elif "end" in data:
+                        # Set the parameters for the WAV file
+                        nchannels = 1  # Mono audio
+                        sampwidth = 2  # 2 bytes per sample for 16-bit audio
+                        framerate = 16000  # Sample rate
+
+                        # Save the received stream of bytes as a WAV file
+                        await loop.run_in_executor(None, save_wav, byte_string, nchannels, sampwidth, framerate)
+            except json.JSONDecodeError:
+                pass  # data is not JSON, leave it as is
+        if "bytes" in data:
+            byte_string += data["bytes"]
+
+# Define a synchronous function to save the WAV file
+def save_wav(data, nchannels, sampwidth, framerate):
+    with wave.open('audio.wav', 'wb') as wf:
+        wf.setnchannels(nchannels)
+        wf.setsampwidth(sampwidth)
+        wf.setframerate(framerate)
+        wf.writeframes(data)
+
+async def send_messages(websocket: WebSocket):
+    while True:
+        await websocket.send_text("Hello, client!")
+        await asyncio.sleep(1)
 
 
 @app.post("/start-secrets", tags=["main"])
