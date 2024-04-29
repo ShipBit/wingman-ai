@@ -658,19 +658,19 @@ class OpenAiWingman(Wingman):
             )
         elif self.conversation_provider == ConversationProvider.GROQ:
             completion = self.groq.ask(
-                messages=self.messages,
+                messages=messages,
                 tools=tools,
                 model=self.config.groq.conversation_model.value,
             )
         elif self.conversation_provider == ConversationProvider.OPENROUTER:
             completion = self.openrouter.ask(
-                messages=self.messages,
+                messages=messages,
                 tools=tools,
                 model=self.config.openrouter.conversation_model,
             )
         elif self.conversation_provider == ConversationProvider.LOCAL_LLM:
             completion = self.local_llm.ask(
-                messages=self.messages,
+                messages=messages,
                 tools=tools,
                 model=self.config.local_llm.conversation_model,
             )
