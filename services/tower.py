@@ -52,7 +52,18 @@ class Tower:
                         settings=settings,
                         audio_player=self.audio_player,
                     )
+            except FileNotFoundError as e:  # pylint: disable=broad-except
+                wingman_config.disabled = True
+                printr.print(
+                    f"Could not instantiate {wingman_name}:\n{str(e)}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source_name=self.log_source_name,
+                    source=LogSource.SYSTEM,
+                )
+                continue
             except Exception as e:  # pylint: disable=broad-except
+                wingman_config.disabled = True
                 # just in case we missed something
                 msg = str(e).strip() or type(e).__name__
                 errors.append(
@@ -62,7 +73,7 @@ class Tower:
                         error_type=WingmanInitializationErrorType.UNKNOWN,
                     )
                 )
-                printr.toast_error(f"Could not instantiate {wingman_name}:\n{str(e)}")
+                continue
             else:
                 # additional validation check if no exception was raised
                 validation_errors = await wingman.validate()
