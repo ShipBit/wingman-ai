@@ -118,27 +118,19 @@ class StarHead(Skill):
         """Formats name by combining model and name, avoiding repetition"""
         return vehicle["name"]
 
-    async def _execute_command_by_function_call(
-        self, function_name: str, function_args: dict[str, any]
-    ) -> tuple[str, str]:
-        """Execute commands passed from the base class and handles the 'get_best_trading_route'."""
-        (
-            function_response,
-            instant_response,
-        ) = await super()._execute_command_by_function_call(
-            function_name, function_args
-        )
-        if function_name == "get_best_trading_route":
-            function_response = await self._get_best_trading_route(**function_args)
-        if function_name == "get_ship_information":
-            function_response = await self._get_ship_information(**function_args)
+    async def execute_tool(self, tool_name: str, parameters: dict[str, any]) -> tuple[str, str]:
+        instant_response = ""
+        function_response = ""
+
+        if tool_name == "get_best_trading_route":
+            function_response = await self._get_best_trading_route(**parameters)
+        if tool_name == "get_ship_information":
+            function_response = await self._get_ship_information(**parameters)
         return function_response, instant_response
 
-    def _build_tools(self) -> list[dict[str, any]]:
-        """Builds the toolset for execution, adding custom function 'get_best_trading_route'."""
-        tools = super()._build_tools()
-        tools.append(
-            {
+    def get_tools(self) -> list[tuple[str, dict]]:
+        tools = [
+            ("get_best_trading_route", {
                 "type": "function",
                 "function": {
                     "name": "get_best_trading_route",
@@ -156,10 +148,8 @@ class StarHead(Skill):
                         "required": ["ship", "position", "moneyToSpend"],
                     },
                 },
-            }
-        )
-        tools.append(
-            {
+            }),
+            ("get_ship_information", {
                 "type": "function",
                 "function": {
                     "name": "get_ship_information",
@@ -172,8 +162,9 @@ class StarHead(Skill):
                         "required": ["ship"],
                     },
                 },
-            }
-        )
+            })
+        ]
+        
         return tools
     
     async def _get_ship_information(self, ship: str) -> str:
@@ -188,11 +179,6 @@ class StarHead(Skill):
             return f"Failed to fetch ship information: {e}"
         ship_details = json.dumps(response.json())
         return ship_details
-
-        if tool_name == "get_best_trading_route":
-            function_response = await self._get_best_trading_route(**parameters)
-
-        return function_response, instant_response
     
     async def _get_best_trading_route(
         self, ship: str, position: str, moneyToSpend: float
