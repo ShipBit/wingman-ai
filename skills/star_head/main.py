@@ -10,7 +10,7 @@ class StarHead(Skill):
 
     def __init__(self, config: WingmanConfig) -> None:
         super().__init__(config=config)
-        
+
         # config entry existence not validated yet. Assign later when checked!
         self.starhead_url = ""
         """The base URL of the StarHead API"""
@@ -32,56 +32,26 @@ class StarHead(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        # add custom errors
-        starhead_api_url = next(
-            (
-                prop
-                for prop in self.config.custom_properties
-                if prop.id == "starhead_api_url"
-            ),
-            None,
+        self.starhead_url = self.retrieve_custom_property_value(
+            "starhead_api_url", errors
         )
-        star_citizen_wiki_api_url = next(
-            (
-                prop
-                for prop in self.config.custom_properties
-                if prop.id == "star_citizen_wiki_api_url"
-            ),
-            None,
+        self.star_citizen_wiki_url = self.retrieve_custom_property_value(
+            "star_citizen_wiki_api_url", errors
         )
 
-        if not starhead_api_url or not starhead_api_url.value:
+        try:
+            await self._prepare_data()
+        except Exception as e:
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.name,
-                    message="Missing required custom property 'starhead_api_url'.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                    message=f"Failed to load data from StarHead API: {e}",
+                    error_type=WingmanInitializationErrorType.UNKNOWN,
                 )
             )
-        elif not star_citizen_wiki_api_url or not star_citizen_wiki_api_url.value:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.name,
-                    message="Missing required custom property 'star_citizen_wiki_api_url'.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
-        else:
-            self.starhead_url = starhead_api_url.value
-            self.star_citizen_wiki_url = star_citizen_wiki_api_url.value
-            try:
-                await self._prepare_data()
-            except Exception as e:
-                errors.append(
-                    WingmanInitializationError(
-                        wingman_name=self.name,
-                        message=f"Failed to load data from StarHead API: {e}",
-                        error_type=WingmanInitializationErrorType.UNKNOWN,
-                    )
-                )
 
         return errors
-    
+
     async def _prepare_data(self):
         self.vehicles = await self._fetch_data("vehicle")
         self.ship_names = [
@@ -113,12 +83,14 @@ class StarHead(Skill):
         response.raise_for_status()
 
         return response.json()
-    
+
     def _format_ship_name(self, vehicle: dict[str, any]) -> str:
         """Formats name by combining model and name, avoiding repetition"""
         return vehicle["name"]
 
-    async def execute_tool(self, tool_name: str, parameters: dict[str, any]) -> tuple[str, str]:
+    async def execute_tool(
+        self, tool_name: str, parameters: dict[str, any]
+    ) -> tuple[str, str]:
         instant_response = ""
         function_response = ""
 
@@ -130,43 +102,49 @@ class StarHead(Skill):
 
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
-            ("get_best_trading_route", {
-                "type": "function",
-                "function": {
-                    "name": "get_best_trading_route",
-                    "description": "Finds the best trade route for a given spaceship and position.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "ship": {"type": "string", "enum": self.ship_names},
-                            "position": {
-                                "type": "string",
-                                "enum": self.celestial_object_names,
+            (
+                "get_best_trading_route",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_best_trading_route",
+                        "description": "Finds the best trade route for a given spaceship and position.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "ship": {"type": "string", "enum": self.ship_names},
+                                "position": {
+                                    "type": "string",
+                                    "enum": self.celestial_object_names,
+                                },
+                                "moneyToSpend": {"type": "number"},
                             },
-                            "moneyToSpend": {"type": "number"},
+                            "required": ["ship", "position", "moneyToSpend"],
                         },
-                        "required": ["ship", "position", "moneyToSpend"],
                     },
                 },
-            }),
-            ("get_ship_information", {
-                "type": "function",
-                "function": {
-                    "name": "get_ship_information",
-                    "description": "Gives information about the given ship.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "ship": {"type": "string", "enum": self.ship_names},
+            ),
+            (
+                "get_ship_information",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_ship_information",
+                        "description": "Gives information about the given ship.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "ship": {"type": "string", "enum": self.ship_names},
+                            },
+                            "required": ["ship"],
                         },
-                        "required": ["ship"],
                     },
                 },
-            })
+            ),
         ]
-        
+
         return tools
-    
+
     async def _get_ship_information(self, ship: str) -> str:
         try:
             response = requests.get(
@@ -179,7 +157,7 @@ class StarHead(Skill):
             return f"Failed to fetch ship information: {e}"
         ship_details = json.dumps(response.json())
         return ship_details
-    
+
     async def _get_best_trading_route(
         self, ship: str, position: str, moneyToSpend: float
     ) -> str:
@@ -220,7 +198,7 @@ class StarHead(Skill):
             section = parsed_response[0]
             return json.dumps(section)
         return f"No route found for ship '{ship}' at '{position}' with '{moneyToSpend}' aUEC."
-    
+
     def _get_celestial_object_id(self, name: str) -> Optional[int]:
         """Finds the ID of the celestial object with the specified name."""
         return next(
@@ -262,7 +240,7 @@ class StarHead(Skill):
                 )
                 return cargo, qd
         return None, None
-    
+
     async def _get_ship_loadout(
         self, ship_id: Optional[int]
     ) -> Optional[dict[str, any]]:

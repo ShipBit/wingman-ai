@@ -10,8 +10,10 @@ class ControlWindows(Skill):
 
     # Paths to Start Menu directories
     start_menu_paths: list[Path] = [
-        Path(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs'),
-        Path(os.environ['PROGRAMDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs')
+        Path(os.environ["APPDATA"], "Microsoft", "Windows", "Start Menu", "Programs"),
+        Path(
+            os.environ["PROGRAMDATA"], "Microsoft", "Windows", "Start Menu", "Programs"
+        ),
     ]
 
     def __init__(self, config: WingmanConfig) -> None:
@@ -20,9 +22,9 @@ class ControlWindows(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
         return errors
-    
+
     # Function to recursively list files in a directory
-    def list_files(self, directory, extension=''):
+    def list_files(self, directory, extension=""):
         for item in directory.iterdir():
             if item.is_dir():
                 yield from self.list_files(item, extension)
@@ -33,14 +35,14 @@ class ControlWindows(Skill):
     def search_and_start(self, app_name):
         for start_menu_path in self.start_menu_paths:
             if start_menu_path.exists():
-                for file_path in self.list_files(start_menu_path, '.lnk'):
+                for file_path in self.list_files(start_menu_path, ".lnk"):
                     if app_name.lower() in file_path.stem.lower():
                         # Attempt to start the application
                         os.startfile(str(file_path))
-                        #subprocess.Popen([str(file_path)])
+                        # subprocess.Popen([str(file_path)])
                         return True
         return False
-    
+
     def close_application(self, app_name):
         windows = gw.getWindowsWithTitle(app_name)
         if windows and len(windows) > 0:
@@ -50,7 +52,7 @@ class ControlWindows(Skill):
             return True
 
         return False
-    
+
     def execute_ui_command(self, app_name: str, command: str):
         windows = gw.getWindowsWithTitle(app_name)
         if windows and len(windows) > 0:
@@ -66,32 +68,45 @@ class ControlWindows(Skill):
 
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
-            ("control_windows_functions", {
-                "type": "function",
-                "function": {
-                    "name": "control_windows_functions",
-                    "description": "Control Windows Functions, like opening and closing applications. Or getting information about your system, like CPU, memory, disks, network.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "command": {
-                                "type": "string",
-                                "description": "The command to execute",
-                                "enum": ["open", "close", "get_cpu_info", "minimize", "maximize", "restore", "activate"],
+            (
+                "control_windows_functions",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "control_windows_functions",
+                        "description": "Control Windows Functions, like opening and closing applications. Or getting information about your system, like CPU, memory, disks, network.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "The command to execute",
+                                    "enum": [
+                                        "open",
+                                        "close",
+                                        "get_cpu_info",
+                                        "minimize",
+                                        "maximize",
+                                        "restore",
+                                        "activate",
+                                    ],
+                                },
+                                "parameter": {
+                                    "type": "string",
+                                    "description": "The parameter for the command. For example, the application name to open or close. Or the information to get.",
+                                },
                             },
-                            "parameter": {
-                                "type": "string",
-                                "description": "The parameter for the command. For example, the application name to open or close. Or the information to get.",
-                            },
+                            "required": ["command"],
                         },
-                        "required": ["command"],
                     },
                 },
-            }),
+            ),
         ]
         return tools
-    
-    async def execute_tool(self, tool_name: str, parameters: dict[str, any]) -> tuple[str, str]:
+
+    async def execute_tool(
+        self, tool_name: str, parameters: dict[str, any]
+    ) -> tuple[str, str]:
         function_response = "Application not found."
         instant_response = ""
 
@@ -111,7 +126,7 @@ class ControlWindows(Skill):
                     function_response = "Application closed."
 
             elif parameters["command"] == "get_cpu_info":
-                function_response =  psutil.cpu_percent(interval=1)
+                function_response = psutil.cpu_percent(interval=1)
 
             else:
                 command = parameters["command"]
