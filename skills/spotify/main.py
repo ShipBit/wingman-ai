@@ -1,7 +1,8 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from skills.skill_base import Skill
 from api.interface import WingmanConfig, WingmanInitializationError
+from skills.skill_base import Skill
+from services.printr import Printr
 
 
 class Spotify(Skill):
@@ -10,6 +11,7 @@ class Spotify(Skill):
         super().__init__(config=config)
         self.spotify: spotipy.Spotify = None
         self.available_devices = []
+        self.printr = Printr()
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -30,28 +32,18 @@ class Spotify(Skill):
                         "user-library-read",
                         "user-read-currently-playing",
                         "user-read-playback-state",
-                        "streaming",
                         "user-modify-playback-state",
+                        "streaming",
+                        # "playlist-modify-public",
+                        "playlist-read-private",
+                        # "playlist-modify-private",
+                        "user-library-modify",
+                        # "user-read-recently-played",
+                        # "user-top-read"
                     ],
                 )
             )
         return errors
-
-    def get_available_devices(self):
-        devices = [
-            device
-            for device in self.spotify.devices().get("devices")
-            if not device["is_restricted"]
-        ]
-        return devices
-
-    def get_active_devices(self):
-        active_devices = [
-            device
-            for device in self.spotify.devices().get("devices")
-            if device["is_active"]
-        ]
-        return active_devices
 
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
@@ -68,7 +60,7 @@ class Spotify(Skill):
                                 "action": {
                                     "type": "string",
                                     "description": "The playback action to take",
-                                    "enum": ["getDevices", "setActiveDevice"],
+                                    "enum": ["get_devices", "set_active_device"],
                                 },
                                 "device_name": {
                                     "type": "string",
@@ -101,11 +93,12 @@ class Spotify(Skill):
                                         "play",
                                         "pause",
                                         "stop",
-                                        "next",
-                                        "previous",
-                                        "setVolume",
+                                        "play_next_track",
+                                        "play_previous_track",
+                                        "set_volume",
                                         "mute",
-                                        "getCurrentTrack",
+                                        "get_current_track",
+                                        "like_song",
                                     ],
                                 },
                                 "volume_level": {
@@ -151,100 +144,143 @@ class Spotify(Skill):
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
     ) -> tuple[str, str]:
+        instant_response = ""  # not used here
         function_response = "Unable to control Spotify."
-        instant_response = ""
 
-        if tool_name == "control_spotify_device":
-            print(f"Executing control_spotify_device with parameters: {parameters}")
+        if tool_name not in [
+            "control_spotify_device",
+            "control_spotify_playback",
+            "play_song_with_spotify",
+        ]:
+            return function_response, instant_response
 
-            action = parameters.get("action")
-            if action == "getDevices":
-                active_devices = self.get_active_devices()
-                active_device_names = ", ".join(
-                    [device["name"] for device in active_devices]
-                )
-                available_device_names = ", ".join(
-                    [device["name"] for device in self.get_available_devices()]
-                )
-                if active_devices and len(active_devices) > 0:
-                    function_response = f"Your available devices are: {available_device_names}. Your active devices are: {active_device_names}."
-                else:
-                    function_response = f"No active device found but these are the available devices: {available_device_names}"
+        self.printr.print(
+            f"Spotify: Executing {tool_name} with parameters: {parameters}",
+            server_only=True,
+        )
 
-            elif action == "setActiveDevice":
-                device_name = parameters.get("device_name")
-                if device_name:
-                    device = next(
-                        (
-                            device
-                            for device in self.get_available_devices()
-                            if device["name"] == device_name
-                        ),
-                        None,
-                    )
-                    if device:
-                        self.spotify.transfer_playback(device["id"])
-                        function_response = "OK"
-                    else:
-                        function_response = f"Device '{device_name}' not found."
-                else:
-                    function_response = "Device name not provided."
-
-        elif tool_name == "control_spotify_playback":
-            print(f"Executing control_spotify_playback with parameters: {parameters}")
-
-            action = parameters.get("action")
-            if action == "play":
-                self.spotify.start_playback()
-                function_response = "OK"
-            elif action == "pause" or action == "stop":
-                self.spotify.pause_playback()
-                function_response = "OK"
-            elif action == "next":
-                self.spotify.next_track()
-                function_response = "OK"
-            elif action == "previous":
-                self.spotify.previous_track()
-                function_response = "OK"
-            elif action == "setVolume":
-                volume_level = parameters.get("volume_level")
-                if volume_level:
-                    self.spotify.volume(volume_level)
-                    function_response = "OK"
-                else:
-                    function_response = "Volume level not provided."
-            elif action == "mute":
-                self.spotify.volume(0)
-            elif action == "getCurrentTrack":
-                current_playback = self.spotify.current_playback()
-                if current_playback:
-                    artist = current_playback["item"]["artists"][0]["name"]
-                    track = current_playback["item"]["name"]
-                    function_response = f"Currently playing '{track}' by '{artist}'."
-                else:
-                    function_response = "No track playing."
-
-        elif tool_name == "play_song_with_spotify":
-            print(f"Executing play_song_with_spotify with parameters: {parameters}")
-
-            track = parameters.get("track")
-            artist = parameters.get("artist")
-            queue = parameters.get("queue")
-
-            results = self.spotify.search(q=f"{track} {artist}", type="track", limit=1)
-            track = results["tracks"]["items"][0]
-            if track:
-                track_name = track["name"]
-                artist_name = track["artists"][0]["name"]
-                if queue:
-                    self.spotify.add_to_queue(track["uri"])
-                    function_response = (
-                        f"Added '{track_name}' by '{artist_name}' to the queue."
-                    )
-                else:
-                    self.spotify.start_playback(uris=[track["uri"]])
-                    function_response = (
-                        f"Now playing '{track_name}' by '{artist_name}'."
-                    )
+        action = parameters.get("action", None)
+        parameters.pop("action", None)
+        function = getattr(self, action if action else tool_name)
+        function_response = function(**parameters)
 
         return function_response, instant_response
+
+    def get_available_devices(self):
+        devices = [
+            device
+            for device in self.spotify.devices().get("devices")
+            if not device["is_restricted"]
+        ]
+        return devices
+
+    def get_active_devices(self):
+        active_devices = [
+            device
+            for device in self.spotify.devices().get("devices")
+            if device["is_active"]
+        ]
+        return active_devices
+
+    def get_devices(self):
+        active_devices = self.get_active_devices()
+        active_device_names = ", ".join([device["name"] for device in active_devices])
+        available_device_names = ", ".join(
+            [device["name"] for device in self.get_available_devices()]
+        )
+        if active_devices and len(active_devices) > 0:
+            return f"Your available devices are: {available_device_names}. Your active devices are: {active_device_names}."
+        if available_device_names:
+            return f"No active device found but these are the available devices: {available_device_names}"
+
+        return "No devices found. Start Spotify on one of your devices first, then try again."
+
+    def set_active_device(self, device_name: str):
+        if device_name:
+            device = next(
+                (
+                    device
+                    for device in self.get_available_devices()
+                    if device["name"] == device_name
+                ),
+                None,
+            )
+            if device:
+                self.spotify.transfer_playback(device["id"])
+                return "OK"
+            else:
+                return f"Device '{device_name}' not found."
+
+        return "Device name not provided."
+
+    def play(self):
+        self.spotify.start_playback()
+        return "OK"
+
+    def pause(self):
+        self.spotify.pause_playback()
+        return "OK"
+
+    def stop(self):
+        return self.pause()
+
+    def play_previous_track(self):
+        self.spotify.previous_track()
+        return "OK"
+
+    def play_next_track(self):
+        self.spotify.next_track()
+        return "OK"
+
+    def set_volume(self, volume_level: int):
+        if volume_level:
+            self.spotify.volume(volume_level)
+            return "OK"
+
+        return "Volume level not provided."
+
+    def mute(self):
+        self.spotify.volume(0)
+        return "OK"
+
+    def get_current_track(self):
+        current_playback = self.spotify.current_playback()
+        if current_playback:
+            artist = current_playback["item"]["artists"][0]["name"]
+            track = current_playback["item"]["name"]
+            return f"Currently playing '{track}' by '{artist}'."
+
+        return "No track playing."
+
+    def like_song(self):
+        current_playback = self.spotify.current_playback()
+        if current_playback:
+            track_id = current_playback["item"]["id"]
+            self.spotify.current_user_saved_tracks_add([track_id])
+            return "Track saved to 'Your Music' library."
+
+        return "No track playing."
+
+    def play_song_with_spotify(
+        self, track: str = None, artist: str = None, queue: bool = False
+    ):
+        if not track and not artist:
+            return "What song or artist would you like to play?"
+        results = self.spotify.search(q=f"{track} {artist}", type="track", limit=1)
+        track = results["tracks"]["items"][0]
+        if track:
+            track_name = track["name"]
+            artist_name = track["artists"][0]["name"]
+            try:
+                if queue:
+                    self.spotify.add_to_queue(track["uri"])
+                    return f"Added '{track_name}' by '{artist_name}' to the queue."
+                else:
+                    self.spotify.start_playback(uris=[track["uri"]])
+                    return f"Now playing '{track_name}' by '{artist_name}'."
+            except spotipy.SpotifyException as e:
+                if e.reason == "NO_ACTIVE_DEVICE":
+                    return "No active device found. Start Spotify on one of your devices first, then play a song or tell me to activate a device."
+                return f"An error occurred while trying to play the song. Code: {e.code}, Reason: '{e.reason}'"
+
+        return "No track found."
