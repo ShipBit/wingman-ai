@@ -131,9 +131,38 @@ class Spotify(Skill):
                                 },
                                 "queue": {
                                     "type": "boolean",
-                                    "description": "If true, the song will be queued. Otherwise it will be played immediately.",
+                                    "description": "If true, the song will be queued and played later. Otherwise it will be played immediately.",
                                 },
                             },
+                        },
+                    },
+                },
+            ),
+            (
+                "interact_with_spotify_playlists",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "interact_with_spotify_playlists",
+                        "description": "Play a song from a Spotify playlist or add a song to a playlist.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "action": {
+                                    "type": "string",
+                                    "description": "The action to take",
+                                    "enum": ["get_playlists", "play_playlist"],
+                                },
+                                "playlist": {
+                                    "type": "string",
+                                    "description": "The name of the playlist to interact with",
+                                    "enum": [
+                                        playlist["name"]
+                                        for playlist in self.get_user_playlists()
+                                    ],
+                                },
+                            },
+                            "required": ["action"],
                         },
                     },
                 },
@@ -151,6 +180,7 @@ class Spotify(Skill):
             "control_spotify_device",
             "control_spotify_playback",
             "play_song_with_spotify",
+            "interact_with_spotify_playlists",
         ]:
             return function_response, instant_response
 
@@ -165,6 +195,8 @@ class Spotify(Skill):
         function_response = function(**parameters)
 
         return function_response, instant_response
+
+    # HELPERS
 
     def get_available_devices(self):
         devices = [
@@ -181,6 +213,24 @@ class Spotify(Skill):
             if device["is_active"]
         ]
         return active_devices
+
+    def get_user_playlists(self):
+        playlists = self.spotify.current_user_playlists()
+        return playlists["items"]
+
+    def get_playlist_uri(self, playlist_name: str):
+        playlists = self.spotify.current_user_playlists()
+        playlist = next(
+            (
+                playlist
+                for playlist in playlists["items"]
+                if playlist["name"].lower() == playlist_name.lower()
+            ),
+            None,
+        )
+        return playlist["uri"] if playlist else None
+
+    # ACTIONS
 
     def get_devices(self):
         active_devices = self.get_active_devices()
@@ -284,3 +334,22 @@ class Spotify(Skill):
                 return f"An error occurred while trying to play the song. Code: {e.code}, Reason: '{e.reason}'"
 
         return "No track found."
+
+    def get_playlists(self):
+        playlists = self.get_user_playlists()
+        playlist_names = ", ".join([playlist["name"] for playlist in playlists])
+        if playlist_names:
+            return f"Your playlists are: {playlist_names}"
+
+        return "No playlists found."
+
+    def play_playlist(self, playlist: str = None):
+        if not playlist:
+            return "Which playlist would you like to play?"
+
+        playlist_uri = self.get_playlist_uri(playlist)
+        if playlist_uri:
+            self.spotify.start_playback(context_uri=playlist_uri)
+            return f"Playing playlist '{playlist}'."
+
+        return f"Playlist '{playlist}' not found."
