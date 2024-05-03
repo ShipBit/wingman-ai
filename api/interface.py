@@ -453,7 +453,8 @@ class CustomWingmanProperty(BaseModel):
     """A hint for the user, displayed in the UI."""
     required: Optional[bool] = False
     """Marks the property as required in the UI."""
-    type: Optional[CustomPropertyType] = CustomPropertyType.STRING
+    property_type: Optional[CustomPropertyType] = CustomPropertyType.STRING
+    """Determines the type of the property and which controls to render in the UI."""
 
 
 class SkillConfig(CustomWingmanClassConfig):

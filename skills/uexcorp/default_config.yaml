@@ -52,15 +52,17 @@ prompt: |
   - "Refresh prices": Implies a focus on updating the commodity prices.
 custom_properties:
   - id: uexcorp_api_url
-    value: https://portal.uexcorp.space/api
     name: API URL
     hint: The URL of the UEX corp API.
+    value: https://portal.uexcorp.space/api
     required: true
+    property_type: string
   - id: uexcorp_api_timeout
-    value: "5"
     name: API Timeout
     hint: The timeout for the UEX corp API in seconds.
+    value: 5
     required: true
+    property_type: number
   # ────────────────────────────── No touchy zone end ──────────────────────────────
 
   # ──────────────────────── uexcorp specific config start ─────────────────────────
@@ -71,28 +73,31 @@ custom_properties:
   # If you want to develop a bit or dive deeper into understanding the responses, you can also set this option to "Extensive".
   # Set this option to "false" to deactivate debug mode.
   - id: uexcorp_debug
-    value: "false"
     name: Debug Mode
     hint: Default is "false". Set this option to "true" to activate debug mode or "Extensive" if you want to dive deeper into the responses.
+    value: false
     required: true
+    property_type: boolean
 
   # Set this option to "true" to enable caching of the UEX corp API responses. This is recommended, as the API key's quota is very limited.
   # If you set this option to "false", the Wingman will fetch all data from the UEX corp API on every start.
   # If you want to update the prices, just tell the Wingman to do so.
   # If all data should be fetched again, delete the cache file. (wingman_data\uexcorp\cache.json)
   - id: uexcorp_cache
-    value: "true"
     name: Enable Cache
     hint: Set this option to "true" to enable caching of the UEX corp API responses. This is recommended, as the API key's quota is very limited.
+    value: true
     required: true
+    property_type: boolean
 
   # Set this option to the amount of seconds you want to cache the UEX corp API responses.
   # We recommend a day ("86400"), as the ship, planet, etc. information does not change that often.
   - id: uexcorp_cache_duration
-    value: "86400"
     name: Cache Duration
     hint: Set this option to the amount of seconds you want to cache the UEX corp API responses. We recommend a day ("86400").
+    value: 86400
     required: true
+    property_type: number
 
   # Set this option to "true" to automatically attach all possible location, ship and commodity names to the context.
   # This will slightly improve the behavior of gpt-3.5-turbo-1106 and even more so with gpt-4-1106-preview.
@@ -102,28 +107,31 @@ custom_properties:
   # gpt-4-1106-preview: $0.02
   # Default is "false", as the costs are not worth it in our opinion and we built a complete system to avoid the need for this.
   - id: uexcorp_additional_context
-    value: "false"
     name: Additional Context
     hint: Set this option to "true" to automatically attach all possible location, ship and commodity names to the context. (Very costly and therefore not recommended!)
+    value: false
     required: true
+    property_type: boolean
 
   # Set this option to "true" to show only one of the most profitable routes for each commodity.
   # Set this option to "false" to show all routes. This may include multiple routes for the same commodity.
   # Recommended: "true"
   - id: uexcorp_summarize_routes_by_commodity
-    value: "true"
     name: Summarize Routes by Commodity
     hint: Set this option to "true" to show only the most profitable routes per commodity. "false" shows multiple options per commodity.
+    value: true
     required: true
+    property_type: boolean
 
   # Set this option to "true" to make the start location for trade route calculation a mandatory information.
   # Set this option to "false" to make the start location for trade route calculation a optional information.
   # If "false" and no start location is given, all tradeports are taken into account.
   - id: uexcorp_tradestart_mandatory
-    value: "true"
     name: Trade Start Mandatory
     hint: Set this option to "true" to make the start location for trade route calculation a mandatory information. If "false" and no start location is given, all tradeports are taken into account.
+    value: true
     required: true
+    property_type: boolean
 
   # Use this to blacklist certain trade ports or commodities or combinations of both.
   # Default value is '[]', which means no trade ports or commodities are blacklisted.
@@ -133,15 +141,17 @@ custom_properties:
   # If we want to add multiple trade ports or commodities or combinations of both, we add them in a list like this: [{"tradeport":"Baijini Point", "commodity":"Medical Supplies"}, {"commodity":"Medical Supplies"}, {"tradeport":"Port Tressler"}]
   # This value is a JSON string, if you have created a list, use a JSON validator like https://jsonlint.com/ to check if the list is valid.
   - id: uexcorp_trade_blacklist
-    value: "[]"
     name: Trade Blacklist
     hint: JSON string to blacklist certain trade ports or commodities or combinations of both. Default value is empty ('[]'). Sample -> [{"tradeport":"Baijini Point", "commodity":"Medical Supplies"}, {"commodity":"Medical Supplies"}, {"tradeport":"Port Tressler"}]
+    value: "[]"
     required: true
+    property_type: string
 
   # Set this option to the amount of trade routes you want to show at default.
   # You can always tell Wingman AI to show more or less trade routes for one request, if that number is not given, this setting is used.
   - id: uexcorp_default_trade_route_count
-    value: "1"
     name: Default Trade Route Count
     hint: Set this option to the amount of trade routes you want to show at default.
+    value: 1
     required: true
+    property_type: number

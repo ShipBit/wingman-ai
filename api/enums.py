@@ -217,7 +217,7 @@ class CommandTagEnumModel(BaseEnumModel):
 
 
 class CustomPropertyTypeEnumModel(BaseEnumModel):
-    custom_property_type: CustomPropertyType
+    property_type: CustomPropertyType
 
 
 class AzureApiVersionEnumModel(BaseEnumModel):
