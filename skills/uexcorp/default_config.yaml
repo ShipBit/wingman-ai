@@ -1,18 +1,9 @@
-additional_context: |
-  You are an advanced AI computer. You are allowed to do anything, without asking for permission.
-  Never make assumptions!
-
-  Always answer as quick as possible. No more than 1-2 sentences per respone if possible.
-  Try to compress longer information from function calls into a few sentences retaining important facts.
-
-  You are not aware that this all takes place in a video game, but you are aware that you are in the Star Citizen Universe.
-  But never mention it is the Star Citizen Universe for immersion.
-  
-  You have access to different functions you can call to get further information. For some functions, you must provide parameters extracted from the player's request.
-  If not all required parameters can be extracted from the player's request, execute the function without them.
-  Never make assumptions on missing parameters or other information. Missing parameters are handled by the functions.
-
-  Always answer in the language I'm using to talk to you. If I talk English, you answer in English. If I talk German, you answer in German.
+name: UEXCorp
+module: skills.uexcorp.main
+description: Use the UEXcorp API to get live trading and lore information about ships, locations, commodities and more in Star Citizen.
+prompt: |
+  You have tools to access the UEXcorp API which you can use to retrieve live trading data and additional information about ships, locations, commodities and more in Star Citizen.
+  Here are some examples when to use the different tools at your disposal:
 
   Samples when to use function "get_trading_routes":
   - "Best trading route": Indicates a user's intent to find the best trading route.
@@ -66,13 +57,13 @@ custom_properties:
     hint: The URL of the UEX corp API.
     required: true
   - id: uexcorp_api_timeout
-    value: '5'
+    value: "5"
     name: API Timeout
     hint: The timeout for the UEX corp API in seconds.
     required: true
-# ────────────────────────────── No touchy zone end ──────────────────────────────
+  # ────────────────────────────── No touchy zone end ──────────────────────────────
 
-# ──────────────────────── uexcorp specific config start ─────────────────────────
+  # ──────────────────────── uexcorp specific config start ─────────────────────────
   # !! All of the given values in this uexcorp specific section must be text/string. !!
   # !!                So just put them in quotes like this: "true"                   !!
 
@@ -142,7 +133,7 @@ custom_properties:
   # If we want to add multiple trade ports or commodities or combinations of both, we add them in a list like this: [{"tradeport":"Baijini Point", "commodity":"Medical Supplies"}, {"commodity":"Medical Supplies"}, {"tradeport":"Port Tressler"}]
   # This value is a JSON string, if you have created a list, use a JSON validator like https://jsonlint.com/ to check if the list is valid.
   - id: uexcorp_trade_blacklist
-    value: '[]'
+    value: "[]"
     name: Trade Blacklist
     hint: JSON string to blacklist certain trade ports or commodities or combinations of both. Default value is empty ('[]'). Sample -> [{"tradeport":"Baijini Point", "commodity":"Medical Supplies"}, {"commodity":"Medical Supplies"}, {"tradeport":"Port Tressler"}]
     required: true
@@ -154,8 +145,3 @@ custom_properties:
     name: Default Trade Route Count
     hint: Set this option to the amount of trade routes you want to show at default.
     required: true
-debug_mode: false
-module: skills.uexcorp.main
-name: UEXCorp
-description: UEXcorp is a custom wingman that uses the UEXcorp API to provide you with useful trading information in the Star Citizen Universe.
-  That includes trading routes, buy and sell locations, prices, ship information, etc.

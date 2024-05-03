@@ -261,9 +261,9 @@ class ConfigManager:
             "description": "",
             "record_key": "",
             "disabled": False,
-            "openai": {"context": ""},
             "commands": [],
             "skills": [],
+            "prompts": {"backstory": ""},
         }
         validated_config = self.__merge_configs(parsed_config, wingman_config)
         return NewWingmanTemplate(
@@ -749,20 +749,20 @@ class ConfigManager:
         """Merge general settings with a specific wingman's overrides, including commands."""
         # Start with a copy of the wingman's specific config to keep it intact.
         merged = wingman.copy()
-        # Update 'openai', 'features', and 'edge_tts' sections from general config into wingman's config.
         for key in [
+            "prompts",
+            "features",
             "sound",
             "openai",
             "mistral",
             "groq",
             "openrouter",
             "local_llm",
-            "features",
             "edge_tts",
             "elevenlabs",
             "azure",
-            "xvasynth",
             "whispercpp",
+            "xvasynth",
             "wingman_pro",
         ]:
             if key in general:
@@ -779,6 +779,5 @@ class ConfigManager:
         elif "commands" in general:
             # If the wingman config does not have commands, use the general ones
             merged["commands"] = general["commands"]
-        # No else needed; if 'commands' is not in general, we simply don't set it
 
         return WingmanConfig(**merged)

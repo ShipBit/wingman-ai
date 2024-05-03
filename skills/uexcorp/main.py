@@ -1140,9 +1140,9 @@ class UEXCorp(Skill):
         self.cache["search_matches"][checksum] = answer
         return answer
 
-    async def get_additional_context(self) -> str | None:
+    async def get_prompt(self) -> str | None:
         """Return additional context."""
-        additional_context = self.config.additional_context or ""
+        additional_context = self.config.prompt or ""
         additional_context += "\n" + self.dynamic_context
         return additional_context
 

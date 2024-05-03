@@ -244,11 +244,6 @@ class XVASynthTtsConfig(BaseModel):
 
 
 class OpenAiConfig(BaseModel):
-    context: Optional[str] = None
-    """The "context" for the wingman. Here's where you can tell the AI how to behave.
-    This is probably what you want to play around with the most.
-    """
-
     conversation_model: OpenAiModel
     """ The model to use for conversations aka "chit-chat" and for function calls.
     gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
@@ -275,6 +270,14 @@ class OpenAiConfig(BaseModel):
 
     organization: Optional[str] = None
     """If you have an organization key, you can set it here."""
+
+
+class PromptConfig(BaseModel):
+    system_prompt: str
+    """The read-only "context template" for the Wingman. Contains variables that will be replaced by the user (backstory) and/or skills."""
+
+    backstory: Optional[str] = None
+    """The backstory of the Wingman. Edit this to control how your Wingman should behave."""
 
 
 class MistralConfig(BaseModel):
@@ -451,10 +454,12 @@ class CustomWingmanProperty(BaseModel):
     required: Optional[bool] = False
     """Marks the property as required in the UI."""
     type: Optional[CustomPropertyType] = CustomPropertyType.STRING
-    
+
+
 class SkillConfig(CustomWingmanClassConfig):
     description: Optional[str] = None
-    additional_context: Optional[str] = None
+    prompt: Optional[str] = None
+    """An additional prompt that extends the system prompt of the Wingman."""
     commands: Optional[list[CommandConfig]] = None
     custom_properties: Optional[list[CustomWingmanProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
@@ -470,6 +475,7 @@ class SkillBase(BaseModel):
 
 
 class NestedConfig(BaseModel):
+    prompts: PromptConfig
     sound: SoundConfig
     features: FeaturesConfig
     openai: OpenAiConfig
@@ -485,6 +491,7 @@ class NestedConfig(BaseModel):
     wingman_pro: WingmanProConfig
     commands: Optional[list[CommandConfig]] = None
     skills: Optional[list[SkillConfig]] = None
+
 
 class WingmanConfig(NestedConfig):
     def __getitem__(self, item):

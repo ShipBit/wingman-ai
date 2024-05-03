@@ -13,21 +13,22 @@ class Skill:
         self.printr = Printr()
 
     async def validate(self) -> list[WingmanInitializationError]:
-        """Validate the skill configuration."""
+        """Validates the skill configuration."""
         return []
 
     def get_tools(self) -> list[tuple[str, dict]]:
-        """Return a list of tools available in the skill."""
+        """Returns a list of tools available in the skill."""
         return []
 
-    async def get_additional_context(self) -> str | None:
-        """Return additional context. Can be overridden by the skill to add dynamic data to context."""
-        return self.config.additional_context or None
+    async def get_prompt(self) -> str | None:
+        """Returns additional context for this skill. Will be injected into the the system prompt. Can be overridden by the skill to add dynamic data to context."""
+        return self.config.prompt or None
 
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
     ) -> tuple[str, str]:
         """Execute a tool by name with parameters."""
+        pass
 
     async def gpt_call(self, messages, tools: list[dict] = None) -> any:
         return any

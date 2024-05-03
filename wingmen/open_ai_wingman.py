@@ -175,7 +175,7 @@ class OpenAiWingman(Wingman):
                 ]
             )
         return False
-    
+
     async def prepare_skill(self, skill: Skill):
         # prepare the skill and skill tools
         for tool_name, tool in skill.get_tools():
@@ -183,7 +183,6 @@ class OpenAiWingman(Wingman):
             self.skill_tools.append(tool)
 
         skill.gpt_call = self.actual_gpt_call
-
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("openai", errors)
@@ -329,7 +328,9 @@ class OpenAiWingman(Wingman):
 
         return transcript.text
 
-    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str, Skill | None]:
+    async def _get_response_for_transcript(
+        self, transcript: str
+    ) -> tuple[str, str, Skill | None]:
         """Gets the response for a given transcript.
 
         This function interprets the transcript, runs instant commands if triggered,
@@ -616,19 +617,20 @@ class OpenAiWingman(Wingman):
                 return response, True
             return None, True
         return None, False
-    
-    async def _add_context(self, messages):
-        # build context and insert it into the messages
-        context = self.config.openai.context or ""
-        additional_skill_context = ""
-        for skill in self.skills:
-            additional_context = await skill.get_additional_context()
-            additional_skill_context += "\n" + additional_context if additional_context else ""
-        context += additional_skill_context
 
-        if context:
-            messages.insert(0, {"role": "system", "content": context})
-    
+    async def _add_context(self, messages):
+        """build the context and inserts it into the messages"""
+        skill_prompts = ""
+        for skill in self.skills:
+            prompt = await skill.get_prompt()
+            if prompt:
+                skill_prompts += "\n\n" + skill.name + "\n\n" + prompt
+
+        context = self.config.prompts.system_prompt.format(
+            backstory=self.config.prompts.backstory, skills=skill_prompts
+        )
+        messages.insert(0, {"role": "system", "content": context})
+
     async def actual_gpt_call(self, original_messages, tools: list[dict] = None):
         """
         Perform the actual GPT call with the messages provided.
@@ -794,7 +796,7 @@ class OpenAiWingman(Wingman):
         message = summarize_response.choices[0].message
         self.messages.append(message)
         return message.content
-    
+
     async def _actual_summarize_function_call(self, original_messages):
         """
         Perform the actual GPT call with the messages provided.
@@ -886,7 +888,9 @@ class OpenAiWingman(Wingman):
         # Go through the skills and check if the function name matches any of the tools
         if function_name in self.tool_skills:
             skill = self.tool_skills[function_name]
-            function_response, instant_response = await skill.execute_tool(function_name, function_args)
+            function_response, instant_response = await skill.execute_tool(
+                function_name, function_args
+            )
             used_skill = skill
             if instant_response:
                 await self._play_to_user(instant_response)
