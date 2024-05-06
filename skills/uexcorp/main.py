@@ -12,10 +12,11 @@ import time
 from typing import Optional
 from datetime import datetime
 import requests
-from api.enums import LogType, WingmanInitializationErrorType
+from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
+    WingmanConfig,
     WingmanInitializationError,
 )
 from services.file import get_writable_dir
@@ -49,8 +50,15 @@ class UEXCorp(Skill):
         "VNDL": "Vanduul",
     }
 
-    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
-        super().__init__(config=config, settings=settings)
+    def __init__(
+        self,
+        config: SkillConfig,
+        wingman_config: WingmanConfig,
+        settings: SettingsConfig,
+    ) -> None:
+        super().__init__(
+            config=config, wingman_config=wingman_config, settings=settings
+        )
 
         self.data_path = get_writable_dir(path.join("wingmen_data", self.name))
         self.logfile = path.join(self.data_path, "error.log")
@@ -119,9 +127,9 @@ class UEXCorp(Skill):
 
         self.dynamic_context = ""
 
-    def _print_debug(self, message: str | dict, is_extensive: bool = False) -> None:
+    async def _print(self, message: str | dict, is_extensive: bool = False) -> None:
         """
-        Prints a debug message if debug mode is enabled.
+        Prints a debug message if debug mode is enabled. Will be sent to the server terminal, log file and client.
 
         Args:
             message (str | dict): The message to be printed.
@@ -136,8 +144,36 @@ class UEXCorp(Skill):
             return
 
         if self.DEV_MODE or not is_extensive:
-            tag = LogType.INFO if not is_extensive else LogType.WARNING
-            self.printr.print(message, color=tag)
+            await self.printr.print_async(
+                message,
+                color=LogType.INFO if not is_extensive else LogType.WARNING,
+                source=LogSource.WINGMAN,
+                source_name=self.wingman_config.name,
+            )
+
+    def _log(self, message: str | dict, is_extensive: bool = False) -> None:
+        """
+        Prints a debug message (synchronously) only on the server (and in the log file).
+
+        Args:
+            message (str | dict): The message to be printed.
+
+        Returns:
+            None
+        """
+        if not self.settings.debug_mode or (
+            not self.cache_enabled and not self.DEV_MODE
+        ):
+            return
+
+        if self.DEV_MODE or not is_extensive:
+            self.printr.print(
+                message,
+                color=LogType.INFO if not is_extensive else LogType.WARNING,
+                source=LogSource.WINGMAN,
+                source_name=self.wingman_config.name,
+                server_only=True,
+            )
 
     def _get_function_arg_from_cache(
         self, arg_name: str, arg_value: str | int = None
@@ -160,7 +196,7 @@ class UEXCorp(Skill):
         ):
             cached_arg = self.cache["function_args"].get(arg_name)
             if cached_arg is not None:
-                self._print_debug(
+                self._log(
                     f"'{arg_name}' was not given and got overwritten by cache: {cached_arg}"
                 )
                 return cached_arg
@@ -184,13 +220,13 @@ class UEXCorp(Skill):
         old_value = function_args.get(arg_name, "None")
 
         if arg_value is not None:
-            self._print_debug(
+            self._log(
                 f"Set function arg '{arg_name}' to cache. Previous value: {old_value} >> New value: {arg_value}",
                 True,
             )
             function_args[arg_name] = arg_value
         elif arg_name in function_args:
-            self._print_debug(
+            self._log(
                 f"Removing function arg '{arg_name}' from cache. Previous value: {old_value}",
                 True,
             )
@@ -245,7 +281,7 @@ class UEXCorp(Skill):
                 )
 
         try:
-            self._prepare_data()
+            await self._prepare_data()
         except Exception as e:
             errors.append(
                 WingmanInitializationError(
@@ -257,7 +293,7 @@ class UEXCorp(Skill):
 
         return errors
 
-    def _load_data(self, reload: bool = False) -> None:
+    async def _load_data(self, reload: bool = False) -> None:
         """
         Load data for UEX corp wingman.
 
@@ -304,26 +340,30 @@ class UEXCorp(Skill):
                 save_cache = True
 
         if not self.ships:
-            self.ships = self._fetch_uex_data("ships")
+            self.ships = await self._fetch_uex_data("ships")
             self.ships = [ship for ship in self.ships if ship["implemented"] == "1"]
 
         if not self.commodities:
-            self.commodities = self._fetch_uex_data("commodities")
+            self.commodities = await self._fetch_uex_data("commodities")
 
         if not self.systems:
-            self.systems = self._fetch_uex_data("star_systems")
+            self.systems = await self._fetch_uex_data("star_systems")
             self.systems = [
                 system for system in self.systems if system["available"] == 1
             ]
             for system in self.systems:
-                self.tradeports += self._fetch_uex_data(
+                self.tradeports += await self._fetch_uex_data(
                     f"tradeports/system/{system['code']}"
                 )
-                self.cities += self._fetch_uex_data(f"cities/system/{system['code']}")
-                self.satellites += self._fetch_uex_data(
+                self.cities += await self._fetch_uex_data(
+                    f"cities/system/{system['code']}"
+                )
+                self.satellites += await self._fetch_uex_data(
                     f"satellites/system/{system['code']}"
                 )
-                self.planets += self._fetch_uex_data(f"planets/system/{system['code']}")
+                self.planets += await self._fetch_uex_data(
+                    f"planets/system/{system['code']}"
+                )
 
             self.tradeports = [
                 tradeport
@@ -345,7 +385,7 @@ class UEXCorp(Skill):
             if reload:
                 self.tradeports = []
                 for system in self.systems:
-                    self.tradeports += self._fetch_uex_data(
+                    self.tradeports += await self._fetch_uex_data(
                         f"tradeports/system/{system['code']}"
                     )
 
@@ -426,7 +466,7 @@ class UEXCorp(Skill):
         for ship in self.ships:
             ship["hull_trading"] = ship["name"] in ships_for_hull_trading
 
-    def _prepare_data(self) -> None:
+    async def _prepare_data(self) -> None:
         """
         Prepares the wingman for execution by initializing necessary variables and loading data.
 
@@ -439,7 +479,7 @@ class UEXCorp(Skill):
             None
         """
         # self.start_execution_benchmark()
-        self._load_data()
+        await self._load_data()
 
         self.ship_names = [
             self._format_ship_name(ship)
@@ -588,7 +628,7 @@ class UEXCorp(Skill):
         key = self.uexcorp_api_key
         return {"api_key": key}
 
-    def _fetch_uex_data(
+    async def _fetch_uex_data(
         self, endpoint: str, params: Optional[dict[str, any]] = None
     ) -> list[dict[str, any]]:
         """
@@ -612,7 +652,7 @@ class UEXCorp(Skill):
             )
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            self._print_debug(f"Error while retrieving data from {url}: {e}")
+            await self._print(f"Error while retrieving data from {url}: {e}")
             return []
 
         # if self.config.debug_mode:
@@ -620,7 +660,7 @@ class UEXCorp(Skill):
 
         response_json = response.json()
         if "status" not in response_json or response_json["status"] != "ok":
-            self._print_debug(f"Error while retrieving data from {url}")
+            await self._print(f"Error while retrieving data from {url}")
             return []
 
         return response_json.get("data", [])
@@ -958,11 +998,11 @@ class UEXCorp(Skill):
             if tool_name in functions:
                 if self.settings.debug_mode:
                     start = time.perf_counter()
-                self._print_debug(f"Executing function: {tool_name}")
+                await self._print(f"Executing function: {tool_name}")
                 function = getattr(self, "_gpt_call_" + functions[tool_name])
                 function_response = await function(**parameters)
                 if self.settings.debug_mode:
-                    self._print_debug(
+                    await self._print(
                         f"...took {(time.perf_counter() - start):.2f}s", True
                     )
         except Exception as e:
@@ -981,7 +1021,7 @@ class UEXCorp(Skill):
                 "========================================================================================\n"
             )
             file_object.close()
-            self._print_debug(
+            await self._print(
                 f"Error while executing custom function: {tool_name}\nCheck log file for more details."
             )
             function_response = f"Error while executing custom function: {tool_name}"
@@ -1007,30 +1047,28 @@ class UEXCorp(Skill):
         if search is None or search == "None":
             return None
 
-        self._print_debug(f"Searching for closest match to '{search}' in list.", True)
+        self._log(f"Searching for closest match to '{search}' in list.", True)
 
         checksum = f"{hash(frozenset(lst))}-{hash(search)}"
         if checksum in self.cache["search_matches"]:
             match = self.cache["search_matches"][checksum]
-            self._print_debug(
-                f"Found closest match to '{search}' in cache: '{match}'", True
-            )
+            self._log(f"Found closest match to '{search}' in cache: '{match}'", True)
             return match
 
         if search in lst:
-            self._print_debug(f"Found exact match to '{search}' in list.", True)
+            self._log(f"Found exact match to '{search}' in list.", True)
             return search
 
         # make a list of possible matches
         closest_matches = difflib.get_close_matches(search, lst, n=10, cutoff=0.4)
         closest_matches.extend(item for item in lst if search.lower() in item.lower())
-        self._print_debug(
+        self._log(
             f"Making a list for closest matches for search term '{search}': {', '.join(closest_matches)}",
             True,
         )
 
         if not closest_matches:
-            self._print_debug(
+            self._log(
                 f"No closest match found for '{search}' in list. Returning None.", True
             )
             return None
@@ -1067,29 +1105,27 @@ class UEXCorp(Skill):
                 search, closest_matches, n=1, cutoff=0.9
             )
             if dumb_match:
-                self._print_debug(
+                self._log(
                     f"OpenAI did not answer for '{search}'. Returning dumb match '{dumb_match}'",
                     True,
                 )
                 return dumb_match[0]
             else:
-                self._print_debug(
+                self._log(
                     f"OpenAI did not answer for '{search}' and dumb match not possible. Returning None.",
                     True,
                 )
                 return None
 
-        self._print_debug(f"OpenAI answered: '{answer}'", True)
+        self._log(f"OpenAI answered: '{answer}'", True)
 
         if answer == "None" or answer not in closest_matches:
-            self._print_debug(
+            self._log(
                 f"No closest match found for '{search}' in list. Returning None.", True
             )
             return None
 
-        self._print_debug(
-            f"Found closest match to '{search}' in list: '{answer}'", True
-        )
+        self._log(f"Found closest match to '{search}' in list: '{answer}'", True)
         self._add_context(f"\n\nInstead of '{search}', you should use '{answer}'.")
         self.cache["search_matches"][checksum] = answer
         return answer
@@ -1108,7 +1144,7 @@ class UEXCorp(Skill):
             str: A message indicating that the cached function's argument values have been printed to the console.
         """
         if self.settings.debug_mode:
-            self._print_debug(self.cache["function_args"])
+            self._log(self.cache["function_args"])
             return "Please check the console for the cached function's argument values."
         return ""
 
@@ -1119,12 +1155,12 @@ class UEXCorp(Skill):
         Returns:
             str: A message indicating that the current commodity prices have been reloaded.
         """
-        self._load_data(reload=True)
+        await self._load_data(reload=True)
         # clear cached data
         for key in self.cache:
             self.cache[key] = {}
 
-        self._print_debug("Reloaded current commodity prices from UEX corp.", True)
+        self._log("Reloaded current commodity prices from UEX corp.", True)
         return "Reloaded current commodity prices from UEX corp."
 
     async def _gpt_call_get_commodity_information(
@@ -1139,14 +1175,14 @@ class UEXCorp(Skill):
         Returns:
             str: The information about the commodity in JSON format, or an error message if the commodity is not found.
         """
-        self._print_debug(f"Parameters: Commodity: {commodity_name}", True)
+        self._log(f"Parameters: Commodity: {commodity_name}", True)
 
         commodity_name = self._get_function_arg_from_cache(
             "commodity_name", commodity_name
         )
 
         if commodity_name is None:
-            self._print_debug("No commodity given. Ask for a commodity.", True)
+            self._log("No commodity given. Ask for a commodity.", True)
             return "No commodity given. Ask for a commodity."
 
         misunderstood = []
@@ -1158,11 +1194,11 @@ class UEXCorp(Skill):
         else:
             commodity_name = closest_match
 
-        self._print_debug(f"Interpreted Parameters: Commodity: {commodity_name}", True)
+        self._log(f"Interpreted Parameters: Commodity: {commodity_name}", True)
 
         if misunderstood:
             misunderstood_str = ", ".join(misunderstood)
-            self._print_debug(
+            self._log(
                 f"These given parameters do not exist in game. Exactly ask for clarification of these values: {misunderstood_str}",
                 True,
             )
@@ -1171,7 +1207,7 @@ class UEXCorp(Skill):
         commodity = self._get_commodity_by_name(commodity_name)
         if commodity is not None:
             output_commodity = self._get_converted_commodity_for_output(commodity)
-            self._print_debug(output_commodity, True)
+            self._log(output_commodity, True)
             return json.dumps(output_commodity)
 
     async def _gpt_call_get_ship_information(self, ship_name: str = None) -> str:
@@ -1185,12 +1221,12 @@ class UEXCorp(Skill):
             str: The ship information or an error message.
 
         """
-        self._print_debug(f"Parameters: Ship: {ship_name}", True)
+        self._log(f"Parameters: Ship: {ship_name}", True)
 
         ship_name = self._get_function_arg_from_cache("ship_name", ship_name)
 
         if ship_name is None:
-            self._print_debug("No ship given. Ask for a ship. Dont say sorry.", True)
+            self._log("No ship given. Ask for a ship. Dont say sorry.", True)
             return "No ship given. Ask for a ship. Dont say sorry."
 
         misunderstood = []
@@ -1200,11 +1236,11 @@ class UEXCorp(Skill):
         else:
             ship_name = closest_match
 
-        self._print_debug(f"Interpreted Parameters: Ship: {ship_name}", True)
+        self._log(f"Interpreted Parameters: Ship: {ship_name}", True)
 
         if misunderstood:
             misunderstood_str = ", ".join(misunderstood)
-            self._print_debug(
+            self._log(
                 f"These given parameters do not exist in game. Exactly ask for clarification of these values: {misunderstood_str}",
                 True,
             )
@@ -1213,7 +1249,7 @@ class UEXCorp(Skill):
         ship = self._get_ship_by_name(ship_name)
         if ship is not None:
             output_ship = self._get_converted_ship_for_output(ship)
-            self._print_debug(output_ship, True)
+            self._log(output_ship, True)
             return json.dumps(output_ship)
 
     async def _gpt_call_get_ship_comparison(self, ship_names: list[str] = None) -> str:
@@ -1226,10 +1262,10 @@ class UEXCorp(Skill):
         Returns:
             str: The ship information or an error message.
         """
-        self._print_debug(f"Parameters: Ships: {', '.join(ship_names)}", True)
+        self._log(f"Parameters: Ships: {', '.join(ship_names)}", True)
 
         if ship_names is None or not ship_names:
-            self._print_debug("No ship given. Ask for a ship. Dont say sorry.", True)
+            self._log("No ship given. Ask for a ship. Dont say sorry.", True)
             return "No ship given. Ask for a ship. Dont say sorry."
 
         misunderstood = []
@@ -1242,12 +1278,10 @@ class UEXCorp(Skill):
                 ship_name = closest_match
                 ships.append(self._get_ship_by_name(ship_name))
 
-        self._print_debug(
-            f"Interpreted Parameters: Ships: {', '.join(ship_names)}", True
-        )
+        self._log(f"Interpreted Parameters: Ships: {', '.join(ship_names)}", True)
 
         if misunderstood:
-            self._print_debug(
+            self._log(
                 f"These ship names do not exist in game. Exactly ask for clarification of these ships: {', '.join(misunderstood)}",
                 True,
             )
@@ -1263,7 +1297,7 @@ class UEXCorp(Skill):
             "Point out differences between these ships but keep it short, like 4-5 sentences, and dont mention something both cant do, like getting rented:\n"
             + json.dumps(output)
         )
-        self._print_debug(output, True)
+        self._log(output, True)
         return output
 
     async def _gpt_call_get_location_information(
@@ -1278,14 +1312,14 @@ class UEXCorp(Skill):
         Returns:
             str: The information about the location in JSON format, or an error message if the location is not found.
         """
-        self._print_debug(f"Parameters: Location: {location_name}", True)
+        self._log(f"Parameters: Location: {location_name}", True)
 
         location_name = self._get_function_arg_from_cache(
             "location_name", location_name
         )
 
         if location_name is None:
-            self._print_debug("No location given. Ask for a location.", True)
+            self._log("No location given. Ask for a location.", True)
             return "No location given. Ask for a location."
 
         misunderstood = []
@@ -1297,11 +1331,11 @@ class UEXCorp(Skill):
         else:
             location_name = closest_match
 
-        self._print_debug(f"Interpreted Parameters: Location: {location_name}", True)
+        self._log(f"Interpreted Parameters: Location: {location_name}", True)
 
         if misunderstood:
             misunderstood_str = ", ".join(misunderstood)
-            self._print_debug(
+            self._log(
                 f"These given parameters do not exist in game. Exactly ask for clarification of these values: {misunderstood_str}",
                 True,
             )
@@ -1311,27 +1345,27 @@ class UEXCorp(Skill):
         tradeport = self._get_tradeport_by_name(location_name)
         if tradeport is not None:
             output = self._get_converted_tradeport_for_output(tradeport)
-            self._print_debug(output, True)
+            self._log(output, True)
             return json.dumps(output)
         city = self._get_city_by_name(location_name)
         if city is not None:
             output = self._get_converted_city_for_output(city)
-            self._print_debug(output, True)
+            self._log(output, True)
             return json.dumps(output)
         satellite = self._get_satellite_by_name(location_name)
         if satellite is not None:
             output = self._get_converted_satellite_for_output(satellite)
-            self._print_debug(output, True)
+            self._log(output, True)
             return json.dumps(output)
         planet = self._get_planet_by_name(location_name)
         if planet is not None:
             output = self._get_converted_planet_for_output(planet)
-            self._print_debug(output, True)
+            self._log(output, True)
             return json.dumps(output)
         system = self._get_system_by_name(location_name)
         if system is not None:
             output = self._get_converted_system_for_output(system)
-            self._print_debug(output, True)
+            self._log(output, True)
             return json.dumps(output)
 
     def _get_converted_tradeport_for_output(
@@ -1782,7 +1816,7 @@ class UEXCorp(Skill):
         commodity_amount: int = 1,
         maximal_number_of_locations: int = 5,
     ) -> str:
-        self._print_debug(
+        await self._print(
             f"Given Parameters: Commodity: {commodity_name}, Ship Name: {ship_name}, Current Position: {position_name}, Amount: {commodity_amount}, Maximal Number of Locations: {maximal_number_of_locations}",
             True,
         )
@@ -1793,7 +1827,7 @@ class UEXCorp(Skill):
         ship_name = self._get_function_arg_from_cache("ship_name", ship_name)
 
         if commodity_name is None:
-            self._print_debug("No commodity given. Ask for a commodity.", True)
+            self._log("No commodity given. Ask for a commodity.", True)
             return "No commodity given. Ask for a commodity."
 
         misunderstood = []
@@ -1814,13 +1848,13 @@ class UEXCorp(Skill):
         ship_name = parameters["ship_name"][0]
         position_name = parameters["position_name"][0]
 
-        self._print_debug(
+        await self._print(
             f"Interpreted Parameters: Commodity: {commodity_name}, Ship Name: {ship_name}, Position: {position_name}, Amount: {commodity_amount}, Maximal Number of Locations: {maximal_number_of_locations}",
             True,
         )
 
         if misunderstood:
-            self._print_debug(
+            self._log(
                 "These given parameters do not exist in game. Exactly ask for clarification of these values: "
                 + ", ".join(misunderstood),
                 True,
@@ -1864,7 +1898,7 @@ class UEXCorp(Skill):
                 for tradeport in tradeports
             )
 
-        self._print_debug("\n".join(messages), True)
+        self._log("\n".join(messages), True)
         return "\n".join(messages)
 
     async def _gpt_call_get_locations_to_buy_from(
@@ -1875,7 +1909,7 @@ class UEXCorp(Skill):
         commodity_amount: int = 1,
         maximal_number_of_locations: int = 5,
     ) -> str:
-        self._print_debug(
+        await self._print(
             f"Given Parameters: Commodity: {commodity_name}, Ship Name: {ship_name}, Current Position: {position_name}, Amount: {commodity_amount}, Maximal Number of Locations: {maximal_number_of_locations}",
             True,
         )
@@ -1886,7 +1920,7 @@ class UEXCorp(Skill):
         ship_name = self._get_function_arg_from_cache("ship_name", ship_name)
 
         if commodity_name is None:
-            self._print_debug("No commodity given. Ask for a commodity.", True)
+            self._log("No commodity given. Ask for a commodity.", True)
             return "No commodity given. Ask for a commodity."
 
         misunderstood = []
@@ -1907,13 +1941,13 @@ class UEXCorp(Skill):
         position_name = parameters["location_name"][0]
         commodity_name = parameters["commodity_name"][0]
 
-        self._print_debug(
+        await self._print(
             f"Interpreted Parameters: Commodity: {commodity_name}, Ship Name: {ship_name}, Position: {position_name}, Amount: {commodity_amount}, Maximal Number of Locations: {maximal_number_of_locations}",
             True,
         )
 
         if misunderstood:
-            self._print_debug(
+            self._log(
                 "These given parameters do not exist in game. Exactly ask for clarification of these values: "
                 + ", ".join(misunderstood),
                 True,
@@ -1956,7 +1990,7 @@ class UEXCorp(Skill):
                 for tradeport in tradeports
             )
 
-        self._print_debug("\n".join(messages), True)
+        self._log("\n".join(messages), True)
         return "\n".join(messages)
 
     def _get_data_location_sellprice(self, tradeport, commodity, ship=None, amount=1):
@@ -2025,7 +2059,7 @@ class UEXCorp(Skill):
         # https://starmap.tk/api/v2/oc/
         # https://starmap.tk/api/v2/pois/
 
-        self._print_debug(
+        await self._print(
             f"Parameters: Ship: {ship_name}, Position Start: {position_start_name}, Position End: {position_end_name}, Commodity Name: {commodity_name}, Money: {money_to_spend} aUEC, free_cargo_space: {free_cargo_space} SCU, Maximal Number of Routes: {maximal_number_of_routes}, Illegal Allowed: {illegal_commodities_allowed}",
             True,
         )
@@ -2078,7 +2112,7 @@ class UEXCorp(Skill):
         if money_to_spend is not None:
             self._set_function_arg_to_cache("money", money_to_spend)
 
-        self._print_debug(
+        await self._print(
             f"Interpreted Parameters: Ship: {ship_name}, Position Start: {position_start_name}, Position End: {position_end_name}, Commodity Name: {commodity_name}, Money: {money_to_spend} aUEC, free_cargo_space: {free_cargo_space} SCU, Maximal Number of Routes: {maximal_number_of_routes}, Illegal Allowed: {illegal_commodities_allowed}",
             True,
         )
@@ -2096,7 +2130,7 @@ class UEXCorp(Skill):
                     f"These given parameters were misunderstood: {misunderstood_str}"
                 )
 
-            self._print_debug(answer, True)
+            self._log(answer, True)
             return answer
 
         # set variables
@@ -2240,13 +2274,13 @@ class UEXCorp(Skill):
                 + json.dumps(trading_routes)
             )
 
-            self._print_debug(message, True)
+            self._log(message, True)
             return message
         else:
             return_string = "No trading routes found."
             if len(errors) > 0:
                 return_string += "\nPossible errors are:\n- " + "\n- ".join(errors)
-            self._print_debug(return_string, True)
+            await self._print(return_string, True)
             return return_string
 
     def _get_trading_route(
