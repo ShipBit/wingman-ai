@@ -442,6 +442,11 @@ class CustomWingmanClassConfig(BaseModel):
     """The name of your class within your file/module."""
 
 
+class LabelValuePair(BaseModel):
+    label: str
+    value: str | int | float | bool
+
+
 class CustomWingmanProperty(BaseModel):
     id: str
     """The name of the property. Has to be unique"""
@@ -455,6 +460,8 @@ class CustomWingmanProperty(BaseModel):
     """Marks the property as required in the UI."""
     property_type: Optional[CustomPropertyType] = CustomPropertyType.STRING
     """Determines the type of the property and which controls to render in the UI."""
+    options: Optional[list[LabelValuePair]] = None
+    """If property_type is set to 'single_select', you can provide options here."""
 
 
 class SkillConfig(CustomWingmanClassConfig):

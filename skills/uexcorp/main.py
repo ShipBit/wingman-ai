@@ -42,19 +42,6 @@ class UEXCorp(Skill):
         "VNDL": "Vanduul",
     }
 
-    CUSTOMCONFIG = {
-        "uexcorp_api_url": {"type": "str", "values": []},
-        "uexcorp_api_timeout": {"type": "int", "values": []},
-        "uexcorp_debug": {"type": "auto", "values": ["true", "false", "Extensive"]},
-        "uexcorp_cache": {"type": "bool", "values": []},
-        "uexcorp_cache_duration": {"type": "int", "values": []},
-        "uexcorp_additional_context": {"type": "bool", "values": []},
-        "uexcorp_summarize_routes_by_commodity": {"type": "bool", "values": []},
-        "uexcorp_tradestart_mandatory": {"type": "bool", "values": []},
-        "uexcorp_trade_blacklist": {"type": "json", "values": []},
-        "uexcorp_default_trade_route_count": {"type": "int", "values": []},
-    }
-
     def __init__(self, config: WingmanConfig) -> None:
         super().__init__(config=config)
 
@@ -66,17 +53,17 @@ class UEXCorp(Skill):
         self.uexcorp_version = "v10"
 
         # init of config options
-        self.uexcorp_api_url = None
-        self.uexcorp_api_key = None
-        self.uexcorp_api_timeout = None
-        self.uexcorp_debug = None
-        self.uexcorp_cache = None
-        self.uexcorp_cache_duration = None
-        self.uexcorp_additional_context = None
-        self.uexcorp_summarize_routes_by_commodity = None
-        self.uexcorp_tradestart_mandatory = None
+        self.uexcorp_api_url: str = None
+        self.uexcorp_api_key: str = None
+        self.uexcorp_api_timeout: int = None
+        self.uexcorp_debug: str = None
+        self.uexcorp_cache: bool = None
+        self.uexcorp_cache_duration: int = None
+        self.uexcorp_additional_context: bool = None
+        self.uexcorp_summarize_routes_by_commodity: bool = None
+        self.uexcorp_tradestart_mandatory: bool = None
         self.uexcorp_trade_blacklist = []
-        self.uexcorp_default_trade_route_count = None
+        self.uexcorp_default_trade_route_count: int = None
 
         # init of data lists
         self.ships = []
@@ -137,7 +124,7 @@ class UEXCorp(Skill):
         Returns:
             None
         """
-        if not self.uexcorp_debug or (
+        if self.uexcorp_debug == "off" or (
             not self.cache_enabled and self.uexcorp_debug != "Extensive"
         ):
             return
@@ -209,51 +196,50 @@ class UEXCorp(Skill):
         self.uexcorp_api_key = await self.retrieve_secret(
             "uexcorp", errors, "You can get one here: https://uexcorp.space/api.html"
         )
+        self.uexcorp_api_url = self.retrieve_custom_property_value(
+            "uexcorp_api_url", errors
+        )
+        self.uexcorp_api_timeout = self.retrieve_custom_property_value(
+            "uexcorp_api_timeout", errors
+        )
+        self.uexcorp_debug = self.retrieve_custom_property_value(
+            "uexcorp_debug", errors
+        )
+        self.uexcorp_cache = self.retrieve_custom_property_value(
+            "uexcorp_cache", errors
+        )
+        self.uexcorp_cache_duration = self.retrieve_custom_property_value(
+            "uexcorp_cache_duration", errors
+        )
+        self.uexcorp_additional_context = self.retrieve_custom_property_value(
+            "uexcorp_additional_context", errors
+        )
+        self.uexcorp_summarize_routes_by_commodity = (
+            self.retrieve_custom_property_value(
+                "uexcorp_summarize_routes_by_commodity", errors
+            )
+        )
+        self.uexcorp_tradestart_mandatory = self.retrieve_custom_property_value(
+            "uexcorp_tradestart_mandatory", errors
+        )
+        self.uexcorp_default_trade_route_count = self.retrieve_custom_property_value(
+            "uexcorp_default_trade_route_count", errors
+        )
 
-        for key, settings in self.CUSTOMCONFIG.items():
-            typesettings = settings["type"]
-            valueoptions = settings["values"]
-
-            value = self.retrieve_custom_property_value(key, errors)
-            if valueoptions and not value in valueoptions:
+        trade_backlist_str: str = self.retrieve_custom_property_value(
+            "uexcorp_trade_blacklist", errors
+        )
+        if trade_backlist_str:
+            try:
+                self.uexcorp_trade_blacklist = json.loads(trade_backlist_str)
+            except json.decoder.JSONDecodeError:
                 errors.append(
                     WingmanInitializationError(
                         wingman_name=self.name,
-                        message=f"Invalid custom property '{key}' in config. Possible values: {', '.join(valueoptions)}",
+                        message="Invalid custom property 'uexcorp_trade_blacklist' in config. Value must be a valid JSON string.",
                         error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                     )
                 )
-            elif typesettings == "int":
-                try:
-                    int(value)
-                except ValueError:
-                    errors.append(
-                        WingmanInitializationError(
-                            wingman_name=self.name,
-                            message=f"Invalid custom property '{key}' in config. Value must be convertable to a number.",
-                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                        )
-                    )
-            elif typesettings == "bool":
-                if value not in ["true", "false"]:
-                    errors.append(
-                        WingmanInitializationError(
-                            wingman_name=self.name,
-                            message=f"Invalid custom property '{key}' in config. Value must be 'true' or 'false'.",
-                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                        )
-                    )
-            elif typesettings == "json":
-                try:
-                    json.loads(value)
-                except json.decoder.JSONDecodeError:
-                    errors.append(
-                        WingmanInitializationError(
-                            wingman_name=self.name,
-                            message=f"Invalid custom property '{key}' in config. Value must be a valid JSON string.",
-                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                        )
-                    )
 
         try:
             self._prepare_data()
@@ -449,40 +435,8 @@ class UEXCorp(Skill):
         Returns:
             None
         """
-
-        for key, settings in self.CUSTOMCONFIG.items():
-            typesettings = settings["type"]
-            # valueoptions = settings["values"]
-            value = next(
-                (
-                    prop.value
-                    for prop in self.config.custom_properties
-                    if prop.id == key
-                ),
-                None,
-            )
-
-            if typesettings == "auto":
-                try:
-                    int(value)
-                    typesettings = "int"
-                except ValueError:
-                    if value == "true" or value == "false":
-                        typesettings = "bool"
-                    else:
-                        typesettings = "str"
-
-            if typesettings == "bool":
-                value = value == "true"
-            elif typesettings == "int":
-                value = int(value)
-            elif typesettings == "json":
-                value = json.loads(value)
-
-            setattr(self, key, value)
-
-        if not self.uexcorp_debug and self.config.debug_mode:
-            self.uexcorp_debug = True
+        if self.uexcorp_debug == "off" and self.config.debug_mode:
+            self.uexcorp_debug = "on"
 
         # self.start_execution_benchmark()
         self._load_data()
@@ -1002,12 +956,12 @@ class UEXCorp(Skill):
 
         try:
             if tool_name in functions:
-                if self.uexcorp_debug:
+                if self.uexcorp_debug != "off":
                     start = time.perf_counter()
                 self._print_debug(f"Executing function: {tool_name}")
                 function = getattr(self, "_gpt_call_" + functions[tool_name])
                 function_response = await function(**parameters)
-                if self.uexcorp_debug:
+                if self.uexcorp_debug != "off":
                     self._print_debug(
                         f"...took {(time.perf_counter() - start):.2f}s", True
                     )
@@ -1153,7 +1107,7 @@ class UEXCorp(Skill):
         Returns:
             str: A message indicating that the cached function's argument values have been printed to the console.
         """
-        if self.uexcorp_debug:
+        if self.uexcorp_debug != "off":
             self._print_debug(self.cache["function_args"])
             return "Please check the console for the cached function's argument values."
         return ""

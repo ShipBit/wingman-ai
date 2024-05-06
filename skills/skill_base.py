@@ -69,7 +69,7 @@ class Skill:
             (prop for prop in self.config.custom_properties if prop.id == property_id),
             None,
         )
-        if not p or (p.required and not p.value):
+        if p is None or (p.required and p.value is None):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.name,

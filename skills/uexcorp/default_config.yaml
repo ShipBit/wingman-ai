@@ -75,9 +75,16 @@ custom_properties:
   - id: uexcorp_debug
     name: Debug Mode
     hint: Default is "false". Set this option to "true" to activate debug mode or "Extensive" if you want to dive deeper into the responses.
-    value: false
+    value: "off"
     required: true
-    property_type: boolean
+    property_type: single_select
+    options:
+      - value: "off"
+        label: "off"
+      - value: "on"
+        label: "on"
+      - value: "Extensive"
+        label: "Extensive"
 
   # Set this option to "true" to enable caching of the UEX corp API responses. This is recommended, as the API key's quota is very limited.
   # If you set this option to "false", the Wingman will fetch all data from the UEX corp API on every start.

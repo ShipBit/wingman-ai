@@ -45,6 +45,7 @@ class CustomPropertyType(Enum):
     STRING = "string"
     NUMBER = "number"
     BOOLEAN = "boolean"
+    SINGLE_SELECT = "single_select"
 
 
 class AzureApiVersion(Enum):
