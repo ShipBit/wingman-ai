@@ -200,8 +200,6 @@ class Spotify(Skill):
             await self.printr.print_async(
                 f"Spotify: Executing {tool_name} with parameters: {parameters}",
                 color=LogType.INFO,
-                source=LogSource.WINGMAN,
-                source_name=self.wingman_config.name,
             )
 
         action = parameters.get("action", None)

@@ -129,8 +129,6 @@ class ControlWindows(Skill):
                 await self.printr.print_async(
                     f"Executing control_windows_functions with parameters: {parameters}",
                     color=LogType.INFO,
-                    source=LogSource.WINGMAN,
-                    source_name=self.wingman_config.name,
                 )
 
             parameter = parameters.get("parameter")

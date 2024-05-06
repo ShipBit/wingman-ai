@@ -91,8 +91,6 @@ class StarHead(Skill):
             await self.printr.print_async(
                 f"Retrieving {url}",
                 color=LogType.INFO,
-                source=LogSource.WINGMAN,
-                source_name=self.wingman_config.name,
             )
 
         response = requests.get(

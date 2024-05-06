@@ -101,10 +101,7 @@ class Skill:
             execution_stop = time.perf_counter()
             elapsed_seconds = execution_stop - self.execution_start
             await self.printr.print_async(
-                f"...took {elapsed_seconds:.2f}s",
-                color=LogType.INFO,
-                source=LogSource.WINGMAN,
-                source_name=self.wingman_config.name,
+                f"...took {elapsed_seconds:.2f}s", color=LogType.INFO
             )
         if reset_timer:
             self.start_execution_benchmark()

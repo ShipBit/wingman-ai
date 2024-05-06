@@ -147,8 +147,6 @@ class UEXCorp(Skill):
             await self.printr.print_async(
                 message,
                 color=LogType.INFO if not is_extensive else LogType.WARNING,
-                source=LogSource.WINGMAN,
-                source_name=self.wingman_config.name,
             )
 
     def _log(self, message: str | dict, is_extensive: bool = False) -> None:
@@ -170,8 +168,6 @@ class UEXCorp(Skill):
             self.printr.print(
                 message,
                 color=LogType.INFO if not is_extensive else LogType.WARNING,
-                source=LogSource.WINGMAN,
-                source_name=self.wingman_config.name,
                 server_only=True,
             )
 
