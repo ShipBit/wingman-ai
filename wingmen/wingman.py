@@ -145,7 +145,9 @@ class Wingman:
         for skill_config in skills_config:
             try:
                 skill = ModuleManager.load_skill(
-                    config=skill_config, settings=self.settings
+                    config=skill_config,
+                    wingman_config=self.config,
+                    settings=self.settings,
                 )
                 if skill:
                     validation_errors = await skill.validate()

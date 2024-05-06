@@ -7,8 +7,15 @@ from services.printr import Printr
 
 class Spotify(Skill):
 
-    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
-        super().__init__(config=config, settings=settings)
+    def __init__(
+        self,
+        config: SkillConfig,
+        wingman_config: WingmanConfig,
+        settings: SettingsConfig,
+    ) -> None:
+        super().__init__(
+            config=config, wingman_config=wingman_config, settings=settings
+        )
         self.spotify: spotipy.Spotify = None
         self.available_devices = []
         self.printr = Printr()

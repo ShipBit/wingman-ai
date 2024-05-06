@@ -2,14 +2,26 @@ import json
 from typing import Optional
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
-from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from api.interface import (
+    SettingsConfig,
+    SkillConfig,
+    WingmanConfig,
+    WingmanInitializationError,
+)
 from skills.skill_base import Skill
 
 
 class StarHead(Skill):
 
-    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
-        super().__init__(config=config, settings=settings)
+    def __init__(
+        self,
+        config: SkillConfig,
+        wingman_config: WingmanConfig,
+        settings: SettingsConfig,
+    ) -> None:
+        super().__init__(
+            config=config, wingman_config=wingman_config, settings=settings
+        )
 
         # config entry existence not validated yet. Assign later when checked!
         self.starhead_url = ""

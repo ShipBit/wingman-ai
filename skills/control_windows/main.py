@@ -5,6 +5,7 @@ import pygetwindow as gw
 from api.interface import (
     SettingsConfig,
     SkillConfig,
+    WingmanConfig,
     WingmanInitializationError,
 )
 from skills.skill_base import Skill
@@ -20,8 +21,15 @@ class ControlWindows(Skill):
         ),
     ]
 
-    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
-        super().__init__(config=config, settings=settings)
+    def __init__(
+        self,
+        config: SkillConfig,
+        wingman_config: WingmanConfig,
+        settings: SettingsConfig,
+    ) -> None:
+        super().__init__(
+            config=config, wingman_config=wingman_config, settings=settings
+        )
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
