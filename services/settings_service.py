@@ -54,6 +54,12 @@ class SettingsService:
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/settings/debug-mode",
+            endpoint=self.set_debug_mode,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/settings/wingman-pro",
             endpoint=self.set_wingman_pro_settings,
             tags=tags,
@@ -299,6 +305,17 @@ class SettingsService:
         if self.config_manager.save_settings_config():
             self.printr.print(
                 "Mute key saved.",
+                toast=ToastType.NORMAL,
+                color=LogType.POSITIVE,
+            )
+
+    # POST /settings/debug-mode
+    def set_debug_mode(self, debug_mode: bool):
+        self.config_manager.settings_config.debug_mode = debug_mode
+
+        if self.config_manager.save_settings_config():
+            self.printr.print(
+                "Debug Mode saved.",
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
             )

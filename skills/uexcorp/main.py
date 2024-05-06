@@ -13,12 +13,19 @@ from typing import Optional
 from datetime import datetime
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
-from api.interface import WingmanConfig, WingmanInitializationError
+from api.interface import (
+    SettingsConfig,
+    SkillConfig,
+    WingmanInitializationError,
+)
 from services.file import get_writable_dir
 from skills.skill_base import Skill
 
 
 class UEXCorp(Skill):
+
+    # enable for verbose logging
+    DEV_MODE = False
 
     # TODO: retrieve this from an API
     MANUFACTURERS = {
@@ -42,8 +49,8 @@ class UEXCorp(Skill):
         "VNDL": "Vanduul",
     }
 
-    def __init__(self, config: WingmanConfig) -> None:
-        super().__init__(config=config)
+    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
+        super().__init__(config=config, settings=settings)
 
         self.data_path = get_writable_dir(path.join("wingmen_data", self.name))
         self.logfile = path.join(self.data_path, "error.log")
@@ -56,7 +63,6 @@ class UEXCorp(Skill):
         self.uexcorp_api_url: str = None
         self.uexcorp_api_key: str = None
         self.uexcorp_api_timeout: int = None
-        self.uexcorp_debug: str = None
         self.uexcorp_cache: bool = None
         self.uexcorp_cache_duration: int = None
         self.uexcorp_additional_context: bool = None
@@ -124,12 +130,12 @@ class UEXCorp(Skill):
         Returns:
             None
         """
-        if self.uexcorp_debug == "off" or (
-            not self.cache_enabled and self.uexcorp_debug != "Extensive"
+        if not self.settings.debug_mode or (
+            not self.cache_enabled and not self.DEV_MODE
         ):
             return
 
-        if self.uexcorp_debug == "Extensive" or not is_extensive:
+        if self.DEV_MODE or not is_extensive:
             tag = LogType.INFO if not is_extensive else LogType.WARNING
             self.printr.print(message, color=tag)
 
@@ -201,9 +207,6 @@ class UEXCorp(Skill):
         )
         self.uexcorp_api_timeout = self.retrieve_custom_property_value(
             "uexcorp_api_timeout", errors
-        )
-        self.uexcorp_debug = self.retrieve_custom_property_value(
-            "uexcorp_debug", errors
         )
         self.uexcorp_cache = self.retrieve_custom_property_value(
             "uexcorp_cache", errors
@@ -435,9 +438,6 @@ class UEXCorp(Skill):
         Returns:
             None
         """
-        if self.uexcorp_debug == "off" and self.config.debug_mode:
-            self.uexcorp_debug = "on"
-
         # self.start_execution_benchmark()
         self._load_data()
 
@@ -956,12 +956,12 @@ class UEXCorp(Skill):
 
         try:
             if tool_name in functions:
-                if self.uexcorp_debug != "off":
+                if self.settings.debug_mode:
                     start = time.perf_counter()
                 self._print_debug(f"Executing function: {tool_name}")
                 function = getattr(self, "_gpt_call_" + functions[tool_name])
                 function_response = await function(**parameters)
-                if self.uexcorp_debug != "off":
+                if self.settings.debug_mode:
                     self._print_debug(
                         f"...took {(time.perf_counter() - start):.2f}s", True
                     )
@@ -1107,7 +1107,7 @@ class UEXCorp(Skill):
         Returns:
             str: A message indicating that the cached function's argument values have been printed to the console.
         """
-        if self.uexcorp_debug != "off":
+        if self.settings.debug_mode:
             self._print_debug(self.cache["function_args"])
             return "Please check the console for the cached function's argument values."
         return ""

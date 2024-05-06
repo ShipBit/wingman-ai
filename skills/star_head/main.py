@@ -2,14 +2,14 @@ import json
 from typing import Optional
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
-from api.interface import WingmanConfig, WingmanInitializationError
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill
 
 
 class StarHead(Skill):
 
-    def __init__(self, config: WingmanConfig) -> None:
-        super().__init__(config=config)
+    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
+        super().__init__(config=config, settings=settings)
 
         # config entry existence not validated yet. Assign later when checked!
         self.starhead_url = ""
@@ -74,7 +74,7 @@ class StarHead(Skill):
     ) -> list[dict[str, any]]:
         url = f"{self.starhead_url}/{endpoint}"
 
-        if self.config.debug_mode:
+        if self.settings.debug_mode:
             await self.printr.print_async(f"Retrieving {url}", color=LogType.INFO)
 
         response = requests.get(

@@ -2,7 +2,11 @@ import os
 from pathlib import Path
 import psutil
 import pygetwindow as gw
-from api.interface import WingmanConfig, WingmanInitializationError
+from api.interface import (
+    SettingsConfig,
+    SkillConfig,
+    WingmanInitializationError,
+)
 from skills.skill_base import Skill
 
 
@@ -16,8 +20,8 @@ class ControlWindows(Skill):
         ),
     ]
 
-    def __init__(self, config: WingmanConfig) -> None:
-        super().__init__(config=config)
+    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
+        super().__init__(config=config, settings=settings)
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()

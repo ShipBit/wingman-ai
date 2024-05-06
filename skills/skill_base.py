@@ -1,13 +1,14 @@
 from api.enums import WingmanInitializationErrorType
-from api.interface import SkillConfig, WingmanInitializationError
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
 
 class Skill:
-    def __init__(self, config: SkillConfig) -> None:
+    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
 
         self.config = config
+        self.settings = settings
         self.secret_keeper = SecretKeeper()
         self.name = self.__class__.__name__
         self.printr = Printr()

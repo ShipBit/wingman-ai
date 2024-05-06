@@ -351,9 +351,6 @@ class FeaturesConfig(BaseModel):
     Note that the other providers may have additional config blocks. These are only used if the provider is set here.
     """
 
-    debug_mode: bool
-    """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
-
     tts_provider: TtsProvider
     stt_provider: SttProvider
     conversation_provider: ConversationProvider
@@ -471,8 +468,6 @@ class SkillConfig(CustomWingmanClassConfig):
     commands: Optional[list[CommandConfig]] = None
     custom_properties: Optional[list[CustomWingmanProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
-    debug_mode: Optional[bool] = False
-    """If enabled, the skill will also print more debug messages."""
 
 
 class SkillBase(BaseModel):
@@ -560,3 +555,4 @@ class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
+    debug_mode: bool = False

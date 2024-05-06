@@ -14,6 +14,7 @@ from skills.skill_base import Skill
 
 SKILLS_DIR = "skills"
 
+
 class ModuleManager:
 
     @staticmethod
@@ -54,7 +55,9 @@ class ModuleManager:
             module = import_module(config.custom_class.module)
         except ModuleNotFoundError:
             # split module into name and path
-            module_name, module_path = ModuleManager.get_module_name_and_path(config.custom_class.module)
+            module_name, module_path = ModuleManager.get_module_name_and_path(
+                config.custom_class.module
+            )
             module_path = path.join(get_writable_dir(module_path), module_name + ".py")
             # load from alternative absolute file path
             spec = util.spec_from_file_location(module_name, module_path)
@@ -70,7 +73,7 @@ class ModuleManager:
         return instance
 
     @staticmethod
-    def load_skill(config: SkillConfig) -> Skill:
+    def load_skill(config: SkillConfig, settings: SettingsConfig) -> Skill:
 
         @contextmanager
         def add_to_sys_path(path_to_add: str):
@@ -82,8 +85,10 @@ class ModuleManager:
 
         try:
             # try to load from app dir first
-            skill_name, skill_path = ModuleManager.get_module_name_and_path(config.module)
-            dependencies_dir = path.join(skill_path, 'venv', 'lib', 'site-packages')
+            skill_name, skill_path = ModuleManager.get_module_name_and_path(
+                config.module
+            )
+            dependencies_dir = path.join(skill_path, "venv", "lib", "site-packages")
             dependencies_dir = path.abspath(dependencies_dir)
             with add_to_sys_path(dependencies_dir):
                 try:
@@ -91,27 +96,31 @@ class ModuleManager:
                 except Exception as e:
                     print(e)
         except ModuleNotFoundError:
-            skill_name, skill_path = ModuleManager.get_module_name_and_path(config.module)
+            skill_name, skill_path = ModuleManager.get_module_name_and_path(
+                config.module
+            )
             skill_path = get_writable_dir(skill_path)
             # Add the dependencies directory to sys.path so the plugin can load them
-            dependencies_dir = get_writable_dir(path.join(skill_path, 'dependencies'))
+            dependencies_dir = get_writable_dir(path.join(skill_path, "dependencies"))
             # sys.path.insert(0, dependencies_dir)
             with add_to_sys_path(dependencies_dir):
                 # Path to the plugin's main module file (e.g., plugin.py)
-                plugin_module_path = get_writable_dir(path.join(skill_path, 'main.py'))
-                
+                plugin_module_path = get_writable_dir(path.join(skill_path, "main.py"))
+
                 if path.exists(plugin_module_path):
                     # Load the plugin module dynamically
                     spec = util.spec_from_file_location(skill_name, plugin_module_path)
                     module = util.module_from_spec(spec)
                     spec.loader.exec_module(module)
                 else:
-                    raise FileNotFoundError(f"Plugin '{skill_name}' not found in directory '{skill_path}'")
-                
+                    raise FileNotFoundError(
+                        f"Plugin '{skill_name}' not found in directory '{skill_path}'"
+                    )
+
         DerivedSkillClass = getattr(module, config.name)
-        instance = DerivedSkillClass(config=config)
+        instance = DerivedSkillClass(config=config, settings=settings)
         return instance
-    
+
     @staticmethod
     def read_available_skill_configs() -> list[tuple[str, str]]:
         if os.path.isdir(SKILLS_DIR):
@@ -128,15 +137,15 @@ class ModuleManager:
             # Check if the path is a directory (to avoid non-folder files)
             if os.path.isdir(skill_path):
                 # Construct the path to the default_config.yaml file
-                default_config_path = os.path.join(skill_path, 'default_config.yaml')
-                
+                default_config_path = os.path.join(skill_path, "default_config.yaml")
+
                 # Check if the default_config.yaml file exists
                 if os.path.isfile(default_config_path):
                     # Add the skill name and the default_config.yaml file path to the list
                     skills_default_configs.append((skill_name, default_config_path))
 
         return skills_default_configs
-    
+
     @staticmethod
     def read_available_skills() -> list[SkillBase]:
         printr = Printr()
@@ -161,9 +170,11 @@ class ModuleManager:
                 )
                 skills.append(skill)
             except Exception as e:
-                printr.toast_error(f"Could not load skill from '{skill_config_path}': {str(e)}")
+                printr.toast_error(
+                    f"Could not load skill from '{skill_config_path}': {str(e)}"
+                )
         return skills
-    
+
     @staticmethod
     def load_image_as_base64(file_path: str):
         with open(file_path, "rb") as image_file:
@@ -174,7 +185,7 @@ class ModuleManager:
         base64_data_uri = f"data:image/png;base64,{base64_string}"
 
         return base64_data_uri
-    
+
     @staticmethod
     def read_config(file_path: str):
         """Loads a config file (without validating it)"""

@@ -58,8 +58,8 @@ class Wingman:
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
-        self.debug: bool = self.config.features.debug_mode
-        """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
+        self.debug: bool = self.settings.debug_mode
+        """If enabled, the Wingman will print more debug messages and benchmark results."""
 
         self.tts_provider = self.config.features.tts_provider
         self.stt_provider = self.config.features.stt_provider
@@ -141,10 +141,12 @@ class Wingman:
         skills_config = self.config.skills
         if not skills_config:
             return errors
-        
+
         for skill_config in skills_config:
             try:
-                skill = ModuleManager.load_skill(skill_config)
+                skill = ModuleManager.load_skill(
+                    config=skill_config, settings=self.settings
+                )
                 if skill:
                     validation_errors = await skill.validate()
                     errors.extend(validation_errors)
@@ -162,7 +164,7 @@ class Wingman:
                 )
 
         return errors
-    
+
     async def prepare_skill(self, skill: Skill):
         """This method is called only once when the Skill is instantiated.
         It is run AFTER validate() so you can access validated params safely here.
@@ -221,8 +223,8 @@ class Wingman:
                 )
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response, skill = await self._get_response_for_transcript(
-                transcript
+            process_result, instant_response, skill = (
+                await self._get_response_for_transcript(transcript)
             )
 
             if self.debug:
@@ -263,7 +265,9 @@ class Wingman:
         """
         return None
 
-    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str, Skill | None]:
+    async def _get_response_for_transcript(
+        self, transcript: str
+    ) -> tuple[str, str, Skill | None]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
@@ -361,7 +365,7 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        if len(command.actions or []) > 0 and not self.debug:
+        if len(command.actions or []) > 0:
             await printr.print_async(
                 f"Executing command: {command.name}", color=LogType.INFO
             )
@@ -373,12 +377,6 @@ class Wingman:
         if len(command.actions or []) == 0:
             await printr.print_async(
                 f"No actions found for command: {command.name}", color=LogType.WARNING
-            )
-
-        if self.debug:
-            await printr.print_async(
-                "Skipping actual keypress execution in debug_mode...",
-                color=LogType.WARNING,
             )
 
         # handle the global special commands:

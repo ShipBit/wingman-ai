@@ -33,7 +33,6 @@ prompts:
       {skills}
     (END of "skills")
 features:
-  debug_mode: false
   tts_provider: wingman_pro
   stt_provider: wingman_pro
   conversation_provider: wingman_pro

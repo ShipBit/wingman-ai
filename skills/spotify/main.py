@@ -1,14 +1,14 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from api.interface import WingmanConfig, WingmanInitializationError
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill
 from services.printr import Printr
 
 
 class Spotify(Skill):
 
-    def __init__(self, config: WingmanConfig) -> None:
-        super().__init__(config=config)
+    def __init__(self, config: SkillConfig, settings: SettingsConfig) -> None:
+        super().__init__(config=config, settings=settings)
         self.spotify: spotipy.Spotify = None
         self.available_devices = []
         self.printr = Printr()

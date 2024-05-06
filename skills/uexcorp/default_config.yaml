@@ -66,26 +66,6 @@ custom_properties:
   # ────────────────────────────── No touchy zone end ──────────────────────────────
 
   # ──────────────────────── uexcorp specific config start ─────────────────────────
-  # !! All of the given values in this uexcorp specific section must be text/string. !!
-  # !!                So just put them in quotes like this: "true"                   !!
-
-  # Set this option to "true" to activate debug mode. All function calls will be printed to the terminal in this mode. This is the default value.
-  # If you want to develop a bit or dive deeper into understanding the responses, you can also set this option to "Extensive".
-  # Set this option to "false" to deactivate debug mode.
-  - id: uexcorp_debug
-    name: Debug Mode
-    hint: Default is "false". Set this option to "true" to activate debug mode or "Extensive" if you want to dive deeper into the responses.
-    value: "off"
-    required: true
-    property_type: single_select
-    options:
-      - value: "off"
-        label: "off"
-      - value: "on"
-        label: "on"
-      - value: "Extensive"
-        label: "Extensive"
-
   # Set this option to "true" to enable caching of the UEX corp API responses. This is recommended, as the API key's quota is very limited.
   # If you set this option to "false", the Wingman will fetch all data from the UEX corp API on every start.
   # If you want to update the prices, just tell the Wingman to do so.
