@@ -76,6 +76,10 @@ class Wingman:
         """Returns the activation or "push-to-talk" mouse button for this Wingman."""
         return self.config.record_mouse_button
 
+    def start_execution_benchmark(self):
+        """Starts the execution benchmark timer."""
+        self.execution_start = time.perf_counter()
+
     async def print_execution_time(self, reset_timer=False):
         """Prints the current time since the execution started (in seconds)."""
         if self.execution_start:
@@ -86,10 +90,6 @@ class Wingman:
             )
         if reset_timer:
             self.start_execution_benchmark()
-
-    def start_execution_benchmark(self):
-        """Starts the execution benchmark timer."""
-        self.execution_start = time.perf_counter()
 
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
@@ -208,7 +208,7 @@ class Wingman:
             # transcribe the audio.
             transcript = await self._transcribe(audio_input_wav)
 
-        if self.debug:
+        if self.debug and not transcript:
             await self.print_execution_time(reset_timer=True)
 
         if transcript:
@@ -242,17 +242,9 @@ class Wingman:
                     skill_name=skill.name if skill else "",
                 )
 
-        if self.debug:
-            await printr.print_async(
-                "Playing response back to user...", color=LogType.INFO
-            )
-
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
             await self._play_to_user(str(process_result))
-
-        if self.debug:
-            await self.print_execution_time()
 
     # ───────────────── virtual methods / hooks ───────────────── #
 

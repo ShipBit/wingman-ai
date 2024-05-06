@@ -325,7 +325,7 @@ class Spotify(Skill):
             self.spotify.current_user_saved_tracks_add([track_id])
             return "Track saved to 'Your Music' library."
 
-        return "No track playing."
+        return "No track playing. Play a song, then tell me to like it."
 
     def play_song_with_spotify(
         self, track: str = None, artist: str = None, queue: bool = False

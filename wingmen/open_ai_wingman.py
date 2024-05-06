@@ -182,7 +182,7 @@ class OpenAiWingman(Wingman):
             self.tool_skills[tool_name] = skill
             self.skill_tools.append(tool)
 
-        skill.gpt_call = self.actual_gpt_call
+        skill.gpt_call = self.actual_llm_call
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("openai", errors)
@@ -353,7 +353,7 @@ class OpenAiWingman(Wingman):
 
         # make a GPT call with the conversation history
         # if an instant command got executed, prevent tool calls to avoid duplicate executions
-        completion = await self._gpt_call(instant_command_executed is False)
+        completion = await self._llm_call(instant_command_executed is False)
 
         if completion is None:
             return None, None, None
@@ -631,7 +631,7 @@ class OpenAiWingman(Wingman):
         )
         messages.insert(0, {"role": "system", "content": context})
 
-    async def actual_gpt_call(self, original_messages, tools: list[dict] = None):
+    async def actual_llm_call(self, original_messages, tools: list[dict] = None):
         """
         Perform the actual GPT call with the messages provided.
         """
@@ -685,41 +685,43 @@ class OpenAiWingman(Wingman):
 
         return completion
 
-    async def _gpt_call(self, allow_tool_calls: bool = True):
-        """Makes the primary GPT call with the conversation history and tools enabled.
+    async def _llm_call(self, allow_tool_calls: bool = True):
+        """Makes the primary LLM call with the conversation history and tools enabled.
 
         Returns:
-            The GPT completion object or None if the call fails.
+            The LLM completion object or None if the call fails.
         """
-        if self.debug:
-            await printr.print_async(
-                f"Calling GPT with {(len(self.messages))} messages (excluding context)",
-                color=LogType.INFO,
-            )
 
         # save request time for later comparison
         thiscall = time.time()
         self.last_gpt_call = thiscall
 
         # build tools
-        if allow_tool_calls:
-            tools = self._build_tools()
-        else:
-            tools = None
+        tools = self._build_tools() if allow_tool_calls else None
 
-        completion = await self.actual_gpt_call(self.messages, tools)
+        if self.debug:
+            self.start_execution_benchmark()
+            await printr.print_async(
+                f"Calling LLM with {(len(self.messages))} messages (excluding context) and {len(tools) if tools else 0} tools.",
+                color=LogType.INFO,
+            )
+
+        completion = await self.actual_llm_call(self.messages, tools)
+
+        if self.debug:
+            self.print_execution_time(reset_timer=True)
 
         # if request isnt most recent, ignore the response
         if self.last_gpt_call != thiscall:
             await printr.print_async(
-                "GPT call was cancelled due to a new call.", color=LogType.WARNING
+                "LLM call was cancelled due to a new call.", color=LogType.WARNING
             )
             return None
 
         return completion
 
     async def _process_completion(self, completion):
-        """Processes the completion returned by the GPT call.
+        """Processes the completion returned by the LLM call.
 
         Args:
             completion: The completion object from an OpenAI call.
@@ -876,7 +878,7 @@ class OpenAiWingman(Wingman):
         instant_response = ""
         used_skill = None
         if function_name == "execute_command":
-            # get the command based on the argument passed by GPT
+            # get the command based on the argument passed by the LLM
             command = self._get_command(function_args["command_name"])
             # execute the command
             function_response = await self._execute_command(command)
