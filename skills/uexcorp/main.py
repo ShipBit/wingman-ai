@@ -996,15 +996,12 @@ class UEXCorp(Skill):
 
         try:
             if tool_name in functions:
-                if self.settings.debug_mode:
-                    start = time.perf_counter()
+                self.start_execution_benchmark()
                 await self._print(f"Executing function: {tool_name}")
                 function = getattr(self, "_gpt_call_" + functions[tool_name])
                 function_response = await function(**parameters)
                 if self.settings.debug_mode:
-                    await self._print(
-                        f"...took {(time.perf_counter() - start):.2f}s", True
-                    )
+                    await self.print_execution_time()
         except Exception as e:
             logging.error(e, exc_info=True)
             file_object = open(self.logfile, "a", encoding="UTF-8")

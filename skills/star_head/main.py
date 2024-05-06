@@ -1,7 +1,7 @@
 import json
 from typing import Optional
 import requests
-from api.enums import LogType, WingmanInitializationErrorType
+from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -87,12 +87,20 @@ class StarHead(Skill):
         url = f"{self.starhead_url}/{endpoint}"
 
         if self.settings.debug_mode:
-            await self.printr.print_async(f"Retrieving {url}", color=LogType.INFO)
+            self.start_execution_benchmark()
+            await self.printr.print_async(
+                f"Retrieving {url}",
+                color=LogType.INFO,
+                source=LogSource.WINGMAN,
+                source_name=self.wingman_config.name,
+            )
 
         response = requests.get(
             url, params=params, timeout=self.timeout, headers=self.headers
         )
         response.raise_for_status()
+        if self.settings.debug_mode:
+            await self.print_execution_time()
 
         return response.json()
 

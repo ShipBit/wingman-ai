@@ -1,8 +1,13 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from api.enums import LogSource, LogType
+from api.interface import (
+    SettingsConfig,
+    SkillConfig,
+    WingmanConfig,
+    WingmanInitializationError,
+)
 from skills.skill_base import Skill
-from services.printr import Printr
 
 
 class Spotify(Skill):
@@ -18,7 +23,6 @@ class Spotify(Skill):
         )
         self.spotify: spotipy.Spotify = None
         self.available_devices = []
-        self.printr = Printr()
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -191,15 +195,22 @@ class Spotify(Skill):
         ]:
             return function_response, instant_response
 
-        self.printr.print(
-            f"Spotify: Executing {tool_name} with parameters: {parameters}",
-            server_only=True,
-        )
+        if self.settings.debug_mode:
+            self.start_execution_benchmark()
+            await self.printr.print_async(
+                f"Spotify: Executing {tool_name} with parameters: {parameters}",
+                color=LogType.INFO,
+                source=LogSource.WINGMAN,
+                source_name=self.wingman_config.name,
+            )
 
         action = parameters.get("action", None)
         parameters.pop("action", None)
         function = getattr(self, action if action else tool_name)
         function_response = function(**parameters)
+
+        if self.settings.debug_mode:
+            await self.print_execution_time()
 
         return function_response, instant_response
 

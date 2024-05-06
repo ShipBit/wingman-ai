@@ -1,4 +1,5 @@
-from api.enums import WingmanInitializationErrorType
+import time
+from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -23,6 +24,8 @@ class Skill:
         self.secret_keeper = SecretKeeper()
         self.name = self.__class__.__name__
         self.printr = Printr()
+        self.execution_start: None | float = None
+        """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
     async def validate(self) -> list[WingmanInitializationError]:
         """Validates the skill configuration."""
@@ -91,3 +94,21 @@ class Skill:
             )
             return None
         return p.value
+
+    async def print_execution_time(self, reset_timer=False):
+        """Prints the current time since the execution started (in seconds)."""
+        if self.execution_start:
+            execution_stop = time.perf_counter()
+            elapsed_seconds = execution_stop - self.execution_start
+            await self.printr.print_async(
+                f"...took {elapsed_seconds:.2f}s",
+                color=LogType.INFO,
+                source=LogSource.WINGMAN,
+                source_name=self.wingman_config.name,
+            )
+        if reset_timer:
+            self.start_execution_benchmark()
+
+    def start_execution_benchmark(self):
+        """Starts the execution benchmark timer."""
+        self.execution_start = time.perf_counter()

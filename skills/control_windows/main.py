@@ -8,6 +8,7 @@ from api.interface import (
     WingmanConfig,
     WingmanInitializationError,
 )
+from api.enums import LogSource, LogType
 from skills.skill_base import Skill
 
 
@@ -123,7 +124,14 @@ class ControlWindows(Skill):
         instant_response = ""
 
         if tool_name == "control_windows_functions":
-            print(f"Executing control_windows_functions with parameters: {parameters}")
+            if self.settings.debug:
+                self.start_execution_benchmark()
+                await self.printr.print_async(
+                    f"Executing control_windows_functions with parameters: {parameters}",
+                    color=LogType.INFO,
+                    source=LogSource.WINGMAN,
+                    source_name=self.wingman_config.name,
+                )
 
             parameter = parameters.get("parameter")
 
@@ -145,5 +153,8 @@ class ControlWindows(Skill):
                 app_minimize = self.execute_ui_command(parameter, command)
                 if app_minimize:
                     function_response = f"Application {command}."
+
+            if self.settings.debug:
+                await self.print_execution_time()
 
         return function_response, instant_response
