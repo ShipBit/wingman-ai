@@ -40,11 +40,11 @@ class BaseOpenAi(ABC):
         )
         if m is not None:
             message = m["message"].replace(". ", ".\n")
-            printr.print(message, color=LogType.ERROR)
+            printr.toast_error(message, color=LogType.ERROR)
         elif api_response.message:
-            printr.print(api_response.message, color=LogType.ERROR)
+            printr.toast_error(api_response.message, color=LogType.ERROR)
         else:
-            printr.print(
+            printr.toast_error(
                 "The API did not provide further information.", color=LogType.ERROR
             )
 

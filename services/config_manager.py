@@ -78,6 +78,7 @@ class ConfigManager:
                 color=LogType.ERROR,
                 source=LogSource.SYSTEM,
                 source_name=self.log_source_name,
+                server_only=True,
             )
             return fallback
 
@@ -87,6 +88,7 @@ class ConfigManager:
                 color=LogType.WARNING,
                 source=LogSource.SYSTEM,
                 source_name=self.log_source_name,
+                server_only=True,
             )
         return default_dir
 

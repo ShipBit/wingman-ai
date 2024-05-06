@@ -102,7 +102,7 @@ class SecretKeeper(WebSocketUser):
         return self.secrets
 
     # POST /secrets
-    def post_secrets(self, secrets: dict[str, Any]):
+    async def post_secrets(self, secrets: dict[str, Any]):
         if not secrets or len(secrets) == 0:
             return
 
@@ -110,6 +110,6 @@ class SecretKeeper(WebSocketUser):
             self.secrets[key] = value
 
         self.save()
-        self.printr.print(
+        await self.printr.print(
             "Secrets updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
         )
