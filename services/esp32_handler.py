@@ -12,6 +12,25 @@ class Esp32Handler:
         self.to_device = asyncio.Queue()
         self.core = core
 
+        core.audio_player.stream_event.subscribe("audio", self.handle_stream_playback)
+        core.audio_player.playback_events.subscribe("started", self.handle_start)
+        core.audio_player.playback_events.subscribe("finished", self.handle_end)
+
+        asyncio.create_task(self.listen())
+
+    async def listen(self):
+        pass
+
+    async def handle_start(self, _):
+        await self.to_device.put({"role": "assistant", "type": "audio", "format": "bytes.raw", "start": True})
+
+    async def handle_end(self, _):
+        await self.to_device.put({"role": "assistant", "type": "audio", "format": "bytes.raw", "end": True})
+
+    async def handle_stream_playback(self, audio_stream):
+        for chunk in self.direct_stream(audio_stream):
+            await self.to_device.put(chunk)
+    
     async def receive_messages(self, websocket: WebSocket):
         byte_string = b''
         while True:
@@ -38,8 +57,8 @@ class Esp32Handler:
                                 await loop.run_in_executor(None, self.save_wav, byte_string, nchannels, sampwidth, framerate)
                                 await self.core.send_audio_to_wingman_by_path("Computer", file_path="audio.wav")
 
-                                for chunk in self.stream_tts("audio.wav"):
-                                    await self.to_device.put(chunk)
+                                # for chunk in self.stream_tts("audio.wav"):
+                                    # await self.to_device.put(chunk)
 
                     except json.JSONDecodeError:
                         pass  # data is not JSON, leave it as is
@@ -74,17 +93,11 @@ class Esp32Handler:
             wf.setframerate(framerate)
             wf.writeframes(data)
 
-    def stream_tts(self, audio_file):
-        with open(audio_file, "rb") as f:
-            audio_bytes = f.read()
-        # os.remove(audio_file)
+    def direct_stream(self, audio_bytes):
 
-        file_type = "bytes.raw"
-        chunk_size = 1024
+        chunk_size = 2048
 
         # Stream the audio
-        yield {"role": "assistant", "type": "audio", "format": file_type, "start": True}
         for i in range(0, len(audio_bytes), chunk_size):
             chunk = audio_bytes[i : i + chunk_size]
             yield chunk
-        yield {"role": "assistant", "type": "audio", "format": file_type, "end": True}
