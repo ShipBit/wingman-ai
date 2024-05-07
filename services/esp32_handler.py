@@ -2,7 +2,7 @@ import asyncio
 import json
 import wave
 
-from fastapi import WebSocket
+from fastapi import WebSocket, WebSocketDisconnect
 
 from wingman_core import WingmanCore
 
@@ -15,31 +15,42 @@ class Esp32Handler:
     async def receive_messages(self, websocket: WebSocket):
         byte_string = b''
         while True:
-            data = await websocket.receive()
-            if "text" in data:
+            try:
                 try:
-                    data = json.loads(data["text"])
-                    if data["role"] == "user":
-                        if "start" in data:
-                            byte_string = b''
-                        elif "end" in data:
-                            # Set the parameters for the WAV file
-                            nchannels = 1  # Mono audio
-                            sampwidth = 2  # 2 bytes per sample for 16-bit audio
-                            framerate = 16000  # Sample rate
+                    data = await websocket.receive()
+                except Exception as e:
+                    print(str(e))
+                    return
+                if "text" in data:
+                    try:
+                        data = json.loads(data["text"])
+                        if data["role"] == "user":
+                            if "start" in data:
+                                byte_string = b''
+                            elif "end" in data:
+                                # Set the parameters for the WAV file
+                                nchannels = 1  # Mono audio
+                                sampwidth = 2  # 2 bytes per sample for 16-bit audio
+                                framerate = 16000  # Sample rate
 
-                            # Save the received stream of bytes as a WAV file
-                            loop = asyncio.get_event_loop()
-                            await loop.run_in_executor(None, self.save_wav, byte_string, nchannels, sampwidth, framerate)
-                            await self.core.send_audio_to_wingman_by_path("Computer", file_path="audio.wav")
+                                # Save the received stream of bytes as a WAV file
+                                loop = asyncio.get_event_loop()
+                                await loop.run_in_executor(None, self.save_wav, byte_string, nchannels, sampwidth, framerate)
+                                await self.core.send_audio_to_wingman_by_path("Computer", file_path="audio.wav")
 
-                            for chunk in self.stream_tts("audio.wav"):
-                                await self.to_device.put(chunk)
+                                for chunk in self.stream_tts("audio.wav"):
+                                    await self.to_device.put(chunk)
 
-                except json.JSONDecodeError:
-                    pass  # data is not JSON, leave it as is
-            if "bytes" in data:
-                byte_string += data["bytes"]
+                    except json.JSONDecodeError:
+                        pass  # data is not JSON, leave it as is
+                if "bytes" in data:
+                    byte_string += data["bytes"]
+            except WebSocketDisconnect as e:
+                if e.code == 1000:
+                    print("Websocket connection closed normally.")
+                    return
+                else:
+                    raise
 
     async def send_messages(self, websocket: WebSocket):
         while True:
