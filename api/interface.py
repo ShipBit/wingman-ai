@@ -288,6 +288,18 @@ class GroqConfig(BaseModel):
     endpoint: str
 
 
+class OpenRouterConfig(BaseModel):
+    conversation_model: str
+    summarize_model: str
+    endpoint: str
+
+
+class LocalLlmConfig(BaseModel):
+    conversation_model: Optional[str] = None
+    summarize_model: Optional[str] = None
+    endpoint: str
+
+
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
@@ -432,6 +444,8 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     mistral: MistralConfig
     groq: GroqConfig
+    openrouter: OpenRouterConfig
+    local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig

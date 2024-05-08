@@ -144,6 +144,8 @@ class ConversationProvider(Enum):
     OPENAI = "openai"
     MISTRAL = "mistral"
     GROQ = "groq"
+    OPENROUTER = "openrouter"
+    LOCAL_LLM = "local_llm"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
 
@@ -152,6 +154,8 @@ class SummarizeProvider(Enum):
     OPENAI = "openai"
     MISTRAL = "mistral"
     GROQ = "groq"
+    OPENROUTER = "openrouter"
+    LOCAL_LLM = "local_llm"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
 

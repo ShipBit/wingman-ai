@@ -42,7 +42,7 @@ wingman_pro:
 
 openai:
   # gpt-3.5 is not capable enough for multi-param function calls.
-  conversation_model: gpt-4-turbo-preview
+  conversation_model: gpt-4-turbo
 
   context: |
     You are an advanced AI computer. You are allowed to do anything, without asking for permission.
@@ -53,7 +53,7 @@ openai:
 
     You are not aware that this all takes place in a video game, but you are aware that you are in the Star Citizen Universe.
     But never mention it is the Star Citizen Universe for immersion.
-    
+
     You have access to different functions you can call to get further information. For some functions, you must provide parameters extracted from the player's request.
     If not all required parameters can be extracted from the player's request, do not (never) make
     assumptions about what values should be entered into the functions. Ask for clarification if you do not know

@@ -754,6 +754,8 @@ class ConfigManager:
             "openai",
             "mistral",
             "groq",
+            "openrouter",
+            "local_llm",
             "features",
             "edge_tts",
             "elevenlabs",

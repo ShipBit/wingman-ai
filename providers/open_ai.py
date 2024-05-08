@@ -1,19 +1,14 @@
 from abc import ABC, abstractmethod
 import re
-import numpy as np
 from typing import Literal
 from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
 from api.enums import (
     AzureRegion,
-    GroqModel,
     LogType,
-    MistralModel,
-    OpenAiModel,
     OpenAiTtsVoice,
 )
 from api.interface import (
-    AzureConfig,
     AzureInstanceConfig,
     AzureSttConfig,
     AzureTtsConfig,
@@ -76,22 +71,22 @@ class BaseOpenAi(ABC):
         self,
         client: OpenAI | AzureOpenAI,
         messages: list[dict[str, str]],
-        model: OpenAiModel | MistralModel | GroqModel,
         stream: bool,
         tools: list[dict[str, any]],
+        model: str = None,
     ):
         try:
             if not tools:
                 completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
-                    model=model.value,
+                    model=model,
                 )
             else:
                 completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
-                    model=model.value,
+                    model=model,
                     tools=tools,
                     tool_choice="auto",
                 )
@@ -140,12 +135,10 @@ class OpenAi(BaseOpenAi):
     def ask(
         self,
         messages: list[dict[str, str]],
-        model: OpenAiModel | MistralModel | GroqModel,
+        model: str = None,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):
-        if not model:
-            model = OpenAiModel.GPT_35_TURBO
         return self._perform_ask(
             client=self.client,
             messages=messages,
