@@ -124,7 +124,7 @@ class ControlWindows(Skill):
         instant_response = ""
 
         if tool_name == "control_windows_functions":
-            if self.settings.debug:
+            if self.settings.debug_mode:
                 self.start_execution_benchmark()
                 await self.printr.print_async(
                     f"Executing control_windows_functions with parameters: {parameters}",
@@ -152,7 +152,7 @@ class ControlWindows(Skill):
                 if app_minimize:
                     function_response = f"Application {command}."
 
-            if self.settings.debug:
+            if self.settings.debug_mode:
                 await self.print_execution_time()
 
         return function_response, instant_response
