@@ -86,9 +86,9 @@ mistral:
   summarize_model: mistral-medium-latest
   endpoint: https://api.mistral.ai/v1
 
-llama:
-  conversation_model: llama3-70b
-  summarize_model: llama3-8b
+groq:
+  conversation_model: llama3-70b-8192
+  summarize_model: llama3-8b-8192
   endpoint: https://api.groq.com/openai/v1
 
 # ────────────────────────────────── EDGE TTS ────────────────────────────────────

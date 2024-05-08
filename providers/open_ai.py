@@ -6,7 +6,7 @@ from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
 from api.enums import (
     AzureRegion,
-    LlamaModel,
+    GroqModel,
     LogType,
     MistralModel,
     OpenAiModel,
@@ -76,7 +76,7 @@ class BaseOpenAi(ABC):
         self,
         client: OpenAI | AzureOpenAI,
         messages: list[dict[str, str]],
-        model: OpenAiModel | MistralModel | LlamaModel,
+        model: OpenAiModel | MistralModel | GroqModel,
         stream: bool,
         tools: list[dict[str, any]],
     ):
@@ -140,7 +140,7 @@ class OpenAi(BaseOpenAi):
     def ask(
         self,
         messages: list[dict[str, str]],
-        model: OpenAiModel | MistralModel | LlamaModel,
+        model: OpenAiModel | MistralModel | GroqModel,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):

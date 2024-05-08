@@ -53,7 +53,7 @@ class OpenAiWingman(Wingman):
         # validate will set these:
         self.openai: OpenAi = None
         self.mistral: OpenAi = None
-        self.llama: OpenAi = None
+        self.groq: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
         self.xvasynth: XVASynth = None
@@ -82,8 +82,8 @@ class OpenAiWingman(Wingman):
         if self.uses_provider("mistral"):
             await self.validate_and_set_mistral(errors)
 
-        if self.uses_provider("llama"):
-            await self.validate_and_set_llama(errors)
+        if self.uses_provider("groq"):
+            await self.validate_and_set_groq(errors)
 
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
@@ -119,11 +119,11 @@ class OpenAiWingman(Wingman):
                     self.summarize_provider == SummarizeProvider.MISTRAL,
                 ]
             )
-        elif provider_type == "llama":
+        elif provider_type == "groq":
             return any(
                 [
-                    self.conversation_provider == ConversationProvider.LLAMA,
-                    self.summarize_provider == SummarizeProvider.LLAMA,
+                    self.conversation_provider == ConversationProvider.GROQ,
+                    self.summarize_provider == SummarizeProvider.GROQ,
                 ]
             )
         elif provider_type == "azure":
@@ -174,14 +174,14 @@ class OpenAiWingman(Wingman):
                 base_url=self.config.mistral.endpoint,
             )
 
-    async def validate_and_set_llama(self, errors: list[WingmanInitializationError]):
-        api_key = await self.retrieve_secret("llama", errors)
+    async def validate_and_set_groq(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("groq", errors)
         if api_key:
             # TODO: maybe use their native client (or LangChain) instead of OpenAI(?)
-            self.llama = OpenAi(
+            self.groq = OpenAi(
                 api_key=api_key,
                 organization=self.config.openai.organization,
-                base_url=self.config.llama.endpoint,
+                base_url=self.config.groq.endpoint,
             )
 
     async def validate_and_set_elevenlabs(
@@ -615,11 +615,11 @@ class OpenAiWingman(Wingman):
                 tools=tools,
                 model=self.config.mistral.conversation_model,
             )
-        elif self.conversation_provider == ConversationProvider.LLAMA:
-            completion = self.llama.ask(
+        elif self.conversation_provider == ConversationProvider.GROQ:
+            completion = self.groq.ask(
                 messages=self.messages,
                 tools=tools,
-                model=self.config.llama.conversation_model,
+                model=self.config.groq.conversation_model,
             )
         elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
             completion = self.wingman_pro.ask(
@@ -721,10 +721,10 @@ class OpenAiWingman(Wingman):
                 messages=self.messages,
                 model=self.config.mistral.summarize_model,
             )
-        elif self.summarize_provider == SummarizeProvider.LLAMA:
-            summarize_response = self.llama.ask(
+        elif self.summarize_provider == SummarizeProvider.GROQ:
+            summarize_response = self.groq.ask(
                 messages=self.messages,
-                model=self.config.llama.summarize_model,
+                model=self.config.groq.summarize_model,
             )
         elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
             summarize_response = self.wingman_pro.ask(

@@ -64,23 +64,30 @@ class TtsVoiceGender(Enum):
 
 
 class OpenAiModel(Enum):
+    """https://platform.openai.com/docs/models/overview"""
+
     GPT_35_TURBO = "gpt-3.5-turbo"
-    GPT_4_TURBO_PREVIEW = "gpt-4-turbo-preview"
+    GPT_4_TURBO_PREVIEW = "gpt-4-turbo"
 
 
 class MistralModel(Enum):
+    """https://docs.mistral.ai/getting-started/models/"""
+
     MISTRAL_7B = "open-mistral-7b"
     OPEN_MIXTRAL_8X7B = "open-mixtral-8x7b"
+    OPEN_MIXTRAL_8X22B = "open-mixtral-8x22b"
     MISTRAL_SMALL = "mistral-small-latest"
     MISTRAL_MEDIUM = "mistral-medium-latest"
     MISTRAL_LARGE = "mistral-large-latest"
 
 
-class LlamaModel(Enum):
-    LLAMA3_8B = "llama3-8b"
+class GroqModel(Enum):
+    """https://console.groq.com/docs/models"""
+
     LLAMA3_8B_8192 = "llama3-8b-8192"
-    LLAMA3_70B = "llama3-70b"
     LLAMA3_70B_8192 = "llama3-70b-8192"
+    MIXTRAL_8X7B = "mixtral-8x7b-32768"
+    GEMMA_7B = "gemma-7b-it"
 
 
 class WingmanProAzureDeployment(Enum):
@@ -136,7 +143,7 @@ class VoiceActivationSttProvider(Enum):
 class ConversationProvider(Enum):
     OPENAI = "openai"
     MISTRAL = "mistral"
-    LLAMA = "llama"
+    GROQ = "groq"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
 
@@ -144,7 +151,7 @@ class ConversationProvider(Enum):
 class SummarizeProvider(Enum):
     OPENAI = "openai"
     MISTRAL = "mistral"
-    LLAMA = "llama"
+    GROQ = "groq"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
 
@@ -223,8 +230,8 @@ class MistralModelEnumModel(BaseEnumModel):
     model: MistralModel
 
 
-class LlamaModelEnumModel(BaseEnumModel):
-    model: LlamaModel
+class GroqModelEnumModel(BaseEnumModel):
+    model: GroqModel
 
 
 class WingmanProAzureDeploymentEnumModel(BaseEnumModel):
@@ -291,7 +298,7 @@ ENUM_TYPES = {
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "OpenAiModel": OpenAiModelEnumModel,
     "MistralModel": MistralModelEnumModel,
-    "LLamaModel": LlamaModelEnumModel,
+    "GroqModel": GroqModelEnumModel,
     "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,
