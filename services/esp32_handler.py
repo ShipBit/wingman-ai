@@ -13,6 +13,7 @@ class Esp32Handler:
     def __init__(self, core: WingmanCore) -> None:
         self.to_device = asyncio.Queue()
         self.core = core
+        self.wait_for_response = False
         self.recording_path = "audio_output"
         self.recording_file = "client_recording.wav"
         self.recording_file_path = path.join(
@@ -24,14 +25,18 @@ class Esp32Handler:
         core.audio_player.playback_events.subscribe("finished", self.handle_end)
 
     async def handle_start(self, _):
-        await self.to_device.put({"role": "assistant", "type": "audio", "format": "bytes.raw", "start": True})
+        if self.wait_for_response:
+            await self.to_device.put({"role": "assistant", "type": "audio", "format": "bytes.raw", "start": True})
 
     async def handle_end(self, _):
-        await self.to_device.put({"role": "assistant", "type": "audio", "format": "bytes.raw", "end": True})
+        if self.wait_for_response:
+            self.wait_for_response = False
+            await self.to_device.put({"role": "assistant", "type": "audio", "format": "bytes.raw", "end": True})
 
     async def handle_stream_playback(self, audio_stream):
-        for chunk in self.direct_stream(audio_stream):
-            await self.to_device.put(chunk)
+        if self.wait_for_response:
+            for chunk in self.direct_stream(audio_stream):
+                await self.to_device.put(chunk)
     
     async def receive_messages(self, websocket: WebSocket):
         byte_string = b''
@@ -57,6 +62,8 @@ class Esp32Handler:
                                 # Save the received stream of bytes as a WAV file
                                 loop = asyncio.get_event_loop()
                                 await loop.run_in_executor(None, self.save_wav, byte_string, nchannels, sampwidth, framerate)
+                                
+                                self.wait_for_response = True
                                 self.core.on_audio_recorder_speech_recorded(self.recording_file_path)
 
                     except json.JSONDecodeError:
