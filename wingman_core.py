@@ -521,37 +521,6 @@ class WingmanCore(WebSocketUser):
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
 
-    async def send_audio_to_wingman_by_path(
-        self, wingman_name: str, file_path: str
-    ):
-        wingman = self.tower.get_wingman_by_name(wingman_name)
-        if not wingman:
-            return
-
-        with open(file_path, "rb") as f:
-            contents = f.read()
-
-        filename = os.path.join(
-            get_writable_dir(RECORDING_PATH), "client_recording.wav"
-        )
-        with open(filename, "wb") as f:
-            f.write(contents)
-
-        def run_async_process():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                if isinstance(wingman, Wingman):
-                    loop.run_until_complete(
-                        wingman.process(audio_input_wav=str(filename))
-                    )
-            finally:
-                loop.close()
-
-        if filename:
-            play_thread = threading.Thread(target=run_async_process)
-            play_thread.start()
-
     # POST /reset-conversation-history
     def reset_conversation_history(self, wingman_name: Optional[str]):
         if wingman_name:

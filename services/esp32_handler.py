@@ -1,9 +1,11 @@
 import asyncio
 import json
+from os import path
 import wave
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from services.file import get_writable_dir
 from wingman_core import WingmanCore
 
 
@@ -11,15 +13,15 @@ class Esp32Handler:
     def __init__(self, core: WingmanCore) -> None:
         self.to_device = asyncio.Queue()
         self.core = core
+        self.recording_path = "audio_output"
+        self.recording_file = "client_recording.wav"
+        self.recording_file_path = path.join(
+            get_writable_dir(self.recording_path), self.recording_file
+        )
 
         core.audio_player.stream_event.subscribe("audio", self.handle_stream_playback)
         core.audio_player.playback_events.subscribe("started", self.handle_start)
         core.audio_player.playback_events.subscribe("finished", self.handle_end)
-
-        asyncio.create_task(self.listen())
-
-    async def listen(self):
-        pass
 
     async def handle_start(self, _):
         await self.to_device.put({"role": "assistant", "type": "audio", "format": "bytes.raw", "start": True})
@@ -55,10 +57,7 @@ class Esp32Handler:
                                 # Save the received stream of bytes as a WAV file
                                 loop = asyncio.get_event_loop()
                                 await loop.run_in_executor(None, self.save_wav, byte_string, nchannels, sampwidth, framerate)
-                                await self.core.send_audio_to_wingman_by_path("Computer", file_path="audio.wav")
-
-                                # for chunk in self.stream_tts("audio.wav"):
-                                    # await self.to_device.put(chunk)
+                                self.core.on_audio_recorder_speech_recorded(self.recording_file_path)
 
                     except json.JSONDecodeError:
                         pass  # data is not JSON, leave it as is
@@ -87,14 +86,13 @@ class Esp32Handler:
                 raise
 
     def save_wav(self, data, nchannels, sampwidth, framerate):
-        with wave.open('audio.wav', 'wb') as wf:
+        with wave.open(self.recording_file_path, "wb") as wf:
             wf.setnchannels(nchannels)
             wf.setsampwidth(sampwidth)
             wf.setframerate(framerate)
             wf.writeframes(data)
 
     def direct_stream(self, audio_bytes):
-
         chunk_size = 2048
 
         # Stream the audio
