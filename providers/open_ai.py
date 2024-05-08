@@ -5,9 +5,6 @@ from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
 from api.enums import (
     AzureRegion,
-    LogType,
-    MistralModel,
-    OpenAiModel,
     OpenAiTtsVoice,
 )
 from api.interface import (
