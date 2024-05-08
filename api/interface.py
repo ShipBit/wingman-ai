@@ -9,7 +9,7 @@ from api.enums import (
     AzureApiVersion,
     AzureRegion,
     ConversationProvider,
-    LlamaModel,
+    GroqModel,
     MistralModel,
     TtsVoiceGender,
     ElevenlabsModel,
@@ -282,9 +282,21 @@ class MistralConfig(BaseModel):
     endpoint: str
 
 
-class LlamaConfig(BaseModel):
-    conversation_model: LlamaModel
-    summarize_model: LlamaModel
+class GroqConfig(BaseModel):
+    conversation_model: GroqModel
+    summarize_model: GroqModel
+    endpoint: str
+
+
+class OpenRouterConfig(BaseModel):
+    conversation_model: str
+    summarize_model: str
+    endpoint: str
+
+
+class LocalLlmConfig(BaseModel):
+    conversation_model: Optional[str] = None
+    summarize_model: Optional[str] = None
     endpoint: str
 
 
@@ -431,7 +443,9 @@ class NestedConfig(BaseModel):
     features: FeaturesConfig
     openai: OpenAiConfig
     mistral: MistralConfig
-    llama: LlamaConfig
+    groq: GroqConfig
+    openrouter: OpenRouterConfig
+    local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig

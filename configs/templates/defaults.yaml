@@ -86,10 +86,18 @@ mistral:
   summarize_model: mistral-medium-latest
   endpoint: https://api.mistral.ai/v1
 
-llama:
-  conversation_model: llama3-70b
-  summarize_model: llama3-8b
+groq:
+  conversation_model: llama3-70b-8192
+  summarize_model: llama3-8b-8192
   endpoint: https://api.groq.com/openai/v1
+
+openrouter:
+  conversation_model: meta-llama/llama-3-8b-instruct:free
+  summarize_model: meta-llama/llama-3-8b-instruct:free
+  endpoint: https://openrouter.ai/api/v1
+
+local_llm:
+  endpoint: http://localhost:1234/v1 # LMStudio
 
 # ────────────────────────────────── EDGE TTS ────────────────────────────────────
 # EdgeTTS is free and faster than the default OpenAI TTSbut it's not as good in terms of quality.

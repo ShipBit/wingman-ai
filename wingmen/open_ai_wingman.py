@@ -53,7 +53,9 @@ class OpenAiWingman(Wingman):
         # validate will set these:
         self.openai: OpenAi = None
         self.mistral: OpenAi = None
-        self.llama: OpenAi = None
+        self.groq: OpenAi = None
+        self.openrouter: OpenAi = None
+        self.local_llm: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
         self.xvasynth: XVASynth = None
@@ -82,8 +84,14 @@ class OpenAiWingman(Wingman):
         if self.uses_provider("mistral"):
             await self.validate_and_set_mistral(errors)
 
-        if self.uses_provider("llama"):
-            await self.validate_and_set_llama(errors)
+        if self.uses_provider("groq"):
+            await self.validate_and_set_groq(errors)
+
+        if self.uses_provider("openrouter"):
+            await self.validate_and_set_openrouter(errors)
+
+        if self.uses_provider("local_llm"):
+            await self.validate_and_set_local_llm(errors)
 
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
@@ -119,11 +127,25 @@ class OpenAiWingman(Wingman):
                     self.summarize_provider == SummarizeProvider.MISTRAL,
                 ]
             )
-        elif provider_type == "llama":
+        elif provider_type == "groq":
             return any(
                 [
-                    self.conversation_provider == ConversationProvider.LLAMA,
-                    self.summarize_provider == SummarizeProvider.LLAMA,
+                    self.conversation_provider == ConversationProvider.GROQ,
+                    self.summarize_provider == SummarizeProvider.GROQ,
+                ]
+            )
+        elif provider_type == "openrouter":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.OPENROUTER,
+                    self.summarize_provider == SummarizeProvider.OPENROUTER,
+                ]
+            )
+        elif provider_type == "local_llm":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.LOCAL_LLM,
+                    self.summarize_provider == SummarizeProvider.LOCAL_LLM,
                 ]
             )
         elif provider_type == "azure":
@@ -174,15 +196,32 @@ class OpenAiWingman(Wingman):
                 base_url=self.config.mistral.endpoint,
             )
 
-    async def validate_and_set_llama(self, errors: list[WingmanInitializationError]):
-        api_key = await self.retrieve_secret("llama", errors)
+    async def validate_and_set_groq(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("groq", errors)
         if api_key:
             # TODO: maybe use their native client (or LangChain) instead of OpenAI(?)
-            self.llama = OpenAi(
+            self.groq = OpenAi(
                 api_key=api_key,
-                organization=self.config.openai.organization,
-                base_url=self.config.llama.endpoint,
+                base_url=self.config.groq.endpoint,
             )
+
+    async def validate_and_set_openrouter(
+        self, errors: list[WingmanInitializationError]
+    ):
+        api_key = await self.retrieve_secret("openrouter", errors)
+        if api_key:
+            self.openrouter = OpenAi(
+                api_key=api_key,
+                base_url=self.config.openrouter.endpoint,
+            )
+
+    async def validate_and_set_local_llm(
+        self, errors: list[WingmanInitializationError]
+    ):
+        self.local_llm = OpenAi(
+            api_key="not-set",
+            base_url=self.config.local_llm.endpoint,
+        )
 
     async def validate_and_set_elevenlabs(
         self, errors: list[WingmanInitializationError]
@@ -607,19 +646,31 @@ class OpenAiWingman(Wingman):
             completion = self.openai.ask(
                 messages=self.messages,
                 tools=tools,
-                model=self.config.openai.conversation_model,
+                model=self.config.openai.conversation_model.value,
             )
         elif self.conversation_provider == ConversationProvider.MISTRAL:
             completion = self.mistral.ask(
                 messages=self.messages,
                 tools=tools,
-                model=self.config.mistral.conversation_model,
+                model=self.config.mistral.conversation_model.value,
             )
-        elif self.conversation_provider == ConversationProvider.LLAMA:
-            completion = self.llama.ask(
+        elif self.conversation_provider == ConversationProvider.GROQ:
+            completion = self.groq.ask(
                 messages=self.messages,
                 tools=tools,
-                model=self.config.llama.conversation_model,
+                model=self.config.groq.conversation_model.value,
+            )
+        elif self.conversation_provider == ConversationProvider.OPENROUTER:
+            completion = self.openrouter.ask(
+                messages=self.messages,
+                tools=tools,
+                model=self.config.openrouter.conversation_model,
+            )
+        elif self.conversation_provider == ConversationProvider.LOCAL_LLM:
+            completion = self.local_llm.ask(
+                messages=self.messages,
+                tools=tools,
+                model=self.config.local_llm.conversation_model,
             )
         elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
             completion = self.wingman_pro.ask(
@@ -714,17 +765,27 @@ class OpenAiWingman(Wingman):
         elif self.summarize_provider == SummarizeProvider.OPENAI:
             summarize_response = self.openai.ask(
                 messages=self.messages,
-                model=self.config.openai.summarize_model,
+                model=self.config.openai.summarize_model.value,
             )
         elif self.summarize_provider == SummarizeProvider.MISTRAL:
             summarize_response = self.mistral.ask(
                 messages=self.messages,
-                model=self.config.mistral.summarize_model,
+                model=self.config.mistral.summarize_model.value,
             )
-        elif self.summarize_provider == SummarizeProvider.LLAMA:
-            summarize_response = self.llama.ask(
+        elif self.summarize_provider == SummarizeProvider.GROQ:
+            summarize_response = self.groq.ask(
                 messages=self.messages,
-                model=self.config.llama.summarize_model,
+                model=self.config.groq.summarize_model.value,
+            )
+        elif self.summarize_provider == SummarizeProvider.OPENROUTER:
+            summarize_response = self.openrouter.ask(
+                messages=self.messages,
+                model=self.config.openrouter.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.LOCAL_LLM:
+            summarize_response = self.local_llm.ask(
+                messages=self.messages,
+                model=self.config.local_llm.summarize_model,
             )
         elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
             summarize_response = self.wingman_pro.ask(
