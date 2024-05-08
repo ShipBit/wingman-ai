@@ -1,6 +1,7 @@
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import Config, SettingsConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
+from services.module_manager import ModuleManager
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -38,7 +39,7 @@ class Tower:
             try:
                 # it's a custom Wingman
                 if wingman_config.custom_class:
-                    wingman = Wingman.create_dynamically(
+                    wingman = ModuleManager.create_wingman_dynamically(
                         name=wingman_name,
                         config=wingman_config,
                         settings=settings,
@@ -51,7 +52,18 @@ class Tower:
                         settings=settings,
                         audio_player=self.audio_player,
                     )
+            except FileNotFoundError as e:  # pylint: disable=broad-except
+                wingman_config.disabled = True
+                printr.print(
+                    f"Could not instantiate {wingman_name}:\n{str(e)}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source_name=self.log_source_name,
+                    source=LogSource.SYSTEM,
+                )
+                continue
             except Exception as e:  # pylint: disable=broad-except
+                wingman_config.disabled = True
                 # just in case we missed something
                 msg = str(e).strip() or type(e).__name__
                 errors.append(
@@ -61,19 +73,24 @@ class Tower:
                         error_type=WingmanInitializationErrorType.UNKNOWN,
                     )
                 )
-                printr.toast_error(f"Could not instantiate {wingman_name}:\n{str(e)}")
+                continue
             else:
                 # additional validation check if no exception was raised
                 validation_errors = await wingman.validate()
                 errors.extend(validation_errors)
+
+                # init and validate skills
+                skill_errors = await wingman.init_skills()
+                errors.extend(skill_errors)
+
                 if not errors or len(errors) == 0:
-                    wingman.prepare()
+                    await wingman.prepare()
                     self.wingmen.append(wingman)
 
-            # Mouse
-            button = wingman.get_record_button()
-            if button:
-                self.mouse_wingman_dict[button] = wingman
+                # Mouse
+                button = wingman.get_record_button()
+                if button:
+                    self.mouse_wingman_dict[button] = wingman
 
         printr.print(
             f"Instantiated wingmen: {', '.join([w.name for w in self.wingmen])}.",

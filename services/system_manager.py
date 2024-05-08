@@ -4,7 +4,7 @@ import requests
 from packaging import version
 from api.interface import SystemCore, SystemInfo
 
-LOCAL_VERSION = "1.2.1"
+LOCAL_VERSION = "1.3.0"
 VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
 
 

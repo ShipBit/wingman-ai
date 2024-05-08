@@ -1,3 +1,4 @@
+debug_mode: false
 audio: {}
 voice_activation:
   enabled: false

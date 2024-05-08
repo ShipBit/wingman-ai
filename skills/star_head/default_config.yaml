@@ -1,0 +1,19 @@
+name: StarHead
+module: skills.star_head.main
+description: Use the StarHead API to retrieve detailed information about spaceships, components, weapons and more. StarHead can also calculate optimal trading routes based on live data.
+prompt: |
+  You have access to the StarHead API which you can use to access live trading data and to retrieve additional information about spaceships in Star Citizen.
+  Your job is to find good trading routes for the user based on his/her ship, current location and available budget.
+  The user can also ask you about details of specific ships, components, weapons, and more.
+  You always use the tools available to you to retrieve the required information and to provide the user with the information.
+custom_properties:
+  - hint: The URL of the StarHead API.
+    id: starhead_api_url
+    name: StarHead API URL
+    required: true
+    value: https://api.star-head.de
+  - hint: The URL of the Star Citizen Wiki API.
+    id: star_citizen_wiki_api_url
+    name: Star Citizen Wiki API URL
+    required: true
+    value: https://api.star-citizen.wiki/api/v2

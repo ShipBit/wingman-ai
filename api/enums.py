@@ -41,6 +41,13 @@ class CommandTag(Enum):
     UNAUTHORIZED = "unauthorized"
 
 
+class CustomPropertyType(Enum):
+    STRING = "string"
+    NUMBER = "number"
+    BOOLEAN = "boolean"
+    SINGLE_SELECT = "single_select"
+
+
 class AzureApiVersion(Enum):
     A2023_12_01_PREVIEW = "2023-12-01-preview"
     A2024_02_15_PREVIEW = "2024-02-15-preview"
@@ -210,6 +217,10 @@ class CommandTagEnumModel(BaseEnumModel):
     command_tag: CommandTag
 
 
+class CustomPropertyTypeEnumModel(BaseEnumModel):
+    property_type: CustomPropertyType
+
+
 class AzureApiVersionEnumModel(BaseEnumModel):
     api_version: AzureApiVersion
 
@@ -296,6 +307,7 @@ ENUM_TYPES = {
     "ToastType": ToastTypeEnumModel,
     "WingmanInitializationErrorType": WingmanInitializationErrorTypeModel,
     "CommandTag": CommandTagEnumModel,
+    "CustomPropertyType": CustomPropertyTypeEnumModel,
     "AzureApiVersion": AzureApiVersionEnumModel,
     "AzureRegion": AzureRegionEnumModel,
     "ElevenlabsModel": ElevenlabsModelEnumModel,

@@ -201,7 +201,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.post("/start-secrets", tags=["main"])
 async def start_secrets(secrets: dict[str, Any]):
-    secret_keeper.post_secrets(secrets)
+    await secret_keeper.post_secrets(secrets)
     core.startup_errors = []
     await core.config_service.load_config()
 

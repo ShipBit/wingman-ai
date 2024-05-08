@@ -5,7 +5,6 @@ from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
 from api.enums import (
     AzureRegion,
-    LogType,
     OpenAiTtsVoice,
 )
 from api.interface import (
@@ -40,13 +39,11 @@ class BaseOpenAi(ABC):
         )
         if m is not None:
             message = m["message"].replace(". ", ".\n")
-            printr.print(message, color=LogType.ERROR)
+            printr.toast_error(message)
         elif api_response.message:
-            printr.print(api_response.message, color=LogType.ERROR)
+            printr.toast_error(api_response.message)
         else:
-            printr.print(
-                "The API did not provide further information.", color=LogType.ERROR
-            )
+            printr.toast_error("The API did not provide further information.")
 
     def _perform_transcription(
         self,

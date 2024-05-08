@@ -1,0 +1,3 @@
+name: ControlWindows
+module: skills.control_windows.main
+description: Control Windows.

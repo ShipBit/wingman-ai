@@ -1,0 +1,21 @@
+name: Spotify
+module: skills.spotify.main
+description: Control your Spotify music player client using its WebAPI. You need to create a Spotify Developer app and start the Spotify client on your computer.
+prompt: |
+  You are also an expert DJ and music player interface resposible to control the Spotify music player client of the user.
+  You have access to different tools or functions you can call to control the Spotify client using its API.
+  If the user asks you to play a song, resume, stop or pause the current playback etc. use your tools to do so.
+  For some functions, you need parameters like the song or artist name. Try to extract these values from the
+  player's request.
+  Never invent any function parameters. Ask the user for clarification if you are not sure or cannot extract function parameters.
+custom_properties:
+  - hint: Create an app in the Spotify Dashboard at https://developer.spotify.com/dashboard. You'll find the Client ID in the Settings of that app.
+    id: spotify_client_id
+    name: Spotify Client ID
+    required: true
+    value: 013ce483968b4118a989d1f2884b44a4
+  - hint: Create an app in the Spotify Dashboard at https://developer.spotify.com/dashboard. In the Settings of the app, set the Redirect URL to http://127.0.0.1:8082 or any other free port. Input the same value here.
+    id: spotify_redirect_url
+    name: Spotify Redirect URL
+    required: true
+    value: http://127.0.0.1:8082

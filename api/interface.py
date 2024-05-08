@@ -11,6 +11,7 @@ from api.enums import (
     ConversationProvider,
     GroqModel,
     MistralModel,
+    CustomPropertyType,
     TtsVoiceGender,
     ElevenlabsModel,
     OpenAiModel,
@@ -243,11 +244,6 @@ class XVASynthTtsConfig(BaseModel):
 
 
 class OpenAiConfig(BaseModel):
-    context: Optional[str] = None
-    """The "context" for the wingman. Here's where you can tell the AI how to behave.
-    This is probably what you want to play around with the most.
-    """
-
     conversation_model: OpenAiModel
     """ The model to use for conversations aka "chit-chat" and for function calls.
     gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
@@ -274,6 +270,14 @@ class OpenAiConfig(BaseModel):
 
     organization: Optional[str] = None
     """If you have an organization key, you can set it here."""
+
+
+class PromptConfig(BaseModel):
+    system_prompt: str
+    """The read-only "context template" for the Wingman. Contains variables that will be replaced by the user (backstory) and/or skills."""
+
+    backstory: Optional[str] = None
+    """The backstory of the Wingman. Edit this to control how your Wingman should behave."""
 
 
 class MistralConfig(BaseModel):
@@ -346,9 +350,6 @@ class FeaturesConfig(BaseModel):
 
     Note that the other providers may have additional config blocks. These are only used if the provider is set here.
     """
-
-    debug_mode: bool
-    """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
 
     tts_provider: TtsProvider
     stt_provider: SttProvider
@@ -438,7 +439,46 @@ class CustomWingmanClassConfig(BaseModel):
     """The name of your class within your file/module."""
 
 
+class LabelValuePair(BaseModel):
+    label: str
+    value: str | int | float | bool
+
+
+class CustomWingmanProperty(BaseModel):
+    id: str
+    """The name of the property. Has to be unique"""
+    name: str
+    """The "friendly" name of the property, displayed in the UI."""
+    value: str | int | float | bool | None
+    """The value of the property"""
+    hint: Optional[str] = None
+    """A hint for the user, displayed in the UI."""
+    required: Optional[bool] = False
+    """Marks the property as required in the UI."""
+    property_type: Optional[CustomPropertyType] = CustomPropertyType.STRING
+    """Determines the type of the property and which controls to render in the UI."""
+    options: Optional[list[LabelValuePair]] = None
+    """If property_type is set to 'single_select', you can provide options here."""
+
+
+class SkillConfig(CustomWingmanClassConfig):
+    description: Optional[str] = None
+    prompt: Optional[str] = None
+    """An additional prompt that extends the system prompt of the Wingman."""
+    commands: Optional[list[CommandConfig]] = None
+    custom_properties: Optional[list[CustomWingmanProperty]] = None
+    """You can add custom properties here to use in your custom skill class."""
+
+
+class SkillBase(BaseModel):
+    name: str
+    config: SkillConfig
+    logo: Optional[Annotated[str, Base64Str]] = None
+    description: Optional[str] = None
+
+
 class NestedConfig(BaseModel):
+    prompts: PromptConfig
     sound: SoundConfig
     features: FeaturesConfig
     openai: OpenAiConfig
@@ -453,19 +493,7 @@ class NestedConfig(BaseModel):
     whispercpp: WhispercppSttConfig
     wingman_pro: WingmanProConfig
     commands: Optional[list[CommandConfig]] = None
-
-
-class CustomWingmanProperty(BaseModel):
-    id: str
-    """The name of the property. Has to be unique"""
-    name: str
-    """The "friendly" name of the property, displayed in the UI."""
-    value: str
-    """The value of the property"""
-    hint: Optional[str] = None
-    """A hint for the user, displayed in the UI."""
-    required: Optional[bool] = False
-    """Marks the property as required in the UI."""
+    skills: Optional[list[SkillConfig]] = None
 
 
 class WingmanConfig(NestedConfig):
@@ -527,3 +555,4 @@ class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
+    debug_mode: bool = False
