@@ -1,7 +1,6 @@
 import argparse
 import asyncio
 from enum import Enum
-import json
 from os import path
 import sys
 import traceback
@@ -24,7 +23,6 @@ from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.system_manager import SystemManager
 from wingman_core import WingmanCore
-import wave
 
 port = None
 host = None
@@ -71,7 +69,7 @@ core.set_connection_manager(connection_manager)
 keyboard.hook(core.on_key)
 
 # TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
-#mouse.hook(core.on_mouse)
+mouse.hook(core.on_mouse)
 
 
 def custom_generate_unique_id(route: APIRoute):
@@ -203,7 +201,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await printr.print_async("Client disconnected", server_only=True)
 
 
-# Open Interpreter (ESP32) Client
+# Websocket for other clients to stream audio to and from (like M5Atom Echo ESP32 devices)
 @app.websocket("/")
 async def oi_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
