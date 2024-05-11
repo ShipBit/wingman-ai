@@ -61,7 +61,7 @@ class UEXCorp(Skill):
             config=config, wingman_config=wingman_config, settings=settings
         )
 
-        self.data_path = get_writable_dir(path.join("skills", self.name, "data"))
+        self.data_path = get_writable_dir(path.join("skills", "uexcorp", "data"))
         self.logfileerror = path.join(self.data_path, "error.log")
         self.logfiledebug = path.join(self.data_path, "debug.log")
         self.cachefile = path.join(self.data_path, "cache.json")
