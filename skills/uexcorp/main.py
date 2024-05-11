@@ -415,7 +415,7 @@ class UEXCorp(Skill):
                 "cities": self.cities,
             }
             with open(self.cachefile, "w", encoding="UTF-8") as f:
-                json.dump(data, f)
+                json.dump(data, f, indent=4)
 
         # data manipulation
         # remove planet information from space tradeports
