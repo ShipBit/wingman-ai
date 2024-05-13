@@ -41,8 +41,8 @@ sound:
   effects: []
   play_beep: false
 openai:
-  conversation_model: gpt-3.5-turbo
-  summarize_model: gpt-3.5-turbo
+  conversation_model: gpt-4o
+  summarize_model: gpt-4o
   tts_voice: nova
 mistral:
   conversation_model: mistral-large-latest

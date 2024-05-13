@@ -75,6 +75,7 @@ class OpenAiModel(Enum):
 
     GPT_35_TURBO = "gpt-3.5-turbo"
     GPT_4_TURBO_PREVIEW = "gpt-4-turbo"
+    GPT_4o = "gpt-4o"
 
 
 class MistralModel(Enum):
