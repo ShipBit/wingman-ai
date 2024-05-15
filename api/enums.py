@@ -73,8 +73,7 @@ class TtsVoiceGender(Enum):
 class OpenAiModel(Enum):
     """https://platform.openai.com/docs/models/overview"""
 
-    GPT_35_TURBO = "gpt-3.5-turbo"
-    GPT_4_TURBO_PREVIEW = "gpt-4-turbo"
+    GPT_4O = "gpt-4o"
 
 
 class MistralModel(Enum):
@@ -98,8 +97,7 @@ class GroqModel(Enum):
 
 
 class WingmanProAzureDeployment(Enum):
-    GPT_35_TURBO = "gpt-35-turbo"
-    GPT_4_TURBO = "gpt-4-turbo"
+    GPT_4O = "gpt-4o"
     MISTRAL_LARGE = "mistral-large-latest"
     LLAMA3_8B = "llama3-8b"
     LLAMA3_70B = "llama3-70b"

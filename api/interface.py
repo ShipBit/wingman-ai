@@ -246,14 +246,10 @@ class XVASynthTtsConfig(BaseModel):
 class OpenAiConfig(BaseModel):
     conversation_model: OpenAiModel
     """ The model to use for conversations aka "chit-chat" and for function calls.
-    gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
-    gpt-3.5 is the default and should be enough for most use cases.
-    If something is not working as expected, you might want to test it with gpt-4.
     """
 
     summarize_model: OpenAiModel
-    """ This model summarizes function responses, like API call responses etc.
-    In most cases gpt-3.5 should be enough.
+    """ This model summarizes function responses, like API call responses etc. This can be a less capable model.
     """
 
     tts_voice: OpenAiTtsVoice
