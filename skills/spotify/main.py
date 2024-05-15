@@ -1,3 +1,4 @@
+from os import path
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from api.enums import LogSource, LogType
@@ -7,6 +8,7 @@ from api.interface import (
     WingmanConfig,
     WingmanInitializationError,
 )
+from services.file import get_writable_dir
 from skills.skill_base import Skill
 
 
@@ -21,6 +23,7 @@ class Spotify(Skill):
         super().__init__(
             config=config, wingman_config=wingman_config, settings=settings
         )
+        self.data_path = get_writable_dir(path.join("skills", "spotify", "data"))
         self.spotify: spotipy.Spotify = None
         self.available_devices = []
 
@@ -34,6 +37,9 @@ class Spotify(Skill):
         )
         if secret and client_id and redirect_url:
             # now that we have everything, initialize the Spotify client
+            cache_handler = spotipy.cache_handler.CacheFileHandler(
+                cache_path=f"{self.data_path}/.cache"
+            )
             self.spotify = spotipy.Spotify(
                 auth_manager=SpotifyOAuth(
                     client_id=client_id,
@@ -52,6 +58,7 @@ class Spotify(Skill):
                         # "user-read-recently-played",
                         # "user-top-read"
                     ],
+                    cache_handler=cache_handler,
                 )
             )
         return errors
