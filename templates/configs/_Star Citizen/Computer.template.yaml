@@ -31,26 +31,67 @@ commands:
   - name: ScanArea
     actions:
       - keyboard:
-          hotkey: v
-          hold: 0.6
+          hotkey: tab
     instant_activation:
       - Scan Area
       - Scan the area
       - Initiate scan
-  - name: JumpWithQuantumDrive
+  - name: ToggleMasterModeScmAndNav
     actions:
       - keyboard:
           hotkey: b
-          hold: 0.8
-  - name: DisableLimiter
+          hold: 0.6
+  - name: NextOperatorModeWeaponsMissilesScanningMiningSalvagingQuantumFlight
+    actions:
+      - mouse:
+          button: middle
+  - name: ToggleMiningOperatorMode
     actions:
       - keyboard:
-          hotkey: ctrl+n
+          hotkey: m
+  - name: ToggleSalvageOperatorMode
+    actions:
+      - keyboard:
+          hotkey: m
+  - name: ToggleScanningOperatorMode
+    actions:
+      - keyboard:
+          hotkey: v
+  - name: UseOrActivateWeapons
+    actions:
+      - mouse:
+          button: left
+          hold: 0.4
+  - name: UseOrActivateMissiles
+    actions:
+      - mouse:
+          button: left
+          hold: 0.4
+  - name: UseOrActivateScanning
+    actions:
+      - mouse:
+          button: left
+          hold: 0.4
+  - name: UseOrActivateMining
+    actions:
+      - mouse:
+          button: left
+          hold: 0.4
+  - name: UseOrActivateSalvaging
+    actions:
+      - mouse:
+          button: left
+          hold: 0.4
+  - name: UseOrActivateQuantumFlight
+    actions:
+      - mouse:
+          button: left
+          hold: 0.4
   - name: InitiateStartSequence
     actions:
       - keyboard:
           hotkey: alt gr+r
-      - wait: 2
+      - wait: 3
       - keyboard:
           hotkey: alt+n
   - name: DeployLandingGear
@@ -61,14 +102,6 @@ commands:
     actions:
       - keyboard:
           hotkey: n
-  - name: EnableQuantumDrive
-    actions:
-      - keyboard:
-          hotkey: b
-  - name: DisableQuantumDrive
-    actions:
-      - keyboard:
-          hotkey: b
   - name: HeadLightsOn
     actions:
       - keyboard:
@@ -132,22 +165,10 @@ commands:
     actions:
       - keyboard:
           hotkey: k
-  - name: Lock
-    actions:
-      - keyboard:
-          hotkey: f8
-  - name: Unlock
-    actions:
-      - keyboard:
-          hotkey: f8
   - name: ResetPowerPriority
     actions:
       - keyboard:
           hotkey: f8
-  - name: MiningMode
-    actions:
-      - keyboard:
-          hotkey: m
   - name: CycleCamera
     actions:
       - keyboard:
@@ -167,7 +188,8 @@ commands:
   - name: HolsterWeapon
     actions:
       - keyboard:
-          hotkey: "2"
+          hotkey: r
+          hold: 0.6
   - name: Reload
     actions:
       - keyboard:
@@ -175,7 +197,10 @@ commands:
   - name: UseMedPen
     actions:
       - keyboard:
-          hotkey: c
+          hotkey: "4"
+      - wait: 0.8
+      - mouse:
+          button: left
   - name: UseFlashLight
     actions:
       - keyboard:
@@ -192,34 +217,6 @@ commands:
     actions:
       - keyboard:
           hotkey: j
-  - name: ShieldRaiseBack
-    actions:
-      - keyboard:
-          hotkey: "2"
-  - name: ShieldRaiseLeft
-    actions:
-      - keyboard:
-          hotkey: "4"
-  - name: ResetShields
-    actions:
-      - keyboard:
-          hotkey: "5"
-  - name: ShieldRaiseRight
-    actions:
-      - keyboard:
-          hotkey: "6"
-  - name: ShieldRaiseTop
-    actions:
-      - keyboard:
-          hotkey: "7"
-  - name: ShieldRaiseFront
-    actions:
-      - keyboard:
-          hotkey: "8"
-  - name: ShieldRaiseBottom
-    actions:
-      - keyboard:
-          hotkey: "9"
   - name: EmergencyEject
     actions:
       - keyboard:
@@ -236,10 +233,6 @@ commands:
       - keyboard:
           hotkey: backspace
           hold: 0.8
-  - name: SalvageMode
-    actions:
-      - keyboard:
-          hotkey: g
   - name: SpaceBrake
     actions:
       - keyboard:
@@ -264,37 +257,53 @@ commands:
   - name: DisplayDebuggingInfo
     actions:
       - keyboard:
-          hotkey: "shift+~"
-      - write: "r_DisplayInfo 2"
-      - wait: 1
+          hotkey: ^
+          hotkey_codes:
+          - 41
+          hotkey_extended: false
+      - wait: 0.5
+      - write: r_DisplayInfo 2
+      - wait: 0.5
       - keyboard:
-          hotkey: "enter"
-      - wait: 1
+          hotkey: enter
+          hotkey_codes:
+          - 28
+          hotkey_extended: false
       - keyboard:
-          hotkey: "shift+~"
+          hotkey: ^
+          hotkey_codes:
+          - 41
+          hotkey_extended: false
+    is_system_command: false
     instant_activation:
       - Display info
       - Display debugging information
       - Display debug information
-  - name: ZoomIn
+  - name: HideDebuggingInfo
     actions:
-      - mouse:
-          scroll: 30
+      - keyboard:
+          hotkey: ^
+          hotkey_codes:
+          - 41
+          hotkey_extended: false
+      - wait: 0.5
+      - write: r_DisplayInfo 0
+      - wait: 0.5
+      - keyboard:
+          hotkey: enter
+          hotkey_codes:
+          - 28
+          hotkey_extended: false
+      - keyboard:
+          hotkey: ^
+          hotkey_codes:
+          - 41
+          hotkey_extended: false
+    is_system_command: false
     instant_activation:
-      - Zoom in
-  - name: ZoomOut
-    actions:
-      - mouse:
-          scroll: -30
-    instant_activation:
-      - Zoom out
-  - name: FireMiningLaser
-    actions:
-      - mouse:
-          button: left
-          hold: 0.6
-    instant_activation:
-      - Fire mining laser
+      - Hide info
+      - Hide debugging information
+      - Hide debug information
   - name: SwitchMiningLaser
     actions:
       - mouse:
@@ -303,11 +312,3 @@ commands:
     instant_activation:
       - Change mining laser
       - Switch mining laser
-  - name: LaunchMissile
-    actions:
-      - mouse:
-          button: left
-          hold: 1.0
-    instant_activation:
-      - Launch Missile
-      - Fire Missile
