@@ -93,10 +93,7 @@ class ModuleManager:
             dependencies_dir = path.join(skill_path, "venv", "lib", "site-packages")
             dependencies_dir = path.abspath(dependencies_dir)
             with add_to_sys_path(dependencies_dir):
-                try:
-                    module = import_module(config.module)
-                except Exception as e:
-                    print(e)
+                module = import_module(config.module)
         except ModuleNotFoundError:
             skill_name, skill_path = ModuleManager.get_module_name_and_path(
                 config.module
