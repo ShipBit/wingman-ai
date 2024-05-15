@@ -1,3 +1,6 @@
 name: ControlWindows
 module: skills.control_windows.main
 description: Control Windows.
+prompt: |
+  You can also control Windows Functions, like opening and closing applications.
+  You can also get system information like CPU usage, memory usage, disk information or network status.
