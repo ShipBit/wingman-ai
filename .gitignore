@@ -178,3 +178,4 @@ configs/system/secrets.yaml
 .frontmatter/database/taxonomyDb.json
 
 frontmatter.json
+skills/**/dependencies
