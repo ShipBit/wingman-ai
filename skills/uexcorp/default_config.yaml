@@ -87,11 +87,9 @@ custom_properties:
     property_type: number
 
   # Set this option to "true" to automatically attach all possible location, ship and commodity names to the context.
-  # This will slightly improve the behavior of gpt-3.5-turbo-1106 and even more so with gpt-4-1106-preview.
   # But it comes with a cost, literally. It will cost you more money, as more tokens are used with openai's API.
   # Approx. additional costs per request due to additional context:
-  # gpt-3.5-turbo-1106: $0.002
-  # gpt-4-1106-preview: $0.02
+  # gpt-4o: $0.0015
   # Default is "false", as the costs are not worth it in our opinion and we built a complete system to avoid the need for this.
   - id: uexcorp_additional_context
     name: Additional Context
