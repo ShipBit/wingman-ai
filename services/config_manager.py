@@ -19,13 +19,13 @@ from api.interface import (
 from services.file import get_writable_dir
 from services.printr import Printr
 
+TEMPLATES_DIR = "templates"
 CONFIGS_DIR = "configs"
-TEMPLATES_DIR = "configs/templates"
 
 SETTINGS_CONFIG_FILE = "settings.yaml"
 DEFAULT_CONFIG_FILE = "defaults.yaml"
 SECRETS_FILE = "secrets.yaml"
-DEFAULT_WINGMAN_AVATAR = "default-avatar-wingman.png"
+DEFAULT_WINGMAN_AVATAR = "default-wingman-avatar.png"
 
 DELETED_PREFIX = "."
 DEFAULT_PREFIX = "_"
@@ -36,10 +36,10 @@ class ConfigManager:
         self.log_source_name = "ConfigManager"
         self.printr = Printr()
 
-        self.config_dir = get_writable_dir(CONFIGS_DIR)
         self.templates_dir = path.join(app_root_path, TEMPLATES_DIR)
+        self.config_dir = get_writable_dir(CONFIGS_DIR)
 
-        self.create_configs_from_templates()
+        self.copy_templates()
 
         self.settings_config_path = path.join(self.config_dir, SETTINGS_CONFIG_FILE)
         self.default_config_path = path.join(self.config_dir, DEFAULT_CONFIG_FILE)
@@ -117,8 +117,8 @@ class ConfigManager:
             path.join(self.config_dir, config_name) if config_name else self.config_dir
         )
 
-    def create_configs_from_templates(self, force: bool = False):
-        for root, _, files in walk(self.templates_dir):
+    def copy_templates(self, force: bool = False):
+        for root, dirs, files in walk(self.templates_dir):
             relative_path = path.relpath(root, self.templates_dir)
             if relative_path != ".":
                 config_dir = self.get_config_dir(
@@ -131,16 +131,18 @@ class ConfigManager:
                     continue
 
             # Create the same relative path in the target directory
-            target_path = (
-                self.config_dir
-                if relative_path == "."
-                else path.join(self.config_dir, relative_path)
+            target_path = get_writable_dir(
+                relative_path if relative_path != "." else ""
             )
 
             if not path.exists(target_path):
                 makedirs(target_path)
 
             for filename in files:
+                # yaml files
+                if filename == ".DS_Store":
+                    continue
+
                 if filename.endswith(".yaml"):
                     new_filename = filename.replace(".template", "")
                     new_filepath = path.join(target_path, new_filename)
@@ -167,15 +169,13 @@ class ConfigManager:
                             source=LogSource.SYSTEM,
                             source_name=self.log_source_name,
                         )
-                # create avatar
-                elif filename.endswith("avatar.png"):
-                    new_filename = filename.replace(".avatar", "")
-                    new_filepath = path.join(target_path, new_filename)
+                else:
+                    new_filepath = path.join(target_path, filename)
                     already_exists = path.exists(new_filepath)
                     if force or not already_exists:
                         shutil.copyfile(path.join(root, filename), new_filepath)
                         self.printr.print(
-                            f"Created avatar {new_filepath} from template.",
+                            f"Created file {new_filepath} from template.",
                             color=LogType.INFO,
                             server_only=True,
                             source=LogSource.SYSTEM,
@@ -271,7 +271,7 @@ class ConfigManager:
         return NewWingmanTemplate(
             wingman_config=validated_config,
             avatar=self.__load_image_as_base64(
-                path.join(self.templates_dir, DEFAULT_WINGMAN_AVATAR)
+                path.join(self.templates_dir, CONFIGS_DIR, DEFAULT_WINGMAN_AVATAR)
             ),
         )
 
@@ -570,7 +570,9 @@ class ConfigManager:
         avatar_path = path.join(
             self.config_dir, config_dir.directory, f"{wingman_file_base_name}.png"
         )
-        default_avatar_path = path.join(self.templates_dir, DEFAULT_WINGMAN_AVATAR)
+        default_avatar_path = path.join(
+            self.templates_dir, CONFIGS_DIR, DEFAULT_WINGMAN_AVATAR
+        )
         return (
             avatar_path if create or path.exists(avatar_path) else default_avatar_path
         )

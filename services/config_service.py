@@ -133,7 +133,7 @@ class ConfigService:
         except Exception as e:
             self.printr.toast_error(str(e))
             raise e
-        
+
         return skills
 
     # GET /configs
@@ -264,7 +264,7 @@ class ConfigService:
                     config_dir, wingman_file
                 )
                 if deleted:
-                    self.config_manager.create_configs_from_templates()
+                    self.config_manager.copy_templates()
 
                 await self.load_config(config_dir)
 
