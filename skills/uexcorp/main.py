@@ -1,3 +1,5 @@
+"""Wingman AI Skill to utalize uexcorp api for trade recommendations"""
+
 import copy
 import difflib
 import heapq
@@ -8,11 +10,10 @@ import math
 from os import path
 import collections
 import re
-import time
 from typing import Optional
 from datetime import datetime
 import requests
-from api.enums import LogSource, LogType, WingmanInitializationErrorType
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -60,12 +61,13 @@ class UEXCorp(Skill):
             config=config, wingman_config=wingman_config, settings=settings
         )
 
-        self.data_path = get_writable_dir(path.join("wingmen_data", self.name))
-        self.logfile = path.join(self.data_path, "error.log")
+        self.data_path = get_writable_dir(path.join("skills", "uexcorp", "data"))
+        self.logfileerror = path.join(self.data_path, "error.log")
+        self.logfiledebug = path.join(self.data_path, "debug.log")
         self.cachefile = path.join(self.data_path, "cache.json")
-        logging.basicConfig(filename=self.logfile, level=logging.ERROR)
+        logging.basicConfig(filename=self.logfileerror, level=logging.ERROR)
 
-        self.uexcorp_version = "v10"
+        self.uexcorp_version = "v11"
 
         # init of config options
         self.uexcorp_api_url: str = None
@@ -73,7 +75,6 @@ class UEXCorp(Skill):
         self.uexcorp_api_timeout: int = None
         self.uexcorp_cache: bool = None
         self.uexcorp_cache_duration: int = None
-        self.uexcorp_additional_context: bool = None
         self.uexcorp_summarize_routes_by_commodity: bool = None
         self.uexcorp_tradestart_mandatory: bool = None
         self.uexcorp_trade_blacklist = []
@@ -129,7 +130,7 @@ class UEXCorp(Skill):
 
     async def _print(self, message: str | dict, is_extensive: bool = False) -> None:
         """
-        Prints a debug message if debug mode is enabled. Will be sent to the server terminal, log file and client.
+        Prints a message if debug mode is enabled. Will be sent to the server terminal, log file and client.
 
         Args:
             message (str | dict): The message to be printed.
@@ -138,16 +139,16 @@ class UEXCorp(Skill):
         Returns:
             None
         """
-        if not self.settings.debug_mode or (
-            not self.cache_enabled and not self.DEV_MODE
-        ):
-            return
-
-        if self.DEV_MODE or not is_extensive:
+        if not is_extensive and self.settings.debug_mode:
             await self.printr.print_async(
                 message,
-                color=LogType.INFO if not is_extensive else LogType.WARNING,
+                color=LogType.INFO,
             )
+        elif self.DEV_MODE:
+            with open(self.logfiledebug, "a", encoding="UTF-8") as f:
+                f.write(f"#### Time: {datetime.now()} ####\n")
+                f.write(f"{message}\n\n")
+
 
     def _log(self, message: str | dict, is_extensive: bool = False) -> None:
         """
@@ -155,21 +156,21 @@ class UEXCorp(Skill):
 
         Args:
             message (str | dict): The message to be printed.
+            is_extensive (bool, optional): Whether the message is extensive. Defaults to False.
 
         Returns:
             None
         """
-        if not self.settings.debug_mode or (
-            not self.cache_enabled and not self.DEV_MODE
-        ):
-            return
-
-        if self.DEV_MODE or not is_extensive:
+        if not is_extensive and self.settings.debug_mode:
             self.printr.print(
                 message,
-                color=LogType.INFO if not is_extensive else LogType.WARNING,
+                color=LogType.INFO,
                 server_only=True,
             )
+        elif self.DEV_MODE:
+            with open(self.logfiledebug, "a", encoding="UTF-8") as f:
+                f.write(f"#### Time: {datetime.now()} ####\n")
+                f.write(f"{message}\n\n")
 
     def _get_function_arg_from_cache(
         self, arg_name: str, arg_value: str | int = None
@@ -245,9 +246,6 @@ class UEXCorp(Skill):
         )
         self.uexcorp_cache_duration = self.retrieve_custom_property_value(
             "uexcorp_cache_duration", errors
-        )
-        self.uexcorp_additional_context = self.retrieve_custom_property_value(
-            "uexcorp_additional_context", errors
         )
         self.uexcorp_summarize_routes_by_commodity = (
             self.retrieve_custom_property_value(
@@ -417,7 +415,7 @@ class UEXCorp(Skill):
                 "cities": self.cities,
             }
             with open(self.cachefile, "w", encoding="UTF-8") as f:
-                json.dump(data, f)
+                json.dump(data, f, indent=4)
 
         # data manipulation
         # remove planet information from space tradeports
@@ -569,26 +567,6 @@ class UEXCorp(Skill):
             + self.city_names
             + self.satellite_names
             + self.planet_names
-        )
-
-        if self.uexcorp_additional_context:
-            self._add_context(
-                'Possible values for function parameter "ship_name". If none is explicitly given by player, use "None": '
-                + ", ".join(self.ship_names)
-                + "\n\n"
-                + 'Possible values for function parameter "commodity_name": '
-                + ", ".join(self.commodity_names)
-                + "\n\n"
-                + 'Possible values for function parameters "position_start_name", "position_end_name", "currentposition_name" and "location_name": '
-                + ", ".join(self.location_names_set)
-            )
-
-        self._add_context(
-            "\nDo not (never) translate any properties when giving them to the player. They must stay in english or untouched."
-            + "\nOnly give functions parameters that were previously clearly provided by a request. Never assume any values, not the current ship, not the location, not the available money, nothing! Always send a None-value instead."
-            + "\nIf you are not using one of the definied functions, dont give any trading recommendations."
-            + "\nIf you execute a function that requires a commodity name, make sure to always provide the name in english, not in german or any other language."
-            + "\nNever mention optional function (tool) parameters to the user. Only mention the required parameters, if some are missing."
         )
 
     def _add_context(self, content: str):
@@ -780,16 +758,6 @@ class UEXCorp(Skill):
                                     "illegal_commodities_allowed",
                                     "maximal_number_of_routes",
                                 ]
-                                if self.uexcorp_tradestart_mandatory
-                                else [
-                                    "position_start_name",
-                                    "money_to_spend",
-                                    "free_cargo_space",
-                                    "position_end_name",
-                                    "commodity_name",
-                                    "illegal_commodities_allowed",
-                                    "maximal_number_of_routes",
-                                ]
                             ),
                         },
                     },
@@ -952,22 +920,26 @@ class UEXCorp(Skill):
                     },
                 },
             ),
-            (
-                "show_cached_function_values",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "show_cached_function_values",
-                        "description": "Prints the cached function's argument values to the console.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {},
-                            "required": [],
+        ]
+
+        if self.DEV_MODE:
+            tools.append(
+                (
+                    "show_cached_function_values",
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "show_cached_function_values",
+                            "description": "Prints the cached function's argument values to the console.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {},
+                                "required": [],
+                            },
                         },
                     },
-                },
-            ),
-        ]
+                ),
+            )
 
         return tools
 
@@ -1000,7 +972,7 @@ class UEXCorp(Skill):
                     await self.print_execution_time()
         except Exception as e:
             logging.error(e, exc_info=True)
-            file_object = open(self.logfile, "a", encoding="UTF-8")
+            file_object = open(self.logfileerror, "a", encoding="UTF-8")
             file_object.write(
                 "========================================================================================\n"
             )
@@ -1136,10 +1108,8 @@ class UEXCorp(Skill):
         Returns:
             str: A message indicating that the cached function's argument values have been printed to the console.
         """
-        if self.settings.debug_mode:
-            self._log(self.cache["function_args"])
-            return "Please check the console for the cached function's argument values."
-        return ""
+        self._log(self.cache["function_args"], True)
+        return "The cached function values are: \n" + json.dumps(self.cache["function_args"])
 
     async def _gpt_call_reload_current_commodity_prices(self) -> str:
         """
@@ -2194,8 +2164,6 @@ class UEXCorp(Skill):
                     ):
                         continue
 
-                    # self._print_debug(f"Searching traderoute..(Ship: {ship['name']}, Start: {start_tradeport['name']}, End: {end_tradeport['name']})", True)
-
                     trading_route_new = self._get_trading_route(
                         ship,
                         start_tradeport,
@@ -2205,7 +2173,6 @@ class UEXCorp(Skill):
                         commodity,
                         illegal_commodities_allowed,
                     )
-                    # self._print_debug(trading_route_new, True)
 
                     if isinstance(trading_route_new, str):
                         if trading_route_new not in errors:

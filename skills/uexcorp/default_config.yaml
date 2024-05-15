@@ -5,6 +5,12 @@ prompt: |
   You have tools to access the UEXcorp API which you can use to retrieve live trading data and additional information about ships, locations, commodities and more in Star Citizen.
   Here are some examples when to use the different tools at your disposal:
 
+  Do not (never) translate any properties when giving them to the player. They must stay in english or untouched.
+  Only give functions parameters that were previously clearly provided by a request. Never assume any values, not the current ship, not the location, not the available money, nothing! Always send a None-value instead.
+  If you are not using one of the definied functions, dont give any trading recommendations.
+  If you execute a function that requires a commodity name, make sure to always provide the name in english, not in german or any other language.
+  Never mention optional function (tool) parameters to the user. Only mention the required parameters, if some are missing.
+
   Samples when to use function "get_trading_routes":
   - "Best trading route": Indicates a user's intent to find the best trading route.
   - "Trade route": Suggests the user is seeking information on trading routes.
@@ -85,18 +91,6 @@ custom_properties:
     value: 86400
     required: true
     property_type: number
-
-  # Set this option to "true" to automatically attach all possible location, ship and commodity names to the context.
-  # But it comes with a cost, literally. It will cost you more money, as more tokens are used with openai's API.
-  # Approx. additional costs per request due to additional context:
-  # gpt-4o: $0.0015
-  # Default is "false", as the costs are not worth it in our opinion and we built a complete system to avoid the need for this.
-  - id: uexcorp_additional_context
-    name: Additional Context
-    hint: Set this option to "true" to automatically attach all possible location, ship and commodity names to the context. (Very costly and therefore not recommended!)
-    value: false
-    required: true
-    property_type: boolean
 
   # Set this option to "true" to show only one of the most profitable routes for each commodity.
   # Set this option to "false" to show all routes. This may include multiple routes for the same commodity.
