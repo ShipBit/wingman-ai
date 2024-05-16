@@ -11,13 +11,13 @@
             "program": "main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            // "args": [
-            //     "--host",
-            //     "127.0.0.1",
-            //     "--port",
-            //     "9000",
-            //     "--sidecar"
-            // ]
+            "args": [
+                "--host",
+                "0.0.0.0",
+                //"--port",
+                //"10001",
+                // "--sidecar"
+            ]
         }
     ]
 }
