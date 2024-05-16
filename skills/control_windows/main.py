@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-import psutil
 import pygetwindow as gw
 from api.interface import (
     SettingsConfig,
@@ -8,7 +7,7 @@ from api.interface import (
     WingmanConfig,
     WingmanInitializationError,
 )
-from api.enums import LogSource, LogType
+from api.enums import LogType
 from skills.skill_base import Skill
 
 
@@ -87,7 +86,7 @@ class ControlWindows(Skill):
                     "type": "function",
                     "function": {
                         "name": "control_windows_functions",
-                        "description": "Control Windows Functions, like opening and closing applications. Or getting information about your system, like CPU, memory, disks, network.",
+                        "description": "Control Windows Functions, like opening and closing applications.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -97,7 +96,6 @@ class ControlWindows(Skill):
                                     "enum": [
                                         "open",
                                         "close",
-                                        "get_cpu_info",
                                         "minimize",
                                         "maximize",
                                         "restore",
@@ -142,9 +140,6 @@ class ControlWindows(Skill):
                 app_closed = self.close_application(parameter)
                 if app_closed:
                     function_response = "Application closed."
-
-            elif parameters["command"] == "get_cpu_info":
-                function_response = psutil.cpu_percent(interval=1)
 
             else:
                 command = parameters["command"]
