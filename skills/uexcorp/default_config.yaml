@@ -1,6 +1,54 @@
 name: UEXCorp
 module: skills.uexcorp.main
-description: Use the UEXcorp API to get live trading and lore information about ships, locations, commodities and more in Star Citizen.
+description:
+  en: Use the UEXCorp API to get live trading and lore information about ships, locations, commodities and more in Star Citizen.
+  de: Nutze die UEXCorp API, um live Handels- und Lore-Informationen über Schiffe, Orte, Rohstoffe und mehr in Star Citizen zu erhalten.
+# hint:
+#   en:
+#   de:
+examples:
+  - question:
+      en: Please provide me a the best two trading routes for my Caterpillar, Im currently at Hurston.
+      de: Bitte nenne mir die zwei besten Handelsrouten für meine Caterpillar, die derzeit in Hurston steht.
+    answer:
+      en: You have two highly profitable trading routes available. The first route involves transporting Recycled Material Composite from Pickers Field on Hurston to Orison - Trade & Development Division on the planet Crusader, offering a profit of 2,148,480 aUEC for 576 SCU of cargo. The second route entails shipping Laranite from HDMS-Lathan on the satellite Arial back to Central Business District in Lorville, resulting in a profit of 297216 aUEC for the same cargo capacity.
+      de: Du hast zwei hochprofitable Handelsrouten zur Verfügung. Auf der ersten Route transportierst du Recyclingmaterial von Pickers Field auf Hurston nach Orison - Trade & Development Division auf dem Planeten Crusader und erzielst einen Gewinn von 2.148.480 AUEC für 576 SCU Fracht. Auf der zweiten Route wird Laranit von HDMS-Lathan auf dem Satelliten Arial zurück zum Central Business District in Lorville transportiert, was einen Gewinn von 297216 AUEC für die gleiche Frachtkapazität bedeutet.
+  - question:
+      en: I got 3000 SCU of Hydrogen loaded in my Hull-C, where can I sell it?
+      de: Ich habe 3000 SCU Hydrogen in meinem Hull-C geladen. Wo kann ich ihn verkaufen?
+    answer:
+      en: You can sell the 3000 SCU of Hydrogen at Baijini Point, located on ArcCorp in the Stanton system.
+      de: Du kannst die 3000 SCU Hydrogen am Baijini Point auf ArcCorp im Stanton-System verkaufen.
+  - question:
+      en: What can you tell me about the Hull-C?
+      de: Was kannst du mir über den Hull-C erzählen?
+    answer:
+      en: The Hull-C is manufactured by Musashi Industrial & Starflight Concern and falls under the 'HULL' series. It serves as a freighter and has a cargo capacity of 4608 SCU. The ship can be purchased at New Deal in Lorville, Hurston for 15,750,000 aUEC. It can accommodate a crew of 1-4 and is designed for trading on suitable space stations with a cargo deck.
+      de: Die Hull-C wird von Musashi Industrial & Starflight Concern hergestellt und gehört zur "HULL"-Serie. Sie dient als Frachter und hat eine Frachtkapazität von 4608 SCU. Das Schiff kann bei New Deal in Lorville, Hurston für 15.750.000 AUEC erworben werden. Es kann eine Besatzung von 1-4 Personen aufnehmen und ist für den Handel mit geeigneten Raumstationen mit einem Frachtdeck ausgelegt.
+  - question:
+      en: What is the difference between the Mole and Prospector?
+      de: Was ist der Unterschied zwischen dem Maulwurf und dem Prospector?
+    answer:
+      en: The MOLE is a mining ship manufactured by ARGO Astronautics, with a capacity for 2-4 crew members and a cargo hold of 96 SCU. It is flyable since version 3.8.0 and is available for purchase at Lorville on Hurston for 5,130,500 aUEC. On the other hand, the Prospector, manufactured by Musashi Industrial & Starflight Concern, is a smaller mining vessel designed for a single crew member, with a cargo capacity of 32 SCU. It is flyable since version 3.0.0 and can be purchased at Lorville for 2,061,000 aUEC. The Prospector is also available for rent at various locations in the Stanton system, unlike the MOLE.
+      de: Die MOLE ist ein von ARGO Astronautics hergestelltes Bergbauschiff mit einer Kapazität für 2-4 Besatzungsmitglieder und einem Laderaum von 96 SCU. Sie ist seit Version 3.8.0 flugfähig und kann bei Lorville auf Hurston für 5.130.500 AUEC gekauft werden. Der Prospector, hergestellt von Musashi Industrial & Starflight Concern, ist ein kleineres Bergbauschiff für ein einziges Besatzungsmitglied und hat eine Ladekapazität von 32 SCU. Er ist seit Version 3.0.0 flugfähig und kann auf Lorville für 2.061.000 AUEC gekauft werden. Im Gegensatz zur MOLE kann der Prospector auch an verschiedenen Orten im Stanton-System gemietet werden.
+  - question:
+      en: What do you know about the commodity Neon?
+      de: Was weißt du über die Ware Neon?
+    answer:
+      en: The commodity 'Neon' is categorized as a drug and is available for purchase at Nuen Waste Management for 7,000 aUEC. It is also sellable at Grim HEX for 8,428 aUEC and Jumptown for 8,805 aUEC. However, it's important to note that Neon is illegal, and engaging in activities involving this commodity may lead to fines and a crimestat. It's advisable to avoid ship scans to mitigate the risk of penalties.
+      de: Die Ware "Neon" wird als Droge eingestuft und kann bei Nuen Waste Management für 7.000 AUEC gekauft werden. Außerdem kann es bei Grim HEX für 8.428 AUEC und bei Jumptown für 8.805 AUEC verkauft werden. Es ist jedoch wichtig zu wissen, dass Neon illegal ist und dass der Handel mit dieser Ware zu Geldstrafen und einer Strafe führen kann. Es ist ratsam, Schiffsscans zu vermeiden, um das Risiko von Strafen zu minimieren.
+  - question:
+      en: What is the best place to buy Laranite?
+      de: Wo kann ich Laranit am besten kaufen?
+    answer:
+      en: The best place to buy Laranite for your Caterpillar is at ArcCorp Mining Area 045, located on the satellite Wala in the Stanton system. It's available for purchase at 2,322 aUEC per SCU.
+      de: Der beste Ort, um Laranit für deine Caterpillar zu kaufen, ist das ArcCorp-Bergbaugebiet 045, das sich auf dem Satelliten Wala im Stanton-System befindet. Du kannst es für 2.322 AUEC pro SCU kaufen.
+  - question:
+      en: Where is the satellite Wala located?
+      de: Wo befindet sich der Satellit Wala?
+    answer:
+      en: The satellite Wala is located in the ArcCorp system, orbiting the planet ArcCorp. It hosts various trading options, including locations like ArcCorp Mining Area 045, ArcCorp Mining Area 048, ArcCorp Mining Area 056, ArcCorp Mining Area 061, Shady Glen Farms, and Samson & Son's Salvage Center.
+      de: Der Satellit Wala befindet sich im ArcCorp-System und umkreist den Planeten ArcCorp. Er beherbergt verschiedene Handelsmöglichkeiten, darunter Orte wie ArcCorp Mining Area 045, ArcCorp Mining Area 048, ArcCorp Mining Area 056, ArcCorp Mining Area 061, Shady Glen Farms und Samson & Son's Salvage Center.
 prompt: |
   You have tools to access the UEXcorp API which you can use to retrieve live trading data and additional information about ships, locations, commodities and more in Star Citizen.
   Here are some examples when to use the different tools at your disposal:

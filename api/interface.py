@@ -457,20 +457,31 @@ class CustomWingmanProperty(BaseModel):
     """If property_type is set to 'single_select', you can provide options here."""
 
 
+class LocalizedMetadata(BaseModel):
+    en: str
+    de: Optional[str] = None
+
+
+class SkillExample(BaseModel):
+    question: LocalizedMetadata
+    answer: LocalizedMetadata
+
+
 class SkillConfig(CustomWingmanClassConfig):
-    description: Optional[str] = None
     prompt: Optional[str] = None
     """An additional prompt that extends the system prompt of the Wingman."""
-    commands: Optional[list[CommandConfig]] = None
     custom_properties: Optional[list[CustomWingmanProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
+    description: Optional[LocalizedMetadata] = None
+    hint: Optional[LocalizedMetadata] = None
+    examples: Optional[list[SkillExample]] = None
+    commands: Optional[list[CommandConfig]] = None
 
 
 class SkillBase(BaseModel):
     name: str
     config: SkillConfig
     logo: Optional[Annotated[str, Base64Str]] = None
-    description: Optional[str] = None
 
 
 class NestedConfig(BaseModel):
