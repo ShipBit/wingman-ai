@@ -30,7 +30,7 @@ class Spotify(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        secret = await self.retrieve_secret("spotify", errors)
+        secret = await self.retrieve_secret("spotify_client_secret", errors)
         client_id = self.retrieve_custom_property_value("spotify_client_id", errors)
         redirect_url = self.retrieve_custom_property_value(
             "spotify_redirect_url", errors
