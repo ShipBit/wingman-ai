@@ -66,7 +66,7 @@ class Skill:
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.name,
-                    message=f"Missing secret '{secret_name}'. {hint}",
+                    message=f"Missing secret '{secret_name}'. {hint or ''}",
                     error_type=WingmanInitializationErrorType.MISSING_SECRET,
                     secret_name=secret_name,
                 )

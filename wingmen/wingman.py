@@ -152,13 +152,20 @@ class Wingman:
                 if skill:
                     validation_errors = await skill.validate()
                     errors.extend(validation_errors)
-                    self.skills.append(skill)
-                    await self.prepare_skill(skill)
-                    printr.print(
-                        f"Skill '{skill_config.name}' loaded successfully.",
-                        color=LogType.INFO,
-                        server_only=True,
-                    )
+
+                    if len(errors) == 0:
+                        self.skills.append(skill)
+                        await self.prepare_skill(skill)
+                        printr.print(
+                            f"Skill '{skill_config.name}' loaded successfully.",
+                            color=LogType.INFO,
+                            server_only=True,
+                        )
+                    else:
+                        await printr.print_async(
+                            f"Skill '{skill_config.name}' could not be loaded: {' '.join(error.message for error in validation_errors)}",
+                            color=LogType.ERROR,
+                        )
             except Exception as e:
                 await printr.print_async(
                     f"Could not load skill '{skill_config.name}': {str(e)}",

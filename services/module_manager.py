@@ -86,15 +86,20 @@ class ModuleManager:
                 sys.path.remove(path_to_add)
 
         try:
-            # try to load from app dir first
+            # try to load from the src dir first (develop mode)
             skill_name, skill_path = ModuleManager.get_module_name_and_path(
                 config.module
             )
-            dependencies_dir = path.join(skill_path, "venv", "lib", "site-packages")
+            dependencies_dir = (
+                path.join(skill_path, "venv", "lib", "python3.11", "site-packages")
+                if sys.platform == "darwin"
+                else path.join(skill_path, "venv", "Lib", "site-packages")
+            )
             dependencies_dir = path.abspath(dependencies_dir)
             with add_to_sys_path(dependencies_dir):
                 module = import_module(config.module)
         except ModuleNotFoundError:
+            # load from Wingman AI config dir (AppData)
             skill_name, skill_path = ModuleManager.get_module_name_and_path(
                 config.module
             )

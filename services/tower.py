@@ -81,7 +81,6 @@ class Tower:
 
                 # init and validate skills
                 skill_errors = await wingman.init_skills()
-                errors.extend(skill_errors)
 
                 if not errors or len(errors) == 0:
                     await wingman.prepare()
