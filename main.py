@@ -3,6 +3,7 @@ import asyncio
 from enum import Enum
 from os import path
 import sys
+import traceback
 from typing import Any, Literal, get_args, get_origin
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -17,6 +18,7 @@ import mouse.mouse as mouse
 from services.command_handler import CommandHandler
 from services.config_manager import ConfigManager
 from services.connection_manager import ConnectionManager
+from services.esp32_handler import Esp32Handler
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.system_manager import SystemManager
@@ -199,9 +201,23 @@ async def websocket_endpoint(websocket: WebSocket):
         await printr.print_async("Client disconnected", server_only=True)
 
 
+# Websocket for other clients to stream audio to and from (like M5Atom Echo ESP32 devices)
+@app.websocket("/")
+async def oi_websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    esp32_handler = Esp32Handler(core)
+    receive_task = asyncio.create_task(esp32_handler.receive_messages(websocket))
+    send_task = asyncio.create_task(esp32_handler.send_messages(websocket))
+    try:
+        await asyncio.gather(receive_task, send_task)
+    except Exception as e:
+        print(traceback.format_exc())
+        print(f"Connection lost. Error: {e}")
+
+
 @app.post("/start-secrets", tags=["main"])
 async def start_secrets(secrets: dict[str, Any]):
-    secret_keeper.post_secrets(secrets)
+    await secret_keeper.post_secrets(secrets)
     core.startup_errors = []
     await core.config_service.load_config()
 

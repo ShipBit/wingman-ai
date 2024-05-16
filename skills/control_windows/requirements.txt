@@ -1,0 +1,1 @@
+pygetwindow==0.0.9

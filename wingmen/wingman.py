@@ -1,8 +1,6 @@
 import random
 import time
 from difflib import SequenceMatcher
-from importlib import import_module, util
-from os import path
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
@@ -13,9 +11,11 @@ from api.interface import (
 )
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from services.audio_player import AudioPlayer
+from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
-from services.file import get_writable_dir
+
+from skills.skill_base import Skill
 
 printr = Printr()
 
@@ -58,52 +58,15 @@ class Wingman:
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
-        self.debug: bool = self.config.features.debug_mode
-        """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
+        self.debug: bool = self.settings.debug_mode
+        """If enabled, the Wingman will print more debug messages and benchmark results."""
 
         self.tts_provider = self.config.features.tts_provider
         self.stt_provider = self.config.features.stt_provider
         self.conversation_provider = self.config.features.conversation_provider
         self.summarize_provider = self.config.features.summarize_provider
 
-    @staticmethod
-    def create_dynamically(
-        name: str,
-        config: WingmanConfig,
-        settings: SettingsConfig,
-        audio_player: AudioPlayer,
-    ):
-        """Dynamically creates a Wingman instance from a module path and class name
-
-        Args:
-            name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
-            config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
-            settings (SettingsConfig): The general user settings.
-            audio_player (AudioPlayer): The audio player handling the playback of audio files.
-        """
-
-        try:
-            # try to load from app dir first
-            module = import_module(config.custom_class.module)
-        except ModuleNotFoundError:
-            # split module into name and path
-            module_name = config.custom_class.module.split(".")[-1]
-            module_path = ""
-            for sub_dir in config.custom_class.module.split(".")[:-1]:
-                module_path = path.join(module_path, sub_dir)
-            module_path = path.join(get_writable_dir(module_path), module_name + ".py")
-            # load from alternative absolute file path
-            spec = util.spec_from_file_location(module_name, module_path)
-            module = util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-        DerivedWingmanClass = getattr(module, config.custom_class.name)
-        instance = DerivedWingmanClass(
-            name=name,
-            config=config,
-            settings=settings,
-            audio_player=audio_player,
-        )
-        return instance
+        self.skills: list[Skill] = []
 
     def get_record_key(self) -> str | int:
         """Returns the activation or "push-to-talk" key for this Wingman."""
@@ -112,6 +75,10 @@ class Wingman:
     def get_record_button(self) -> str:
         """Returns the activation or "push-to-talk" mouse button for this Wingman."""
         return self.config.record_mouse_button
+
+    def start_execution_benchmark(self):
+        """Starts the execution benchmark timer."""
+        self.execution_start = time.perf_counter()
 
     async def print_execution_time(self, reset_timer=False):
         """Prints the current time since the execution started (in seconds)."""
@@ -123,10 +90,6 @@ class Wingman:
             )
         if reset_timer:
             self.start_execution_benchmark()
-
-    def start_execution_benchmark(self):
-        """Starts the execution benchmark timer."""
-        self.execution_start = time.perf_counter()
 
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
@@ -164,13 +127,58 @@ class Wingman:
             )
         return api_key
 
-    # TODO: this should be async
-    def prepare(self):
+    async def prepare(self):
         """This method is called only once when the Wingman is instantiated by Tower.
-        It is run AFTER validate() so you can access validated params safely here.
+        It is run AFTER validate() and AFTER init_skills() so you can access validated params safely here.
 
         You can override it if you need to load async data from an API or file."""
-        pass
+
+    async def init_skills(self) -> list[WingmanInitializationError]:
+        """This method is called only once when the Wingman is instantiated by Tower.
+        It is run AFTER validate() so you can access validated params safely here.
+        It is used to load and init the skills of the Wingman."""
+        errors = []
+        skills_config = self.config.skills
+        if not skills_config:
+            return errors
+
+        for skill_config in skills_config:
+            try:
+                skill = ModuleManager.load_skill(
+                    config=skill_config,
+                    wingman_config=self.config,
+                    settings=self.settings,
+                )
+                if skill:
+                    validation_errors = await skill.validate()
+                    errors.extend(validation_errors)
+
+                    if len(errors) == 0:
+                        self.skills.append(skill)
+                        await self.prepare_skill(skill)
+                        printr.print(
+                            f"Skill '{skill_config.name}' loaded successfully.",
+                            color=LogType.INFO,
+                            server_only=True,
+                        )
+                    else:
+                        await printr.print_async(
+                            f"Skill '{skill_config.name}' could not be loaded: {' '.join(error.message for error in validation_errors)}",
+                            color=LogType.ERROR,
+                        )
+            except Exception as e:
+                await printr.print_async(
+                    f"Could not load skill '{skill_config.name}': {str(e)}",
+                    color=LogType.ERROR,
+                )
+
+        return errors
+
+    async def prepare_skill(self, skill: Skill):
+        """This method is called only once when the Skill is instantiated.
+        It is run AFTER validate() so you can access validated params safely here.
+
+        You can override it if you need to react on data of this skill."""
 
     def reset_conversation_history(self):
         """This function is called when the user triggers the ResetConversationHistory command.
@@ -207,7 +215,7 @@ class Wingman:
             # transcribe the audio.
             transcript = await self._transcribe(audio_input_wav)
 
-        if self.debug:
+        if self.debug and not transcript:
             await self.print_execution_time(reset_timer=True)
 
         if transcript:
@@ -224,8 +232,8 @@ class Wingman:
                 )
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response = await self._get_response_for_transcript(
-                transcript
+            process_result, instant_response, skill = (
+                await self._get_response_for_transcript(transcript)
             )
 
             if self.debug:
@@ -238,19 +246,12 @@ class Wingman:
                     color=LogType.POSITIVE,
                     source=LogSource.WINGMAN,
                     source_name=self.name,
+                    skill_name=skill.name if skill else "",
                 )
-
-        if self.debug:
-            await printr.print_async(
-                "Playing response back to user...", color=LogType.INFO
-            )
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
             await self._play_to_user(str(process_result))
-
-        if self.debug:
-            await self.print_execution_time()
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
@@ -265,7 +266,9 @@ class Wingman:
         """
         return None
 
-    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
+    async def _get_response_for_transcript(
+        self, transcript: str
+    ) -> tuple[str, str, Skill | None]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
@@ -276,7 +279,7 @@ class Wingman:
         Returns:
             A tuple of strings representing the response to a function call and/or an instant response.
         """
-        return ("", "")
+        return ("", "", None)
 
     async def _play_to_user(self, text: str):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
@@ -363,7 +366,7 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        if len(command.actions or []) > 0 and not self.debug:
+        if len(command.actions or []) > 0:
             await printr.print_async(
                 f"Executing command: {command.name}", color=LogType.INFO
             )
@@ -375,12 +378,6 @@ class Wingman:
         if len(command.actions or []) == 0:
             await printr.print_async(
                 f"No actions found for command: {command.name}", color=LogType.WARNING
-            )
-
-        if self.debug:
-            await printr.print_async(
-                "Skipping actual keypress execution in debug_mode...",
-                color=LogType.WARNING,
             )
 
         # handle the global special commands:

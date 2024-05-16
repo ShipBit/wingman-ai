@@ -31,7 +31,7 @@ jobs:
       - name: Build with PyInstaller
         run: |
           .\venv\Scripts\Activate
-          pyinstaller main.py --name WingmanAiCore --noconfirm --icon assets/wingman-ai.ico --paths venv/Lib/site-packages --add-data "venv/Lib/site-packages/azure/cognitiveservices/speech;azure/cognitiveservices/speech" --add-data "assets;assets" --add-data "services;services" --add-data "wingmen;wingmen" --add-data "configs;configs" --add-data "audio_samples;audio_samples" --add-data "LICENSE;."
+          pyinstaller main.py --name WingmanAiCore --noconfirm --icon assets/wingman-ai.ico --paths venv/Lib/site-packages --add-data "venv/Lib/site-packages/azure/cognitiveservices/speech;azure/cognitiveservices/speech" --add-data "assets;assets" --add-data "services;services" --add-data "wingmen;wingmen" --add-data "templates;templates" --add-data "audio_samples;audio_samples" --add-data "LICENSE;."
 
       - name: Upload Windows Exe Artifact
         uses: actions/upload-artifact@v4

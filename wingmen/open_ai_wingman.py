@@ -19,6 +19,7 @@ from providers.xvasynth import XVASynth
 from providers.whispercpp import Whispercpp
 from services.audio_player import AudioPlayer
 from services.printr import Printr
+from skills.skill_base import Skill
 from wingmen.wingman import Wingman
 
 printr = Printr()
@@ -53,7 +54,9 @@ class OpenAiWingman(Wingman):
         # validate will set these:
         self.openai: OpenAi = None
         self.mistral: OpenAi = None
-        self.llama: OpenAi = None
+        self.groq: OpenAi = None
+        self.openrouter: OpenAi = None
+        self.local_llm: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
         self.xvasynth: XVASynth = None
@@ -63,15 +66,13 @@ class OpenAiWingman(Wingman):
         self.pending_tool_calls = []
         self.last_gpt_call = None
 
-        # every conversation starts with the "context" that the user has configured
-        self.messages = (
-            [{"role": "system", "content": self.config.openai.context}]
-            if self.config.openai.context
-            else []
-        )
+        self.messages = []
         """The conversation history that is used for the GPT calls"""
 
         self.azure_api_keys = {key: None for key in self.AZURE_SERVICES}
+
+        self.tool_skills: dict[str, Skill] = {}
+        self.skill_tools: list[dict] = []
 
     async def validate(self):
         errors = await super().validate()
@@ -82,8 +83,14 @@ class OpenAiWingman(Wingman):
         if self.uses_provider("mistral"):
             await self.validate_and_set_mistral(errors)
 
-        if self.uses_provider("llama"):
-            await self.validate_and_set_llama(errors)
+        if self.uses_provider("groq"):
+            await self.validate_and_set_groq(errors)
+
+        if self.uses_provider("openrouter"):
+            await self.validate_and_set_openrouter(errors)
+
+        if self.uses_provider("local_llm"):
+            await self.validate_and_set_local_llm(errors)
 
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
@@ -119,11 +126,25 @@ class OpenAiWingman(Wingman):
                     self.summarize_provider == SummarizeProvider.MISTRAL,
                 ]
             )
-        elif provider_type == "llama":
+        elif provider_type == "groq":
             return any(
                 [
-                    self.conversation_provider == ConversationProvider.LLAMA,
-                    self.summarize_provider == SummarizeProvider.LLAMA,
+                    self.conversation_provider == ConversationProvider.GROQ,
+                    self.summarize_provider == SummarizeProvider.GROQ,
+                ]
+            )
+        elif provider_type == "openrouter":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.OPENROUTER,
+                    self.summarize_provider == SummarizeProvider.OPENROUTER,
+                ]
+            )
+        elif provider_type == "local_llm":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.LOCAL_LLM,
+                    self.summarize_provider == SummarizeProvider.LOCAL_LLM,
                 ]
             )
         elif provider_type == "azure":
@@ -155,6 +176,14 @@ class OpenAiWingman(Wingman):
             )
         return False
 
+    async def prepare_skill(self, skill: Skill):
+        # prepare the skill and skill tools
+        for tool_name, tool in skill.get_tools():
+            self.tool_skills[tool_name] = skill
+            self.skill_tools.append(tool)
+
+        skill.gpt_call = self.actual_llm_call
+
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("openai", errors)
         if api_key:
@@ -174,15 +203,32 @@ class OpenAiWingman(Wingman):
                 base_url=self.config.mistral.endpoint,
             )
 
-    async def validate_and_set_llama(self, errors: list[WingmanInitializationError]):
-        api_key = await self.retrieve_secret("llama", errors)
+    async def validate_and_set_groq(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("groq", errors)
         if api_key:
             # TODO: maybe use their native client (or LangChain) instead of OpenAI(?)
-            self.llama = OpenAi(
+            self.groq = OpenAi(
                 api_key=api_key,
-                organization=self.config.openai.organization,
-                base_url=self.config.llama.endpoint,
+                base_url=self.config.groq.endpoint,
             )
+
+    async def validate_and_set_openrouter(
+        self, errors: list[WingmanInitializationError]
+    ):
+        api_key = await self.retrieve_secret("openrouter", errors)
+        if api_key:
+            self.openrouter = OpenAi(
+                api_key=api_key,
+                base_url=self.config.openrouter.endpoint,
+            )
+
+    async def validate_and_set_local_llm(
+        self, errors: list[WingmanInitializationError]
+    ):
+        self.local_llm = OpenAi(
+            api_key="not-set",
+            base_url=self.config.local_llm.endpoint,
+        )
 
     async def validate_and_set_elevenlabs(
         self, errors: list[WingmanInitializationError]
@@ -282,7 +328,9 @@ class OpenAiWingman(Wingman):
 
         return transcript.text
 
-    async def _get_response_for_transcript(self, transcript: str) -> tuple[str, str]:
+    async def _get_response_for_transcript(
+        self, transcript: str
+    ) -> tuple[str, str, Skill | None]:
         """Gets the response for a given transcript.
 
         This function interprets the transcript, runs instant commands if triggered,
@@ -301,14 +349,14 @@ class OpenAiWingman(Wingman):
         )
         if instant_response:
             self._add_assistant_message(instant_response)
-            return instant_response, instant_response
+            return instant_response, instant_response, None
 
         # make a GPT call with the conversation history
         # if an instant command got executed, prevent tool calls to avoid duplicate executions
-        completion = await self._gpt_call(instant_command_executed is False)
+        completion = await self._llm_call(instant_command_executed is False)
 
         if completion is None:
-            return None, None
+            return None, None, None
 
         response_message, tool_calls = await self._process_completion(completion)
 
@@ -316,14 +364,15 @@ class OpenAiWingman(Wingman):
         self._add_gpt_response(response_message, tool_calls)
 
         if tool_calls:
-            instant_response = await self._handle_tool_calls(tool_calls)
+            instant_response, skill = await self._handle_tool_calls(tool_calls)
             if instant_response:
-                return None, instant_response
+                return None, instant_response, None
 
-            summarize_response = self._summarize_function_calls()
-            return self._finalize_response(str(summarize_response))
+            summarize_response = await self._summarize_function_calls()
+            summarize_response = self._finalize_response(str(summarize_response))
+            return summarize_response, summarize_response, skill
 
-        return response_message.content, response_message.content
+        return response_message.content, response_message.content, None
 
     async def _fix_tool_calls(self, tool_calls):
         """Fixes tool calls that have a command name as function name.
@@ -507,13 +556,8 @@ class OpenAiWingman(Wingman):
         if remember_messages is None or len(self.messages) == 0:
             return 0  # Configuration not set, nothing to delete.
 
-        # The system message aka `context` does not count
-        context_offset = (
-            1 if self.messages and self.messages[0]["role"] == "system" else 0
-        )
-
         # Find the cutoff index where to end deletion, making sure to only count 'user' messages towards the limit starting with newest messages.
-        cutoff_index = len(self.messages) - 1
+        cutoff_index = len(self.messages)
         user_message_count = 0
         for message in reversed(self.messages):
             if self.__get_message_role(message) == "user":
@@ -526,10 +570,10 @@ class OpenAiWingman(Wingman):
         if user_message_count < remember_messages:
             return 0
 
-        total_deleted_messages = cutoff_index - context_offset  # Messages to delete.
+        total_deleted_messages = cutoff_index  # Messages to delete.
 
         # Remove the pending tool calls that are no longer needed.
-        for mesage in self.messages[context_offset:cutoff_index]:
+        for mesage in self.messages[:cutoff_index]:
             if (
                 self.__get_message_role(mesage) == "tool"
                 and mesage.get("tool_call_id") in self.pending_tool_calls
@@ -542,7 +586,7 @@ class OpenAiWingman(Wingman):
                     )
 
         # Remove the messages before the cutoff index, exclusive of the system message.
-        del self.messages[context_offset:cutoff_index]
+        del self.messages[:cutoff_index]
 
         # Optional debugging printout.
         if self.debug and total_deleted_messages > 0:
@@ -554,8 +598,8 @@ class OpenAiWingman(Wingman):
         return total_deleted_messages
 
     def reset_conversation_history(self):
-        """Resets the conversation history by removing all messages except for the initial system message."""
-        del self.messages[1:]
+        """Resets the conversation history by removing all messages."""
+        self.messages = []
 
     async def _try_instant_activation(self, transcript: str) -> str:
         """Tries to execute an instant activation command if present in the transcript.
@@ -574,71 +618,110 @@ class OpenAiWingman(Wingman):
             return None, True
         return None, False
 
-    async def _gpt_call(self, allow_tool_calls: bool = True):
-        """Makes the primary GPT call with the conversation history and tools enabled.
+    async def _add_context(self, messages):
+        """build the context and inserts it into the messages"""
+        skill_prompts = ""
+        for skill in self.skills:
+            prompt = await skill.get_prompt()
+            if prompt:
+                skill_prompts += "\n\n" + skill.name + "\n\n" + prompt
 
-        Returns:
-            The GPT completion object or None if the call fails.
+        context = self.config.prompts.system_prompt.format(
+            backstory=self.config.prompts.backstory, skills=skill_prompts
+        )
+        messages.insert(0, {"role": "system", "content": context})
+
+    async def actual_llm_call(self, original_messages, tools: list[dict] = None):
         """
-        if self.debug:
-            await printr.print_async(
-                f"Calling GPT with {(len(self.messages) - 1)} messages (excluding context)",
-                color=LogType.INFO,
-            )
+        Perform the actual GPT call with the messages provided.
+        """
+        messages = original_messages.copy()
 
-        # save request time for later comparison
-        thiscall = time.time()
-        self.last_gpt_call = thiscall
-
-        # build tools
-        if allow_tool_calls:
-            tools = self._build_tools()
-        else:
-            tools = None
+        await self._add_context(messages)
 
         if self.conversation_provider == ConversationProvider.AZURE:
             completion = self.openai_azure.ask(
-                messages=self.messages,
+                messages=messages,
                 api_key=self.azure_api_keys["conversation"],
                 config=self.config.azure.conversation,
                 tools=tools,
             )
         elif self.conversation_provider == ConversationProvider.OPENAI:
             completion = self.openai.ask(
-                messages=self.messages,
+                messages=messages,
                 tools=tools,
-                model=self.config.openai.conversation_model,
+                model=self.config.openai.conversation_model.value,
             )
         elif self.conversation_provider == ConversationProvider.MISTRAL:
             completion = self.mistral.ask(
-                messages=self.messages,
+                messages=messages,
                 tools=tools,
-                model=self.config.mistral.conversation_model,
+                model=self.config.mistral.conversation_model.value,
             )
-        elif self.conversation_provider == ConversationProvider.LLAMA:
-            completion = self.llama.ask(
-                messages=self.messages,
+        elif self.conversation_provider == ConversationProvider.GROQ:
+            completion = self.groq.ask(
+                messages=messages,
                 tools=tools,
-                model=self.config.llama.conversation_model,
+                model=self.config.groq.conversation_model.value,
+            )
+        elif self.conversation_provider == ConversationProvider.OPENROUTER:
+            completion = self.openrouter.ask(
+                messages=messages,
+                tools=tools,
+                model=self.config.openrouter.conversation_model,
+            )
+        elif self.conversation_provider == ConversationProvider.LOCAL_LLM:
+            completion = self.local_llm.ask(
+                messages=messages,
+                tools=tools,
+                model=self.config.local_llm.conversation_model,
             )
         elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
             completion = self.wingman_pro.ask(
-                messages=self.messages,
+                messages=messages,
                 deployment=self.config.wingman_pro.conversation_deployment,
                 tools=tools,
             )
 
+        return completion
+
+    async def _llm_call(self, allow_tool_calls: bool = True):
+        """Makes the primary LLM call with the conversation history and tools enabled.
+
+        Returns:
+            The LLM completion object or None if the call fails.
+        """
+
+        # save request time for later comparison
+        thiscall = time.time()
+        self.last_gpt_call = thiscall
+
+        # build tools
+        tools = self._build_tools() if allow_tool_calls else None
+
+        if self.debug:
+            self.start_execution_benchmark()
+            await printr.print_async(
+                f"Calling LLM with {(len(self.messages))} messages (excluding context) and {len(tools) if tools else 0} tools.",
+                color=LogType.INFO,
+            )
+
+        completion = await self.actual_llm_call(self.messages, tools)
+
+        if self.debug:
+            self.print_execution_time(reset_timer=True)
+
         # if request isnt most recent, ignore the response
         if self.last_gpt_call != thiscall:
             await printr.print_async(
-                "GPT call was cancelled due to a new call.", color=LogType.WARNING
+                "LLM call was cancelled due to a new call.", color=LogType.WARNING
             )
             return None
 
         return completion
 
     async def _process_completion(self, completion):
-        """Processes the completion returned by the GPT call.
+        """Processes the completion returned by the LLM call.
 
         Args:
             completion: The completion object from an OpenAI call.
@@ -685,6 +768,7 @@ class OpenAiWingman(Wingman):
             (
                 function_response,
                 instant_response,
+                skill,
             ) = await self._execute_command_by_function_call(
                 function_name, function_args
             )
@@ -696,41 +780,16 @@ class OpenAiWingman(Wingman):
                 # adding a new tool response
                 self._add_tool_response(tool_call, function_response)
 
-        return instant_response
+        return instant_response, skill
 
-    def _summarize_function_calls(self):
+    async def _summarize_function_calls(self):
         """Summarizes the function call responses using the GPT model specified for summarization in the configuration.
 
         Returns:
             The content of the GPT response to the function call summaries.
         """
 
-        if self.summarize_provider == SummarizeProvider.AZURE:
-            summarize_response = self.openai_azure.ask(
-                messages=self.messages,
-                api_key=self.azure_api_keys["summarize"],
-                config=self.config.azure.summarize,
-            )
-        elif self.summarize_provider == SummarizeProvider.OPENAI:
-            summarize_response = self.openai.ask(
-                messages=self.messages,
-                model=self.config.openai.summarize_model,
-            )
-        elif self.summarize_provider == SummarizeProvider.MISTRAL:
-            summarize_response = self.mistral.ask(
-                messages=self.messages,
-                model=self.config.mistral.summarize_model,
-            )
-        elif self.summarize_provider == SummarizeProvider.LLAMA:
-            summarize_response = self.llama.ask(
-                messages=self.messages,
-                model=self.config.mistral.summarize_model,
-            )
-        elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
-            summarize_response = self.wingman_pro.ask(
-                messages=self.messages,
-                deployment=self.config.wingman_pro.summarize_deployment,
-            )
+        summarize_response = await self._actual_summarize_function_call(self.messages)
 
         if summarize_response is None:
             return None
@@ -740,22 +799,69 @@ class OpenAiWingman(Wingman):
         self.messages.append(message)
         return message.content
 
-    def _finalize_response(self, summarize_response: str) -> tuple[str, str]:
+    async def _actual_summarize_function_call(self, original_messages):
+        """
+        Perform the actual GPT call with the messages provided.
+        """
+        messages = original_messages.copy()
+
+        await self._add_context(messages)
+
+        if self.summarize_provider == SummarizeProvider.AZURE:
+            summarize_response = self.openai_azure.ask(
+                messages=messages,
+                api_key=self.azure_api_keys["summarize"],
+                config=self.config.azure.summarize,
+            )
+        elif self.summarize_provider == SummarizeProvider.OPENAI:
+            summarize_response = self.openai.ask(
+                messages=self.messages,
+                model=self.config.openai.summarize_model.value,
+            )
+        elif self.summarize_provider == SummarizeProvider.MISTRAL:
+            summarize_response = self.mistral.ask(
+                messages=self.messages,
+                model=self.config.mistral.summarize_model.value,
+            )
+        elif self.summarize_provider == SummarizeProvider.GROQ:
+            summarize_response = self.groq.ask(
+                messages=self.messages,
+                model=self.config.groq.summarize_model.value,
+            )
+        elif self.summarize_provider == SummarizeProvider.OPENROUTER:
+            summarize_response = self.openrouter.ask(
+                messages=self.messages,
+                model=self.config.openrouter.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.LOCAL_LLM:
+            summarize_response = self.local_llm.ask(
+                messages=self.messages,
+                model=self.config.local_llm.summarize_model,
+            )
+        elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
+            summarize_response = self.wingman_pro.ask(
+                messages=messages,
+                deployment=self.config.wingman_pro.summarize_deployment,
+            )
+
+        return summarize_response
+
+    def _finalize_response(self, summarize_response: str) -> str:
         """Finalizes the response based on the call of the second (summarize) GPT call.
 
         Args:
             summarize_response (str): The response content from the second GPT call.
 
         Returns:
-            A tuple containing the final response to the user.
+            The final response to the user.
         """
         if summarize_response is None:
-            return self.messages[-1]["content"], self.messages[-1]["content"]
-        return summarize_response, summarize_response
+            return self.messages[-1]["content"]
+        return summarize_response
 
     async def _execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, Skill | None]:
         """
         Uses an OpenAI function call to execute a command. If it's an instant activation_command, one if its responses will be played.
 
@@ -770,8 +876,9 @@ class OpenAiWingman(Wingman):
         """
         function_response = ""
         instant_response = ""
+        used_skill = None
         if function_name == "execute_command":
-            # get the command based on the argument passed by GPT
+            # get the command based on the argument passed by the LLM
             command = self._get_command(function_args["command_name"])
             # execute the command
             function_response = await self._execute_command(command)
@@ -780,7 +887,17 @@ class OpenAiWingman(Wingman):
                 instant_response = self._select_command_response(command)
                 await self._play_to_user(instant_response)
 
-        return function_response, instant_response
+        # Go through the skills and check if the function name matches any of the tools
+        if function_name in self.tool_skills:
+            skill = self.tool_skills[function_name]
+            function_response, instant_response = await skill.execute_tool(
+                function_name, function_args
+            )
+            used_skill = skill
+            if instant_response:
+                await self._play_to_user(instant_response)
+
+        return function_response, instant_response, used_skill
 
     async def _play_to_user(self, text: str):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
@@ -894,6 +1011,11 @@ class OpenAiWingman(Wingman):
                 },
             },
         ]
+
+        # extend with skill tools
+        for tool in self.skill_tools:
+            tools.append(tool)
+
         return tools
 
     def __get_message_role(self, message):
@@ -923,5 +1045,5 @@ class OpenAiWingman(Wingman):
             end = input_string.find("*", start + 1)
             if end == -1:
                 break
-            input_string = input_string[:start] + input_string[end + 1:]
+            input_string = input_string[:start] + input_string[end + 1 :]
         return input_string

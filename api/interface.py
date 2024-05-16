@@ -9,8 +9,9 @@ from api.enums import (
     AzureApiVersion,
     AzureRegion,
     ConversationProvider,
-    LlamaModel,
+    GroqModel,
     MistralModel,
+    CustomPropertyType,
     TtsVoiceGender,
     ElevenlabsModel,
     OpenAiModel,
@@ -243,21 +244,12 @@ class XVASynthTtsConfig(BaseModel):
 
 
 class OpenAiConfig(BaseModel):
-    context: Optional[str] = None
-    """The "context" for the wingman. Here's where you can tell the AI how to behave.
-    This is probably what you want to play around with the most.
-    """
-
     conversation_model: OpenAiModel
     """ The model to use for conversations aka "chit-chat" and for function calls.
-    gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
-    gpt-3.5 is the default and should be enough for most use cases.
-    If something is not working as expected, you might want to test it with gpt-4.
     """
 
     summarize_model: OpenAiModel
-    """ This model summarizes function responses, like API call responses etc.
-    In most cases gpt-3.5 should be enough.
+    """ This model summarizes function responses, like API call responses etc. This can be a less capable model.
     """
 
     tts_voice: OpenAiTtsVoice
@@ -276,15 +268,35 @@ class OpenAiConfig(BaseModel):
     """If you have an organization key, you can set it here."""
 
 
+class PromptConfig(BaseModel):
+    system_prompt: str
+    """The read-only "context template" for the Wingman. Contains variables that will be replaced by the user (backstory) and/or skills."""
+
+    backstory: Optional[str] = None
+    """The backstory of the Wingman. Edit this to control how your Wingman should behave."""
+
+
 class MistralConfig(BaseModel):
     conversation_model: MistralModel
     summarize_model: MistralModel
     endpoint: str
 
 
-class LlamaConfig(BaseModel):
-    conversation_model: LlamaModel
-    summarize_model: LlamaModel
+class GroqConfig(BaseModel):
+    conversation_model: GroqModel
+    summarize_model: GroqModel
+    endpoint: str
+
+
+class OpenRouterConfig(BaseModel):
+    conversation_model: str
+    summarize_model: str
+    endpoint: str
+
+
+class LocalLlmConfig(BaseModel):
+    conversation_model: Optional[str] = None
+    summarize_model: Optional[str] = None
     endpoint: str
 
 
@@ -334,9 +346,6 @@ class FeaturesConfig(BaseModel):
 
     Note that the other providers may have additional config blocks. These are only used if the provider is set here.
     """
-
-    debug_mode: bool
-    """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
 
     tts_provider: TtsProvider
     stt_provider: SttProvider
@@ -426,19 +435,9 @@ class CustomWingmanClassConfig(BaseModel):
     """The name of your class within your file/module."""
 
 
-class NestedConfig(BaseModel):
-    sound: SoundConfig
-    features: FeaturesConfig
-    openai: OpenAiConfig
-    mistral: MistralConfig
-    llama: LlamaConfig
-    edge_tts: EdgeTtsConfig
-    elevenlabs: ElevenlabsConfig
-    azure: AzureConfig
-    xvasynth: XVASynthTtsConfig
-    whispercpp: WhispercppSttConfig
-    wingman_pro: WingmanProConfig
-    commands: Optional[list[CommandConfig]] = None
+class LabelValuePair(BaseModel):
+    label: str
+    value: str | int | float | bool
 
 
 class CustomWingmanProperty(BaseModel):
@@ -446,12 +445,62 @@ class CustomWingmanProperty(BaseModel):
     """The name of the property. Has to be unique"""
     name: str
     """The "friendly" name of the property, displayed in the UI."""
-    value: str
+    value: str | int | float | bool | None
     """The value of the property"""
     hint: Optional[str] = None
     """A hint for the user, displayed in the UI."""
     required: Optional[bool] = False
     """Marks the property as required in the UI."""
+    property_type: Optional[CustomPropertyType] = CustomPropertyType.STRING
+    """Determines the type of the property and which controls to render in the UI."""
+    options: Optional[list[LabelValuePair]] = None
+    """If property_type is set to 'single_select', you can provide options here."""
+
+
+class LocalizedMetadata(BaseModel):
+    en: str
+    de: Optional[str] = None
+
+
+class SkillExample(BaseModel):
+    question: LocalizedMetadata
+    answer: LocalizedMetadata
+
+
+class SkillConfig(CustomWingmanClassConfig):
+    prompt: Optional[str] = None
+    """An additional prompt that extends the system prompt of the Wingman."""
+    custom_properties: Optional[list[CustomWingmanProperty]] = None
+    """You can add custom properties here to use in your custom skill class."""
+    description: Optional[LocalizedMetadata] = None
+    hint: Optional[LocalizedMetadata] = None
+    examples: Optional[list[SkillExample]] = None
+    commands: Optional[list[CommandConfig]] = None
+
+
+class SkillBase(BaseModel):
+    name: str
+    config: SkillConfig
+    logo: Optional[Annotated[str, Base64Str]] = None
+
+
+class NestedConfig(BaseModel):
+    prompts: PromptConfig
+    sound: SoundConfig
+    features: FeaturesConfig
+    openai: OpenAiConfig
+    mistral: MistralConfig
+    groq: GroqConfig
+    openrouter: OpenRouterConfig
+    local_llm: LocalLlmConfig
+    edge_tts: EdgeTtsConfig
+    elevenlabs: ElevenlabsConfig
+    azure: AzureConfig
+    xvasynth: XVASynthTtsConfig
+    whispercpp: WhispercppSttConfig
+    wingman_pro: WingmanProConfig
+    commands: Optional[list[CommandConfig]] = None
+    skills: Optional[list[SkillConfig]] = None
 
 
 class WingmanConfig(NestedConfig):
@@ -513,3 +562,4 @@ class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
+    debug_mode: bool = False

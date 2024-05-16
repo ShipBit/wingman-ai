@@ -1,19 +1,13 @@
 from abc import ABC, abstractmethod
 import re
-import numpy as np
 from typing import Literal
 from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
 from api.enums import (
     AzureRegion,
-    LlamaModel,
-    LogType,
-    MistralModel,
-    OpenAiModel,
     OpenAiTtsVoice,
 )
 from api.interface import (
-    AzureConfig,
     AzureInstanceConfig,
     AzureSttConfig,
     AzureTtsConfig,
@@ -45,13 +39,11 @@ class BaseOpenAi(ABC):
         )
         if m is not None:
             message = m["message"].replace(". ", ".\n")
-            printr.print(message, color=LogType.ERROR)
+            printr.toast_error(message)
         elif api_response.message:
-            printr.print(api_response.message, color=LogType.ERROR)
+            printr.toast_error(api_response.message)
         else:
-            printr.print(
-                "The API did not provide further information.", color=LogType.ERROR
-            )
+            printr.toast_error("The API did not provide further information.")
 
     def _perform_transcription(
         self,
@@ -76,22 +68,22 @@ class BaseOpenAi(ABC):
         self,
         client: OpenAI | AzureOpenAI,
         messages: list[dict[str, str]],
-        model: OpenAiModel | MistralModel | LlamaModel,
         stream: bool,
         tools: list[dict[str, any]],
+        model: str = None,
     ):
         try:
             if not tools:
                 completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
-                    model=model.value,
+                    model=model,
                 )
             else:
                 completion = client.chat.completions.create(
                     stream=stream,
                     messages=messages,
-                    model=model.value,
+                    model=model,
                     tools=tools,
                     tool_choice="auto",
                 )
@@ -140,12 +132,10 @@ class OpenAi(BaseOpenAi):
     def ask(
         self,
         messages: list[dict[str, str]],
-        model: OpenAiModel | MistralModel | LlamaModel,
+        model: str = None,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
     ):
-        if not model:
-            model = OpenAiModel.GPT_35_TURBO
         return self._perform_ask(
             client=self.client,
             messages=messages,

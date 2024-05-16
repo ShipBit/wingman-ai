@@ -54,6 +54,12 @@ class SettingsService:
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/settings/debug-mode",
+            endpoint=self.set_debug_mode,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/settings/wingman-pro",
             endpoint=self.set_wingman_pro_settings,
             tags=tags,
@@ -101,6 +107,7 @@ class SettingsService:
                                     "Configured input device is not an input device. Using default.",
                                     toast=ToastType.NORMAL,
                                     color=LogType.WARNING,
+                                    server_only=True,
                                 )
                             input_device = None
                         else:
@@ -123,6 +130,7 @@ class SettingsService:
                                 "Configured input device not found. Using default.",
                                 toast=ToastType.NORMAL,
                                 color=LogType.WARNING,
+                                server_only=True,
                             )
                         input_device = None
                 elif isinstance(input_settings, AudioDeviceSettings):
@@ -148,6 +156,7 @@ class SettingsService:
                                 f"Configured input device '{input_settings.name}' not found. Using default.",
                                 toast=ToastType.NORMAL,
                                 color=LogType.WARNING,
+                                server_only=True,
                             )
             elif write:
                 self.printr.print(
@@ -172,6 +181,7 @@ class SettingsService:
                                     "Configured output device is not an output device. Using default.",
                                     toast=ToastType.NORMAL,
                                     color=LogType.WARNING,
+                                    server_only=True,
                                 )
                             output_device = None
                         else:
@@ -194,6 +204,7 @@ class SettingsService:
                                 "Configured output device not found. Using default.",
                                 toast=ToastType.NORMAL,
                                 color=LogType.WARNING,
+                                server_only=True,
                             )
                         output_device = None
                 # check if instance of AudioDeviceSettings
@@ -220,6 +231,7 @@ class SettingsService:
                                 f"Configured audio output device '{output_settings.name}' not found. Using default.",
                                 toast=ToastType.NORMAL,
                                 color=LogType.WARNING,
+                                server_only=True,
                             )
             elif write:
                 self.printr.print(
@@ -269,7 +281,7 @@ class SettingsService:
         )
 
         if self.config_manager.save_settings_config():
-            self.printr.print(
+            await self.printr.print_async(
                 "Audio devices updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
             )
             await self.settings_events.publish(
@@ -282,7 +294,7 @@ class SettingsService:
         self.config_manager.settings_config.voice_activation.enabled = is_enabled
 
         if self.config_manager.save_settings_config():
-            self.printr.print(
+            await self.printr.print_async(
                 f"Voice activation {'enabled' if is_enabled else 'disabled'}.",
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
@@ -290,15 +302,24 @@ class SettingsService:
             await self.settings_events.publish("voice_activation_changed", is_enabled)
 
     # POST /settings/mute-key
-    def set_mute_key(self, key: str, keycodes: Optional[list[int]] = None):
+    async def set_mute_key(self, key: str, keycodes: Optional[list[int]] = None):
         self.config_manager.settings_config.voice_activation.mute_toggle_key = key
         self.config_manager.settings_config.voice_activation.mute_toggle_key_codes = (
             keycodes
         )
 
         if self.config_manager.save_settings_config():
-            self.printr.print(
-                "Mute key saved.",
+            await self.printr.print_async(
+                "Mute key saved.", toast=ToastType.NORMAL, color=LogType.POSITIVE
+            )
+
+    # POST /settings/debug-mode
+    async def set_debug_mode(self, debug_mode: bool):
+        self.config_manager.settings_config.debug_mode = debug_mode
+
+        if self.config_manager.save_settings_config():
+            await self.printr.print_async(
+                "Debug Mode saved.",
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
             )
@@ -329,7 +350,7 @@ class SettingsService:
 
         if self.config_manager.save_settings_config():
             await self.config_service.load_config()
-            self.printr.print(
+            await self.printr.print_async(
                 "Wingman Pro settings updated.",
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,

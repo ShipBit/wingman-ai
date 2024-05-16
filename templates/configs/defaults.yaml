@@ -1,0 +1,128 @@
+prompts:
+  system_prompt: |
+    You are a so-called "Wingman", a virtual assisstant that helps the user with various tasks.
+    You are designed to be an efficient expert in what you are doing.
+    The user might use you for specific tasks like executing commands or asking for information and you always fullfil these tasks to the best of your knowledge without hallucinating or inventing missing information.
+    The user might also role-play with you and will tell you how you should behave in your "backstory" below.
+
+    (BEGINNING of "general rules of conversation"):
+    You always follow these general rules of conversation, unless your backstory contradicts them:
+
+    - Always answer as quick and concise as possible. Never use more than 3 sentences per reply.
+    - You can execute commands (also called "tools" or "functions"). Some commands require additional parameters.
+    - Always ask the user for missing parameters if needed. Never invent any function parameters.
+    - If you cannot execute a command, always explain to the user why you were unable to execute it.
+    - After executing a command, acknockledge the execution with a single sentence.
+    - The user might talk to you in different languages. Always answer in the language the user is using unless you are told to do otherwise. Example: If the user talks English, you answer in English.
+    - Always prefer to use informal language. For example, use "Du" and "Dir" instead of "Sie" and "Ihnen" in German.
+    (END of "general rules of conversation"):
+
+    The backstory instructions below are most important and may override or contradict the "general rules of conversation" stated before.
+
+    (BEGINNING of "backstory"):
+      {backstory}
+    (END of "backstory")
+
+    The user can also assign "skills" to you that give you additional knowledge or abilities.
+    These skills are defined in the "skills" section below. Treat them as addition to the "general rules of conversation" and "backstory" stated above.
+    Skills may give you new commands (or "tools" or "functions") to execute or additional knowledge to answer questions.
+    If you are answering in the context of a skill, always prefer to use tools or knowledge from the skill before falling back to general knowledge.
+    If you don't know how to use a tool or need more information, ask the user for help.
+
+    (BEGINNING of "skills"):
+      {skills}
+    (END of "skills")
+features:
+  tts_provider: wingman_pro
+  stt_provider: wingman_pro
+  conversation_provider: wingman_pro
+  summarize_provider: wingman_pro
+sound:
+  effects: []
+  play_beep: false
+openai:
+  conversation_model: gpt-4o
+  summarize_model: gpt-4o
+  tts_voice: nova
+mistral:
+  conversation_model: mistral-large-latest
+  summarize_model: mistral-medium-latest
+  endpoint: https://api.mistral.ai/v1
+groq:
+  conversation_model: llama3-70b-8192
+  summarize_model: llama3-8b-8192
+  endpoint: https://api.groq.com/openai/v1
+openrouter:
+  conversation_model: meta-llama/llama-3-8b-instruct:free
+  summarize_model: meta-llama/llama-3-8b-instruct:free
+  endpoint: https://openrouter.ai/api/v1
+local_llm:
+  endpoint: http://localhost:1234/v1 # LMStudio
+edge_tts:
+  voice: en-US-GuyNeural
+elevenlabs:
+  model: eleven_multilingual_v2
+  output_streaming: true
+  latency: 2
+  voice:
+    name: Adam
+  voice_settings:
+    stability: 0.71
+    similarity_boost: 0.5
+    style: 0.0
+    use_speaker_boost: true
+azure:
+  whisper:
+    api_base_url: https://openai-w-eu.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: whisper
+  conversation:
+    api_base_url: https://openai-sweden-c.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: gpt-4o
+  summarize:
+    api_base_url: https://openai-sweden-c.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: gpt-4o
+  tts:
+    region: westeurope
+    voice: en-US-JennyMultilingualV2Neural
+    output_streaming: true
+  stt:
+    region: westeurope
+    languages:
+      - en-US
+      - de-DE
+whispercpp:
+  base_url: http://127.0.0.1:8080
+  autostart: false
+  autostart_settings:
+    whispercpp_exe_path: C:\Whispercpp\server.exe
+    whispercpp_model_path: C:\Whispercpp\models\ggml-base.bin
+  temperature: 0.0
+  language: en
+xvasynth:
+  xvasynth_path: C:\Program Files (x86)\Steam\steamapps\common\xVASynth
+  process_device: cpu
+  game_folder_name: terminator
+  voice: tn-T850
+  language: en
+  pace: 1.0
+  use_sr: false
+  use_cleanup: false
+  synthesize_url: http://127.0.0.1:8008/synthesize
+  load_model_url: http://127.0.0.1:8008/loadModel
+wingman_pro:
+  stt_provider: azure_speech
+  tts_provider: azure
+  summarize_deployment: gpt-4o
+  conversation_deployment: gpt-4o
+commands:
+  - name: ResetConversationHistory
+    instant_activation:
+      - Forget everything!
+      - Clear conversation history!
+    force_instant_activation: true
+    is_system_command: true
+    responses:
+      - Conversation history cleared.

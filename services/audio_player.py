@@ -26,6 +26,7 @@ class AudioPlayer:
         self.raw_stream = None
         self.wingman_name = ""
         self.playback_events = PubSub()
+        self.stream_event = PubSub()
         self.on_playback_started = on_playback_started
         self.on_playback_finished = on_playback_finished
 
@@ -223,6 +224,8 @@ class AudioPlayer:
 
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(processed_buffer)
+
+                await self.stream_event.publish("audio", processed_buffer)
 
                 filled_size = buffer_callback(audio_buffer)
 

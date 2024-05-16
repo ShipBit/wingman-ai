@@ -43,6 +43,7 @@ class LogCommand(WebSocketCommandModel):
     source_name: Optional[str] = None
     source: LogSource = "system"
     tag: Optional[CommandTag] = None
+    skill_name: Optional[str] = None
 
 
 class PromptSecretCommand(WebSocketCommandModel):
