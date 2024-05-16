@@ -9,7 +9,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "main.py",
-            "console": "externalTerminal",
+            "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
                 "--host",
