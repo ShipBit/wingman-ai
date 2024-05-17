@@ -29,28 +29,6 @@ class UEXCorp(Skill):
     # enable for verbose logging
     DEV_MODE = False
 
-    # TODO: retrieve this from an API
-    MANUFACTURERS = {
-        "AEGS": "Aegis Dynamics",
-        "ANVL": "Anvil Aerospace",
-        "AOPO": "Aopoa",
-        "ARGO": "ARGO Astronautics",
-        "BANU": "Banu",
-        "CNOU": "Consolidated Outland",
-        "CRUS": "Crusader Industries",
-        "DRAK": "Drake Interplanetary",
-        "ESPR": "Esperia",
-        "GATA": "Gatac",
-        "GRIN": "Greycat Industrial",
-        "KRIG": "Kruger Intergalactic",
-        "MIRA": "Mirai",
-        "MISC": "Musashi Industrial & Starflight Concern",
-        "ORIG": "Origin Jumpworks",
-        "RSIN": "Roberts Space Industries",
-        "TMBL": "Tumbril Land Systems",
-        "VNDL": "Vanduul",
-    }
-
     def __init__(
         self,
         config: SkillConfig,
@@ -67,7 +45,8 @@ class UEXCorp(Skill):
         self.cachefile = path.join(self.data_path, "cache.json")
         logging.basicConfig(filename=self.logfileerror, level=logging.ERROR)
 
-        self.uexcorp_version = "v11"
+        self.skill_version = "v12"
+        self.default_api_key = "072df8a58163e9b1486402d04e3d3315419cba57"
 
         # init of config options
         self.uexcorp_api_url: str = None
@@ -85,14 +64,17 @@ class UEXCorp(Skill):
         self.ship_names = []
         self.ship_dict = {}
         self.ship_code_dict = {}
+
         self.commodities = []
         self.commodity_names = []
         self.commodity_dict = {}
         self.commodity_code_dict = {}
+
         self.systems = []
         self.system_names = []
         self.system_dict = {}
         self.system_code_dict = {}
+
         self.tradeports = []
         self.tradeport_names = []
         self.tradeport_dict = {}
@@ -101,16 +83,19 @@ class UEXCorp(Skill):
         self.tradeports_by_planet = collections.defaultdict(list)
         self.tradeports_by_satellite = collections.defaultdict(list)
         self.tradeports_by_city = collections.defaultdict(list)
+
         self.planets = []
         self.planet_names = []
         self.planet_dict = {}
         self.planet_code_dict = {}
         self.planets_by_system = collections.defaultdict(list)
+
         self.satellites = []
         self.satellite_names = []
         self.satellite_dict = {}
         self.satellite_code_dict = {}
         self.satellites_by_planet = collections.defaultdict(list)
+
         self.cities = []
         self.city_names = []
         self.city_dict = {}
@@ -294,6 +279,7 @@ class UEXCorp(Skill):
         Args:
             reload (bool, optional): Whether to reload the data from the source. Defaults to False.
         """
+        print("Loading data for UEX corp wingman...")
 
         boo_tradeports_reloaded = False
 
@@ -313,8 +299,9 @@ class UEXCorp(Skill):
                 data.get("timestamp")
                 and data.get("timestamp") + self.uexcorp_cache_duration
                 > self._get_timestamp()
-                and data.get("wingman_version") == self.uexcorp_version
+                and data.get("skill_version") == self.skill_version
             ):
+                print("Loading data from cache...")
                 if data.get("ships"):
                     self.ships = data["ships"]
                 if data.get("commodities"):
@@ -334,61 +321,62 @@ class UEXCorp(Skill):
                 save_cache = True
 
         if not self.ships:
-            self.ships = await self._fetch_uex_data("ships")
-            self.ships = [ship for ship in self.ships if ship["implemented"] == "1"]
+            self.ships = await self._fetch_uex_data("vehicles")
+            self.ships = [ship for ship in self.ships if ship["game_version"]]
 
         if not self.commodities:
             self.commodities = await self._fetch_uex_data("commodities")
+            self.commodities = [commodity for commodity in self.commodities if commodity["is_available"] == 1]
 
         if not self.systems:
             self.systems = await self._fetch_uex_data("star_systems")
             self.systems = [
-                system for system in self.systems if system["available"] == 1
+                system for system in self.systems if system["is_available"] == 1
             ]
             for system in self.systems:
                 self.tradeports += await self._fetch_uex_data(
-                    f"tradeports/system/{system['code']}"
+                    f"terminals/id_star_system/{system['id']}/type/commodity/is_available/1/is_visible/1"
                 )
                 self.cities += await self._fetch_uex_data(
-                    f"cities/system/{system['code']}"
+                    f"cities/id_star_system/{system['id']}"
                 )
                 self.satellites += await self._fetch_uex_data(
-                    f"satellites/system/{system['code']}"
+                    f"moons/id_star_system/{system['id']}"
                 )
                 self.planets += await self._fetch_uex_data(
-                    f"planets/system/{system['code']}"
+                    f"planets/id_star_system/{system['id']}"
                 )
 
-            self.tradeports = [
-                tradeport
-                for tradeport in self.tradeports
-                if tradeport["visible"] == "1"
-            ]
-            boo_tradeports_reloaded = True
+            # data manipulation
+            # remove planet information from space tradeports
+            planet_codes = []
+            for planet in self.planets:
+                if planet["code"] not in planet_codes:
+                    planet_codes.append(planet["code"])
+
+            for tradeport in self.tradeports:
+                if (
+                    tradeport["space"] == "1"
+                    and len(tradeport["nickname"].split("-")) == 2
+                    and tradeport["nickname"].split("-")[0] in planet_codes
+                    and re.match(r"^L\d+$", tradeport["nickname"].split("-")[1])
+                ):
+                    tradeport["id_planet"] = ""
+
+            await self._load_commodity_prices()
 
             self.planets = [
-                planet for planet in self.planets if planet["available"] == 1
+                planet for planet in self.planets if planet["is_available"] == 1
             ]
 
             self.satellites = [
                 satellite
                 for satellite in self.satellites
-                if satellite["available"] == 1
+                if satellite["is_available"] == 1
             ]
         else:
             if reload:
-                self.tradeports = []
-                for system in self.systems:
-                    self.tradeports += await self._fetch_uex_data(
-                        f"tradeports/system/{system['code']}"
-                    )
-
-                self.tradeports = [
-                    tradeport
-                    for tradeport in self.tradeports
-                    if tradeport["visible"] == "1"
-                ]
-                boo_tradeports_reloaded = True
+                self._load_commodity_prices()
                 save_cache = True
 
         if (
@@ -405,7 +393,7 @@ class UEXCorp(Skill):
         ):
             data = {
                 "timestamp": self._get_timestamp(),
-                "wingman_version": self.uexcorp_version,
+                "skill_version": self.skill_version,
                 "ships": self.ships,
                 "commodities": self.commodities,
                 "systems": self.systems,
@@ -417,48 +405,69 @@ class UEXCorp(Skill):
             with open(self.cachefile, "w", encoding="UTF-8") as f:
                 json.dump(data, f, indent=4)
 
-        # data manipulation
-        # remove planet information from space tradeports
-        if boo_tradeports_reloaded is True:
-            planet_codes = []
-            for planet in self.planets:
-                if planet["code"] not in planet_codes:
-                    planet_codes.append(planet["code"])
-
-            for tradeport in self.tradeports:
-                shorted_name = tradeport["name"].split(" ")[0]
-                if (
-                    tradeport["space"] == "1"
-                    and len(shorted_name.split("-")) == 2
-                    and shorted_name.split("-")[0] in planet_codes
-                    and re.match(r"^L\d+$", shorted_name.split("-")[1])
-                ):
-                    tradeport["planet"] = ""
-        # remove urls from ships and resolve manufacturer code
+        # remove urls from ships
         for ship in self.ships:
-            ship.pop("store_url", None)
-            ship.pop("photos", None)
-            ship.pop("brochure_url", None)
-            ship.pop("hotsite_url", None)
-            ship.pop("video_url", None)
-        # remove unavailable cities
-        self.cities = [city for city in self.cities if city["available"] == 1]
+            ship.pop("url_store", None)
+            ship.pop("url_brochure", None)
+            ship.pop("url_hotsite", None)
+            ship.pop("url_video", None)
+            ship.pop("url_photos", None)
+
         # add hull trading option to trade ports
-        tradeports_for_hull_trading = [
-            "Baijini Point",
-            "Everus Harbor",
-            "Magnus Gateway",
-            "Pyro Gateway",
-            "Seraphim Station",
-            "Terra Gateway",
-            "Port Tressler",
-        ]
         for tradeport in self.tradeports:
-            tradeport["hull_trading"] = tradeport["name"] in tradeports_for_hull_trading
+            tradeport["hull_trading"] = bool(tradeport["has_loading_dock"])
+
         # add hull trading option to ships
-        ships_for_hull_trading = ["Hull C"]
+        ships_for_hull_trading = [
+            "Hull C",
+            "Hull D",
+            "Hull E",
+        ]
         for ship in self.ships:
             ship["hull_trading"] = ship["name"] in ships_for_hull_trading
+
+    async def _load_commodity_prices(self) -> None:
+        """
+        Load commodity prices from UEX corp API.
+
+        Returns:
+            None
+        """
+
+        self.cache["readable_objects"] = {}
+
+        # currently the prices are saved in api v1 style to minimize rework time for now
+        for i in range(0, len(self.tradeports), 10):
+            tradeports_batch = self.tradeports[i : i + 10]
+            tradeport_ids = [tradeport["id"] for tradeport in tradeports_batch]
+
+            commodity_prices = await self._fetch_uex_data(
+                "commodities_prices/id_terminal/" + ",".join(map(str, tradeport_ids))
+            )
+
+            for tradeport in tradeports_batch:
+                tradeport["prices"] = {}
+
+                for commodity_price in commodity_prices:
+                    if commodity_price["id_terminal"] == tradeport["id"]:
+                        commodity = next(
+                            (
+                                commodity
+                                for commodity in self.commodities
+                                if commodity["id"] == commodity_price["id_commodity"]
+                            ),
+                            None,
+                        )
+                        if commodity:
+                            tradeport["prices"][commodity["code"]] = {
+                                "name": self._format_commodity_name(commodity),
+                                "kind": commodity["kind"],
+                                "operation": "buy" if commodity_price["price_buy"] > 0 else "sell",
+                                "price_buy": commodity_price["price_buy"],
+                                "price_sell": commodity_price["price_sell"],
+                                "date_update": commodity_price["date_modified"],
+                                "is_updated": bool(commodity_price["date_modified"]),
+                            }
 
     async def _prepare_data(self) -> None:
         """
@@ -478,12 +487,11 @@ class UEXCorp(Skill):
         self.ship_names = [
             self._format_ship_name(ship)
             for ship in self.ships
-            if ship["implemented"] == "1"
         ]
         self.ship_dict = {
             self._format_ship_name(ship).lower(): ship for ship in self.ships
         }
-        self.ship_code_dict = {ship["code"].lower(): ship for ship in self.ships}
+        self.ship_code_dict = {ship["id"]: ship for ship in self.ships}
 
         self.commodity_names = [
             self._format_commodity_name(commodity) for commodity in self.commodities
@@ -493,7 +501,7 @@ class UEXCorp(Skill):
             for commodity in self.commodities
         }
         self.commodity_code_dict = {
-            commodity["code"].lower(): commodity for commodity in self.commodities
+            commodity["id"]: commodity for commodity in self.commodities
         }
 
         self.system_names = [
@@ -503,7 +511,7 @@ class UEXCorp(Skill):
             self._format_system_name(system).lower(): system for system in self.systems
         }
         self.system_code_dict = {
-            system["code"].lower(): system for system in self.systems
+            system["id"]: system for system in self.systems
         }
 
         self.tradeport_names = [
@@ -514,27 +522,27 @@ class UEXCorp(Skill):
             for tradeport in self.tradeports
         }
         self.tradeport_code_dict = {
-            tradeport["code"].lower(): tradeport for tradeport in self.tradeports
+            tradeport["id"]: tradeport for tradeport in self.tradeports
         }
         for tradeport in self.tradeports:
-            if tradeport["system"]:
-                self.tradeports_by_system[tradeport["system"].lower()].append(tradeport)
-            if tradeport["planet"]:
-                self.tradeports_by_planet[tradeport["planet"].lower()].append(tradeport)
-            if tradeport["satellite"]:
-                self.tradeports_by_satellite[tradeport["satellite"].lower()].append(
+            if tradeport["id_star_system"]:
+                self.tradeports_by_system[tradeport["id_star_system"]].append(tradeport)
+            if tradeport["id_planet"]:
+                self.tradeports_by_planet[tradeport["id_planet"]].append(tradeport)
+            if tradeport["id_moon"]:
+                self.tradeports_by_satellite[tradeport["id_moon"]].append(
                     tradeport
                 )
-            if tradeport["city"]:
-                self.tradeports_by_city[tradeport["city"].lower()].append(tradeport)
+            if tradeport["id_city"]:
+                self.tradeports_by_city[tradeport["id_city"]].append(tradeport)
 
         self.city_names = [self._format_city_name(city) for city in self.cities]
         self.city_dict = {
             self._format_city_name(city).lower(): city for city in self.cities
         }
-        self.city_code_dict = {city["code"].lower(): city for city in self.cities}
+        self.city_code_dict = {city["id"]: city for city in self.cities}
         for city in self.cities:
-            self.cities_by_planet[city["planet"].lower()].append(city)
+            self.cities_by_planet[city["id_planet"]].append(city)
 
         self.satellite_names = [
             self._format_satellite_name(satellite) for satellite in self.satellites
@@ -544,10 +552,10 @@ class UEXCorp(Skill):
             for satellite in self.satellites
         }
         self.satellite_code_dict = {
-            satellite["code"].lower(): satellite for satellite in self.satellites
+            satellite["id"]: satellite for satellite in self.satellites
         }
         for satellite in self.satellites:
-            self.satellites_by_planet[satellite["planet"].lower()].append(satellite)
+            self.satellites_by_planet[satellite["id_planet"]].append(satellite)
 
         self.planet_names = [
             self._format_planet_name(planet) for planet in self.planets
@@ -556,10 +564,10 @@ class UEXCorp(Skill):
             self._format_planet_name(planet).lower(): planet for planet in self.planets
         }
         self.planet_code_dict = {
-            planet["code"].lower(): planet for planet in self.planets
+            planet["id"]: planet for planet in self.planets
         }
         for planet in self.planets:
-            self.planets_by_system[planet["system"].lower()].append(planet)
+            self.planets_by_system[planet["id_star_system"]].append(planet)
 
         self.location_names_set = set(
             self.system_names
@@ -599,8 +607,8 @@ class UEXCorp(Skill):
         Returns:
             dict: The header dictionary with the API key.
         """
-        key = self.uexcorp_api_key
-        return {"api_key": key}
+        key = self.uexcorp_api_key or self.default_api_key
+        return {"Authorization": f"Bearer {key}"}
 
     async def _fetch_uex_data(
         self, endpoint: str, params: Optional[dict[str, any]] = None
@@ -616,6 +624,7 @@ class UEXCorp(Skill):
             list[dict[str, any]]: The fetched data as a list of dictionaries.
         """
         url = f"{self.uexcorp_api_url}/{endpoint}"
+        print(f"Fetching data from {url} ...")
 
         try:
             response = requests.get(
@@ -651,7 +660,7 @@ class UEXCorp(Skill):
         Returns:
             str: The formatted ship name.
         """
-        return ship["name"]
+        return ship["name_full"]
 
     def _format_tradeport_name(self, tradeport: dict[str, any]) -> str:
         """
@@ -981,7 +990,7 @@ class UEXCorp(Skill):
             )
             file_object.write(f"With parameters: {parameters}\n")
             file_object.write(f"On date: {datetime.now()}\n")
-            file_object.write(f"Version: {self.uexcorp_version}\n")
+            file_object.write(f"Version: {self.skill_version}\n")
             file_object.write(
                 "========================================================================================\n"
             )
@@ -1257,7 +1266,7 @@ class UEXCorp(Skill):
             )
 
         output = (
-            "Point out differences between these ships but keep it short, like 4-5 sentences, and dont mention something both cant do, like getting rented:\n"
+            "Point out differences between these ships but keep it short, like 4-5 sentences, and dont mention something both cant do:\n"
             + json.dumps(output)
         )
         self._log(output, True)
@@ -1343,62 +1352,46 @@ class UEXCorp(Skill):
         Returns:
             dict[str, any]: The converted tradeport dictionary.
         """
-        checksum = f"tradeport--{tradeport['code']}"
+        checksum = f"tradeport--{tradeport['id']}"
         if checksum in self.cache["readable_objects"]:
             return self.cache["readable_objects"][checksum]
 
-        tradeport = copy.deepcopy(tradeport)
-        deletable_keys = [
-            "code",
-            "name_short",
-            "space",
-            "visible",
-            "prices",
-            "date_modified",
-            "date_added",
-        ]
-        tradeport["type"] = "Tradeport"
-        tradeport["system"] = self._get_system_name_by_code(tradeport["system"])
-        tradeport["planet"] = self._get_planet_name_by_code(tradeport["planet"])
-        tradeport["city"] = self._get_city_name_by_code(tradeport["city"])
-        tradeport["satellite"] = self._get_satellite_name_by_code(
-            tradeport["satellite"]
-        )
-        tradeport["hull_trading"] = (
-            "Trading with MISC Hull C is possible."
+        output = {
+            "type": "Tradeport",
+            "name": self._format_tradeport_name(tradeport),
+            "star_system": self._get_system_name_by_code(tradeport["id_star_system"]),
+            "planet": self._get_planet_name_by_code(tradeport["id_planet"]),
+            "city": self._get_city_name_by_code(tradeport["id_city"]),
+            "satellite": self._get_satellite_name_by_code(tradeport["id_moon"]),
+        }
+        output["hull_trading"] = (
+            "Trading with large ships, that need a loading area, is possible."
             if tradeport["hull_trading"]
-            else "Trading with MISC Hull C is not possible."
+            else "Trading with large ships, that need a loading area, is not possible."
         )
 
-        if "prices" in tradeport:
-            buyable_commodities = [
-                f"{data['name']} for {data['price_buy']} aUEC per SCU"
-                for commodity_code, data in tradeport["prices"].items()
-                if data["operation"] == "buy"
-            ]
-            sellable_commodities = [
-                f"{data['name']} for {data['price_sell']} aUEC per SCU"
-                for commodity_code, data in tradeport["prices"].items()
-                if data["operation"] == "sell"
-            ]
-        else:
-            buyable_commodities = []
-            sellable_commodities = []
+        buyable_commodities = [
+            f"{data['name']} for {data['price_buy']} aUEC per SCU"
+            for commodity_code, data in tradeport["prices"].items()
+            if data["operation"] == "buy"
+        ]
+        sellable_commodities = [
+            f"{data['name']} for {data['price_sell']} aUEC per SCU"
+            for commodity_code, data in tradeport["prices"].items()
+            if data["operation"] == "sell"
+        ]
 
         if len(buyable_commodities):
-            tradeport["buyable_commodities"] = ", ".join(buyable_commodities)
+            output["buyable_commodities"] = ", ".join(buyable_commodities)
         if len(sellable_commodities):
-            tradeport["sellable_commodities"] = ", ".join(sellable_commodities)
+            output["sellable_commodities"] = ", ".join(sellable_commodities)
 
         for key in ["system", "planet", "city", "satellite"]:
-            if tradeport.get(key) is None:
-                deletable_keys.append(key)
+            if output.get(key) is None:
+                output.pop(key, None)
 
-        for key in deletable_keys:
-            tradeport.pop(key, None)
-
-        self.cache["readable_objects"][checksum] = tradeport
-        return tradeport
+        self.cache["readable_objects"][checksum] = output
+        return output
 
     def _get_converted_city_for_output(self, city: dict[str, any]) -> dict[str, any]:
         """
@@ -1410,32 +1403,38 @@ class UEXCorp(Skill):
         Returns:
             dict[str, any]: The converted city dictionary.
         """
-        checksum = f"city--{city['code']}"
+        checksum = f"city--{city['id']}"
         if checksum in self.cache["readable_objects"]:
             return self.cache["readable_objects"][checksum]
 
-        city = copy.deepcopy(city)
-        deletable_keys = [
-            "code",
-            "available",
-            "date_added",
-            "date_modified",
-        ]
-        city["type"] = "City"
-        city["system"] = self._get_system_name_by_code(city["system"])
-        city["planet"] = self._get_planet_name_by_code(city["planet"])
-        tradeports = self._get_tradeports_by_position_name(city["name"], True)
+        output = {
+            "type": "City",
+            "name": self._format_city_name(city),
+            "star_system": self._get_system_name_by_code(city["id_star_system"]),
+            "planet": self._get_planet_name_by_code(city["id_planet"]),
+            "moon": self._get_satellite_name_by_code(city["id_moon"]),
+            "is_armistice": "Yes" if city["is_armistice"] else "No",
+            "has_freight_elevator": "Yes" if city["has_freight_elevator"] else "No",
+            "has_docking_ports": "Yes" if city["has_docking_port"] else "No",
+            "has_clinic": "Yes" if city["has_clinic"] else "No",
+            "has_food": "Yes" if city["has_food"] else "No",
+            "has_refuel_option": "Yes" if city["has_refuel"] else "No",
+            "has_repair_option": "Yes" if city["has_repair"] else "No",
+            "has_refinery": "Yes" if city["has_refinery"] else "No",
+        }
 
+        tradeports = self._get_tradeports_by_position_name(city["name"], True)
         if tradeports:
-            city["options_to_trade"] = ", ".join(
+            output["options_to_trade"] = ", ".join(
                 [self._format_tradeport_name(tradeport) for tradeport in tradeports]
             )
 
-        for key in deletable_keys:
-            city.pop(key, None)
+        for key in ["star_system", "planet", "moon"]:
+            if output.get(key) is None:
+                output.pop(key, None)
 
-        self.cache["readable_objects"][checksum] = city
-        return city
+        self.cache["readable_objects"][checksum] = output
+        return output
 
     def _get_converted_satellite_for_output(
         self, satellite: dict[str, any]
@@ -1449,32 +1448,29 @@ class UEXCorp(Skill):
         Returns:
             dict[str, any]: The converted satellite dictionary.
         """
-        checksum = f"satellite--{satellite['code']}"
+        checksum = f"satellite--{satellite['id']}"
         if checksum in self.cache["readable_objects"]:
             return self.cache["readable_objects"][checksum]
 
-        satellite = copy.deepcopy(satellite)
-        deletable_keys = [
-            "code",
-            "available",
-            "date_added",
-            "date_modified",
-        ]
-        satellite["type"] = "Satellite"
-        satellite["system"] = self._get_system_name_by_code(satellite["system"])
-        satellite["planet"] = self._get_planet_name_by_code(satellite["planet"])
-        tradeports = self._get_tradeports_by_position_name(satellite["name"], True)
+        output = {
+            "type": "Moon",
+            "name": self._format_satellite_name(satellite),
+            "star_system": self._get_system_name_by_code(satellite["id_star_system"]),
+            "orbits_planet": self._get_planet_name_by_code(satellite["id_planet"]),
+        }
 
+        tradeports = self._get_tradeports_by_position_name(self._format_satellite_name(satellite), True)
         if tradeports:
-            satellite["options_to_trade"] = ", ".join(
+            output["options_to_trade"] = ", ".join(
                 [self._format_tradeport_name(tradeport) for tradeport in tradeports]
             )
 
-        for key in deletable_keys:
-            satellite.pop(key, None)
+        for key in ["star_system", "orbits_planet"]:
+            if output.get(key) is None:
+                output.pop(key, None)
 
-        self.cache["readable_objects"][checksum] = satellite
-        return satellite
+        self.cache["readable_objects"][checksum] = output
+        return output
 
     def _get_converted_planet_for_output(
         self, planet: dict[str, any]
@@ -1488,43 +1484,40 @@ class UEXCorp(Skill):
         Returns:
             dict[str, any]: The converted planet dictionary.
         """
-        checksum = f"planet--{planet['code']}"
+        checksum = f"planet--{planet['id']}"
         if checksum in self.cache["readable_objects"]:
             return self.cache["readable_objects"][checksum]
 
-        planet = copy.deepcopy(planet)
-        deletable_keys = [
-            "code",
-            "available",
-            "date_added",
-            "date_modified",
-        ]
-        planet["type"] = "Planet"
-        planet["system"] = self._get_system_name_by_code(planet["system"])
-        tradeports = self._get_tradeports_by_position_name(planet["name"], True)
+        output = {
+            "type": "Planet",
+            "name": self._format_planet_name(planet),
+            "star_system": self._get_system_name_by_code(planet["id_star_system"]),
+        }
 
+        tradeports = self._get_tradeports_by_position_name(planet["name"], True)
         if tradeports:
-            planet["options_to_trade"] = ", ".join(
+            output["options_to_trade"] = ", ".join(
                 [self._format_tradeport_name(tradeport) for tradeport in tradeports]
             )
 
         satellites = self._get_satellites_by_planetcode(planet["code"])
         if satellites:
-            planet["satellites"] = ", ".join(
+            output["satellites"] = ", ".join(
                 [self._format_satellite_name(satellite) for satellite in satellites]
             )
 
         cities = self._get_cities_by_planetcode(planet["code"])
         if cities:
-            planet["cities"] = ", ".join(
+            output["cities"] = ", ".join(
                 [self._format_city_name(city) for city in cities]
             )
 
-        for key in deletable_keys:
-            planet.pop(key, None)
+        for key in ["star_system"]:
+            if output.get(key) is None:
+                output.pop(key, None)
 
-        self.cache["readable_objects"][checksum] = planet
-        return planet
+        self.cache["readable_objects"][checksum] = output
+        return output
 
     def _get_converted_system_for_output(
         self, system: dict[str, any]
@@ -1538,37 +1531,43 @@ class UEXCorp(Skill):
         Returns:
             dict[str, any]: The converted system dictionary.
         """
-        checksum = f"system--{system['code']}"
+        checksum = f"system--{system['id']}"
         if checksum in self.cache["readable_objects"]:
             return self.cache["readable_objects"][checksum]
 
-        system = copy.deepcopy(system)
-        deletable_keys = [
-            "code",
-            "available",
-            "default",
-            "date_added",
-            "date_modified",
-        ]
-        system["type"] = "System"
-        tradeports = self._get_tradeports_by_position_name(system["name"], True)
+        output = {
+            "type": "Star System",
+            "name": self._format_system_name(system),
+        }
 
+        tradeports = self._get_tradeports_by_position_name(system["name"], True)
         if tradeports:
-            system["options_to_trade"] = ", ".join(
-                [self._format_tradeport_name(tradeport) for tradeport in tradeports]
-            )
+            output["options_to_trade"] = f"{len(tradeports)} different options to trade."
+            tradeport_without_planets = []
+            gateways = []
+            for tradeport in tradeports:
+                if not tradeport["id_planet"]:
+                    if tradeport["name"].find("Gateway") != -1:
+                        gateways.append(tradeport)
+                    else:
+                        tradeport_without_planets.append(tradeport)
+            if tradeport_without_planets:
+                output["space_stations"] = ", ".join(
+                    [self._format_tradeport_name(tradeport) for tradeport in tradeport_without_planets]
+                )
+            if gateways:
+                output["gateways"] = ", ".join(
+                    [self._format_tradeport_name(tradeport) for tradeport in gateways]
+                )
 
         planets = self._get_planets_by_systemcode(system["code"])
         if planets:
-            system["planets"] = ", ".join(
+            output["planets"] = ", ".join(
                 [self._format_planet_name(planet) for planet in planets]
             )
 
-        for key in deletable_keys:
-            system.pop(key, None)
-
-        self.cache["readable_objects"][checksum] = system
-        return system
+        self.cache["readable_objects"][checksum] = output
+        return output
 
     def _get_converted_ship_for_output(self, ship: dict[str, any]) -> dict[str, any]:
         """
@@ -1580,40 +1579,20 @@ class UEXCorp(Skill):
         Returns:
             dict[str, any]: The converted ship dictionary.
         """
-        checksum = f"ship--{ship['code']}"
+        checksum = f"ship--{ship['id']}"
         if checksum in self.cache["readable_objects"]:
             return self.cache["readable_objects"][checksum]
 
-        ship = copy.deepcopy(ship)
-        deletable_keys = [
-            "code",
-            "loaner",
-            "scu",
-            "implemented",
-            "mining",
-            "stealth",
-            "price",
-            "price_warbond",
-            "price_pkg",
-            "sell_active",
-            "sell_active_warbond",
-            "sell_active_pkg",
-            "stock_qt_speed",
-            "showdown_winner",
-            "date_added",
-            "date_modified",
-            "hull_trading",
-        ]
-        ship["type"] = "Ship"
-        ship["manufacturer"] = (
-            self.MANUFACTURERS[ship["manufacturer"]]
-            if ship["manufacturer"] in self.MANUFACTURERS
-            else ship["manufacturer"]
-        )
-        ship["cargo"] = f"{ship['scu']} SCU"
-        ship["price_USD"] = f"{ship['price']}"
+        output = {
+            "type": "Ship" if ship["is_spaceship"] else "Groud Vehicle",
+            "name": self._format_ship_name(ship),
+            "manufacturer": ship["company_name"],
+            "cargo_capacity": f"{ship['scu']} SCU",
+            "added_on_version": "Unknown" if ship["is_concept"] else ship["game_version"],
+            "field_of_activity": self._get_ship_field_of_activity(ship),
+        }
 
-        ship["buy_at"] = (
+        output["buy_at"] = (
             "This ship cannot be bought."
             if not ship["buy_at"]
             else [
@@ -1622,7 +1601,7 @@ class UEXCorp(Skill):
             ]
         )
 
-        ship["rent_at"] = (
+        output["rent_at"] = (
             "This ship cannot be rented."
             if not ship["rent_at"]
             else [
@@ -1632,15 +1611,77 @@ class UEXCorp(Skill):
         )
 
         if ship["hull_trading"] is True:
-            ship["trading_info"] = (
-                "This ship can only trade on suitable space stations with a cargo deck."
+            output["trading_info"] = (
+                "This ship can only trade on suitable space stations with cargo loading option."
             )
 
-        for key in deletable_keys:
-            ship.pop(key, None)
+        self.cache["readable_objects"][checksum] = output
+        return output
+    
+    def _get_ship_field_of_activity(self, ship: dict[str, any]) -> str:
+        """
+        Returns the field of activity of a ship.
 
-        self.cache["readable_objects"][checksum] = ship
-        return ship
+        Args:
+            ship (dict[str, any]): The ship dictionary to get the field of activity for.
+
+        Returns:
+            str: The field of activity of the ship.
+        """
+
+        field = []
+        if ship["is_exploration"]:
+            field.append("Exploration")
+        if ship["is_mining"]:
+            field.append("Mining")
+        if ship["is_salvage"]:
+            field.append("Salvage")
+        if ship["is_refinery"]:
+            field.append("Refinery")
+        if ship["is_scanning"]:
+            field.append("Scanning")
+        if ship["is_cargo"]:
+            field.append("Cargo")
+        if ship["is_medical"]:
+            field.append("Medical")
+        if ship["is_racing"]:
+            field.append("Racing")
+        if ship["is_repair"]:
+            field.append("Repair")
+        if ship["is_refuel"]:
+            field.append("Refuel")
+        if ship["is_interdiction"]:
+            field.append("Interdiction")
+        if ship["is_tractor_beam"]:
+            field.append("Tractor Beam")
+        if ship["is_qed"]:
+            field.append("Quantum Interdiction")
+        if ship["is_emp"]:
+            field.append("EMP")
+        if ship["is_construction"]:
+            field.append("Construction")
+        if ship["is_datarunner"]:
+            field.append("Datarunner")
+        if ship["is_science"]:
+            field.append("Science")
+        if ship["is_boarding"]:
+            field.append("Boarding")
+        if ship["is_stealth"]:
+            field.append("Stealth")
+        if ship["is_research"]:
+            field.append("Research")
+        if ship["is_carrier"]:
+            field.append("Carrier")
+
+        addition = []
+        if ship["is_civilian"]:
+            addition.append("Civilian")
+        if ship["is_military"]:
+            addition.append("Military")
+
+        return f"{', '.join(field)} ({' & '.join(addition)})"
+
+    ## TODO: Continue API v2 implementation here
 
     def _get_converted_rent_and_buy_option_for_output(
         self, position: dict[str, any]

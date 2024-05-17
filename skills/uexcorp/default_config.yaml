@@ -108,7 +108,7 @@ custom_properties:
   - id: uexcorp_api_url
     name: API URL
     hint: The URL of the UEX corp API.
-    value: https://portal.uexcorp.space/api
+    value: https://uexcorp.space/api/2.0/
     required: true
     property_type: string
   - id: uexcorp_api_timeout
