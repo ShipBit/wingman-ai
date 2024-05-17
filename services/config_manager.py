@@ -192,7 +192,7 @@ class ConfigManager:
 
     def __get_template_dir(self, config_dir: ConfigDirInfo) -> Optional[ConfigDirInfo]:
         """Gets the template directory for a given config directory."""
-        template_dir = path.join(self.templates_dir, config_dir.directory)
+        template_dir = path.join(self.templates_dir, CONFIGS_DIR, config_dir.directory)
         if not path.exists(template_dir):
             # check if "defaulted" template dir exists
             default_template_dir = path.join(
@@ -221,16 +221,19 @@ class ConfigManager:
             return (None, None)
 
         for root, dirs, files in walk(
-            path.join(self.templates_dir, config_dir.directory)
+            path.join(self.templates_dir, CONFIGS_DIR, config_dir.directory)
         ):
             for filename in files:
                 # templates are never logically deleted
                 base_file_name = filename.replace(".template", "")
-                if filename.endswith(
-                    "template.yaml"
+                if (
+                    filename.endswith("template.yaml")
                     # but the given wingman config might be logically deleted
-                ) and base_file_name == wingman_file.file.replace(
-                    DELETED_PREFIX, "", 1
+                    and base_file_name == wingman_file.file
+                    or (
+                        wingman_file.file.startswith(DELETED_PREFIX)
+                        and base_file_name == wingman_file.file[1:]
+                    )
                 ):
                     file_info = WingmanConfigFileInfo(
                         file=base_file_name,
@@ -527,6 +530,19 @@ class ConfigManager:
             old_config_path = path.join(
                 self.config_dir, config_dir.directory, wingman_file.file
             )
+
+            # check if there is a template for the old name
+            tpl, wng = self.__get_template(config_dir, wingman_file)
+            if tpl and wng:
+                # leave a .[OLD] file so that it won't be recreated next time
+                shutil.copyfile(
+                    old_config_path,
+                    path.join(
+                        self.config_dir,
+                        config_dir.directory,
+                        f"{DELETED_PREFIX}{wng.file}",
+                    ),
+                )
 
             # move the config
             shutil.move(
