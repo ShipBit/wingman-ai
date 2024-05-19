@@ -1,12 +1,11 @@
 """Wingman AI Skill to utalize uexcorp api for trade recommendations"""
 
-import copy
 import difflib
 import heapq
 import itertools
 import json
-import logging
 import math
+import traceback
 from os import path
 import collections
 import re
@@ -43,23 +42,25 @@ class UEXCorp(Skill):
         self.logfileerror = path.join(self.data_path, "error.log")
         self.logfiledebug = path.join(self.data_path, "debug.log")
         self.cachefile = path.join(self.data_path, "cache.json")
-        logging.basicConfig(filename=self.logfileerror, level=logging.ERROR)
 
         self.skill_version = "v12"
-        self.default_api_key = "072df8a58163e9b1486402d04e3d3315419cba57"
 
         # init of config options
         self.uexcorp_api_url: str = None
         self.uexcorp_api_key: str = None
         self.uexcorp_api_timeout: int = None
+        self.uexcorp_api_timeout_retries: int = None
         self.uexcorp_cache: bool = None
         self.uexcorp_cache_duration: int = None
         self.uexcorp_summarize_routes_by_commodity: bool = None
         self.uexcorp_tradestart_mandatory: bool = None
         self.uexcorp_trade_blacklist = []
         self.uexcorp_default_trade_route_count: int = None
+        self.uexcorp_use_estimated_availability: bool = None
 
         # init of data lists
+        # self.status_codes = []
+
         self.ships = []
         self.ship_names = []
         self.ship_dict = {}
@@ -218,13 +219,16 @@ class UEXCorp(Skill):
         errors = await super().validate()
 
         self.uexcorp_api_key = await self.retrieve_secret(
-            "uexcorp", errors, "You can get one here: https://uexcorp.space/api.html"
+            "uexcorp", errors, "You can create your own API key here: https://uexcorp.space/api/apps/"
         )
         self.uexcorp_api_url = self.retrieve_custom_property_value(
             "uexcorp_api_url", errors
         )
         self.uexcorp_api_timeout = self.retrieve_custom_property_value(
             "uexcorp_api_timeout", errors
+        )
+        self.uexcorp_api_timeout_retries = self.retrieve_custom_property_value(
+            "uexcorp_api_timeout_retries", errors
         )
         self.uexcorp_cache = self.retrieve_custom_property_value(
             "uexcorp_cache", errors
@@ -242,6 +246,9 @@ class UEXCorp(Skill):
         )
         self.uexcorp_default_trade_route_count = self.retrieve_custom_property_value(
             "uexcorp_default_trade_route_count", errors
+        )
+        self.uexcorp_use_estimated_availability = self.retrieve_custom_property_value(
+            "uexcorp_use_estimated_availability", errors
         )
 
         trade_backlist_str: str = self.retrieve_custom_property_value(
@@ -279,9 +286,6 @@ class UEXCorp(Skill):
         Args:
             reload (bool, optional): Whether to reload the data from the source. Defaults to False.
         """
-        print("Loading data for UEX corp wingman...")
-
-        boo_tradeports_reloaded = False
 
         save_cache = False
         # if cache is enabled and file is not too old, load from cache
@@ -301,7 +305,8 @@ class UEXCorp(Skill):
                 > self._get_timestamp()
                 and data.get("skill_version") == self.skill_version
             ):
-                print("Loading data from cache...")
+                # if data.get("status_codes"):
+                #     self.status_codes = data["status_codes"]
                 if data.get("ships"):
                     self.ships = data["ships"]
                 if data.get("commodities"):
@@ -310,7 +315,13 @@ class UEXCorp(Skill):
                     self.systems = data["systems"]
                 if data.get("tradeports"):
                     self.tradeports = data["tradeports"]
-                    boo_tradeports_reloaded = True
+                    # fix prices keys (from string to integer due to unwanted json conversion)
+                    for tradeport in self.tradeports:
+                        if "prices" in tradeport:
+                            tradeport["prices"] = {
+                                int(key): value
+                                for key, value in tradeport["prices"].items()
+                            }
                 if data.get("planets"):
                     self.planets = data["planets"]
                 if data.get("satellites"):
@@ -319,6 +330,9 @@ class UEXCorp(Skill):
                     self.cities = data["cities"]
             else:
                 save_cache = True
+
+        # if not self.status_codes:
+        #     self.status_codes = await self._fetch_uex_data("commodities_status")
 
         if not self.ships:
             self.ships = await self._fetch_uex_data("vehicles")
@@ -356,7 +370,7 @@ class UEXCorp(Skill):
 
             for tradeport in self.tradeports:
                 if (
-                    tradeport["space"] == "1"
+                    tradeport["id_space_station"]
                     and len(tradeport["nickname"].split("-")) == 2
                     and tradeport["nickname"].split("-")[0] in planet_codes
                     and re.match(r"^L\d+$", tradeport["nickname"].split("-")[1])
@@ -376,7 +390,7 @@ class UEXCorp(Skill):
             ]
         else:
             if reload:
-                self._load_commodity_prices()
+                await self._load_commodity_prices()
                 save_cache = True
 
         if (
@@ -412,6 +426,12 @@ class UEXCorp(Skill):
             ship.pop("url_hotsite", None)
             ship.pop("url_video", None)
             ship.pop("url_photos", None)
+
+        # remove screenshot from tradeports
+        for tradeport in self.tradeports:
+            tradeport.pop("screenshot", None)
+            tradeport.pop("screenshot_thumbnail", None)
+            tradeport.pop("screenshot_author", None)
 
         # add hull trading option to trade ports
         for tradeport in self.tradeports:
@@ -459,15 +479,34 @@ class UEXCorp(Skill):
                             None,
                         )
                         if commodity:
-                            tradeport["prices"][commodity["code"]] = {
+                            transaction_type = "buy" if commodity_price["price_buy"] > 0 else "sell"
+                            price = {
                                 "name": self._format_commodity_name(commodity),
                                 "kind": commodity["kind"],
-                                "operation": "buy" if commodity_price["price_buy"] > 0 else "sell",
+                                "operation": transaction_type,
                                 "price_buy": commodity_price["price_buy"],
                                 "price_sell": commodity_price["price_sell"],
                                 "date_update": commodity_price["date_modified"],
                                 "is_updated": bool(commodity_price["date_modified"]),
+                                "scu": commodity_price[f"scu_{transaction_type}"] or None,
+                                "scu_average": commodity_price[f"scu_{transaction_type}_avg"] or None,
+                                "scu_average_week": commodity_price[f"scu_{transaction_type}_avg_week"] or None,
                             }
+                            # calculate expected scu
+                            count = 0
+                            total = 0
+                            if price["scu"]:
+                                count += 2
+                                total += (price["scu"] * 2)
+                            if price["scu_average"]:
+                                count += 1
+                                total += price["scu_average"]
+                            if price["scu_average_week"]:
+                                count += 1
+                                total += price["scu_average_week"]
+                            price["scu_expected"] = int(total / count) if count > 0 else None
+
+                            tradeport["prices"][commodity["id"]] = price
 
     async def _prepare_data(self) -> None:
         """
@@ -481,8 +520,15 @@ class UEXCorp(Skill):
         Returns:
             None
         """
-        # self.start_execution_benchmark()
+
+        # fix api url
+        if self.uexcorp_api_url and self.uexcorp_api_url.endswith("/"):
+            self.uexcorp_api_url = self.uexcorp_api_url[:-1]
         await self._load_data()
+
+        # fix timeout
+        self.uexcorp_api_timeout = max(3, self.uexcorp_api_timeout)
+        self.uexcorp_api_timeout_retries = max(0, self.uexcorp_api_timeout_retries)
 
         self.ship_names = [
             self._format_ship_name(ship)
@@ -607,7 +653,7 @@ class UEXCorp(Skill):
         Returns:
             dict: The header dictionary with the API key.
         """
-        key = self.uexcorp_api_key or self.default_api_key
+        key = self.uexcorp_api_key
         return {"Authorization": f"Bearer {key}"}
 
     async def _fetch_uex_data(
@@ -624,22 +670,35 @@ class UEXCorp(Skill):
             list[dict[str, any]]: The fetched data as a list of dictionaries.
         """
         url = f"{self.uexcorp_api_url}/{endpoint}"
-        print(f"Fetching data from {url} ...")
+        await self._print(f"Fetching data from {url} ...", True)
 
-        try:
-            response = requests.get(
-                url,
-                params=params,
-                timeout=self.uexcorp_api_timeout,
-                headers=self._get_header(),
-            )
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            await self._print(f"Error while retrieving data from {url}: {e}")
+        request_count = 1
+        timeout_error = False
+        requests_error = False
+
+        while request_count == 1 or (request_count <= (self.uexcorp_api_timeout + 1) and timeout_error):
+            if requests_error:
+                await self._print(f"Retrying request #{request_count}...", True)
+                requests_error = False
+
+            timeout_error = False
+            try:
+                response = requests.get(
+                    url,
+                    params=params,
+                    timeout=(self.uexcorp_api_timeout * request_count),
+                    headers=self._get_header(),
+                )
+                response.raise_for_status()
+            except requests.exceptions.RequestException as e:
+                await self._print(f"Error while retrieving data from {url}: {e}")
+                requests_error = True
+                if isinstance(e, requests.exceptions.Timeout):
+                    timeout_error = True
+            request_count += 1
+
+        if requests_error:
             return []
-
-        # if self.config.debug_mode:
-        #     self.print_execution_time(reset_timer=True)
 
         response_json = response.json()
         if "status" not in response_json or response_json["status"] != "ok":
@@ -672,7 +731,7 @@ class UEXCorp(Skill):
         Returns:
             str: The formatted tradeport name.
         """
-        return tradeport["name"]
+        return tradeport["nickname"]
 
     def _format_city_name(self, city: dict[str, any]) -> str:
         """
@@ -979,9 +1038,11 @@ class UEXCorp(Skill):
                 function_response = await function(**parameters)
                 if self.settings.debug_mode:
                     await self.print_execution_time()
-        except Exception as e:
-            logging.error(e, exc_info=True)
+                if self.DEV_MODE:
+                    await self._print(f"_gpt_call_{functions[tool_name]} response: {function_response}", True)
+        except Exception:
             file_object = open(self.logfileerror, "a", encoding="UTF-8")
+            file_object.write(traceback.format_exc())
             file_object.write(
                 "========================================================================================\n"
             )
@@ -999,7 +1060,7 @@ class UEXCorp(Skill):
                 f"Error while executing custom function: {tool_name}\nCheck log file for more details."
             )
             function_response = f"Error while executing custom function: {tool_name}"
-            function_response += "\nTell user there seems to be an error. And you must say that it should be report to the 'uexcorp wingman developers'."
+            function_response += "\nTell user there seems to be an error. And you must say that it should be report to the 'uexcorp skill developer (JayMatthew on Discord)'."
 
         return function_response, instant_response
 
@@ -1423,7 +1484,7 @@ class UEXCorp(Skill):
             "has_refinery": "Yes" if city["has_refinery"] else "No",
         }
 
-        tradeports = self._get_tradeports_by_position_name(city["name"], True)
+        tradeports = self._get_tradeports_by_position_name(city["name"])
         if tradeports:
             output["options_to_trade"] = ", ".join(
                 [self._format_tradeport_name(tradeport) for tradeport in tradeports]
@@ -1459,7 +1520,7 @@ class UEXCorp(Skill):
             "orbits_planet": self._get_planet_name_by_code(satellite["id_planet"]),
         }
 
-        tradeports = self._get_tradeports_by_position_name(self._format_satellite_name(satellite), True)
+        tradeports = self._get_tradeports_by_position_name(self._format_satellite_name(satellite))
         if tradeports:
             output["options_to_trade"] = ", ".join(
                 [self._format_tradeport_name(tradeport) for tradeport in tradeports]
@@ -1494,7 +1555,7 @@ class UEXCorp(Skill):
             "star_system": self._get_system_name_by_code(planet["id_star_system"]),
         }
 
-        tradeports = self._get_tradeports_by_position_name(planet["name"], True)
+        tradeports = self._get_tradeports_by_position_name(planet["name"])
         if tradeports:
             output["options_to_trade"] = ", ".join(
                 [self._format_tradeport_name(tradeport) for tradeport in tradeports]
@@ -1540,7 +1601,7 @@ class UEXCorp(Skill):
             "name": self._format_system_name(system),
         }
 
-        tradeports = self._get_tradeports_by_position_name(system["name"], True)
+        tradeports = self._get_tradeports_by_position_name(system["name"])
         if tradeports:
             output["options_to_trade"] = f"{len(tradeports)} different options to trade."
             tradeport_without_planets = []
@@ -1592,23 +1653,12 @@ class UEXCorp(Skill):
             "field_of_activity": self._get_ship_field_of_activity(ship),
         }
 
-        output["buy_at"] = (
-            "This ship cannot be bought."
-            if not ship["buy_at"]
-            else [
-                self._get_converted_rent_and_buy_option_for_output(position)
-                for position in ship["buy_at"]
-            ]
-        )
+        buy_rent_options = self._get_converted_rent_and_buy_option_for_output(ship)
+        if "buy_at" in buy_rent_options:
+            output["buy_at"] = buy_rent_options["buy_at"]
 
-        output["rent_at"] = (
-            "This ship cannot be rented."
-            if not ship["rent_at"]
-            else [
-                self._get_converted_rent_and_buy_option_for_output(position)
-                for position in ship["rent_at"]
-            ]
-        )
+        if "rent_at" in buy_rent_options:
+            output["rent_at"] = buy_rent_options["rent_at"]
 
         if ship["hull_trading"] is True:
             output["trading_info"] = (
@@ -1681,60 +1731,21 @@ class UEXCorp(Skill):
 
         return f"{', '.join(field)} ({' & '.join(addition)})"
 
-    ## TODO: Continue API v2 implementation here
-
     def _get_converted_rent_and_buy_option_for_output(
-        self, position: dict[str, any]
+        self, ship: dict[str, any]
     ) -> dict[str, any]:
         """
-        Converts a rent/buy option dictionary to a dictionary that can be used as output.
+        Converts the rent and buy options of a ship to a dictionary that can be used as output.
 
         Args:
-            position (dict[str, any]): The rent/buy option dictionary to be converted.
+            ship (dict[str, any]): The ship dictionary to get the rent and buy options for.
 
         Returns:
-            dict[str, any]: The converted rent/buy option dictionary.
+            dict[str, any]: The converted rent and buy options dictionary.
         """
-        position = copy.deepcopy(position)
-        keys = ["system", "planet", "satellite", "city", "store"]
-        if not position["tradeport"]:
-            for key in keys:
-                if not position[key]:
-                    position.pop(key, None)
-                else:
-                    position[key] = position[f"{key}_name"]
-            position.pop("tradeport", None)
-        else:
-            tradeport = self._get_tradeport_by_code(position["tradeport"])
-            position["tradeport"] = self._format_tradeport_name(tradeport)
-            for key in keys:
-                function_name = f"_get_{key}_name_by_code"
-                if function_name in dir(self):
-                    name = getattr(self, function_name)(tradeport[key])
-                    if name:
-                        position[key] = name
-                    else:
-                        position.pop(key, None)
-            position["store"] = (
-                "Refinery"  # TODO: remove this when refinery is implemented
-            )
-        position["price"] = f"{position['price']} aUEC"
 
-        keys_to_remove = [
-            "tradeport_name",
-            "system_name",
-            "planet_name",
-            "satellite_name",
-            "tradeport_name",
-            "city_name",
-            "store_name",
-            "date_added",
-            "date_modified",
-        ]
-        for key in keys_to_remove:
-            position.pop(key, None)
-
-        return position
+        # TODO: implement this with API v2
+        return {}
 
     def _get_converted_commodity_for_output(
         self, commodity: dict[str, any]
@@ -1748,69 +1759,56 @@ class UEXCorp(Skill):
         Returns:
             dict[str, any]: The converted commodity dictionary.
         """
-        checksum = f"commodity--{commodity['code']}"
+        checksum = f"commodity--{commodity['id']}"
         if checksum in self.cache["readable_objects"]:
             return self.cache["readable_objects"][checksum]
 
-        commodity = copy.deepcopy(commodity)
-        commodity["notes"] = ""
-        deletable_keys = [
-            "code",
-            "tradable",
-            "temporary",
-            "restricted",
-            "raw",
-            "available",
-            "date_added",
-            "date_modified",
-            "trade_price_buy",
-            "trade_price_sell",
-        ]
+        output = {
+            "type": "Commodity",
+            "subtype": commodity["kind"],
+            "name": commodity["name"],
+        }
 
         price_buy_best = None
         price_sell_best = None
-        commodity["buy_options"] = {}
-        commodity["sell_options"] = {}
+        output["buy_at"] = {}
+        output["sell_at"] = {}
 
         for tradeport in self.tradeports:
             if "prices" not in tradeport:
                 continue
-            if commodity["code"] in tradeport["prices"]:
-                if tradeport["prices"][commodity["code"]]["operation"] == "buy":
-                    price_buy = tradeport["prices"][commodity["code"]]["price_buy"]
+            if commodity["id"] in tradeport["prices"]:
+                if tradeport["prices"][commodity["id"]]["operation"] == "buy":
+                    price_buy = tradeport["prices"][commodity["id"]]["price_buy"]
                     if price_buy_best is None or price_buy < price_buy_best:
                         price_buy_best = price_buy
-                    commodity["buy_options"][
+                    output["buy_at"][
                         self._format_tradeport_name(tradeport)
                     ] = f"{price_buy} aUEC"
                 else:
-                    price_sell = tradeport["prices"][commodity["code"]]["price_sell"]
+                    price_sell = tradeport["prices"][commodity["id"]]["price_sell"]
                     if price_sell_best is None or price_sell > price_sell_best:
                         price_sell_best = price_sell
-                    commodity["sell_options"][
+                    output["sell_at"][
                         self._format_tradeport_name(tradeport)
                     ] = f"{price_sell} aUEC"
 
-        commodity["best_buy_price"] = (
+        output["best_buy_price"] = (
             f"{price_buy_best} aUEC" if price_buy_best else "Not buyable."
         )
-        commodity["best_sell_price"] = (
+        output["best_sell_price"] = (
             f"{price_sell_best} aUEC" if price_sell_best else "Not sellable."
         )
 
-        boolean_keys = ["minable", "harvestable", "illegal"]
+        boolean_keys = ["is_harvestable", "is_mineral", "is_illegal"]
         for key in boolean_keys:
-            commodity[key] = "Yes" if commodity[key] != "0" else "No"
-        if commodity["illegal"] == "Yes":
-            commodity[
-                "notes"
-            ] += "Stay away from ship scanns to avoid fines and crimestat, as this commodity is illegal."
+            output[key] = "Yes" if commodity[key] else "No"
 
-        for key in deletable_keys:
-            commodity.pop(key, None)
-
-        self.cache["readable_objects"][checksum] = commodity
-        return commodity
+        if commodity["is_illegal"]:
+            output["notes"] = "Stay away from ship scanns to avoid fines and crimestat, as this commodity is illegal."
+        
+        self.cache["readable_objects"][checksum] = output
+        return output
 
     async def _gpt_call_get_locations_to_sell_to(
         self,
@@ -1901,6 +1899,7 @@ class UEXCorp(Skill):
                 self._get_tradeport_route_description(tradeport)
                 for tradeport in tradeports
             )
+            messages.append("\n")
 
         self._log("\n".join(messages), True)
         return "\n".join(messages)
@@ -1993,6 +1992,7 @@ class UEXCorp(Skill):
                 self._get_tradeport_route_description(tradeport)
                 for tradeport in tradeports
             )
+            messages.append("\n")
 
         self._log("\n".join(messages), True)
         return "\n".join(messages)
@@ -2008,7 +2008,7 @@ class UEXCorp(Skill):
         if "prices" not in tradeport:
             return None
 
-        commodity_code = commodity["code"]
+        commodity_code = commodity["id"]
         for code, price in tradeport["prices"].items():
             if code == commodity_code and price["operation"] == "sell":
                 return price["price_sell"] * amount
@@ -2025,7 +2025,7 @@ class UEXCorp(Skill):
         if "prices" not in tradeport:
             return None
 
-        commodity_code = commodity["code"]
+        commodity_code = commodity["id"]
         for code, price in tradeport["prices"].items():
             if code == commodity_code and price["operation"] == "buy":
                 return price["price_buy"] * amount
@@ -2133,8 +2133,6 @@ class UEXCorp(Skill):
                 answer += (
                     f"These given parameters were misunderstood: {misunderstood_str}"
                 )
-
-            self._log(answer, True)
             return answer
 
         # set variables
@@ -2174,21 +2172,21 @@ class UEXCorp(Skill):
         errors = []
         for commodity in commodities:
             commodity_routes = []
-            if not illegal_commodities_allowed and commodity["illegal"] == "1":
+            if not illegal_commodities_allowed and commodity["is_illegal"]:
                 continue
             for start_tradeport in start_tradeports:
                 if (
                     "prices" not in start_tradeport
-                    or commodity["code"] not in start_tradeport["prices"]
-                    or start_tradeport["prices"][commodity["code"]]["operation"]
+                    or commodity["id"] not in start_tradeport["prices"]
+                    or start_tradeport["prices"][commodity["id"]]["operation"]
                     != "buy"
                 ):
                     continue
                 for end_tradeport in end_tradeports:
                     if (
                         "prices" not in end_tradeport
-                        or commodity["code"] not in end_tradeport["prices"]
-                        or end_tradeport["prices"][commodity["code"]]["operation"]
+                        or commodity["id"] not in end_tradeport["prices"]
+                        or end_tradeport["prices"][commodity["id"]]["operation"]
                         != "sell"
                     ):
                         continue
@@ -2208,9 +2206,9 @@ class UEXCorp(Skill):
                     trading_route_new = self._get_trading_route(
                         ship,
                         start_tradeport,
+                        end_tradeport,
                         money,
                         free_cargo_space,
-                        end_tradeport,
                         commodity,
                         illegal_commodities_allowed,
                     )
@@ -2269,28 +2267,25 @@ class UEXCorp(Skill):
                 trading_route["cargo"] = f"{trading_route['cargo']} SCU"
 
             message = (
-                "Possible commodities with their profit. Just give basic overview at first."
+                "Possible commodities with their profit. Just give basic overview at first.\n"
                 + additional_answer
-                + " JSON: "
+                + " JSON: \n "
                 + json.dumps(trading_routes)
             )
-
-            self._log(message, True)
             return message
         else:
             return_string = "No trading routes found."
             if len(errors) > 0:
                 return_string += "\nPossible errors are:\n- " + "\n- ".join(errors)
-            await self._print(return_string, True)
             return return_string
 
     def _get_trading_route(
         self,
         ship: dict[str, any],
         position_start: dict[str, any],
+        position_end: dict[str, any],
         money: int = None,
         free_cargo_space: int = None,
-        position_end: dict[str, any] = None,
         commodity: dict[str, any] = None,
         illegal_commodities_allowed: bool = True,
     ) -> str:
@@ -2321,7 +2316,7 @@ class UEXCorp(Skill):
             return "Your ship has no cargo space to trade."
 
         commodity_filter = commodity
-        start_tradeports = self._get_tradeports_by_position_name(position_start["name"])
+        start_tradeports = [position_start]
         if ship["hull_trading"] is True:
             start_tradeports = [
                 tradeport
@@ -2333,13 +2328,7 @@ class UEXCorp(Skill):
                 return "No valid start position given. Make sure to provide a start point compatible with your ship."
             return "No valid start position given. Try a different position or just name a planet or star system."
 
-        end_tradeports = []
-        if position_end is None:
-            for tradeport in self.tradeports:
-                if tradeport["system"] == start_tradeports[0]["system"]:
-                    end_tradeports.append(tradeport)
-        else:
-            end_tradeports = self._get_tradeports_by_position_name(position_end["name"])
+        end_tradeports = [position_end]
         if ship["hull_trading"] is True:
             end_tradeports = [
                 tradeport
@@ -2352,7 +2341,7 @@ class UEXCorp(Skill):
         if (
             len(end_tradeports) == 1
             and len(start_tradeports) == 1
-            and end_tradeports[0]["code"] == start_tradeports[0]["code"]
+            and end_tradeports[0]["id"] == start_tradeports[0]["id"]
         ):
             return "Start and end position are the same."
 
@@ -2374,7 +2363,7 @@ class UEXCorp(Skill):
             for blacklist_item in self.uexcorp_trade_blacklist:
                 if "tradeport" in blacklist_item and blacklist_item["tradeport"]:
                     for tradeport in start_tradeports:
-                        if tradeport["name"] == blacklist_item["tradeport"]:
+                        if self._format_tradeport_name(tradeport) == blacklist_item["tradeport"]:
                             if (
                                 "commodity" not in blacklist_item
                                 or not blacklist_item["commodity"]
@@ -2387,12 +2376,12 @@ class UEXCorp(Skill):
                                     blacklist_item["commodity"]
                                 )
                                 for commodity_code, data in tradeport["prices"].items():
-                                    if commodity["code"] == commodity_code:
+                                    if commodity["id"] == commodity_code:
                                         # remove commodity code from tradeport
                                         tradeport["prices"].pop(commodity_code)
                                         break
                     for tradeport in end_tradeports:
-                        if tradeport["name"] == blacklist_item["tradeport"]:
+                        if self._format_tradeport_name(tradeport) == blacklist_item["tradeport"]:
                             if (
                                 "commodity" not in blacklist_item
                                 or not blacklist_item["commodity"]
@@ -2405,26 +2394,30 @@ class UEXCorp(Skill):
                                     blacklist_item["commodity"]
                                 )
                                 for commodity_code, data in tradeport["prices"].items():
-                                    if commodity["code"] == commodity_code:
+                                    if commodity["id"] == commodity_code:
                                         # remove commodity code from tradeport
                                         tradeport["prices"].pop(commodity_code)
                                         break
+
+        if len(start_tradeports) < 1 or len(end_tradeports) < 1:
+            return "Exluded by blacklist."
 
         for tradeport_start in start_tradeports:
             commodities = []
             if "prices" not in tradeport_start:
                 continue
 
-            for attr, price in tradeport_start["prices"].items():
+            for commodity_code, price in tradeport_start["prices"].items():
                 if price["operation"] == "buy" and (
-                    commodity_filter is None or commodity_filter["code"] == attr
+                    commodity_filter is None or commodity_filter["id"] == commodity_code
                 ):
-                    commodity = self._get_commodity_by_code(attr)
+                    commodity = self._get_commodity_by_code(commodity_code)
                     if (
                         illegal_commodities_allowed is True
-                        or commodity["illegal"] != "1"
+                        or not commodity["is_illegal"]
                     ):
-                        price["short_name"] = attr
+                        temp_price = price
+                        temp_price["commodity_code"] = commodity_code
 
                         in_blacklist = False
                         # apply commodity blacklist
@@ -2448,15 +2441,12 @@ class UEXCorp(Skill):
                 continue
 
             for tradeport_end in end_tradeports:
-                if "prices" not in tradeport_end or (
-                    commodity_filter is not None
-                    and commodity_filter["code"] not in tradeport_end["prices"]
-                ):
+                if "prices" not in tradeport_end:
                     continue
-                for attr, price in tradeport_end["prices"].items():
-                    price["short_name"] = attr
 
-                    sell_commodity = self._get_commodity_by_code(attr)
+                for commodity_code, price in tradeport_end["prices"].items():
+                    sell_commodity = self._get_commodity_by_code(commodity_code)
+
                     in_blacklist = False
                     # apply commodity blacklist
                     if sell_commodity and self.uexcorp_trade_blacklist:
@@ -2478,9 +2468,12 @@ class UEXCorp(Skill):
                     if in_blacklist:
                         continue
 
+                    temp_price = price
+                    temp_price["commodity_code"] = commodity_code
+
                     for commodity in commodities:
                         if (
-                            commodity["short_name"] == price["short_name"]
+                            commodity["commodity_code"] == temp_price["commodity_code"]
                             and price["operation"] == "sell"
                             and price["price_sell"] > commodity["price_buy"]
                         ):
@@ -2491,7 +2484,12 @@ class UEXCorp(Skill):
                                     money / commodity["price_buy"]
                                 )
                             cargo_by_space = cargo_space
-                            cargo = min(cargo_by_money, cargo_by_space)
+                            if self.uexcorp_use_estimated_availability:
+                                cargo_by_availability = min(commodity["scu_expected"] or 0, temp_price["scu_expected"] or 0)
+                            else:
+                                cargo_by_availability = cargo_by_space
+
+                            cargo = min(cargo_by_money, cargo_by_space, cargo_by_availability)
                             if cargo >= 1:
                                 profit = round(
                                     cargo
@@ -2500,7 +2498,7 @@ class UEXCorp(Skill):
                                 if profit > best_route["profit"]:
                                     best_route["start"] = [tradeport_start]
                                     best_route["end"] = [tradeport_end]
-                                    best_route["commodity"] = price
+                                    best_route["commodity"] = temp_price
                                     best_route["profit"] = profit
                                     best_route["cargo"] = cargo
                                     best_route["buy"] = commodity["price_buy"] * cargo
@@ -2508,8 +2506,8 @@ class UEXCorp(Skill):
                                 else:
                                     if (
                                         profit == best_route["profit"]
-                                        and best_route["commodity"]["short_name"]
-                                        == price["short_name"]
+                                        and best_route["commodity"]["commodity_code"]
+                                        == temp_price["commodity_code"]
                                     ):
                                         if tradeport_start not in best_route["start"]:
                                             best_route["start"].append(tradeport_start)
@@ -2558,7 +2556,7 @@ class UEXCorp(Skill):
         Returns:
             Optional[object]: The tradeport object if found, otherwise None.
         """
-        return self.tradeport_code_dict.get(code.lower()) if code else None
+        return self.tradeport_code_dict.get(code) if code else None
 
     def _get_planet_by_name(self, name: str) -> dict[str, any] | None:
         """Finds the planet with the specified name and returns the planet or None.
@@ -2626,7 +2624,7 @@ class UEXCorp(Skill):
         """
         tradeport = self._get_converted_tradeport_for_output(tradeport)
         keys = [
-            ("system", "Star-System"),
+            ("star_system", "Star-System"),
             ("planet", "Planet"),
             ("satellite", "Satellite"),
             ("city", "City"),
@@ -2645,7 +2643,7 @@ class UEXCorp(Skill):
             str: The name of the system with the specified code.
         """
         return (
-            self._format_system_name(self.system_code_dict.get(code.lower()))
+            self._format_system_name(self.system_code_dict.get(code))
             if code
             else None
         )
@@ -2660,7 +2658,7 @@ class UEXCorp(Skill):
             str: The name of the planet with the specified code.
         """
         return (
-            self._format_planet_name(self.planet_code_dict.get(code.lower()))
+            self._format_planet_name(self.planet_code_dict.get(code))
             if code
             else None
         )
@@ -2675,7 +2673,7 @@ class UEXCorp(Skill):
             str: The name of the satellite with the specified code.
         """
         return (
-            self._format_satellite_name(self.satellite_code_dict.get(code.lower()))
+            self._format_satellite_name(self.satellite_code_dict.get(code))
             if code
             else None
         )
@@ -2690,7 +2688,7 @@ class UEXCorp(Skill):
             str: The name of the city with the specified code.
         """
         return (
-            self._format_city_name(self.city_code_dict.get(code.lower()))
+            self._format_city_name(self.city_code_dict.get(code))
             if code
             else None
         )
@@ -2705,7 +2703,7 @@ class UEXCorp(Skill):
             str: The name of the commodity with the specified code.
         """
         return (
-            self._format_commodity_name(self.commodity_code_dict.get(code.lower()))
+            self._format_commodity_name(self.commodity_code_dict.get(code))
             if code
             else None
         )
@@ -2719,10 +2717,10 @@ class UEXCorp(Skill):
         Returns:
             Optional[object]: The commodity object if found, otherwise None.
         """
-        return self.commodity_code_dict.get(code.lower()) if code else None
+        return self.commodity_code_dict.get(code) if code else None
 
     def _get_tradeports_by_position_name(
-        self, name: str, direct: bool = False
+        self, name: str
     ) -> list[dict[str, any]]:
         """Returns all tradeports with the specified position name.
 
@@ -2756,7 +2754,7 @@ class UEXCorp(Skill):
         Returns:
             Optional[object]: The satellite object if found, otherwise None.
         """
-        return self.satellites_by_planet.get(code.lower(), []) if code else []
+        return self.satellites_by_planet.get(code, []) if code else []
 
     def _get_cities_by_planetcode(self, code: str) -> list[dict[str, any]]:
         """Returns all cities with the specified planet code.
@@ -2767,7 +2765,7 @@ class UEXCorp(Skill):
         Returns:
             list[dict[str, any]]: A list of cities matching the planet code.
         """
-        return self.cities_by_planet.get(code.lower(), []) if code else []
+        return self.cities_by_planet.get(code, []) if code else []
 
     def _get_planets_by_systemcode(self, code: str) -> list[dict[str, any]]:
         """Returns all planets with the specified system code.
@@ -2778,7 +2776,7 @@ class UEXCorp(Skill):
         Returns:
             list[dict[str, any]]: A list of planets matching the system code.
         """
-        return self.planets_by_system.get(code.lower(), []) if code else []
+        return self.planets_by_system.get(code, []) if code else []
 
     def _get_tradeports_by_systemcode(self, code: str) -> list[dict[str, any]]:
         """Returns all tradeports with the specified system code.
@@ -2789,7 +2787,7 @@ class UEXCorp(Skill):
         Returns:
             list[dict[str, any]]: A list of tradeports matching the system code.
         """
-        return self.tradeports_by_system.get(code.lower(), []) if code else []
+        return self.tradeports_by_system.get(code, []) if code else []
 
     def _get_tradeports_by_planetcode(self, code: str) -> list[dict[str, any]]:
         """Returns all tradeports with the specified planet code.
@@ -2800,7 +2798,7 @@ class UEXCorp(Skill):
         Returns:
             list[dict[str, any]]: A list of tradeports matching the planet code.
         """
-        return self.tradeports_by_planet.get(code.lower(), []) if code else []
+        return self.tradeports_by_planet.get(code, []) if code else []
 
     def _get_tradeports_by_satellitecode(self, code: str) -> list[dict[str, any]]:
         """Returns all tradeports with the specified satellite code.
@@ -2811,7 +2809,7 @@ class UEXCorp(Skill):
         Returns:
             list[dict[str, any]]: A list of tradeports matching the satellite code.
         """
-        return self.tradeports_by_satellite.get(code.lower(), []) if code else []
+        return self.tradeports_by_satellite.get(code, []) if code else []
 
     def _get_tradeports_by_citycode(self, code: str) -> list[dict[str, any]]:
         """Returns all tradeports with the specified city code.
@@ -2822,7 +2820,7 @@ class UEXCorp(Skill):
         Returns:
             list[dict[str, any]]: A list of tradeports matching the city code.
         """
-        return self.tradeports_by_city.get(code.lower(), []) if code else []
+        return self.tradeports_by_city.get(code, []) if code else []
 
     def _get_tradeports_by_planetname(self, name: str) -> list[dict[str, any]]:
         """Returns all tradeports with the specified planet name.
@@ -2834,7 +2832,7 @@ class UEXCorp(Skill):
             list[dict[str, any]]: A list of tradeports matching the planet name.
         """
         planet = self._get_planet_by_name(name)
-        return self._get_tradeports_by_planetcode(planet["code"]) if planet else []
+        return self._get_tradeports_by_planetcode(planet["id"]) if planet else []
 
     def _get_tradeports_by_satellitename(self, name: str) -> list[dict[str, any]]:
         """Returns all tradeports with the specified satellite name.
@@ -2847,7 +2845,7 @@ class UEXCorp(Skill):
         """
         satellite = self._get_satellite_by_name(name)
         return (
-            self._get_tradeports_by_satellitecode(satellite["code"])
+            self._get_tradeports_by_satellitecode(satellite["id"])
             if satellite
             else []
         )
@@ -2862,19 +2860,7 @@ class UEXCorp(Skill):
             list[dict[str, any]]: A list of tradeports matching the city name.
         """
         city = self._get_city_by_name(name)
-        return self._get_tradeports_by_citycode(city["code"]) if city else []
-
-    def _get_tradeports_by_cityname(self, name: str) -> list[dict[str, any]]:
-        """Returns all tradeports with the specified city name.
-
-        Args:
-            name (str): The name of the city.
-
-        Returns:
-            list[dict[str, any]]: A list of tradeports matching the city name.
-        """
-        city = self._get_city_by_name(name)
-        return self._get_tradeports_by_citycode(city["code"]) if city else []
+        return self._get_tradeports_by_citycode(city["id"]) if city else []
 
     def _get_tradeports_by_systemname(self, name: str) -> list[dict[str, any]]:
         """Returns all tradeports with the specified system name.
@@ -2886,4 +2872,5 @@ class UEXCorp(Skill):
             list[dict[str, any]]: A list of tradeports matching the system name.
         """
         system = self._get_system_by_name(name)
-        return self._get_tradeports_by_systemcode(system["code"]) if system else []
+        return self._get_tradeports_by_systemcode(system["id"]) if system else []
+    

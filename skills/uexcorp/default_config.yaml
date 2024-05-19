@@ -53,6 +53,7 @@ prompt: |
   You have tools to access the UEXcorp API which you can use to retrieve live trading data and additional information about ships, locations, commodities and more in Star Citizen.
   Here are some examples when to use the different tools at your disposal:
 
+  Do not use markdown formatting (e.g. **name**) in your answers, but prefer lists to show multiple options or information.
   Do not (never) translate any properties when giving them to the player. They must stay in english or untouched.
   Only give functions parameters that were previously clearly provided by a request. Never assume any values, not the current ship, not the location, not the available money, nothing! Always send a None-value instead.
   If you are not using one of the definied functions, dont give any trading recommendations.
@@ -113,8 +114,14 @@ custom_properties:
     property_type: string
   - id: uexcorp_api_timeout
     name: API Timeout
-    hint: The timeout for the UEX corp API in seconds.
-    value: 5
+    hint: The timeout for the UEX corp API in seconds. (If set below 3s, 3s will be used.)
+    value: 10
+    required: true
+    property_type: number
+  - id: uexcorp_api_timeout_retries
+    name: API Timeout Retries
+    hint: How often the request should be retried in case of a timeout. (Timeout setting may increase automatically on each retry.)
+    value: 3
     required: true
     property_type: number
   # ────────────────────────────── No touchy zone end ──────────────────────────────
@@ -182,3 +189,12 @@ custom_properties:
     value: 1
     required: true
     property_type: number
+
+  # Set this option to true to take estimated scu availability into account for trade route calculations.
+  # This will reduce the amount of trade routes shown, but will give you more accurate results.
+  - id: uexcorp_use_estimated_availability
+    name: Use Estimated Availability
+    hint: Enable this option to take estimated scu availability into account for trade route calculations.
+    value: true
+    required: true
+    property_type: boolean
