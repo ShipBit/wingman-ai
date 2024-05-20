@@ -1,5 +1,7 @@
 """Wingman AI Skill to utalize uexcorp api for trade recommendations"""
 
+import asyncio
+import threading
 import difflib
 import heapq
 import itertools
@@ -22,7 +24,6 @@ from api.interface import (
 from services.file import get_writable_dir
 from skills.skill_base import Skill
 
-
 class UEXCorp(Skill):
 
     # enable for verbose logging
@@ -44,6 +45,8 @@ class UEXCorp(Skill):
         self.cachefile = path.join(self.data_path, "cache.json")
 
         self.skill_version = "v12"
+        self.skill_loaded = False
+        self.skill_loaded_asked = False
 
         # init of config options
         self.uexcorp_api_url: str = None
@@ -114,7 +117,7 @@ class UEXCorp(Skill):
 
         self.dynamic_context = ""
 
-    async def _print(self, message: str | dict, is_extensive: bool = False) -> None:
+    async def _print(self, message: str | dict, is_extensive: bool = False, is_debug: bool = True) -> None:
         """
         Prints a message if debug mode is enabled. Will be sent to the server terminal, log file and client.
 
@@ -125,7 +128,7 @@ class UEXCorp(Skill):
         Returns:
             None
         """
-        if not is_extensive and self.settings.debug_mode:
+        if (not is_extensive and self.settings.debug_mode) or not is_debug:
             await self.printr.print_async(
                 message,
                 color=LogType.INFO,
@@ -267,7 +270,7 @@ class UEXCorp(Skill):
                 )
 
         try:
-            await self._prepare_data()
+            await self._start_loading_data()
         except Exception as e:
             errors.append(
                 WingmanInitializationError(
@@ -279,7 +282,7 @@ class UEXCorp(Skill):
 
         return errors
 
-    async def _load_data(self, reload: bool = False) -> None:
+    async def _load_data(self, reload_prices: bool = False, callback = None) -> None:
         """
         Load data for UEX corp wingman.
 
@@ -287,9 +290,15 @@ class UEXCorp(Skill):
             reload (bool, optional): Whether to reload the data from the source. Defaults to False.
         """
 
-        save_cache = False
-        # if cache is enabled and file is not too old, load from cache
-        if self.uexcorp_cache and not reload:
+        if reload_prices:
+            await self._load_commodity_prices()
+            await self._save_to_cachefile()
+            return
+
+        async def _load_from_cache():
+            if not self.uexcorp_cache:
+                return
+
             # check file age
             data = {}
             try:
@@ -305,8 +314,6 @@ class UEXCorp(Skill):
                 > self._get_timestamp()
                 and data.get("skill_version") == self.skill_version
             ):
-                # if data.get("status_codes"):
-                #     self.status_codes = data["status_codes"]
                 if data.get("ships"):
                     self.ships = data["ships"]
                 if data.get("commodities"):
@@ -315,7 +322,7 @@ class UEXCorp(Skill):
                     self.systems = data["systems"]
                 if data.get("tradeports"):
                     self.tradeports = data["tradeports"]
-                    # fix prices keys (from string to integer due to unwanted json conversion)
+                    # fix prices keys (from string to integer due to unintentional json conversion)
                     for tradeport in self.tradeports:
                         if "prices" in tradeport:
                             tradeport["prices"] = {
@@ -328,74 +335,70 @@ class UEXCorp(Skill):
                     self.satellites = data["satellites"]
                 if data.get("cities"):
                     self.cities = data["cities"]
-            else:
-                save_cache = True
 
-        # if not self.status_codes:
-        #     self.status_codes = await self._fetch_uex_data("commodities_status")
+        async def _load_missing_data():
+            if not self.ships:
+                self.ships = await self._fetch_uex_data("vehicles")
+                self.ships = [ship for ship in self.ships if ship["game_version"]]
 
-        if not self.ships:
-            self.ships = await self._fetch_uex_data("vehicles")
-            self.ships = [ship for ship in self.ships if ship["game_version"]]
+            if not self.commodities:
+                self.commodities = await self._fetch_uex_data("commodities")
+                self.commodities = [commodity for commodity in self.commodities if commodity["is_available"] == 1]
 
-        if not self.commodities:
-            self.commodities = await self._fetch_uex_data("commodities")
-            self.commodities = [commodity for commodity in self.commodities if commodity["is_available"] == 1]
-
-        if not self.systems:
-            self.systems = await self._fetch_uex_data("star_systems")
-            self.systems = [
-                system for system in self.systems if system["is_available"] == 1
-            ]
-            for system in self.systems:
-                self.tradeports += await self._fetch_uex_data(
-                    f"terminals/id_star_system/{system['id']}/type/commodity/is_available/1/is_visible/1"
+            if not self.systems:
+                self.systems = await self._fetch_uex_data("star_systems")
+                self.systems = [
+                    system for system in self.systems if system["is_available"] == 1
+                ]
+                for system in self.systems:
+                    self.tradeports += await self._fetch_uex_data(
+                        f"terminals/id_star_system/{system['id']}/type/commodity/is_available/1/is_visible/1"
+                    )
+                    self.cities += await self._fetch_uex_data(
+                        f"cities/id_star_system/{system['id']}"
+                    )
+                    self.satellites += await self._fetch_uex_data(
+                        f"moons/id_star_system/{system['id']}"
+                    )
+                    self.planets += await self._fetch_uex_data(
+                        f"planets/id_star_system/{system['id']}"
                 )
-                self.cities += await self._fetch_uex_data(
-                    f"cities/id_star_system/{system['id']}"
-                )
-                self.satellites += await self._fetch_uex_data(
-                    f"moons/id_star_system/{system['id']}"
-                )
-                self.planets += await self._fetch_uex_data(
-                    f"planets/id_star_system/{system['id']}"
-                )
-
-            # data manipulation
-            # remove planet information from space tradeports
-            planet_codes = []
-            for planet in self.planets:
-                if planet["code"] not in planet_codes:
-                    planet_codes.append(planet["code"])
-
-            for tradeport in self.tradeports:
-                if (
-                    tradeport["id_space_station"]
-                    and len(tradeport["nickname"].split("-")) == 2
-                    and tradeport["nickname"].split("-")[0] in planet_codes
-                    and re.match(r"^L\d+$", tradeport["nickname"].split("-")[1])
-                ):
-                    tradeport["id_planet"] = ""
-
-            await self._load_commodity_prices()
-
-            self.planets = [
-                planet for planet in self.planets if planet["is_available"] == 1
-            ]
-
-            self.satellites = [
-                satellite
-                for satellite in self.satellites
-                if satellite["is_available"] == 1
-            ]
-        else:
-            if reload:
                 await self._load_commodity_prices()
-                save_cache = True
 
+                # data manipulation
+                planet_codes = []
+                for planet in self.planets:
+                    if planet["code"] not in planet_codes:
+                        planet_codes.append(planet["code"])
+
+                for tradeport in self.tradeports:
+                    if (
+                        tradeport["id_space_station"]
+                        and len(tradeport["nickname"].split("-")) == 2
+                        and tradeport["nickname"].split("-")[0] in planet_codes
+                        and re.match(r"^L\d+$", tradeport["nickname"].split("-")[1])
+                    ):
+                        tradeport["id_planet"] = ""
+
+        def _load_data(callback=None):
+            async def _actual_loading(callback=None):
+                await _load_from_cache()
+                await _load_missing_data()
+                await self._save_to_cachefile()
+
+                if callback:
+                    await callback()
+
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            new_loop.run_until_complete(_actual_loading(callback))
+            new_loop.close()
+
+        threading.Thread(target=_load_data, args=(callback,)).start()
+
+    async def _save_to_cachefile(self) -> None:
         if (
-            save_cache
-            and self.uexcorp_cache
+            self.uexcorp_cache
             and self.uexcorp_cache_duration > 0
             and self.ships
             and self.commodities
@@ -418,33 +421,6 @@ class UEXCorp(Skill):
             }
             with open(self.cachefile, "w", encoding="UTF-8") as f:
                 json.dump(data, f, indent=4)
-
-        # remove urls from ships
-        for ship in self.ships:
-            ship.pop("url_store", None)
-            ship.pop("url_brochure", None)
-            ship.pop("url_hotsite", None)
-            ship.pop("url_video", None)
-            ship.pop("url_photos", None)
-
-        # remove screenshot from tradeports
-        for tradeport in self.tradeports:
-            tradeport.pop("screenshot", None)
-            tradeport.pop("screenshot_thumbnail", None)
-            tradeport.pop("screenshot_author", None)
-
-        # add hull trading option to trade ports
-        for tradeport in self.tradeports:
-            tradeport["hull_trading"] = bool(tradeport["has_loading_dock"])
-
-        # add hull trading option to ships
-        ships_for_hull_trading = [
-            "Hull C",
-            "Hull D",
-            "Hull E",
-        ]
-        for ship in self.ships:
-            ship["hull_trading"] = ship["name"] in ships_for_hull_trading
 
     async def _load_commodity_prices(self) -> None:
         """
@@ -508,7 +484,7 @@ class UEXCorp(Skill):
 
                             tradeport["prices"][commodity["id"]] = price
 
-    async def _prepare_data(self) -> None:
+    async def _start_loading_data(self) -> None:
         """
         Prepares the wingman for execution by initializing necessary variables and loading data.
 
@@ -524,11 +500,54 @@ class UEXCorp(Skill):
         # fix api url
         if self.uexcorp_api_url and self.uexcorp_api_url.endswith("/"):
             self.uexcorp_api_url = self.uexcorp_api_url[:-1]
-        await self._load_data()
 
         # fix timeout
         self.uexcorp_api_timeout = max(3, self.uexcorp_api_timeout)
         self.uexcorp_api_timeout_retries = max(0, self.uexcorp_api_timeout_retries)
+
+        await self._load_data(False, self._prepare_data)
+
+    async def _prepare_data(self) -> None:
+        """
+        Prepares the wingman for execution by initializing necessary variables.
+        """
+
+        self.planets = [
+            planet for planet in self.planets if planet["is_available"] == 1
+        ]
+
+        self.satellites = [
+            satellite
+            for satellite in self.satellites
+            if satellite["is_available"] == 1
+        ]
+
+        # remove urls from ships
+        for ship in self.ships:
+            ship.pop("url_store", None)
+            ship.pop("url_brochure", None)
+            ship.pop("url_hotsite", None)
+            ship.pop("url_video", None)
+            ship.pop("url_photos", None)
+
+        # remove screenshot from tradeports
+        for tradeport in self.tradeports:
+            tradeport.pop("screenshot", None)
+            tradeport.pop("screenshot_thumbnail", None)
+            tradeport.pop("screenshot_author", None)
+
+        # add hull trading option to trade ports
+        for tradeport in self.tradeports:
+            tradeport["hull_trading"] = bool(tradeport["has_loading_dock"])
+
+        # add hull trading option to ships
+        ships_for_hull_trading = [
+            "Hull C",
+            "Hull D",
+            "Hull E",
+        ]
+        for ship in self.ships:
+            ship["hull_trading"] = ship["name"] in ships_for_hull_trading
 
         self.ship_names = [
             self._format_ship_name(ship)
@@ -622,6 +641,11 @@ class UEXCorp(Skill):
             + self.satellite_names
             + self.planet_names
         )
+
+        self.skill_loaded = True
+        if self.skill_loaded_asked:
+            self.skill_loaded_asked = False
+            await self._print("UEXcorp skill data loading complete.", False, False)
 
     def _add_context(self, content: str):
         """
@@ -1032,6 +1056,12 @@ class UEXCorp(Skill):
 
         try:
             if tool_name in functions:
+                if(not self.skill_loaded):
+                    self.skill_loaded_asked = True
+                    await self._print("UEXcorp skill is not loaded yet. Please wait a moment.", False, False)
+                    function_response = "Data is still beeing loaded. Please wait a moment."
+                    return function_response, instant_response
+
                 self.start_execution_benchmark()
                 await self._print(f"Executing function: {tool_name}")
                 function = getattr(self, "_gpt_call_" + functions[tool_name])
@@ -1188,7 +1218,7 @@ class UEXCorp(Skill):
         Returns:
             str: A message indicating that the current commodity prices have been reloaded.
         """
-        await self._load_data(reload=True)
+        await self._load_data(True)
         # clear cached data
         for key in self.cache:
             self.cache[key] = {}
