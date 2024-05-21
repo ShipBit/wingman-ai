@@ -30,12 +30,12 @@ class VisionAI(Skill):
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
             (
-                "analyse_what_user_sees",
+                "analyse_what_you_or_user_sees",
                 {
                     "type": "function",
                     "function": {
-                        "name": "analyse_what_user_sees",
-                        "description": "Analyse what the user sees and answer questions about it.",
+                        "name": "analyse_what_you_or_user_sees",
+                        "description": "Analyse what you or the user sees and answer questions about it.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -58,7 +58,7 @@ class VisionAI(Skill):
         function_response = ""
         instant_response = ""
 
-        if tool_name == "analyse_what_user_sees":
+        if tool_name == "analyse_what_you_or_user_sees":
             # Take a screenshot
             with mss() as sct:
                 main_monitor = sct.monitors[2]
