@@ -57,7 +57,7 @@ class VisionAI(Skill):
         if tool_name == "analyse_what_user_sees":
             # Take a screenshot
             with mss() as sct:
-                main_monitor = sct.monitors[1]
+                main_monitor = sct.monitors[2]
                 screenshot = sct.grab(main_monitor)
 
                 # Create a PIL image from array
@@ -67,12 +67,8 @@ class VisionAI(Skill):
                 aspect_ratio = image.height / image.width
                 new_height = int(desired_width * aspect_ratio)
 
-                # resized_image = image.resize((512, 512))
                 resized_image = image.resize((desired_width, new_height))
-
-                #png = tools.to_png(screenshot.rgb, screenshot.size)
-                # Convert the PNG to a base64 encoded string
-                #png_base64 = self.convert_png_to_base64(resized_image)
+          
                 png_base64 = self.pil_image_to_base64(resized_image)
 
                 messages = [
@@ -90,7 +86,7 @@ class VisionAI(Skill):
                                 "type": "image_url",
                                 "image_url": {
                                     "url": f"data:image/jpeg;base64,{png_base64}",
-                                    "detail": "low"
+                                    "detail": "high"
                                 },
                             },
                         ],
