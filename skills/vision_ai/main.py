@@ -39,8 +39,12 @@ class VisionAI(Skill):
                         "parameters": {
                             "type": "object",
                             "properties": {
+                                "question": {
+                                    "type": "string",
+                                    "description": "The question to answer about the image.",
+                                }
                             },
-                            "required": [],
+                            "required": ["question"],
                         },
                     },
                 },
@@ -71,6 +75,8 @@ class VisionAI(Skill):
           
                 png_base64 = self.pil_image_to_base64(resized_image)
 
+                question = parameters.get("question", "What’s in this image?")
+
                 messages = [
                     {
                         "role": "system",
@@ -81,7 +87,7 @@ class VisionAI(Skill):
                     {
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": "What’s in this image?"},
+                            {"type": "text", "text": question},
                             {
                                 "type": "image_url",
                                 "image_url": {
