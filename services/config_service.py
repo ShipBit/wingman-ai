@@ -1,6 +1,8 @@
 from typing import Optional
 from fastapi import APIRouter
+from api.enums import OpenAiTtsVoice
 from api.interface import (
+    BasicWingmanConfig,
     ConfigDirInfo,
     ConfigWithDirInfo,
     ConfigsInfo,
@@ -116,6 +118,12 @@ class ConfigService:
             methods=["POST"],
             path="/config/save-wingman",
             endpoint=self.save_wingman_config,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/save-wingman-basic",
+            endpoint=self.save_basic_wingman_config,
             tags=tags,
         )
         self.router.add_api_route(
@@ -276,6 +284,42 @@ class ConfigService:
                 self.printr.toast_error(f"{error_message} {restored_message}")
             else:
                 self.printr.toast_error(f"{error_message}")
+
+    # POST config/save-wingman-basic
+    async def save_basic_wingman_config(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        basic_config: BasicWingmanConfig,
+        silent: bool = False,
+    ):
+        # get the current config
+        wingman_config = self.config_manager.load_wingman_config(
+            config_dir=config_dir, wingman_file=wingman_file
+        )
+
+        wingman_config.name = basic_config.name
+        wingman_config.disabled = basic_config.disabled
+        wingman_config.record_key = basic_config.record_key
+        wingman_config.record_key_codes = basic_config.record_key_codes
+        wingman_config.sound = basic_config.sound
+        wingman_config.prompts.backstory = basic_config.backstory
+        try:
+            wingman_config.openai.tts_voice = OpenAiTtsVoice(basic_config.voice)
+        except ValueError:
+            wingman_config.azure.tts.voice = basic_config.voice
+
+        self.config_manager.save_wingman_config(
+            config_dir=config_dir,
+            wingman_file=wingman_file,
+            wingman_config=wingman_config,
+        )
+        try:
+            if not silent:
+                await self.load_config(config_dir)
+                self.printr.toast("Wingman saved successfully.")
+        except Exception as e:
+            self.printr.toast_error(f"Invalid Wingman configuration: {str(e)}")
 
     # POST config/wingman/default
     async def set_default_wingman(
