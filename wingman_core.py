@@ -345,6 +345,7 @@ class WingmanCore(WebSocketUser):
             ):
                 await self.__init_azure_voice_activation()
         else:
+            self.start_voice_recognition(mute=True)
             self.azure_speech_recognizer = None
 
     # called when Azure Speech Recognizer recognized voice
