@@ -186,7 +186,7 @@ class WingmanCore(WebSocketUser):
             wingman = None
             if key:
                 for potential_wingman in self.tower.wingmen:
-                    if self.is_hotkey_pressed(potential_wingman.get_record_key()):
+                    if potential_wingman.get_record_key() and self.is_hotkey_pressed(potential_wingman.get_record_key()):
                         wingman = potential_wingman
             elif button:
                 wingman = self.tower.get_wingman_from_mouse(button)
@@ -345,6 +345,7 @@ class WingmanCore(WebSocketUser):
             ):
                 await self.__init_azure_voice_activation()
         else:
+            self.start_voice_recognition(mute=True)
             self.azure_speech_recognizer = None
 
     # called when Azure Speech Recognizer recognized voice

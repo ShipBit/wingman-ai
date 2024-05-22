@@ -377,7 +377,8 @@ def _setup_name_tables():
                         # Remember the "id" of the name, as the first techniques
                         # have better results and therefore priority.
                         for i, name in enumerate(map(normalize_name, names + lowercase_names)):
-                            from_name[name].append((i, entry))
+                            if name != "alt gr": # alt gr gets added manually later
+                                from_name[name].append((i, entry))
 
         # TODO: single quotes on US INTL is returning the dead key (?), and therefore
         # not typing properly.

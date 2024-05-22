@@ -217,7 +217,7 @@ class AudioRecorder:
         safe_start()
 
     def stop_continuous_listening(self):
-        if self.is_listening_continuously and self.stop_function:
+        if self.stop_function:
             self.stop_function(wait_for_stop=True)
             self.stop_function = None
             self.is_listening_continuously = False

@@ -503,6 +503,18 @@ class NestedConfig(BaseModel):
     skills: Optional[list[SkillConfig]] = None
 
 
+class BasicWingmanConfig(BaseModel):
+    """All configuration options that can be save in the "Basic" config in the client"""
+
+    name: str
+    disabled: Optional[bool] = False
+    record_key: Optional[str] = None
+    record_key_codes: Optional[list[int]] = None
+    sound: SoundConfig
+    voice: str | OpenAiTtsVoice
+    backstory: Optional[str] = None
+
+
 class WingmanConfig(NestedConfig):
     def __getitem__(self, item):
         return self.extra_properties.get(item)
@@ -522,14 +534,11 @@ class WingmanConfig(NestedConfig):
     description: str
     """A short description of this Wingman."""
     record_key: Optional[str] = None
-    """The "push-to-talk" key for this wingman. Keep it pressed while talking!
-    Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
+    """The "push-to-talk" key for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
     record_key_codes: Optional[list[int]] = None
-    """The "push-to-talk" key code for this wingman. Keep it pressed while talking!
-    Modifiers for this key are not supported yet. Don't use the same key for multiple wingmen!"""
+    """The "push-to-talk" key code for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
     record_mouse_button: Optional[str] = None
-    """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking!
-    Don't use the same button for multiple wingmen!"""
+    """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
     is_voice_activation_default: Optional[bool] = None
     """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
 
