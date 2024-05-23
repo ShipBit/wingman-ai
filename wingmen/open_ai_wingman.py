@@ -1,5 +1,6 @@
 import json
 import time
+import asyncio
 from typing import Mapping
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
@@ -769,7 +770,7 @@ class OpenAiWingman(Wingman):
                 function_response,
                 instant_response,
                 skill,
-            ) = await self._execute_command_by_function_call(
+            ) = await self.execute_command_by_function_call(
                 function_name, function_args
             )
 
@@ -859,7 +860,7 @@ class OpenAiWingman(Wingman):
             return self.messages[-1]["content"]
         return summarize_response
 
-    async def _execute_command_by_function_call(
+    async def execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str, Skill | None]:
         """
@@ -885,7 +886,7 @@ class OpenAiWingman(Wingman):
             # if the command has responses, we have to play one of them
             if command and command.responses:
                 instant_response = self._select_command_response(command)
-                await self._play_to_user(instant_response)
+                await self.play_to_user(instant_response)
 
         # Go through the skills and check if the function name matches any of the tools
         if function_name in self.tool_skills:
@@ -895,11 +896,11 @@ class OpenAiWingman(Wingman):
             )
             used_skill = skill
             if instant_response:
-                await self._play_to_user(instant_response)
+                await self.play_to_user(instant_response)
 
         return function_response, instant_response, used_skill
 
-    async def _play_to_user(self, text: str):
+    async def play_to_user(self, text: str, no_interrupt: bool = False):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
         Also adds sound effects if enabled in the configuration.
 
@@ -909,6 +910,11 @@ class OpenAiWingman(Wingman):
 
         # remove emotes between asterisks for voice responses
         text = self._remove_emote_text(text)
+
+        # wait for audio player to finish playing
+        if no_interrupt and self.audio_player.is_playing:
+            while self.audio_player.is_playing:
+                await asyncio.sleep(0.1)
 
         if self.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(

@@ -1,5 +1,6 @@
 import time
-from api.enums import LogSource, LogType, WingmanInitializationErrorType
+from typing import TYPE_CHECKING
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -9,6 +10,9 @@ from api.interface import (
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
+
 
 class Skill:
     def __init__(
@@ -16,11 +20,13 @@ class Skill:
         config: SkillConfig,
         wingman_config: WingmanConfig,
         settings: SettingsConfig,
+        wingman: "Wingman",
     ) -> None:
 
         self.config = config
         self.settings = settings
         self.wingman_config = wingman_config
+        self.wingman = wingman
         self.secret_keeper = SecretKeeper()
         self.name = self.__class__.__name__
         self.printr = Printr()

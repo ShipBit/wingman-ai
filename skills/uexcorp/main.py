@@ -11,7 +11,7 @@ import traceback
 from os import path
 import collections
 import re
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 from datetime import datetime
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
@@ -24,6 +24,9 @@ from api.interface import (
 from services.file import get_writable_dir
 from skills.skill_base import Skill
 
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
+
 class UEXCorp(Skill):
 
     # enable for verbose logging
@@ -34,9 +37,10 @@ class UEXCorp(Skill):
         config: SkillConfig,
         wingman_config: WingmanConfig,
         settings: SettingsConfig,
+        wingman: "Wingman",
     ) -> None:
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings
+            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
 
         self.data_path = get_writable_dir(path.join("skills", "uexcorp", "data"))

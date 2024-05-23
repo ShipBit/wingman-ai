@@ -148,6 +148,7 @@ class Wingman:
                     config=skill_config,
                     wingman_config=self.config,
                     settings=self.settings,
+                    wingman=self,
                 )
                 if skill:
                     validation_errors = await skill.validate()
@@ -201,7 +202,7 @@ class Wingman:
         Hooks:
             - async _transcribe: transcribe the audio to text
             - async _get_response_for_transcript: process the transcript and return a text response
-            - async _play_to_user: do something with the response, e.g. play it as audio
+            - async play_to_user: do something with the response, e.g. play it as audio
         """
 
         self.start_execution_benchmark()
@@ -251,7 +252,7 @@ class Wingman:
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
-            await self._play_to_user(str(process_result))
+            await self.play_to_user(str(process_result))
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
@@ -281,7 +282,7 @@ class Wingman:
         """
         return ("", "", None)
 
-    async def _play_to_user(self, text: str):
+    async def play_to_user(self, text: str):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
