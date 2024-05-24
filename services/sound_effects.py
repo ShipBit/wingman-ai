@@ -10,6 +10,9 @@ from pedalboard import (
     Gain,
     Bitcrush,
     Compressor,
+    PitchShift,
+    Distortion,
+    
 )
 from api.interface import SoundConfig
 
@@ -38,44 +41,23 @@ class SoundEffects(Enum):
 
     RADIO = Pedalboard(
         [
-            HighpassFilter(
-                cutoff_frequency_hz=800
-            ),  # Slightly lower high-pass filter to cut off low frequencies
-            LowpassFilter(
-                cutoff_frequency_hz=4000
-            ),  # Slightly lower low-pass filter to cut off high frequencies
-            Resample(
-                target_sample_rate=8000
-            ),  # Lower resample rate to simulate radio bandwidth more closely
-            Compressor(
-                threshold_db=-18, ratio=6
-            ),  # Adjust compressor settings for a tighter dynamic range
-            Gain(gain_db=75),  # Increase gain to ensure presence
+        HighpassFilter(cutoff_frequency_hz=800),  # Slightly lower high-pass filter to cut off low frequencies
+        LowpassFilter(cutoff_frequency_hz=4000),  # Slightly lower low-pass filter to cut off high frequencies
+        Resample(target_sample_rate=8000),  # Lower resample rate to simulate radio bandwidth more closely
+        Compressor(threshold_db=-18, ratio=6),  # Adjust compressor settings for a tighter dynamic range
+        Gain(gain_db=83)  # Increase gain to ensure presence
         ]
     )
     INTERIOR_HELMET = Pedalboard(
         [
-            HighpassFilter(
-                cutoff_frequency_hz=400
-            ),  # High-pass filter to cut off low frequencies
-            LowpassFilter(
-                cutoff_frequency_hz=8000
-            ),  # Low-pass filter to retain high frequencies
-            Compressor(
-                threshold_db=-20, ratio=4
-            ),  # Compressor to add dynamic range compression
-            Delay(
-                delay_seconds=0.01, feedback=0.1, mix=0.2
-            ),  # Subtle delay to simulate the enclosed space
-            Reverb(
-                room_size=0.1,
-                damping=0.7,
-                wet_level=0.2,
-                dry_level=0.8,
-                width=0.3,
-                freeze_mode=0.0,
-            ),  # Subtle reverb to enhance helmet effect
-            Gain(gain_db=65),  # Moderate gain to ensure presence
+       HighpassFilter(cutoff_frequency_hz=100),  # Remove low-frequency rumble
+    LowpassFilter(cutoff_frequency_hz=8000),  # Remove very high frequencies to reduce sibilance
+    PitchShift(semitones=-10),  # Lower the pitch by 5 semitones for a female demonic effect / 12 = 1 full octive
+    Distortion(drive_db=8),  # Add distortion for a gritty sound
+    Chorus(rate_hz=1.5, depth=1.0, mix=0.8),  # Strong chorus effect for multiple voices
+       Reverb(room_size=0.1, damping=0.5, dry_level=0.8, wet_level=0.2, width=0.5),  # Minimal reverb to reduce echo
+    Compressor(threshold_db=-30, ratio=10),  # Apply compression to smooth out the sound
+    Gain(gain_db=20)
         ]
     )
     INTERIOR_SMALL = Pedalboard(
