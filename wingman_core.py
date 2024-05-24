@@ -142,7 +142,10 @@ class WingmanCore(WebSocketUser):
         )
 
         if self.settings_service.settings.audio:
-            sd.default.device = [self.settings_service.settings.audio.input, self.settings_service.settings.audio.output]
+            sd.default.device = [
+                self.settings_service.settings.audio.input,
+                self.settings_service.settings.audio.output,
+            ]
             self.audio_recorder.update_input_stream()
 
     async def startup(self):
@@ -179,14 +182,19 @@ class WingmanCore(WebSocketUser):
             self.settings_service.settings.voice_activation.mute_toggle_key_codes
             or self.settings_service.settings.voice_activation.mute_toggle_key
         )
-        if is_mute_hotkey_pressed:
+        if (
+            self.settings_service.settings.voice_activation.enabled
+            and is_mute_hotkey_pressed
+        ):
             self.toggle_voice_recognition()
 
         if self.tower and self.active_recording["key"] == "":
             wingman = None
             if key:
                 for potential_wingman in self.tower.wingmen:
-                    if potential_wingman.get_record_key() and self.is_hotkey_pressed(potential_wingman.get_record_key()):
+                    if potential_wingman.get_record_key() and self.is_hotkey_pressed(
+                        potential_wingman.get_record_key()
+                    ):
                         wingman = potential_wingman
             elif button:
                 wingman = self.tower.get_wingman_from_mouse(button)
