@@ -13,7 +13,6 @@ from services.secret_keeper import SecretKeeper
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
-
 class Skill:
     def __init__(
         self,

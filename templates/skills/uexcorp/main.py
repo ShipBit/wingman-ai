@@ -647,7 +647,7 @@ class UEXCorp(Skill):
             self.skill_loaded_asked = False
             await self._print("UEXcorp skill data loading complete.", False, False)
 
-    def _add_context(self, content: str):
+    def add_context(self, content: str):
         """
         Adds additional context to the first message content,
         that represents the context given to open ai.
@@ -1191,7 +1191,7 @@ class UEXCorp(Skill):
             return None
 
         self._log(f"Found closest match to '{search}' in list: '{answer}'", True)
-        self._add_context(f"\n\nInstead of '{search}', you should use '{answer}'.")
+        self.add_context(f"\n\nInstead of '{search}', you should use '{answer}'.")
         self.cache["search_matches"][checksum] = answer
         return answer
 

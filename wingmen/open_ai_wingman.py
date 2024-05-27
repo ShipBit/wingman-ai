@@ -343,13 +343,13 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple of strings representing the response to a function call and an instant response.
         """
-        await self._add_user_message(transcript)
+        await self.add_user_message(transcript)
 
         instant_response, instant_command_executed = await self._try_instant_activation(
             transcript
         )
         if instant_response:
-            self._add_assistant_message(instant_response)
+            self.add_assistant_message(instant_response)
             return instant_response, instant_response, None
 
         # make a GPT call with the conversation history
@@ -362,14 +362,14 @@ class OpenAiWingman(Wingman):
         response_message, tool_calls = await self._process_completion(completion)
 
         # add message and dummy tool responses to conversation history
-        self._add_gpt_response(response_message, tool_calls)
+        self.add_gpt_response(response_message, tool_calls)
 
         if tool_calls:
             instant_response, skill = await self._handle_tool_calls(tool_calls)
             if instant_response:
                 return None, instant_response, None
 
-            summarize_response = await self._summarize_function_calls()
+            summarize_response = await self.summarize_function_calls()
             summarize_response = self._finalize_response(str(summarize_response))
             return summarize_response, summarize_response, skill
 
@@ -396,7 +396,7 @@ class OpenAiWingman(Wingman):
                 )
 
                 # try to resolve function name to a command name
-                if len(function_args) == 0 and self._get_command(function_name):
+                if len(function_args) == 0 and self.get_command(function_name):
                     function_args["command_name"] = function_name
                     function_name = "execute_command"
 
@@ -411,7 +411,7 @@ class OpenAiWingman(Wingman):
 
         return tool_calls
 
-    def _add_gpt_response(self, message, tool_calls) -> None:
+    def add_gpt_response(self, message, tool_calls) -> None:
         """Adds a message from GPT to the conversation history as well as adding dummy tool responses for any tool calls.
 
         Args:
@@ -528,7 +528,7 @@ class OpenAiWingman(Wingman):
 
         return True
 
-    async def _add_user_message(self, content: str):
+    async def add_user_message(self, content: str):
         """Shortens the conversation history if needed and adds a user message to it.
 
         Args:
@@ -541,7 +541,7 @@ class OpenAiWingman(Wingman):
         await self._cleanup_conversation_history()
         self.messages.append(msg)
 
-    def _add_assistant_message(self, content: str):
+    def add_assistant_message(self, content: str):
         """Adds an assistant message to the conversation history.
 
         Args:
@@ -619,7 +619,7 @@ class OpenAiWingman(Wingman):
             return None, True
         return None, False
 
-    async def _add_context(self, messages):
+    async def add_context(self, messages):
         """build the context and inserts it into the messages"""
         skill_prompts = ""
         for skill in self.skills:
@@ -638,7 +638,7 @@ class OpenAiWingman(Wingman):
         """
         messages = original_messages.copy()
 
-        await self._add_context(messages)
+        await self.add_context(messages)
 
         if self.conversation_provider == ConversationProvider.AZURE:
             completion = self.openai_azure.ask(
@@ -698,7 +698,7 @@ class OpenAiWingman(Wingman):
         self.last_gpt_call = thiscall
 
         # build tools
-        tools = self._build_tools() if allow_tool_calls else None
+        tools = self.build_tools() if allow_tool_calls else None
 
         if self.debug:
             self.start_execution_benchmark()
@@ -783,7 +783,7 @@ class OpenAiWingman(Wingman):
 
         return instant_response, skill
 
-    async def _summarize_function_calls(self):
+    async def summarize_function_calls(self):
         """Summarizes the function call responses using the GPT model specified for summarization in the configuration.
 
         Returns:
@@ -806,7 +806,7 @@ class OpenAiWingman(Wingman):
         """
         messages = original_messages.copy()
 
-        await self._add_context(messages)
+        await self.add_context(messages)
 
         if self.summarize_provider == SummarizeProvider.AZURE:
             summarize_response = self.openai_azure.ask(
@@ -880,7 +880,7 @@ class OpenAiWingman(Wingman):
         used_skill = None
         if function_name == "execute_command":
             # get the command based on the argument passed by the LLM
-            command = self._get_command(function_args["command_name"])
+            command = self.get_command(function_args["command_name"])
             # execute the command
             function_response = await self._execute_command(command)
             # if the command has responses, we have to play one of them
@@ -985,7 +985,7 @@ class OpenAiWingman(Wingman):
         await super()._execute_command(command)
         return "Ok"
 
-    def _build_tools(self) -> list[dict]:
+    def build_tools(self) -> list[dict]:
         """
         Builds a tool for each command that is not instant_activation.
 
@@ -1019,8 +1019,10 @@ class OpenAiWingman(Wingman):
         ]
 
         # extend with skill tools
-        for tool in self.skill_tools:
-            tools.append(tool)
+        # building them every time allows for dynamic tool offering
+        for skill in self.skills:
+            for tool_name, tool in skill.get_tools():
+                tools.append(tool)
 
         return tools
 

@@ -3,17 +3,28 @@ import string
 import asyncio
 import threading
 import time
-from typing import TYPE_CHECKING
+import json
+from typing import (
+    TYPE_CHECKING,
+    Mapping,
+)
 from api.interface import (
     SettingsConfig,
     SkillConfig,
     WingmanConfig,
     WingmanInitializationError,
 )
+from api.enums import (
+    LogSource,
+    LogType,
+)
 from skills.skill_base import Skill
+from services.printr import Printr
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
+
+printr = Printr()
 
 class Timer(Skill):
 
@@ -27,6 +38,7 @@ class Timer(Skill):
 
         self.timers = {}
         self.wingman = wingman
+        self.available_tools = []
 
         super().__init__(
             config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
@@ -35,7 +47,7 @@ class Timer(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
         return errors
-
+    
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
             (
@@ -54,6 +66,7 @@ class Timer(Skill):
                                 },
                                 "function": {
                                     "type": "string",
+                                    # "enum": self._get_available_tools(), # end up beeing a recursive nightmare
                                     "description": "The name of the function to execute after the delay. Must be a function name from the available tools.",
                                 },
                                 "parameters": {
@@ -102,7 +115,7 @@ class Timer(Skill):
                     "type": "function",
                     "function": {
                         "name": "remind_me",
-                        "description": "Say something to the user. Should only be used, when delay is requested. Like setting a reminder.",
+                        "description": "Must only be called with the set_timer function. Will remind the user with the given message.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -119,6 +132,17 @@ class Timer(Skill):
 
         ]
         return tools
+
+    def _get_available_tools(self) -> list[dict[str, any]]:
+        tools = self.wingman.build_tools()
+        tool_names = []
+        for tool in tools:
+            name = tool.get("function", {}).get("name", None)
+            if name:
+                tool_names.append(name)
+
+        print(f"Available tools: {tool_names}")
+        return tool_names
 
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
@@ -146,17 +170,165 @@ class Timer(Skill):
             if self.settings.debug_mode:
                 await self.print_execution_time()
 
+            print(function_response)
+
         return function_response, instant_response
-
-    async def set_timer(self, delay: int = None, function: str = None, parameters: dict[str, any] = None) -> str:
-        if delay is None or function is None:
-            return "No timer set, missing delay or function."
-
-        if delay < 0:
-            return "No timer set, delay must be greater than 0."
+    
+    async def _get_tool_parameter_type_by_name(self, type_name: str) -> any:
+        if type_name == "object":
+            return dict
+        elif type_name == "string":
+            return str
+        elif type_name == "number":
+            return int
+        elif type_name == "boolean":
+            return bool
+        elif type_name == "array":
+            return list
+        else:
+            return None
         
-        if "." in function:
-            function = function.split(".")[1]
+    async def set_timer(self, delay: int = None, function: str = None, parameters: dict[str, any] = None) -> str:
+        check_counter = 0
+        max_checks = 2
+        errors = []
+
+        while (check_counter == 0 or errors) and check_counter < max_checks:
+            print(f"Trying to set timer with delay {delay} for function {function} with parameters {parameters}. Try {check_counter + 1}/{max_checks}.")
+            errors = []
+        
+            if delay is None or function is None:
+                errors.append("Missing delay or function.")
+            elif delay < 0:
+                errors.append("No timer set, delay must be greater than 0.")
+
+            if "." in function:
+                function = function.split(".")[1]
+
+            # check if tool call exists
+            tool_call = None
+            tool_call = next(
+                (tool for tool in self.wingman.build_tools() if tool.get("function", {}).get("name", False) == function),
+                None
+            )
+
+            # if not valid it might be a command
+            if not tool_call and self.wingman.get_command(function):
+                parameters = {"command_name": function}
+                function = "execute_command"
+
+            if not tool_call:
+                errors.append(f"Function {function} does not exist.")
+            else:
+                print(f"tool call: {tool_call}")
+                if tool_call.get("function", False) and tool_call.get("function", {}).get("parameters", False):
+                    properties =  tool_call.get("function", {}).get("parameters", {}).get("properties", {})
+                    print(f"properties: {properties}")
+                    required_parameters = tool_call.get("function", {}).get("parameters", {}).get("required", [])
+                    print(f"required_parameters: {required_parameters}")
+
+                    for name, value in properties.items():
+                        if name in parameters:
+                            real_type = await self._get_tool_parameter_type_by_name(value.get("type", "string"))
+                            print(f"string_type: {value.get('type', 'string')}, real_type: {real_type}")
+                            if not isinstance(parameters[name], real_type):
+                                errors.append(
+                                    f"Parameter {name} must be of type {value.get('type', None)}, but is {type(parameters[name])}."
+                                )
+                            elif value.get("enum", False) and parameters[name] not in value.get("enum", []):
+                                errors.append(
+                                    f"Parameter {name} must be one of {value.get('enum', [])}, but is {parameters[name]}."
+                                )
+                            if name in required_parameters:
+                                required_parameters.remove(name)
+
+                    if required_parameters:
+                        errors.append(
+                            f"Missing required parameters: {required_parameters}."
+                        )
+
+            check_counter += 1
+            if errors:
+                # try to let it fix itself
+                message_history = []
+                for message in self.wingman.messages:
+                    role = message.role if hasattr(message, "role") else message.get("role", False)
+                    if role in ["user", "assistant", "system"]:
+                        message_history.append(
+                            {
+                                "role": role,
+                                "content": message.content if hasattr(message, "content") else message.get("content", False),
+                            }
+                        )
+                data = {
+                    "set_timer": {
+                        "delay": delay,
+                        "function": function,
+                        "parameters": parameters,
+                    },
+                    "message_history": message_history if len(message_history) <= 10 else message_history[:1] + message_history[-9:],
+                    "tool_calls_definition": self.wingman.build_tools(),
+                    "errors": errors,
+                }
+
+                messages = [
+                    {
+                        "role": "system",
+                        "content": """
+                            The set_time tool got called by a GPT request with parameters that are incomplete or do not match the given requirements.
+                            Please adjust the parameters "delay", "function" and "parameters" to match the requirements of the tool.
+                            Make use of the message_history to figure out missing parameters or wrong types.
+                            And the tool_calls_definition to see the available tools and their requirements.
+
+                            Provide me an answer in JSON format with the following structure for example:
+                            {
+                                "delay": 10,
+                                "function": "function_name",
+                                "parameters": {
+                                    "parameter_name": "parameter_value"
+                                }
+                            }
+                        """,
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(data, indent=4)
+                    },
+                ]
+                json_retry = 0
+                max_json_retries = 1
+                valid_json = False
+                while not valid_json and json_retry < max_json_retries:
+                    completion = await self.gpt_call(messages)
+                    data = completion.choices[0].message.content
+                    messages.append(
+                        {
+                            "role": "assistant",
+                            "content": data,
+                        }
+                    )
+                    # check if data is valid json
+                    try:
+                        data = json.loads(data)
+                    except json.JSONDecodeError:
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": "Data is not valid JSON. Please provide valid JSON data.",
+                            }
+                        )
+                        json_retry += 1
+                    else:
+                        valid_json = True
+                        delay = data.get("delay", False)
+                        function = data.get("function", False)
+                        parameters = data.get("parameters", {})
+
+        if errors:
+            return f"""
+                No timer set. Communicate these errors to the user.
+                But make sure to align them with the message history so far: {errors}
+            """
 
         # generate a unique id for the timer
         letters_and_digits = string.ascii_letters + string.digits
@@ -184,7 +356,18 @@ class Timer(Skill):
                     return
 
                 print(f"Executing timer with id {timer_id}: {function} with parameters {parameters}.")
-                await self.wingman.execute_command_by_function_call(function, parameters)
+                response = await self.wingman.execute_command_by_function_call(function, parameters)
+                if(response):
+                    summary = await self._summarize_timer_execution(function, parameters, response)
+                    self.wingman.add_assistant_message(summary)
+                    await printr.print_async(
+                        f"{summary}",
+                        color=LogType.POSITIVE,
+                        source=LogSource.WINGMAN,
+                        source_name=self.wingman.name,
+                        skill_name=self.name,
+                    )
+                    await self.wingman.play_to_user(summary, True)
                 del self.timers[timer_id]
 
             new_loop = asyncio.new_event_loop()
@@ -197,7 +380,28 @@ class Timer(Skill):
         print(f"Function to execute: {function}")
         print(f"Parameters: {parameters}")
 
-        return "Timer set with id {timer_id}."
+        return f"Timer set with id {timer_id}.\n\n{await self.get_timer_status()}"
+    
+    async def _summarize_timer_execution(self, function: str, parameters: dict[str, any], response: str) -> str:
+        self.wingman.messages.append(
+            {
+                "role": "user",
+                "content": f"""
+                    Timed "{function}" with "{parameters}" was executed.
+                    Summarize the respone while you must stay in character!
+                    Dont mention it was a function call, go by the meaning:
+                    {response}
+                """,
+            },
+        )
+        await self.wingman.add_context(self.wingman.messages)
+        completion = await self.gpt_call(self.wingman.messages)
+        answer = (
+            completion.choices[0].message.content
+            if completion and completion.choices
+            else ""
+        )
+        return answer
 
     async def get_timer_status(self) -> list[dict[str, any]]:
         timers = []
@@ -206,7 +410,7 @@ class Timer(Skill):
                 {
                     "id": timer_id,
                     "delay": timer[0],
-                    "remaining_time_in_seconds": max(0, timer[0] - (time.time() - timer[3])),
+                    "remaining_time_in_seconds": round(max(0, timer[0] - (time.time() - timer[3]))),
                 }
             )
         print(f"Running timers: {timers}")
@@ -217,11 +421,10 @@ class Timer(Skill):
             return f"Timer with id {timer_id} not found."
         del self.timers[timer_id]
         print(f"Timer with id {timer_id} cancelled.")
-        return f"Timer with id {timer_id} cancelled."
+        return f"Timer with id {timer_id} cancelled.\n\n{await self.get_timer_status()}"
 
     async def reminder(self, message: str = None) -> str:
         if not message:
             return "No reminder content set."
         print("Reminder played to user.")
-        await self.wingman.play_to_user(message, True)
-        return "Reminder played to user."
+        return message
