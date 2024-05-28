@@ -4,10 +4,7 @@ import asyncio
 import threading
 import time
 import json
-from typing import (
-    TYPE_CHECKING,
-    Mapping,
-)
+from typing import TYPE_CHECKING
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -47,7 +44,7 @@ class Timer(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
         return errors
-    
+
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
             (
@@ -141,7 +138,6 @@ class Timer(Skill):
             if name:
                 tool_names.append(name)
 
-        print(f"Available tools: {tool_names}")
         return tool_names
 
     async def execute_tool(
@@ -170,10 +166,8 @@ class Timer(Skill):
             if self.settings.debug_mode:
                 await self.print_execution_time()
 
-            print(function_response)
-
         return function_response, instant_response
-    
+
     async def _get_tool_parameter_type_by_name(self, type_name: str) -> any:
         if type_name == "object":
             return dict
@@ -187,16 +181,15 @@ class Timer(Skill):
             return list
         else:
             return None
-        
+
     async def set_timer(self, delay: int = None, function: str = None, parameters: dict[str, any] = None) -> str:
         check_counter = 0
         max_checks = 2
         errors = []
 
         while (check_counter == 0 or errors) and check_counter < max_checks:
-            print(f"Trying to set timer with delay {delay} for function {function} with parameters {parameters}. Try {check_counter + 1}/{max_checks}.")
             errors = []
-        
+
             if delay is None or function is None:
                 errors.append("Missing delay or function.")
             elif delay < 0:
@@ -220,17 +213,13 @@ class Timer(Skill):
             if not tool_call:
                 errors.append(f"Function {function} does not exist.")
             else:
-                print(f"tool call: {tool_call}")
                 if tool_call.get("function", False) and tool_call.get("function", {}).get("parameters", False):
                     properties =  tool_call.get("function", {}).get("parameters", {}).get("properties", {})
-                    print(f"properties: {properties}")
                     required_parameters = tool_call.get("function", {}).get("parameters", {}).get("required", [])
-                    print(f"required_parameters: {required_parameters}")
 
                     for name, value in properties.items():
                         if name in parameters:
                             real_type = await self._get_tool_parameter_type_by_name(value.get("type", "string"))
-                            print(f"string_type: {value.get('type', 'string')}, real_type: {real_type}")
                             if not isinstance(parameters[name], real_type):
                                 errors.append(
                                     f"Parameter {name} must be of type {value.get('type', None)}, but is {type(parameters[name])}."
@@ -342,7 +331,6 @@ class Timer(Skill):
         def timed_execution(timer_id: str):
             async def execute_timer(timer_id: str) -> None:
                 if timer_id not in self.timers:
-                    print(f"Timer with id {timer_id} not found.")
                     return
                 timer = self.timers[timer_id]
                 delay = timer[0]
@@ -352,12 +340,13 @@ class Timer(Skill):
                 await asyncio.sleep(delay)
 
                 if timer_id not in self.timers:
-                    print(f"Timer with id {timer_id} not found.")
                     return
 
-                print(f"Executing timer with id {timer_id}: {function} with parameters {parameters}.")
+                if self.settings.debug_mode:
+                    self.start_execution_benchmark()
+
                 response = await self.wingman.execute_command_by_function_call(function, parameters)
-                if(response):
+                if response:
                     summary = await self._summarize_timer_execution(function, parameters, response)
                     self.wingman.add_assistant_message(summary)
                     await printr.print_async(
@@ -376,12 +365,8 @@ class Timer(Skill):
             new_loop.close()
         threading.Thread(target=timed_execution, args=(timer_id,)).start()
 
-        print(f"Setting timer for {delay} seconds.")
-        print(f"Function to execute: {function}")
-        print(f"Parameters: {parameters}")
-
         return f"Timer set with id {timer_id}.\n\n{await self.get_timer_status()}"
-    
+
     async def _summarize_timer_execution(self, function: str, parameters: dict[str, any], response: str) -> str:
         self.wingman.messages.append(
             {
@@ -413,18 +398,15 @@ class Timer(Skill):
                     "remaining_time_in_seconds": round(max(0, timer[0] - (time.time() - timer[3]))),
                 }
             )
-        print(f"Running timers: {timers}")
         return timers
 
     async def cancel_timer(self, timer_id: str) -> str:
         if timer_id not in self.timers:
             return f"Timer with id {timer_id} not found."
         del self.timers[timer_id]
-        print(f"Timer with id {timer_id} cancelled.")
         return f"Timer with id {timer_id} cancelled.\n\n{await self.get_timer_status()}"
 
     async def reminder(self, message: str = None) -> str:
         if not message:
             return "No reminder content set."
-        print("Reminder played to user.")
         return message

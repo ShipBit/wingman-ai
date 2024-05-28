@@ -362,14 +362,14 @@ class OpenAiWingman(Wingman):
         response_message, tool_calls = await self._process_completion(completion)
 
         # add message and dummy tool responses to conversation history
-        self.add_gpt_response(response_message, tool_calls)
+        self._add_gpt_response(response_message, tool_calls)
 
         if tool_calls:
             instant_response, skill = await self._handle_tool_calls(tool_calls)
             if instant_response:
                 return None, instant_response, None
 
-            summarize_response = await self.summarize_function_calls()
+            summarize_response = await self._summarize_function_calls()
             summarize_response = self._finalize_response(str(summarize_response))
             return summarize_response, summarize_response, skill
 
@@ -411,7 +411,7 @@ class OpenAiWingman(Wingman):
 
         return tool_calls
 
-    def add_gpt_response(self, message, tool_calls) -> None:
+    def _add_gpt_response(self, message, tool_calls) -> None:
         """Adds a message from GPT to the conversation history as well as adding dummy tool responses for any tool calls.
 
         Args:
@@ -783,7 +783,7 @@ class OpenAiWingman(Wingman):
 
         return instant_response, skill
 
-    async def summarize_function_calls(self):
+    async def _summarize_function_calls(self):
         """Summarizes the function call responses using the GPT model specified for summarization in the configuration.
 
         Returns:
@@ -1019,10 +1019,8 @@ class OpenAiWingman(Wingman):
         ]
 
         # extend with skill tools
-        # building them every time allows for dynamic tool offering
-        for skill in self.skills:
-            for tool_name, tool in skill.get_tools():
-                tools.append(tool)
+        for tool in self.skill_tools:
+            tools.append(tool)
 
         return tools
 
