@@ -11,15 +11,14 @@ from pedalboard import (
     Bitcrush,
     Compressor,
     PitchShift,
-    Distortion,
-    
+    Distortion,    
 )
 from api.interface import SoundConfig
 
 
 # Credits to our community members @JaydiCodes and @Thaendril!
 class SoundEffects(Enum):
-    ROBOT = Pedalboard(
+    AI = Pedalboard(
         [
             Bitcrush(
                 bit_depth=12
@@ -38,28 +37,38 @@ class SoundEffects(Enum):
             ),  # Careful with gain, it adds presence but can cause peaking.
         ]
     )
+    
+    LOW_QUALITY_RADIO= Pedalboard(
+        [
+            Distortion(drive_db=30),
+            HighpassFilter(cutoff_frequency_hz=800),
+            LowpassFilter(cutoff_frequency_hz=3400),
+            Resample(target_sample_rate=8000),  # Lower resample rate for tinny effect
+            Reverb(room_size=0.1, damping=0.3, wet_level=0.1, dry_level=0.9),
+            Gain(gain_db=-10)
+        ]
+    )
+    MEDIUM_QUALITY_RADIO = Pedalboard(
+        [
+            Distortion(drive_db=15),
+            HighpassFilter(cutoff_frequency_hz=300),
+            LowpassFilter(cutoff_frequency_hz=5000),
+            Resample(target_sample_rate=16000),
+            Reverb(room_size=0.01, damping=0.3, wet_level=0.1, dry_level=0.9),
+            Compressor(threshold_db=-18, ratio=4),
+        ]
+    )
+    HIGH_END_RADIO= Pedalboard(
+        [
+        HighpassFilter(cutoff_frequency_hz=100),
+        LowpassFilter(cutoff_frequency_hz=8000),  # Adjust cutoff to avoid conflicts
+        Compressor(threshold_db=-10, ratio=2),
+        Reverb(room_size=0.001, damping=0.3, wet_level=0.1, dry_level=0.9),
+        Resample(target_sample_rate=44100),
+        ]
+    )
+    
 
-    RADIO = Pedalboard(
-        [
-        HighpassFilter(cutoff_frequency_hz=800),  # Slightly lower high-pass filter to cut off low frequencies
-        LowpassFilter(cutoff_frequency_hz=4000),  # Slightly lower low-pass filter to cut off high frequencies
-        Resample(target_sample_rate=8000),  # Lower resample rate to simulate radio bandwidth more closely
-        Compressor(threshold_db=-18, ratio=6),  # Adjust compressor settings for a tighter dynamic range
-        Gain(gain_db=83)  # Increase gain to ensure presence
-        ]
-    )
-    INTERIOR_HELMET = Pedalboard(
-        [
-       HighpassFilter(cutoff_frequency_hz=100),  # Remove low-frequency rumble
-    LowpassFilter(cutoff_frequency_hz=8000),  # Remove very high frequencies to reduce sibilance
-    PitchShift(semitones=-10),  # Lower the pitch by 5 semitones for a female demonic effect / 12 = 1 full octive
-    Distortion(drive_db=8),  # Add distortion for a gritty sound
-    Chorus(rate_hz=1.5, depth=1.0, mix=0.8),  # Strong chorus effect for multiple voices
-       Reverb(room_size=0.1, damping=0.5, dry_level=0.8, wet_level=0.2, width=0.5),  # Minimal reverb to reduce echo
-    Compressor(threshold_db=-30, ratio=10),  # Apply compression to smooth out the sound
-    Gain(gain_db=20)
-        ]
-    )
     INTERIOR_SMALL = Pedalboard(
         [
             Delay(
@@ -102,9 +111,10 @@ def get_sound_effects(config: SoundConfig):
     sound_effects = []
 
     mapping = {
-        "ROBOT": SoundEffects.ROBOT.value,
-        "RADIO": SoundEffects.RADIO.value,
-        "INTERIOR_HELMET": SoundEffects.INTERIOR_HELMET.value,
+        "AI": SoundEffects.AI.value,
+        "LOW_QUALITY_RADIO": SoundEffects.LOW_QUALITY_RADIO.value,
+        "MEDIUM_QUALITY_RADIO": SoundEffects.MEDIUM_QUALITY_RADIO.value,
+        "HIGH_END_RADIO": SoundEffects.HIGH_END_RADIO.value,
         "INTERIOR_SMALL": SoundEffects.INTERIOR_SMALL.value,
         "INTERIOR_MEDIUM": SoundEffects.INTERIOR_MEDIUM.value,
         "INTERIOR_LARGE": SoundEffects.INTERIOR_LARGE.value,
