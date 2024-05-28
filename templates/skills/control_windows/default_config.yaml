@@ -4,8 +4,8 @@ description:
   en: Launch applications and control your Windows computer.
   de: Starte Anwendungen und steuere deinen Windows-Computer.
 hint:
-  en: This skill currently only looks for applications in your Start Menu directory (%APPDATA%/Roaming/Microsoft/Windows/Start Menu/Programs), so if it tells you that it cannot find an application, create a shortcut in that directory.
-  de: Dieser Skill sucht derzeit nur nach Anwendungen in deinem Startmenü-Verzeichnis (%APPDATA%/Roaming/Microsoft/Windows/Start Menu/Programs). Wenn er dir also sagt, dass er eine Anwendung nicht finden kann, erstelle eine Verknüpfung in diesem Verzeichnis.
+  en: This skill looks for applications in your Start Menu directory (%APPDATA%/Microsoft/Windows/Start Menu/Programs), so if it tells you that it cannot find an application, create a shortcut in that directory.
+  de: Dieser Skill sucht nach Anwendungen in deinem Startmenü-Verzeichnis (%APPDATA%/Microsoft/Windows/Start Menu/Programs). Wenn er dir also sagt, dass er eine Anwendung nicht finden kann, erstelle eine Verknüpfung in diesem Verzeichnis.
 examples:
   - question:
       en: Open Spotify.
