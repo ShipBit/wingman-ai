@@ -255,9 +255,8 @@ class VoiceChanger(Skill):
         last_message_diff = round(last_message_diff, 0)
         self.voice_last_message = time.time()
 
-        print (f"Last message diff: {last_message_diff} - Voice timespan: {self.voice_timespan}")
         if last_message_diff >= self.voice_timespan:
-            self._initiate_change()
+            await self._initiate_change()
 
     async def _initiate_change(self):
         messages = []

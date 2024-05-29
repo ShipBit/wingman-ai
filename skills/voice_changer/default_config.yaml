@@ -19,12 +19,12 @@ custom_properties:
   - id: voice_changer_voices
     name: Available voices
     hint: A list of voices seperated by commas. (voicename or provider.voicename) For example -> "elevenlabs.Alice, elevenlabs.zcAOhNBS3c14rBihAFp1, openai.nova, wingman_pro.azure.en-US-EmmaNeural"
-    value: null
+    value: ""
     required: false
     property_type: string
   - id: voice_changer_personalityprompt
     name: Personality Prompt
     hint: A prompt used on voice change to generate a new personality. Leave empty to disable.
     required: false
-    value: null
+    value: ""
     property_type: string
