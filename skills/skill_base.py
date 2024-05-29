@@ -45,6 +45,10 @@ class Skill:
         """Execute a tool by name with parameters."""
         pass
 
+    async def on_add_user_message(self, message: str) -> None:
+        """Called when a user message is added to the system."""
+        pass
+
     async def gpt_call(self, messages, tools: list[dict] = None) -> any:
         return any
 

@@ -536,6 +536,10 @@ class OpenAiWingman(Wingman):
             tool_call_id (Optional[str]): The identifier for the tool call, if applicable.
             name (Optional[str]): The name of the function associated with the tool call, if applicable.
         """
+        # call skill hooks
+        for skill in self.skills:
+            await skill.on_add_user_message(content)
+
         msg = {"role": "user", "content": content}
         await self._cleanup_conversation_history()
         self.messages.append(msg)
@@ -631,13 +635,10 @@ class OpenAiWingman(Wingman):
         )
         messages.insert(0, {"role": "system", "content": context})
 
-    async def actual_llm_call(self, original_messages, tools: list[dict] = None):
+    async def actual_llm_call(self, messages, tools: list[dict] = None):
         """
         Perform the actual GPT call with the messages provided.
         """
-        messages = original_messages.copy()
-
-        await self._add_context(messages)
 
         if self.conversation_provider == ConversationProvider.AZURE:
             completion = self.openai_azure.ask(
@@ -706,7 +707,9 @@ class OpenAiWingman(Wingman):
                 color=LogType.INFO,
             )
 
-        completion = await self.actual_llm_call(self.messages, tools)
+        messages = self.messages.copy()
+        await self.add_context(messages)
+        completion = await self.actual_llm_call(messages, tools)
 
         if self.debug:
             self.print_execution_time(reset_timer=True)

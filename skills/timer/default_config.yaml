@@ -1,0 +1,21 @@
+name: Timer
+module: skills.timer.main
+description:
+  en: Gives the AI the oppertunity to delay actions. Be it a reminder, a command or a function call.
+  de: Gibt dem AI die Möglichkeit, Aktionen zu verzögern. Sei es eine Erinnerung, ein Befehl oder ein Funktionsaufruf.
+hint:
+  en: No configuration needed. The AI will (hopefully) figure out when to use this skill.
+  de: Keine Konfiguration erforderlich. Der AI wird (hoffentlich) herausfinden, wann er diese Fähigkeit einsetzen soll.
+examples:
+  - question:
+      en: Remind me in 60 minutes to take a break.
+      de: Erinnere mich in 60 Minuten daran, eine Pause zu machen.
+    answer:
+      en: (Tells you to take a break in 60 minutes)
+      de: (Erinnert dich in 60 Minuten daran, eine Pause zu machen)
+prompt: |
+  You can also delay actions with the set_timer function. The first argument is the time in seconds, the second argument is the function to call and the third argument is a list of arguments for the function.
+  Only use the set_timer function if it is requested to delay a function.
+  Never say a timer id, always use a decriptive name.
+  When confirming, keep it short and simple.
+  When reading out current timers, use the most suitable time unit.
