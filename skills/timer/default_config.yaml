@@ -1,11 +1,11 @@
 name: Timer
 module: skills.timer.main
 description:
-  en: Gives the AI the oppertunity to delay actions. Be it a reminder, a command or a function call.
-  de: Gibt dem AI die Möglichkeit, Aktionen zu verzögern. Sei es eine Erinnerung, ein Befehl oder ein Funktionsaufruf.
+  en: Gives your wingman the possibility to delay actions. Be it a reminder, a command or a function call.
+  de: Gibt dem Wingman die Möglichkeit, Aktionen zu verzögern. Sei es eine Erinnerung, ein Befehl oder ein Funktionsaufruf.
 hint:
-  en: No configuration needed. The AI will (hopefully) figure out when to use this skill.
-  de: Keine Konfiguration erforderlich. Der AI wird (hoffentlich) herausfinden, wann er diese Fähigkeit einsetzen soll.
+  en: No configuration needed.
+  de: Keine Konfiguration erforderlich.
 examples:
   - question:
       en: Remind me in 60 minutes to take a break.
