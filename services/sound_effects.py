@@ -11,7 +11,7 @@ from pedalboard import (
     Bitcrush,
     Compressor,
     PitchShift,
-    Distortion,    
+    Distortion,
 )
 from api.interface import SoundConfig
 
@@ -37,15 +37,15 @@ class SoundEffects(Enum):
             ),  # Careful with gain, it adds presence but can cause peaking.
         ]
     )
-    
-    LOW_QUALITY_RADIO= Pedalboard(
+
+    LOW_QUALITY_RADIO = Pedalboard(
         [
             Distortion(drive_db=30),
             HighpassFilter(cutoff_frequency_hz=800),
             LowpassFilter(cutoff_frequency_hz=3400),
             Resample(target_sample_rate=8000),  # Lower resample rate for tinny effect
             Reverb(room_size=0.1, damping=0.3, wet_level=0.1, dry_level=0.9),
-            Gain(gain_db=-10)
+            Gain(gain_db=-10),
         ]
     )
     MEDIUM_QUALITY_RADIO = Pedalboard(
@@ -58,16 +58,15 @@ class SoundEffects(Enum):
             Compressor(threshold_db=-18, ratio=4),
         ]
     )
-    HIGH_END_RADIO= Pedalboard(
+    HIGH_END_RADIO = Pedalboard(
         [
-        HighpassFilter(cutoff_frequency_hz=100),
-        LowpassFilter(cutoff_frequency_hz=8000),  # Adjust cutoff to avoid conflicts
-        Compressor(threshold_db=-10, ratio=2),
-        Reverb(room_size=0.001, damping=0.3, wet_level=0.1, dry_level=0.9),
-        Resample(target_sample_rate=44100),
+            HighpassFilter(cutoff_frequency_hz=100),
+            LowpassFilter(cutoff_frequency_hz=8000),  # Adjust cutoff to avoid conflicts
+            Compressor(threshold_db=-10, ratio=2),
+            Reverb(room_size=0.001, damping=0.3, wet_level=0.1, dry_level=0.9),
+            Resample(target_sample_rate=44100),
         ]
     )
-    
 
     INTERIOR_SMALL = Pedalboard(
         [
