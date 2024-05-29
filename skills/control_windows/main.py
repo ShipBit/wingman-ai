@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import pygetwindow as gw
+from typing import TYPE_CHECKING
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -10,6 +11,8 @@ from api.interface import (
 from api.enums import LogType
 from skills.skill_base import Skill
 
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
 
 class ControlWindows(Skill):
 
@@ -26,9 +29,10 @@ class ControlWindows(Skill):
         config: SkillConfig,
         wingman_config: WingmanConfig,
         settings: SettingsConfig,
+        wingman: "Wingman",
     ) -> None:
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings
+            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
 
     async def validate(self) -> list[WingmanInitializationError]:

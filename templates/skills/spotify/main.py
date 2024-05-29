@@ -1,6 +1,7 @@
 from os import path
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
+from typing import TYPE_CHECKING
 from api.enums import LogSource, LogType
 from api.interface import (
     SettingsConfig,
@@ -11,6 +12,8 @@ from api.interface import (
 from services.file import get_writable_dir
 from skills.skill_base import Skill
 
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
 
 class Spotify(Skill):
 
@@ -19,9 +22,10 @@ class Spotify(Skill):
         config: SkillConfig,
         wingman_config: WingmanConfig,
         settings: SettingsConfig,
+        wingman: "Wingman",
     ) -> None:
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings
+            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
         self.data_path = get_writable_dir(path.join("skills", "spotify", "data"))
         self.spotify: spotipy.Spotify = None

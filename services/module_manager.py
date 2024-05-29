@@ -5,12 +5,16 @@ from os import path
 import os
 import sys
 
+from typing import TYPE_CHECKING
 import yaml
 from api.interface import SettingsConfig, SkillBase, SkillConfig, WingmanConfig
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
 from skills.skill_base import Skill
+
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
 
 SKILLS_DIR = "skills"
 
@@ -74,7 +78,7 @@ class ModuleManager:
 
     @staticmethod
     def load_skill(
-        config: SkillConfig, wingman_config: WingmanConfig, settings: SettingsConfig
+        config: SkillConfig, wingman_config: WingmanConfig, settings: SettingsConfig, wingman: "Wingman"
     ) -> Skill:
 
         @contextmanager
@@ -123,7 +127,7 @@ class ModuleManager:
 
         DerivedSkillClass = getattr(module, config.name)
         instance = DerivedSkillClass(
-            config=config, wingman_config=wingman_config, settings=settings
+            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
         return instance
 

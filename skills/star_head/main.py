@@ -1,7 +1,8 @@
 import json
 from typing import Optional
 import requests
-from api.enums import LogSource, LogType, WingmanInitializationErrorType
+from typing import TYPE_CHECKING
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -10,6 +11,8 @@ from api.interface import (
 )
 from skills.skill_base import Skill
 
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
 
 class StarHead(Skill):
 
@@ -18,9 +21,10 @@ class StarHead(Skill):
         config: SkillConfig,
         wingman_config: WingmanConfig,
         settings: SettingsConfig,
+        wingman: "Wingman",
     ) -> None:
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings
+            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
 
         # config entry existence not validated yet. Assign later when checked!
