@@ -13,7 +13,7 @@ prompts:
 record_key: end
 is_voice_activation_default: True
 sound:
-  effects: [ROBOT]
+  effects: [AI]
 skills:
   - name: StarHead
     module: skills.star_head.main

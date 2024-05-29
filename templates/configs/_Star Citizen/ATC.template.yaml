@@ -29,7 +29,7 @@ prompts:
     - Emergency protocols for unexpected events like piracy, system failures, or distress signals.
 record_key: delete
 sound:
-  effects: [RADIO]
+  effects: [AI]
   play_beep: True
 openai:
   tts_voice: onyx
