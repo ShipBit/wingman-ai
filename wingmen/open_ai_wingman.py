@@ -1,5 +1,6 @@
 import json
 import time
+import asyncio
 from typing import Mapping
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
@@ -342,13 +343,13 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple of strings representing the response to a function call and an instant response.
         """
-        await self._add_user_message(transcript)
+        await self.add_user_message(transcript)
 
         instant_response, instant_command_executed = await self._try_instant_activation(
             transcript
         )
         if instant_response:
-            self._add_assistant_message(instant_response)
+            self.add_assistant_message(instant_response)
             return instant_response, instant_response, None
 
         # make a GPT call with the conversation history
@@ -395,7 +396,7 @@ class OpenAiWingman(Wingman):
                 )
 
                 # try to resolve function name to a command name
-                if len(function_args) == 0 and self._get_command(function_name):
+                if len(function_args) == 0 and self.get_command(function_name):
                     function_args["command_name"] = function_name
                     function_name = "execute_command"
 
@@ -527,7 +528,7 @@ class OpenAiWingman(Wingman):
 
         return True
 
-    async def _add_user_message(self, content: str):
+    async def add_user_message(self, content: str):
         """Shortens the conversation history if needed and adds a user message to it.
 
         Args:
@@ -544,7 +545,7 @@ class OpenAiWingman(Wingman):
         await self._cleanup_conversation_history()
         self.messages.append(msg)
 
-    def _add_assistant_message(self, content: str):
+    def add_assistant_message(self, content: str):
         """Adds an assistant message to the conversation history.
 
         Args:
@@ -622,7 +623,7 @@ class OpenAiWingman(Wingman):
             return None, True
         return None, False
 
-    async def _add_context(self, messages):
+    async def add_context(self, messages):
         """build the context and inserts it into the messages"""
         skill_prompts = ""
         for skill in self.skills:
@@ -698,7 +699,7 @@ class OpenAiWingman(Wingman):
         self.last_gpt_call = thiscall
 
         # build tools
-        tools = self._build_tools() if allow_tool_calls else None
+        tools = self.build_tools() if allow_tool_calls else None
 
         if self.debug:
             self.start_execution_benchmark()
@@ -772,7 +773,7 @@ class OpenAiWingman(Wingman):
                 function_response,
                 instant_response,
                 skill,
-            ) = await self._execute_command_by_function_call(
+            ) = await self.execute_command_by_function_call(
                 function_name, function_args
             )
 
@@ -808,7 +809,7 @@ class OpenAiWingman(Wingman):
         """
         messages = original_messages.copy()
 
-        await self._add_context(messages)
+        await self.add_context(messages)
 
         if self.summarize_provider == SummarizeProvider.AZURE:
             summarize_response = self.openai_azure.ask(
@@ -862,7 +863,7 @@ class OpenAiWingman(Wingman):
             return self.messages[-1]["content"]
         return summarize_response
 
-    async def _execute_command_by_function_call(
+    async def execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str, Skill | None]:
         """
@@ -882,13 +883,13 @@ class OpenAiWingman(Wingman):
         used_skill = None
         if function_name == "execute_command":
             # get the command based on the argument passed by the LLM
-            command = self._get_command(function_args["command_name"])
+            command = self.get_command(function_args["command_name"])
             # execute the command
             function_response = await self._execute_command(command)
             # if the command has responses, we have to play one of them
             if command and command.responses:
                 instant_response = self._select_command_response(command)
-                await self._play_to_user(instant_response)
+                await self.play_to_user(instant_response)
 
         # Go through the skills and check if the function name matches any of the tools
         if function_name in self.tool_skills:
@@ -898,11 +899,11 @@ class OpenAiWingman(Wingman):
             )
             used_skill = skill
             if instant_response:
-                await self._play_to_user(instant_response)
+                await self.play_to_user(instant_response)
 
         return function_response, instant_response, used_skill
 
-    async def _play_to_user(self, text: str):
+    async def play_to_user(self, text: str, no_interrupt: bool = False):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
         Also adds sound effects if enabled in the configuration.
 
@@ -912,6 +913,11 @@ class OpenAiWingman(Wingman):
 
         # remove emotes between asterisks for voice responses
         text = self._remove_emote_text(text)
+
+        # wait for audio player to finish playing
+        if no_interrupt and self.audio_player.is_playing:
+            while self.audio_player.is_playing:
+                await asyncio.sleep(0.1)
 
         if self.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(
@@ -982,7 +988,7 @@ class OpenAiWingman(Wingman):
         await super()._execute_command(command)
         return "Ok"
 
-    def _build_tools(self) -> list[dict]:
+    def build_tools(self) -> list[dict]:
         """
         Builds a tool for each command that is not instant_activation.
 
