@@ -1,3 +1,5 @@
+import asyncio
+import threading
 import time
 from typing import TYPE_CHECKING
 from api.enums import LogType, WingmanInitializationErrorType
@@ -118,3 +120,15 @@ class Skill:
     def start_execution_benchmark(self):
         """Starts the execution benchmark timer."""
         self.execution_start = time.perf_counter()
+
+    def threaded_execution(self, function, *args) -> threading.Thread:
+        """Execute a function in a separate thread."""
+        def start_thread(function, *args):
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            new_loop.run_until_complete(function(*args))
+            new_loop.close()
+
+        thread = threading.Thread(target=start_thread, args=(function, *args))
+        thread.start()
+        return thread
