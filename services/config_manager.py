@@ -122,9 +122,9 @@ class ConfigManager:
             relative_path = path.relpath(root, self.templates_dir)
             if relative_path != ".":
                 config_dir = self.get_config_dir(
-                    relative_path.replace(DELETED_PREFIX, "", 1).replace(
-                        DEFAULT_PREFIX, "", 1
-                    )
+                    relative_path.replace(DELETED_PREFIX, "", 1)  # ..
+                    .replace(DEFAULT_PREFIX, "", 1)
+                    .replace(f"{CONFIGS_DIR}/", "", 1)
                 )
                 if not force and config_dir:
                     # skip logically deleted and default (renamed) config dirs
@@ -196,7 +196,9 @@ class ConfigManager:
         if not path.exists(template_dir):
             # check if "defaulted" template dir exists
             default_template_dir = path.join(
-                self.templates_dir, f"{DEFAULT_PREFIX}.{config_dir.directory}"
+                self.templates_dir,
+                CONFIGS_DIR,
+                f"{DEFAULT_PREFIX}.{config_dir.directory}",
             )
             if path.exists(default_template_dir):
                 return ConfigDirInfo(
@@ -389,7 +391,8 @@ class ConfigManager:
                 shutil.move(
                     config_path,
                     path.join(
-                        self.config_dir, f"{DELETED_PREFIX}{config_dir.directory}"
+                        self.config_dir,
+                        f"{DELETED_PREFIX}{config_dir.name}",
                     ),
                 )
                 config_dir.is_deleted = True
