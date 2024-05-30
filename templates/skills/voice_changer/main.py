@@ -1,6 +1,4 @@
 import time
-import asyncio
-import threading
 from random import randrange
 from typing import TYPE_CHECKING
 from api.interface import (
@@ -241,7 +239,7 @@ class VoiceChanger(Skill):
 
         #prepare first personality
         if self.context_generation:
-            await self._generate_new_context_threaded()
+            self.threaded_execution(self._generate_new_context)
 
         return errors
 
@@ -337,21 +335,9 @@ class VoiceChanger(Skill):
         self.context_personality = self.context_personality_next
         self.context_personality_next = ""
 
-        await self._generate_new_context_threaded()
+        self.threaded_execution(self._generate_new_context)
 
         return "Switched personality context."
-
-    async def _generate_new_context_threaded(self):
-        def generate_next_context():
-            async def _actual_generating():
-                await self._generate_new_context()
-
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            new_loop.run_until_complete(_actual_generating())
-            new_loop.close()
-
-        threading.Thread(target=generate_next_context, args=()).start()
 
     async def _generate_new_context(self):
         messages = [

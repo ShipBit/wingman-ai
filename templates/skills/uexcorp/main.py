@@ -384,21 +384,15 @@ class UEXCorp(Skill):
                     ):
                         tradeport["id_planet"] = ""
 
-        def _load_data(callback=None):
-            async def _actual_loading(callback=None):
-                await _load_from_cache()
-                await _load_missing_data()
-                await self._save_to_cachefile()
+        async def _load_data(callback=None):
+            await _load_from_cache()
+            await _load_missing_data()
+            await self._save_to_cachefile()
 
-                if callback:
-                    await callback()
+            if callback:
+                await callback()
 
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            new_loop.run_until_complete(_actual_loading(callback))
-            new_loop.close()
-
-        threading.Thread(target=_load_data, args=(callback,)).start()
+        self.threaded_execution(_load_data, callback)
 
     async def _save_to_cachefile(self) -> None:
         if (
