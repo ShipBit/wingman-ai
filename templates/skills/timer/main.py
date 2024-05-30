@@ -1,7 +1,6 @@
 import random
 import string
 import asyncio
-import threading
 import time
 import json
 from typing import TYPE_CHECKING
@@ -328,42 +327,37 @@ class Timer(Skill):
         self.timers[timer_id] = [delay, function, parameters, current_time]
 
         # time execution
-        def timed_execution(timer_id: str):
-            async def execute_timer(timer_id: str) -> None:
-                if timer_id not in self.timers:
-                    return
-                timer = self.timers[timer_id]
-                delay = timer[0]
-                function = timer[1]
-                parameters = timer[2]
+        async def execute_timer(timer_id: str) -> None:
+            if timer_id not in self.timers:
+                return
+            timer = self.timers[timer_id]
+            delay = timer[0]
+            function = timer[1]
+            parameters = timer[2]
 
-                await asyncio.sleep(delay)
+            await asyncio.sleep(delay)
 
-                if timer_id not in self.timers:
-                    return
+            if timer_id not in self.timers:
+                return
 
-                if self.settings.debug_mode:
-                    self.start_execution_benchmark()
+            if self.settings.debug_mode:
+                self.start_execution_benchmark()
 
-                response = await self.wingman.execute_command_by_function_call(function, parameters)
-                if response:
-                    summary = await self._summarize_timer_execution(function, parameters, response)
-                    self.wingman.add_assistant_message(summary)
-                    await printr.print_async(
-                        f"{summary}",
-                        color=LogType.POSITIVE,
-                        source=LogSource.WINGMAN,
-                        source_name=self.wingman.name,
-                        skill_name=self.name,
-                    )
-                    await self.wingman.play_to_user(summary, True)
-                del self.timers[timer_id]
+            response = await self.wingman.execute_command_by_function_call(function, parameters)
+            if response:
+                summary = await self._summarize_timer_execution(function, parameters, response)
+                self.wingman.add_assistant_message(summary)
+                await printr.print_async(
+                    f"{summary}",
+                    color=LogType.POSITIVE,
+                    source=LogSource.WINGMAN,
+                    source_name=self.wingman.name,
+                    skill_name=self.name,
+                )
+                await self.wingman.play_to_user(summary, True)
+            del self.timers[timer_id]
 
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            new_loop.run_until_complete(execute_timer(timer_id))
-            new_loop.close()
-        threading.Thread(target=timed_execution, args=(timer_id,)).start()
+        self.threaded_execution(execute_timer, timer_id)
 
         return f"Timer set with id {timer_id}.\n\n{await self.get_timer_status()}"
 
