@@ -43,6 +43,7 @@ class CommandTag(Enum):
 
 class CustomPropertyType(Enum):
     STRING = "string"
+    TEXTAREA = "textarea"
     NUMBER = "number"
     BOOLEAN = "boolean"
     SINGLE_SELECT = "single_select"

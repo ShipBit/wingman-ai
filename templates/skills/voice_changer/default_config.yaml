@@ -6,7 +6,7 @@ description:
 custom_properties:
   - id: voice_changer_interval
     name: Switching Interval
-    hint: The intervall in seconds in which the voice should be changed. (Calculated from last interaction)
+    hint: The interval in seconds in which the voice should be changed. (Calculated from last interaction)
     value: 180
     required: true
     property_type: number
@@ -27,4 +27,4 @@ custom_properties:
     hint: A prompt used on voice change to generate a new personality. Leave empty to disable.
     required: false
     value: ""
-    property_type: string
+    property_type: textarea
