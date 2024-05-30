@@ -374,6 +374,9 @@ class VoiceChanger(Skill):
         self.context_personality_next = generated_context
 
     async def get_prompt(self) -> str | None:
+        prompts = []
+        if self.config.prompt:
+            prompts.append(self.config.prompt)
         if self.context_generation:
-            return f"You must act like this is your personality: {self.context_personality or ""}"
-        return None
+            prompts.append(self.context_personality)
+        return " ".join(prompts) if prompts else None
