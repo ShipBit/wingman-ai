@@ -47,10 +47,11 @@ Since version 2.0, Wingman AI Core acts as a "backend" API (using FastAPI and Py
   - **Instant activation**: Users can (almost) instantly trigger commands by saying exact phrases.
   - Optional: Predetermined responses
 - **Custom Wingman** support: Developers can easily plug-in their own Python scripts with custom implementations
+- **Skills** that can do almost anything. Think Alexa... but better.
 - **directory/file-based configuration** for different use cases (e.g. games) and Wingmen. No database needed.
 - Wingman AI Core exposes a lot of its functionality via **REST services** (with an OpenAPI/Swagger spec) and can send and receive messages from clients, games etc. using **WebSockets**.
 
-We (Team ShipBit) offer an additional [client with a neat GUI](https://www.shipbit.de/wingman-ai) that you can use to configure everything in Wingman AI Core.
+We (Team ShipBit) offer an additional [client with a neat GUI](https://www.wingman-ai.com) that you can use to configure everything in Wingman AI Core.
 
 <img src="assets/wingman-ui-1.png" width="23%"></img> <img src="assets/wingman-ui-3.png" width="23%"></img> <img src="assets/wingman-ui-4.png" width="23%"></img> <img src="assets/wingman-ui-2.png" width="23%"></img>
 
@@ -75,27 +76,15 @@ If you're a developer, you can just clone the repository and start building your
 
 ### Gamers & other interested people
 
-If you're not a developer, you can start with pre-built Wingmen from us or from the community and adapt them to your needs. Since version 2, we offer an [eay-to-use client](https://www.shipbit.de/wingman-ai) for Windows that you can use to cofigure every single detail of your Wingmen. It also handles multiple configurations and offers system-wide settings like audio device selection.
+If you're not a developer, you can start with pre-built Wingmen from us or from the community and adapt them to your needs. Since version 2, we offer an [eay-to-use client](https://www.wingman-ai.com) for Windows that you can use to cofigure every single detail of your Wingmen. It also handles multiple configurations and offers system-wide settings like audio device selection.
 
 ## Providers & cost
 
-Wingman AI Core is free but the AI providers you'll be using might not be. We know that this is a big concern for many people, so we want to offer an easier solution. We're working on "Wingman Pro" which will offer a subscription-based service with a flat fee for all the AI providers you need (and additional GUI features). This way, you won't have to worry about intransparent "pay-per-use" costs. But we're not ready yet.
+Wingman AI Core is free but the AI providers you'll be using might not be. We know that this is a big concern for many people, so we are offering "Wingman Pro" which is a subscription-based service with a flat fee for all the AI providers you need (and additional GUI features). This way, you won't have to worry about intransparent "pay-per-use" costs.
 
-### Unlimited access for Patreons for just $5/month
-
-**Until Wingman Pro is ready**, we offer our [Patreon](https://www.patreon.com/ShipBit) supporters unlimited access to the following services via our Azure infrastructure:
-
-- Open AI GPT-3.5 Turbo via Azure
-- Open AI Whisper via Azure (STT)
-- Azure Speech (STT)
-- Azure TTS
+Check out the pricing and features here: [Wingman AI Pro](https://www.wingman-ai.com)
 
 Wingman AI also supports local providers that you have to setup on your own but can then use and connect with our client for free:
-
-- [whispercpp](https://github.com/ggerganov/whisper.cpp) (STT)
-- [XVASynth](https://store.steampowered.com/app/1765720/xVASynth/) (TTS)
-
-You can basically get everything (except 11Labs and OpenAI TTS) for $5 per month using one of our [Patreon packages](https://www.patreon.com/shipbit/membership). We also offer [one-time purchases](https://www.patreon.com/shipbit/shop) for people who hate subscriptions.
 
 ### Other providers
 
@@ -190,16 +179,13 @@ For updates and more information, visit the [StarHead website](https://star-head
 
 ### Noteworthy community projects
 
-- [UEXCorp](https://discord.com/channels/1173573578604687360/1179594417926066196) by @JayMatthew: A custom Wingman that utilizes the UEX Corp API to pull live data for Star Citizen. Think StarHead on steroids.
-- [Cora](https://discord.com/channels/1173573578604687360/1205649611470016512) by @eXpG_kalumet: A fork offering automatic keybinding, multiple Wingmen using a single key, bi-directional UEXCorp communication, screenshot analysis and much more for Star Citizen. Note that Cora is a standalone fork that you cannot easily integrate into the latest Wingman AI Core release.
-
-Cora Showcase Video:
-
-[![IMAGE ALT TEXT](https://img.youtube.com/vi/5eE5VLuKtTw/0.jpg)](https://www.youtube.com/watch?v=5eE5VLuKtTw 'Wingman AI Release Trailer')
+- [UEXCorp](https://discord.com/channels/1173573578604687360/1179594417926066196) by @JayMatthew: A former Custom Wingman, now Skill that utilizes the UEX Corp API to pull live data for Star Citizen. Think StarHead on steroids.
+- [Clippy](https://discord.com/channels/1173573578604687360/1241854342282219662) by @teddybear082: A tribute Skill to the sketchy Microsoft assistant we all used to hate.
+- [WebSearch](https://discord.com/channels/1173573578604687360/1245432544946688081) by @teddybear082: A Skill that can pull data from websites (and quote the sources) for you.
 
 ## Can I configure Wingman AI Core without using your client?
 
-Yes, you can! You can edit all the configs in your `%APP_DATA%/Roaming/ShipBit/WingmanAI/[version]` directory.
+Yes, you can! You can edit all the configs in your `%APP_DATA%\ShipBit\WingmanAI\[version]` directory.
 
 The YAML configs are very indentation-sensitive, so please be careful. We recommend using [VSCode](https://code.visualstudio.com/) with the [YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) to edit them.
 
@@ -249,7 +235,7 @@ If you want to read some code first and understand how it all works, we recommen
 
 - `http://127.0.0.1:8000/docs` - The OpenAPI (ex: Swagger) spec
 - `wingman_core.py` - most of the public API endpoints that Wingman AI exposes
-- The config files in `%APP_DATA%/Roaming/ShipBit/WingmanAI/[version]` to get an idea of what's configurable.
+- The config files in `%APP_DATA%\ShipBit\WingmanAI\[version]` to get an idea of what's configurable.
 - `Wingman.py` - the base class for all Wingmen
 - `OpenAIWingman.py` - derived from Wingman, using all the providers
 - `Tower.py` - the factory that creates Wingmen
@@ -289,7 +275,7 @@ This list will inevitably remain incomplete. If you miss your name here, please 
 
 #### Special thanks
 
-- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew) and @teddybear082 for outstanding moderation in Discord, constant feedback and valuable core contributions
+- [**JayMatthew aka SawPsyder**](https://robertsspaceindustries.com/citizens/JayMatthew), @teddybear082 and @Thaendril for outstanding moderation in Discord, constant feedback and valuable Core & Skill contributions
 - @lugia19 for developing and improving the amazing [elevenlabslib](https://github.com/lugia19/elevenlabslib).
 - [Knebel](https://www.youtube.com/@Knebel_DE) who helped us kickstart Wingman AI by showing it on stream and grants us access to the [StarHead API](https://star-head.de/) for Star Citizen.
 - @Zatecc from [UEX Corp](https://uexcorp.space/) who supports our community developers and Wingmen with live trading data for Star Citizen using the [UEX Corp API](https://uexcorp.space/api.html).
