@@ -1,0 +1,17 @@
+name: WebSearch
+module: skills.web_search.main
+description:
+  en: Searches the web (duckduckgo) for a user query.
+  de: Sucht im Internet nach Antworten auf eine Benutzerfrage.
+hint:
+  en: This skill searches the internet based on what the user says.  It may help if you specifically say "search the web for..." or "search the internet for..." 
+  de: Diese Fähigkeit sucht im Internet nach Informationen, basierend auf Ihren Angaben. Versuchen Sie, Ihre Anfrage mit 'Suche im Web nach...' oder 'Suche im Internet nach...' zu beginnen.
+examples:
+  - question:
+      en: Search the internet for recent news about Star Citizen and give me the highlights.
+      de: Suche im Internet nach aktuellen Nachrichten über Star Citizen und gib mir die Höhepunkte.
+    answer:
+      en: I found the following news about Star Citizen...
+      de: Ich habe folgende Nachrichten über Star Citizen gefunden...
+prompt: |
+  You can also search the internet for topics identified by the user, or if the user asks you a question that requires knowledge of current events, like questions about "today", "this week," "this month," or "recently."
