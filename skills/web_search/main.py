@@ -17,6 +17,7 @@ from skills.skill_base import Skill
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
+
 class WebSearch(Skill):
 
     def __init__(
@@ -27,7 +28,10 @@ class WebSearch(Skill):
         wingman: "Wingman",
     ) -> None:
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
+            config=config,
+            wingman_config=wingman_config,
+            settings=settings,
+            wingman=wingman,
         )
 
         # behavior
@@ -37,9 +41,10 @@ class WebSearch(Skill):
         self.max_result_size = 4000
 
         self.trafilatura_config = deepcopy(DEFAULT_CONFIG)
-        self.trafilatura_config['DEFAULT']['DOWNLOAD_TIMEOUT'] = f"{math.ceil(self.max_time/2)}"
-        self.trafilatura_config['DEFAULT']['MAX_REDIRECTS '] = '3'
-
+        self.trafilatura_config["DEFAULT"][
+            "DOWNLOAD_TIMEOUT"
+        ] = f"{math.ceil(self.max_time/2)}"
+        self.trafilatura_config["DEFAULT"]["MAX_REDIRECTS "] = "3"
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -96,6 +101,7 @@ class WebSearch(Skill):
             search_type = parameters.get("search_type")
 
             processed_results = []
+
             async def gather_information(result):
                 title = result.get("title")
                 link = result.get("url")
@@ -104,10 +110,22 @@ class WebSearch(Skill):
                 body = result.get("body")
                 if link:
                     trafilatura_url = link
-                    trafilatura_downloaded = fetch_url(trafilatura_url, config=self.trafilatura_config)
-                    trafilatura_result = extract(trafilatura_downloaded, include_comments=False, include_tables=False)
+                    trafilatura_downloaded = fetch_url(
+                        trafilatura_url, config=self.trafilatura_config
+                    )
+                    trafilatura_result = extract(
+                        trafilatura_downloaded,
+                        include_comments=False,
+                        include_tables=False,
+                    )
                     if trafilatura_result:
-                        processed_results.append(title + "\n" + link + "\n" + trafilatura_result[:self.max_result_size])
+                        processed_results.append(
+                            title
+                            + "\n"
+                            + link
+                            + "\n"
+                            + trafilatura_result[: self.max_result_size]
+                        )
                         if self.settings.debug_mode:
                             await self.printr.print_async(
                                 f"web_search skill analyzing website at: {link} for full content using trafilatura",
@@ -117,16 +135,23 @@ class WebSearch(Skill):
                         processed_results.append(title + "\n" + link + "\n" + body)
 
             if search_type == "general":
-                search_results = DDGS().text(search_query, safesearch="off", max_results=self.max_results)
+                search_results = DDGS().text(
+                    search_query, safesearch="off", max_results=self.max_results
+                )
             else:
-                search_results = DDGS().news(search_query, safesearch="off", max_results=self.max_results)
+                search_results = DDGS().news(
+                    search_query, safesearch="off", max_results=self.max_results
+                )
 
             start_time = time.time()
 
             for result in search_results:
                 self.threaded_execution(gather_information, result)
-            
-            while len(processed_results) < self.min_results and time.time() - start_time < self.max_time:
+
+            while (
+                len(processed_results) < self.min_results
+                and time.time() - start_time < self.max_time
+            ):
                 time.sleep(0.1)
 
             final_results = "\n\n".join(processed_results)
