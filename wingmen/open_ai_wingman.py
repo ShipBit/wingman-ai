@@ -19,6 +19,7 @@ from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
 from providers.whispercpp import Whispercpp
 from services.audio_player import AudioPlayer
+from services.markdown import cleanup_text
 from services.printr import Printr
 from skills.skill_base import Skill
 from wingmen.wingman import Wingman
@@ -910,9 +911,8 @@ class OpenAiWingman(Wingman):
         Args:
             text (str): The text to play as audio.
         """
-
-        # remove emotes between asterisks for voice responses
-        text = self._remove_emote_text(text)
+        # remove Markdown, links, emotes and code blocks
+        text, contains_links, contains_code_blocks = cleanup_text(text)
 
         # wait for audio player to finish playing
         if no_interrupt and self.audio_player.is_playing:
@@ -1037,22 +1037,3 @@ class OpenAiWingman(Wingman):
             raise TypeError(
                 f"Message is neither a mapping nor has a 'role' attribute: {message}"
             )
-
-    def _remove_emote_text(self, input_string):
-        """Removes emotes from text responses, which LLMs tend to place between *.
-
-        Args:
-            input_string (str): The response text passed, which may contain emotes.
-
-        Returns:
-            input_string: The response string with any strings between * removed.
-        """
-        while True:
-            start = input_string.find("*")
-            if start == -1:
-                break
-            end = input_string.find("*", start + 1)
-            if end == -1:
-                break
-            input_string = input_string[:start] + input_string[end + 1 :]
-        return input_string
