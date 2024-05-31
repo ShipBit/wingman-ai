@@ -282,11 +282,12 @@ class Wingman:
         """
         return ("", "", None)
 
-    async def play_to_user(self, text: str):
+    async def play_to_user(self, text: str, no_interrupt: bool = False):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
             text (str): The response of your _get_response_for_transcript. This is usually the "response" from conversation with the AI.
+            no_interrupt (bool): prevent interrupting the audio playback
         """
         pass
 
