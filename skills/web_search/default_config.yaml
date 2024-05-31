@@ -1,0 +1,26 @@
+name: WebSearch
+module: skills.web_search.main
+description:
+  en: Searches the web using the DuckDuckGo search engine.
+  de: Nutze die DuckDuckGo Suchmaschine um Antworten auf deine Fragen zu finden.
+hint:
+  en: Start your queries with "Search the web for..." or "Search the internet for..."
+  de: Starte deine Anfragen mit 'Suche im Web nach...' oder 'Suche im Internet nach...'.
+examples:
+  - question:
+      en: Search the internet for recent news about Star Citizen and give me the highlights.
+      de: Suche im Internet nach aktuellen Neuigkeiten zu Star Citizen und fasse sie zusammen.
+    answer:
+      en: I found the following news about Star Citizen...
+      de: Ich habe folgende Neuigkeiten zu Star Citizen gefunden...
+prompt: |
+  You can also search the internet for topics identified by the user by using your `web_search_function` tool.
+
+  Examples indicating that the user wants to search the internet are:
+
+  - "Search the web for..." or "Search the internet for..."
+  - "Use DuckDuckGo to search for..."
+  - "Find more information about..."
+  - "What is the latest news about..." (or any other mention of current or recent information)
+  - How is the weather forecast for... (or any other mention of future information)
+  - The user is asking a question that can be answered by searching the internet and is not part of your general knowledge.
