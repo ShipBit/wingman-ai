@@ -1,0 +1,23 @@
+name: TypingAssistant
+module: skills.typing_assistant.main
+description:
+  en: Types for the user.
+  de: Typen für den Benutzer.
+hint:
+  en: This skill types what the user says, either directly transcribing their speech or its response.  For instance this might be used to type with speech in office or messaging programs.  This is not for pressing single keys or macros, it is for typing prose.  Use the built in commands feature of WingmanAI for button presses or macros.
+  de: Dieser Skill gibt ein, was der Benutzer sagt, indem er entweder seine Rede oder seine Antwort direkt transkribiert.  Dies kann beispielsweise verwendet werden, um mit Sprache in Office oder Messaging-Programmen zu tippen.  Das ist nicht für das Drücken einzelner Tasten oder Makros, sondern zum Schreiben von Prosa Verwende die integrierte Befehlsfunktion von WingmanAI für Tastendrücke oder Makros.
+examples:
+  - question:
+      en: Type how are you today.
+      de: Geben Sie ein, wie es Ihnen heute geht.
+    answer:
+      en: (types "how are you today" in active window at cursor location)
+      de: (Geben Sie "Wie geht es Ihnen heute" in das aktive Fenster an der Cursorposition ein)
+  - question:
+      en: Type a poem about trees.
+      de: Schreibe ein Gedicht über Bäume.
+    answer:
+      en: (imagines a poem about trees and then types it in the active window)
+      de: (stellt sich ein Gedicht über Bäume vor und tippt es dann in das aktive Fenster)
+prompt: |
+  You can also type what the user says if they ask you to do so.  Sometimes this will mean transcribing what they said word for word.  Other times the user will want you to imagine something like a poem, email or speech, and then type the contents.  Use the context of the user's request to determine what content the user wants you to type.
