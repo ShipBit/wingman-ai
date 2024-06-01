@@ -111,14 +111,27 @@ class InstantActivationLearning(Skill):
 
     async def _cleanup_learning_data(self) -> None:
         """Cleanup learning data. (Remove for commands that are no loner available)"""
+        pops = []
         for phrase, command in self.learning_learned.items():
             if not self.wingman.get_command(command):
+                pops.append(phrase)
+        if pops:
+            for phrase in pops:
                 self.learning_learned.pop(phrase)
 
+        pops = []
+        finished = []
         for phrase in self.learning_data.keys():
             if not self.wingman.get_command(self.learning_data[phrase]["command"]):
-                self.learning_data.pop(phrase)
+                pops.append(phrase)
             elif self.learning_data[phrase]["count"] >= self.rule_count:
+                finished.append(phrase)
+
+        if pops:
+            for phrase in pops:
+                self.learning_data.pop(phrase)
+        if finished:
+            for phrase in finished:
                 self._finish_learning(phrase, self.learning_data[phrase]["command"])
 
         await self._save_learning_data()
