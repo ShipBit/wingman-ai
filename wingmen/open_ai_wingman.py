@@ -625,6 +625,7 @@ class OpenAiWingman(Wingman):
             if len(responses) == len(commands):
                 # clear duplicates
                 responses = list(dict.fromkeys(responses))
+                responses = [response + "." if not response.endswith(".") else response for response in responses]
                 return " ".join(responses), True
             return None, True
         return None, False
