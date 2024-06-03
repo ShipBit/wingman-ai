@@ -12,13 +12,14 @@ from api.enums import (
     LogType,
 )
 from services.file import get_writable_dir
-from skills.skill_base import Skill
 from services.printr import Printr
+from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
 printr = Printr()
+
 
 class InstantActivationLearning(Skill):
 
@@ -31,7 +32,9 @@ class InstantActivationLearning(Skill):
     ) -> None:
 
         # get file paths
-        self.data_path = get_writable_dir(path.join("skills", "instant_activation_learning", "data"))
+        self.data_path = get_writable_dir(
+            path.join("skills", "instant_activation_learning", "data")
+        )
         self.file_ipl = path.join(self.data_path, "instant_phrase_learning.json")
 
         # learning data
@@ -43,14 +46,17 @@ class InstantActivationLearning(Skill):
         self.rule_count = 3
 
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
+            config=config,
+            wingman_config=wingman_config,
+            settings=settings,
+            wingman=wingman,
         )
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
         self.rule_count = self.retrieve_custom_property_value(
-            "intant_activation_learning_rule_count", errors
+            "quick_commands_learning_rule_count", errors
         )
         if not self.rule_count or self.rule_count < 0:
             self.rule_count = 3
@@ -86,9 +92,15 @@ class InstantActivationLearning(Skill):
             return
         messages.reverse()
         for message in messages:
-            role = message.role if hasattr(message, "role") else message.get("role", False)
+            role = (
+                message.role if hasattr(message, "role") else message.get("role", False)
+            )
             if role == "assistant":
-                tool_calls = message.tool_calls if hasattr(message, "tool_calls") else message.get("tool_calls", False)
+                tool_calls = (
+                    message.tool_calls
+                    if hasattr(message, "tool_calls")
+                    else message.get("tool_calls", False)
+                )
                 # if no function calls, ignore
                 if not tool_calls:
                     continue
@@ -98,15 +110,21 @@ class InstantActivationLearning(Skill):
                 # if the tool call is not a command call, ignore
                 if tool_calls[0].function.name != "execute_command":
                     return
-                command_name = json.loads(tool_calls[0].function.arguments)["command_name"]
+                command_name = json.loads(tool_calls[0].function.arguments)[
+                    "command_name"
+                ]
             elif role == "user":
-                content = message.content if hasattr(message, "content") else message.get("content", False)
+                content = (
+                    message.content
+                    if hasattr(message, "content")
+                    else message.get("content", False)
+                )
                 phrase = content
                 break
 
         if not phrase or not command_name:
             return
-        
+
         await self._learn_phrase(phrase, command_name)
 
     async def _cleanup_learning_data(self) -> None:
@@ -153,8 +171,8 @@ class InstantActivationLearning(Skill):
 
         # add / increase count of the phrase
         if phrase in self.learning_data:
-            if self.learning_data[phrase]['command'] != command.name:
-                # phrase is ambiguous, add to blacklist 
+            if self.learning_data[phrase]["command"] != command.name:
+                # phrase is ambiguous, add to blacklist
                 await self._add_to_blacklist(phrase)
                 return
 
@@ -232,21 +250,30 @@ class InstantActivationLearning(Skill):
                 data = json.load(file)
             except json.JSONDecodeError:
                 await printr.print_async(
-                    "Could not read learning data file. Resetting learning data..", color=LogType.ERROR
+                    "Could not read learning data file. Resetting learning data..",
+                    color=LogType.ERROR,
                 )
                 # if file wasnt empty, save it as backup
                 if file.read():
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S")
-                    with open(self.file_ipl + f"_{timestamp}.backup", "w", encoding="utf-8") as backup_file:
+                    with open(
+                        self.file_ipl + f"_{timestamp}.backup", "w", encoding="utf-8"
+                    ) as backup_file:
                         backup_file.write(file.read())
                 # reset learning data
                 with open(self.file_ipl, "w", encoding="utf-8") as file:
                     file.write("{}")
                 data = {}
 
-            self.learning_data = data["learning_data"] if "learning_data" in data else {}
-            self.learning_blacklist = data["learning_blacklist"] if "learning_blacklist" in data else []
-            self.learning_learned = data["learning_learned"] if "learning_learned" in data else {}
+            self.learning_data = (
+                data["learning_data"] if "learning_data" in data else {}
+            )
+            self.learning_blacklist = (
+                data["learning_blacklist"] if "learning_blacklist" in data else []
+            )
+            self.learning_learned = (
+                data["learning_learned"] if "learning_learned" in data else {}
+            )
 
     async def _save_learning_data(self) -> None:
         """Save the learning data."""
