@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 printr = Printr()
 
 
-class InstantActivationLearning(Skill):
+class QuickCommands(Skill):
 
     def __init__(
         self,
@@ -150,7 +150,7 @@ class InstantActivationLearning(Skill):
                 self.learning_data.pop(phrase)
         if finished:
             for phrase in finished:
-                self._finish_learning(phrase, self.learning_data[phrase]["command"])
+                await self._finish_learning(phrase, self.learning_data[phrase]["command"])
 
         await self._save_learning_data()
 
