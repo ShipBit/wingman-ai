@@ -4,8 +4,8 @@ description:
   en: Let your Wingman type text for you!
   de: Lass deinen Wingman für dich tippen!
 hint:
-  en: This Skill types what you say, either by transcribing your speech or the reponse to your input. You can use this in Office or Messaging programs etc. This is not meant for pressing single keys or macros - use Wingman Commands for that.
-  de: Dieser Skill tippt, was du sagst, indem er deine Spracheingabe oder die Antwort darauf transkribiert. Verwende den Skill in Office- oder Messaging-Programmen usw. Er ist nicht für das Drücken einzelner Tasten oder Makros gedacht - dafür kannst du Wingman Befehle verwenden.
+  en: Types what you say, either by transcribing your speech or the reponse to your input. You can use this in Office or Messaging programs etc. Not meant for pressing keys or macros - use Wingman Commands for that.
+  de: Tippt, was du sagst, indem deine Spracheingabe oder die Antwort darauf transkribiert werden. Verwende den Skill in Office- oder Messaging-Programmen usw. Er ist nicht für das Drücken einzelner Tasten oder Makros gedacht - dafür kannst du Wingman Befehle verwenden.
 examples:
   - question:
       en: Type "How are you today?".
