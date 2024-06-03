@@ -1,6 +1,6 @@
 import random
 import time
-from difflib import SequenceMatcher
+import difflib
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
@@ -326,7 +326,7 @@ class Wingman:
 
         return random.choice(command_responses)
 
-    async def _execute_instant_activation_command(self, transcript: str):
+    async def _execute_instant_activation_command(self, transcript: str) -> list[CommandConfig] | None:
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -336,24 +336,30 @@ class Wingman:
             {} | None: The executed instant_activation command.
         """
 
-        instant_activation_commands = [
-            command for command in self.config.commands if command.instant_activation
-        ]
+        # create list with phrases pointing to commands
+        commands_by_instant_activation = {}
+        for command in self.config.commands:
+            if command.instant_activation:
+                for phrase in command.instant_activation:
+                    if phrase.lower() in commands_by_instant_activation:
+                        commands_by_instant_activation[phrase.lower()].append(command)
+                    else:
+                        commands_by_instant_activation[phrase.lower()] = [command]
 
-        # check if transcript matches any instant activation command. Each command has a list of possible phrases
-        for command in instant_activation_commands:
-            for phrase in command.instant_activation:
-                ratio = SequenceMatcher(
-                    None,
-                    transcript.lower(),
-                    phrase.lower(),
-                ).ratio()
-                if (
-                    ratio > 0.8
-                ):  # if the ratio is higher than 0.8, we assume that the command was spoken
-                    await self._execute_command(command)
-                    return command
-        return None
+        # find best matching phrase
+        phrase = difflib.get_close_matches(transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8)
+
+        # if no phrase found, return None
+        if not phrase:
+            return None
+
+        # execute all commands for the phrase
+        commands = commands_by_instant_activation[phrase[0]]
+        for command in commands:
+            await self._execute_command(command)
+
+        # return the executed command
+        return commands
 
     async def _execute_command(self, command: CommandConfig) -> str:
         """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
