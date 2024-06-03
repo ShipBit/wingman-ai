@@ -1,7 +1,5 @@
 """Wingman AI Skill to utalize uexcorp api for trade recommendations"""
 
-import asyncio
-import threading
 import difflib
 import heapq
 import itertools
@@ -816,6 +814,23 @@ class UEXCorp(Skill):
         return commodity["name"]
 
     def get_tools(self) -> list[tuple[str, dict]]:
+        trading_routes_optional = [
+            "money_to_spend",
+            "free_cargo_space",
+            "position_end_name",
+            "commodity_name",
+            "illegal_commodities_allowed",
+            "maximal_number_of_routes",
+        ]
+        trading_routes_required = [
+            "ship_name"
+        ]
+
+        if self.uexcorp_tradestart_mandatory:
+            trading_routes_required.append("position_start_name")
+        else:
+            trading_routes_optional.append("position_start_name")
+
         tools = [
             (
                 "get_trading_routes",
@@ -836,21 +851,8 @@ class UEXCorp(Skill):
                                 "illegal_commodities_allowed": {"type": "boolean"},
                                 "maximal_number_of_routes": {"type": "number"},
                             },
-                            "required": [
-                                "ship_name",
-                                "position_start_name" if self.uexcorp_tradestart_mandatory else None,
-                            ],
-                            "optional": (
-                                [
-                                    "position_start_name" if not self.uexcorp_tradestart_mandatory else None,
-                                    "money_to_spend",
-                                    "free_cargo_space",
-                                    "position_end_name",
-                                    "commodity_name",
-                                    "illegal_commodities_allowed",
-                                    "maximal_number_of_routes",
-                                ]
-                            ),
+                            "required": trading_routes_required,
+                            "optional": trading_routes_optional,
                         },
                     },
                 },
