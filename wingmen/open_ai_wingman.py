@@ -616,11 +616,17 @@ class OpenAiWingman(Wingman):
         Returns:
             tuple[str, bool]: A tuple containing the response to the instant command and a boolean indicating whether an instant command was executed.
         """
-        command = await self._execute_instant_activation_command(transcript)
-        if command:
-            if command.responses:
-                response = self._select_command_response(command)
-                return response, True
+        commands = await self._execute_instant_activation_command(transcript)
+        if commands:
+            responses = []
+            for command in commands:
+                if command.responses:
+                    responses.append(self._select_command_response(command))
+            if len(responses) == len(commands):
+                # clear duplicates
+                responses = list(dict.fromkeys(responses))
+                responses = [response + "." if not response.endswith(".") else response for response in responses]
+                return " ".join(responses), True
             return None, True
         return None, False
 
