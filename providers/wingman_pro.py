@@ -234,6 +234,30 @@ class WingmanPro:
                 wingman_name=wingman_name,
             )
 
+    async def generate_image(
+        self,
+        text: str,
+    ):
+        data = {
+            "text": text,
+        }
+        response = requests.post(
+            url=f"{self.settings.base_url}/generate-image",
+            params={
+                "region": self.settings.region.value,
+            },
+            headers=self._get_headers(),
+            json=data,
+            timeout=self.timeout,
+        )
+        if response is not None:
+            if response.status_code == 403:
+                self.send_unauthorized_error()
+                return
+            else:
+                response.raise_for_status()
+            return response.text
+
     def get_available_voices(self, locale: str = ""):
         response = requests.get(
             url=f"{self.settings.base_url}/azure-voices",

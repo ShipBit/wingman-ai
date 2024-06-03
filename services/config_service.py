@@ -11,6 +11,7 @@ from api.interface import (
     WingmanConfig,
     WingmanConfigFileInfo,
 )
+from providers.wingman_pro import WingmanPro
 from services.config_manager import ConfigManager
 from services.module_manager import ModuleManager
 from services.printr import Printr
@@ -131,6 +132,12 @@ class ConfigService:
             path="/available-skills",
             endpoint=self.get_available_skills,
             response_model=list[SkillBase],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/generate-image",
+            endpoint=self.generate_image,
             tags=tags,
         )
 
@@ -359,3 +366,16 @@ class ConfigService:
             )
 
         await self.load_config(config_dir)
+
+    # POST generate-image
+    async def generate_image(
+        self,
+        text: str,
+    ):
+        wingman_pro = WingmanPro(
+            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
+        )
+
+        image_url = await wingman_pro.generate_image(text)
+
+        return image_url
