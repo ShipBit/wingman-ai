@@ -1,30 +1,18 @@
 name: VisionAI
 module: skills.vision_ai.main
 description:
-  en: Launch applications and control your Windows computer.
-  de: Starte Anwendungen und steuere deinen Windows-Computer.
+  en: Ask your wingman to analyse whatever is on your screen.
+  de: Lass deinen Wingman alles analysieren, was auf deinem Screen zu sehen ist.
 hint:
-  en: This skill looks for applications in your Start Menu directory (%APPDATA%/Microsoft/Windows/Start Menu/Programs), so if it tells you that it cannot find an application, create a shortcut in that directory.
-  de: Dieser Skill sucht nach Anwendungen in deinem Startmenü-Verzeichnis (%APPDATA%/Microsoft/Windows/Start Menu/Programs). Wenn er dir also sagt, dass er eine Anwendung nicht finden kann, erstelle eine Verknüpfung in diesem Verzeichnis.
+  en: This skill can analyse whatever is on your screen.
+  de: Mit diesem Skill kannst du alles analysieren lassen, was auf deinem Bildschirm zu sehen ist.
 examples:
   - question:
-      en: Open Spotify.
-      de: Öffne Spotify.
+      en: What is on my screen?
+      de: Was siehst du auf meinem Bildschirm.
     answer:
-      en: (opens the Spotify application)
-      de: (öffnet die Spotify-Anwendung)
-  - question:
-      en: Activate Notepad.
-      de: Aktiviere Notepad.
-    answer:
-      en: (maximizes the Notepad application)
-      de: (maximiert die Notepad Anwendung)
-  - question:
-      en: Close Notepad.
-      de: Schließe Notepad.
-    answer:
-      en: (closes the Notepad application)
-      de: (schließt die Notepad Anwendung)
+      en: I see Spotify running and playing music.
+      de: Ich sehe die Spotify-App, die Musik abspielt.
 prompt: |
   You can also see what the user is seeing and you can analyse it and answer all questions about what you see.
   You can call the tool 'analyse_what_you_or_user_sees' if you are asked to analyse what you or the user sees.

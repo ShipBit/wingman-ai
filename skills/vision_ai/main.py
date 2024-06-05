@@ -76,7 +76,7 @@ class VisionAI(Skill):
                 # Create a PIL image from array
                 image = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
 
-                desired_width = 1200
+                desired_width = 1000
                 aspect_ratio = image.height / image.width
                 new_height = int(desired_width * aspect_ratio)
 
@@ -115,7 +115,6 @@ class VisionAI(Skill):
                 )
 
                 if answer:
-                    print(answer)
                     function_response = answer
 
         return function_response, instant_response
