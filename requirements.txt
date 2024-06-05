@@ -12,6 +12,7 @@ pyaudio~=0.2.14
 pydantic~=2.7.3
 pydirectinput-rgx==2.1.1
 pyinstaller==6.8.0
+pygame==2.5.2
 python-multipart==0.0.9
 PyYAML~=6.0.1
 requests~=2.32.3

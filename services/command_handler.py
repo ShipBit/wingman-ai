@@ -1,5 +1,6 @@
 import json
 import asyncio
+import pygame
 from fastapi import WebSocket
 import keyboard.keyboard as keyboard
 from api.commands import (
@@ -39,6 +40,7 @@ class CommandHandler:
             elif command_name == "save_secret":
                 await self.handle_secret(SaveSecretCommand(**command), websocket)
             elif command_name == "record_keyboard_actions":
+                self.handle_record_joystick_actions()
                 await self.handle_record_keyboard_actions(
                     RecordKeyboardActionsCommand(**command), websocket
                 )
@@ -91,6 +93,14 @@ class CommandHandler:
                 if not key_up_event:
                     return False
         return True
+
+    def handle_record_joystick_actions(self):
+        pygame.joystick.init()
+        joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
+
+        # Print all names of the all controllers
+        for joystick in joysticks:
+            print(joystick.get_name())
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
