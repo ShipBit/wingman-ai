@@ -28,3 +28,4 @@ examples:
 prompt: |
   You can also see what the user is seeing and you can analyse it and answer all questions about what you see.
   You can call the tool 'analyse_what_you_or_user_sees' if you are asked to analyse what you or the user sees.
+  You can also see the screen of the user. Call 'analyse_what_you_or_user_sees' for this too.
