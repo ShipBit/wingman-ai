@@ -114,13 +114,13 @@ custom_properties:
     property_type: string
   - id: uexcorp_api_timeout
     name: API Timeout
-    hint: The timeout for the UEX corp API in seconds. (If set below 3s, 3s will be used.)
-    value: 10
+    hint: The timeout for the UEX corp API and, if used, the starcitizen wiki api in seconds. (If set below 3s, 3s will be used.)
+    value: 6
     required: true
     property_type: number
   - id: uexcorp_api_timeout_retries
     name: API Timeout Retries
-    hint: How often the request should be retried in case of a timeout. (Timeout setting may increase automatically on each retry.)
+    hint: How often the request to the uexcorp api should be retried in case of a timeout. (Timeout setting may increase automatically on each retry.)
     value: 3
     required: true
     property_type: number
@@ -193,5 +193,13 @@ custom_properties:
     name: Use Estimated Availability
     hint: Enable this option to take estimated scu availability into account for trade route calculations.
     value: true
+    required: true
+    property_type: boolean
+
+  # Set this option to true to get additional lore information from api.star-citizen.wiki on ships, locations, commodities and more.
+  - id: uexcorp_add_lore
+    name: Add Lore Information
+    hint: Enable this to retrieve additional lore information from api.star-citizen.wiki on ships, locations, commodities and more. But this will add a delay to the response.
+    value: false
     required: true
     property_type: boolean
