@@ -1,6 +1,7 @@
 import base64
 import io
-from mss import (mss, tools)
+from mss import (mss)
+from typing import TYPE_CHECKING
 from PIL import Image
 from api.interface import (
     SettingsConfig,
@@ -10,6 +11,8 @@ from api.interface import (
 )
 from skills.skill_base import Skill
 
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
 
 class VisionAI(Skill):
 
@@ -18,9 +21,10 @@ class VisionAI(Skill):
         config: SkillConfig,
         wingman_config: WingmanConfig,
         settings: SettingsConfig,
+        wingman: "Wingman",
     ) -> None:
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings
+            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
 
     async def validate(self) -> list[WingmanInitializationError]:
