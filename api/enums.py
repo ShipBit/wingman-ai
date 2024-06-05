@@ -156,6 +156,10 @@ class ConversationProvider(Enum):
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
 
+class ImageGenerationProvider(Enum):
+    OPENAI = "openai"
+    WINGMAN_PRO = "wingman_pro"
+
 
 class SummarizeProvider(Enum):
     OPENAI = "openai"
@@ -275,6 +279,9 @@ class VoiceActivationSttProviderEnumModel(BaseEnumModel):
 
 class ConversationProviderEnumModel(BaseEnumModel):
     conversation_provider: ConversationProvider
+
+class ImageGenerationProviderEnumModel(BaseEnumModel):
+    image_generation_provider: ImageGenerationProvider
 
 
 class SummarizeProviderEnumModel(BaseEnumModel):

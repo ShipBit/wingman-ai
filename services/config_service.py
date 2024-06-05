@@ -134,18 +134,6 @@ class ConfigService:
             response_model=list[SkillBase],
             tags=tags,
         )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/generate-image",
-            endpoint=self.generate_image,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/ask",
-            endpoint=self.ask,
-            tags=tags,
-        )
 
     # GET /available-skills
     def get_available_skills(self):
@@ -372,37 +360,3 @@ class ConfigService:
             )
 
         await self.load_config(config_dir)
-
-    # POST generate-image
-    async def generate_image(
-        self,
-        text: str,
-    ):
-        wingman_pro = WingmanPro(
-            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
-        )
-
-        image_url = await wingman_pro.generate_image(text)
-
-        return image_url
-
-    # POST ask
-    async def ask(
-        self,
-        text: str,
-    ):
-        wingman_pro = WingmanPro(
-            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
-        )
-
-        messages = [
-            {
-                "role": "user",
-                "content": text 
-            }
-        ]
-
-        completion = wingman_pro.ask(messages=messages, deployment=WingmanProAzureDeployment.GPT_4O)
-        result = completion.choices[0].message.content
-
-        return result
