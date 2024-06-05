@@ -27,8 +27,13 @@ class VisionAI(Skill):
             config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
 
+        self.monitor_to_capture = 1
+
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
+
+        self.monitor_to_capture = self.retrieve_custom_property_value("monitor_to_capture", errors)
+
         return errors
 
     def get_tools(self) -> list[tuple[str, dict]]:
@@ -65,7 +70,7 @@ class VisionAI(Skill):
         if tool_name == "analyse_what_you_or_user_sees":
             # Take a screenshot
             with mss() as sct:
-                main_monitor = sct.monitors[2]
+                main_monitor = sct.monitors[self.monitor_to_capture]
                 screenshot = sct.grab(main_monitor)
 
                 # Create a PIL image from array
