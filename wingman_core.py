@@ -24,6 +24,7 @@ from api.interface import (
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
+from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.file import get_writable_dir
 from services.voice_service import VoiceService
@@ -74,6 +75,18 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/send-text-to-wingman",
             endpoint=self.send_text_to_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/ask-wingman-conversation-provider",
+            endpoint=self.ask_wingman_conversation_provider,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/generate-image",
+            endpoint=self.generate_image,
             tags=tags,
         )
         self.router.add_api_route(
@@ -482,6 +495,35 @@ class WingmanCore(WebSocketUser):
     # POST /stop-playback
     async def stop_playback(self):
         await self.audio_player.stop_playback()
+
+    # POST /ask-wingman-conversation-provider
+    async def ask_wingman_conversation_provider(self, text: str,  wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+
+        if wingman and text:
+            if isinstance(wingman, OpenAiWingman):
+                messages = [
+                    {
+                        "role": "user",
+                        "content": text 
+                    }
+                ]
+
+                completion = await wingman.actual_llm_call(messages=messages)
+
+                return completion.choices[0].message.content
+ 
+        return None
+
+    # POST /generate-image
+    async def generate_image(self, text: str,  wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+
+        if wingman and text:
+            if isinstance(wingman, OpenAiWingman):
+                return await wingman.generate_image(text=text)
+
+        return None
 
     # POST /send-text-to-wingman
     async def send_text_to_wingman(self, text: str, wingman_name: str):

@@ -4,6 +4,7 @@ import asyncio
 from typing import Mapping
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
+    ImageGenerationProvider,
     LogType,
     TtsProvider,
     SttProvider,
@@ -642,6 +643,16 @@ class OpenAiWingman(Wingman):
             backstory=self.config.prompts.backstory, skills=skill_prompts
         )
         messages.insert(0, {"role": "system", "content": context})
+
+    async def generate_image(self, text: str) -> str:
+        """
+        Generates an image from the provided text configured provider.
+        """
+
+        if self.image_generation_provider == ImageGenerationProvider.WINGMAN_PRO:
+            return await self.wingman_pro.generate_image(text)
+    
+        return ""
 
     async def actual_llm_call(self, messages, tools: list[dict] = None):
         """

@@ -42,6 +42,7 @@ features:
   stt_provider: wingman_pro
   conversation_provider: wingman_pro
   summarize_provider: wingman_pro
+  image_generation_provider: wingman_pro
 sound:
   effects: []
   play_beep: false

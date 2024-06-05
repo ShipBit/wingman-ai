@@ -65,6 +65,7 @@ class Wingman:
         self.stt_provider = self.config.features.stt_provider
         self.conversation_provider = self.config.features.conversation_provider
         self.summarize_provider = self.config.features.summarize_provider
+        self.image_generation_provider = self.config.features.image_generation_provider
 
         self.skills: list[Skill] = []
 

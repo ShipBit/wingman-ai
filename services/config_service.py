@@ -1,6 +1,6 @@
 from typing import Optional
 from fastapi import APIRouter
-from api.enums import OpenAiTtsVoice
+from api.enums import OpenAiTtsVoice, WingmanProAzureDeployment
 from api.interface import (
     BasicWingmanConfig,
     ConfigDirInfo,
@@ -11,6 +11,7 @@ from api.interface import (
     WingmanConfig,
     WingmanConfigFileInfo,
 )
+from providers.wingman_pro import WingmanPro
 from services.config_manager import ConfigManager
 from services.module_manager import ModuleManager
 from services.printr import Printr
