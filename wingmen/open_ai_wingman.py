@@ -720,7 +720,7 @@ class OpenAiWingman(Wingman):
         completion = await self.actual_llm_call(messages, tools)
 
         if self.debug:
-            self.print_execution_time(reset_timer=True)
+            await self.print_execution_time(reset_timer=True)
 
         # if request isnt most recent, ignore the response
         if self.last_gpt_call != thiscall:
