@@ -18,6 +18,7 @@ from api.enums import (
 from api.interface import (
     AudioDevice,
     AzureSttConfig,
+    Config,
     ConfigWithDirInfo,
     WingmanInitializationError,
 )
@@ -165,9 +166,18 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
+    def is_mouse_configured(self, config: Config) -> bool:
+        return any(config.wingmen[wingman].record_mouse_button for wingman in config.wingmen)
+
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
+        config = config_dir_info.config
+
+        # Register hooks
+        if self.is_mouse_configured(config):
+            mouse.hook(self.on_mouse)
+
         self.tower = Tower(
-            config=config_dir_info.config, audio_player=self.audio_player
+            config=config, audio_player=self.audio_player
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
