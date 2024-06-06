@@ -143,14 +143,37 @@ class CommandHandler:
             server_only=True,
         )
 
-        pygame.joystick.init()
+        #pygame.joystick.init()
+        pygame.init()
         joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
 
         # Print all names of the all controllers
         for joystick in joysticks:
             print(joystick.get_name())
+            print(joystick.get_instance_id())
+            print(joystick.get_guid())
+            joystick.init()
 
-        pygame.joystick.quit()
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    print("Button Pressed: ", event.button)
+                    running = False
+
+        #self.recorded_keys.append(event)
+        stop_command = StopRecordingCommand(
+            command="stop_recording",
+            recording_device=RecordingDevice.JOYSTICK
+        )
+        WebSocketUser.ensure_async(
+            self.handle_stop_recording(stop_command, None)
+        )
+
+        #pygame.joystick.quit()
+        pygame.quit()
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
@@ -224,11 +247,12 @@ class CommandHandler:
                 else self._get_actions_from_recorded_hotkey(recorded_keys)
             )
         elif command.recording_device == RecordingDevice.MOUSE:
-            mouse_config = CommandActionConfig()
-            mouse_config.mouse = CommandMouseConfig()
-            mouse_config.mouse.button = recorded_keys[0].button
+            if len(recorded_keys) > 0:
+                mouse_config = CommandActionConfig()
+                mouse_config.mouse = CommandMouseConfig()
+                mouse_config.mouse.button = recorded_keys[0].button
 
-            actions.append(mouse_config)
+                actions.append(mouse_config)
 
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
