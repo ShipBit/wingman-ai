@@ -3,6 +3,7 @@ import asyncio
 import pygame
 from fastapi import WebSocket
 import keyboard.keyboard as keyboard
+import mouse.mouse as mouse
 from api.commands import (
     ActionsRecordedCommand,
     RecordJoystickActionsCommand,
@@ -12,8 +13,8 @@ from api.commands import (
     StopRecordingCommand,
     WebSocketCommandModel,
 )
-from api.enums import KeyboardRecordingType, LogSource, ToastType
-from api.interface import CommandActionConfig, CommandKeyboardConfig
+from api.enums import KeyboardRecordingType, LogSource, RecordingDevice, ToastType
+from api.interface import CommandActionConfig, CommandKeyboardConfig, CommandMouseConfig
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -30,7 +31,8 @@ class CommandHandler:
         self.printr: Printr = Printr()
         self.timeout_task = None
         self.recorded_keys = []
-        self.hook_callback = None
+        self.keyboard_hook_callback = None
+        self.mouse_hook_callback = None
 
     async def dispatch(self, message, websocket: WebSocket):
         try:
@@ -114,6 +116,22 @@ class CommandHandler:
             server_only=True,
         )
 
+        self.recorded_keys = []
+
+        def _on_mouse_event(event):
+            if isinstance(event, mouse.ButtonEvent):
+                self.recorded_keys.append(event)
+                stop_command = StopRecordingCommand(
+                    command="stop_recording",
+                    recording_device=RecordingDevice.MOUSE
+                )
+                WebSocketUser.ensure_async(
+                    self.handle_stop_recording(stop_command, None)
+                )
+                    
+
+        self.mouse_hook_callback = mouse.hook(_on_mouse_event)
+
     async def handle_record_joystick_actions(
         self, command: RecordJoystickActionsCommand, websocket: WebSocket
     ):
@@ -149,10 +167,16 @@ class CommandHandler:
         # self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
         self.recorded_keys = []
 
+        stop_command = StopRecordingCommand(
+            command="stop_recording",
+            recording_device=RecordingDevice.KEYBOARD,
+            keyboard_recording_type=command.recording_type
+        )
+
         def _on_key_event(event):
             if event.event_type == "down" and event.name == "esc":
                 WebSocketUser.ensure_async(
-                    self.handle_stop_recording(None, None, command.recording_type)
+                    self.handle_stop_recording(stop_command, None, command.recording_type)
                 )
             if (
                 event.scan_code == 58
@@ -171,10 +195,10 @@ class CommandHandler:
                 and self._is_hotkey_recording_finished(self.recorded_keys)
             ):
                 WebSocketUser.ensure_async(
-                    self.handle_stop_recording(None, None, command.recording_type)
+                    self.handle_stop_recording(stop_command, None, command.recording_type)
                 )
 
-        self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
+        self.keyboard_hook_callback = keyboard.hook(_on_key_event, suppress=True)
 
     async def handle_stop_recording(
         self,
@@ -182,17 +206,30 @@ class CommandHandler:
         websocket: WebSocket,
         recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE,
     ):
-        if self.hook_callback:
-            keyboard.unhook(self.hook_callback)
+        if self.keyboard_hook_callback:
+            keyboard.unhook(self.keyboard_hook_callback)
+        if self.mouse_hook_callback:
+            mouse.unhook(self.mouse_hook_callback)
+
         recorded_keys = self.recorded_keys
         if self.timeout_task:
             self.timeout_task.cancel()
 
-        actions = (
-            self._get_actions_from_recorded_keys(recorded_keys)
-            if recording_type == KeyboardRecordingType.MACRO_ADVANCED
-            else self._get_actions_from_recorded_hotkey(recorded_keys)
-        )
+        actions: list[CommandActionConfig] = []
+
+        if command.recording_device == RecordingDevice.KEYBOARD:
+            actions = (
+                self._get_actions_from_recorded_keys(recorded_keys)
+                if recording_type == KeyboardRecordingType.MACRO_ADVANCED
+                else self._get_actions_from_recorded_hotkey(recorded_keys)
+            )
+        elif command.recording_device == RecordingDevice.MOUSE:
+            mouse_config = CommandActionConfig()
+            mouse_config.mouse = CommandMouseConfig()
+            mouse_config.mouse.button = recorded_keys[0].button
+
+            actions.append(mouse_config)
+
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
 
