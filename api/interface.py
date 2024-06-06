@@ -394,6 +394,14 @@ class CommandMouseConfig(BaseModel):
     """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
 
 
+class CommandJoystickConfig(BaseModel):
+    button: Optional[int] = None
+    """The joystick button to press. Optional."""
+
+    guid: Optional[str] = None
+    """The joystick GUID to use. Optional."""
+
+
 class CommandActionConfig(BaseModel):
     keyboard: Optional[CommandKeyboardConfig] = None
     """The keyboard configuration for this action. Optional."""
@@ -403,6 +411,9 @@ class CommandActionConfig(BaseModel):
 
     mouse: Optional[CommandMouseConfig] = None
     """The mouse configuration for this action. Optional."""
+
+    joystick: Optional[CommandJoystickConfig] = None
+    """The joystick configuration for this action. Optional."""
 
     write: Optional[str] = None
     """The word or phrase to type, for example, to type text in a login screen.  Must have associated button press to work.  May need special formatting for special characters."""
@@ -542,8 +553,10 @@ class WingmanConfig(NestedConfig):
     """The "push-to-talk" key code for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
     record_mouse_button: Optional[str] = None
     """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
-    record_joystick_button: Optional[str] = None
+    record_joystick_button: Optional[int] = None
     """The "push-to-talk" joystick button for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
+    record_joystick_guid: Optional[str] = None
+    """The "push-to-talk" joystick guid for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
     is_voice_activation_default: Optional[bool] = None
     """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
 

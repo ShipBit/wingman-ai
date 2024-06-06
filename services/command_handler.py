@@ -14,7 +14,7 @@ from api.commands import (
     WebSocketCommandModel,
 )
 from api.enums import KeyboardRecordingType, LogSource, RecordingDevice, ToastType
-from api.interface import CommandActionConfig, CommandKeyboardConfig, CommandMouseConfig
+from api.interface import CommandActionConfig, CommandJoystickConfig, CommandKeyboardConfig, CommandMouseConfig
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -161,9 +161,11 @@ class CommandHandler:
                     running = False
                 elif event.type == pygame.JOYBUTTONDOWN:
                     print("Button Pressed: ", event.button)
+                    # Get guid of joystick with instance id
+                    joystick_origin = pygame.joystick.Joystick(event.instance_id)
+                    self.recorded_keys.append({"button": event.button, "guid": joystick_origin.get_guid()})
                     running = False
 
-        #self.recorded_keys.append(event)
         stop_command = StopRecordingCommand(
             command="stop_recording",
             recording_device=RecordingDevice.JOYSTICK
@@ -173,7 +175,7 @@ class CommandHandler:
         )
 
         #pygame.joystick.quit()
-        pygame.quit()
+        #pygame.quit()
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
@@ -233,6 +235,8 @@ class CommandHandler:
             keyboard.unhook(self.keyboard_hook_callback)
         if self.mouse_hook_callback:
             mouse.unhook(self.mouse_hook_callback)
+        if command.recording_device == RecordingDevice.JOYSTICK:
+            pygame.quit()
 
         recorded_keys = self.recorded_keys
         if self.timeout_task:
@@ -251,8 +255,14 @@ class CommandHandler:
                 mouse_config = CommandActionConfig()
                 mouse_config.mouse = CommandMouseConfig()
                 mouse_config.mouse.button = recorded_keys[0].button
-
                 actions.append(mouse_config)
+        elif command.recording_device == RecordingDevice.JOYSTICK:
+            if len(recorded_keys) > 0:
+                joystick_config = CommandActionConfig()
+                joystick_config.joystick = CommandJoystickConfig()
+                joystick_config.joystick.button = recorded_keys[0]["button"]
+                joystick_config.joystick.guid = recorded_keys[0]["guid"]
+                actions.append(joystick_config)
 
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
