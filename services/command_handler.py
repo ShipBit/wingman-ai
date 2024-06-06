@@ -5,7 +5,9 @@ from fastapi import WebSocket
 import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
+    RecordJoystickActionsCommand,
     RecordKeyboardActionsCommand,
+    RecordMouseActionsCommand,
     SaveSecretCommand,
     StopRecordingCommand,
     WebSocketCommandModel,
@@ -40,9 +42,16 @@ class CommandHandler:
             elif command_name == "save_secret":
                 await self.handle_secret(SaveSecretCommand(**command), websocket)
             elif command_name == "record_keyboard_actions":
-                self.handle_record_joystick_actions()
                 await self.handle_record_keyboard_actions(
                     RecordKeyboardActionsCommand(**command), websocket
+                )
+            elif command_name == "record_mouse_actions":
+                await self.handle_record_mouse_actions(
+                    RecordMouseActionsCommand(**command), websocket
+                )
+            elif command_name == "record_joystick_actions":
+                await self.handle_record_joystick_actions(
+                    RecordJoystickActionsCommand(**command), websocket
                 )
             elif command_name == "stop_recording":
                 # Get Enum from string
@@ -93,14 +102,37 @@ class CommandHandler:
                 if not key_up_event:
                     return False
         return True
+    
+    async def handle_record_mouse_actions(
+        self, command: RecordMouseActionsCommand, websocket: WebSocket
+    ):
+        await self.printr.print_async(
+            "Recording mouse actions...",
+            toast=ToastType.NORMAL,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+            server_only=True,
+        )
 
-    def handle_record_joystick_actions(self):
+    async def handle_record_joystick_actions(
+        self, command: RecordJoystickActionsCommand, websocket: WebSocket
+    ):
+        await self.printr.print_async(
+            "Recording joystick actions...",
+            toast=ToastType.NORMAL,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+            server_only=True,
+        )
+
         pygame.joystick.init()
         joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
 
         # Print all names of the all controllers
         for joystick in joysticks:
             print(joystick.get_name())
+
+        pygame.joystick.quit()
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
