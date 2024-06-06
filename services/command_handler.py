@@ -55,7 +55,7 @@ class CommandHandler:
                 )
             elif command_name == "stop_recording":
                 # Get Enum from string
-                recording_type = KeyboardRecordingType(command["recording_type"])
+                recording_type = KeyboardRecordingType(command["keyboard_recording_type"])
                 await self.handle_stop_recording(
                     StopRecordingCommand(**command), websocket, recording_type
                 )
