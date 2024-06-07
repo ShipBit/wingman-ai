@@ -73,7 +73,7 @@ class WebSearch(Skill):
                                 },
                                 "search_type": {
                                     "type": "string",
-                                    "description": "The type of search to perform.  Use 'news', if the user is looking for current events, weather, or recent news.  Use 'general' for general detailed information about a topic.  Use 'single_site' if the user has specified one particular web page that they want you to download, and then use the 'single_site_url' parameter to identify the web page.  If it is not clear what type of search the user wants, ask.",
+                                    "description": "The type of search to perform.  Use 'news', if the user is looking for current events, weather, or recent news.  Use 'general' for general detailed information about a topic.  Use 'single_site' if the user has specified one particular web page that they want you to review, and then use the 'single_site_url' parameter to identify the web page.  If it is not clear what type of search the user wants, ask.",
                                     "enum": [
                                         "news",
                                         "general",
