@@ -1,5 +1,6 @@
 import time
 import math
+from urllib.parse import urlparse
 from copy import deepcopy
 from typing import TYPE_CHECKING
 from duckduckgo_search import DDGS
@@ -34,13 +35,17 @@ class WebSearch(Skill):
             wingman=wingman,
         )
 
-        # behavior
+        # Set default and custom behavior
         self.max_time = 5
         self.max_results = 5
         self.min_results = 2
         self.max_result_size = 4000
 
+        # Set necessary trafilatura settings to match
+
+        # Copy default config file that comes with trafilatura
         self.trafilatura_config = deepcopy(DEFAULT_CONFIG)
+        # Change download and max redirects default in config
         self.trafilatura_config["DEFAULT"][
             "DOWNLOAD_TIMEOUT"
         ] = f"{math.ceil(self.max_time/2)}"
@@ -68,11 +73,16 @@ class WebSearch(Skill):
                                 },
                                 "search_type": {
                                     "type": "string",
-                                    "description": "The type of search to perform.  Use 'news', if the user is looking for current events, weather, today's date, or date-related information.  Use 'general' for general detailed information about a topic.  If it is not clear what type of search the user wants, ask.",
+                                    "description": "The type of search to perform.  Use 'news', if the user is looking for current events, weather, or recent news.  Use 'general' for general detailed information about a topic.  Use 'single_site' if the user has specified one particular web page that they want you to review, and then use the 'single_site_url' parameter to identify the web page.  If it is not clear what type of search the user wants, ask.",
                                     "enum": [
                                         "news",
                                         "general",
+                                        "single_site",
                                     ],
+                                },
+                                "single_site_url": {
+                                    "type": "string",
+                                    "description": "If the user wants to search a single website, the specific site url that they want to search, formatted as a proper url.",
                                 },
                             },
                             "required": ["search_query", "search_type"],
@@ -99,6 +109,18 @@ class WebSearch(Skill):
             final_results = ""
             search_query = parameters.get("search_query")
             search_type = parameters.get("search_type")
+            site_url = parameters.get("single_site_url")
+
+            # Since site_url is not a required parameter, it is possible the AI may not to include it even when using single site type, and instead put the web address in the query field; check if that is the case.
+            if not site_url and search_type == "single_site":
+                try:
+                    urlparse(search_query)
+                    site_url = search_query
+                except ValueError:
+                    await self.printr.print_async(
+                        f"Tried single site search but no valid url to search.",
+                        color=LogType.INFO,
+                    )
 
             processed_results = []
 
@@ -108,11 +130,23 @@ class WebSearch(Skill):
                 if search_type == "general":
                     link = result.get("href")
                 body = result.get("body")
+                
+                # If doing a deep dive on a single site get as much content as possible
+                if search_type == "single_site":
+                    self.max_result_size = 20000
+                else:
+                    self.max_result_size = 4000
+                # If a link is in search results or identified by the user, then use trafilatura to download its content and extract the content to text
                 if link:
                     trafilatura_url = link
                     trafilatura_downloaded = fetch_url(
                         trafilatura_url, config=self.trafilatura_config
                     )
+                    if self.settings.debug_mode:
+                        await self.printr.print_async(
+                            f"web_search skill analyzing website at: {link} for full content using trafilatura",
+                            color=LogType.INFO,
+                        )
                     trafilatura_result = extract(
                         trafilatura_downloaded,
                         include_comments=False,
@@ -124,24 +158,37 @@ class WebSearch(Skill):
                             + "\n"
                             + link
                             + "\n"
-                            + trafilatura_result[: self.max_result_size]
+                            + trafilatura_result[:self.max_result_size]
                         )
+
+                    else:
                         if self.settings.debug_mode:
                             await self.printr.print_async(
-                                f"web_search skill analyzing website at: {link} for full content using trafilatura",
+                                f"web_search skill could not extract results from website at: {link} for full content using trafilatura",
                                 color=LogType.INFO,
                             )
-                    else:
                         processed_results.append(title + "\n" + link + "\n" + body)
 
             if search_type == "general":
+                self.min_results = 2
+                self.max_time = 5
                 search_results = DDGS().text(
                     search_query, safesearch="off", max_results=self.max_results
                 )
-            else:
+            elif search_type == "news":
+                self.min_results = 2
+                self.max_time = 5
                 search_results = DDGS().news(
                     search_query, safesearch="off", max_results=self.max_results
                 )
+            else:
+                search_results = [{"url": site_url, "title": "Site Requested", "body": "None found"}]
+                self.min_results = 1
+                self.max_time = 30
+            
+            self.trafilatura_config["DEFAULT"][
+                "DOWNLOAD_TIMEOUT"
+            ] = f"{math.ceil(self.max_time/2)}"
 
             start_time = time.time()
 
