@@ -1307,7 +1307,7 @@ class UEXCorp(Skill):
                 "content": search,
             },
         ]
-        completion = await self.gpt_call(messages)
+        completion = await self.llm_call(messages)
         answer = (
             completion.choices[0].message.content
             if completion and completion.choices

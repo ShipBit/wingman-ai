@@ -1,6 +1,8 @@
 import random
 import time
 import difflib
+import asyncio
+import threading
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
@@ -473,3 +475,15 @@ class Wingman:
 
             if action.wait:
                 time.sleep(action.wait)
+
+    def threaded_execution(self, function, *args) -> threading.Thread:
+    """Execute a function in a separate thread."""
+        def start_thread(function, *args):
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            new_loop.run_until_complete(function(*args))
+            new_loop.close()
+
+        thread = threading.Thread(target=start_thread, args=(function, *args))
+        thread.start()
+        return thread

@@ -185,7 +185,9 @@ class OpenAiWingman(Wingman):
             self.tool_skills[tool_name] = skill
             self.skill_tools.append(tool)
 
-        skill.gpt_call = self.actual_llm_call
+        # init skill methods
+        skill.llm_call = self.actual_llm_call
+        skill.threaded_execution = self.threaded_execution
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("openai", errors)

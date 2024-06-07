@@ -1,4 +1,3 @@
-import asyncio
 import threading
 import time
 from typing import TYPE_CHECKING
@@ -56,7 +55,19 @@ class Skill:
         """Called when a user message is added to the system."""
         pass
 
-    async def gpt_call(self, messages, tools: list[dict] = None) -> any:
+    async def is_threadable_tool(self, tool_name: str) -> bool:
+        """Returns whether a tool can be executed in a separate thread."""
+        return True
+    
+    async def is_summarize_needed(self, tool_name: str) -> bool:
+        """Returns whether a tool needs to be summarized."""
+        return True
+    
+    async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        """Returns whether a tool needs to wait for a response."""
+        return False
+
+    async def llm_call(self, messages, tools: list[dict] = None) -> any:
         return any
 
     async def retrieve_secret(
@@ -123,12 +134,4 @@ class Skill:
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
-        def start_thread(function, *args):
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            new_loop.run_until_complete(function(*args))
-            new_loop.close()
-
-        thread = threading.Thread(target=start_thread, args=(function, *args))
-        thread.start()
-        return thread
+        pass

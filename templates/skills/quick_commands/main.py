@@ -211,7 +211,7 @@ class QuickCommands(Skill):
                 "content": f"Phrase: '{phrase}' Command: '{command}'",
             },
         ]
-        completion = await self.gpt_call(messages)
+        completion = await self.llm_call(messages)
         answer = completion.choices[0].message.content or ""
         if answer.lower() == "yes":
             await printr.print_async(
