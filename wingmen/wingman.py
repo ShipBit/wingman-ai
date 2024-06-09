@@ -239,7 +239,7 @@ class Wingman:
                 )
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response, skill = (
+            process_result, instant_response, skill, interrupt = (
                 await self._get_response_for_transcript(transcript)
             )
 
@@ -258,7 +258,7 @@ class Wingman:
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
-            await self.play_to_user(str(process_result), True)
+            await self.play_to_user(str(process_result), not interrupt)
 
     # ───────────────── virtual methods / hooks ───────────────── #
 

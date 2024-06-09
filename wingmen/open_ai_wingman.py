@@ -345,7 +345,7 @@ class OpenAiWingman(Wingman):
             transcript (str): The user's spoken text transcribed.
 
         Returns:
-            A tuple of strings representing the response to a function call and an instant response.
+            tuple[str, str, Skill | None, bool]: A tuple containing the final response, the instant response (if any), the skill that was used, and a boolean indicating whether the current audio should be interrupted.
         """
         await self.add_user_message(transcript)
 
@@ -367,8 +367,7 @@ class OpenAiWingman(Wingman):
 
         # add message and dummy tool responses to conversation history
         is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(response_message, tool_calls)
-        print(is_waiting_response_needed, is_summarize_needed)
-        print(response_message)
+        interrupt = True # initial answer should be awaited, if its not there, current audio should be interrupted
 
         if tool_calls:
             if is_waiting_response_needed and response_message.content:
@@ -380,6 +379,7 @@ class OpenAiWingman(Wingman):
                     source_name=self.name,
                     skill_name="",
                 )
+                interrupt = False
             else:
                 is_summarize_needed = True
 
@@ -390,11 +390,11 @@ class OpenAiWingman(Wingman):
             if is_summarize_needed:
                 summarize_response = await self._summarize_function_calls()
                 summarize_response = self._finalize_response(str(summarize_response))
-                return summarize_response, summarize_response, skill
+                return summarize_response, summarize_response, skill, interrupt
             elif is_waiting_response_needed:
-                return None, None, None
+                return None, None, None, interrupt
 
-        return response_message.content, response_message.content, None
+        return response_message.content, response_message.content, None, interrupt
 
     async def _fix_tool_calls(self, tool_calls):
         """Fixes tool calls that have a command name as function name.
