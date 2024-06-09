@@ -1,6 +1,7 @@
 import json
 import time
 import asyncio
+import random
 from typing import Mapping
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
@@ -67,8 +68,13 @@ class OpenAiWingman(Wingman):
         self.whispercpp: Whispercpp = None
         self.wingman_pro: WingmanPro = None
 
+        # tool queue
         self.pending_tool_calls = []
         self.last_gpt_call = None
+
+        # generated addional content
+        self.use_instant_responses = False # TODO: option to enable/disable in GUI/config
+        self.instant_responses = []
 
         self.messages = []
         """The conversation history that is used for the GPT calls"""
@@ -180,6 +186,10 @@ class OpenAiWingman(Wingman):
             )
         return False
 
+    async def prepare(self):
+        if self.use_instant_responses:
+            self.threaded_execution(self._generate_instant_responses)
+
     async def prepare_skill(self, skill: Skill):
         # prepare the skill and skill tools
         for tool_name, tool in skill.get_tools():
@@ -282,6 +292,56 @@ class OpenAiWingman(Wingman):
             wingman_name=self.name, settings=self.settings.wingman_pro
         )
 
+    async def _generate_instant_responses(self) -> None:
+        """Generates general instant responses based on given context."""
+        context = await self.get_context()
+        messages = [
+            {"role": "system", "content": """
+                Generate a list in JSON format of at least 20 short direct text responses.
+                Make sure the response only contains the JSON, no additional text.
+                They must fit the described character in the given context by the user.
+                Every generated response must be generally usable in every situation.
+                Responses must show its still in progress and not in a finished state.
+                The user request this response is used on is unknown. Therefore it must be generic.
+                Good examples:
+                    - "Processing..."
+                    - "Stand by..."
+             
+                Bad examples:
+                    - "Generating route..." (too specific)
+                    - "I'm sorry, I can't do that." (too negative)
+             
+                Response example:
+                [
+                    "OK",
+                    "Generating results...",
+                    "Roger that!",
+                    "Stand by..."
+                ]
+            """},
+            {"role": "user", "content": context},
+        ]
+        completion = await self.actual_llm_call(messages)
+        if completion is None:
+            return
+        if completion.choices[0].message.content:
+            retry_limit = 3
+            retry_count = 1
+            valid = False
+            while not valid and retry_count <= retry_limit:
+                try:
+                    responses = json.loads(completion.choices[0].message.content)
+                    valid = True
+                    for response in responses:
+                        if response not in self.instant_responses:
+                            self.instant_responses.append(str(response))
+                except json.JSONDecodeError:
+                    messages.append(completion.choices[0].message)
+                    messages.append({"role": "user", "content": "It was tried to handle the response in its entierty as a JSON string. Fix response to be a valid JSON, it was not convertable."})
+                    if retry_count <= retry_limit:
+                        completion = await self.actual_llm_call(messages)
+                    retry_count += 1
+
     async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
 
@@ -370,16 +430,26 @@ class OpenAiWingman(Wingman):
         interrupt = True # initial answer should be awaited, if its not there, current audio should be interrupted
 
         if tool_calls:
-            if is_waiting_response_needed and response_message.content:
-                self.threaded_execution(self.play_to_user, response_message.content)
-                await printr.print_async(
-                    f"{response_message.content}",
-                    color=LogType.POSITIVE,
-                    source=LogSource.WINGMAN,
-                    source_name=self.name,
-                    skill_name="",
-                )
-                interrupt = False
+            if is_waiting_response_needed:
+                if response_message.content:
+                    message = response_message.content
+                elif self.instant_responses:
+                    message = self.instant_responses[
+                        random.randint(0, len(self.instant_responses) - 1)
+                    ]
+                    is_summarize_needed = True
+                if message:
+                    self.threaded_execution(self.play_to_user, message)
+                    await printr.print_async(
+                        f"{message}",
+                        color=LogType.POSITIVE,
+                        source=LogSource.WINGMAN,
+                        source_name=self.name,
+                        skill_name="",
+                    )
+                    interrupt = False
+                else:
+                    is_summarize_needed = True
             else:
                 is_summarize_needed = True
 
@@ -472,7 +542,7 @@ class OpenAiWingman(Wingman):
             if len(unique_tools) == 1 and "execute_command" in unique_tools:
                 is_waiting_response_needed = True
 
-        return is_waiting_response_needed, is_summarize_needed   
+        return is_waiting_response_needed, is_summarize_needed
 
     def _add_tool_response(self, tool_call, response: str, completed: bool = True):
         """Adds a tool response to the conversation history.
@@ -678,7 +748,7 @@ class OpenAiWingman(Wingman):
             return None, True
         return None, False
 
-    async def add_context(self, messages):
+    async def get_context(self):
         """build the context and inserts it into the messages"""
         skill_prompts = ""
         for skill in self.skills:
@@ -689,7 +759,10 @@ class OpenAiWingman(Wingman):
         context = self.config.prompts.system_prompt.format(
             backstory=self.config.prompts.backstory, skills=skill_prompts
         )
-        messages.insert(0, {"role": "system", "content": context})
+        return context
+
+    async def add_context(self, messages):
+        messages.insert(0, {"role": "system", "content": (await self.get_context())})
 
     async def generate_image(self, text: str) -> str:
         """
