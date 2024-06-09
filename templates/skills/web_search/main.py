@@ -92,6 +92,9 @@ class WebSearch(Skill):
             ),
         ]
         return tools
+    
+    async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        return True
 
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
