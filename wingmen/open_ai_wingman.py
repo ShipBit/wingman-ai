@@ -73,7 +73,7 @@ class OpenAiWingman(Wingman):
         self.last_gpt_call = None
 
         # generated addional content
-        self.use_instant_responses = False # TODO: option to enable/disable in GUI/config
+        self.use_instant_responses = True # TODO: option to enable/disable in GUI/config
         self.instant_responses = []
 
         self.messages = []
@@ -414,14 +414,14 @@ class OpenAiWingman(Wingman):
         )
         if instant_response:
             self.add_assistant_message(instant_response)
-            return instant_response, instant_response, None
+            return instant_response, instant_response, None, True
 
         # make a GPT call with the conversation history
         # if an instant command got executed, prevent tool calls to avoid duplicate executions
         completion = await self._llm_call(instant_command_executed is False)
 
         if completion is None:
-            return None, None, None
+            return None, None, None, True
 
         response_message, tool_calls = await self._process_completion(completion)
 
@@ -431,6 +431,7 @@ class OpenAiWingman(Wingman):
 
         if tool_calls:
             if is_waiting_response_needed:
+                message = None
                 if response_message.content:
                     message = response_message.content
                 elif self.instant_responses:
@@ -455,7 +456,7 @@ class OpenAiWingman(Wingman):
 
             instant_response, skill = await self._handle_tool_calls(tool_calls)
             if instant_response:
-                return None, instant_response, None
+                return None, instant_response, None, interrupt
 
             if is_summarize_needed:
                 summarize_response = await self._summarize_function_calls()
@@ -487,7 +488,12 @@ class OpenAiWingman(Wingman):
                 )
 
                 # try to resolve function name to a command name
-                if len(function_args) == 0 and self.get_command(function_name):
+                if (len(function_args) == 0 and self.get_command(function_name)) or (
+                        len(function_args) == 1
+                        and "command_name" in function_args
+                        and self.get_command(function_args["command_name"])
+                        and function_name == function_args["command_name"]
+                    ):
                     function_args["command_name"] = function_name
                     function_name = "execute_command"
 
@@ -668,7 +674,7 @@ class OpenAiWingman(Wingman):
         """
         # call skill hooks
         for skill in self.skills:
-            skill.on_add_assistant_message(content)
+            skill.on_add_assistant_message(content, [])
 
         msg = {"role": "assistant", "content": content}
         self.messages.append(msg)
