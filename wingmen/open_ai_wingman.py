@@ -413,7 +413,7 @@ class OpenAiWingman(Wingman):
             transcript
         )
         if instant_response:
-            self.add_assistant_message(instant_response)
+            await self.add_assistant_message(instant_response)
             return instant_response, instant_response, None, True
 
         # make a GPT call with the conversation history
@@ -666,7 +666,7 @@ class OpenAiWingman(Wingman):
         await self._cleanup_conversation_history()
         self.messages.append(msg)
 
-    def add_assistant_message(self, content: str):
+    async def add_assistant_message(self, content: str):
         """Adds an assistant message to the conversation history.
 
         Args:
@@ -674,7 +674,7 @@ class OpenAiWingman(Wingman):
         """
         # call skill hooks
         for skill in self.skills:
-            skill.on_add_assistant_message(content, [])
+            await skill.on_add_assistant_message(content, [])
 
         msg = {"role": "assistant", "content": content}
         self.messages.append(msg)
