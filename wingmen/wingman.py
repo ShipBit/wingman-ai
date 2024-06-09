@@ -154,6 +154,9 @@ class Wingman:
                     wingman=self,
                 )
                 if skill:
+                    # init skill methods
+                    skill.threaded_execution = self.threaded_execution
+
                     validation_errors = await skill.validate()
                     errors.extend(validation_errors)
 
@@ -255,7 +258,7 @@ class Wingman:
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
-            await self.play_to_user(str(process_result))
+            await self.play_to_user(str(process_result), True)
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
@@ -477,7 +480,7 @@ class Wingman:
                 time.sleep(action.wait)
 
     def threaded_execution(self, function, *args) -> threading.Thread:
-    """Execute a function in a separate thread."""
+        """Execute a function in a separate thread."""
         def start_thread(function, *args):
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)

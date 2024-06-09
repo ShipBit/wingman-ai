@@ -1242,6 +1242,9 @@ class UEXCorp(Skill):
             function_response += "\nTell user there seems to be an error. And you must say that it should be report to the 'uexcorp skill developer (JayMatthew on Discord)'."
 
         return function_response, instant_response
+    
+    async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        return True
 
     async def _find_closest_match(
         self, search: str | None, lst: list[str] | set[str]

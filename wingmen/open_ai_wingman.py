@@ -6,6 +6,7 @@ from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationEr
 from api.enums import (
     ImageGenerationProvider,
     LogType,
+    LogSource,
     TtsProvider,
     SttProvider,
     ConversationProvider,
@@ -187,7 +188,6 @@ class OpenAiWingman(Wingman):
 
         # init skill methods
         skill.llm_call = self.actual_llm_call
-        skill.threaded_execution = self.threaded_execution
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("openai", errors)
@@ -366,16 +366,33 @@ class OpenAiWingman(Wingman):
         response_message, tool_calls = await self._process_completion(completion)
 
         # add message and dummy tool responses to conversation history
-        self._add_gpt_response(response_message, tool_calls)
+        is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(response_message, tool_calls)
+        print(is_waiting_response_needed, is_summarize_needed)
+        print(response_message)
 
         if tool_calls:
+            if is_waiting_response_needed and response_message.content:
+                self.threaded_execution(self.play_to_user, response_message.content)
+                await printr.print_async(
+                    f"{response_message.content}",
+                    color=LogType.POSITIVE,
+                    source=LogSource.WINGMAN,
+                    source_name=self.name,
+                    skill_name="",
+                )
+            else:
+                is_summarize_needed = True
+
             instant_response, skill = await self._handle_tool_calls(tool_calls)
             if instant_response:
                 return None, instant_response, None
 
-            summarize_response = await self._summarize_function_calls()
-            summarize_response = self._finalize_response(str(summarize_response))
-            return summarize_response, summarize_response, skill
+            if is_summarize_needed:
+                summarize_response = await self._summarize_function_calls()
+                summarize_response = self._finalize_response(str(summarize_response))
+                return summarize_response, summarize_response, skill
+            elif is_waiting_response_needed:
+                return None, None, None
 
         return response_message.content, response_message.content, None
 
@@ -415,23 +432,47 @@ class OpenAiWingman(Wingman):
 
         return tool_calls
 
-    def _add_gpt_response(self, message, tool_calls) -> None:
+    async def _add_gpt_response(self, message, tool_calls) -> bool:
         """Adds a message from GPT to the conversation history as well as adding dummy tool responses for any tool calls.
 
         Args:
             message (dict): The message to add.
             tool_calls (list): The tool calls associated with the message.
         """
+        # call skill hooks
+        for skill in self.skills:
+            await skill.on_add_assistant_message(message.content, message.tool_calls)
+
         # do not tamper with this message as it will lead to 400 errors!
         self.messages.append(message)
 
         # adding dummy tool responses to prevent corrupted message history on parallel requests
+        # and checks if waiting response should be played
+        unique_tools = {}
+        is_waiting_response_needed = False
+        is_summarize_needed = False
+
         if tool_calls:
             for tool_call in tool_calls:
                 if not tool_call.id:
                     continue
                 # adding a dummy tool response to get updated later
                 self._add_tool_response(tool_call, "Loading..", False)
+
+                function_name = tool_call.function.name
+                if function_name in self.tool_skills:
+                    skill = self.tool_skills[function_name]
+                    if await skill.is_waiting_response_needed(function_name):
+                        is_waiting_response_needed = True
+                    if await skill.is_summarize_needed(function_name):
+                        is_summarize_needed = True
+
+                unique_tools[function_name] = True
+
+            if len(unique_tools) == 1 and "execute_command" in unique_tools:
+                is_waiting_response_needed = True
+
+        return is_waiting_response_needed, is_summarize_needed   
 
     def _add_tool_response(self, tool_call, response: str, completed: bool = True):
         """Adds a tool response to the conversation history.
@@ -555,6 +596,10 @@ class OpenAiWingman(Wingman):
         Args:
             content (str): The message content to add.
         """
+        # call skill hooks
+        for skill in self.skills:
+            skill.on_add_assistant_message(content)
+
         msg = {"role": "assistant", "content": content}
         self.messages.append(msg)
 

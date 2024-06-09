@@ -55,16 +55,16 @@ class Skill:
         """Called when a user message is added to the system."""
         pass
 
-    async def is_threadable_tool(self, tool_name: str) -> bool:
-        """Returns whether a tool can be executed in a separate thread."""
-        return True
-    
+    async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
+        """Called when a system message is added to the system."""
+        pass
+
     async def is_summarize_needed(self, tool_name: str) -> bool:
         """Returns whether a tool needs to be summarized."""
         return True
     
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
-        """Returns whether a tool needs to wait for a response."""
+        """Returns whether a tool probably takes long and a message should be printet in between."""
         return False
 
     async def llm_call(self, messages, tools: list[dict] = None) -> any:
