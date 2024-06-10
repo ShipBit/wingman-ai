@@ -4,6 +4,7 @@ import asyncio
 from typing import Mapping
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
+    ImageGenerationProvider,
     LogType,
     TtsProvider,
     SttProvider,
@@ -643,6 +644,16 @@ class OpenAiWingman(Wingman):
         )
         messages.insert(0, {"role": "system", "content": context})
 
+    async def generate_image(self, text: str) -> str:
+        """
+        Generates an image from the provided text configured provider.
+        """
+
+        if self.image_generation_provider == ImageGenerationProvider.WINGMAN_PRO:
+            return await self.wingman_pro.generate_image(text)
+    
+        return ""
+
     async def actual_llm_call(self, messages, tools: list[dict] = None):
         """
         Perform the actual GPT call with the messages provided.
@@ -901,6 +912,9 @@ class OpenAiWingman(Wingman):
         # Go through the skills and check if the function name matches any of the tools
         if function_name in self.tool_skills:
             skill = self.tool_skills[function_name]
+
+            await printr.print_async(f"Skill processing: {skill.name} ...", LogType.SUBTLE)
+
             function_response, instant_response = await skill.execute_tool(
                 function_name, function_args
             )

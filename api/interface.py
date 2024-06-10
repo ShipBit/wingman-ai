@@ -10,6 +10,7 @@ from api.enums import (
     AzureRegion,
     ConversationProvider,
     GroqModel,
+    ImageGenerationProvider,
     MistralModel,
     CustomPropertyType,
     TtsVoiceGender,
@@ -352,6 +353,7 @@ class FeaturesConfig(BaseModel):
     conversation_provider: ConversationProvider
     summarize_provider: SummarizeProvider
     remember_messages: Optional[int] = None
+    image_generation_provider: ImageGenerationProvider
 
 
 class CommandKeyboardConfig(BaseModel):
