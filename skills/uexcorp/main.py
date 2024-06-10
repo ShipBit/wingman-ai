@@ -386,13 +386,16 @@ class UEXCorp(Skill):
                         planet_codes.append(planet["code"])
 
                 for terminal in self.terminals:
-                    if (
-                        terminal["id_space_station"]
-                        and len(terminal["nickname"].split("-")) == 2
-                        and terminal["nickname"].split("-")[0] in planet_codes
-                        and re.match(r"^L\d+$", terminal["nickname"].split("-")[1])
-                    ):
-                        terminal["id_planet"] = ""
+                    if terminal["id_space_station"]:
+                        parts = terminal["nickname"].split(" ")
+                        for part in parts:
+                            if (
+                                len(part.split("-")) == 2
+                                and part.split("-")[0] in planet_codes
+                                and re.match(r"^L\d+$", part.split("-")[1])
+                            ):
+                                terminal["id_planet"] = ""
+                                break
 
             if load_purchase_and_rental:
                 await self._load_purchase_and_rental()
