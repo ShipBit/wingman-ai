@@ -54,7 +54,7 @@ class UEXCorp(Skill):
 
         # init of config options
         self.uexcorp_api_url: str = None
-        self.uexcorp_api_key: str = None
+        # self.uexcorp_api_key: str = None
         self.uexcorp_api_timeout: int = None
         self.uexcorp_api_timeout_retries: int = None
         self.uexcorp_cache: bool = None
@@ -225,9 +225,9 @@ class UEXCorp(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        self.uexcorp_api_key = await self.retrieve_secret(
-            "uexcorp", errors, "You can create your own API key here: https://uexcorp.space/api/apps/"
-        )
+        # self.uexcorp_api_key = await self.retrieve_secret(
+        #     "uexcorp", errors, "You can create your own API key here: https://uexcorp.space/api/apps/"
+        # )
         self.uexcorp_api_url = self.retrieve_custom_property_value(
             "uexcorp_api_url", errors
         )
@@ -386,13 +386,16 @@ class UEXCorp(Skill):
                         planet_codes.append(planet["code"])
 
                 for terminal in self.terminals:
-                    if (
-                        terminal["id_space_station"]
-                        and len(terminal["nickname"].split("-")) == 2
-                        and terminal["nickname"].split("-")[0] in planet_codes
-                        and re.match(r"^L\d+$", terminal["nickname"].split("-")[1])
-                    ):
-                        terminal["id_planet"] = ""
+                    if terminal["id_space_station"]:
+                        parts = terminal["nickname"].split(" ")
+                        for part in parts:
+                            if (
+                                len(part.split("-")) == 2
+                                and part.split("-")[0] in planet_codes
+                                and re.match(r"^L\d+$", part.split("-")[1])
+                            ):
+                                terminal["id_planet"] = ""
+                                break
 
             if load_purchase_and_rental:
                 await self._load_purchase_and_rental()
@@ -727,6 +730,7 @@ class UEXCorp(Skill):
         Returns:
             dict: The header dictionary with the API key.
         """
+        return {} # no header needed anymore for currently used endpoints
         key = self.uexcorp_api_key
         return {"Authorization": f"Bearer {key}"}
 
@@ -1589,7 +1593,7 @@ class UEXCorp(Skill):
             return formating + json.dumps(output)
 
     async def _get_converted_terminal_for_output(
-        self, terminal: dict[str, any]
+        self, terminal: dict[str, any], allow_lore: bool = True
     ) -> dict[str, any]:
         """
         Converts a terminal dictionary to a dictionary that can be used as output.
@@ -1600,7 +1604,8 @@ class UEXCorp(Skill):
         Returns:
             dict[str, any]: The converted terminal dictionary.
         """
-        checksum = f"terminal--{terminal['id']}"
+        lore = allow_lore and self.uexcorp_add_lore
+        checksum = f"terminal--{terminal['id']}--{lore}"
         if checksum in self.cache["readable_objects"]:
             return self.cache["readable_objects"][checksum]
 
@@ -1658,7 +1663,7 @@ class UEXCorp(Skill):
             if output.get(key) is None:
                 output.pop(key, None)
 
-        if self.uexcorp_add_lore:
+        if lore:
             output["background_information"] = await self._fetch_lore(self._format_terminal_name(terminal))
 
         self.cache["readable_objects"][checksum] = output
@@ -2120,10 +2125,8 @@ class UEXCorp(Skill):
 
         for sellprice, terminals in selloptions.items():
             messages.append(f"{sellprice} aUEC:")
-            messages.extend(
-                (await self._get_terminal_route_description(terminal))
-                for terminal in terminals
-            )
+            for terminal in terminals:
+                messages.append(await self._get_terminal_route_description(terminal))
             messages.append("\n")
 
         self._log("\n".join(messages), True)
@@ -2213,10 +2216,7 @@ class UEXCorp(Skill):
         ]
         for buyprice, terminals in buyoptions.items():
             messages.append(f"{buyprice} aUEC:")
-            messages.extend(
-                (await self._get_terminal_route_description(terminal))
-                for terminal in terminals
-            )
+            messages.append(await self._get_terminal_route_description(terminal))
             messages.append("\n")
 
         self._log("\n".join(messages), True)
@@ -2456,7 +2456,7 @@ class UEXCorp(Skill):
         if len(trading_routes) > 0:
             additional_answer = ""
             if len(trading_routes) < maximal_number_of_routes:
-                additional_answer += f" There are only {len(trading_routes)} with different commodities available. "
+                additional_answer += f" There are only {len(trading_routes)} routes available."
             else:
                 additional_answer += f" There are {len(trading_routes)} routes available and these are the best {maximal_number_of_routes} ones."
 
@@ -2490,6 +2490,7 @@ class UEXCorp(Skill):
                 trading_route["buy"] = f"{trading_route['buy']} aUEC"
                 trading_route["sell"] = f"{trading_route['sell']} aUEC"
                 trading_route["cargo"] = f"{trading_route['cargo']} SCU"
+                trading_route["additional_info"] = trading_route["additional_info"]
 
             message = (
                 "Possible commodities with their profit. Just give basic overview at first.\n"
@@ -2581,6 +2582,7 @@ class UEXCorp(Skill):
             "cargo": 0,
             "buy": 0,
             "sell": 0,
+            "additional_info": "",
         }
 
         # apply trade port blacklist
@@ -2710,12 +2712,22 @@ class UEXCorp(Skill):
                                 )
                             cargo_by_space = cargo_space
                             if self.uexcorp_use_estimated_availability:
-                                cargo_by_availability = min(commodity["scu_expected"] or 0, temp_price["scu_expected"] or 0)
+                                cargo_by_availability_sell = temp_price["scu_expected"] or 0
+                                cargo_by_availability_buy = commodity["scu_expected"] or 0
                             else:
-                                cargo_by_availability = cargo_by_space
+                                cargo_by_availability_sell = cargo_by_space
+                                cargo_by_availability_buy = cargo_by_space
 
-                            cargo = min(cargo_by_money, cargo_by_space, cargo_by_availability)
+                            cargo = min(cargo_by_money, cargo_by_space, cargo_by_availability_sell, cargo_by_availability_buy)
                             if cargo >= 1:
+                                info = ""
+                                if min(cargo_by_money, cargo_by_space) > min(cargo_by_availability_buy, cargo_by_availability_sell):
+                                    if cargo_by_availability_buy < cargo_by_availability_sell:
+                                        info = f"Please mention to user: SCU count limited to {min(cargo_by_availability_buy, cargo_by_availability_sell)} (instead of {min(cargo_by_money, cargo_by_space)}) by estimated availability at buy location."
+                                    elif cargo_by_availability_buy > cargo_by_availability_sell:
+                                        info = f"Please mention to user: SCU count limited to {min(cargo_by_availability_buy, cargo_by_availability_sell)} (instead of {min(cargo_by_money, cargo_by_space)}) by estimated availability at sell location."
+                                    else:
+                                        info = f"Please mention to user: SCU count limited to {min(cargo_by_availability_buy, cargo_by_availability_sell)} (instead of {min(cargo_by_money, cargo_by_space)}) by estimated availability at sell and buy location."
                                 profit = round(
                                     cargo
                                     * (price["price_sell"] - commodity["price_buy"])
@@ -2728,6 +2740,7 @@ class UEXCorp(Skill):
                                     best_route["cargo"] = cargo
                                     best_route["buy"] = commodity["price_buy"] * cargo
                                     best_route["sell"] = price["price_sell"] * cargo
+                                    best_route["additional_info"] = info
                                 else:
                                     if (
                                         profit == best_route["profit"]
@@ -2847,7 +2860,7 @@ class UEXCorp(Skill):
         Returns:
             str: The description of the terminal route.
         """
-        terminal = await self._get_converted_terminal_for_output(terminal)
+        terminal = await self._get_converted_terminal_for_output(terminal, False)
         keys = [
             ("star_system", "Star-System"),
             ("planet", "Planet"),
