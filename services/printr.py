@@ -52,6 +52,7 @@ class Printr(WebSocketUser):
         source_name: str = "",
         command_tag: CommandTag = None,
         skill_name: str = "",
+        additional_data: dict = None,
     ):
         if self._connection_manager is None:
             raise ValueError("connection_manager has not been set.")
@@ -69,6 +70,7 @@ class Printr(WebSocketUser):
                     source_name=source_name,
                     tag=command_tag,
                     skill_name=skill_name,
+                    additional_data=additional_data,
                 )
             )
 
@@ -81,6 +83,7 @@ class Printr(WebSocketUser):
         toast: ToastType = None,
         server_only=False,
         command_tag: CommandTag = None,
+        additional_data: dict = None,
     ):
         # print to server (terminal)
         self.print_colored(text, color=self.get_terminal_color(color))
@@ -95,6 +98,7 @@ class Printr(WebSocketUser):
                     source=source,
                     source_name=source_name,
                     command_tag=command_tag,
+                    additional_data=additional_data,
                 )
             )
 
@@ -108,6 +112,7 @@ class Printr(WebSocketUser):
         server_only=False,
         command_tag: CommandTag = None,
         skill_name: str = "",
+        additional_data: dict = None,
     ):
         # print to server (terminal)
         self.print_colored(text, color=self.get_terminal_color(color))
@@ -121,6 +126,7 @@ class Printr(WebSocketUser):
                 source_name=source_name,
                 command_tag=command_tag,
                 skill_name=skill_name,
+                additional_data=additional_data,
             )
 
     def toast(self, text: str):

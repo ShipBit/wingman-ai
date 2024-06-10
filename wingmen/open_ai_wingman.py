@@ -912,6 +912,9 @@ class OpenAiWingman(Wingman):
         # Go through the skills and check if the function name matches any of the tools
         if function_name in self.tool_skills:
             skill = self.tool_skills[function_name]
+
+            await printr.print_async(f"Skill processing: {skill.name} ...", LogType.SUBTLE)
+
             function_response, instant_response = await skill.execute_tool(
                 function_name, function_args
             )
