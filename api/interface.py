@@ -398,6 +398,9 @@ class CommandJoystickConfig(BaseModel):
     button: Optional[int] = None
     """The joystick button to press. Optional."""
 
+    name: Optional[str] = None
+    """The joystick name to use. Optional."""
+
     guid: Optional[str] = None
     """The joystick GUID to use. Optional."""
 

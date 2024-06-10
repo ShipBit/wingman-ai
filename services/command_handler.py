@@ -156,7 +156,7 @@ class CommandHandler:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                elif event.type == pygame.JOYBUTTONDOWN:
+                elif event.type == pygame.JOYBUTTONUP:
                     print("Button Pressed: ", event.button)
                     # Get guid of joystick with instance id
                     joystick_origin = pygame.joystick.Joystick(event.joy)
@@ -264,6 +264,7 @@ class CommandHandler:
                 joystick_config = CommandActionConfig()
                 joystick_config.joystick = CommandJoystickConfig()
                 joystick_config.joystick.button = recorded_keys[0]["button"]
+                joystick_config.joystick.name = recorded_keys[0]["name"]
                 joystick_config.joystick.guid = recorded_keys[0]["guid"]
                 actions.append(joystick_config)
 
