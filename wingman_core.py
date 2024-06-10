@@ -355,6 +355,7 @@ class WingmanCore(WebSocketUser):
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
         # devices: [output_device, input_device]
         sd.default.device = devices
+        self.audio_recorder.valid_mic = True # this allows a new error message
         self.audio_recorder.update_input_stream()
 
     async def set_voice_activation(self, is_enabled: bool):
