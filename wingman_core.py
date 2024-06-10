@@ -294,7 +294,7 @@ class WingmanCore(WebSocketUser):
             key is not None
             and self.active_recording["key"] == key.name
             or self.active_recording["key"] == mouse_button
-            or self.active_recording["key"] == f"{joystick_config.guid}{joystick_config.button}"
+            or (joystick_config and self.active_recording["key"] == f"{joystick_config.guid}{joystick_config.button}")
         ):
             wingman = self.active_recording["wingman"]
             recorded_audio_wav = self.audio_recorder.stop_recording(
