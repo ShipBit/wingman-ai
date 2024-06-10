@@ -73,7 +73,6 @@ class OpenAiWingman(Wingman):
         self.last_gpt_call = None
 
         # generated addional content
-        self.use_instant_responses = True # TODO: option to enable/disable in GUI/config
         self.instant_responses = []
 
         self.messages = []
@@ -187,7 +186,7 @@ class OpenAiWingman(Wingman):
         return False
 
     async def prepare(self):
-        if self.use_instant_responses:
+        if self.config.features.use_generic_instant_responses:
             self.threaded_execution(self._generate_instant_responses)
 
     async def prepare_skill(self, skill: Skill):
