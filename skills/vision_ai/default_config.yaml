@@ -24,3 +24,9 @@ custom_properties:
     property_type: number
     required: true
     value: 1
+  - hint: Weather to show screenshots in terminal or not
+    id: show_screenshots_in_terminal
+    name: Show screenshots in terminal
+    property_type: boolean
+    required: true
+    value: true

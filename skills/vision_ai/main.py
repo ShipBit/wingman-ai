@@ -3,6 +3,7 @@ import io
 from mss import (mss)
 from typing import TYPE_CHECKING
 from PIL import Image
+from api.enums import LogSource, LogType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -10,9 +11,12 @@ from api.interface import (
     WingmanInitializationError,
 )
 from skills.skill_base import Skill
+from services.printr import Printr
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
+
+printr = Printr()
 
 class VisionAI(Skill):
 
@@ -28,11 +32,13 @@ class VisionAI(Skill):
         )
 
         self.monitor_to_capture = 1
+        self.show_screenshots_in_terminal = False
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
         self.monitor_to_capture = self.retrieve_custom_property_value("monitor_to_capture", errors)
+        self.show_screenshots_in_terminal = self.retrieve_custom_property_value("show_screenshots_in_terminal", errors)
 
         return errors
 
@@ -83,6 +89,16 @@ class VisionAI(Skill):
                 resized_image = image.resize((desired_width, new_height))
           
                 png_base64 = self.pil_image_to_base64(resized_image)
+
+                if self.show_screenshots_in_terminal:
+                    await printr.print_async(
+                        "Analyzing this image",
+                        color=LogType.INFO,
+                        source=LogSource.WINGMAN,
+                        source_name=self.wingman.name,
+                        skill_name=self.name,
+                        additional_data={"image": png_base64},
+                    )
 
                 question = parameters.get("question", "What’s in this image?")
 
