@@ -143,11 +143,9 @@ class CommandHandler:
             server_only=True,
         )
 
-        #pygame.joystick.init()
         pygame.init()
         joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
 
-        # Print all names of the all controllers
         for joystick in joysticks:
             joystick.init()
 
@@ -157,7 +155,6 @@ class CommandHandler:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.JOYBUTTONUP:
-                    print("Button Pressed: ", event.button)
                     # Get guid of joystick with instance id
                     joystick_origin = pygame.joystick.Joystick(event.joy)
                     self.recorded_keys.append({
@@ -175,7 +172,6 @@ class CommandHandler:
             self.handle_stop_recording(stop_command, None)
         )
 
-        #pygame.joystick.quit()
         pygame.quit()
 
     async def handle_record_keyboard_actions(

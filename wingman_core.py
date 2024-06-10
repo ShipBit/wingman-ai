@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import threading
+import pygame
 from typing import Optional
 from fastapi import APIRouter, File, UploadFile
 import sounddevice as sd
@@ -169,12 +170,52 @@ class WingmanCore(WebSocketUser):
     def is_mouse_configured(self, config: Config) -> bool:
         return any(config.wingmen[wingman].record_mouse_button for wingman in config.wingmen)
 
+    def is_joystick_configured(self, config: Config) -> bool:
+        return any(config.wingmen[wingman].record_joystick_button for wingman in config.wingmen)
+    
+    async def start_joysticks(self, config: Config):
+        pygame.init()
+
+        # Get all joystick configs
+        joystick_configs = [config.wingmen[wingman].record_joystick_button for wingman in config.wingmen if config.wingmen[wingman].record_joystick_button]
+        
+        joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
+        for joystick in joysticks:
+            if any([joystick.get_guid() == joystick_config.guid for joystick_config in joystick_configs]):
+                joystick.init()
+
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    print("Button Pressed: ", event.button)
+                    # Get guid of joystick with instance id
+                    joystick_origin = pygame.joystick.Joystick(event.joy)
+                    print("Joystick NAME: ", joystick_origin.get_name())
+
+    def init_joystick(self, config: Config):
+        
+        def run_async_process():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.start_joysticks(config))
+            finally:
+                loop.close()
+
+        play_thread = threading.Thread(target=run_async_process)
+        play_thread.start()
+
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         config = config_dir_info.config
 
         # Register hooks
         if self.is_mouse_configured(config):
             mouse.hook(self.on_mouse)
+        if self.is_joystick_configured(config):
+            self.init_joystick(config)
 
         self.tower = Tower(
             config=config, audio_player=self.audio_player
