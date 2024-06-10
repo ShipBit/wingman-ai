@@ -287,7 +287,7 @@ class Timer(Skill):
                 max_json_retries = 1
                 valid_json = False
                 while not valid_json and json_retry < max_json_retries:
-                    completion = await self.gpt_call(messages)
+                    completion = await self.llm_call(messages)
                     data = completion.choices[0].message.content
                     messages.append(
                         {
@@ -374,7 +374,7 @@ class Timer(Skill):
             },
         )
         await self.wingman.add_context(self.wingman.messages)
-        completion = await self.gpt_call(self.wingman.messages)
+        completion = await self.llm_call(self.wingman.messages)
         answer = (
             completion.choices[0].message.content
             if completion and completion.choices

@@ -354,7 +354,7 @@ class VoiceChanger(Skill):
                 'content': self.context_prompt,
             },
         ]
-        completion = await self.gpt_call(messages)
+        completion = await self.llm_call(messages)
         generated_context = completion.choices[0].message.content if completion and completion.choices else ""
 
         self.context_personality_next = generated_context
