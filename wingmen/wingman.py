@@ -75,9 +75,15 @@ class Wingman:
         """Returns the activation or "push-to-talk" key for this Wingman."""
         return self.config.record_key_codes or self.config.record_key
 
-    def get_record_button(self) -> str:
+    def get_record_mouse_button(self) -> str:
         """Returns the activation or "push-to-talk" mouse button for this Wingman."""
         return self.config.record_mouse_button
+    
+    def get_record_joystick_button(self) -> str:
+        """Returns the activation or "push-to-talk" joystick button for this Wingman."""
+        if not self.config.record_joystick_button:
+            return None
+        return f"{self.config.record_joystick_button.guid}{self.config.record_joystick_button.button}"
 
     def start_execution_benchmark(self):
         """Starts the execution benchmark timer."""
