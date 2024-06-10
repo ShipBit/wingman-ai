@@ -123,7 +123,7 @@ class VisionAI(Skill):
                         ],
                     },
                 ]
-                completion = await self.gpt_call(messages)
+                completion = await self.llm_call(messages)
                 answer = (
                     completion.choices[0].message.content
                     if completion and completion.choices
@@ -134,7 +134,15 @@ class VisionAI(Skill):
                     function_response = answer
 
         return function_response, instant_response
-    
+
+    async def is_summarize_needed(self, tool_name: str) -> bool:
+        """Returns whether a tool needs to be summarized."""
+        return True
+
+    async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        """Returns whether a tool probably takes long and a message should be printet in between."""
+        return True
+
     def pil_image_to_base64(self, pil_image):
         """
         Convert a PIL image to a base64 encoded string.

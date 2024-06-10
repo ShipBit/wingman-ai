@@ -1,6 +1,8 @@
 import random
 import time
 import difflib
+import asyncio
+import threading
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
@@ -152,6 +154,9 @@ class Wingman:
                     wingman=self,
                 )
                 if skill:
+                    # init skill methods
+                    skill.threaded_execution = self.threaded_execution
+
                     validation_errors = await skill.validate()
                     errors.extend(validation_errors)
 
@@ -234,7 +239,7 @@ class Wingman:
                 )
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response, skill = (
+            process_result, instant_response, skill, interrupt = (
                 await self._get_response_for_transcript(transcript)
             )
 
@@ -253,7 +258,7 @@ class Wingman:
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
-            await self.play_to_user(str(process_result))
+            await self.play_to_user(str(process_result), not interrupt)
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
@@ -473,3 +478,15 @@ class Wingman:
 
             if action.wait:
                 time.sleep(action.wait)
+
+    def threaded_execution(self, function, *args) -> threading.Thread:
+        """Execute a function in a separate thread."""
+        def start_thread(function, *args):
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            new_loop.run_until_complete(function(*args))
+            new_loop.close()
+
+        thread = threading.Thread(target=start_thread, args=(function, *args))
+        thread.start()
+        return thread
