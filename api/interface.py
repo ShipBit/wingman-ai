@@ -354,7 +354,7 @@ class FeaturesConfig(BaseModel):
     summarize_provider: SummarizeProvider
     remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
-    use_generic_instant_responses: Optional[bool] = True
+    use_generic_instant_responses: bool
 
 
 class CommandKeyboardConfig(BaseModel):

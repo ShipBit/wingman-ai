@@ -43,6 +43,7 @@ features:
   conversation_provider: wingman_pro
   summarize_provider: wingman_pro
   image_generation_provider: wingman_pro
+  use_generic_instant_responses: false
 sound:
   effects: []
   play_beep: false
