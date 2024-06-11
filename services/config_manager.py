@@ -97,7 +97,7 @@ class ConfigManager:
 
         if template:
             for root, _, files in walk(
-                path.join(self.templates_dir, template.directory)
+                path.join(self.templates_dir, CONFIGS_DIR, template.directory)
             ):
                 for filename in files:
                     if filename.endswith("template.yaml"):
@@ -186,9 +186,9 @@ class ConfigManager:
         """Gets all config dirs."""
         return self.__get_dirs_info(self.config_dir)
 
-    def get_template_dirs(self) -> list[ConfigDirInfo]:
+    def get_config_template_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config template dirs."""
-        return self.__get_dirs_info(self.templates_dir)
+        return self.__get_dirs_info(path.join(self.templates_dir, CONFIGS_DIR))
 
     def __get_template_dir(self, config_dir: ConfigDirInfo) -> Optional[ConfigDirInfo]:
         """Gets the template directory for a given config directory."""

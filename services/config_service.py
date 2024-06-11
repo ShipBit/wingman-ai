@@ -1,6 +1,6 @@
 from typing import Optional
 from fastapi import APIRouter
-from api.enums import OpenAiTtsVoice, WingmanProAzureDeployment
+from api.enums import OpenAiTtsVoice
 from api.interface import (
     BasicWingmanConfig,
     ConfigDirInfo,
@@ -11,7 +11,6 @@ from api.interface import (
     WingmanConfig,
     WingmanConfigFileInfo,
 )
-from providers.wingman_pro import WingmanPro
 from services.config_manager import ConfigManager
 from services.module_manager import ModuleManager
 from services.printr import Printr
@@ -154,7 +153,7 @@ class ConfigService:
 
     # GET /configs/templates
     def get_config_templates(self):
-        return self.config_manager.get_template_dirs()
+        return self.config_manager.get_config_template_dirs()
 
     # GET /config
     async def get_config(self, config_name: Optional[str] = "") -> ConfigWithDirInfo:
