@@ -38,17 +38,17 @@ class SoundEffects(Enum):
         ]
     )
 
-    LOW_QUALITY_RADIO = Pedalboard(
+    LOW_QUALITY_RADIO_NORMAL = Pedalboard(
         [
             Distortion(drive_db=30),
             HighpassFilter(cutoff_frequency_hz=800),
             LowpassFilter(cutoff_frequency_hz=3400),
             Resample(target_sample_rate=8000),  # Lower resample rate for tinny effect
             Reverb(room_size=0.1, damping=0.3, wet_level=0.1, dry_level=0.9),
-            Gain(gain_db=-10),
+            Gain(gain_db=-17),
         ]
     )
-    MEDIUM_QUALITY_RADIO = Pedalboard(
+    MEDIUM_QUALITY_RADIO_NORMAL = Pedalboard(
         [
             Distortion(drive_db=15),
             HighpassFilter(cutoff_frequency_hz=300),
@@ -56,17 +56,50 @@ class SoundEffects(Enum):
             Resample(target_sample_rate=16000),
             Reverb(room_size=0.01, damping=0.3, wet_level=0.1, dry_level=0.9),
             Compressor(threshold_db=-18, ratio=4),
+            Gain(gain_db=4),
         ]
     )
-    HIGH_END_RADIO = Pedalboard(
+    HIGH_END_RADIO_NORMAL = Pedalboard(
         [
             HighpassFilter(cutoff_frequency_hz=100),
             LowpassFilter(cutoff_frequency_hz=8000),  # Adjust cutoff to avoid conflicts
             Compressor(threshold_db=-10, ratio=2),
             Reverb(room_size=0.001, damping=0.3, wet_level=0.1, dry_level=0.9),
             Resample(target_sample_rate=44100),
+            Gain(gain_db=2),
         ]
     )
+    LOW_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
+        [
+            Distortion(drive_db=30),
+            HighpassFilter(cutoff_frequency_hz=800),
+            LowpassFilter(cutoff_frequency_hz=3400),
+            Resample(target_sample_rate=8000),  # Lower resample rate for tinny effect
+            Reverb(room_size=0.1, damping=0.3, wet_level=0.1, dry_level=0.9),
+            Gain(gain_db=70),
+        ]
+    )
+    MEDIUM_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
+        [
+            Distortion(drive_db=15),
+            HighpassFilter(cutoff_frequency_hz=300),
+            LowpassFilter(cutoff_frequency_hz=5000),
+            Resample(target_sample_rate=16000),
+            Reverb(room_size=0.01, damping=0.3, wet_level=0.1, dry_level=0.9),
+            Compressor(threshold_db=-18, ratio=4),
+            Gain(gain_db=82),
+        ]
+    )
+    HIGH_END_RADIO_GAIN_BOOST = Pedalboard(
+        [
+            HighpassFilter(cutoff_frequency_hz=100),
+            LowpassFilter(cutoff_frequency_hz=8000),  # Adjust cutoff to avoid conflicts
+            Compressor(threshold_db=-10, ratio=2),
+            Reverb(room_size=0.001, damping=0.3, wet_level=0.1, dry_level=0.9),
+            Resample(target_sample_rate=44100),
+            Gain(gain_db=30),
+        ]
+)
 
     INTERIOR_SMALL = Pedalboard(
         [
@@ -111,9 +144,12 @@ def get_sound_effects(config: SoundConfig):
 
     mapping = {
         "AI": SoundEffects.AI.value,
-        "LOW_QUALITY_RADIO": SoundEffects.LOW_QUALITY_RADIO.value,
-        "MEDIUM_QUALITY_RADIO": SoundEffects.MEDIUM_QUALITY_RADIO.value,
-        "HIGH_END_RADIO": SoundEffects.HIGH_END_RADIO.value,
+        "LOW_QUALITY_RADIO_NORMAL": SoundEffects.LOW_QUALITY_RADIO_NORMAL.value,
+        "MEDIUM_QUALITY_RADIO_NORMAL": SoundEffects.MEDIUM_QUALITY_RADIO_NORMAL.value,
+        "HIGH_END_RADIO_NORMAL": SoundEffects.HIGH_END_RADIO_NORMAL.value,
+        "LOW_QUALITY_RADIO_GAIN_BOOST": SoundEffects.LOW_QUALITY_RADIO_GAIN_BOOST.value,
+        "MEDIUM_QUALITY_RADIO_GAIN_BOOST": SoundEffects.MEDIUM_QUALITY_RADIO_GAIN_BOOST.value,
+        "HIGH_END_RADIO_GAIN_BOOST": SoundEffects.HIGH_END_RADIO_GAIN_BOOST.value,
         "INTERIOR_SMALL": SoundEffects.INTERIOR_SMALL.value,
         "INTERIOR_MEDIUM": SoundEffects.INTERIOR_MEDIUM.value,
         "INTERIOR_LARGE": SoundEffects.INTERIOR_LARGE.value,
