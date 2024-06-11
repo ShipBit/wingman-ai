@@ -1,6 +1,6 @@
 import json
 import asyncio
-import pygame
+#import pygame
 from fastapi import WebSocket
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
@@ -51,10 +51,10 @@ class CommandHandler:
                 await self.handle_record_mouse_actions(
                     RecordMouseActionsCommand(**command), websocket
                 )
-            elif command_name == "record_joystick_actions":
-                await self.handle_record_joystick_actions(
-                    RecordJoystickActionsCommand(**command), websocket
-                )
+            # elif command_name == "record_joystick_actions":
+            #     await self.handle_record_joystick_actions(
+            #         RecordJoystickActionsCommand(**command), websocket
+            #     )
             elif command_name == "stop_recording":
                 # Get Enum from string
                 recording_type = KeyboardRecordingType(command["keyboard_recording_type"])
@@ -132,47 +132,47 @@ class CommandHandler:
 
         self.mouse_hook_callback = mouse.hook(_on_mouse_event)
 
-    async def handle_record_joystick_actions(
-        self, command: RecordJoystickActionsCommand, websocket: WebSocket
-    ):
-        await self.printr.print_async(
-            "Recording joystick actions...",
-            toast=ToastType.NORMAL,
-            source=LogSource.SYSTEM,
-            source_name=self.source_name,
-            server_only=True,
-        )
+    # async def handle_record_joystick_actions(
+    #     self, command: RecordJoystickActionsCommand, websocket: WebSocket
+    # ):
+    #     await self.printr.print_async(
+    #         "Recording joystick actions...",
+    #         toast=ToastType.NORMAL,
+    #         source=LogSource.SYSTEM,
+    #         source_name=self.source_name,
+    #         server_only=True,
+    #     )
 
-        pygame.init()
-        joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
+    #     pygame.init()
+    #     joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
 
-        for joystick in joysticks:
-            joystick.init()
+    #     for joystick in joysticks:
+    #         joystick.init()
 
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.JOYBUTTONUP:
-                    # Get guid of joystick with instance id
-                    joystick_origin = pygame.joystick.Joystick(event.joy)
-                    self.recorded_keys.append({
-                        "button": event.button,
-                        "guid": joystick_origin.get_guid(),
-                        "name": joystick_origin.get_name()
-                        })
-                    running = False
+    #     running = True
+    #     while running:
+    #         for event in pygame.event.get():
+    #             if event.type == pygame.QUIT:
+    #                 running = False
+    #             elif event.type == pygame.JOYBUTTONUP:
+    #                 # Get guid of joystick with instance id
+    #                 joystick_origin = pygame.joystick.Joystick(event.joy)
+    #                 self.recorded_keys.append({
+    #                     "button": event.button,
+    #                     "guid": joystick_origin.get_guid(),
+    #                     "name": joystick_origin.get_name()
+    #                     })
+    #                 running = False
 
-        stop_command = StopRecordingCommand(
-            command="stop_recording",
-            recording_device=RecordingDevice.JOYSTICK
-        )
-        WebSocketUser.ensure_async(
-            self.handle_stop_recording(stop_command, None)
-        )
+    #     stop_command = StopRecordingCommand(
+    #         command="stop_recording",
+    #         recording_device=RecordingDevice.JOYSTICK
+    #     )
+    #     WebSocketUser.ensure_async(
+    #         self.handle_stop_recording(stop_command, None)
+    #     )
 
-        pygame.quit()
+    #     pygame.quit()
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
@@ -234,8 +234,8 @@ class CommandHandler:
         if self.mouse_hook_callback:
             mouse.unhook(self.mouse_hook_callback)
             self.mouse_hook_callback = None
-        if command.recording_device == RecordingDevice.JOYSTICK:
-            pygame.quit()
+        # if command.recording_device == RecordingDevice.JOYSTICK:
+        #     pygame.quit()
 
         recorded_keys = self.recorded_keys
         if self.timeout_task:
