@@ -98,7 +98,7 @@ class WingmanPro:
             json=data,
             timeout=self.timeout,
         )
-        if response.status_code == 403:
+        if response.status_code == 401 or response.status_code == 403:
             self.send_unauthorized_error()
             return None
         else:
