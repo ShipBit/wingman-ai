@@ -179,6 +179,7 @@ class AudioPlayer:
         sample_rate=16000,
         channels=1,
         dtype="int16",
+        use_gain_boost=False,
     ):
         buffer = bytearray()
         stream_finished = False
@@ -209,7 +210,9 @@ class AudioPlayer:
                 self.play_beep()
             self.raw_stream.start()
 
-            sound_effects = get_sound_effects(config)
+            sound_effects = get_sound_effects(
+                config=config, use_gain_boost=use_gain_boost
+            )
             audio_buffer = bytearray(buffer_size)
             filled_size = buffer_callback(audio_buffer)
             while filled_size > 0:

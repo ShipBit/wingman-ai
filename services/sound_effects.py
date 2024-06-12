@@ -10,7 +10,6 @@ from pedalboard import (
     Gain,
     Bitcrush,
     Compressor,
-    PitchShift,
     Distortion,
 )
 from api.interface import SoundConfig
@@ -38,7 +37,7 @@ class SoundEffects(Enum):
         ]
     )
 
-    LOW_QUALITY_RADIO_NORMAL = Pedalboard(
+    LOW_QUALITY_RADIO = Pedalboard(
         [
             Distortion(drive_db=30),
             HighpassFilter(cutoff_frequency_hz=800),
@@ -48,7 +47,7 @@ class SoundEffects(Enum):
             Gain(gain_db=-17),
         ]
     )
-    MEDIUM_QUALITY_RADIO_NORMAL = Pedalboard(
+    MEDIUM_QUALITY_RADIO = Pedalboard(
         [
             Distortion(drive_db=15),
             HighpassFilter(cutoff_frequency_hz=300),
@@ -59,7 +58,7 @@ class SoundEffects(Enum):
             Gain(gain_db=4),
         ]
     )
-    HIGH_END_RADIO_NORMAL = Pedalboard(
+    HIGH_END_RADIO = Pedalboard(
         [
             HighpassFilter(cutoff_frequency_hz=100),
             LowpassFilter(cutoff_frequency_hz=8000),  # Adjust cutoff to avoid conflicts
@@ -99,7 +98,7 @@ class SoundEffects(Enum):
             Resample(target_sample_rate=44100),
             Gain(gain_db=30),
         ]
-)
+    )
 
     INTERIOR_SMALL = Pedalboard(
         [
@@ -136,7 +135,7 @@ class SoundEffects(Enum):
     )
 
 
-def get_sound_effects(config: SoundConfig):
+def get_sound_effects(config: SoundConfig, use_gain_boost: bool = False):
     if config is None or not config.effects or len(config.effects) == 0:
         return []
 
@@ -144,9 +143,9 @@ def get_sound_effects(config: SoundConfig):
 
     mapping = {
         "AI": SoundEffects.AI.value,
-        "LOW_QUALITY_RADIO_NORMAL": SoundEffects.LOW_QUALITY_RADIO_NORMAL.value,
-        "MEDIUM_QUALITY_RADIO_NORMAL": SoundEffects.MEDIUM_QUALITY_RADIO_NORMAL.value,
-        "HIGH_END_RADIO_NORMAL": SoundEffects.HIGH_END_RADIO_NORMAL.value,
+        "LOW_QUALITY_RADIO": SoundEffects.LOW_QUALITY_RADIO.value,
+        "MEDIUM_QUALITY_RADIO": SoundEffects.MEDIUM_QUALITY_RADIO.value,
+        "HIGH_END_RADIO": SoundEffects.HIGH_END_RADIO.value,
         "LOW_QUALITY_RADIO_GAIN_BOOST": SoundEffects.LOW_QUALITY_RADIO_GAIN_BOOST.value,
         "MEDIUM_QUALITY_RADIO_GAIN_BOOST": SoundEffects.MEDIUM_QUALITY_RADIO_GAIN_BOOST.value,
         "HIGH_END_RADIO_GAIN_BOOST": SoundEffects.HIGH_END_RADIO_GAIN_BOOST.value,
@@ -157,6 +156,8 @@ def get_sound_effects(config: SoundConfig):
 
     for effect in config.effects:
         effect_name = effect.value
+        if use_gain_boost and f"{effect_name}_GAIN_BOOST" in mapping:
+            effect_name += "_GAIN_BOOST"
         effect = mapping.get(effect_name)
         if effect:
             sound_effects.append(effect)
