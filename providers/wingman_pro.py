@@ -178,6 +178,7 @@ class WingmanPro:
                 buffer_callback=buffer_callback,
                 config=sound_config,
                 wingman_name=wingman_name,
+                use_gain_boost=True,  # "Azure Streaming" low gain workaround
             )
         else:  # non-streaming
             response = requests.post(

@@ -52,15 +52,22 @@ class ElevenLabs:
 
         def notify_playback_finished():
             audio_player.playback_events.unsubscribe("finished", playback_finished)
+
             if sound_config.play_beep:
-                audio_player.play_beep()
+                audio_player.play_wav("beep.wav")
+            elif sound_config.play_beep_apollo:
+                audio_player.play_wav("Apollo_Beep.wav")
+
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_finished(wingman_name)
             )
 
         def notify_playback_started():
             if sound_config.play_beep:
-                audio_player.play_beep()
+                audio_player.play_wav("beep.wav")
+            elif sound_config.play_beep_apollo:
+                audio_player.play_wav("Apollo_Beep.wav")
+
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_started(wingman_name)
             )

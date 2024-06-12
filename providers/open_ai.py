@@ -285,6 +285,7 @@ class OpenAiAzure(BaseOpenAi):
                     buffer_callback,
                     sound_config,
                     wingman_name=wingman_name,
+                    use_gain_boost=True,  # "Azure Streaming" low gain workaround
                 )
             else:
                 await audio_player.play_with_effects(
