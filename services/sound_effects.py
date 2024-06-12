@@ -48,7 +48,7 @@ class SoundEffects(Enum):
         ]
     )
 
-    LOW_QUALITY_RADIO_NORMAL = Pedalboard(
+    LOW_QUALITY_RADIO = Pedalboard(
         [
             Distortion(drive_db=30),
             HighpassFilter(cutoff_frequency_hz=800),
@@ -58,7 +58,7 @@ class SoundEffects(Enum):
             Gain(gain_db=-17),
         ]
     )
-    MEDIUM_QUALITY_RADIO_NORMAL = Pedalboard(
+    MEDIUM_QUALITY_RADIO = Pedalboard(
         [
             Distortion(drive_db=15),
             HighpassFilter(cutoff_frequency_hz=300),
@@ -69,7 +69,7 @@ class SoundEffects(Enum):
             Gain(gain_db=4),
         ]
     )
-    HIGH_END_RADIO_NORMAL = Pedalboard(
+    HIGH_END_RADIO = Pedalboard(
         [
             HighpassFilter(cutoff_frequency_hz=100),
             LowpassFilter(cutoff_frequency_hz=8000),  # Adjust cutoff to avoid conflicts
