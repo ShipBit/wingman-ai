@@ -30,7 +30,7 @@ prompts:
 record_key: delete
 sound:
   effects: [AI]
-  play_beep: True
+  play_beep_apollo: true
 openai:
   tts_voice: onyx
 commands:
