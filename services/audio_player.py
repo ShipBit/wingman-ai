@@ -91,7 +91,9 @@ class AudioPlayer:
             audio = sound_effect(audio, sample_rate)
 
         if config.play_beep:
-            audio = self._add_beep_effect(audio, sample_rate)
+            audio = self._add_wav_effect(audio, sample_rate, "beep.wav")
+        elif config.play_beep_apollo:
+            audio = self._add_wav_effect(audio, sample_rate, "Apollo_Beep.wav")
 
         channels = audio.shape[1] if audio.ndim > 1 else 1
 
@@ -127,10 +129,10 @@ class AudioPlayer:
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
 
-    def play_beep(self):
+    def play_wav(self, audio_sample_file: str):
         bundle_dir = path.abspath(path.dirname(__file__))
         beep_audio, beep_sample_rate = self.get_audio_from_file(
-            path.join(bundle_dir, "../audio_samples/beep.wav")
+            path.join(bundle_dir, f"../audio_samples/{audio_sample_file}")
         )
         self.start_playback(beep_audio, beep_sample_rate, 1, None)
 
@@ -142,10 +144,12 @@ class AudioPlayer:
         audio, sample_rate = sf.read(io.BytesIO(stream), dtype="float32")
         return audio, sample_rate
 
-    def _add_beep_effect(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
+    def _add_wav_effect(
+        self, audio: np.ndarray, sample_rate: int, audio_sample_file: str
+    ) -> np.ndarray:
         bundle_dir = path.abspath(path.dirname(__file__))
         beep_audio, beep_sample_rate = self.get_audio_from_file(
-            path.join(bundle_dir, "../audio_samples/beep.wav")
+            path.join(bundle_dir, f"../audio_samples/{audio_sample_file}")
         )
 
         # Resample the beep sound if necessary to match the sample rate of 'audio'
@@ -179,6 +183,7 @@ class AudioPlayer:
         sample_rate=16000,
         channels=1,
         dtype="int16",
+        use_gain_boost=False,
     ):
         buffer = bytearray()
         stream_finished = False
@@ -206,10 +211,15 @@ class AudioPlayer:
             await self.notify_playback_started(wingman_name)
 
             if config.play_beep:
-                self.play_beep()
+                self.play_wav("beep.wav")
+            elif config.play_beep_apollo:
+                self.play_wav("Apollo_Beep.wav")
+
             self.raw_stream.start()
 
-            sound_effects = get_sound_effects(config)
+            sound_effects = get_sound_effects(
+                config=config, use_gain_boost=use_gain_boost
+            )
             audio_buffer = bytearray(buffer_size)
             filled_size = buffer_callback(audio_buffer)
             while filled_size > 0:
@@ -234,6 +244,9 @@ class AudioPlayer:
                 sd.sleep(100)
 
             if config.play_beep:
-                self.play_beep()
+                self.play_wav("beep.wav")
+            elif config.play_beep_apollo:
+                self.play_wav("Apollo_Beep.wav")
+
             self.is_playing = False
             await self.notify_playback_finished(wingman_name)

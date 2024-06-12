@@ -98,7 +98,7 @@ class WingmanPro:
             json=data,
             timeout=self.timeout,
         )
-        if response.status_code == 403:
+        if response.status_code == 401 or response.status_code == 403:
             self.send_unauthorized_error()
             return None
         else:
@@ -178,6 +178,7 @@ class WingmanPro:
                 buffer_callback=buffer_callback,
                 config=sound_config,
                 wingman_name=wingman_name,
+                use_gain_boost=True,  # "Azure Streaming" low gain workaround
             )
         else:  # non-streaming
             response = requests.post(

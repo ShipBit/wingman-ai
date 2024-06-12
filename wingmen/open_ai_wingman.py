@@ -187,6 +187,11 @@ class OpenAiWingman(Wingman):
 
     async def prepare(self):
         if self.config.features.use_generic_instant_responses:
+            printr.print(
+                "Generating AI instant responses...",
+                color=LogType.WARNING,
+                server_only=True,
+            )
             self.threaded_execution(self._generate_instant_responses)
 
     async def prepare_skill(self, skill: Skill):
@@ -295,7 +300,9 @@ class OpenAiWingman(Wingman):
         """Generates general instant responses based on given context."""
         context = await self.get_context()
         messages = [
-            {"role": "system", "content": """
+            {
+                "role": "system",
+                "content": """
                 Generate a list in JSON format of at least 20 short direct text responses.
                 Make sure the response only contains the JSON, no additional text.
                 They must fit the described character in the given context by the user.
@@ -305,11 +312,11 @@ class OpenAiWingman(Wingman):
                 Good examples:
                     - "Processing..."
                     - "Stand by..."
-             
+
                 Bad examples:
                     - "Generating route..." (too specific)
                     - "I'm sorry, I can't do that." (too negative)
-             
+
                 Response example:
                 [
                     "OK",
@@ -317,7 +324,8 @@ class OpenAiWingman(Wingman):
                     "Roger that!",
                     "Stand by..."
                 ]
-            """},
+            """,
+            },
             {"role": "user", "content": context},
         ]
         completion = await self.actual_llm_call(messages)
@@ -336,7 +344,12 @@ class OpenAiWingman(Wingman):
                             self.instant_responses.append(str(response))
                 except json.JSONDecodeError:
                     messages.append(completion.choices[0].message)
-                    messages.append({"role": "user", "content": "It was tried to handle the response in its entierty as a JSON string. Fix response to be a valid JSON, it was not convertable."})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "It was tried to handle the response in its entierty as a JSON string. Fix response to be a valid JSON, it was not convertable.",
+                        }
+                    )
                     if retry_count <= retry_limit:
                         completion = await self.actual_llm_call(messages)
                     retry_count += 1
@@ -425,8 +438,10 @@ class OpenAiWingman(Wingman):
         response_message, tool_calls = await self._process_completion(completion)
 
         # add message and dummy tool responses to conversation history
-        is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(response_message, tool_calls)
-        interrupt = True # initial answer should be awaited, if its not there, current audio should be interrupted
+        is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
+            response_message, tool_calls
+        )
+        interrupt = True  # initial answer should be awaited, if its not there, current audio should be interrupted
 
         if tool_calls:
             if is_waiting_response_needed:
@@ -488,11 +503,11 @@ class OpenAiWingman(Wingman):
 
                 # try to resolve function name to a command name
                 if (len(function_args) == 0 and self.get_command(function_name)) or (
-                        len(function_args) == 1
-                        and "command_name" in function_args
-                        and self.get_command(function_args["command_name"])
-                        and function_name == function_args["command_name"]
-                    ):
+                    len(function_args) == 1
+                    and "command_name" in function_args
+                    and self.get_command(function_args["command_name"])
+                    and function_name == function_args["command_name"]
+                ):
                     function_args["command_name"] = function_name
                     function_name = "execute_command"
 
@@ -748,7 +763,10 @@ class OpenAiWingman(Wingman):
             if len(responses) == len(commands):
                 # clear duplicates
                 responses = list(dict.fromkeys(responses))
-                responses = [response + "." if not response.endswith(".") else response for response in responses]
+                responses = [
+                    response + "." if not response.endswith(".") else response
+                    for response in responses
+                ]
                 return " ".join(responses), True
             return None, True
         return None, False
@@ -776,7 +794,7 @@ class OpenAiWingman(Wingman):
 
         if self.image_generation_provider == ImageGenerationProvider.WINGMAN_PRO:
             return await self.wingman_pro.generate_image(text)
-    
+
         return ""
 
     async def actual_llm_call(self, messages, tools: list[dict] = None):
@@ -1038,7 +1056,9 @@ class OpenAiWingman(Wingman):
         if function_name in self.tool_skills:
             skill = self.tool_skills[function_name]
 
-            await printr.print_async(f"Skill processing: {skill.name} ...", LogType.SUBTLE)
+            await printr.print_async(
+                f"Skill processing: {skill.name} ...", LogType.SUBTLE
+            )
 
             function_response, instant_response = await skill.execute_tool(
                 function_name, function_args

@@ -316,7 +316,10 @@ class WingmanProSettings(BaseModel):
 
 class SoundConfig(BaseModel):
     play_beep: bool
-    """adds a beep/Quindar sound before and after the wingman talks"""
+    """adds a Beep/Quindar sound before and after the wingman talks"""
+
+    play_beep_apollo: bool
+    """adds a Apollo Beep sound before and after the wingman talks"""
 
     effects: list[SoundEffect]
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
@@ -354,7 +357,7 @@ class FeaturesConfig(BaseModel):
     summarize_provider: SummarizeProvider
     remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
-    use_generic_instant_responses: Optional[bool] = True
+    use_generic_instant_responses: bool
 
 
 class CommandKeyboardConfig(BaseModel):
