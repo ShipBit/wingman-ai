@@ -70,10 +70,6 @@ class AudioPlayer:
                     current_chunk, (0, required_length - len(current_chunk)), "constant"
                 )
 
-            print(
-                f"[DEBUG] Playhead: {playhead}, Frames: {frames}, Channels: {channels}, Outdata length: {len(outdata)}, Current chunk length: {len(current_chunk)}"
-            )
-
             if outdata.dtype == np.float32 or outdata.dtype == np.float64:
                 outdata[:required_length] = current_chunk.astype(outdata.dtype).reshape(
                     outdata.shape
@@ -367,16 +363,7 @@ class AudioPlayer:
                         data_chunk + mix_chunk[: len(data_chunk)] * amplitude_factor
                     )
 
-                print(
-                    f"[DEBUG] Read buffer: {len(data_chunk)} elements, Frames: {frames}, Channels: {channels}"
-                )
-
                 data_chunk = data_chunk.flatten()
-
-                print(
-                    f"[DEBUG] Outdata length: {len(outdata)}, Data chunk length: {len(data_chunk)}"
-                )
-
                 data_chunk_bytes = data_chunk.astype(dtype).tobytes()
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
                 buffer = buffer[num_elements * byte_size :]
