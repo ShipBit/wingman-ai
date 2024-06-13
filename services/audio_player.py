@@ -9,7 +9,7 @@ import sounddevice as sd
 from scipy.signal import resample
 from api.interface import SoundConfig
 from services.pub_sub import PubSub
-from services.sound_effects import get_sound_effects
+from services.sound_effects import get_additional_layer_file, get_sound_effects
 
 
 class AudioPlayer:
@@ -74,6 +74,7 @@ class AudioPlayer:
         input_data: bytes | tuple,
         config: SoundConfig,
         wingman_name: str = None,
+        mixed_layer_amp: float = 1.0,
     ):
         if isinstance(input_data, bytes):
             audio, sample_rate = self._get_audio_from_stream(input_data)
@@ -89,6 +90,17 @@ class AudioPlayer:
 
         for sound_effect in sound_effects:
             audio = sound_effect(audio, sample_rate)
+
+        mixed_layer_file = None
+        for effect in config.effects:
+            # currently one one layer file is supported
+            if not mixed_layer_file:
+                mixed_layer_file = get_additional_layer_file(effect)
+
+        if mixed_layer_file:
+            audio = self._mix_in_layer(
+                audio, sample_rate, mixed_layer_file, mixed_layer_amp
+            )
 
         if config.play_beep:
             audio = self._add_wav_effect(audio, sample_rate, "beep.wav")
@@ -174,11 +186,42 @@ class AudioPlayer:
 
         return resampled_audio
 
+    def _mix_in_layer(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        mix_layer_file: str,
+        amp: float = 1.0,
+    ) -> np.ndarray:
+        noise_audio, noise_sample_rate = self.get_audio_from_file(
+            f"../audio_samples/{mix_layer_file}"
+        )
+
+        # Resample the noise if needed
+        if noise_sample_rate != sample_rate:
+            noise_audio = self._resample_audio(
+                noise_audio, noise_sample_rate, sample_rate
+            )
+
+        # Repeat noise to match the length of the audio
+        if len(noise_audio) < len(audio):
+            repeat_count = int(np.ceil(len(audio) / len(noise_audio)))
+            noise_audio = np.tile(noise_audio, (repeat_count, 1))[: len(audio)]
+
+        # Trim noise to fit the audio length exactly
+        noise_audio = noise_audio[: len(audio)]
+
+        # Scale the noise by noise_amp and add to the audio
+        audio_with_noise = audio + amp * noise_audio
+
+        return audio_with_noise
+
     async def stream_with_effects(
         self,
         buffer_callback,
         config: SoundConfig,
         wingman_name: str,
+        mixed_layer_amp: float = 1.0,
         buffer_size=2048,
         sample_rate=16000,
         channels=1,
@@ -188,14 +231,56 @@ class AudioPlayer:
         buffer = bytearray()
         stream_finished = False
         data_received = False
+        noise_pos = 0
+
+        mixed_layer_file = None
+        for effect in config.effects:
+            # currently one one layer file is supported
+            if not mixed_layer_file:
+                mixed_layer_file = get_additional_layer_file(effect)
+
+        if mixed_layer_file:
+            noise_audio, noise_sample_rate = self.get_audio_from_file(mixed_layer_file)
+            if noise_sample_rate != sample_rate:
+                noise_audio = self._resample_audio(
+                    noise_audio, noise_sample_rate, sample_rate
+                )
+            # Ensuring noise audio is stereo if it is supposed to be stereo
+            if channels > 1 and noise_audio.ndim == 1:
+                noise_audio = np.tile(noise_audio[:, None], (1, channels))
+            noise_audio = noise_audio.flatten()
+
+        def get_noise_chunk(length):
+            nonlocal noise_pos, noise_audio
+            chunk = np.zeros(length, dtype=np.float32)
+            remaining = length
+            while remaining > 0:
+                if noise_pos >= len(noise_audio):
+                    noise_pos = 0
+                end_pos = min(len(noise_audio), noise_pos + remaining)
+                chunk[
+                    length - remaining : length - remaining + (end_pos - noise_pos)
+                ] = noise_audio[noise_pos:end_pos]
+                remaining -= end_pos - noise_pos
+                noise_pos = end_pos
+            return chunk
 
         def callback(outdata, frames, time, status):
-            nonlocal buffer, stream_finished, data_received
-
+            nonlocal buffer, stream_finished, data_received, noise_pos
             if data_received and len(buffer) == 0:
                 stream_finished = True
-            outdata[: len(buffer)] = buffer[: len(outdata)]
-            buffer = buffer[len(outdata) :]
+                outdata.fill(0)
+                return
+            if len(buffer) > 0:
+                num_elements = frames * channels
+                data_chunk = np.frombuffer(
+                    buffer[: num_elements * np.dtype(dtype).itemsize], dtype=dtype
+                ).astype(np.float32)
+                if mixed_layer_file:
+                    noise_chunk = get_noise_chunk(len(data_chunk))
+                    data_chunk = data_chunk + noise_chunk * mixed_layer_amp
+                outdata[: frames * channels] = data_chunk.astype(dtype).tobytes()
+                buffer = buffer[num_elements * np.dtype(dtype).itemsize :]
 
         with sd.RawOutputStream(
             samplerate=sample_rate,
@@ -232,11 +317,13 @@ class AudioPlayer:
                         data_in_numpy, sample_rate, reset=False
                     )
 
+                if mixed_layer_file:
+                    noise_chunk = get_noise_chunk(len(data_in_numpy))
+                    data_in_numpy = data_in_numpy + noise_chunk * mixed_layer_amp
+
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(processed_buffer)
-
                 await self.stream_event.publish("audio", processed_buffer)
-
                 filled_size = buffer_callback(audio_buffer)
 
             data_received = True

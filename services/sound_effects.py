@@ -12,6 +12,7 @@ from pedalboard import (
     Compressor,
     Distortion,
 )
+from api.enums import SoundEffect
 from api.interface import SoundConfig
 
 
@@ -142,16 +143,19 @@ def get_sound_effects(config: SoundConfig, use_gain_boost: bool = False):
     sound_effects = []
 
     mapping = {
-        "AI": SoundEffects.AI.value,
-        "LOW_QUALITY_RADIO": SoundEffects.LOW_QUALITY_RADIO.value,
-        "MEDIUM_QUALITY_RADIO": SoundEffects.MEDIUM_QUALITY_RADIO.value,
-        "HIGH_END_RADIO": SoundEffects.HIGH_END_RADIO.value,
-        "LOW_QUALITY_RADIO_GAIN_BOOST": SoundEffects.LOW_QUALITY_RADIO_GAIN_BOOST.value,
-        "MEDIUM_QUALITY_RADIO_GAIN_BOOST": SoundEffects.MEDIUM_QUALITY_RADIO_GAIN_BOOST.value,
-        "HIGH_END_RADIO_GAIN_BOOST": SoundEffects.HIGH_END_RADIO_GAIN_BOOST.value,
-        "INTERIOR_SMALL": SoundEffects.INTERIOR_SMALL.value,
-        "INTERIOR_MEDIUM": SoundEffects.INTERIOR_MEDIUM.value,
-        "INTERIOR_LARGE": SoundEffects.INTERIOR_LARGE.value,
+        SoundEffect.AI: SoundEffects.AI.value,
+        SoundEffect.LOW_QUALITY_RADIO: SoundEffects.LOW_QUALITY_RADIO.value,
+        SoundEffect.MEDIUM_QUALITY_RADIO: SoundEffects.MEDIUM_QUALITY_RADIO.value,
+        SoundEffect.HIGH_END_RADIO: SoundEffects.HIGH_END_RADIO.value,
+        SoundEffect.LOW_QUALITY_RADIO
+        + "_GAIN_BOOST": SoundEffects.LOW_QUALITY_RADIO_GAIN_BOOST.value,
+        SoundEffect.MEDIUM_QUALITY_RADIO
+        + "_GAIN_BOOST": SoundEffects.MEDIUM_QUALITY_RADIO_GAIN_BOOST.value,
+        SoundEffect.HIGH_END_RADIO
+        + "_GAIN_BOOST": SoundEffects.HIGH_END_RADIO_GAIN_BOOST.value,
+        SoundEffect.INTERIOR_SMALL: SoundEffects.INTERIOR_SMALL.value,
+        SoundEffect.INTERIOR_MEDIUM: SoundEffects.INTERIOR_MEDIUM.value,
+        SoundEffect.INTERIOR_LARGE: SoundEffects.INTERIOR_LARGE.value,
     }
 
     for effect in config.effects:
@@ -163,3 +167,11 @@ def get_sound_effects(config: SoundConfig, use_gain_boost: bool = False):
             sound_effects.append(effect)
 
     return sound_effects
+
+
+def get_additional_layer_file(effect: SoundEffect):
+    if effect == SoundEffect.LOW_QUALITY_RADIO:
+        return "low_quality_radio.wav"
+    elif effect == SoundEffect.MEDIUM_QUALITY_RADIO:
+        return "Radio_Static.wav"
+    return None
