@@ -252,9 +252,17 @@ class AudioPlayer:
                 noise_audio, noise_sample_rate, sample_rate
             )
 
-        if noise_audio.ndim == 1 and audio.ndim > 1 and audio.shape[1] > 1:
-            noise_audio = np.tile(noise_audio[:, None], (1, audio.shape[1]))
+        # Ensure both audio and noise_audio have compatible shapes for addition
+        if noise_audio.ndim == 1:
+            noise_audio = noise_audio[:, None]
 
+        if audio.ndim == 1:
+            audio = audio[:, None]
+
+        if noise_audio.shape[1] != audio.shape[1]:
+            noise_audio = np.tile(noise_audio, (1, audio.shape[1]))
+
+        # Ensure noise_audio length matches audio length
         if len(noise_audio) < len(audio):
             repeat_count = int(np.ceil(len(audio) / len(noise_audio)))
             noise_audio = np.tile(noise_audio, (repeat_count, 1))[: len(audio)]
