@@ -5,7 +5,7 @@ from packaging import version
 from api.interface import SystemCore, SystemInfo
 
 LOCAL_VERSION = "1.4.0"
-VERSION_ENDPOINT = "https://shipbit.de/wingman.json"
+VERSION_ENDPOINT = "https://wingman-ai.com/api/version"
 
 
 class SystemManager:
