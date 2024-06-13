@@ -143,19 +143,19 @@ def get_sound_effects(config: SoundConfig, use_gain_boost: bool = False):
     sound_effects = []
 
     mapping = {
-        SoundEffect.AI: SoundEffects.AI.value,
-        SoundEffect.LOW_QUALITY_RADIO: SoundEffects.LOW_QUALITY_RADIO.value,
-        SoundEffect.MEDIUM_QUALITY_RADIO: SoundEffects.MEDIUM_QUALITY_RADIO.value,
-        SoundEffect.HIGH_END_RADIO: SoundEffects.HIGH_END_RADIO.value,
-        SoundEffect.LOW_QUALITY_RADIO
+        SoundEffect.AI.value: SoundEffects.AI.value,
+        SoundEffect.LOW_QUALITY_RADIO.value: SoundEffects.LOW_QUALITY_RADIO.value,
+        SoundEffect.MEDIUM_QUALITY_RADIO.value: SoundEffects.MEDIUM_QUALITY_RADIO.value,
+        SoundEffect.HIGH_END_RADIO.value: SoundEffects.HIGH_END_RADIO.value,
+        SoundEffect.LOW_QUALITY_RADIO.value
         + "_GAIN_BOOST": SoundEffects.LOW_QUALITY_RADIO_GAIN_BOOST.value,
-        SoundEffect.MEDIUM_QUALITY_RADIO
+        SoundEffect.MEDIUM_QUALITY_RADIO.value
         + "_GAIN_BOOST": SoundEffects.MEDIUM_QUALITY_RADIO_GAIN_BOOST.value,
-        SoundEffect.HIGH_END_RADIO
+        SoundEffect.HIGH_END_RADIO.value
         + "_GAIN_BOOST": SoundEffects.HIGH_END_RADIO_GAIN_BOOST.value,
-        SoundEffect.INTERIOR_SMALL: SoundEffects.INTERIOR_SMALL.value,
-        SoundEffect.INTERIOR_MEDIUM: SoundEffects.INTERIOR_MEDIUM.value,
-        SoundEffect.INTERIOR_LARGE: SoundEffects.INTERIOR_LARGE.value,
+        SoundEffect.INTERIOR_SMALL.value: SoundEffects.INTERIOR_SMALL.value,
+        SoundEffect.INTERIOR_MEDIUM.value: SoundEffects.INTERIOR_MEDIUM.value,
+        SoundEffect.INTERIOR_LARGE.value: SoundEffects.INTERIOR_LARGE.value,
     }
 
     for effect in config.effects:
