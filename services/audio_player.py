@@ -218,6 +218,13 @@ class AudioPlayer:
         if beep_sample_rate != sample_rate:
             beep_audio = self._resample_audio(beep_audio, beep_sample_rate, sample_rate)
 
+        # Ensure beep_audio has the same number of channels as 'audio'
+        if beep_audio.ndim == 1 and audio.ndim == 2:
+            beep_audio = np.tile(beep_audio[:, np.newaxis], (1, audio.shape[1]))
+
+        if beep_audio.ndim == 2 and audio.ndim == 1:
+            audio = audio[:, np.newaxis]
+
         # Concatenate the beep sound to the start and end of the audio
         audio_with_beeps = np.concatenate((beep_audio, audio, beep_audio), axis=0)
 
