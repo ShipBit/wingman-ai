@@ -16,6 +16,16 @@ from api.enums import SoundEffect
 from api.interface import SoundConfig
 
 
+def get_azure_workaround_gain_boost(effect: SoundEffect):
+    if effect == SoundEffect.LOW_QUALITY_RADIO:
+        return 70.0
+    elif effect == SoundEffect.MEDIUM_QUALITY_RADIO:
+        return 82.0
+    elif effect == SoundEffect.HIGH_END_RADIO:
+        return 30.0
+    return 0.0
+
+
 # Credits to our community members @JaydiCodes and @Thaendril!
 class SoundEffects(Enum):
     AI = Pedalboard(
@@ -69,6 +79,7 @@ class SoundEffects(Enum):
             Gain(gain_db=2),
         ]
     )
+    # Azure streaming workaround
     LOW_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
         [
             Distortion(drive_db=30),
@@ -76,9 +87,12 @@ class SoundEffects(Enum):
             LowpassFilter(cutoff_frequency_hz=3400),
             Resample(target_sample_rate=8000),  # Lower resample rate for tinny effect
             Reverb(room_size=0.1, damping=0.3, wet_level=0.1, dry_level=0.9),
-            Gain(gain_db=70),
+            Gain(
+                gain_db=get_azure_workaround_gain_boost(SoundEffect.LOW_QUALITY_RADIO)
+            ),
         ]
     )
+    # Azure streaming workaround
     MEDIUM_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
         [
             Distortion(drive_db=15),
@@ -87,9 +101,14 @@ class SoundEffects(Enum):
             Resample(target_sample_rate=16000),
             Reverb(room_size=0.01, damping=0.3, wet_level=0.1, dry_level=0.9),
             Compressor(threshold_db=-18, ratio=4),
-            Gain(gain_db=82),
+            Gain(
+                gain_db=get_azure_workaround_gain_boost(
+                    SoundEffect.MEDIUM_QUALITY_RADIO
+                )
+            ),
         ]
     )
+    # Azure streaming workaround
     HIGH_END_RADIO_GAIN_BOOST = Pedalboard(
         [
             HighpassFilter(cutoff_frequency_hz=100),
@@ -97,7 +116,7 @@ class SoundEffects(Enum):
             Compressor(threshold_db=-10, ratio=2),
             Reverb(room_size=0.001, damping=0.3, wet_level=0.1, dry_level=0.9),
             Resample(target_sample_rate=44100),
-            Gain(gain_db=30),
+            Gain(gain_db=get_azure_workaround_gain_boost(SoundEffect.HIGH_END_RADIO)),
         ]
     )
 

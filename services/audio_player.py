@@ -9,7 +9,11 @@ import sounddevice as sd
 from scipy.signal import resample
 from api.interface import SoundConfig
 from services.pub_sub import PubSub
-from services.sound_effects import get_additional_layer_file, get_sound_effects
+from services.sound_effects import (
+    get_additional_layer_file,
+    get_azure_workaround_gain_boost,
+    get_sound_effects,
+)
 
 
 class AudioPlayer:
@@ -118,7 +122,7 @@ class AudioPlayer:
         input_data: bytes | tuple,
         config: SoundConfig,
         wingman_name: str = None,
-        mixed_layer_amp: float = 0.5,
+        mixed_layer_gain_boost_db: float = -9.0,
     ):
         if isinstance(input_data, bytes):
             audio, sample_rate = self._get_audio_from_stream(input_data)
@@ -137,13 +141,12 @@ class AudioPlayer:
 
         mixed_layer_file = None
         for effect in config.effects:
-            # currently one one layer file is supported
             if not mixed_layer_file:
                 mixed_layer_file = get_additional_layer_file(effect)
 
         if mixed_layer_file:
             audio = self._mix_in_layer(
-                audio, sample_rate, mixed_layer_file, mixed_layer_amp
+                audio, sample_rate, mixed_layer_file, mixed_layer_gain_boost_db
             )
 
         if config.play_beep:
@@ -229,7 +232,11 @@ class AudioPlayer:
         return resampled_audio
 
     def _mix_in_layer(
-        self, audio: np.ndarray, sample_rate: int, mix_layer_file: str, amp: float = 1.0
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        mix_layer_file: str,
+        mix_layer_gain_boost_db: float = 0.0,
     ) -> np.ndarray:
         noise_audio, noise_sample_rate = self.get_audio_from_file(
             path.join(self.sample_dir, mix_layer_file)
@@ -249,7 +256,11 @@ class AudioPlayer:
 
         noise_audio = noise_audio[: len(audio)]
 
-        audio_with_noise = audio + amp * noise_audio
+        # Convert gain boost from dB to amplitude factor
+        amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
+
+        # Apply volume scaling to the mixed-in layer
+        audio_with_noise = audio + amplitude_factor * noise_audio
         return audio_with_noise
 
     async def stream_with_effects(
@@ -257,7 +268,7 @@ class AudioPlayer:
         buffer_callback,
         config: SoundConfig,
         wingman_name: str,
-        mixed_layer_amp: float = 1,
+        mix_layer_gain_boost_db: float = 0.0,
         buffer_size=2048,
         sample_rate=16000,
         channels=1,
@@ -267,45 +278,45 @@ class AudioPlayer:
         buffer = bytearray()
         stream_finished = False
         data_received = False
-        noise_pos = 0
+        mixed_pos = 0
 
-        mixed_layer_file = None
+        mix_layer_file = None
         for effect in config.effects:
-            # currently one one layer file is supported
-            if not mixed_layer_file:
-                mixed_layer_file = get_additional_layer_file(effect)
+            if not mix_layer_file:
+                mix_layer_file = get_additional_layer_file(effect)
+                # if we boost the actual audio, we need to boost the mixed layer as well
+                if use_gain_boost:
+                    mix_layer_gain_boost_db += get_azure_workaround_gain_boost(effect)
 
-        if mixed_layer_file:
+        if mix_layer_file:
             noise_audio, noise_sample_rate = self.get_audio_from_file(
-                path.join(self.sample_dir, mixed_layer_file)
+                path.join(self.sample_dir, mix_layer_file)
             )
             if noise_sample_rate != sample_rate:
                 noise_audio = self._resample_audio(
                     noise_audio, noise_sample_rate, sample_rate
                 )
-            # Ensuring noise audio is stereo if it is supposed to be stereo
             if channels > 1 and noise_audio.ndim == 1:
                 noise_audio = np.tile(noise_audio[:, None], (1, channels))
             noise_audio = noise_audio.flatten()
 
-        def get_noise_chunk(length):
-            nonlocal noise_pos, noise_audio
+        def get_mixed_chunk(length):
+            nonlocal mixed_pos, noise_audio
             chunk = np.zeros(length, dtype=np.float32)
             remaining = length
             while remaining > 0:
-                if noise_pos >= len(noise_audio):
-                    noise_pos = 0
-                end_pos = min(len(noise_audio), noise_pos + remaining)
+                if mixed_pos >= len(noise_audio):
+                    mixed_pos = 0
+                end_pos = min(len(noise_audio), mixed_pos + remaining)
                 chunk[
-                    length - remaining : length - remaining + (end_pos - noise_pos)
-                ] = noise_audio[noise_pos:end_pos]
-                remaining -= end_pos - noise_pos
-                noise_pos = end_pos
+                    length - remaining : length - remaining + (end_pos - mixed_pos)
+                ] = noise_audio[mixed_pos:end_pos]
+                remaining -= end_pos - mixed_pos
+                mixed_pos = end_pos
             return chunk
 
         def callback(outdata, frames, time, status):
-            nonlocal buffer, stream_finished, data_received, noise_pos
-
+            nonlocal buffer, stream_finished, data_received, mixed_pos
             if data_received and len(buffer) == 0:
                 stream_finished = True
                 outdata[:] = bytes(len(outdata))  # Fill the buffer with zeros
@@ -318,26 +329,32 @@ class AudioPlayer:
                     buffer[: num_elements * byte_size], dtype=dtype
                 ).astype(np.float32)
 
-                print(f"[DEBUG] Read buffer: {len(data_chunk)} elements")
-
                 if len(data_chunk) < num_elements:
                     data_chunk = np.pad(
                         data_chunk, (0, num_elements - len(data_chunk)), "constant"
                     )
 
                 if channels > 1 and data_chunk.ndim == 1:
-                    data_chunk = np.tile(data_chunk[:, None], (1, channels))
+                    data_chunk = np.tile(data_chunk[:, None], (1, channels)).flatten()
 
-                data_chunk = data_chunk.flatten()
+                data_chunk = data_chunk[: frames * channels]
 
-                if mixed_layer_file:
-                    noise_chunk = get_noise_chunk(len(data_chunk))
+                if mix_layer_file:
+                    mix_chunk = get_mixed_chunk(len(data_chunk))
+                    # Convert gain boost from dB to amplitude factor
+                    amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
                     data_chunk = (
-                        data_chunk + noise_chunk[: len(data_chunk)] * mixed_layer_amp
+                        data_chunk + mix_chunk[: len(data_chunk)] * amplitude_factor
                     )
 
                 print(
-                    f"[DEBUG] Outdata length: {len(outdata)}, Data chunk length: {len(data_chunk)}, Frames: {frames}, Channels: {channels}"
+                    f"[DEBUG] Read buffer: {len(data_chunk)} elements, Frames: {frames}, Channels: {channels}"
+                )
+
+                data_chunk = data_chunk.flatten()
+
+                print(
+                    f"[DEBUG] Outdata length: {len(outdata)}, Data chunk length: {len(data_chunk)}"
                 )
 
                 data_chunk_bytes = data_chunk.astype(dtype).tobytes()
@@ -379,9 +396,11 @@ class AudioPlayer:
                         data_in_numpy, sample_rate, reset=False
                     )
 
-                if mixed_layer_file:
-                    noise_chunk = get_noise_chunk(len(data_in_numpy))
-                    data_in_numpy = data_in_numpy + noise_chunk * mixed_layer_amp
+                if mix_layer_file:
+                    noise_chunk = get_mixed_chunk(len(data_in_numpy))
+                    # Convert gain boost from dB to amplitude factor
+                    amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
+                    data_in_numpy = data_in_numpy + noise_chunk * amplitude_factor
 
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(processed_buffer)
