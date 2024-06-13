@@ -12,7 +12,18 @@ from pedalboard import (
     Compressor,
     Distortion,
 )
+from api.enums import SoundEffect
 from api.interface import SoundConfig
+
+
+def get_azure_workaround_gain_boost(effect: SoundEffect):
+    if effect == SoundEffect.LOW_QUALITY_RADIO:
+        return 70.0
+    elif effect == SoundEffect.MEDIUM_QUALITY_RADIO:
+        return 82.0
+    elif effect == SoundEffect.HIGH_END_RADIO:
+        return 30.0
+    return 0.0
 
 
 # Credits to our community members @JaydiCodes and @Thaendril!
@@ -68,6 +79,7 @@ class SoundEffects(Enum):
             Gain(gain_db=2),
         ]
     )
+    # Azure streaming workaround
     LOW_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
         [
             Distortion(drive_db=30),
@@ -75,9 +87,12 @@ class SoundEffects(Enum):
             LowpassFilter(cutoff_frequency_hz=3400),
             Resample(target_sample_rate=8000),  # Lower resample rate for tinny effect
             Reverb(room_size=0.1, damping=0.3, wet_level=0.1, dry_level=0.9),
-            Gain(gain_db=70),
+            Gain(
+                gain_db=get_azure_workaround_gain_boost(SoundEffect.LOW_QUALITY_RADIO)
+            ),
         ]
     )
+    # Azure streaming workaround
     MEDIUM_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
         [
             Distortion(drive_db=15),
@@ -86,9 +101,14 @@ class SoundEffects(Enum):
             Resample(target_sample_rate=16000),
             Reverb(room_size=0.01, damping=0.3, wet_level=0.1, dry_level=0.9),
             Compressor(threshold_db=-18, ratio=4),
-            Gain(gain_db=82),
+            Gain(
+                gain_db=get_azure_workaround_gain_boost(
+                    SoundEffect.MEDIUM_QUALITY_RADIO
+                )
+            ),
         ]
     )
+    # Azure streaming workaround
     HIGH_END_RADIO_GAIN_BOOST = Pedalboard(
         [
             HighpassFilter(cutoff_frequency_hz=100),
@@ -96,7 +116,7 @@ class SoundEffects(Enum):
             Compressor(threshold_db=-10, ratio=2),
             Reverb(room_size=0.001, damping=0.3, wet_level=0.1, dry_level=0.9),
             Resample(target_sample_rate=44100),
-            Gain(gain_db=30),
+            Gain(gain_db=get_azure_workaround_gain_boost(SoundEffect.HIGH_END_RADIO)),
         ]
     )
 
@@ -142,16 +162,19 @@ def get_sound_effects(config: SoundConfig, use_gain_boost: bool = False):
     sound_effects = []
 
     mapping = {
-        "AI": SoundEffects.AI.value,
-        "LOW_QUALITY_RADIO": SoundEffects.LOW_QUALITY_RADIO.value,
-        "MEDIUM_QUALITY_RADIO": SoundEffects.MEDIUM_QUALITY_RADIO.value,
-        "HIGH_END_RADIO": SoundEffects.HIGH_END_RADIO.value,
-        "LOW_QUALITY_RADIO_GAIN_BOOST": SoundEffects.LOW_QUALITY_RADIO_GAIN_BOOST.value,
-        "MEDIUM_QUALITY_RADIO_GAIN_BOOST": SoundEffects.MEDIUM_QUALITY_RADIO_GAIN_BOOST.value,
-        "HIGH_END_RADIO_GAIN_BOOST": SoundEffects.HIGH_END_RADIO_GAIN_BOOST.value,
-        "INTERIOR_SMALL": SoundEffects.INTERIOR_SMALL.value,
-        "INTERIOR_MEDIUM": SoundEffects.INTERIOR_MEDIUM.value,
-        "INTERIOR_LARGE": SoundEffects.INTERIOR_LARGE.value,
+        SoundEffect.AI.value: SoundEffects.AI.value,
+        SoundEffect.LOW_QUALITY_RADIO.value: SoundEffects.LOW_QUALITY_RADIO.value,
+        SoundEffect.MEDIUM_QUALITY_RADIO.value: SoundEffects.MEDIUM_QUALITY_RADIO.value,
+        SoundEffect.HIGH_END_RADIO.value: SoundEffects.HIGH_END_RADIO.value,
+        SoundEffect.LOW_QUALITY_RADIO.value
+        + "_GAIN_BOOST": SoundEffects.LOW_QUALITY_RADIO_GAIN_BOOST.value,
+        SoundEffect.MEDIUM_QUALITY_RADIO.value
+        + "_GAIN_BOOST": SoundEffects.MEDIUM_QUALITY_RADIO_GAIN_BOOST.value,
+        SoundEffect.HIGH_END_RADIO.value
+        + "_GAIN_BOOST": SoundEffects.HIGH_END_RADIO_GAIN_BOOST.value,
+        SoundEffect.INTERIOR_SMALL.value: SoundEffects.INTERIOR_SMALL.value,
+        SoundEffect.INTERIOR_MEDIUM.value: SoundEffects.INTERIOR_MEDIUM.value,
+        SoundEffect.INTERIOR_LARGE.value: SoundEffects.INTERIOR_LARGE.value,
     }
 
     for effect in config.effects:
@@ -163,3 +186,11 @@ def get_sound_effects(config: SoundConfig, use_gain_boost: bool = False):
             sound_effects.append(effect)
 
     return sound_effects
+
+
+def get_additional_layer_file(effect: SoundEffect):
+    if effect == SoundEffect.LOW_QUALITY_RADIO:
+        return "low_quality_radio.wav"
+    elif effect == SoundEffect.MEDIUM_QUALITY_RADIO:
+        return "Radio_Static.wav"
+    return None

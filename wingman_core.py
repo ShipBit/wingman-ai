@@ -355,7 +355,7 @@ class WingmanCore(WebSocketUser):
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
         # devices: [output_device, input_device]
         sd.default.device = devices
-        self.audio_recorder.valid_mic = True # this allows a new error message
+        self.audio_recorder.valid_mic = True  # this allows a new error message
         self.audio_recorder.update_input_stream()
 
     async def set_voice_activation(self, is_enabled: bool):
@@ -498,26 +498,21 @@ class WingmanCore(WebSocketUser):
         await self.audio_player.stop_playback()
 
     # POST /ask-wingman-conversation-provider
-    async def ask_wingman_conversation_provider(self, text: str,  wingman_name: str):
+    async def ask_wingman_conversation_provider(self, text: str, wingman_name: str):
         wingman = self.tower.get_wingman_by_name(wingman_name)
 
         if wingman and text:
             if isinstance(wingman, OpenAiWingman):
-                messages = [
-                    {
-                        "role": "user",
-                        "content": text 
-                    }
-                ]
+                messages = [{"role": "user", "content": text}]
 
                 completion = await wingman.actual_llm_call(messages=messages)
 
                 return completion.choices[0].message.content
- 
+
         return None
 
     # POST /generate-image
-    async def generate_image(self, text: str,  wingman_name: str):
+    async def generate_image(self, text: str, wingman_name: str):
         wingman = self.tower.get_wingman_by_name(wingman_name)
 
         if wingman and text:
@@ -574,7 +569,7 @@ class WingmanCore(WebSocketUser):
             play_thread.start()
 
     # POST /reset-conversation-history
-    def reset_conversation_history(self, wingman_name: Optional[str]):
+    def reset_conversation_history(self, wingman_name: Optional[str] = None):
         if wingman_name:
             wingman = self.tower.get_wingman_by_name(wingman_name)
             if wingman:
