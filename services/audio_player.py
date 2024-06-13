@@ -7,6 +7,7 @@ import numpy as np
 import soundfile as sf
 import sounddevice as sd
 from scipy.signal import resample
+from api.enums import SoundEffect
 from api.interface import SoundConfig
 from services.pub_sub import PubSub
 from services.sound_effects import (
@@ -148,6 +149,10 @@ class AudioPlayer:
             audio = self._mix_in_layer(
                 audio, sample_rate, mixed_layer_file, mixed_layer_gain_boost_db
             )
+
+        contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
+        if contains_high_end_radio:
+            audio = self._add_wav_effect(audio, sample_rate, "Radio_Static_Beep.wav")
 
         if config.play_beep:
             audio = self._add_wav_effect(audio, sample_rate, "beep.wav")
@@ -379,6 +384,10 @@ class AudioPlayer:
             elif config.play_beep_apollo:
                 self.play_wav("Apollo_Beep.wav")
 
+            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
+            if contains_high_end_radio:
+                self.play_wav("Radio_Static_Beep.wav")
+
             self.raw_stream.start()
 
             sound_effects = get_sound_effects(
@@ -410,6 +419,10 @@ class AudioPlayer:
             data_received = True
             while not stream_finished:
                 sd.sleep(100)
+
+            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
+            if contains_high_end_radio:
+                self.play_wav("Radio_Static_Beep.wav")
 
             if config.play_beep:
                 self.play_wav("beep.wav")
