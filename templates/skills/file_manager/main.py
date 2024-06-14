@@ -10,11 +10,29 @@ from api.interface import (
 from api.enums import LogType
 from skills.skill_base import Skill
 from services.file import get_writable_dir
+
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
 DEFAULT_MAX_TEXT_SIZE = 10000
-DEFAULT_FILE_EXTENSIONS = ['txt', 'md', 'log', 'yaml', 'py', 'json', 'csv', 'html', 'htm', 'xml', 'ini', 'toml', 'Rmd', 'tex', 'sql']
+DEFAULT_FILE_EXTENSIONS = [
+    "txt",
+    "md",
+    "log",
+    "yaml",
+    "py",
+    "json",
+    "csv",
+    "html",
+    "htm",
+    "xml",
+    "ini",
+    "toml",
+    "Rmd",
+    "tex",
+    "sql",
+]
+
 
 class FileManager(Skill):
 
@@ -32,17 +50,21 @@ class FileManager(Skill):
             wingman=wingman,
         )
         self.allowed_file_extensions = DEFAULT_FILE_EXTENSIONS
-        self.default_file_extension = 'txt'
+        self.default_file_extension = "txt"
         self.max_text_size = DEFAULT_MAX_TEXT_SIZE
         self.default_directory = ""  # Set in validate
         self.allow_overwrite_existing = False
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
-        self.default_directory = self.retrieve_custom_property_value("default_directory", errors)
+        self.default_directory = self.retrieve_custom_property_value(
+            "default_directory", errors
+        )
         if not self.default_directory or self.default_directory == "":
             self.default_directory = self.get_default_directory()
-        self.overwrite_existing = self.retrieve_custom_property_value("allow_overwrite_existing", errors)
+        self.allow_overwrite_existing = self.retrieve_custom_property_value(
+            "allow_overwrite_existing", errors
+        )
         return errors
 
     def get_tools(self) -> list[tuple[str, dict]]:
@@ -126,7 +148,9 @@ class FileManager(Skill):
         ]
         return tools
 
-    async def execute_tool(self, tool_name: str, parameters: dict[str, any]) -> tuple[str, str]:
+    async def execute_tool(
+        self, tool_name: str, parameters: dict[str, any]
+    ) -> tuple[str, str]:
         function_response = "Operation not completed."
         instant_response = ""
 
@@ -143,7 +167,7 @@ class FileManager(Skill):
             if not file_name:
                 function_response = "File name not provided."
             else:
-                file_extension = file_name.split('.')[-1]
+                file_extension = file_name.split(".")[-1]
                 if file_extension not in self.allowed_file_extensions:
                     function_response = f"Unsupported file extension: {file_extension}"
                 else:
@@ -152,13 +176,19 @@ class FileManager(Skill):
                         with open(file_path, "r", encoding="utf-8") as file:
                             file_content = file.read()
                             if len(file_content) > self.max_text_size:
-                                function_response = "File content exceeds the maximum allowed size."
+                                function_response = (
+                                    "File content exceeds the maximum allowed size."
+                                )
                             else:
                                 function_response = f"File content loaded from {file_path}:\n{file_content}"
                     except FileNotFoundError:
-                        function_response = f"File '{file_name}' not found in '{directory}'."
+                        function_response = (
+                            f"File '{file_name}' not found in '{directory}'."
+                        )
                     except Exception as e:
-                        function_response = f"Failed to read file '{file_name}': {str(e)}"
+                        function_response = (
+                            f"Failed to read file '{file_name}': {str(e)}"
+                        )
 
         elif tool_name == "save_text_to_file":
             if self.settings.debug_mode:
@@ -174,13 +204,13 @@ class FileManager(Skill):
             if not file_name or not text_content:
                 function_response = "File name or text content not provided."
             else:
-                file_extension = file_name.split('.')[-1]
+                file_extension = file_name.split(".")[-1]
                 if file_extension not in self.allowed_file_extensions:
                     file_name += f".{self.default_file_extension}"
                 if len(text_content) > self.max_text_size:
                     function_response = "Text content exceeds the maximum allowed size."
                 else:
-                    if file_extension == 'json':
+                    if file_extension == "json":
                         try:
                             json_content = json.loads(text_content)
                             text_content = json.dumps(json_content, indent=4)
@@ -198,7 +228,9 @@ class FileManager(Skill):
                                 file.write(text_content)
                             function_response = f"Text saved to {file_path}."
                         except Exception as e:
-                            function_response = f"Failed to save text to {file_path}: {str(e)}"
+                            function_response = (
+                                f"Failed to save text to {file_path}: {str(e)}"
+                            )
 
         elif tool_name == "create_folder":
             if self.settings.debug_mode:
@@ -216,9 +248,13 @@ class FileManager(Skill):
                 full_path = os.path.join(directory_path, folder_name)
                 try:
                     os.makedirs(full_path, exist_ok=True)
-                    function_response = f"Folder '{folder_name}' created at '{directory_path}'."
+                    function_response = (
+                        f"Folder '{folder_name}' created at '{directory_path}'."
+                    )
                 except Exception as e:
-                    function_response = f"Failed to create folder '{folder_name}': {str(e)}"
+                    function_response = (
+                        f"Failed to create folder '{folder_name}': {str(e)}"
+                    )
 
         if self.settings.debug_mode:
             await self.printr.print_async(
