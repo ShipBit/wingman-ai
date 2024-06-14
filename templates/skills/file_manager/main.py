@@ -9,7 +9,7 @@ from api.interface import (
 )
 from api.enums import LogType
 from skills.skill_base import Skill
-
+from services.file import get_writable_dir
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
@@ -228,12 +228,4 @@ class FileManager(Skill):
         return function_response, instant_response
 
     def get_default_directory(self) -> str:
-        if os.name == 'nt':  # Windows
-            return os.path.join(os.path.expandvars(r"%APPDATA%"), "ShipBit", "WingmanAI")
-        elif os.name == 'posix':
-            if sys.platform == 'darwin':  # macOS
-                return os.path.join(os.path.expanduser("~/Library/Application Support"), "ShipBit", "WingmanAI")
-            else:  # Linux and other Unix-like systems
-                return os.path.join(os.path.expanduser("~/.config"), "ShipBit", "WingmanAI")
-        else:
-            return os.getcwd()  # Fallback to current working directory
+        return get_writable_dir("files")
