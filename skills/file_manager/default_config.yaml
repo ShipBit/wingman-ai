@@ -34,7 +34,7 @@ custom_properties:
     property_type: string
     required: false
     value: ""
-  - hint: Allow WingmanAI FileManager to overwrite existing files. CAUTION - ADVANCED USERS ONLY: Only activate this option if you have backed up existing files.
+  - hint: Allow WingmanAI FileManager to overwrite existing files. CAUTION - ADVANCED USERS ONLY - Only activate this option if you have backed up existing files.
     id: allow_overwrite_existing
     name: Allow overwrite existing files
     property_type: boolean
