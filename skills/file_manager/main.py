@@ -14,7 +14,7 @@ from services.file import get_writable_dir
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
-DEFAULT_MAX_TEXT_SIZE = 10000
+DEFAULT_MAX_TEXT_SIZE = 15000
 DEFAULT_FILE_EXTENSIONS = [
     "txt",
     "md",
@@ -163,8 +163,9 @@ class FileManager(Skill):
                 )
             file_name = parameters.get("file_name")
             directory = parameters.get("directory_path", self.default_directory)
-
-            if not file_name:
+            if directory == "":
+                directory = self.default_directory
+            if not file_name or file_name == "":
                 function_response = "File name not provided."
             else:
                 file_extension = file_name.split(".")[-1]
@@ -200,8 +201,9 @@ class FileManager(Skill):
             file_name = parameters.get("file_name")
             text_content = parameters.get("text_content")
             directory = parameters.get("directory_path", self.default_directory)
-
-            if not file_name or not text_content:
+            if directory == "":
+                directory = self.default_directory
+            if not file_name or not text_content or file_name == "":
                 function_response = "File name or text content not provided."
             else:
                 file_extension = file_name.split(".")[-1]
@@ -241,8 +243,9 @@ class FileManager(Skill):
                 )
             folder_name = parameters.get("folder_name")
             directory_path = parameters.get("directory_path", self.default_directory)
-
-            if not folder_name:
+            if directory_path == "":
+                directory_path = self.default_directory
+            if not folder_name or folder_name == "":
                 function_response = "Folder name not provided."
             else:
                 full_path = os.path.join(directory_path, folder_name)
