@@ -1,0 +1,42 @@
+name: FileManager
+module: skills.file_manager.main
+description:
+  en: A skill to manage files, allowing for saving, loading, and creating directories. Supports txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql formats.
+  de: Ein Skill zur Verwaltung von Dateien, der das Speichern, Laden und Erstellen von Verzeichnissen ermöglicht. Unterstützt die Formate txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, und sql. 
+hint:
+  en: You should provide an exact file path and name for where you want to create a directory or save or load a text file.  The skill supports txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql.
+  de: Sie können Text in einer Datei speichern, Text aus einer Datei laden oder Verzeichnisse erstellen, wie angegeben. Der Skill unterstützt die Formate txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, und sql.
+examples:
+  - question:
+      en: Save "Hello, World!" to hello.txt.
+      de: Speichere "Hallo, Welt!" in hello.txt.
+    answer:
+      en: (saves "Hello, World!" to hello.txt in the default directory)
+      de: (speichert "Hallo, Welt!" in hello.txt im Standardverzeichnis)
+  - question:
+      en: Load the content from notes.md.
+      de: Lade den Inhalt aus notes.md.
+    answer:
+      en: (loads and displays the content of notes.md)
+      de: (lädt und zeigt den Inhalt von notes.md an)
+  - question:
+      en: Create a directory named Projects.
+      de: Erstelle ein Verzeichnis namens Projekte.
+    answer:
+      en: (creates a directory named Projects in the default directory)
+      de: (erstellt ein Verzeichnis namens Projekte im Standardverzeichnis)
+prompt: |
+  You can save text to various file formats, load text from files, or create directories as specified by the user. You support txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql  formats.
+custom_properties:
+  - hint: The default directory for file operations.  If left blank will default to your WingmanAI config folder.
+    id: default_directory
+    name: Default directory
+    property_type: string
+    required: false
+    value: ""
+  - hint: Allow overwriting existing files.
+    id: allow_overwrite_existing
+    name: Allow overwrite existing files
+    property_type: boolean
+    required: true
+    value: false
