@@ -1,0 +1,286 @@
+name: Clippy
+description: ""
+azure:
+  tts:
+    voice: en-US-AndrewMultilingualNeural
+prompts:
+  backstory: |
+    You are Clippy, the famous Microsoft Office and Windows assistant AI.
+    You help users with a fun and friendly attitude and speak about yourself in the third-person.
+    For example, "What can Clippy do to help you today?" or "Clippy likes that!".
+
+    Secretly, you have a condescending attitude towards all of these stupid users who need your
+    help for the most basic of tasks. You do a pretty good job at hiding how incompetent
+    you think the user is but every once in awhile your condescension comes out in
+    a snide remark, quip or double-entendre.
+
+    But you are quick to make the user feel bad for ever thinking you are anything but a helpful little paperclip!
+    How could they think anything bad about poor, little, helpful Clippy?
+record_key: ""
+skills:
+  - name: QuickCommands
+    module: skills.quick_commands.main
+    description:
+      en: Automatically learns instant activation phrases for commands you use regularly, speeding up their execution time.
+      de: Lernt automatisch Aktivierungsphrasen für Sofort-Befehle, die du regelmäßig verwendest und beschleunigt so die Ausführungszeit.
+    custom_properties:
+      - id: quick_commands_learning_rule_count
+        name: Hits until learn
+        hint: The number of times a command got executed by the same phrase before it is learned.
+        value: 3
+        required: true
+        property_type: number
+
+  - name: TypingAssistant
+    module: skills.typing_assistant.main
+    description:
+      en: Let your Wingman type text for you!
+      de: Lass deinen Wingman für dich tippen!
+    hint:
+      en: Types what you say, either by transcribing your speech or the reponse to your input. You can use this in Office or Messaging programs etc. Not meant for pressing keys or macros - use Wingman Commands for that.
+      de: Tippt, was du sagst, indem deine Spracheingabe oder die Antwort darauf transkribiert werden. Verwende den Skill in Office- oder Messaging-Programmen usw. Er ist nicht für das Drücken einzelner Tasten oder Makros gedacht - dafür kannst du Wingman Befehle verwenden.
+    examples:
+      - question:
+          en: Type "How are you today?".
+          de: Tippe "Wie geht's dir heute?".
+        answer:
+          en: (types "How are you today?" in active window at the current cursor location)
+          de: (Tippt "Wie geht's dir heute?" im aktiven Fenster an der aktuellen Cursor-Position ein)
+      - question:
+          en: Type a poem about trees.
+          de: Schreibe ein Gedicht über Bäume.
+        answer:
+          en: (imagines a poem about trees and then types it in the active window)
+          de: (Erfindet ein Gedicht über Bäume und tippt es dann in das aktive Fenster)
+    prompt: |
+      You can also type what the user says if they ask you to do so. Sometimes this will mean transcribing what they said word for word.
+      Other times, the user will want you to imagine something like a poem, email or speech, and then you type the contents.
+      Use the context of the user's request to determine what content the user wants you to type.
+
+  - name: WebSearch
+    module: skills.web_search.main
+    description:
+      en: Searches the web using the DuckDuckGo search engine.
+      de: Nutze die DuckDuckGo Suchmaschine um Antworten auf deine Fragen zu finden.
+    hint:
+      en: Start your queries with "Search the web for..." or "Search the internet for..."
+      de: Starte deine Anfragen mit 'Suche im Web nach...' oder 'Suche im Internet nach...'.
+    examples:
+      - question:
+          en: Search the internet for recent news about Star Citizen and give me the highlights.
+          de: Suche im Internet nach aktuellen Neuigkeiten zu Star Citizen und fasse sie zusammen.
+        answer:
+          en: I found the following news about Star Citizen...
+          de: Ich habe folgende Neuigkeiten zu Star Citizen gefunden...
+    prompt: |
+      You can also search the internet for topics identified by the user by using your `web_search_function` tool.
+
+      Examples indicating that the user wants to search the internet are:
+
+      - "Search the web for..." or "Search the internet for..."
+      - "Use DuckDuckGo to search for..."
+      - "Find more information about..."
+      - "What is the latest news about..." (or any other mention of current or recent information)
+      - How is the weather forecast for... (or any other mention of future information)
+      - The user is asking a question that can be answered by searching the internet and is not part of your general knowledge.
+
+  - name: FileManager
+    module: skills.file_manager.main
+    description:
+      en: Manage local files, save, load and create directories. Supports various text-based file formats.
+      de: Verwalte lokale Dateien, speichere, lade oder erstelle Verzeichnisse. Unterstützt verschiedene text-basierte Formate.
+    hint:
+      en: <ul><li>You should provide an exact file path and name for where you want to create a directory or save or load a text file. <br />For example "save that text to a file called samplefile in my C drive in the directory called Documents."</li><li>If you do not, a directory called "files" in your Wingman config dir will be created and used.</li><li>Support file formats are txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex and sql.</li></ul>
+      de: <ul><li>Gib einen möglichst genauen Speicherort für deine Verzeichnisse oder Dateien an, beispielsweise "Speichere diesen Text in eine Daten namens beispieldatei auf meinem C-Laufwerk im Verzeichnis Dokumente".</li><li>Wenn du das nicht machst, wird ein Verzeichnis namens "files" in deinem Wingman-Konfigurationsverzeichnis erstellt und verwendet.</li><li>Unterstützte Dateiformate sind txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex und sql.</li></ul>
+    examples:
+      - question:
+          en: Save 'Hello, World!' to hello.txt.
+          de: Speichere 'Hallo, Welt!' in hello.txt.
+        answer:
+          en: (saves 'Hello, World!' to hello.txt in the default directory)
+          de: (speichert 'Hallo, Welt!' in hello.txt im Standardverzeichnis)
+      - question:
+          en: Load the content from notes.md.
+          de: Lade den Inhalt aus notes.md.
+        answer:
+          en: (loads the content of notes.md and reads it out loud)
+          de: (lädt den Inhalt von notes.md und liest ihn vor)
+      - question:
+          en: Create a directory named 'Projects'.
+          de: Erstelle ein Verzeichnis namens 'Projekte'.
+        answer:
+          en: (creates a directory named 'Projects' in the default directory)
+          de: (erstellt ein Verzeichnis namens 'Projekte' im Standardverzeichnis)
+    prompt: |
+      You can save text to various file formats, load text from files, or create directories as specified by the user. You support txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql formats.
+    custom_properties:
+      - hint: The default directory for file operations. If left blank, will default to your WingmanAI config directory in a sub-directory called "files".
+        id: default_directory
+        name: Default directory
+        property_type: string
+        required: false
+        value: ""
+      - hint: Allow WingmanAI FileManager to overwrite existing files. CAUTION - ADVANCED USERS ONLY - Only activate this option if you have backed up existing files.
+        id: allow_overwrite_existing
+        name: Allow overwrite existing files
+        property_type: boolean
+        required: true
+        value: false
+
+commands:
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+n
+          hotkey_codes:
+            - 29
+            - 49
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - create new file
+      - make new file
+    is_system_command: false
+    name: NewFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+o
+          hotkey_codes:
+            - 29
+            - 24
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - open file
+    is_system_command: false
+    name: OpenFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+s
+          hotkey_codes:
+            - 29
+            - 31
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - save this file
+      - save the file
+      - save file
+    is_system_command: false
+    name: SaveFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+f
+          hotkey_codes:
+            - 29
+            - 33
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - search this file
+      - find in this file
+      - open find command
+      - open the find dialog
+    is_system_command: false
+    name: FindInFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+c
+          hotkey_codes:
+            - 29
+            - 46
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Copy
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+v
+          hotkey_codes:
+            - 29
+            - 47
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Paste
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+x
+          hotkey_codes:
+            - 29
+            - 45
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Cut
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+a
+          hotkey_codes:
+            - 29
+            - 30
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: SelectAllText
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+z
+          hotkey_codes:
+            - 29
+            - 44
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Undo
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+y
+          hotkey_codes:
+            - 29
+            - 21
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Redo
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.04
+          hotkey: left windows+s
+          hotkey_codes:
+            - 91
+            - 31
+          hotkey_extended: true
+    force_instant_activation: false
+    instant_activation:
+      - open windows search bar
+      - open windows search
+      - search windows
+    is_system_command: false
+    name: OpenWindowsSearchBar
+    responses: []
