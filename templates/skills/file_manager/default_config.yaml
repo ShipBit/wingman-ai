@@ -4,8 +4,8 @@ description:
   en: A skill to manage files, allowing for saving, loading, and creating directories. Supports txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql formats.
   de: Ein Skill zur Verwaltung von Dateien, der das Speichern, Laden und Erstellen von Verzeichnissen ermöglicht. Unterstützt die Formate txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, und sql. 
 hint:
-  en: You should provide an exact file path and name for where you want to create a directory or save or load a text file.  The skill supports txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql.
-  de: Sie können Text in einer Datei speichern, Text aus einer Datei laden oder Verzeichnisse erstellen, wie angegeben. Der Skill unterstützt die Formate txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, und sql.
+  en: You should provide an exact file path and name for where you want to create a directory or save or load a text file.  For example "save that text to a file called samplefile in my C drive in the directory called Documents."  If you do not, a directory in your Wingman configs called "files" will be used.
+  de: Sie können Text in einer Datei speichern, Text aus einer Datei laden oder Verzeichnisse erstellen, wie angegeben.  Speichere diesen Text in einer Datei namens samplefile auf meinem C-Laufwerk im Verzeichnis Dokumente Wenn du das nicht tust, wird ein Verzeichnis in deinen Wingman-Konfigurationen namens "files" verwendet.
 examples:
   - question:
       en: Save "Hello, World!" to hello.txt.
@@ -17,8 +17,8 @@ examples:
       en: Load the content from notes.md.
       de: Lade den Inhalt aus notes.md.
     answer:
-      en: (loads and displays the content of notes.md)
-      de: (lädt und zeigt den Inhalt von notes.md an)
+      en: (loads the content of notes.md)
+      de: (lädt den Inhalt von notes.md an)
   - question:
       en: Create a directory named Projects.
       de: Erstelle ein Verzeichnis namens Projekte.
@@ -28,13 +28,13 @@ examples:
 prompt: |
   You can save text to various file formats, load text from files, or create directories as specified by the user. You support txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql  formats.
 custom_properties:
-  - hint: The default directory for file operations.  If left blank will default to your WingmanAI config folder.
+  - hint: The default directory for file operations.  If left blank will default to your WingmanAI config directory in a sub-directory called "files".
     id: default_directory
     name: Default directory
     property_type: string
     required: false
     value: ""
-  - hint: Allow overwriting existing files.
+  - hint: Allow WingmanAI FileManager to overwrite existing files. CAUTION - ADVANCED USERS ONLY: Only activate this option if you have backed up existing files.
     id: allow_overwrite_existing
     name: Allow overwrite existing files
     property_type: boolean
