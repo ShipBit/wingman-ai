@@ -14,7 +14,7 @@ from services.secret_keeper import SecretKeeper
 
 class WingmanPro:
     def __init__(
-        self, wingman_name: str, settings: WingmanProSettings, timeout: int = 30
+        self, wingman_name: str, settings: WingmanProSettings, timeout: int = 120
     ):
         self.wingman_name: str = wingman_name
         self.settings: WingmanProSettings = settings
