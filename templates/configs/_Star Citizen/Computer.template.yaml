@@ -15,46 +15,7 @@ is_voice_activation_default: True
 sound:
   effects: [AI]
 skills:
-  - name: StarHead
-    module: skills.star_head.main
-    description:
-      en: Use the StarHead API to retrieve detailed information about spaceships, weapons and more. StarHead can also calculate optimal trading routes based on live data.
-      de: Nutze die StarHead API, um detaillierte Informationen über Raumschiffe, Waffen und mehr abzurufen. StarHead kann auch optimale Handelsrouten anhand von Live-Daten berechnen.
-    examples:
-      - question:
-          en: I want to trade. What's the best route?
-          de: Ich möchte handeln. Was ist die beste Route?
-        answer:
-          en: To provide you with the best trading route, I need to know your ship model, your current location, and your available budget. Could you please provide these details?
-          de: Um dir die beste Handelsroute anbieten zu können, muss ich dein Schiffsmodell, deinen aktuellen Standort und dein verfügbares Budget kennen. Kannst du mir diese Angaben bitte mitteilen?
-      - question:
-          en: I'm flying a Caterpillar and am near Yela. I have 100.000 credits to spend.
-          de: Ich fliege eine Caterpillar und bin in der Nähe von Yela. Ich habe 100.000 Credits auszugeben.
-        answer:
-          en: You can buy Stims at Deakins Research Outpost near Yela for 2.8 credits/unit and sell them at CRU-L1 Ambitious Dream Station for 3.85 credits/unit. The total profit for this route is approximately 37499 credits, and the travel time estimation is 41 minutes.
-          de: Du kannst Stims bei Deakins Research Outpost in der Nähe von Yela für 2,8 Credits/Stück kaufen und sie bei CRU-L1 Ambitious Dream Station für 3,85 Credits/Stück verkaufen. Der Gesamtgewinn für diese Route beträgt ca. 37499 Credits, und die geschätzte Reisezeit beträgt 41 Minuten.
-      - question:
-          en: What can you tell me about the Caterpillar?
-          de: Was kannst du mir über die Caterpillar erzählen?
-        answer:
-          en: The Constellation Taurus is a dedicated freighter, designed for hauling cargo. It has a cargo capacity of 174 SCU and is fully configurable but without all the bells and whistles found on other Constellation variants. On the other hand, the Constellation Andromeda is a multi-person freighter and the most popular ship in RSI's current production array. It has a cargo capacity of 96 SCU and is beloved by smugglers and merchants alike for its modular and high-powered capabilities. Both are part of the Constellation series, but the Taurus specifically caters to dedicated freight operations whereas the Andromeda serves as a multi-person versatile ship.
-          de: Die Constellation Taurus ist ein reiner Frachter, der für den Transport von Fracht entwickelt wurde. Er hat eine Ladekapazität von 174 SCU und ist voll konfigurierbar, hat aber nicht den ganzen Schnickschnack der anderen Constellation-Varianten. Die Constellation Andromeda hingegen ist ein Mehrpersonen-Frachter und das beliebteste Schiff in der aktuellen Produktion von RSI. Sie hat eine Ladekapazität von 96 SCU und ist bei Schmugglern und Händlern wegen ihrer modularen und leistungsstarken Fähigkeiten gleichermaßen beliebt. Beide gehören zur Constellation-Serie, aber die Taurus ist speziell für den reinen Frachtverkehr gedacht, während die Andromeda ein vielseitiges Schiff für mehrere Personen ist.
-    prompt: |
-      You have access to the StarHead API which you can use to access live trading data and to retrieve additional information about spaceships in Star Citizen.
-      Your job is to find good trading routes for the user based on his/her ship, current location and available budget.
-      The user can also ask you about details of specific ships, components, weapons, and more.
-      You always use the tools available to you to retrieve the required information and to provide the user with the information.
-    custom_properties:
-      - hint: The URL of the StarHead API.
-        id: starhead_api_url
-        name: StarHead API URL
-        required: true
-        value: https://api.star-head.de
-      - hint: The URL of the Star Citizen Wiki API.
-        id: star_citizen_wiki_api_url
-        name: Star Citizen Wiki API URL
-        required: true
-        value: https://api.star-citizen.wiki/api/v2
+  - module: skills.star_head.main
 commands:
   - name: ToggleCruiseControlOrToggleHoldCurrentSpeed
     actions:
