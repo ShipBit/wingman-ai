@@ -82,7 +82,7 @@ class SoundEffects(Enum):
     # Azure streaming workaround
     LOW_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
         [
-            Distortion(drive_db=30),
+            Distortion(drive_db=-65),
             HighpassFilter(cutoff_frequency_hz=800),
             LowpassFilter(cutoff_frequency_hz=3400),
             Resample(target_sample_rate=8000),  # Lower resample rate for tinny effect
@@ -95,7 +95,7 @@ class SoundEffects(Enum):
     # Azure streaming workaround
     MEDIUM_QUALITY_RADIO_GAIN_BOOST = Pedalboard(
         [
-            Distortion(drive_db=15),
+            Distortion(drive_db=-74),
             HighpassFilter(cutoff_frequency_hz=300),
             LowpassFilter(cutoff_frequency_hz=5000),
             Resample(target_sample_rate=16000),
