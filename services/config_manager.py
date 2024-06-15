@@ -21,11 +21,13 @@ from services.printr import Printr
 
 TEMPLATES_DIR = "templates"
 CONFIGS_DIR = "configs"
+SKILLS_DIR = "skills"
 
 SETTINGS_CONFIG_FILE = "settings.yaml"
 DEFAULT_CONFIG_FILE = "defaults.yaml"
 SECRETS_FILE = "secrets.yaml"
 DEFAULT_WINGMAN_AVATAR = "default-wingman-avatar.png"
+DEFAULT_SKILLS_CONFIG = "default_config.yaml"
 
 DELETED_PREFIX = "."
 DEFAULT_PREFIX = "_"
@@ -300,7 +302,7 @@ class ConfigManager:
                     ] = merged_config
 
         validated_config = Config(**default_config)
-        # not catching ValifationExceptions here, because we can't recover from it
+        # not catching ValidationExceptions here, because we can't recover from it
         # TODO: Notify the client about the error somehow
 
         self.printr.print(
@@ -772,6 +774,7 @@ class ConfigManager:
         """Merge general settings with a specific wingman's overrides, including commands."""
         # Start with a copy of the wingman's specific config to keep it intact.
         merged = wingman.copy()
+
         for key in [
             "prompts",
             "features",
@@ -794,7 +797,7 @@ class ConfigManager:
                     copy.deepcopy(general[key]), wingman.get(key, {})
                 )
 
-        # Special handling for merging the commands lists
+        # Commands
         if "commands" in general and "commands" in wingman:
             merged["commands"] = self.__merge_command_lists(
                 general["commands"], wingman["commands"]
@@ -802,5 +805,26 @@ class ConfigManager:
         elif "commands" in general:
             # If the wingman config does not have commands, use the general ones
             merged["commands"] = general["commands"]
+
+        # Skills
+        if "skills" in wingman:
+            merged_skills = []
+            for skill_config_wingman in wingman["skills"]:
+                skill_dir = (
+                    skill_config_wingman["module"]
+                    .replace(".main", "")
+                    .replace(".", "/")
+                )
+                skill_default_config_path = path.join(
+                    get_writable_dir(skill_dir), DEFAULT_SKILLS_CONFIG
+                )
+                skill_config = self.__read_config(skill_default_config_path)
+                skill_config = self.__deep_merge(skill_config, skill_config_wingman)
+
+                merged_skills.append(skill_config)
+
+            merged["skills"] = merged_skills
+        elif "skills" in general:
+            merged["skills"] = general["skills"]
 
         return WingmanConfig(**merged)
