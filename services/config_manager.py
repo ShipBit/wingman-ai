@@ -1,12 +1,14 @@
 import base64
 from enum import Enum
+import enum
+import json
 from os import makedirs, path, remove, walk
 import copy
 import shutil
 from typing import Optional, Tuple
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 import yaml
-from api.enums import LogSource, LogType, enum_representer
+from api.enums import BaseEnumModel, LogSource, LogType, enum_representer
 from api.interface import (
     Config,
     ConfigDirInfo,
@@ -583,7 +585,28 @@ class ConfigManager:
             config_dir.directory,
             wingman_file.file,
         )
-        return self.__write_config(config_path, wingman_config)
+        default_config = self.__read_default_config()
+        wingman_config_dict = self.__convert_to_dict(wingman_config)
+        wingman_config_diff = self.__deep_diff(default_config, wingman_config_dict)
+
+        if wingman_config.skills:
+            skills = []
+
+            for skill_config in wingman_config.skills:
+                skill_dir = skill_config.module.replace(".main", "").replace(".", "/")
+                skill_default_config_path = path.join(
+                    get_writable_dir(skill_dir), DEFAULT_SKILLS_CONFIG
+                )
+                skill_default_config = self.__read_config(skill_default_config_path)
+                skill_config_diff = self.__deep_diff(
+                    skill_default_config, self.__convert_to_dict(skill_config)
+                )
+                skill_config_diff["module"] = skill_config.module
+                skills.append(skill_config_diff)
+
+            wingman_config_diff["skills"] = skills
+
+        return self.__write_config(config_path, wingman_config_diff)
 
     def get_wingman_avatar_path(
         self, config_dir: ConfigDirInfo, wingman_file_base_name: str, create=False
@@ -657,7 +680,14 @@ class ConfigManager:
         yaml.add_multi_representer(Enum, enum_representer)
         with open(file_path, "w", encoding="UTF-8") as stream:
             try:
-                yaml.dump(content.dict(exclude_none=True), stream)
+                yaml.dump(
+                    (
+                        content
+                        if isinstance(content, dict)
+                        else content.dict(exclude_none=True)
+                    ),
+                    stream,
+                )
                 return True
             except yaml.YAMLError as e:
                 self.printr.toast_error(
@@ -741,6 +771,66 @@ class ConfigManager:
         return self.__write_config(self.default_config_path, self.default_config)
 
     # Config merging:
+
+    def __convert_to_dict(self, obj):
+        if isinstance(obj, BaseModel):
+            json_obj = obj.model_dump_json(exclude_none=True, exclude_unset=True)
+            return json.loads(json_obj)
+        elif isinstance(obj, dict):
+            return {k: self.__convert_to_dict(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self.__convert_to_dict(i) for i in obj]
+        return obj
+
+    def __deep_diff(self, default_config, wingman_config):
+        """
+        Recursively compare two dictionaries and return an object that only contains the changes defined in the wingman_config.
+        """
+        diff = {}
+
+        for key in wingman_config:
+            wingman_value = wingman_config[key]
+            default_value = default_config.get(key, None)
+
+            if default_value is None:
+                # If the key is not in the default config, it's a new addition.
+                diff[key] = wingman_value
+            elif isinstance(wingman_value, dict) and isinstance(default_value, dict):
+                # If the key exists in both configurations and both values are dictionaries, recurse.
+                nested_diff = self.__deep_diff(default_value, wingman_value)
+                if nested_diff:
+                    diff[key] = nested_diff
+            elif isinstance(wingman_value, list) and isinstance(default_value, list):
+                # If the values are lists, compare each element.
+                list_diff = self.__diff_lists(default_value, wingman_value)
+                if list_diff:
+                    diff[key] = list_diff
+            elif wingman_value != default_value:
+                # If the values are different, record the difference.
+                diff[key] = wingman_value
+
+        return diff
+
+    def __diff_lists(self, default_list, wingman_list):
+        """
+        Compare two lists and return the differences.
+        """
+        diff = []
+        len_default = len(default_list)
+
+        for i, wingman_value in enumerate(wingman_list):
+            if i < len_default:
+                default_value = default_list[i]
+                if isinstance(wingman_value, dict) and isinstance(default_value, dict):
+                    nested_diff = self.__deep_diff(default_value, wingman_value)
+                    if nested_diff:
+                        diff.append(nested_diff)
+                elif wingman_value != default_value:
+                    diff.append(wingman_value)
+            else:
+                diff.append(wingman_value)
+
+        return diff
 
     def __deep_merge(self, source, updates):
         """Recursively merges updates into source."""

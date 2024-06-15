@@ -36,8 +36,10 @@ custom_properties:
     name: StarHead API URL
     required: true
     value: https://api.star-head.de
+    property_type: string
   - hint: The URL of the Star Citizen Wiki API.
     id: star_citizen_wiki_api_url
     name: Star Citizen Wiki API URL
     required: true
     value: https://api.star-citizen.wiki/api/v2
+    property_type: string

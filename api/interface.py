@@ -450,12 +450,12 @@ class CustomProperty(BaseModel):
     """The "friendly" name of the property, displayed in the UI."""
     value: str | int | float | bool | None
     """The value of the property"""
+    property_type: CustomPropertyType
+    """Determines the type of the property and which controls to render in the UI."""
     hint: Optional[str] = None
     """A hint for the user, displayed in the UI."""
     required: Optional[bool] = False
     """Marks the property as required in the UI."""
-    property_type: Optional[CustomPropertyType] = CustomPropertyType.STRING
-    """Determines the type of the property and which controls to render in the UI."""
     options: Optional[list[LabelValuePair]] = None
     """If property_type is set to 'single_select', you can provide options here."""
 

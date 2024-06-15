@@ -62,8 +62,10 @@ custom_properties:
     name: Spotify Client ID
     required: true
     value: enter-your-client-id-here
+    property_type: string
   - hint: Create an app in the Spotify Dashboard at https://developer.spotify.com/dashboard. In the Settings of the app, add http://127.0.0.1:8082 (or any other free port) as Redirect URL. Then enter the same value here.
     id: spotify_redirect_url
     name: Spotify Redirect URL
     required: true
     value: http://127.0.0.1:8082
+    property_type: string
