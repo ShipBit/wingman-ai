@@ -1,4 +1,5 @@
 import os
+import time
 from pathlib import Path
 import pygetwindow as gw
 from typing import TYPE_CHECKING
@@ -82,6 +83,77 @@ class ControlWindows(Skill):
 
         return False
 
+    def activate_application(self, app_name: str):
+        windows = gw.getWindowsWithTitle(app_name)
+        if windows and len(windows) > 0:
+            for window in windows:
+                # See https://github.com/asweigart/PyGetWindow/issues/36#issuecomment-919332733 for why just regular "activate" may not work
+                window.minimize()
+                window.restore()
+                window.activate()
+
+            return True
+
+        return False
+
+    async def move_application(self, app_name: str, command: str):
+        windows = gw.getWindowsWithTitle(app_name)
+        if self.settings.debug_mode:
+            await self.printr.print_async(
+                f"Windows found in move_application function matching {app_name}: {windows}",
+                color=LogType.INFO,
+            )
+        if windows and len(windows) > 0:
+            for window in windows:
+                if self.settings.debug_mode:
+                    await self.printr.print_async(
+                        f"Executing move_application command for: {window.title}",
+                        color=LogType.INFO,
+                    )
+                # Make sure application is active before moving it
+                window.minimize()
+                window.restore()
+                # Temporarily maximize it, let windows do the work of what maximize means based on the user's setup 
+                window.maximize()
+                time.sleep(0.5)
+                # Assume that maximize is a proxy for the appropriate full size of a window in this setup, use that to calculate resize
+                monitor_width, monitor_height = window.size
+                if self.settings.debug_mode:
+                    await self.printr.print_async(
+                        f"Before resize and move, {window.title} is {window.size} and is located at {window.topleft}.",
+                        color=LogType.INFO,
+                    )
+
+                try:
+                    if "left" in command:
+                        window.resizeTo(int(monitor_width * 0.5) , int(monitor_height))
+                        window.moveTo(0, 0)
+                    if "right" in command:
+                        window.resizeTo(int(monitor_width * 0.5) , int(monitor_height))
+                        window.moveTo(int(monitor_width * 0.5), 0)
+                    if "top" in command:
+                        window.resizeTo(int(monitor_width), int(monitor_height * 0.5))
+                        window.moveTo(0, 0)
+                    if "bottom" in command:
+                        window.resizeTo(int(monitor_width), int(monitor_height * 0.5))
+                        window.moveTo(0, int(monitor_height * 0.5))
+                    if self.settings.debug_mode:
+                        await self.printr.print_async(
+                            f"Executed move_application command {command}; {window.title} is now {window.size} and is located at {window.topleft}.",
+                            color=LogType.INFO,
+                        )
+                    # Check if resize and move command really worked, if not return false so wingmanai does not tell user command was successful when it was not
+                    if (monitor_width, monitor_height) == window.size:
+                        return False
+                    return True
+
+                # If any errors in trying to move and resize windows, return false as well
+                except:
+                    return False
+
+        # If no windows found, return false
+        return False
+
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
             (
@@ -90,7 +162,7 @@ class ControlWindows(Skill):
                     "type": "function",
                     "function": {
                         "name": "control_windows_functions",
-                        "description": "Control Windows Functions, like opening and closing applications.",
+                        "description": "Control Windows Functions, like opening, closing, and moving applications.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -104,11 +176,15 @@ class ControlWindows(Skill):
                                         "maximize",
                                         "restore",
                                         "activate",
+                                        "snap_left",
+                                        "snap_right",
+                                        "snap_top",
+                                        "snap_bottom",
                                     ],
                                 },
                                 "parameter": {
                                     "type": "string",
-                                    "description": "The parameter for the command. For example, the application name to open or close. Or the information to get.",
+                                    "description": "The parameter for the command. For example, the application name to open, close, or move. Or the information to get.",
                                 },
                             },
                             "required": ["command"],
@@ -122,7 +198,7 @@ class ControlWindows(Skill):
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
     ) -> tuple[str, str]:
-        function_response = "Application not found."
+        function_response = "Error: Application not found."
         instant_response = ""
 
         if tool_name == "control_windows_functions":
@@ -144,6 +220,19 @@ class ControlWindows(Skill):
                 app_closed = self.close_application(parameter)
                 if app_closed:
                     function_response = "Application closed."
+
+            elif parameters["command"] == "activate":
+                app_activated = self.activate_application(parameter)
+                if app_activated:
+                    function_response = "Application activated."
+
+            elif any(word in parameters["command"].lower() for word in ["left", "right", "top", "bottom"]):
+                command = parameters["command"].lower()
+                app_moved = await self.move_application(parameter, command)
+                if app_moved:
+                    function_response = "Application moved"
+                else:
+                    function_response = "There was a problem moving that application. The application may not support moving it through automation."
 
             else:
                 command = parameters["command"]
