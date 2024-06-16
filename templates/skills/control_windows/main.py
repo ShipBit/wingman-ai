@@ -48,6 +48,18 @@ class ControlWindows(Skill):
             elif item.is_file() and item.suffix == extension:
                 yield item
 
+    # Microsoft does odd things with its tab titles, see https://github.com/asweigart/PyGetWindow/issues/54, so use this function to try to find matching windows to app name and if match not found try adding unicode special character
+    def get_and_check_windows(self, app_name):
+        windows = gw.getWindowsWithTitle(app_name)
+        if not windows and "Microsoft Edge".lower() in app_name.lower():
+            app_name = app_name.replace("Microsoft Edge", "Microsoft\u200b Edge")
+            app_name = app_name.replace("microsoft edge", "Microsoft\u200b Edge")
+            windows = gw.getWindowsWithTitle(app_name)
+            if not windows:
+                return None
+        return windows
+
+
     # Function to search and start an application
     def search_and_start(self, app_name):
         for start_menu_path in self.start_menu_paths:
@@ -55,23 +67,31 @@ class ControlWindows(Skill):
                 for file_path in self.list_files(start_menu_path, ".lnk"):
                     if app_name.lower() in file_path.stem.lower():
                         # Attempt to start the application
-                        os.startfile(str(file_path))
+                        try:
+                            os.startfile(str(file_path))
                         # subprocess.Popen([str(file_path)])
+                        except:
+                            return False
+
                         return True
+
         return False
 
     def close_application(self, app_name):
-        windows = gw.getWindowsWithTitle(app_name)
+        windows = self.get_and_check_windows(app_name)
         if windows and len(windows) > 0:
             for window in windows:
-                window.close()
+                try:
+                    window.close()
+                except:
+                    return False
 
             return True
 
         return False
 
     def execute_ui_command(self, app_name: str, command: str):
-        windows = gw.getWindowsWithTitle(app_name)
+        windows = self.get_and_check_windows(app_name)
         if windows and len(windows) > 0:
             for window in windows:
                 try:
@@ -84,25 +104,30 @@ class ControlWindows(Skill):
         return False
 
     def activate_application(self, app_name: str):
-        windows = gw.getWindowsWithTitle(app_name)
+        windows = self.get_and_check_windows(app_name)
         if windows and len(windows) > 0:
             for window in windows:
                 # See https://github.com/asweigart/PyGetWindow/issues/36#issuecomment-919332733 for why just regular "activate" may not work
-                window.minimize()
-                window.restore()
-                window.activate()
+                try:
+                    window.minimize()
+                    window.restore()
+                    window.activate()
+                except:
+                    return False
 
             return True
 
         return False
 
     async def move_application(self, app_name: str, command: str):
-        windows = gw.getWindowsWithTitle(app_name)
+        windows = self.get_and_check_windows(app_name)
+
         if self.settings.debug_mode:
             await self.printr.print_async(
                 f"Windows found in move_application function matching {app_name}: {windows}",
                 color=LogType.INFO,
             )
+
         if windows and len(windows) > 0:
             for window in windows:
                 if self.settings.debug_mode:
@@ -111,11 +136,14 @@ class ControlWindows(Skill):
                         color=LogType.INFO,
                     )
                 # Make sure application is active before moving it
-                window.minimize()
-                window.restore()
-                # Temporarily maximize it, let windows do the work of what maximize means based on the user's setup 
-                window.maximize()
-                time.sleep(0.5)
+                try:
+                    window.minimize()
+                    window.restore()
+                    # Temporarily maximize it, let windows do the work of what maximize means based on the user's setup 
+                    window.maximize()
+                    time.sleep(0.5)
+                except:
+                    pass
                 # Assume that maximize is a proxy for the appropriate full size of a window in this setup, use that to calculate resize
                 monitor_width, monitor_height = window.size
                 if self.settings.debug_mode:
