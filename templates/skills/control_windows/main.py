@@ -154,6 +154,20 @@ class ControlWindows(Skill):
         # If no windows found, return false
         return False
 
+    async def list_applications(self):
+        window_titles = gw.getAllTitles()
+        if window_titles:
+            titles_as_string = ", ".join(window_titles)
+            response = f"List of all application window titles found: {titles_as_string}."
+            if self.settings.debug_mode:
+                self.start_execution_benchmark()
+                await self.printr.print_async(
+                    f"list_applications command found these applications: {titles_as_string}",
+                    color=LogType.INFO,
+                )
+            return response
+        return False
+
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
             (
@@ -162,7 +176,7 @@ class ControlWindows(Skill):
                     "type": "function",
                     "function": {
                         "name": "control_windows_functions",
-                        "description": "Control Windows Functions, like opening, closing, and moving applications.",
+                        "description": "Control Windows Functions, like opening, closing, listing, and moving applications.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -180,6 +194,7 @@ class ControlWindows(Skill):
                                         "snap_right",
                                         "snap_top",
                                         "snap_bottom",
+                                        "list_applications",
                                     ],
                                 },
                                 "parameter": {
@@ -234,6 +249,12 @@ class ControlWindows(Skill):
                 else:
                     function_response = "There was a problem moving that application. The application may not support moving it through automation."
 
+            elif "list" in parameters["command"].lower():
+                apps_listed = await self.list_applications()
+                if apps_listed:
+                    function_response = apps_listed
+                else:
+                    function_response = "There was a problem getting your list of applications."
             else:
                 command = parameters["command"]
                 app_minimize = self.execute_ui_command(parameter, command)
