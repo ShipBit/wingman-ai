@@ -1,0 +1,217 @@
+Metadata-Version: 2.1
+Name: clip-util
+Version: 0.1.27
+Summary: Clipboard utilities for use with Python.
+Author-email: "Kyle L. Davis" <aceofspades5757.github@gmail.com>
+Maintainer-email: "Kyle L. Davis" <aceofspades5757.github@gmail.com>
+License: MIT License
+        
+        Copyright © 2022 Kyle L. Davis
+        
+        Permission is hereby granted, free of charge, to any person obtaining a copy
+        of this software and associated documentation files (the "Software"), to deal
+        in the Software without restriction, including without limitation the rights
+        to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+        copies of the Software, and to permit persons to whom the Software is
+        furnished to do so, subject to the following conditions:
+        
+        The above copyright notice and this permission notice shall be included in all
+        copies or substantial portions of the Software.
+        
+        THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+        IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+        FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+        AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+        LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+        OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+        SOFTWARE.
+        
+Project-URL: Homepage, https://github.com/AceofSpades5757/clip-util
+Project-URL: Documentation, https://clip-util.readthedocs.io/en/latest/
+Project-URL: Author, https://github.com/AceofSpades5757
+Project-URL: Repository, https://github.com/AceofSpades5757/clip-util
+Project-URL: Issues, https://github.com/AceofSpades5757/clip-util/issues
+Keywords: clipboard,html,rtf,unicode
+Classifier: Programming Language :: Python :: 3
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Development Status :: 4 - Beta
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Intended Audience :: Developers
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Classifier: Topic :: Utilities
+Classifier: Typing :: Typed
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Provides-Extra: build
+Requires-Dist: build ; extra == 'build'
+Requires-Dist: setuptools ; extra == 'build'
+Provides-Extra: dev
+Requires-Dist: clip-util[build] ; extra == 'dev'
+Requires-Dist: clip-util[test] ; extra == 'dev'
+Requires-Dist: pre-commit ; extra == 'dev'
+Requires-Dist: mypy ; extra == 'dev'
+Provides-Extra: test
+Requires-Dist: tox ; extra == 'test'
+Requires-Dist: tox-gh-actions ; extra == 'test'
+
+[![PyPI](https://img.shields.io/pypi/v/clip-util?color=darkred)](https://pypi.org/project/clip-util/)
+[![Read the Docs](https://img.shields.io/readthedocs/clip-util)](https://clip-util.readthedocs.io/en/latest/)
+[![Tests](https://github.com/AceofSpades5757/clip-util/actions/workflows/test.yml/badge.svg)](https://github.com/AceofSpades5757/clip-util/actions/workflows/test.yml)
+
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/clip-util?label=Python%20Version&logo=python&logoColor=yellow)](https://pypi.org/project/clip-util/)
+[![PyPI - License](https://img.shields.io/pypi/l/clip-util?color=green)](https://github.com/AceofSpades5757/clip-util/blob/main/LICENSE)
+
+[![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
+# Description
+
+Package for accessing the clipboard with Python.
+
+# Installation
+
+`pip install clip-util`
+
+# Features
+
+_Windows Only_
+
+Allows you to set text, RTF, and HTML to the clipboard on Windows. Any other format can also be specified using the format type integer, specified by Windows.
+
+## Supported Clipboard Formats
+
+- Text
+- HTML
+- RTF
+
+# Usage
+
+## Clipboard
+
+Will open and close every time the values are set, or retrieved. It's better to use a context manager.
+
+```python
+from clipboard import Clipboard
+
+
+clipboard = Clipboard()
+
+# Set Clipboard
+clipboard["text"] = "Hello World!"
+# OR
+clipboard.set_clipboard("Hello World!")
+
+# Get Clipboard
+text = clipboard["text"]
+# OR
+text = clipboard.get_clipboard("text")
+
+# Supports HTML
+clipboard["html"] = "<h1>Hello World</h1>"
+```
+
+
+### Context Manager
+
+```python
+from clipboard import Clipboard
+
+
+with Clipboard() as clipboard:
+
+    # Set Clipboard
+    clipboard["text"] = "Hello World!"
+    # OR
+    clipboard.set_clipboard("Hello World!")
+
+    # Get Clipboard
+    text = clipboard["text"]
+    # OR
+    text = clipboard.get_clipboard("text")
+
+    # HTML
+    clipboard["html"] = "<h1>Hello World</h1>"
+```
+
+## Clipboard Formats
+
+You can use `clip-util` to access the clipboard formats directly.
+
+`ClipboardFormat`: Enum for clipboard formats.
+
+`ClipboardFormat.CF_HTML`: Represents HTML format.
+
+`ClipboardFormat.CF_RTF`: Represents RTF format.
+
+```python
+from clipboard import Clipboard
+from clipboard import ClipboardFormat
+from clipboard import get_format_name
+
+
+with Clipboard() as clipboard:
+
+    # Get All Available Formats
+    format_ids: list[int] = clipboard.available_formats()
+
+    # Get Specific Format by ID
+    # Use parentheses to access the format by ID
+    formats: list[ClipboardFormat] = []
+    format_id: int
+    for format_id in format_ids:
+        if format_id in ClipboardFormat:
+            format_: ClipboardFormat = ClipboardFormat(format_id)
+            formats.append(format_)
+        else:
+            # Format is not supported directly by this library
+            pass
+
+    # Get Specified Format by Name (directly)
+    format_names: list[str] = []
+    format_id: int
+    for format_id in format_ids:
+        name: str = get_format_name(format_id)
+        format_names.append(name)
+
+    # Get Specified Format by Name (using enum)
+    # Use bracket notation to access the format
+    #
+    # Note: this method is not as robust as using `get_format_name`
+    formats: list[ClipboardFormat] = []
+    format_names: list[str] = []
+    format_name: str
+    for format_name in [f.name for f in formats]:
+        if format_name in ClipboardFormat:
+            format_: ClipboardFormat = ClipboardFormat[format_name]
+            name: str = format_.name
+            formats.append(format_)
+            format_names.append(name)
+        else:
+            # Format is not supported directly by this library
+            pass
+```
+
+## Get All Supported Formats
+
+You can even get the content of all available formats currently in the clipboard.
+
+```python
+from clipboard import get_available_formats
+from clipboard import get_format_name
+from clipboard import get_clipboard
+
+
+available: list[int] = get_available_formats()
+print(f"{available=}")
+
+for format_id in available:
+    name: str = get_format_name(format_id)
+    content: str = get_clipboard(format_id)
+    print(f"{format_id=}", f"{name=}, {content=}")
+```
