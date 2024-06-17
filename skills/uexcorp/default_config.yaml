@@ -3,9 +3,6 @@ module: skills.uexcorp.main
 description:
   en: Use the UEXCorp API to get live trading and lore information about ships, locations, commodities and more in Star Citizen.
   de: Nutze die UEXCorp API, um live Handels- und Lore-Informationen über Schiffe, Orte, Rohstoffe und mehr in Star Citizen zu erhalten.
-# hint:
-#   en:
-#   de:
 examples:
   - question:
       en: Please provide me a the best two trading routes for my Caterpillar, Im currently at Hurston.
@@ -50,7 +47,7 @@ examples:
       en: The satellite Wala is located in the ArcCorp system, orbiting the planet ArcCorp. It hosts various trading options, including locations like ArcCorp Mining Area 045, ArcCorp Mining Area 048, ArcCorp Mining Area 056, ArcCorp Mining Area 061, Shady Glen Farms, and Samson & Son's Salvage Center.
       de: Der Satellit Wala befindet sich im ArcCorp-System und umkreist den Planeten ArcCorp. Er beherbergt verschiedene Handelsmöglichkeiten, darunter Orte wie ArcCorp Mining Area 045, ArcCorp Mining Area 048, ArcCorp Mining Area 056, ArcCorp Mining Area 061, Shady Glen Farms und Samson & Son's Salvage Center.
 prompt: |
-  You have tools to access the UEXcorp API which you can use to retrieve live trading data and additional information about ships, locations, commodities and more in Star Citizen.
+  You also have tools to access the UEXcorp API which you can use to retrieve live trading data and additional information about ships, locations, commodities and more in Star Citizen.
   Here are some examples when to use the different tools at your disposal:
 
   Do not use markdown formatting (e.g. **name**) in your answers, but prefer lists to show multiple options or information.

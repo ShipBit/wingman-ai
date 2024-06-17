@@ -2,7 +2,7 @@ name: VoiceChanger
 module: skills.voice_changer.main
 description:
   en: Changes the voice of your Wingman automatically. Customize it to your liking.
-  de: Wechselt die Stimme des Wingman automatisch. Konfigurierbar nach eigenen Vorlieben.
+  de: Wechselt die Stimme deines Wingman automatisch. Konfigurierbar nach eigenen Vorlieben.
 custom_properties:
   - id: voice_changer_interval
     name: Switching Interval

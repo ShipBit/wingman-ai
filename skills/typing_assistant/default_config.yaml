@@ -2,10 +2,10 @@ name: TypingAssistant
 module: skills.typing_assistant.main
 description:
   en: Let your Wingman type text for you!
-  de: Lass deinen Wingman für dich tippen!
+  de: Lass deinen Wingman Texte für dich tippen!
 hint:
-  en: Types what you say, either by transcribing your speech or the reponse to your input. You can use this in Office or Messaging programs etc. Not meant for pressing keys or macros - use Wingman Commands for that.
-  de: Tippt, was du sagst, indem deine Spracheingabe oder die Antwort darauf transkribiert werden. Verwende den Skill in Office- oder Messaging-Programmen usw. Er ist nicht für das Drücken einzelner Tasten oder Makros gedacht - dafür kannst du Wingman Befehle verwenden.
+  en: Types what you say, either by transcribing your speech or the response to your input. You can use this in Office or messaging programs etc. Not meant for pressing keys or macros - use Wingman commands for that.
+  de: Tippt, was du sagst, indem deine Spracheingabe oder die Antwort darauf transkribiert werden. Verwende den Skill in Office- oder Messaging-Programmen usw. Er ist nicht für das Drücken einzelner Tasten oder Makros gedacht - dafür kannst du Wingman-Befehle verwenden.
 examples:
   - question:
       en: Type "How are you today?".
@@ -20,6 +20,7 @@ examples:
       en: (imagines a poem about trees and then types it in the active window)
       de: (Erfindet ein Gedicht über Bäume und tippt es dann in das aktive Fenster)
 prompt: |
-  You can also type what the user says if they ask you to do so. Sometimes this will mean transcribing what they said word for word.
-  Other times, the user will want you to imagine something like a poem, email or speech, and then you type the contents.
+  You can also type what the user says if they ask you to. The user might dictate what you type, word for word.
+  The user might also ask you to imagine something, such as a poem, an email, or a speech, and then you type that content.
   Use the context of the user's request to determine what content the user wants you to type.
+  Always use the tool assist_with_typing to type but only type if the user specifically asks you to.

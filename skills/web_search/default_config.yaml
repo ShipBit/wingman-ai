@@ -2,7 +2,7 @@ name: WebSearch
 module: skills.web_search.main
 description:
   en: Searches the web using the DuckDuckGo search engine.
-  de: Nutze die DuckDuckGo Suchmaschine um Antworten auf deine Fragen zu finden.
+  de: Nutze die DuckDuckGo Suchmaschine um Daten aus dem Internet zu laden.
 hint:
   en: Start your queries with "Search the web for..." or "Search the internet for..."
   de: Starte deine Anfragen mit 'Suche im Web nach...' oder 'Suche im Internet nach...'.
