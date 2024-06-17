@@ -41,6 +41,7 @@ class ConfigManager:
 
         self.templates_dir = path.join(app_root_path, TEMPLATES_DIR)
         self.config_dir = get_writable_dir(CONFIGS_DIR)
+        self.skills_dir = get_writable_dir(SKILLS_DIR)
 
         self.copy_templates()
 
@@ -937,9 +938,11 @@ class ConfigManager:
                     skill_config_wingman["module"]
                     .replace(".main", "")
                     .replace(".", "/")
+                    .split("/")[1]
                 )
+
                 skill_default_config_path = path.join(
-                    get_writable_dir(skill_dir), DEFAULT_SKILLS_CONFIG
+                    self.skills_dir, skill_dir, DEFAULT_SKILLS_CONFIG
                 )
                 skill_config = self.__read_config(skill_default_config_path)
                 skill_config = self.__deep_merge(skill_config, skill_config_wingman)
