@@ -1,6 +1,5 @@
 import base64
 from enum import Enum
-import enum
 import json
 from os import makedirs, path, remove, walk
 import copy
@@ -8,7 +7,7 @@ import shutil
 from typing import Optional, Tuple
 from pydantic import BaseModel, ValidationError
 import yaml
-from api.enums import BaseEnumModel, LogSource, LogType, enum_representer
+from api.enums import LogSource, LogType, enum_representer
 from api.interface import (
     Config,
     ConfigDirInfo,
@@ -789,6 +788,10 @@ class ConfigManager:
         diff = {}
 
         for key in wingman_config:
+            if key == "id":
+                diff[key] = wingman_config[key]
+                continue
+
             wingman_value = wingman_config[key]
             default_value = default_config.get(key, None)
 
@@ -832,27 +835,57 @@ class ConfigManager:
 
         return diff
 
-    def __deep_merge(self, source, updates):
-        """Recursively merges updates into source."""
+    def __deep_merge(self, source: dict, updates: dict) -> dict:
+        """
+        Deep merge two dictionaries.
+        """
         if updates is None:
             return source
 
-        for key, value in updates.items():
-            if isinstance(value, dict):
-                node = source.setdefault(key, {})
-                self.__deep_merge(node, value)
+        for key, val in updates.items():
+            if (
+                isinstance(val, dict)
+                and key in source
+                and isinstance(source[key], dict)
+            ):
+                source[key] = self.__deep_merge(source[key], val)
+            elif (
+                isinstance(val, list)
+                and key in source
+                and isinstance(source[key], list)
+            ):
+                source[key] = self.__merge_list(source[key], val)
             else:
-                source[key] = value
+                source[key] = val
         return source
 
-    def __merge_command_lists(self, general_commands, wingman_commands):
+    def __merge_list(self, source: list, updates: list) -> list:
+        """
+        Merges two lists of dictionaries based on a unique identifier key if available.
+        For generic lists without identifiable keys, the override list replaces the base list.
+        """
+        # Check if items in both lists are dictionaries with an "id" key
+        if all(isinstance(item, dict) and "id" in item for item in source + updates):
+            base_dict = {item["id"]: item for item in source}
+            for item in updates:
+                item_id = item["id"]
+                if item_id in base_dict:
+                    base_dict[item_id] = self.__deep_merge(base_dict[item_id], item)
+                else:
+                    base_dict[item_id] = item
+            return list(base_dict.values())
+        else:
+            # Generic list replacement: assume override list replaces base list
+            return updates
+
+    def __merge_command_lists(self, default_commands, wingman_commands):
         """Merge two lists of commands, where wingman-specific commands override or get added based on the 'name' key."""
 
         if wingman_commands is None:
-            return general_commands
+            return default_commands
 
         # Use a dictionary to ensure unique names and allow easy overrides
-        merged_commands = {cmd["name"]: cmd for cmd in general_commands}
+        merged_commands = {cmd["name"]: cmd for cmd in default_commands}
         for cmd in wingman_commands:
             merged_commands[cmd["name"]] = (
                 cmd  # Will override or add the wingman-specific command
@@ -860,7 +893,7 @@ class ConfigManager:
         # Convert merged commands back to a list since that's the expected format
         return list(merged_commands.values())
 
-    def __merge_configs(self, general: Config, wingman):
+    def __merge_configs(self, default: Config, wingman):
         """Merge general settings with a specific wingman's overrides, including commands."""
         # Start with a copy of the wingman's specific config to keep it intact.
         merged = wingman.copy()
@@ -881,20 +914,20 @@ class ConfigManager:
             "xvasynth",
             "wingman_pro",
         ]:
-            if key in general:
+            if key in default:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.
                 merged[key] = self.__deep_merge(
-                    copy.deepcopy(general[key]), wingman.get(key, {})
+                    copy.deepcopy(default[key]), wingman.get(key, {})
                 )
 
         # Commands
-        if "commands" in general and "commands" in wingman:
+        if "commands" in default and "commands" in wingman:
             merged["commands"] = self.__merge_command_lists(
-                general["commands"], wingman["commands"]
+                default["commands"], wingman["commands"]
             )
-        elif "commands" in general:
+        elif "commands" in default:
             # If the wingman config does not have commands, use the general ones
-            merged["commands"] = general["commands"]
+            merged["commands"] = default["commands"]
 
         # Skills
         if "skills" in wingman:
@@ -914,7 +947,7 @@ class ConfigManager:
                 merged_skills.append(skill_config)
 
             merged["skills"] = merged_skills
-        elif "skills" in general:
-            merged["skills"] = general["skills"]
+        elif "skills" in default:
+            merged["skills"] = default["skills"]
 
         return WingmanConfig(**merged)

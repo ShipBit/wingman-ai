@@ -471,8 +471,8 @@ class SkillExample(BaseModel):
 
 
 class SkillConfig(CustomClassConfig):
-    description: LocalizedMetadata = None
-    prompt: str
+    description: LocalizedMetadata
+    prompt: Optional[str] = None
     """An additional prompt that extends the system prompt of the Wingman."""
     custom_properties: Optional[list[CustomProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
