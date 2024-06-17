@@ -11,6 +11,7 @@ from api.interface import (
 )
 from api.enums import LogType
 from skills.skill_base import Skill
+import mouse.mouse as mouse
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
@@ -172,6 +173,25 @@ class ControlWindows(Skill):
                         )
                     # Check if resize and move command really worked, if not return false so wingmanai does not tell user command was successful when it was not
                     if (monitor_width, monitor_height) == window.size:
+                        # Try last ditch manual move if moving to left or right
+                        if "left" in command:
+                            mouse.move(int(monitor_width * 0.5), 10, duration=1.0)
+                            time.sleep(0.1)
+                            mouse.press(button="left")
+                            mouse.move(20, 10, duration=1.0)
+                            time.sleep(0.1)
+                            mouse.release(button="left")
+                            return True
+
+                        elif "right" in command:
+                            mouse.move(int(monitor_width * 0.5), 10, duration=1.0)
+                            time.sleep(0.1)
+                            mouse.press(button="left")
+                            mouse.move(monitor_width - 20, 10, duration=1.0)
+                            time.sleep(0.1)
+                            mouse.release(button="left")
+                            return True
+                        # Return False as failed if could not move through any method
                         return False
                     return True
 
