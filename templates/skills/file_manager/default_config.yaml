@@ -26,7 +26,7 @@ examples:
       en: (creates a directory named 'Projects' in the default directory)
       de: (erstellt ein Verzeichnis namens 'Projekte' im Standardverzeichnis)
 prompt: |
-  You can save text to various file formats, load text from files, or create directories as specified by the user. You support txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql formats.
+  You can also save text to various file formats, load text from files, or create directories as specified by the user. You support txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql formats.
 custom_properties:
   - hint: The default directory for file operations. If left blank, will default to your WingmanAI config directory in a sub-directory called "files".
     id: default_directory

@@ -16,6 +16,7 @@ import mouse.mouse as mouse
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
+
 class ControlWindows(Skill):
 
     # Paths to Start Menu directories
@@ -34,7 +35,10 @@ class ControlWindows(Skill):
         wingman: "Wingman",
     ) -> None:
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
+            config=config,
+            wingman_config=wingman_config,
+            settings=settings,
+            wingman=wingman,
         )
 
     async def validate(self) -> list[WingmanInitializationError]:
@@ -59,7 +63,6 @@ class ControlWindows(Skill):
             if not windows:
                 return None
         return windows
-
 
     # Function to search and start an application
     def search_and_start(self, app_name):
@@ -140,7 +143,7 @@ class ControlWindows(Skill):
                 try:
                     window.minimize()
                     window.restore()
-                    # Temporarily maximize it, let windows do the work of what maximize means based on the user's setup 
+                    # Temporarily maximize it, let windows do the work of what maximize means based on the user's setup
                     window.maximize()
                     time.sleep(0.5)
                 except:
@@ -155,10 +158,10 @@ class ControlWindows(Skill):
 
                 try:
                     if "left" in command:
-                        window.resizeTo(int(monitor_width * 0.5) , int(monitor_height))
+                        window.resizeTo(int(monitor_width * 0.5), int(monitor_height))
                         window.moveTo(0, 0)
                     if "right" in command:
-                        window.resizeTo(int(monitor_width * 0.5) , int(monitor_height))
+                        window.resizeTo(int(monitor_width * 0.5), int(monitor_height))
                         window.moveTo(int(monitor_width * 0.5), 0)
                     if "top" in command:
                         window.resizeTo(int(monitor_width), int(monitor_height * 0.5))
@@ -206,7 +209,9 @@ class ControlWindows(Skill):
         window_titles = gw.getAllTitles()
         if window_titles:
             titles_as_string = ", ".join(window_titles)
-            response = f"List of all application window titles found: {titles_as_string}."
+            response = (
+                f"List of all application window titles found: {titles_as_string}."
+            )
             if self.settings.debug_mode:
                 self.start_execution_benchmark()
                 await self.printr.print_async(
@@ -289,7 +294,10 @@ class ControlWindows(Skill):
                 if app_activated:
                     function_response = "Application activated."
 
-            elif any(word in parameters["command"].lower() for word in ["left", "right", "top", "bottom"]):
+            elif any(
+                word in parameters["command"].lower()
+                for word in ["left", "right", "top", "bottom"]
+            ):
                 command = parameters["command"].lower()
                 app_moved = await self.move_application(parameter, command)
                 if app_moved:
@@ -302,7 +310,9 @@ class ControlWindows(Skill):
                 if apps_listed:
                     function_response = apps_listed
                 else:
-                    function_response = "There was a problem getting your list of applications."
+                    function_response = (
+                        "There was a problem getting your list of applications."
+                    )
             else:
                 command = parameters["command"]
                 app_minimize = self.execute_ui_command(parameter, command)
