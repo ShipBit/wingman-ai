@@ -2,6 +2,7 @@ import os
 import time
 from pathlib import Path
 import pygetwindow as gw
+from clipboard import Clipboard
 from typing import TYPE_CHECKING
 from api.interface import (
     SettingsConfig,
@@ -213,13 +214,22 @@ class ControlWindows(Skill):
                 f"List of all application window titles found: {titles_as_string}."
             )
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
                 await self.printr.print_async(
                     f"list_applications command found these applications: {titles_as_string}",
                     color=LogType.INFO,
                 )
             return response
         return False
+
+    def get_text_from_clipboard(self) -> str:
+        try:
+            with Clipboard() as clipboard:
+                text = clipboard["text"]
+                return f"Text copied from clipboard: {text}"
+        except KeyError:
+            return "Error: Clipboard has no text.  Images and other non-text content of the clipboard cannot be processed."
+        except Exception as e:
+            return f"Error: {str(e)}"
 
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
@@ -229,7 +239,7 @@ class ControlWindows(Skill):
                     "type": "function",
                     "function": {
                         "name": "control_windows_functions",
-                        "description": "Control Windows Functions, like opening, closing, listing, and moving applications.",
+                        "description": "Control Windows Functions, like opening, closing, listing, and moving applications, and reading clipboard content.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -248,6 +258,7 @@ class ControlWindows(Skill):
                                         "snap_top",
                                         "snap_bottom",
                                         "list_applications",
+                                        "read_clipboard_content",
                                     ],
                                 },
                                 "parameter": {
@@ -313,6 +324,11 @@ class ControlWindows(Skill):
                     function_response = (
                         "There was a problem getting your list of applications."
                     )
+
+            elif "clipboard" in parameters["command"].lower():
+                text_received = self.get_text_from_clipboard()
+                function_response = text_received
+
             else:
                 command = parameters["command"]
                 app_minimize = self.execute_ui_command(parameter, command)
