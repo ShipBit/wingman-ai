@@ -153,7 +153,7 @@ class ConfigService:
 
     # GET /configs/templates
     def get_config_templates(self):
-        return self.config_manager.get_template_dirs()
+        return self.config_manager.get_config_template_dirs()
 
     # GET /config
     async def get_config(self, config_name: Optional[str] = "") -> ConfigWithDirInfo:

@@ -7,9 +7,14 @@ import numpy as np
 import soundfile as sf
 import sounddevice as sd
 from scipy.signal import resample
+from api.enums import SoundEffect
 from api.interface import SoundConfig
 from services.pub_sub import PubSub
-from services.sound_effects import get_sound_effects
+from services.sound_effects import (
+    get_additional_layer_file,
+    get_azure_workaround_gain_boost,
+    get_sound_effects,
+)
 
 
 class AudioPlayer:
@@ -29,6 +34,9 @@ class AudioPlayer:
         self.stream_event = PubSub()
         self.on_playback_started = on_playback_started
         self.on_playback_finished = on_playback_finished
+        self.sample_dir = path.join(
+            path.abspath(path.dirname(__file__)), "../audio_samples"
+        )
 
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self.event_loop = loop
@@ -37,14 +45,51 @@ class AudioPlayer:
         def callback(outdata, frames, time, status):
             nonlocal playhead
             chunksize = frames * channels
-            current_chunk = audio[playhead : playhead + chunksize].reshape(-1, channels)
-            if current_chunk.shape[0] < frames:
-                outdata[: current_chunk.shape[0]] = current_chunk
-                outdata[current_chunk.shape[0] :] = 0  # Fill the rest with zeros
-                raise sd.CallbackStop  # Stop the stream after playing the current chunk
+
+            if playhead * channels >= len(audio):
+                if np.issubdtype(outdata.dtype, np.floating):
+                    outdata.fill(0.0)  # Fill with zero for floats
+                else:
+                    outdata[:] = bytes(
+                        len(outdata)
+                    )  # Fill with zeros for buffer of int types
+                raise sd.CallbackStop
+
+            end = min(playhead + chunksize, len(audio) // channels)
+            current_chunk = audio[playhead:end]
+
+            if channels > 1 and current_chunk.ndim == 1:
+                current_chunk = np.tile(current_chunk[:, None], (1, channels)).flatten()
+
+            # It's critical that current_chunk matches the number of elements in outdata
+            required_length = frames * channels
+            current_chunk = current_chunk[:required_length]
+
+            if len(current_chunk) < required_length:
+                current_chunk = np.pad(
+                    current_chunk, (0, required_length - len(current_chunk)), "constant"
+                )
+
+            if outdata.dtype == np.float32 or outdata.dtype == np.float64:
+                outdata[:required_length] = current_chunk.astype(outdata.dtype).reshape(
+                    outdata.shape
+                )
             else:
-                outdata[:] = current_chunk
-                playhead += chunksize  # Advance the playhead
+                current_chunk_bytes = current_chunk.astype(outdata.dtype).tobytes()
+                outdata[: len(current_chunk_bytes)] = current_chunk_bytes[
+                    : len(outdata)
+                ]
+
+            playhead += chunksize
+
+            if end >= len(audio):
+                if np.issubdtype(outdata.dtype, np.floating):
+                    outdata.fill(0.0)  # Fill with zero for floats
+                else:
+                    outdata[:] = bytes(
+                        len(outdata)
+                    )  # Fill with zeros buffer of int types
+                raise sd.CallbackStop
 
         playhead = 0  # Tracks the position in the audio
 
@@ -74,6 +119,7 @@ class AudioPlayer:
         input_data: bytes | tuple,
         config: SoundConfig,
         wingman_name: str = None,
+        mixed_layer_gain_boost_db: float = -9.0,
     ):
         if isinstance(input_data, bytes):
             audio, sample_rate = self._get_audio_from_stream(input_data)
@@ -90,8 +136,24 @@ class AudioPlayer:
         for sound_effect in sound_effects:
             audio = sound_effect(audio, sample_rate)
 
+        mixed_layer_file = None
+        for effect in config.effects:
+            if not mixed_layer_file:
+                mixed_layer_file = get_additional_layer_file(effect)
+
+        if mixed_layer_file:
+            audio = self._mix_in_layer(
+                audio, sample_rate, mixed_layer_file, mixed_layer_gain_boost_db
+            )
+
+        contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
+        if contains_high_end_radio:
+            audio = self._add_wav_effect(audio, sample_rate, "Radio_Static_Beep.wav")
+
         if config.play_beep:
-            audio = self._add_beep_effect(audio, sample_rate)
+            audio = self._add_wav_effect(audio, sample_rate, "beep.wav")
+        elif config.play_beep_apollo:
+            audio = self._add_wav_effect(audio, sample_rate, "Apollo_Beep.wav")
 
         channels = audio.shape[1] if audio.ndim > 1 else 1
 
@@ -127,10 +189,9 @@ class AudioPlayer:
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
 
-    def play_beep(self):
-        bundle_dir = path.abspath(path.dirname(__file__))
+    def play_wav(self, audio_sample_file: str):
         beep_audio, beep_sample_rate = self.get_audio_from_file(
-            path.join(bundle_dir, "../audio_samples/beep.wav")
+            path.join(self.sample_dir, audio_sample_file)
         )
         self.start_playback(beep_audio, beep_sample_rate, 1, None)
 
@@ -142,15 +203,23 @@ class AudioPlayer:
         audio, sample_rate = sf.read(io.BytesIO(stream), dtype="float32")
         return audio, sample_rate
 
-    def _add_beep_effect(self, audio: np.ndarray, sample_rate: int) -> np.ndarray:
-        bundle_dir = path.abspath(path.dirname(__file__))
+    def _add_wav_effect(
+        self, audio: np.ndarray, sample_rate: int, audio_sample_file: str
+    ) -> np.ndarray:
         beep_audio, beep_sample_rate = self.get_audio_from_file(
-            path.join(bundle_dir, "../audio_samples/beep.wav")
+            path.join(self.sample_dir, audio_sample_file)
         )
 
         # Resample the beep sound if necessary to match the sample rate of 'audio'
         if beep_sample_rate != sample_rate:
             beep_audio = self._resample_audio(beep_audio, beep_sample_rate, sample_rate)
+
+        # Ensure beep_audio has the same number of channels as 'audio'
+        if beep_audio.ndim == 1 and audio.ndim == 2:
+            beep_audio = np.tile(beep_audio[:, np.newaxis], (1, audio.shape[1]))
+
+        if beep_audio.ndim == 2 and audio.ndim == 1:
+            audio = audio[:, np.newaxis]
 
         # Concatenate the beep sound to the start and end of the audio
         audio_with_beeps = np.concatenate((beep_audio, audio, beep_audio), axis=0)
@@ -170,27 +239,134 @@ class AudioPlayer:
 
         return resampled_audio
 
+    def _mix_in_layer(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        mix_layer_file: str,
+        mix_layer_gain_boost_db: float = 0.0,
+    ) -> np.ndarray:
+        noise_audio, noise_sample_rate = self.get_audio_from_file(
+            path.join(self.sample_dir, mix_layer_file)
+        )
+
+        if noise_sample_rate != sample_rate:
+            noise_audio = self._resample_audio(
+                noise_audio, noise_sample_rate, sample_rate
+            )
+
+        # Ensure both audio and noise_audio have compatible shapes for addition
+        if noise_audio.ndim == 1:
+            noise_audio = noise_audio[:, None]
+
+        if audio.ndim == 1:
+            audio = audio[:, None]
+
+        if noise_audio.shape[1] != audio.shape[1]:
+            noise_audio = np.tile(noise_audio, (1, audio.shape[1]))
+
+        # Ensure noise_audio length matches audio length
+        if len(noise_audio) < len(audio):
+            repeat_count = int(np.ceil(len(audio) / len(noise_audio)))
+            noise_audio = np.tile(noise_audio, (repeat_count, 1))[: len(audio)]
+
+        noise_audio = noise_audio[: len(audio)]
+
+        # Convert gain boost from dB to amplitude factor
+        amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
+
+        # Apply volume scaling to the mixed-in layer
+        audio_with_noise = audio + amplitude_factor * noise_audio
+        return audio_with_noise
+
     async def stream_with_effects(
         self,
         buffer_callback,
         config: SoundConfig,
         wingman_name: str,
+        mix_layer_gain_boost_db: float = 0.0,
         buffer_size=2048,
         sample_rate=16000,
         channels=1,
         dtype="int16",
+        use_gain_boost=False,
     ):
         buffer = bytearray()
         stream_finished = False
         data_received = False
+        mixed_pos = 0
+
+        mix_layer_file = None
+        for effect in config.effects:
+            if not mix_layer_file:
+                mix_layer_file = get_additional_layer_file(effect)
+                # if we boost the actual audio, we need to boost the mixed layer as well
+                if use_gain_boost:
+                    mix_layer_gain_boost_db += get_azure_workaround_gain_boost(effect)
+
+        if mix_layer_file:
+            noise_audio, noise_sample_rate = self.get_audio_from_file(
+                path.join(self.sample_dir, mix_layer_file)
+            )
+            if noise_sample_rate != sample_rate:
+                noise_audio = self._resample_audio(
+                    noise_audio, noise_sample_rate, sample_rate
+                )
+            if channels > 1 and noise_audio.ndim == 1:
+                noise_audio = np.tile(noise_audio[:, None], (1, channels))
+            noise_audio = noise_audio.flatten()
+
+        def get_mixed_chunk(length):
+            nonlocal mixed_pos, noise_audio
+            chunk = np.zeros(length, dtype=np.float32)
+            remaining = length
+            while remaining > 0:
+                if mixed_pos >= len(noise_audio):
+                    mixed_pos = 0
+                end_pos = min(len(noise_audio), mixed_pos + remaining)
+                chunk[
+                    length - remaining : length - remaining + (end_pos - mixed_pos)
+                ] = noise_audio[mixed_pos:end_pos]
+                remaining -= end_pos - mixed_pos
+                mixed_pos = end_pos
+            return chunk
 
         def callback(outdata, frames, time, status):
-            nonlocal buffer, stream_finished, data_received
-
+            nonlocal buffer, stream_finished, data_received, mixed_pos
             if data_received and len(buffer) == 0:
                 stream_finished = True
-            outdata[: len(buffer)] = buffer[: len(outdata)]
-            buffer = buffer[len(outdata) :]
+                outdata[:] = bytes(len(outdata))  # Fill the buffer with zeros
+                return
+
+            if len(buffer) > 0:
+                num_elements = frames * channels
+                byte_size = np.dtype(dtype).itemsize
+                data_chunk = np.frombuffer(
+                    buffer[: num_elements * byte_size], dtype=dtype
+                ).astype(np.float32)
+
+                if len(data_chunk) < num_elements:
+                    data_chunk = np.pad(
+                        data_chunk, (0, num_elements - len(data_chunk)), "constant"
+                    )
+
+                if channels > 1 and data_chunk.ndim == 1:
+                    data_chunk = np.tile(data_chunk[:, None], (1, channels)).flatten()
+
+                data_chunk = data_chunk[: frames * channels]
+
+                if mix_layer_file:
+                    mix_chunk = get_mixed_chunk(len(data_chunk))
+                    # Convert gain boost from dB to amplitude factor
+                    amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
+                    data_chunk = (
+                        data_chunk + mix_chunk[: len(data_chunk)] * amplitude_factor
+                    )
+
+                data_chunk = data_chunk.flatten()
+                data_chunk_bytes = data_chunk.astype(dtype).tobytes()
+                outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
+                buffer = buffer[num_elements * byte_size :]
 
         with sd.RawOutputStream(
             samplerate=sample_rate,
@@ -206,10 +382,19 @@ class AudioPlayer:
             await self.notify_playback_started(wingman_name)
 
             if config.play_beep:
-                self.play_beep()
+                self.play_wav("beep.wav")
+            elif config.play_beep_apollo:
+                self.play_wav("Apollo_Beep.wav")
+
+            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
+            if contains_high_end_radio:
+                self.play_wav("Radio_Static_Beep.wav")
+
             self.raw_stream.start()
 
-            sound_effects = get_sound_effects(config)
+            sound_effects = get_sound_effects(
+                config=config, use_gain_boost=use_gain_boost
+            )
             audio_buffer = bytearray(buffer_size)
             filled_size = buffer_callback(audio_buffer)
             while filled_size > 0:
@@ -222,18 +407,29 @@ class AudioPlayer:
                         data_in_numpy, sample_rate, reset=False
                     )
 
+                if mix_layer_file:
+                    noise_chunk = get_mixed_chunk(len(data_in_numpy))
+                    # Convert gain boost from dB to amplitude factor
+                    amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
+                    data_in_numpy = data_in_numpy + noise_chunk * amplitude_factor
+
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(processed_buffer)
-
                 await self.stream_event.publish("audio", processed_buffer)
-
                 filled_size = buffer_callback(audio_buffer)
 
             data_received = True
             while not stream_finished:
                 sd.sleep(100)
 
+            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
+            if contains_high_end_radio:
+                self.play_wav("Radio_Static_Beep.wav")
+
             if config.play_beep:
-                self.play_beep()
+                self.play_wav("beep.wav")
+            elif config.play_beep_apollo:
+                self.play_wav("Apollo_Beep.wav")
+
             self.is_playing = False
             await self.notify_playback_finished(wingman_name)

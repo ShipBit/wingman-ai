@@ -14,7 +14,7 @@ from services.secret_keeper import SecretKeeper
 
 class WingmanPro:
     def __init__(
-        self, wingman_name: str, settings: WingmanProSettings, timeout: int = 30
+        self, wingman_name: str, settings: WingmanProSettings, timeout: int = 120
     ):
         self.wingman_name: str = wingman_name
         self.settings: WingmanProSettings = settings
@@ -98,7 +98,7 @@ class WingmanPro:
             json=data,
             timeout=self.timeout,
         )
-        if response.status_code == 403:
+        if response.status_code == 401 or response.status_code == 403:
             self.send_unauthorized_error()
             return None
         else:
@@ -178,6 +178,7 @@ class WingmanPro:
                 buffer_callback=buffer_callback,
                 config=sound_config,
                 wingman_name=wingman_name,
+                use_gain_boost=True,  # "Azure Streaming" low gain workaround
             )
         else:  # non-streaming
             response = requests.post(
@@ -233,6 +234,30 @@ class WingmanPro:
                 config=sound_config,
                 wingman_name=wingman_name,
             )
+
+    async def generate_image(
+        self,
+        text: str,
+    ):
+        data = {
+            "text": text,
+        }
+        response = requests.post(
+            url=f"{self.settings.base_url}/generate-image",
+            params={
+                "region": self.settings.region.value,
+            },
+            headers=self._get_headers(),
+            json=data,
+            timeout=self.timeout,
+        )
+        if response is not None:
+            if response.status_code == 403:
+                self.send_unauthorized_error()
+                return
+            else:
+                response.raise_for_status()
+            return response.text
 
     def get_available_voices(self, locale: str = ""):
         response = requests.get(

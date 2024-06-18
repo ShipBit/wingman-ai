@@ -1,5 +1,7 @@
+import threading
 import time
-from api.enums import LogSource, LogType, WingmanInitializationErrorType
+from typing import TYPE_CHECKING
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
@@ -9,6 +11,8 @@ from api.interface import (
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
+if TYPE_CHECKING:
+    from wingmen.wingman import Wingman
 
 class Skill:
     def __init__(
@@ -16,11 +20,13 @@ class Skill:
         config: SkillConfig,
         wingman_config: WingmanConfig,
         settings: SettingsConfig,
+        wingman: "Wingman",
     ) -> None:
 
         self.config = config
         self.settings = settings
         self.wingman_config = wingman_config
+        self.wingman = wingman
         self.secret_keeper = SecretKeeper()
         self.name = self.__class__.__name__
         self.printr = Printr()
@@ -45,7 +51,23 @@ class Skill:
         """Execute a tool by name with parameters."""
         pass
 
-    async def gpt_call(self, messages, tools: list[dict] = None) -> any:
+    async def on_add_user_message(self, message: str) -> None:
+        """Called when a user message is added to the system."""
+        pass
+
+    async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
+        """Called when a system message is added to the system."""
+        pass
+
+    async def is_summarize_needed(self, tool_name: str) -> bool:
+        """Returns whether a tool needs to be summarized."""
+        return True
+    
+    async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        """Returns whether a tool probably takes long and a message should be printet in between."""
+        return False
+
+    async def llm_call(self, messages, tools: list[dict] = None) -> any:
         return any
 
     async def retrieve_secret(
@@ -109,3 +131,7 @@ class Skill:
     def start_execution_benchmark(self):
         """Starts the execution benchmark timer."""
         self.execution_start = time.perf_counter()
+
+    def threaded_execution(self, function, *args) -> threading.Thread:
+        """Execute a function in a separate thread."""
+        pass

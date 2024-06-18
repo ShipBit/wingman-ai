@@ -1,6 +1,8 @@
 import random
 import time
-from difflib import SequenceMatcher
+import difflib
+import asyncio
+import threading
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
@@ -65,6 +67,7 @@ class Wingman:
         self.stt_provider = self.config.features.stt_provider
         self.conversation_provider = self.config.features.conversation_provider
         self.summarize_provider = self.config.features.summarize_provider
+        self.image_generation_provider = self.config.features.image_generation_provider
 
         self.skills: list[Skill] = []
 
@@ -148,8 +151,12 @@ class Wingman:
                     config=skill_config,
                     wingman_config=self.config,
                     settings=self.settings,
+                    wingman=self,
                 )
                 if skill:
+                    # init skill methods
+                    skill.threaded_execution = self.threaded_execution
+
                     validation_errors = await skill.validate()
                     errors.extend(validation_errors)
 
@@ -201,7 +208,7 @@ class Wingman:
         Hooks:
             - async _transcribe: transcribe the audio to text
             - async _get_response_for_transcript: process the transcript and return a text response
-            - async _play_to_user: do something with the response, e.g. play it as audio
+            - async play_to_user: do something with the response, e.g. play it as audio
         """
 
         self.start_execution_benchmark()
@@ -232,7 +239,7 @@ class Wingman:
                 )
 
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response, skill = (
+            process_result, instant_response, skill, interrupt = (
                 await self._get_response_for_transcript(transcript)
             )
 
@@ -251,7 +258,7 @@ class Wingman:
 
         # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
         if process_result:
-            await self._play_to_user(str(process_result))
+            await self.play_to_user(str(process_result), not interrupt)
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
@@ -281,17 +288,18 @@ class Wingman:
         """
         return ("", "", None)
 
-    async def _play_to_user(self, text: str):
+    async def play_to_user(self, text: str, no_interrupt: bool = False):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
             text (str): The response of your _get_response_for_transcript. This is usually the "response" from conversation with the AI.
+            no_interrupt (bool): prevent interrupting the audio playback
         """
         pass
 
     # ───────────────────────────────── Commands ─────────────────────────────── #
 
-    def _get_command(self, command_name: str):
+    def get_command(self, command_name: str):
         """Extracts the command with the given name
 
         Args:
@@ -324,7 +332,7 @@ class Wingman:
 
         return random.choice(command_responses)
 
-    async def _execute_instant_activation_command(self, transcript: str):
+    async def _execute_instant_activation_command(self, transcript: str) -> list[CommandConfig] | None:
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -334,24 +342,30 @@ class Wingman:
             {} | None: The executed instant_activation command.
         """
 
-        instant_activation_commands = [
-            command for command in self.config.commands if command.instant_activation
-        ]
+        # create list with phrases pointing to commands
+        commands_by_instant_activation = {}
+        for command in self.config.commands:
+            if command.instant_activation:
+                for phrase in command.instant_activation:
+                    if phrase.lower() in commands_by_instant_activation:
+                        commands_by_instant_activation[phrase.lower()].append(command)
+                    else:
+                        commands_by_instant_activation[phrase.lower()] = [command]
 
-        # check if transcript matches any instant activation command. Each command has a list of possible phrases
-        for command in instant_activation_commands:
-            for phrase in command.instant_activation:
-                ratio = SequenceMatcher(
-                    None,
-                    transcript.lower(),
-                    phrase.lower(),
-                ).ratio()
-                if (
-                    ratio > 0.8
-                ):  # if the ratio is higher than 0.8, we assume that the command was spoken
-                    await self._execute_command(command)
-                    return command
-        return None
+        # find best matching phrase
+        phrase = difflib.get_close_matches(transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8)
+
+        # if no phrase found, return None
+        if not phrase:
+            return None
+
+        # execute all commands for the phrase
+        commands = commands_by_instant_activation[phrase[0]]
+        for command in commands:
+            await self._execute_command(command)
+
+        # return the executed command
+        return commands
 
     async def _execute_command(self, command: CommandConfig) -> str:
         """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
@@ -464,3 +478,15 @@ class Wingman:
 
             if action.wait:
                 time.sleep(action.wait)
+
+    def threaded_execution(self, function, *args) -> threading.Thread:
+        """Execute a function in a separate thread."""
+        def start_thread(function, *args):
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            new_loop.run_until_complete(function(*args))
+            new_loop.close()
+
+        thread = threading.Thread(target=start_thread, args=(function, *args))
+        thread.start()
+        return thread

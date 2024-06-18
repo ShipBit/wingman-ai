@@ -1,0 +1,3 @@
+[console_scripts]
+trafilatura = trafilatura.cli:main
+trafilatura_gui = trafilatura.gui:main

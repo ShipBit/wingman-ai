@@ -43,6 +43,7 @@ class CommandTag(Enum):
 
 class CustomPropertyType(Enum):
     STRING = "string"
+    TEXTAREA = "textarea"
     NUMBER = "number"
     BOOLEAN = "boolean"
     SINGLE_SELECT = "single_select"
@@ -113,9 +114,10 @@ class OpenAiTtsVoice(Enum):
 
 
 class SoundEffect(Enum):
-    ROBOT = "ROBOT"
-    RADIO = "RADIO"
-    INTERIOR_HELMET = "INTERIOR_HELMET"
+    AI = "AI"
+    LOW_QUALITY_RADIO = "LOW_QUALITY_RADIO"
+    MEDIUM_QUALITY_RADIO = "MEDIUM_QUALITY_RADIO"
+    HIGH_END_RADIO = "HIGH_END_RADIO"
     INTERIOR_SMALL = "INTERIOR_SMALL"
     INTERIOR_MEDIUM = "INTERIOR_MEDIUM"
     INTERIOR_LARGE = "INTERIOR_LARGE"
@@ -152,6 +154,10 @@ class ConversationProvider(Enum):
     OPENROUTER = "openrouter"
     LOCAL_LLM = "local_llm"
     AZURE = "azure"
+    WINGMAN_PRO = "wingman_pro"
+
+class ImageGenerationProvider(Enum):
+    OPENAI = "openai"
     WINGMAN_PRO = "wingman_pro"
 
 
@@ -273,6 +279,9 @@ class VoiceActivationSttProviderEnumModel(BaseEnumModel):
 
 class ConversationProviderEnumModel(BaseEnumModel):
     conversation_provider: ConversationProvider
+
+class ImageGenerationProviderEnumModel(BaseEnumModel):
+    image_generation_provider: ImageGenerationProvider
 
 
 class SummarizeProviderEnumModel(BaseEnumModel):

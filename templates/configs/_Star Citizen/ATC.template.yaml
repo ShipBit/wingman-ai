@@ -1,5 +1,5 @@
 name: ATC
-description: /
+description: |
   Air Traffic Controller is tasked with overseeing spacecraft traffic while ensuring safety and efficiency.
   It handling all aspects of space station operations and emergencies.
 prompts:
@@ -29,8 +29,8 @@ prompts:
     - Emergency protocols for unexpected events like piracy, system failures, or distress signals.
 record_key: delete
 sound:
-  effects: [RADIO]
-  play_beep: True
+  effects: [AI]
+  play_beep_apollo: true
 openai:
   tts_voice: onyx
 commands:

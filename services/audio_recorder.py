@@ -47,17 +47,27 @@ class AudioRecorder:
         self.stop_function = None
         # default devices are fixed once this is called
         # so this methods needs to be called every time a new device is configured
-        self.update_input_stream()
+        self.valid_mic = True
+        self.valid_mic = self.update_input_stream()
 
-    def update_input_stream(self):
+    def update_input_stream(self) -> bool:
         if self.recstream is not None:
             self.recstream.close()
 
-        self.recstream = sounddevice.InputStream(
-            callback=self.__handle_input_stream,
-            channels=self.channels,
-            samplerate=self.samplerate,
-        )
+        try:
+            # throw exception to test
+            self.recstream = sounddevice.InputStream(
+                callback=self.__handle_input_stream,
+                channels=self.channels,
+                samplerate=self.samplerate,
+            )
+            return True
+        except Exception:
+            if self.valid_mic:
+                # only show error once
+                self.printr.toast_error("Unable to open microphone input stream. Please check your microphone, anti-virus and windows privacy settings. Audio input will be disabled.")
+            self.recstream = None
+            return False
 
     def __handle_input_stream(self, indata, _frames, _time, _status):
         if self.is_recording:
@@ -69,7 +79,7 @@ class AudioRecorder:
     # Push to talk:
 
     def start_recording(self, wingman_name: str):
-        if self.is_recording:
+        if self.is_recording or not self.recstream:
             return
 
         self.recstream.start()
@@ -81,6 +91,9 @@ class AudioRecorder:
         )
 
     def stop_recording(self, wingman_name) -> None | str:
+        if not self.recstream:
+            return None
+
         self.recstream.stop()
         self.is_recording = False
         self.printr.print(

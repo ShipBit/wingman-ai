@@ -1,9 +1,13 @@
 import json
 import time
+import asyncio
+import random
 from typing import Mapping
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
+    ImageGenerationProvider,
     LogType,
+    LogSource,
     TtsProvider,
     SttProvider,
     ConversationProvider,
@@ -18,6 +22,7 @@ from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
 from providers.whispercpp import Whispercpp
 from services.audio_player import AudioPlayer
+from services.markdown import cleanup_text
 from services.printr import Printr
 from skills.skill_base import Skill
 from wingmen.wingman import Wingman
@@ -63,8 +68,12 @@ class OpenAiWingman(Wingman):
         self.whispercpp: Whispercpp = None
         self.wingman_pro: WingmanPro = None
 
+        # tool queue
         self.pending_tool_calls = []
         self.last_gpt_call = None
+
+        # generated addional content
+        self.instant_responses = []
 
         self.messages = []
         """The conversation history that is used for the GPT calls"""
@@ -176,13 +185,23 @@ class OpenAiWingman(Wingman):
             )
         return False
 
+    async def prepare(self):
+        if self.config.features.use_generic_instant_responses:
+            printr.print(
+                "Generating AI instant responses...",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            self.threaded_execution(self._generate_instant_responses)
+
     async def prepare_skill(self, skill: Skill):
         # prepare the skill and skill tools
         for tool_name, tool in skill.get_tools():
             self.tool_skills[tool_name] = skill
             self.skill_tools.append(tool)
 
-        skill.gpt_call = self.actual_llm_call
+        # init skill methods
+        skill.llm_call = self.actual_llm_call
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("openai", errors)
@@ -277,6 +296,64 @@ class OpenAiWingman(Wingman):
             wingman_name=self.name, settings=self.settings.wingman_pro
         )
 
+    async def _generate_instant_responses(self) -> None:
+        """Generates general instant responses based on given context."""
+        context = await self.get_context()
+        messages = [
+            {
+                "role": "system",
+                "content": """
+                Generate a list in JSON format of at least 20 short direct text responses.
+                Make sure the response only contains the JSON, no additional text.
+                They must fit the described character in the given context by the user.
+                Every generated response must be generally usable in every situation.
+                Responses must show its still in progress and not in a finished state.
+                The user request this response is used on is unknown. Therefore it must be generic.
+                Good examples:
+                    - "Processing..."
+                    - "Stand by..."
+
+                Bad examples:
+                    - "Generating route..." (too specific)
+                    - "I'm sorry, I can't do that." (too negative)
+
+                Response example:
+                [
+                    "OK",
+                    "Generating results...",
+                    "Roger that!",
+                    "Stand by..."
+                ]
+            """,
+            },
+            {"role": "user", "content": context},
+        ]
+        completion = await self.actual_llm_call(messages)
+        if completion is None:
+            return
+        if completion.choices[0].message.content:
+            retry_limit = 3
+            retry_count = 1
+            valid = False
+            while not valid and retry_count <= retry_limit:
+                try:
+                    responses = json.loads(completion.choices[0].message.content)
+                    valid = True
+                    for response in responses:
+                        if response not in self.instant_responses:
+                            self.instant_responses.append(str(response))
+                except json.JSONDecodeError:
+                    messages.append(completion.choices[0].message)
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "It was tried to handle the response in its entierty as a JSON string. Fix response to be a valid JSON, it was not convertable.",
+                        }
+                    )
+                    if retry_count <= retry_limit:
+                        completion = await self.actual_llm_call(messages)
+                    retry_count += 1
+
     async def _transcribe(self, audio_input_wav: str) -> str | None:
         """Transcribes the recorded audio to text using the OpenAI Whisper API.
 
@@ -340,39 +417,69 @@ class OpenAiWingman(Wingman):
             transcript (str): The user's spoken text transcribed.
 
         Returns:
-            A tuple of strings representing the response to a function call and an instant response.
+            tuple[str, str, Skill | None, bool]: A tuple containing the final response, the instant response (if any), the skill that was used, and a boolean indicating whether the current audio should be interrupted.
         """
-        await self._add_user_message(transcript)
+        await self.add_user_message(transcript)
 
         instant_response, instant_command_executed = await self._try_instant_activation(
             transcript
         )
         if instant_response:
-            self._add_assistant_message(instant_response)
-            return instant_response, instant_response, None
+            await self.add_assistant_message(instant_response)
+            return instant_response, instant_response, None, True
 
         # make a GPT call with the conversation history
         # if an instant command got executed, prevent tool calls to avoid duplicate executions
         completion = await self._llm_call(instant_command_executed is False)
 
         if completion is None:
-            return None, None, None
+            return None, None, None, True
 
         response_message, tool_calls = await self._process_completion(completion)
 
         # add message and dummy tool responses to conversation history
-        self._add_gpt_response(response_message, tool_calls)
+        is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
+            response_message, tool_calls
+        )
+        interrupt = True  # initial answer should be awaited, if its not there, current audio should be interrupted
 
         if tool_calls:
+            if is_waiting_response_needed:
+                message = None
+                if response_message.content:
+                    message = response_message.content
+                elif self.instant_responses:
+                    message = self.instant_responses[
+                        random.randint(0, len(self.instant_responses) - 1)
+                    ]
+                    is_summarize_needed = True
+                if message:
+                    self.threaded_execution(self.play_to_user, message)
+                    await printr.print_async(
+                        f"{message}",
+                        color=LogType.POSITIVE,
+                        source=LogSource.WINGMAN,
+                        source_name=self.name,
+                        skill_name="",
+                    )
+                    interrupt = False
+                else:
+                    is_summarize_needed = True
+            else:
+                is_summarize_needed = True
+
             instant_response, skill = await self._handle_tool_calls(tool_calls)
             if instant_response:
-                return None, instant_response, None
+                return None, instant_response, None, interrupt
 
-            summarize_response = await self._summarize_function_calls()
-            summarize_response = self._finalize_response(str(summarize_response))
-            return summarize_response, summarize_response, skill
+            if is_summarize_needed:
+                summarize_response = await self._summarize_function_calls()
+                summarize_response = self._finalize_response(str(summarize_response))
+                return summarize_response, summarize_response, skill, interrupt
+            elif is_waiting_response_needed:
+                return None, None, None, interrupt
 
-        return response_message.content, response_message.content, None
+        return response_message.content, response_message.content, None, interrupt
 
     async def _fix_tool_calls(self, tool_calls):
         """Fixes tool calls that have a command name as function name.
@@ -395,7 +502,12 @@ class OpenAiWingman(Wingman):
                 )
 
                 # try to resolve function name to a command name
-                if len(function_args) == 0 and self._get_command(function_name):
+                if (len(function_args) == 0 and self.get_command(function_name)) or (
+                    len(function_args) == 1
+                    and "command_name" in function_args
+                    and self.get_command(function_args["command_name"])
+                    and function_name == function_args["command_name"]
+                ):
                     function_args["command_name"] = function_name
                     function_name = "execute_command"
 
@@ -410,23 +522,47 @@ class OpenAiWingman(Wingman):
 
         return tool_calls
 
-    def _add_gpt_response(self, message, tool_calls) -> None:
+    async def _add_gpt_response(self, message, tool_calls) -> bool:
         """Adds a message from GPT to the conversation history as well as adding dummy tool responses for any tool calls.
 
         Args:
             message (dict): The message to add.
             tool_calls (list): The tool calls associated with the message.
         """
+        # call skill hooks
+        for skill in self.skills:
+            await skill.on_add_assistant_message(message.content, message.tool_calls)
+
         # do not tamper with this message as it will lead to 400 errors!
         self.messages.append(message)
 
         # adding dummy tool responses to prevent corrupted message history on parallel requests
+        # and checks if waiting response should be played
+        unique_tools = {}
+        is_waiting_response_needed = False
+        is_summarize_needed = False
+
         if tool_calls:
             for tool_call in tool_calls:
                 if not tool_call.id:
                     continue
                 # adding a dummy tool response to get updated later
                 self._add_tool_response(tool_call, "Loading..", False)
+
+                function_name = tool_call.function.name
+                if function_name in self.tool_skills:
+                    skill = self.tool_skills[function_name]
+                    if await skill.is_waiting_response_needed(function_name):
+                        is_waiting_response_needed = True
+                    if await skill.is_summarize_needed(function_name):
+                        is_summarize_needed = True
+
+                unique_tools[function_name] = True
+
+            if len(unique_tools) == 1 and "execute_command" in unique_tools:
+                is_waiting_response_needed = True
+
+        return is_waiting_response_needed, is_summarize_needed
 
     def _add_tool_response(self, tool_call, response: str, completed: bool = True):
         """Adds a tool response to the conversation history.
@@ -527,7 +663,7 @@ class OpenAiWingman(Wingman):
 
         return True
 
-    async def _add_user_message(self, content: str):
+    async def add_user_message(self, content: str):
         """Shortens the conversation history if needed and adds a user message to it.
 
         Args:
@@ -536,16 +672,24 @@ class OpenAiWingman(Wingman):
             tool_call_id (Optional[str]): The identifier for the tool call, if applicable.
             name (Optional[str]): The name of the function associated with the tool call, if applicable.
         """
+        # call skill hooks
+        for skill in self.skills:
+            await skill.on_add_user_message(content)
+
         msg = {"role": "user", "content": content}
         await self._cleanup_conversation_history()
         self.messages.append(msg)
 
-    def _add_assistant_message(self, content: str):
+    async def add_assistant_message(self, content: str):
         """Adds an assistant message to the conversation history.
 
         Args:
             content (str): The message content to add.
         """
+        # call skill hooks
+        for skill in self.skills:
+            await skill.on_add_assistant_message(content, [])
+
         msg = {"role": "assistant", "content": content}
         self.messages.append(msg)
 
@@ -610,15 +754,24 @@ class OpenAiWingman(Wingman):
         Returns:
             tuple[str, bool]: A tuple containing the response to the instant command and a boolean indicating whether an instant command was executed.
         """
-        command = await self._execute_instant_activation_command(transcript)
-        if command:
-            if command.responses:
-                response = self._select_command_response(command)
-                return response, True
+        commands = await self._execute_instant_activation_command(transcript)
+        if commands:
+            responses = []
+            for command in commands:
+                if command.responses:
+                    responses.append(self._select_command_response(command))
+            if len(responses) == len(commands):
+                # clear duplicates
+                responses = list(dict.fromkeys(responses))
+                responses = [
+                    response + "." if not response.endswith(".") else response
+                    for response in responses
+                ]
+                return " ".join(responses), True
             return None, True
         return None, False
 
-    async def _add_context(self, messages):
+    async def get_context(self):
         """build the context and inserts it into the messages"""
         skill_prompts = ""
         for skill in self.skills:
@@ -629,15 +782,25 @@ class OpenAiWingman(Wingman):
         context = self.config.prompts.system_prompt.format(
             backstory=self.config.prompts.backstory, skills=skill_prompts
         )
-        messages.insert(0, {"role": "system", "content": context})
+        return context
 
-    async def actual_llm_call(self, original_messages, tools: list[dict] = None):
+    async def add_context(self, messages):
+        messages.insert(0, {"role": "system", "content": (await self.get_context())})
+
+    async def generate_image(self, text: str) -> str:
+        """
+        Generates an image from the provided text configured provider.
+        """
+
+        if self.image_generation_provider == ImageGenerationProvider.WINGMAN_PRO:
+            return await self.wingman_pro.generate_image(text)
+
+        return ""
+
+    async def actual_llm_call(self, messages, tools: list[dict] = None):
         """
         Perform the actual GPT call with the messages provided.
         """
-        messages = original_messages.copy()
-
-        await self._add_context(messages)
 
         if self.conversation_provider == ConversationProvider.AZURE:
             completion = self.openai_azure.ask(
@@ -697,7 +860,7 @@ class OpenAiWingman(Wingman):
         self.last_gpt_call = thiscall
 
         # build tools
-        tools = self._build_tools() if allow_tool_calls else None
+        tools = self.build_tools() if allow_tool_calls else None
 
         if self.debug:
             self.start_execution_benchmark()
@@ -706,10 +869,12 @@ class OpenAiWingman(Wingman):
                 color=LogType.INFO,
             )
 
-        completion = await self.actual_llm_call(self.messages, tools)
+        messages = self.messages.copy()
+        await self.add_context(messages)
+        completion = await self.actual_llm_call(messages, tools)
 
         if self.debug:
-            self.print_execution_time(reset_timer=True)
+            await self.print_execution_time(reset_timer=True)
 
         # if request isnt most recent, ignore the response
         if self.last_gpt_call != thiscall:
@@ -769,7 +934,7 @@ class OpenAiWingman(Wingman):
                 function_response,
                 instant_response,
                 skill,
-            ) = await self._execute_command_by_function_call(
+            ) = await self.execute_command_by_function_call(
                 function_name, function_args
             )
 
@@ -805,7 +970,7 @@ class OpenAiWingman(Wingman):
         """
         messages = original_messages.copy()
 
-        await self._add_context(messages)
+        await self.add_context(messages)
 
         if self.summarize_provider == SummarizeProvider.AZURE:
             summarize_response = self.openai_azure.ask(
@@ -859,7 +1024,7 @@ class OpenAiWingman(Wingman):
             return self.messages[-1]["content"]
         return summarize_response
 
-    async def _execute_command_by_function_call(
+    async def execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str, Skill | None]:
         """
@@ -879,36 +1044,45 @@ class OpenAiWingman(Wingman):
         used_skill = None
         if function_name == "execute_command":
             # get the command based on the argument passed by the LLM
-            command = self._get_command(function_args["command_name"])
+            command = self.get_command(function_args["command_name"])
             # execute the command
             function_response = await self._execute_command(command)
             # if the command has responses, we have to play one of them
             if command and command.responses:
                 instant_response = self._select_command_response(command)
-                await self._play_to_user(instant_response)
+                await self.play_to_user(instant_response)
 
         # Go through the skills and check if the function name matches any of the tools
         if function_name in self.tool_skills:
             skill = self.tool_skills[function_name]
+
+            await printr.print_async(
+                f"Skill processing: {skill.name} ...", LogType.SUBTLE
+            )
+
             function_response, instant_response = await skill.execute_tool(
                 function_name, function_args
             )
             used_skill = skill
             if instant_response:
-                await self._play_to_user(instant_response)
+                await self.play_to_user(instant_response)
 
         return function_response, instant_response, used_skill
 
-    async def _play_to_user(self, text: str):
+    async def play_to_user(self, text: str, no_interrupt: bool = False):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
         Also adds sound effects if enabled in the configuration.
 
         Args:
             text (str): The text to play as audio.
         """
+        # remove Markdown, links, emotes and code blocks
+        text, contains_links, contains_code_blocks = cleanup_text(text)
 
-        # remove emotes between asterisks for voice responses
-        text = self._remove_emote_text(text)
+        # wait for audio player to finish playing
+        if no_interrupt and self.audio_player.is_playing:
+            while self.audio_player.is_playing:
+                await asyncio.sleep(0.1)
 
         if self.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(
@@ -979,7 +1153,7 @@ class OpenAiWingman(Wingman):
         await super()._execute_command(command)
         return "Ok"
 
-    def _build_tools(self) -> list[dict]:
+    def build_tools(self) -> list[dict]:
         """
         Builds a tool for each command that is not instant_activation.
 
@@ -1028,22 +1202,3 @@ class OpenAiWingman(Wingman):
             raise TypeError(
                 f"Message is neither a mapping nor has a 'role' attribute: {message}"
             )
-
-    def _remove_emote_text(self, input_string):
-        """Removes emotes from text responses, which LLMs tend to place between *.
-
-        Args:
-            input_string (str): The response text passed, which may contain emotes.
-
-        Returns:
-            input_string: The response string with any strings between * removed.
-        """
-        while True:
-            start = input_string.find("*")
-            if start == -1:
-                break
-            end = input_string.find("*", start + 1)
-            if end == -1:
-                break
-            input_string = input_string[:start] + input_string[end + 1 :]
-        return input_string

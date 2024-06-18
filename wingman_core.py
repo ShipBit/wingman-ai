@@ -24,6 +24,7 @@ from api.interface import (
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
+from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.file import get_writable_dir
 from services.voice_service import VoiceService
@@ -74,6 +75,18 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/send-text-to-wingman",
             endpoint=self.send_text_to_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/ask-wingman-conversation-provider",
+            endpoint=self.ask_wingman_conversation_provider,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/generate-image",
+            endpoint=self.generate_image,
             tags=tags,
         )
         self.router.add_api_route(
@@ -142,7 +155,10 @@ class WingmanCore(WebSocketUser):
         )
 
         if self.settings_service.settings.audio:
-            sd.default.device = [self.settings_service.settings.audio.input, self.settings_service.settings.audio.output]
+            sd.default.device = [
+                self.settings_service.settings.audio.input,
+                self.settings_service.settings.audio.output,
+            ]
             self.audio_recorder.update_input_stream()
 
     async def startup(self):
@@ -179,14 +195,19 @@ class WingmanCore(WebSocketUser):
             self.settings_service.settings.voice_activation.mute_toggle_key_codes
             or self.settings_service.settings.voice_activation.mute_toggle_key
         )
-        if is_mute_hotkey_pressed:
+        if (
+            self.settings_service.settings.voice_activation.enabled
+            and is_mute_hotkey_pressed
+        ):
             self.toggle_voice_recognition()
 
         if self.tower and self.active_recording["key"] == "":
             wingman = None
             if key:
                 for potential_wingman in self.tower.wingmen:
-                    if potential_wingman.get_record_key() and self.is_hotkey_pressed(potential_wingman.get_record_key()):
+                    if potential_wingman.get_record_key() and self.is_hotkey_pressed(
+                        potential_wingman.get_record_key()
+                    ):
                         wingman = potential_wingman
             elif button:
                 wingman = self.tower.get_wingman_from_mouse(button)
@@ -334,6 +355,7 @@ class WingmanCore(WebSocketUser):
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
         # devices: [output_device, input_device]
         sd.default.device = devices
+        self.audio_recorder.valid_mic = True  # this allows a new error message
         self.audio_recorder.update_input_stream()
 
     async def set_voice_activation(self, is_enabled: bool):
@@ -475,6 +497,30 @@ class WingmanCore(WebSocketUser):
     async def stop_playback(self):
         await self.audio_player.stop_playback()
 
+    # POST /ask-wingman-conversation-provider
+    async def ask_wingman_conversation_provider(self, text: str, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+
+        if wingman and text:
+            if isinstance(wingman, OpenAiWingman):
+                messages = [{"role": "user", "content": text}]
+
+                completion = await wingman.actual_llm_call(messages=messages)
+
+                return completion.choices[0].message.content
+
+        return None
+
+    # POST /generate-image
+    async def generate_image(self, text: str, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+
+        if wingman and text:
+            if isinstance(wingman, OpenAiWingman):
+                return await wingman.generate_image(text=text)
+
+        return None
+
     # POST /send-text-to-wingman
     async def send_text_to_wingman(self, text: str, wingman_name: str):
         wingman = self.tower.get_wingman_by_name(wingman_name)
@@ -523,7 +569,7 @@ class WingmanCore(WebSocketUser):
             play_thread.start()
 
     # POST /reset-conversation-history
-    def reset_conversation_history(self, wingman_name: Optional[str]):
+    def reset_conversation_history(self, wingman_name: Optional[str] = None):
         if wingman_name:
             wingman = self.tower.get_wingman_by_name(wingman_name)
             if wingman:

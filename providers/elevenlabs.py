@@ -3,7 +3,7 @@ from elevenlabslib import (
     GenerationOptions,
     PlaybackOptions,
 )
-from api.enums import ElevenlabsModel, WingmanInitializationErrorType
+from api.enums import ElevenlabsModel, SoundEffect, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
 from services.secret_keeper import SecretKeeper
@@ -52,15 +52,30 @@ class ElevenLabs:
 
         def notify_playback_finished():
             audio_player.playback_events.unsubscribe("finished", playback_finished)
+
+            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
+            if contains_high_end_radio:
+                audio_player.play_wav("Radio_Static_Beep.wav")
+
             if sound_config.play_beep:
-                audio_player.play_beep()
+                audio_player.play_wav("beep.wav")
+            elif sound_config.play_beep_apollo:
+                audio_player.play_wav("Apollo_Beep.wav")
+
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_finished(wingman_name)
             )
 
         def notify_playback_started():
             if sound_config.play_beep:
-                audio_player.play_beep()
+                audio_player.play_wav("beep.wav")
+            elif sound_config.play_beep_apollo:
+                audio_player.play_wav("Apollo_Beep.wav")
+
+            contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
+            if contains_high_end_radio:
+                audio_player.play_wav("Radio_Static_Beep.wav")
+
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_started(wingman_name)
             )
