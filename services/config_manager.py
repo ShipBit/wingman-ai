@@ -819,22 +819,57 @@ class ConfigManager:
         """
         Compare two lists and return the differences.
         """
-        diff = []
-        len_default = len(default_list)
+        if all(isinstance(item, dict) for item in default_list + wingman_list):
+            # If both lists contain dictionaries, use identifiers to compare
+            identifier = None
+            for id_key in ["id", "module", "name"]:
+                if any(id_key in item for item in default_list + wingman_list):
+                    identifier = id_key
+                    break
+            if identifier:
+                default_dict = {
+                    item[identifier]: item
+                    for item in default_list
+                    if identifier in item
+                }
+                wingman_dict = {
+                    item[identifier]: item
+                    for item in wingman_list
+                    if identifier in item
+                }
+                diff = []
+                for item_key in wingman_dict:
+                    if item_key in default_dict:
+                        nested_diff = self.__deep_diff(
+                            default_dict[item_key], wingman_dict[item_key]
+                        )
+                        if nested_diff:
+                            diff.append(nested_diff)
+                    else:
+                        diff.append(wingman_dict[item_key])
+                return diff
+        else:
+            # If the lists are basic types or not dictionaries, sort and compare
+            default_list_sorted = sorted(default_list)
+            wingman_list_sorted = sorted(wingman_list)
+            diff = []
+            len_default = len(default_list_sorted)
 
-        for i, wingman_value in enumerate(wingman_list):
-            if i < len_default:
-                default_value = default_list[i]
-                if isinstance(wingman_value, dict) and isinstance(default_value, dict):
-                    nested_diff = self.__deep_diff(default_value, wingman_value)
-                    if nested_diff:
-                        diff.append(nested_diff)
-                elif wingman_value != default_value:
+            for i, wingman_value in enumerate(wingman_list_sorted):
+                if i < len_default:
+                    default_value = default_list_sorted[i]
+                    if isinstance(wingman_value, dict) and isinstance(
+                        default_value, dict
+                    ):
+                        nested_diff = self.__deep_diff(default_value, wingman_value)
+                        if nested_diff:
+                            diff.append(nested_diff)
+                    elif wingman_value != default_value:
+                        diff.append(wingman_value)
+                else:
                     diff.append(wingman_value)
-            else:
-                diff.append(wingman_value)
 
-        return diff
+            return diff
 
     def __deep_merge(self, source: dict, updates: dict) -> dict:
         """
