@@ -941,6 +941,7 @@ class ConfigManager:
             "openai",
             "mistral",
             "groq",
+            "google",
             "openrouter",
             "local_llm",
             "edge_tts",
