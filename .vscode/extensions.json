@@ -1,7 +1,9 @@
 {
     "recommendations": [
         "ms-python.black-formatter",
-        "ms-python.python",
-        "ms-python.pylint"
+        "ms-python.pylint",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "njpwerner.autodocstring"
     ]
 }

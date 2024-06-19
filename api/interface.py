@@ -430,12 +430,9 @@ class CommandConfig(BaseModel):
     """The actions to execute when the command is called. You can use keyboard, mouse and wait actions here."""
 
 
-class CustomWingmanClassConfig(BaseModel):
+class CustomClassConfig(BaseModel):
     module: str
-    """Where your code is located. Use '.' as path separator!
-    We advise you to put all your custom wingmen into the /wingmen directory.
-    "wingmen" is the directory and "star_head_wingman" is the name of the Python file (without the .py extension).
-    """
+    """Where your code is located. Use '.' as path separator!"""
 
     name: str
     """The name of your class within your file/module."""
@@ -446,19 +443,19 @@ class LabelValuePair(BaseModel):
     value: str | int | float | bool
 
 
-class CustomWingmanProperty(BaseModel):
+class CustomProperty(BaseModel):
     id: str
     """The name of the property. Has to be unique"""
     name: str
     """The "friendly" name of the property, displayed in the UI."""
     value: str | int | float | bool | None
     """The value of the property"""
+    property_type: CustomPropertyType
+    """Determines the type of the property and which controls to render in the UI."""
     hint: Optional[str] = None
     """A hint for the user, displayed in the UI."""
     required: Optional[bool] = False
     """Marks the property as required in the UI."""
-    property_type: Optional[CustomPropertyType] = CustomPropertyType.STRING
-    """Determines the type of the property and which controls to render in the UI."""
     options: Optional[list[LabelValuePair]] = None
     """If property_type is set to 'single_select', you can provide options here."""
 
@@ -473,15 +470,14 @@ class SkillExample(BaseModel):
     answer: LocalizedMetadata
 
 
-class SkillConfig(CustomWingmanClassConfig):
+class SkillConfig(CustomClassConfig):
+    description: LocalizedMetadata
     prompt: Optional[str] = None
     """An additional prompt that extends the system prompt of the Wingman."""
-    custom_properties: Optional[list[CustomWingmanProperty]] = None
+    custom_properties: Optional[list[CustomProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
-    description: Optional[LocalizedMetadata] = None
     hint: Optional[LocalizedMetadata] = None
     examples: Optional[list[SkillExample]] = None
-    commands: Optional[list[CommandConfig]] = None
 
 
 class SkillBase(BaseModel):
@@ -528,12 +524,12 @@ class WingmanConfig(NestedConfig):
     def __setitem__(self, key, value):
         self.extra_properties[key] = value
 
-    custom_properties: Optional[list[CustomWingmanProperty]] = None
+    custom_properties: Optional[list[CustomProperty]] = None
     """You can add custom properties here to use in your custom wingman class."""
 
     disabled: Optional[bool] = False
     """Set this to true if you want to disable this wingman. You can also just remove it from the config."""
-    custom_class: Optional[CustomWingmanClassConfig] = None
+    custom_class: Optional[CustomClassConfig] = None
     """If you want to use a custom Wingman (Python) class, you can specify it here."""
     name: str
     """The "friendly" name of this Wingman. Can be changed by the user."""
