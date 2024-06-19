@@ -1,0 +1,85 @@
+name: RadioChatter
+module: skills.radio_chatter.main
+description:
+  en: Randomly playback radio chatter over time.
+  de: Spielt zufällige Funkgespräche ab.
+examples:
+  - question:
+      en: What is the status of the radio?
+      de: Was ist der Status des Funkgeräts?
+    answer:
+      en: The radio is currently turned off.
+      de: Das Funkgerät ist derzeit ausgeschaltet.
+  - question:
+      en: Please turn the radio on.
+      de: Bitte schalte das Funkgerät ein.
+    answer:
+      en: The radio is now turned on.
+      de: Das Funkgerät wurde eingeschaltet.
+  - question:
+      en: Please turn the radio off.
+      de: Bitte schalte das Funkgerät aus.
+    answer:
+      en: The radio is now off.
+      de: Das Funkgerät wurde ausgeschaltet.
+custom_properties:
+  - id: prompt
+    name: Prompt for message generation
+    hint: A prompt used on voice change to generate a new personality. Leave empty to disable.
+    required: false
+    value: "Generate a dialog between random pilots in the Star Citizen universe. Feel free to throw in some random details."
+    property_type: textarea
+  - id: voices
+    name: Available voices
+    hint: A list of voices seperated by commas. (voicename or provider.voicename or provider.subprovider.voicename) For example -> "elevenlabs.Alice, elevenlabs.zcAOhNBS3c14rBihAFp1, openai.nova, wingman_pro.azure.en-US-EmmaNeural, wingman_pro.openai.nova"
+    value: ""
+    required: false
+    property_type: textarea
+  - id: interval_min
+    name: Min interval
+    hint: The minimum time in seconds between radio chatter.
+    value: 30
+    required: true
+    property_type: number
+  - id: interval_max
+    name: Max interval
+    hint: The maximum time in seconds between radio chatter.
+    value: 300
+    required: true
+    property_type: number
+  - id: messages_min
+    name: Min messages
+    hint: The minimum number of messages to play for on chatter event.
+    value: 2
+    required: true
+    property_type: number
+  - id: messages_max
+    name: Max messages
+    hint: The maximum number of messages to play for on chatter event.
+    value: 10
+    required: true
+    property_type: number
+  - id: participants_min
+    name: Min participants
+    hint: The minimum number of participants in the chatter.
+    value: 2
+    required: true
+    property_type: number
+  - id: participants_max
+    name: Max participants
+    hint: The maximum number of participants in the chatter.
+    value: 4
+    required: true
+    property_type: number
+  - id: force_radio_sound
+    name: Force radio sound
+    hint: Overwrites wingman sound effects for radio chatter with different radio effects.
+    value: True
+    required: false
+    property_type: boolean
+  - id: auto_start
+    name: Auto start
+    hint: Automatically start the radio chatter with your wingman.
+    value: False
+    required: false
+    property_type: boolean
