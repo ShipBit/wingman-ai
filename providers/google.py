@@ -3,6 +3,7 @@ import google.generativeai as genai
 from google.generativeai.types import generation_types
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
+from pydantic import BaseModel
 
 
 class GoogleGenAI:
@@ -28,12 +29,21 @@ class GoogleGenAI:
         google_messages = []
         system_prompt = ""
         for message in openai_messages:
-            if message["role"] == "system":
-                system_prompt = message["content"]
-            elif message["role"] == "user":
-                google_messages.append({"role": "user", "parts": [message["content"]]})
-            elif message["role"] == "assistant":
-                google_messages.append({"role": "model", "parts": [message["content"]]})
+            if isinstance(message, BaseModel):
+                message_dict = message.model_dump()
+            else:
+                message_dict = message
+
+            if message_dict["role"] == "system":
+                system_prompt = message_dict["content"]
+            elif message_dict["role"] == "user":
+                google_messages.append(
+                    {"role": "user", "parts": [message_dict["content"]]}
+                )
+            elif message_dict["role"] == "assistant":
+                google_messages.append(
+                    {"role": "model", "parts": [message_dict["content"]]}
+                )
         if system_prompt:
             google_messages[0]["parts"].insert(0, f"*{system_prompt}*")
 
