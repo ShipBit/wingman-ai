@@ -20,7 +20,36 @@ class GoogleGenAI:
         aimodel = genai.GenerativeModel(model_name=model)
 
         contents = self.convert_messages(messages)
-        response = aimodel.generate_content(contents=contents, stream=stream)
+        google_tools = self.convert_tools(tools)
+
+        safety_settings = [
+            {
+                "category": "HARM_CATEGORY_DANGEROUS",
+                "threshold": "BLOCK_NONE",
+            },
+            {
+                "category": "HARM_CATEGORY_HARASSMENT",
+                "threshold": "BLOCK_NONE",
+            },
+            {
+                "category": "HARM_CATEGORY_HATE_SPEECH",
+                "threshold": "BLOCK_NONE",
+            },
+            {
+                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "threshold": "BLOCK_NONE",
+            },
+            {
+                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "threshold": "BLOCK_NONE",
+            },
+        ]
+        response = aimodel.generate_content(
+            contents=contents,
+            stream=stream,
+            tools=google_tools,
+            safety_settings=safety_settings,
+        )
         completion = self.convert_response(response=response, model=model)
 
         return completion
@@ -52,12 +81,16 @@ class GoogleGenAI:
     def convert_response(
         self, response: generation_types.GenerateContentResponse, model: str
     ):
+        text = response.candidates[0].content.parts[0].text
+        if len(response.candidates[0].content.parts) > 1:
+            function_call = response.candidates[0].content.parts[0].function_call
+
         timestamp = int(time.time())
         choices = [
             Choice(
                 finish_reason="stop",
                 index=0,
-                message=ChatCompletionMessage(content=response.text, role="assistant"),
+                message=ChatCompletionMessage(content=text, role="assistant"),
             )
         ]
         completion = ChatCompletion(
@@ -68,3 +101,22 @@ class GoogleGenAI:
             choices=choices,
         )
         return completion
+
+    def convert_tools(self, openai_tools: list[dict[str, any]]):
+        gemini_tools = {"function_declarations": []}
+
+        for tool in openai_tools:
+            if tool["type"] != "function":
+                continue
+
+            function = tool["function"]
+            gemini_tool = {
+                "name": function["name"],
+                "description": function["description"],
+            }
+            if "parameters" in function:
+                gemini_tool["parameters"] = function["parameters"]
+
+            gemini_tools["function_declarations"].append(gemini_tool)
+
+        return [gemini_tools]
