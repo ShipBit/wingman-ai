@@ -20,7 +20,8 @@ class GoogleGenAI:
         aimodel = genai.GenerativeModel(model_name=model)
 
         contents = self.convert_messages(messages)
-        google_tools = self.convert_tools(tools)
+        # TODO: tool support commented out for now - implement later if it's out of beta.
+        # google_tools = self.convert_tools(tools)
 
         safety_settings = [
             {
@@ -47,7 +48,7 @@ class GoogleGenAI:
         response = aimodel.generate_content(
             contents=contents,
             stream=stream,
-            tools=google_tools,
+            # tools=google_tools,
             safety_settings=safety_settings,
         )
         completion = self.convert_response(response=response, model=model)
@@ -82,8 +83,8 @@ class GoogleGenAI:
         self, response: generation_types.GenerateContentResponse, model: str
     ):
         text = response.candidates[0].content.parts[0].text
-        if len(response.candidates[0].content.parts) > 1:
-            function_call = response.candidates[0].content.parts[0].function_call
+        # if len(response.candidates[0].content.parts) > 1:
+        #     function_call = response.candidates[0].content.parts[0].function_call
 
         timestamp = int(time.time())
         choices = [
