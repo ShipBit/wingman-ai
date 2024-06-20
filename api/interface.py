@@ -10,6 +10,7 @@ from api.enums import (
     AzureRegion,
     ConversationProvider,
     GroqModel,
+    GoogleAiModel,
     ImageGenerationProvider,
     MistralModel,
     CustomPropertyType,
@@ -289,6 +290,11 @@ class GroqConfig(BaseModel):
     endpoint: str
 
 
+class GoogleConfig(BaseModel):
+    conversation_model: GoogleAiModel
+    summarize_model: GoogleAiModel
+
+
 class OpenRouterConfig(BaseModel):
     conversation_model: str
     summarize_model: str
@@ -493,6 +499,7 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     mistral: MistralConfig
     groq: GroqConfig
+    google: GoogleConfig
     openrouter: OpenRouterConfig
     local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig

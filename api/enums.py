@@ -97,6 +97,11 @@ class GroqModel(Enum):
     GEMMA_7B = "gemma-7b-it"
 
 
+class GoogleAiModel(Enum):
+    GEMINI_1_5_FLASH = "gemini-1.5-flash"
+    GEMINI_1_5_PRO = "gemini-1.5-pro"
+
+
 class WingmanProAzureDeployment(Enum):
     GPT_4O = "gpt-4o"
     MISTRAL_LARGE = "mistral-large-latest"
@@ -155,6 +160,8 @@ class ConversationProvider(Enum):
     LOCAL_LLM = "local_llm"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
+    GOOGLE = "google"
+
 
 class ImageGenerationProvider(Enum):
     OPENAI = "openai"
@@ -169,6 +176,7 @@ class SummarizeProvider(Enum):
     LOCAL_LLM = "local_llm"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
+    GOOGLE = "google"
 
 
 class KeyboardRecordingType(Enum):
@@ -253,6 +261,10 @@ class GroqModelEnumModel(BaseEnumModel):
     model: GroqModel
 
 
+class GoogleAiModelEnumModel(BaseEnumModel):
+    model: GoogleAiModel
+
+
 class WingmanProAzureDeploymentEnumModel(BaseEnumModel):
     deployment_name: WingmanProAzureDeployment
 
@@ -279,6 +291,7 @@ class VoiceActivationSttProviderEnumModel(BaseEnumModel):
 
 class ConversationProviderEnumModel(BaseEnumModel):
     conversation_provider: ConversationProvider
+
 
 class ImageGenerationProviderEnumModel(BaseEnumModel):
     image_generation_provider: ImageGenerationProvider
@@ -322,6 +335,7 @@ ENUM_TYPES = {
     "OpenAiModel": OpenAiModelEnumModel,
     "MistralModel": MistralModelEnumModel,
     "GroqModel": GroqModelEnumModel,
+    "GoogleAiModel": GoogleAiModelEnumModel,
     "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,
