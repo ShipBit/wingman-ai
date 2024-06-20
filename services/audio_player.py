@@ -46,6 +46,7 @@ class AudioPlayer:
             nonlocal playhead
             chunksize = frames * channels
 
+            # If we are at the end of the audio buffer, stop playback
             if playhead * channels >= len(audio):
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata.fill(0.0)  # Fill with zero for floats
@@ -55,44 +56,56 @@ class AudioPlayer:
                     )  # Fill with zeros for buffer of int types
                 raise sd.CallbackStop
 
-            end = min(playhead + chunksize, len(audio) // channels)
+            # Define the end of the current chunk
+            end = min(playhead + chunksize, len(audio))
             current_chunk = audio[playhead:end]
 
+            # Handle multi-channel conversion if necessary
             if channels > 1 and current_chunk.ndim == 1:
-                current_chunk = np.tile(current_chunk[:, None], (1, channels)).flatten()
+                current_chunk = np.tile(current_chunk[:, np.newaxis], (1, channels))
 
-            # It's critical that current_chunk matches the number of elements in outdata
+            # Flat the chunk
+            current_chunk = current_chunk.ravel()
+
             required_length = frames * channels
-            current_chunk = current_chunk[:required_length]
 
+            # Ensure current_chunk has the required length
             if len(current_chunk) < required_length:
-                current_chunk = np.pad(
-                    current_chunk, (0, required_length - len(current_chunk)), "constant"
-                )
-
-            if outdata.dtype == np.float32 or outdata.dtype == np.float64:
-                outdata[:required_length] = current_chunk.astype(outdata.dtype).reshape(
-                    outdata.shape
-                )
+                padding_length = required_length - len(current_chunk)
+                current_chunk = np.pad(current_chunk, (0, padding_length), "constant")
             else:
-                current_chunk_bytes = current_chunk.astype(outdata.dtype).tobytes()
-                outdata[: len(current_chunk_bytes)] = current_chunk_bytes[
-                    : len(outdata)
-                ]
+                current_chunk = current_chunk[:required_length]
 
-            playhead += chunksize
+            # Reshape current_chunk to match outdata's shape, only if size matches
+            try:
+                current_chunk = current_chunk.reshape((frames, channels))
+                if np.issubdtype(outdata.dtype, np.floating):
+                    outdata[:] = current_chunk.astype(outdata.dtype)
+                else:
+                    outdata_bytes = current_chunk.astype(outdata.dtype).tobytes()
+                    outdata_flat = np.frombuffer(outdata_bytes, dtype=outdata.dtype)
+                    outdata[:] = outdata_flat.reshape(outdata.shape)
+            except ValueError as e:
+                print(f"Reshape error: {e}")
+                outdata.fill(
+                    0.0 if np.issubdtype(outdata.dtype, np.floating) else 0
+                )  # Safely fill zero to avoid noise
 
-            if end >= len(audio):
+            # Update playhead
+            playhead = end
+
+            # Check if playback should stop (end of audio)
+            if playhead >= len(audio):
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata.fill(0.0)  # Fill with zero for floats
                 else:
-                    outdata[:] = bytes(
-                        len(outdata)
-                    )  # Fill with zeros buffer of int types
+                    outdata[:] = bytes(len(outdata))
                 raise sd.CallbackStop
 
-        playhead = 0  # Tracks the position in the audio
+        # Initial playhead position
+        playhead = 0
 
+        # Create and start the audio stream
         self.stream = sd.OutputStream(
             samplerate=sample_rate,
             channels=channels,
