@@ -165,7 +165,16 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
+    async def unload_tower(self):
+        if self.tower:
+            for wingman in self.tower.wingmen:
+                for skill in wingman.skills:
+                    await skill.unload()
+                await wingman.unload()
+            self.tower = None
+
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
+        await self.unload_tower()
         self.tower = Tower(
             config=config_dir_info.config, audio_player=self.audio_player
         )
