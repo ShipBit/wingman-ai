@@ -37,7 +37,7 @@ custom_properties:
     property_type: textarea
   - id: interval_min
     name: Min interval
-    hint: The minimum time in seconds between radio chatter.
+    hint: The minimum time in seconds between radio chatter. This is also the time used until the first chatter event occurs.
     value: 30
     required: true
     property_type: number
