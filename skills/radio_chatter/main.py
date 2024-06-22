@@ -411,12 +411,12 @@ class RadioChatter(Skill):
         """Start the radio chatter."""
 
         self.radio_status = True
-        time.sleep(5) # just dont start right away
+        time.sleep(min(5, self.interval_min)) # sleep for min 5s else min interval
 
         while session == self._get_session() and self.radio_status:
+            await self._generate_chatter(session)
             interval = randrange(self.interval_min, self.interval_max)
             time.sleep(interval)
-            await self._generate_chatter(session)
 
         self.radio_status = False
 
