@@ -381,4 +381,6 @@ class ConfigService:
     # POST config/defaults
     async def save_defaults_config(self, config: NestedConfig):
         self.config_manager.default_config = config
-        return self.config_manager.save_defaults_config()
+        result = self.config_manager.save_defaults_config()
+        if result:
+            self.printr.toast("Default configuration saved successfully.")
