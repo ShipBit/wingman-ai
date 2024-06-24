@@ -36,6 +36,14 @@ class Skill:
     async def validate(self) -> list[WingmanInitializationError]:
         """Validates the skill configuration."""
         return []
+    
+    async def unload(self) -> None:
+        """Unload the skill. Use this hook to clear background tasks, etc."""
+        pass
+
+    async def prepare(self) -> None:
+        """Prepare the skill. Use this hook to initialize background tasks, etc."""
+        pass
 
     def get_tools(self) -> list[tuple[str, dict]]:
         """Returns a list of tools available in the skill."""
