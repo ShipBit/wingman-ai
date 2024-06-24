@@ -284,6 +284,12 @@ class ConfigManager:
             ),
         )
 
+    def load_defaults_config(self) -> NestedConfig:
+        """Loads and validates the defaults config file (defaults.yaml)."""
+        defaults = self.__read_default_config()
+        validated_defaults = NestedConfig(**defaults)
+        return validated_defaults
+
     def load_config(
         self, config_dir: Optional[ConfigDirInfo] = None
     ) -> Tuple[ConfigDirInfo, Config]:
