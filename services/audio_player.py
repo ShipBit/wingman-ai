@@ -25,6 +25,7 @@ class AudioPlayer:
         on_playback_finished: Callable[[str], None],
     ) -> None:
         self.is_playing = False
+        self.volume = 1.0
         self.event_queue = event_queue
         self.event_loop = None
         self.stream = None
@@ -37,6 +38,13 @@ class AudioPlayer:
         self.sample_dir = path.join(
             path.abspath(path.dirname(__file__)), "../audio_samples"
         )
+
+    def set_volume(self, volume: float):
+        """Set the playback volume. `volume` should be in the range [0.0, 1.0]."""
+        if 0.0 <= volume <= 1.0:
+            self.volume = volume
+        else:
+            raise ValueError("Volume must be between 0.0 and 1.0")
 
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self.event_loop = loop
@@ -79,6 +87,7 @@ class AudioPlayer:
             # Reshape current_chunk to match outdata's shape, only if size matches
             try:
                 current_chunk = current_chunk.reshape((frames, channels))
+                current_chunk = current_chunk * self.volume
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata[:] = current_chunk.astype(outdata.dtype)
                 else:
@@ -377,6 +386,7 @@ class AudioPlayer:
                     )
 
                 data_chunk = data_chunk.flatten()
+                data_chunk = data_chunk * self.volume
                 data_chunk_bytes = data_chunk.astype(dtype).tobytes()
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
                 buffer = buffer[num_elements * byte_size :]
@@ -426,6 +436,7 @@ class AudioPlayer:
                     amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
                     data_in_numpy = data_in_numpy + noise_chunk * amplitude_factor
 
+                data_in_numpy = data_in_numpy * self.volume
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(processed_buffer)
                 await self.stream_event.publish("audio", processed_buffer)
