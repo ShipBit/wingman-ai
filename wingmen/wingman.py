@@ -493,3 +493,19 @@ class Wingman:
         thread = threading.Thread(target=start_thread, args=(function, *args))
         thread.start()
         return thread
+
+    async def update_config(self, config: WingmanConfig, validate=False):
+        """Update the config of the Wingman. This method is called when the config of the Wingman has changed."""
+        if validate:
+            old_config = WingmanConfig(**self.config.model_dump_json())
+
+        self.config = config
+
+        if validate:
+            errors = await self.validate()
+
+            if errors and len(errors) > 0:
+                self.config = old_config
+                return False
+
+        return True
