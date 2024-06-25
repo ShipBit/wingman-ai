@@ -63,12 +63,6 @@ class Wingman:
         self.debug: bool = self.settings.debug_mode
         """If enabled, the Wingman will print more debug messages and benchmark results."""
 
-        self.tts_provider = self.config.features.tts_provider
-        self.stt_provider = self.config.features.stt_provider
-        self.conversation_provider = self.config.features.conversation_provider
-        self.summarize_provider = self.config.features.summarize_provider
-        self.image_generation_provider = self.config.features.image_generation_provider
-
         self.skills: list[Skill] = []
 
     def get_record_key(self) -> str | int:
@@ -336,7 +330,9 @@ class Wingman:
 
         return random.choice(command_responses)
 
-    async def _execute_instant_activation_command(self, transcript: str) -> list[CommandConfig] | None:
+    async def _execute_instant_activation_command(
+        self, transcript: str
+    ) -> list[CommandConfig] | None:
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -357,7 +353,9 @@ class Wingman:
                         commands_by_instant_activation[phrase.lower()] = [command]
 
         # find best matching phrase
-        phrase = difflib.get_close_matches(transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8)
+        phrase = difflib.get_close_matches(
+            transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8
+        )
 
         # if no phrase found, return None
         if not phrase:
@@ -485,6 +483,7 @@ class Wingman:
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
+
         def start_thread(function, *args):
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
