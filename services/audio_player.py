@@ -39,10 +39,18 @@ class AudioPlayer:
             path.abspath(path.dirname(__file__)), "../audio_samples"
         )
 
-    def set_volume(self, volume: float):
-        """Set the playback volume. `volume` should be in the range [0.0, 1.0]."""
-        if 0.0 <= volume <= 1.0:
-            self.volume = volume
+    def set_volume(self, config: SoundConfig, relative_volume: float = 1.0):
+        """Set the volume of the audio player.
+
+        Args:
+            config (SoundConfig): Wingman sound config
+            relative_volume (float): Additional volume modifier between 0.0 and 1.0
+
+        Raises:
+            ValueError: If the relative volume is not between 0.0 and 1.0
+        """
+        if 0.0 <= relative_volume <= 1.0:
+            self.volume = config.volume * relative_volume
         else:
             raise ValueError("Volume must be between 0.0 and 1.0")
 

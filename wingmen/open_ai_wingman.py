@@ -1113,7 +1113,7 @@ class OpenAiWingman(Wingman):
             while self.audio_player.is_playing:
                 await asyncio.sleep(0.1)
 
-        self.audio_player.set_volume(volume)
+        self.audio_player.set_volume(self.config.sound, volume)
 
         if self.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(
