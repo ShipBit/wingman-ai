@@ -259,12 +259,12 @@ class ConfigService:
             avatar=avatar,
         )
 
-        await self.save_wingman_config(
+        self.config_manager.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
-            validate=True,
         )
+        await self.load_config(config_dir)
 
     # POST config/save-wingman
     async def save_wingman_config(
