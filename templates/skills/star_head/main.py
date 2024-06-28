@@ -122,6 +122,9 @@ class StarHead(Skill):
             function_response = await self._get_ship_information(**parameters)
         return function_response, instant_response
 
+    async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        return True
+
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
             (

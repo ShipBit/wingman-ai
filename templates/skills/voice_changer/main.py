@@ -44,6 +44,8 @@ class VoiceChanger(Skill):
         self.context_personality = ""
         self.context_personality_next = ""
 
+        self.active = False
+
         super().__init__(
             config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
@@ -237,13 +239,22 @@ class VoiceChanger(Skill):
 
                 self.voices.append((voice_provider, voice_subprovider, voice_name, voice_id))
 
+        return errors
+
+    async def prepare(self) -> None:
+        self.active = True
+
         #prepare first personality
         if self.context_generation:
             self.threaded_execution(self._generate_new_context)
 
-        return errors
+    async def unload(self) -> None:
+        self.active = False
 
     async def on_add_user_message(self, message: str):
+        if not self.active:
+            return
+
         if self.voice_last_message is None:
             await self._initiate_change()
             self.voice_last_message = time.time()
