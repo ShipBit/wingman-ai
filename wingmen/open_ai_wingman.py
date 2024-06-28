@@ -1098,7 +1098,7 @@ class OpenAiWingman(Wingman):
 
         return function_response, instant_response, used_skill
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False):
+    async def play_to_user(self, text: str, no_interrupt: bool = False, volume: float = 1.0):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
         Also adds sound effects if enabled in the configuration.
 
@@ -1112,6 +1112,8 @@ class OpenAiWingman(Wingman):
         if no_interrupt and self.audio_player.is_playing:
             while self.audio_player.is_playing:
                 await asyncio.sleep(0.1)
+
+        self.audio_player.set_volume(self.config.sound, volume)
 
         if self.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(

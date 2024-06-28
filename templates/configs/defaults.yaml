@@ -48,6 +48,7 @@ sound:
   effects: []
   play_beep: false
   play_beep_apollo: false
+  volume: 1.0
 openai:
   conversation_model: gpt-4o
   summarize_model: gpt-4o

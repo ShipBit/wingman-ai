@@ -292,7 +292,7 @@ class Wingman:
         """
         return ("", "", None)
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False):
+    async def play_to_user(self, text: str, no_interrupt: bool = False, volume: float = 1.0):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
