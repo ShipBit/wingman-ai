@@ -3,6 +3,7 @@ import time
 import asyncio
 import random
 from typing import Mapping
+from openai.types.chat import ChatCompletion
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from api.enums import (
     ImageGenerationProvider,
@@ -17,6 +18,7 @@ from api.enums import (
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
+from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
@@ -67,6 +69,7 @@ class OpenAiWingman(Wingman):
         self.xvasynth: XVASynth = None
         self.whispercpp: Whispercpp = None
         self.wingman_pro: WingmanPro = None
+        self.google: GoogleGenAI = None
 
         # tool queue
         self.pending_tool_calls = []
@@ -94,6 +97,9 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("groq"):
             await self.validate_and_set_groq(errors)
+
+        if self.uses_provider("google"):
+            await self.validate_and_set_google(errors)
 
         if self.uses_provider("openrouter"):
             await self.validate_and_set_openrouter(errors)
@@ -140,6 +146,13 @@ class OpenAiWingman(Wingman):
                 [
                     self.conversation_provider == ConversationProvider.GROQ,
                     self.summarize_provider == SummarizeProvider.GROQ,
+                ]
+            )
+        elif provider_type == "google":
+            return any(
+                [
+                    self.conversation_provider == ConversationProvider.GOOGLE,
+                    self.summarize_provider == SummarizeProvider.GOOGLE,
                 ]
             )
         elif provider_type == "openrouter":
@@ -230,6 +243,11 @@ class OpenAiWingman(Wingman):
                 api_key=api_key,
                 base_url=self.config.groq.endpoint,
             )
+
+    async def validate_and_set_google(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("google", errors)
+        if api_key:
+            self.google = GoogleGenAI(api_key=api_key)
 
     async def validate_and_set_openrouter(
         self, errors: list[WingmanInitializationError]
@@ -799,7 +817,7 @@ class OpenAiWingman(Wingman):
 
     async def actual_llm_call(self, messages, tools: list[dict] = None):
         """
-        Perform the actual GPT call with the messages provided.
+        Perform the actual LLM call with the messages provided.
         """
 
         if self.conversation_provider == ConversationProvider.AZURE:
@@ -826,6 +844,12 @@ class OpenAiWingman(Wingman):
                 messages=messages,
                 tools=tools,
                 model=self.config.groq.conversation_model.value,
+            )
+        elif self.conversation_provider == ConversationProvider.GOOGLE:
+            completion = self.google.ask(
+                messages=messages,
+                tools=tools,
+                model=self.config.google.conversation_model.value,
             )
         elif self.conversation_provider == ConversationProvider.OPENROUTER:
             completion = self.openrouter.ask(
@@ -885,7 +909,7 @@ class OpenAiWingman(Wingman):
 
         return completion
 
-    async def _process_completion(self, completion):
+    async def _process_completion(self, completion: ChatCompletion):
         """Processes the completion returned by the LLM call.
 
         Args:
@@ -993,6 +1017,11 @@ class OpenAiWingman(Wingman):
                 messages=self.messages,
                 model=self.config.groq.summarize_model.value,
             )
+        elif self.summarize_provider == SummarizeProvider.GOOGLE:
+            summarize_response = self.google.ask(
+                messages=self.messages,
+                model=self.config.google.summarize_model.value,
+            )
         elif self.summarize_provider == SummarizeProvider.OPENROUTER:
             summarize_response = self.openrouter.ask(
                 messages=self.messages,
@@ -1069,7 +1098,7 @@ class OpenAiWingman(Wingman):
 
         return function_response, instant_response, used_skill
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False):
+    async def play_to_user(self, text: str, no_interrupt: bool = False, volume: float = 1.0):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
         Also adds sound effects if enabled in the configuration.
 
@@ -1083,6 +1112,8 @@ class OpenAiWingman(Wingman):
         if no_interrupt and self.audio_player.is_playing:
             while self.audio_player.is_playing:
                 await asyncio.sleep(0.1)
+
+        self.audio_player.set_volume(self.config.sound, volume)
 
         if self.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(

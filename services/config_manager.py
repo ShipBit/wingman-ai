@@ -202,7 +202,7 @@ class ConfigManager:
             default_template_dir = path.join(
                 self.templates_dir,
                 CONFIGS_DIR,
-                f"{DEFAULT_PREFIX}.{config_dir.directory}",
+                f"{DEFAULT_PREFIX}{config_dir.directory}",
             )
             if path.exists(default_template_dir):
                 return ConfigDirInfo(
@@ -941,6 +941,7 @@ class ConfigManager:
             "openai",
             "mistral",
             "groq",
+            "google",
             "openrouter",
             "local_llm",
             "edge_tts",

@@ -10,6 +10,7 @@ from api.enums import (
     AzureRegion,
     ConversationProvider,
     GroqModel,
+    GoogleAiModel,
     ImageGenerationProvider,
     MistralModel,
     CustomPropertyType,
@@ -289,6 +290,11 @@ class GroqConfig(BaseModel):
     endpoint: str
 
 
+class GoogleConfig(BaseModel):
+    conversation_model: GoogleAiModel
+    summarize_model: GoogleAiModel
+
+
 class OpenRouterConfig(BaseModel):
     conversation_model: str
     summarize_model: str
@@ -324,6 +330,8 @@ class SoundConfig(BaseModel):
     effects: list[SoundEffect]
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
+    volume: float
+    """The volume for playback. 0.0 - 1.0"""
 
 class VoiceActivationSettings(BaseModel):
     """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
@@ -493,6 +501,7 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     mistral: MistralConfig
     groq: GroqConfig
+    google: GoogleConfig
     openrouter: OpenRouterConfig
     local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig

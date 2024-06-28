@@ -6,6 +6,7 @@ from api.interface import (
     ConfigDirInfo,
     ConfigWithDirInfo,
     ConfigsInfo,
+    NestedConfig,
     NewWingmanTemplate,
     SkillBase,
     WingmanConfig,
@@ -131,6 +132,19 @@ class ConfigService:
             path="/available-skills",
             endpoint=self.get_available_skills,
             response_model=list[SkillBase],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/config/defaults",
+            endpoint=self.get_defaults_config,
+            response_model=NestedConfig,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/defaults",
+            endpoint=self.save_defaults_config,
             tags=tags,
         )
 
@@ -359,3 +373,14 @@ class ConfigService:
             )
 
         await self.load_config(config_dir)
+
+    # GET config/defaults
+    async def get_defaults_config(self):
+        return self.config_manager.load_defaults_config()
+
+    # POST config/defaults
+    async def save_defaults_config(self, config: NestedConfig):
+        self.config_manager.default_config = config
+        result = self.config_manager.save_defaults_config()
+        if result:
+            self.printr.toast("Default configuration saved successfully.")

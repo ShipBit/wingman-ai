@@ -48,6 +48,7 @@ sound:
   effects: []
   play_beep: false
   play_beep_apollo: false
+  volume: 1.0
 openai:
   conversation_model: gpt-4o
   summarize_model: gpt-4o
@@ -60,6 +61,9 @@ groq:
   conversation_model: llama3-70b-8192
   summarize_model: llama3-8b-8192
   endpoint: https://api.groq.com/openai/v1
+google:
+  conversation_model: gemini-1.5-flash
+  summarize_model: gemini-1.5-flash
 openrouter:
   conversation_model: meta-llama/llama-3-8b-instruct:free
   summarize_model: meta-llama/llama-3-8b-instruct:free

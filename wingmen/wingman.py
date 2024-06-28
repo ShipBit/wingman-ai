@@ -136,6 +136,9 @@ class Wingman:
 
         You can override it if you need to load async data from an API or file."""
 
+    async def unload(self):
+        """This method is called when the Wingman is unloaded by Tower. You can override it if you need to clean up resources."""
+
     async def init_skills(self) -> list[WingmanInitializationError]:
         """This method is called only once when the Wingman is instantiated by Tower.
         It is run AFTER validate() so you can access validated params safely here.
@@ -163,6 +166,7 @@ class Wingman:
                     if len(errors) == 0:
                         self.skills.append(skill)
                         await self.prepare_skill(skill)
+                        await skill.prepare()
                         printr.print(
                             f"Skill '{skill_config.name}' loaded successfully.",
                             color=LogType.INFO,
@@ -288,7 +292,7 @@ class Wingman:
         """
         return ("", "", None)
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False):
+    async def play_to_user(self, text: str, no_interrupt: bool = False, volume: float = 1.0):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
