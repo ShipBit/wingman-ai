@@ -44,6 +44,9 @@ class Timer(Skill):
         errors = await super().validate()
         return errors
 
+    async def unload(self) -> None:
+        self.timers = {} # clear timers
+
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
             (
@@ -128,6 +131,9 @@ class Timer(Skill):
 
         ]
         return tools
+    
+    async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        return tool_name in ["set_timer"]
 
     def _get_available_tools(self) -> list[dict[str, any]]:
         tools = self.wingman.build_tools()
