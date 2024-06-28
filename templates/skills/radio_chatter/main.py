@@ -38,10 +38,10 @@ class RadioChatter(Skill):
 
         self.audio_player = wingman.audio_player
         self.file_path = get_writable_dir(path.join("skills", "radio_chatter", "data"))
-        self.file_session = path.join(self.file_path, "session.txt")
 
         self.last_message = None
         self.radio_status = False
+        self.loaded = False
 
         self.prompt = None
         self.voices = []
@@ -53,22 +53,13 @@ class RadioChatter(Skill):
         self.participants_max = None
         self.force_radio_sound = False
         self.auto_start = False
+        self.volume = 1.0
+        self.print_chatter = False
+        self.radio_knowledge = False
 
         super().__init__(
             config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
         )
-
-    def _set_session(self, session_id = None):
-        if not session_id:
-            session_id = randrange(1000000, 9999999)
-        # write to file
-        with open(self.file_session, "w", encoding="UTF-8") as f:
-            f.write(str(session_id))
-
-    def _get_session(self):
-        # read from file
-        with open(self.file_session, "r", encoding="UTF-8") as f:
-            return int(f.read())
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -329,13 +320,40 @@ class RadioChatter(Skill):
             "auto_start", errors
         )
 
-        await self._prepare()
+        self.volume = self.retrieve_custom_property_value(
+            "volume", errors
+        ) or 0.5
+        if self.volume < 0 or self.volume > 1:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message="Invalid value for 'volume'. Expected a number between 0 and 1.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+        self.print_chatter = self.retrieve_custom_property_value(
+            "print_chatter", errors
+        )
+        self.radio_knowledge = self.retrieve_custom_property_value(
+            "radio_knowledge", errors
+        )
+
         return errors
 
-    async def _prepare(self) -> None:
-        self._set_session()
+    async def prepare(self) -> None:
+        self.loaded = True
         if(self.auto_start):
-            self.threaded_execution(self._init_chatter, self._get_session())
+            self.threaded_execution(self._init_chatter)
+
+    async def unload(self) -> None:
+        self.loaded = False
+        self.radio_status = False
+
+    def randrange(self, start, stop = None):
+        if start == stop:
+            return start
+        random = randrange(start, stop)
+        return random
 
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
@@ -386,12 +404,10 @@ class RadioChatter(Skill):
                 if self.radio_status:
                     function_response = "Radio is already on."
                 else:
-                    self._set_session()
-                    self.threaded_execution(self._init_chatter, self._get_session())
+                    self.threaded_execution(self._init_chatter)
                     function_response = "Radio is now on."
             elif tool_name == "turn_off_radio":
                 if self.radio_status:
-                    self._set_session()
                     self.radio_status = False
                     function_response = "Radio is now off."
                 else:
@@ -407,40 +423,42 @@ class RadioChatter(Skill):
 
         return function_response, instant_response
 
-    async def _init_chatter(self, session) -> None:
+    async def _init_chatter(self) -> None:
         """Start the radio chatter."""
 
         self.radio_status = True
-        time.sleep(min(5, self.interval_min)) # sleep for min 5s else min interval
+        time.sleep(max(5, self.interval_min)) # sleep for min 5s else min interval
 
-        while session == self._get_session() and self.radio_status:
-            await self._generate_chatter(session)
-            interval = randrange(self.interval_min, self.interval_max)
+        while self.is_active():
+            await self._generate_chatter()
+            interval = self.randrange(self.interval_min, self.interval_max)
             time.sleep(interval)
 
-        self.radio_status = False
+    def is_active(self) -> bool:
+        return self.radio_status and self.loaded
 
-    async def _generate_chatter(self, session):
-        if session != self._get_session():
+    async def _generate_chatter(self):
+        if not self.is_active():
             return
 
-        count_message = randrange(self.messages_min, self.messages_max)
-        count_participants = randrange(self.participants_min, self.participants_max)
+        count_message = self.randrange(self.messages_min, self.messages_max)
+        count_participants = self.randrange(self.participants_min, self.participants_max)
 
         messages = [
             {
                 'role': 'system',
                 'content': f"""
                     ## Must follow these rules
-                    - There are {count_participants} participant(s) in the conversation, monologs are allowed
-                    - The conversation must contain exactly {count_message} messages between the participants or in the monolog
+                    - There are {count_participants} participant(s) in the conversation/monolog
+                    - The conversation/monolog must contain exactly {count_message} messages between the participants or in the monolog
                     - Each new line in your answer represents a new message
+                    - Use matching call signs for the participants
 
                     ## Sample response
-                    Person 1: Message Content
-                    Person 2: Message Content
-                    Person 3: Message Content
-                    Person 2: Message Content
+                    Name1: Message Content
+                    Name2: Message Content
+                    Name3: Message Content
+                    Name2: Message Content
                     ...
                 """,
             },
@@ -470,13 +488,14 @@ class RadioChatter(Skill):
 
             clean_messages.append((name, text))
 
-        original_voice_provider = await self._get_original_voice_setting()
+        original_voice_setting = await self._get_original_voice_setting()
         original_sound_config = self.wingman.config.sound
         if self.force_radio_sound:
             custom_sound_config = copy.deepcopy(self.wingman.config.sound)
             custom_sound_config.play_beep = True
             custom_sound_config.play_beep_apollo = False
-            custom_sound_effect_options = [SoundEffect.LOW_QUALITY_RADIO, SoundEffect.MEDIUM_QUALITY_RADIO, SoundEffect.HIGH_END_RADIO]
+            # removed SoundEffect.HIGH_END_RADIO for now, as its to clear and breaks the immersion
+            custom_sound_effect_options = [SoundEffect.LOW_QUALITY_RADIO, SoundEffect.MEDIUM_QUALITY_RADIO]
 
         voice_index = await self._get_random_voice_index(len(voice_participant_mapping))
         if not voice_index:
@@ -485,33 +504,42 @@ class RadioChatter(Skill):
             sound_config = original_sound_config
             if self.force_radio_sound:
                 sound_config = copy.deepcopy(custom_sound_config)
-                sound_config.effects = [custom_sound_effect_options[randrange(len(custom_sound_effect_options))]]
+                sound_config.effects = [custom_sound_effect_options[self.randrange(len(custom_sound_effect_options))]]
 
             voice_participant_mapping[name] = (voice_index[i], sound_config)
 
         for name, text in clean_messages:
-            if session != self._get_session():
+            if not self.is_active():
                 return
 
             # wait for audio_player idleing
             while self.audio_player.is_playing:
                 time.sleep(2)
 
+            if not self.is_active():
+                return
+
             voice_index, sound_config = voice_participant_mapping[name]
             voice_tulple = self.voices[voice_index]
 
             await self._switch_voice(voice_tulple)
             self.wingman.config.sound = sound_config
-            await printr.print_async(
-                text=f"Background radio: {text}",
-                color=LogType.INFO,
-                source_name=self.wingman.name
-            )
-            self.threaded_execution(self.wingman.play_to_user, text, True)
-            await self.wingman.add_assistant_message(f"Background radio chatter: {text}")
-            time.sleep(2) # this simulates tts loading time TODO: find a better way to handle this
-            await self._switch_voice(original_voice_provider)
+            if self.print_chatter:
+                await printr.print_async(
+                    text=f"Background radio ({name}): {text}",
+                    color=LogType.INFO,
+                    source_name=self.wingman.name
+                )
+            self.threaded_execution(self.wingman.play_to_user, text, True, self.volume)
+            if self.radio_knowledge:
+                await self.wingman.add_assistant_message(f"Background radio chatter: {text}")
+            while not self.audio_player.is_playing:
+                time.sleep(0.1)
+            await self._switch_voice(original_voice_setting)
             self.wingman.config.sound = original_sound_config
+
+        while self.audio_player.is_playing:
+            time.sleep(1) # stay in function call until last message got played
 
     async def _get_random_voice_index(self, count: int) -> list[int]:
         """Switch voice to a random voice from the list."""
@@ -525,7 +553,7 @@ class RadioChatter(Skill):
         voice_index = []
         for i in range(count):
             while True:
-                index = randrange(len(self.voices))-1
+                index = self.randrange(len(self.voices))-1
                 if index not in voice_index:
                     voice_index.append(index)
                     break
