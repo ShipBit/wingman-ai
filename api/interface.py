@@ -330,7 +330,7 @@ class SoundConfig(BaseModel):
     effects: list[SoundEffect]
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
-    volume: Optional[float] = 1.0
+    volume: float
     """The volume for playback. 0.0 - 1.0"""
 
 class VoiceActivationSettings(BaseModel):
