@@ -249,7 +249,6 @@ class SettingsService:
                     input=input_settings, output=output_settings
                 )
                 self.config_manager.save_settings_config()
-                print("Audio settings updated.")
         return AudioSettings(input=input_device, output=output_device)
 
     # POST /settings/audio-devices
@@ -337,6 +336,9 @@ class SettingsService:
         self.config_manager.settings_config.wingman_pro.base_url = base_url
         self.config_manager.settings_config.wingman_pro.region = region
 
+        old_stt_provider = (
+            self.config_manager.settings_config.voice_activation.stt_provider
+        )
         self.config_manager.settings_config.voice_activation.stt_provider = stt_provider
         self.config_manager.settings_config.voice_activation.azure = azure
         self.config_manager.settings_config.voice_activation.whispercpp = whispercpp
@@ -355,9 +357,9 @@ class SettingsService:
                 toast=ToastType.NORMAL,
                 color=LogType.POSITIVE,
             )
-            if old_va_threshold != va_energy_threshold:
+            if old_va_threshold != va_energy_threshold or old_stt_provider != stt_provider:
                 await self.settings_events.publish(
-                    "va_treshold_changed", va_energy_threshold
+                    "va_settings_changed", va_energy_threshold
                 )
 
     # POST /settings/default-provider
