@@ -35,6 +35,7 @@ class Timer(Skill):
         self.timers = {}
         self.wingman = wingman
         self.available_tools = []
+        self.active = False
 
         super().__init__(
             config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
@@ -44,8 +45,12 @@ class Timer(Skill):
         errors = await super().validate()
         return errors
 
+    async def prepare(self) -> None:
+        self.active = True
+        self.threaded_execution(self.start_timer_worker)
+
     async def unload(self) -> None:
-        self.timers = {} # clear timers
+        self.active = False
 
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
@@ -63,6 +68,14 @@ class Timer(Skill):
                                     "type": "number",
                                     "description": "The delay/timer in seconds.",
                                 },
+                                "is_loop": {
+                                    "type": "boolean",
+                                    "description": "If the timer should loop or not.",
+                                },
+                                "loops": {
+                                    "type": "number",
+                                    "description": "The amount of loops the timer should do. -1 for infinite loops.",
+                                },
                                 "function": {
                                     "type": "string",
                                     # "enum": self._get_available_tools(), # end up beeing a recursive nightmare
@@ -73,7 +86,8 @@ class Timer(Skill):
                                     "description": "The parameters for the function to execute after the delay. Must be a valid object with the required properties to their values. Can not be empty.",
                                 },
                             },
-                            "required": ["detlay", "function", "parameters"],
+                            "required": ["delay", "function", "parameters"],
+                            "optional": ["is_loop", "loops"],
                         },
                     },
                 }
@@ -94,7 +108,7 @@ class Timer(Skill):
                     "type": "function",
                     "function": {
                         "name": "cancel_timer",
-                        "description": "Cancel a running timer by its id.",
+                        "description": "Cancel a running timer by its id. Use this in combination with set_timer to change timers.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -104,6 +118,38 @@ class Timer(Skill):
                                 },
                             },
                             "required": ["id"],
+                        },
+                    },
+                }
+            ),
+            (
+                "change_timer_settings",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "change_timer_settings",
+                        "description": "Change a timers loop and delay settings. Requires the id of the timer to change.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "id": {
+                                    "type": "string",
+                                    "description": "The id of the timer to change.",
+                                },
+                                "delay": {
+                                    "type": "number",
+                                    "description": "The new delay/timer in seconds.",
+                                },
+                                "is_loop": {
+                                    "type": "boolean",
+                                    "description": "If the timer should loop or not.",
+                                },
+                                "loops": {
+                                    "type": "number",
+                                    "description": "The amount of remaining loops the timer should do. -1 for infinite loops.",
+                                },
+                            },
+                            "required": ["id", "delay", "is_loop", "loops"],
                         },
                     },
                 }
@@ -120,7 +166,7 @@ class Timer(Skill):
                             "properties": {
                                 "message": {
                                     "type": "string",
-                                    "description": "The message to say to the user. Must be given as a string.",
+                                    "description": "The message of the reminder to say to the user. For example User: \"Remind me to take a break.\" -> Message: \"This is your reminder to take a break.\"",
                                 },
                             },
                             "required": ["message"],
@@ -131,7 +177,7 @@ class Timer(Skill):
 
         ]
         return tools
-    
+
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return tool_name in ["set_timer"]
 
@@ -151,13 +197,15 @@ class Timer(Skill):
         function_response = ""
         instant_response = ""
 
-        if tool_name in ["set_timer", "get_timer_status", "cancel_timer", "remind_me"]:
+        if tool_name in ["set_timer", "get_timer_status", "cancel_timer", "change_timer_settings", "remind_me"]:
             if self.settings.debug_mode:
                 self.start_execution_benchmark()
 
             if tool_name == "set_timer":
                 function_response = await self.set_timer(
                     delay=parameters.get("delay", None),
+                    is_loop=parameters.get("is_loop", False),
+                    loops=parameters.get("loops", 1),
                     function=parameters.get("function", None),
                     parameters=parameters.get("parameters", {}),
                 )
@@ -165,6 +213,13 @@ class Timer(Skill):
                 function_response = await self.get_timer_status()
             elif tool_name == "cancel_timer":
                 function_response = await self.cancel_timer(timer_id=parameters.get("id", None))
+            elif tool_name == "change_timer_settings":
+                function_response = await self.change_timer_settings(
+                    timer_id=parameters.get("id", None),
+                    delay=parameters.get("delay", None),
+                    is_loop=parameters.get("is_loop", False),
+                    loops=parameters.get("loops", 1),
+                )
             elif tool_name == "remind_me":
                 function_response = await self.reminder(message=parameters.get("message", None))
 
@@ -187,7 +242,70 @@ class Timer(Skill):
         else:
             return None
 
-    async def set_timer(self, delay: int = None, function: str = None, parameters: dict[str, any] = None) -> str:
+    async def start_timer_worker(self) -> None:
+        while self.active:
+            await asyncio.sleep(2)
+            timers_to_delete = []
+            for timer_id, timer in self.timers.items():
+                delay = timer[0]
+                # function = timer[1]
+                # parameters = timer[2]
+                start_time = timer[3]
+                is_loop = timer[4]
+                loops = timer[5]
+
+                if is_loop and loops == 0:
+                    timers_to_delete.append(timer_id)
+                    continue # skip timers marked for deletion
+
+                if time.time() - start_time >= delay:
+                    if self.settings.debug_mode:
+                        self.start_execution_benchmark()
+                    await self.execute_timer(timer_id)
+                    if self.settings.debug_mode:
+                        await self.print_execution_time(True)
+
+            # delete timers marked for deletion
+            for timer_id in timers_to_delete:
+                del self.timers[timer_id]
+
+        self.timers = {} # clear timers
+
+    async def execute_timer(self, timer_id: str) -> None:
+        if timer_id not in self.timers:
+            return
+
+        # delay = self.timers[timer_id][0]
+        function = self.timers[timer_id][1]
+        parameters = self.timers[timer_id][2]
+        # start_time = self.timers[timer_id][3]
+        is_loop = self.timers[timer_id][4]
+        loops = self.timers[timer_id][5]
+
+        response = await self.wingman.execute_command_by_function_call(function, parameters)
+        if response:
+            summary = await self._summarize_timer_execution(function, parameters, response)
+            await self.wingman.add_assistant_message(summary)
+            await printr.print_async(
+                f"{summary}",
+                color=LogType.POSITIVE,
+                source=LogSource.WINGMAN,
+                source_name=self.wingman.name,
+                skill_name=self.name,
+            )
+            await self.wingman.play_to_user(summary, True)
+
+        if not is_loop or loops == 1:
+            # we cant delete it here, because we are iterating over the timers in a sepereate thread
+            self.timers[timer_id][4] = True
+            self.timers[timer_id][5] = 0
+            return
+
+        self.timers[timer_id][3] = time.time() # reset start time
+        if loops > 0:
+            self.timers[timer_id][5] -= 1 # decrease remaining loops
+
+    async def set_timer(self, delay: int = None, is_loop: bool = False, loops: int = -1, function: str = None, parameters: dict[str, any] = None) -> str:
         check_counter = 0
         max_checks = 2
         errors = []
@@ -219,7 +337,7 @@ class Timer(Skill):
                 errors.append(f"Function {function} does not exist.")
             else:
                 if tool_call.get("function", False) and tool_call.get("function", {}).get("parameters", False):
-                    properties =  tool_call.get("function", {}).get("parameters", {}).get("properties", {})
+                    properties = tool_call.get("function", {}).get("parameters", {}).get("properties", {})
                     required_parameters = tool_call.get("function", {}).get("parameters", {}).get("required", [])
 
                     for name, value in properties.items():
@@ -255,8 +373,10 @@ class Timer(Skill):
                             }
                         )
                 data = {
-                    "set_timer": {
+                    "original_set_timer_call": {
                         "delay": delay,
+                        "is_loop": is_loop,
+                        "loops": loops,
                         "function": function,
                         "parameters": parameters,
                     },
@@ -269,14 +389,17 @@ class Timer(Skill):
                     {
                         "role": "system",
                         "content": """
-                            The set_time tool got called by a GPT request with parameters that are incomplete or do not match the given requirements.
-                            Please adjust the parameters "delay", "function" and "parameters" to match the requirements of the tool.
-                            Make use of the message_history to figure out missing parameters or wrong types.
+                            The **set_timer** tool got called by a request with parameters that are incomplete or do not match the given requirements.
+                            Please adjust the parameters "function" and "parameters" to match the requirements of the designated tool.
+                            Make use of the message_history with the user previously to figure out missing parameters or wrong types.
                             And the tool_calls_definition to see the available tools and their requirements.
+                            Use the **errors** information to figure out what it missing or wrong.
 
-                            Provide me an answer in JSON format with the following structure for example:
+                            Provide me an answer **only containing a valid JSON object** with the following structure for example:
                             {
                                 "delay": 10,
+                                "is_loop": false,
+                                "loops": 1,
                                 "function": "function_name",
                                 "parameters": {
                                     "parameter_name": "parameter_value"
@@ -303,6 +426,8 @@ class Timer(Skill):
                     )
                     # check if data is valid json
                     try:
+                        if data.startswith("```json") and data.endswith("```"):
+                            data = data[len("```json"): -len("```")].strip()
                         data = json.loads(data)
                     except json.JSONDecodeError:
                         messages.append(
@@ -312,11 +437,14 @@ class Timer(Skill):
                             }
                         )
                         json_retry += 1
-                    else:
-                        valid_json = True
-                        delay = data.get("delay", False)
-                        function = data.get("function", False)
-                        parameters = data.get("parameters", {})
+                        continue
+
+                    valid_json = True
+                    delay = data.get("delay", False)
+                    is_loop = data.get("is_loop", False)
+                    loops = data.get("loops", 1)
+                    function = data.get("function", False)
+                    parameters = data.get("parameters", {})
 
         if errors:
             return f"""
@@ -330,40 +458,7 @@ class Timer(Skill):
 
         # set timer
         current_time = time.time()
-        self.timers[timer_id] = [delay, function, parameters, current_time]
-
-        # time execution
-        async def execute_timer(timer_id: str) -> None:
-            if timer_id not in self.timers:
-                return
-            timer = self.timers[timer_id]
-            delay = timer[0]
-            function = timer[1]
-            parameters = timer[2]
-
-            await asyncio.sleep(delay)
-
-            if timer_id not in self.timers:
-                return
-
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-
-            response = await self.wingman.execute_command_by_function_call(function, parameters)
-            if response:
-                summary = await self._summarize_timer_execution(function, parameters, response)
-                self.wingman.add_assistant_message(summary)
-                await printr.print_async(
-                    f"{summary}",
-                    color=LogType.POSITIVE,
-                    source=LogSource.WINGMAN,
-                    source_name=self.wingman.name,
-                    skill_name=self.name,
-                )
-                await self.wingman.play_to_user(summary, True)
-            del self.timers[timer_id]
-
-        self.threaded_execution(execute_timer, timer_id)
+        self.timers[timer_id] = [delay, function, parameters, current_time, is_loop, loops]
 
         return f"Timer set with id {timer_id}.\n\n{await self.get_timer_status()}"
 
@@ -391,10 +486,14 @@ class Timer(Skill):
     async def get_timer_status(self) -> list[dict[str, any]]:
         timers = []
         for timer_id, timer in self.timers.items():
+            if timer[4] and timer[5] == 0:
+                continue # skip timers marked for deletion
             timers.append(
                 {
                     "id": timer_id,
                     "delay": timer[0],
+                    "is_loop": timer[4],
+                    "remaining_loops": (timer[5] if timer[5] > 0 else "infinite") if timer[4] else "N/A",
                     "remaining_time_in_seconds": round(max(0, timer[0] - (time.time() - timer[3]))),
                 }
             )
@@ -403,10 +502,20 @@ class Timer(Skill):
     async def cancel_timer(self, timer_id: str) -> str:
         if timer_id not in self.timers:
             return f"Timer with id {timer_id} not found."
-        del self.timers[timer_id]
+        # we cant delete it here, because we are iterating over the timers in a sepereate thread
+        self.timers[timer_id][4] = True
+        self.timers[timer_id][5] = 0
         return f"Timer with id {timer_id} cancelled.\n\n{await self.get_timer_status()}"
+
+    async def change_timer_settings(self, timer_id: str, delay: int, is_loop: bool, loops: int) -> str:
+        if timer_id not in self.timers:
+            return f"Timer with id {timer_id} not found."
+        self.timers[timer_id][0] = delay
+        self.timers[timer_id][4] = is_loop
+        self.timers[timer_id][5] = loops
+        return f"Timer with id {timer_id} settings changed.\n\n{await self.get_timer_status()}"
 
     async def reminder(self, message: str = None) -> str:
         if not message:
-            return "No reminder content set."
+            return "This is your reminder, no message was given."
         return message
