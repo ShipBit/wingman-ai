@@ -1,0 +1,14 @@
+name: XPlane
+module: skills.x_plane.main
+description:
+  en: Let your Wingman control X-Plane Simulator for you.
+  de: Lass deinen Wingman X-PLane Simulator für dich steuern.
+examples:
+  - question:
+      en: What is my altitude?
+      de: Wie hoch fliege ich?
+    answer:
+      en: You are currently flying at an altitude of 5000 feet.
+      de: Du fliegst derzeit in einer Höhe von 5000 Fuß.
+prompt: |
+  You can also read and set the aircraft and environment data from X-Plane.
