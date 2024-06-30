@@ -72,11 +72,17 @@ custom_properties:
     required: true
     property_type: number
   - id: force_radio_sound
-    name: Force radio sound
-    hint: Overwrites wingman sound effects for radio chatter with medium and low end radio effects.
+    name: Force radio effect
+    hint: Overwrites wingman sound effects for radio chatter with selected radio effects. Needs at least one valid value in "Availale radio effectss".
     value: True
     required: false
     property_type: boolean
+  - id: radio_sounds
+    name: Availale radio effects
+    hint: A list of radio effects seperated by commas that are randomly used when "Force radio effects" is enabled. Possible values are "low", "medium" and "high".
+    value: "low, medium"
+    required: false
+    property_type: string
   - id: auto_start
     name: Auto start
     hint: Automatically start the radio chatter with your wingman.
@@ -86,7 +92,7 @@ custom_properties:
   - id: volume
     name: Volume
     hint: The volume (relative to the wingman's volume) of the radio chatter. Must be between 0.0 (silent) and 1.0 (same volume as wingman).
-    value: 0.4
+    value: 0.5
     required: false
     property_type: number
   - id: print_chatter
@@ -98,6 +104,12 @@ custom_properties:
   - id: radio_knowledge
     name: Radio knowledge
     hint: If enabled, the radio chatter messages will be added to the wingman conversation. This way you can talk with your wingman about the radio chatter.
+    value: True
+    required: false
+    property_type: boolean
+  - id: use_beeps
+    name: Use beeps
+    hint: Use beeps to indicate the start and end of a radio chatter messages.
     value: True
     required: false
     property_type: boolean
