@@ -52,6 +52,8 @@ class RadioChatter(Skill):
         self.participants_min = None
         self.participants_max = None
         self.force_radio_sound = False
+        self.radio_sounds = []
+        self.use_beeps = False
         self.auto_start = False
         self.volume = 1.0
         self.print_chatter = False
@@ -337,6 +339,23 @@ class RadioChatter(Skill):
         self.radio_knowledge = self.retrieve_custom_property_value(
             "radio_knowledge", errors
         )
+        radio_sounds = self.retrieve_custom_property_value(
+            "radio_sounds", errors
+        )
+        # split by comma
+        if radio_sounds:
+            radio_sounds = radio_sounds.lower().replace(' ', '').split(",")
+            if "low" in radio_sounds:
+                self.radio_sounds.append(SoundEffect.LOW_QUALITY_RADIO)
+            if "medium" in radio_sounds:
+                self.radio_sounds.append(SoundEffect.MEDIUM_QUALITY_RADIO)
+            if "high" in radio_sounds:
+                self.radio_sounds.append(SoundEffect.HIGH_END_RADIO)
+        if not self.radio_sounds:
+            self.force_radio_sound = False
+        self.use_beeps = self.retrieve_custom_property_value(
+            "use_beeps", errors
+        )
 
         return errors
 
@@ -492,10 +511,8 @@ class RadioChatter(Skill):
         original_sound_config = self.wingman.config.sound
         if self.force_radio_sound:
             custom_sound_config = copy.deepcopy(self.wingman.config.sound)
-            custom_sound_config.play_beep = True
+            custom_sound_config.play_beep = self.use_beeps
             custom_sound_config.play_beep_apollo = False
-            # removed SoundEffect.HIGH_END_RADIO for now, as its to clear and breaks the immersion
-            custom_sound_effect_options = [SoundEffect.LOW_QUALITY_RADIO, SoundEffect.MEDIUM_QUALITY_RADIO]
 
         voice_index = await self._get_random_voice_index(len(voice_participant_mapping))
         if not voice_index:
@@ -504,7 +521,7 @@ class RadioChatter(Skill):
             sound_config = original_sound_config
             if self.force_radio_sound:
                 sound_config = copy.deepcopy(custom_sound_config)
-                sound_config.effects = [custom_sound_effect_options[self.randrange(len(custom_sound_effect_options))]]
+                sound_config.effects = [self.radio_sounds[self.randrange(len(self.radio_sounds))]]
 
             voice_participant_mapping[name] = (voice_index[i], sound_config)
 
