@@ -110,6 +110,12 @@ class VisionAI(Skill):
 
                 question = parameters.get("question", "What's in this image?")
 
+                if self.settings.debug_mode:
+                    await self.printr.print_async(
+                        f"Calling vision ai with this question: {question}",
+                        color=LogType.INFO,
+                    )
+
                 messages = [
                     {
                         "role": "system",
@@ -140,6 +146,12 @@ class VisionAI(Skill):
 
                 if answer:
                     function_response = answer
+
+                    if self.settings.debug_mode:
+                        await self.printr.print_async(
+                            f"Finished vision ai with this answer: {answer}",
+                            color=LogType.INFO,
+                        )
 
         return function_response, instant_response
 
