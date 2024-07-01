@@ -221,6 +221,16 @@ class ControlWindows(Skill):
             return response
         return False
 
+    def place_text_on_clipboard(self, text : str) -> str:
+        try:
+            with Clipboard() as clipboard:
+                clipboard.set_clipboard(text)
+                return "Text successfully placed on clipboard."
+        except KeyError:
+            return "Error: Cannot save content to Clipboard as text.  Images and other non-text content cannot be processed."
+        except Exception as e:
+            return f"Error: {str(e)}"
+
     def get_text_from_clipboard(self) -> str:
         try:
             with Clipboard() as clipboard:
@@ -259,11 +269,12 @@ class ControlWindows(Skill):
                                         "snap_bottom",
                                         "list_applications",
                                         "read_clipboard_content",
+                                        "place_text_on_clipboard",
                                     ],
                                 },
                                 "parameter": {
                                     "type": "string",
-                                    "description": "The parameter for the command. For example, the application name to open, close, or move. Or the information to get.",
+                                    "description": "The parameter for the command. For example, the application name to open, close, or move. Or the information to get or use.",
                                 },
                             },
                             "required": ["command"],
@@ -325,9 +336,13 @@ class ControlWindows(Skill):
                         "There was a problem getting your list of applications."
                     )
 
-            elif "clipboard" in parameters["command"].lower():
+            elif "read_clipboard" in parameters["command"].lower():
                 text_received = self.get_text_from_clipboard()
                 function_response = text_received
+
+            elif "clipboard" in parameters["command"].lower():
+                text_placed = self.place_text_on_clipboard(parameter)
+                function_response = text_placed
 
             else:
                 command = parameters["command"]

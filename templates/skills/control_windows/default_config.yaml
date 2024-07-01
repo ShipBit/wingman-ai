@@ -26,4 +26,4 @@ examples:
       en: (closes the Notepad application)
       de: (schließt die Notepad Anwendung)
 prompt: |
-  You can also control Windows Functions, like opening, closing, moving, and listing active applications and reading text from the clipboard.
+  You can also control Windows Functions, like opening, closing, moving, and listing active applications, reading text from the clipboard, and place or save text on the clipboard.
