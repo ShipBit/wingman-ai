@@ -15,24 +15,72 @@ if TYPE_CHECKING:
     from wingmen.wingman import Wingman
 
 DEFAULT_MAX_TEXT_SIZE = 15000
-DEFAULT_FILE_EXTENSIONS = [
-    "txt",
-    "md",
-    "log",
-    "yaml",
-    "py",
-    "json",
+SUPPORTED_FILE_EXTENSIONS = [
+    "adoc",
+    "asc",
+    "bat",
+    "bib",
+    "cfg",
+    "conf",
+    "cpp",
+    "c",
+    "cs",
+    "css",
     "csv",
+    "dockerfile",
+    "dot",
+    "env",
+    "fo",
+    "gd",
+    "gitconfig",
+    "gitignore",
+    "go",
+    "graphql",
+    "h",
+    "htaccess",
     "html",
-    "htm",
-    "xml",
+    "http",
     "ini",
-    "toml",
-    "Rmd",
-    "tex",
+    "ipynb",
+    "java",
+    "json",
+    "jsonl",
+    "js",
+    "lua",
+    "log",
+    "m3u",
+    "map",
+    "md",
+    "pyd",
+    "plist",
+    "pl",
+    "po",
+    "pxd",
+    "py",
+    "resx",
+    "rpy",
+    "rs",
+    "rst",
+    "rtf",
+    "srt",
+    "sh",
     "sql",
+    "svg",
+    "ts",
+    "tcl",
+    "tex",
+    "tmpl",
+    "toml",
+    "tpl",
+    "tsv",
+    "txt",
+    "vtt",
+    "wsdl",
+    "wsgi",
+    "xlf",
+    "xml",
+    "yaml",
 ]
-
 
 class FileManager(Skill):
 
@@ -49,7 +97,7 @@ class FileManager(Skill):
             settings=settings,
             wingman=wingman,
         )
-        self.allowed_file_extensions = DEFAULT_FILE_EXTENSIONS
+        self.allowed_file_extensions = SUPPORTED_FILE_EXTENSIONS
         self.default_file_extension = "txt"
         self.max_text_size = DEFAULT_MAX_TEXT_SIZE
         self.default_directory = ""  # Set in validate
@@ -115,8 +163,12 @@ class FileManager(Skill):
                                     "type": "string",
                                     "description": "The directory where the file should be saved. Defaults to the configured directory.",
                                 },
+                                "add_to_existing_file": {
+                                    "type": "boolean",
+                                    "description": "Boolean True/False indicator of whether the user wants to add text to an already existing file.  Defaults to False unless user expresses clear intent to add to existing file.",
+                                },
                             },
-                            "required": ["file_name", "text_content"],
+                            "required": ["file_name", "text_content", "add_to_existing_file"],
                         },
                     },
                 },
@@ -200,6 +252,7 @@ class FileManager(Skill):
                 )
             file_name = parameters.get("file_name")
             text_content = parameters.get("text_content")
+            add_to_existing_file = parameters.get("add_to_existing_file", False)
             directory = parameters.get("directory_path", self.default_directory)
             if directory == "":
                 directory = self.default_directory
@@ -222,8 +275,20 @@ class FileManager(Skill):
                     os.makedirs(directory, exist_ok=True)
                     file_path = os.path.join(directory, file_name)
 
-                    if os.path.isfile(file_path) and not self.allow_overwrite_existing:
+                    # If file already exists, and user does not have overwrite option on, and LLM did not detect an intent to add to the existing file, stop
+                    if os.path.isfile(file_path) and not self.allow_overwrite_existing and not add_to_existing_file:
                         function_response = f"File '{file_name}' already exists at {directory} and overwrite is not allowed."
+                    
+                    # Otherwise, if file exists but LLM detected user wanted to add to existing file, do that.
+                    elif os.path.isfile(file_path) and add_to_existing_file:
+                        try:
+                            with open(file_path, "a", encoding="utf-8") as file:
+                                file.write(text_content)
+                            function_response = f"Text added to existing file at {file_path}."
+                        except Exception as e:
+                            function_response = f"Failed to append text to {file_path}: {str(e)}"
+
+                    # We are either fine with completely overwriting the file or it does not exist already
                     else:
                         try:
                             with open(file_path, "w", encoding="utf-8") as file:

@@ -4,8 +4,8 @@ description:
   en: Manage local files, save, load and create directories. Supports various text-based file formats.
   de: Verwalte lokale Dateien, speichere, lade oder erstelle Verzeichnisse. Unterstützt verschiedene text-basierte Formate.
 hint:
-  en: <ul><li>You should provide an exact file path and name for where you want to create a directory or save or load a text file. <br />For example "save that text to a file called samplefile in my C drive in the directory called Documents."</li><li>If you do not, a directory called "files" in your Wingman config dir will be created and used.</li><li>Support file formats are txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex and sql.</li></ul>
-  de: <ul><li>Gib einen möglichst genauen Speicherort für deine Verzeichnisse oder Dateien an, beispielsweise "Speichere diesen Text in eine Daten namens beispieldatei auf meinem C-Laufwerk im Verzeichnis Dokumente".</li><li>Wenn du das nicht machst, wird ein Verzeichnis namens "files" in deinem Wingman-Konfigurationsverzeichnis erstellt und verwendet.</li><li>Unterstützte Dateiformate sind txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex und sql.</li></ul>
+  en: <ul><li>You should provide an exact file path and name for where you want to create a directory or save or load a text file. <br />For example "save that text to a file called samplefile in my C drive in the directory called Documents."</li><li>If you do not, a directory called "files" in your Wingman config dir will be created and used.</li><li>Supported file formats are plain text file formats, such as txt, md, log, yaml, py, json, etc.</li></ul>
+  de: <ul><li>Gib einen möglichst genauen Speicherort für deine Verzeichnisse oder Dateien an, beispielsweise "Speichere diesen Text in eine Daten namens beispieldatei auf meinem C-Laufwerk im Verzeichnis Dokumente".</li><li>Wenn du das nicht machst, wird ein Verzeichnis namens "files" in deinem Wingman-Konfigurationsverzeichnis erstellt und verwendet.</li><li>Unterstützte Dateiformate sind einfache Textdateiformate wie txt, md, log, yaml, py, json usw</li></ul>
 examples:
   - question:
       en: Save 'Hello, World!' to hello.txt.
@@ -26,7 +26,12 @@ examples:
       en: (creates a directory named 'Projects' in the default directory)
       de: (erstellt ein Verzeichnis namens 'Projekte' im Standardverzeichnis)
 prompt: |
-  You can also save text to various file formats, load text from files, or create directories as specified by the user. You support txt, md, log, yaml, py, json, csv, html, htm, xml, ini, toml, Rmd, tex, and sql formats.
+  You can also save text to various file formats, load text from files, or create directories as specified by the user.  
+  You support all plain text file formats.
+  When adding text to an existing file, you follow these rules:
+  (1) determine if it is appropriate to add a new line before the added text or ask the user if you do not know.
+  (2) only add content to an existing file if you are sure that is what the user wants.
+  (3) when adding content to a file, only add the specific additional content the user wants added, not a duplicate of all of the original content.
 custom_properties:
   - hint: The default directory for file operations. If left blank, will default to your WingmanAI config directory in a sub-directory called "files".
     id: default_directory
