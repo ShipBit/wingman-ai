@@ -278,9 +278,24 @@ class ConfigService:
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
         if not wingman:
-            self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
-            return
-        updated = wingman.update_config(config=wingman_config, validate=validate)
+            # try to enable a previously disabled wingman
+            disabled_config = self.tower.get_disabled_wingman_by_name(
+                wingman_config.name
+            )
+            if disabled_config and not wingman_config.disabled:
+                enabled = await self.tower.enable_wingman(
+                    wingman_name=wingman_config.name,
+                    settings=self.config_manager.settings_config,
+                )
+                if enabled:
+                    # now this should work
+                    wingman = self.tower.get_wingman_by_name(wingman_file.name)
+            # else fail
+            if not wingman:
+                self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
+                return
+
+        updated = await wingman.update_config(config=wingman_config, validate=validate)
 
         if not updated:
             self.printr.toast_error(
@@ -310,8 +325,20 @@ class ConfigService:
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
         if not wingman:
-            self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
-            return
+            # try to enable a previously disabled wingman
+            disabled_config = self.tower.get_disabled_wingman_by_name(basic_config.name)
+            if disabled_config and not basic_config.disabled:
+                enabled = await self.tower.enable_wingman(
+                    wingman_name=basic_config.name,
+                    settings=self.config_manager.settings_config,
+                )
+                if enabled:
+                    # now this should work
+                    wingman = self.tower.get_wingman_by_name(wingman_file.name)
+            # else fail
+            if not wingman:
+                self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
+                return
 
         wingman_config = wingman.config
         wingman_config.name = basic_config.name
@@ -325,7 +352,7 @@ class ConfigService:
         except ValueError:
             wingman_config.azure.tts.voice = basic_config.voice
 
-        updated = wingman.update_config(config=wingman_config, validate=validate)
+        updated = await wingman.update_config(config=wingman_config, validate=validate)
 
         if not updated:
             self.printr.toast_error(
