@@ -274,6 +274,7 @@ class ConfigService:
         wingman_config: WingmanConfig,
         silent: bool = False,
         validate: bool = False,
+        update_skills: bool = False,
     ):
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
@@ -295,7 +296,9 @@ class ConfigService:
                 self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
                 return
 
-        updated = await wingman.update_config(config=wingman_config, validate=validate)
+        updated = await wingman.update_config(
+            config=wingman_config, validate=validate, update_skills=update_skills
+        )
 
         if not updated:
             self.printr.toast_error(

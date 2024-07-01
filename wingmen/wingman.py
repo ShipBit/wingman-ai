@@ -134,15 +134,15 @@ class Wingman:
         """This method is called when the Wingman is unloaded by Tower. You can override it if you need to clean up resources."""
 
     async def init_skills(self) -> list[WingmanInitializationError]:
-        """This method is called only once when the Wingman is instantiated by Tower.
+        """This method is called when the Wingman is instantiated by Tower or when a skill's config changes.
         It is run AFTER validate() so you can access validated params safely here.
         It is used to load and init the skills of the Wingman."""
         errors = []
-        skills_config = self.config.skills
-        if not skills_config:
+        self.skills = []
+        if not self.config.skills:
             return errors
 
-        for skill_config in skills_config:
+        for skill_config in self.config.skills:
             try:
                 skill = ModuleManager.load_skill(
                     config=skill_config,
@@ -286,7 +286,9 @@ class Wingman:
         """
         return ("", "", None)
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False, volume: float = 1.0):
+    async def play_to_user(
+        self, text: str, no_interrupt: bool = False, volume: float = 1.0
+    ):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
@@ -494,12 +496,17 @@ class Wingman:
         thread.start()
         return thread
 
-    async def update_config(self, config: WingmanConfig, validate=False):
+    async def update_config(
+        self, config: WingmanConfig, validate=False, update_skills=False
+    ):
         """Update the config of the Wingman. This method is called when the config of the Wingman has changed."""
         if validate:
             old_config = WingmanConfig(**self.config.model_dump_json())
 
         self.config = config
+
+        if update_skills:
+            await self.init_skills()
 
         if validate:
             errors = await self.validate()
