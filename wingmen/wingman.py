@@ -1,3 +1,4 @@
+from copy import deepcopy
 import random
 import time
 import difflib
@@ -501,7 +502,7 @@ class Wingman:
     ):
         """Update the config of the Wingman. This method is called when the config of the Wingman has changed."""
         if validate:
-            old_config = WingmanConfig(**self.config.model_dump_json())
+            old_config = deepcopy(self.config)
 
         self.config = config
 
