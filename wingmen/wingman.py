@@ -61,9 +61,6 @@ class Wingman:
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
-        self.debug: bool = self.settings.debug_mode
-        """If enabled, the Wingman will print more debug messages and benchmark results."""
-
         self.skills: list[Skill] = []
 
     def get_record_key(self) -> str | int:
@@ -214,14 +211,14 @@ class Wingman:
 
         process_result = None
 
-        if self.debug and not transcript:
+        if self.settings.debug_mode and not transcript:
             await printr.print_async("Starting transcription...", color=LogType.INFO)
 
         if not transcript:
             # transcribe the audio.
             transcript = await self._transcribe(audio_input_wav)
 
-        if self.debug and not transcript:
+        if self.settings.debug_mode and not transcript:
             await self.print_execution_time(reset_timer=True)
 
         if transcript:
@@ -232,7 +229,7 @@ class Wingman:
                 source=LogSource.USER,
             )
 
-            if self.debug:
+            if self.settings.debug_mode:
                 await printr.print_async(
                     "Getting response for transcript...", color=LogType.INFO
                 )
@@ -242,7 +239,7 @@ class Wingman:
                 await self._get_response_for_transcript(transcript)
             )
 
-            if self.debug:
+            if self.settings.debug_mode:
                 await self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
@@ -389,7 +386,7 @@ class Wingman:
             await printr.print_async(
                 f"Executing command: {command.name}", color=LogType.INFO
             )
-            if not self.debug:
+            if not self.settings.debug_mode:
                 # in debug mode we already printed the separate execution times
                 await self.print_execution_time()
             self.execute_action(command)
@@ -500,7 +497,7 @@ class Wingman:
     async def update_config(
         self, config: WingmanConfig, validate=False, update_skills=False
     ):
-        """Update the config of the Wingman. This method is called when the config of the Wingman has changed."""
+        """Update the config of the Wingman. This method should always be called if the config of the Wingman has changed."""
         if validate:
             old_config = deepcopy(self.config)
 
@@ -517,3 +514,10 @@ class Wingman:
                 return False
 
         return True
+
+    async def update_settings(self, settings: SettingsConfig):
+        """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
+        self.settings = settings
+        await self.init_skills()
+
+        printr.print(f"Wingman {self.name}'s settings changed", server_only=True)

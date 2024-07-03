@@ -421,8 +421,6 @@ class ConfigService:
                 silent=True,
             )
 
-        await self.load_config(config_dir)
-
     # GET config/defaults
     async def get_defaults_config(self):
         return self.config_manager.load_defaults_config()
@@ -441,12 +439,12 @@ class ConfigService:
         if not saved:
             self.printr.toast_error("Failed to save default configuration.")
             return
+
+        message = "Default configuration changed."
+        if not silent:
+            self.printr.toast(message)
         else:
-            message = "Default configuration changed."
-            if not silent:
-                self.printr.toast(message)
-            else:
-                self.printr.print(text=message, server_only=True)
+            self.printr.print(text=message, server_only=True)
 
         # rewrite the Wingman config in each config dir, building a new diff to the the new defaults
         for config_dir in self.config_manager.get_config_dirs():

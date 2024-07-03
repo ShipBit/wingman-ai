@@ -120,7 +120,7 @@ class OpenAiWingman(Wingman):
             await self.validate_and_set_azure(errors)
 
         if self.uses_provider("wingman_pro"):
-            await self.validate_and_set_wingman_pro(errors)
+            await self.validate_and_set_wingman_pro()
 
         return errors
 
@@ -319,12 +319,27 @@ class OpenAiWingman(Wingman):
         )
         errors.extend(validation_errors)
 
-    async def validate_and_set_wingman_pro(
-        self, errors: list[WingmanInitializationError]
-    ):
+    async def validate_and_set_wingman_pro(self):
         self.wingman_pro = WingmanPro(
             wingman_name=self.name, settings=self.settings.wingman_pro
         )
+
+    # overrides the base class method
+    async def update_settings(self, settings: SettingsConfig):
+        """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
+
+        wingman_pro_changed = (
+            self.settings.wingman_pro.base_url != settings.wingman_pro.base_url
+            or self.settings.wingman_pro.region != settings.wingman_pro.region
+        )
+        await super().update_settings(settings)
+
+        if wingman_pro_changed and self.uses_provider("wingman_pro"):
+            await self.validate_and_set_wingman_pro()
+            printr.print(
+                f"Wingman {self.name}: reinitialized Wingman Pro with new settings",
+                server_only=True,
+            )
 
     async def _generate_instant_responses(self) -> None:
         """Generates general instant responses based on given context."""
@@ -545,7 +560,7 @@ class OpenAiWingman(Wingman):
                     tool_call.function.name = function_name
                     tool_call.function.arguments = json.dumps(function_args)
 
-                    if self.debug:
+                    if self.settings.debug_mode:
                         await printr.print_async(
                             "Applied command call fix.", color=LogType.WARNING
                         )
@@ -686,7 +701,7 @@ class OpenAiWingman(Wingman):
         del self.messages[start_index : end_index + 1]
         self.messages.extend(message_block)
 
-        if self.debug:
+        if self.settings.debug_mode:
             await printr.print_async(
                 "Moved message block to the end.", color=LogType.INFO
             )
@@ -753,7 +768,7 @@ class OpenAiWingman(Wingman):
                 and mesage.get("tool_call_id") in self.pending_tool_calls
             ):
                 self.pending_tool_calls.remove(mesage.get("tool_call_id"))
-                if self.debug:
+                if self.settings.debug_mode:
                     await printr.print_async(
                         f"Removing pending tool call {mesage.get('tool_call_id')} due to message history clean up.",
                         color=LogType.WARNING,
@@ -763,7 +778,7 @@ class OpenAiWingman(Wingman):
         del self.messages[:cutoff_index]
 
         # Optional debugging printout.
-        if self.debug and total_deleted_messages > 0:
+        if self.settings.debug_mode and total_deleted_messages > 0:
             await printr.print_async(
                 f"Deleted {total_deleted_messages} messages from the conversation history.",
                 color=LogType.WARNING,
@@ -909,7 +924,7 @@ class OpenAiWingman(Wingman):
         # build tools
         tools = self.build_tools() if allow_tool_calls else None
 
-        if self.debug:
+        if self.settings.debug_mode:
             self.start_execution_benchmark()
             await printr.print_async(
                 f"Calling LLM with {(len(self.messages))} messages (excluding context) and {len(tools) if tools else 0} tools.",
@@ -920,7 +935,7 @@ class OpenAiWingman(Wingman):
         await self.add_context(messages)
         completion = await self.actual_llm_call(messages, tools)
 
-        if self.debug:
+        if self.settings.debug_mode:
             await self.print_execution_time(reset_timer=True)
 
         # if request isnt most recent, ignore the response
@@ -1121,7 +1136,9 @@ class OpenAiWingman(Wingman):
 
         return function_response, instant_response, used_skill
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False, volume: float = 1.0):
+    async def play_to_user(
+        self, text: str, no_interrupt: bool = False, volume: float = 1.0
+    ):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
         Also adds sound effects if enabled in the configuration.
 
