@@ -19,6 +19,7 @@ from api.interface import (
     AudioDevice,
     AzureSttConfig,
     ConfigWithDirInfo,
+    VoiceActivationSettings,
     WingmanInitializationError,
 )
 from providers.open_ai import OpenAi
@@ -142,7 +143,7 @@ class WingmanCore(WebSocketUser):
             "voice_activation_changed", self.set_voice_activation
         )
         self.settings_service.settings_events.subscribe(
-            "va_treshold_changed", self.on_va_treshold_changed
+            "va_settings_changed", self.on_va_settings_changed
         )
 
         self.voice_service = VoiceService(
@@ -369,6 +370,9 @@ class WingmanCore(WebSocketUser):
         sd.default.device = devices
         self.audio_recorder.valid_mic = True  # this allows a new error message
         self.audio_recorder.update_input_stream()
+        if self.is_listening:
+            self.start_voice_recognition(mute=True)
+            self.start_voice_recognition(mute=False)
 
     async def set_voice_activation(self, is_enabled: bool):
         if is_enabled:
@@ -456,7 +460,7 @@ class WingmanCore(WebSocketUser):
             callback, wingman_name = await self.event_queue.get()
             await callback(wingman_name)
 
-    def on_va_treshold_changed(self, _va_energy_threshold: float):
+    def on_va_settings_changed(self, _va_settings: VoiceActivationSettings):
         # restart VA with new settings
         if self.is_listening:
             self.start_voice_recognition(mute=True)

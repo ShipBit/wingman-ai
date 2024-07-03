@@ -89,13 +89,13 @@ class SettingsService:
         if (
             settings.voice_activation.energy_threshold
             != old.voice_activation.energy_threshold
+            or settings.voice_activation.stt_provider
+            != old.voice_activation.stt_provider
         ):
             await self.settings_events.publish(
-                "va_treshold_changed", settings.voice_activation.energy_threshold
+                "va_settings_changed", settings.voice_activation
             )
-            self.printr.print(
-                "Voice Activation energy threshold changed.", server_only=True
-            )
+            self.printr.print("Voice Activation settings changed.", server_only=True)
 
         # rest
         self.config_manager.settings_config.wingman_pro = settings.wingman_pro
