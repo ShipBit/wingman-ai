@@ -24,6 +24,7 @@ class ConfigService:
         self.printr = Printr()
         self.config_manager = config_manager
         self.config_events = PubSub()
+        self.source_name = "Config Service"
 
         self.current_config_dir: ConfigDirInfo = (
             self.config_manager.find_default_config()
@@ -202,10 +203,11 @@ class ConfigService:
         config_dir_info = ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
         await self.config_events.publish("config_loaded", config_dir_info)
 
-        self.printr.print(
+        await self.printr.print_async(
             f"Loaded config: {loaded_config_dir.name}.",
-            color=LogType.INFO,
-            server_only=True,
+            color=LogType.HIGHLIGHT,
+            source_name=self.source_name,
+            command_tag="config_loaded",
         )
 
         return config_dir_info
@@ -371,12 +373,17 @@ class ConfigService:
             )
             return
 
+        renamed = wingman_file.name != wingman_config.name
+
         # save the config file
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
         )
+
+        if renamed:
+            await self.load_config(config_dir=config_dir)
 
         message = f"Wingman {wingman_config.name}'s basic config changed."
         if not silent:
