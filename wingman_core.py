@@ -172,6 +172,7 @@ class WingmanCore(WebSocketUser):
                     await skill.unload()
                 await wingman.unload()
             self.tower = None
+            self.config_service.set_tower(None)
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         await self.unload_tower()
@@ -183,6 +184,8 @@ class WingmanCore(WebSocketUser):
         )
         for error in self.tower_errors:
             self.printr.toast_error(error.message)
+
+        self.config_service.set_tower(self.tower)
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []

@@ -307,13 +307,6 @@ class ConfigManager:
         # not catching ValidationExceptions here, because we can't recover from it
         # TODO: Notify the client about the error somehow
 
-        self.printr.print(
-            f"Loaded and validated config: {config_dir.name}.",
-            color=LogType.INFO,
-            server_only=True,
-            source=LogSource.SYSTEM,
-            source_name=self.log_source_name,
-        )
         return config_dir, validated_config
 
     def rename_config(self, config_dir: ConfigDirInfo, new_name: str):

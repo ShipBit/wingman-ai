@@ -3,10 +3,6 @@ from typing import Dict, Any
 import yaml
 from fastapi import APIRouter
 from api.commands import PromptSecretCommand
-from api.enums import (
-    LogType,
-    ToastType,
-)
 from services.config_manager import CONFIGS_DIR, SECRETS_FILE
 from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
@@ -109,7 +105,5 @@ class SecretKeeper(WebSocketUser):
         for key, value in secrets.items():
             self.secrets[key] = value
 
-        self.save()
-        await self.printr.print(
-            "Secrets updated.", toast=ToastType.NORMAL, color=LogType.POSITIVE
-        )
+        if self.save():
+            self.printr.print("Secrets updated.", server_only=True)

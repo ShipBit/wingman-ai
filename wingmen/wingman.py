@@ -1,3 +1,4 @@
+from copy import deepcopy
 import random
 import time
 import difflib
@@ -59,15 +60,6 @@ class Wingman:
 
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
-
-        self.debug: bool = self.settings.debug_mode
-        """If enabled, the Wingman will print more debug messages and benchmark results."""
-
-        self.tts_provider = self.config.features.tts_provider
-        self.stt_provider = self.config.features.stt_provider
-        self.conversation_provider = self.config.features.conversation_provider
-        self.summarize_provider = self.config.features.summarize_provider
-        self.image_generation_provider = self.config.features.image_generation_provider
 
         self.skills: list[Skill] = []
 
@@ -140,15 +132,15 @@ class Wingman:
         """This method is called when the Wingman is unloaded by Tower. You can override it if you need to clean up resources."""
 
     async def init_skills(self) -> list[WingmanInitializationError]:
-        """This method is called only once when the Wingman is instantiated by Tower.
+        """This method is called when the Wingman is instantiated by Tower or when a skill's config changes.
         It is run AFTER validate() so you can access validated params safely here.
         It is used to load and init the skills of the Wingman."""
         errors = []
-        skills_config = self.config.skills
-        if not skills_config:
+        self.skills = []
+        if not self.config.skills:
             return errors
 
-        for skill_config in skills_config:
+        for skill_config in self.config.skills:
             try:
                 skill = ModuleManager.load_skill(
                     config=skill_config,
@@ -219,14 +211,14 @@ class Wingman:
 
         process_result = None
 
-        if self.debug and not transcript:
+        if self.settings.debug_mode and not transcript:
             await printr.print_async("Starting transcription...", color=LogType.INFO)
 
         if not transcript:
             # transcribe the audio.
             transcript = await self._transcribe(audio_input_wav)
 
-        if self.debug and not transcript:
+        if self.settings.debug_mode and not transcript:
             await self.print_execution_time(reset_timer=True)
 
         if transcript:
@@ -237,7 +229,7 @@ class Wingman:
                 source=LogSource.USER,
             )
 
-            if self.debug:
+            if self.settings.debug_mode:
                 await printr.print_async(
                     "Getting response for transcript...", color=LogType.INFO
                 )
@@ -247,7 +239,7 @@ class Wingman:
                 await self._get_response_for_transcript(transcript)
             )
 
-            if self.debug:
+            if self.settings.debug_mode:
                 await self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
@@ -292,7 +284,9 @@ class Wingman:
         """
         return ("", "", None)
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False, volume: float = 1.0):
+    async def play_to_user(
+        self, text: str, no_interrupt: bool = False, volume: float = 1.0
+    ):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
@@ -336,7 +330,9 @@ class Wingman:
 
         return random.choice(command_responses)
 
-    async def _execute_instant_activation_command(self, transcript: str) -> list[CommandConfig] | None:
+    async def _execute_instant_activation_command(
+        self, transcript: str
+    ) -> list[CommandConfig] | None:
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -357,7 +353,9 @@ class Wingman:
                         commands_by_instant_activation[phrase.lower()] = [command]
 
         # find best matching phrase
-        phrase = difflib.get_close_matches(transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8)
+        phrase = difflib.get_close_matches(
+            transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8
+        )
 
         # if no phrase found, return None
         if not phrase:
@@ -388,7 +386,7 @@ class Wingman:
             await printr.print_async(
                 f"Executing command: {command.name}", color=LogType.INFO
             )
-            if not self.debug:
+            if not self.settings.debug_mode:
                 # in debug mode we already printed the separate execution times
                 await self.print_execution_time()
             self.execute_action(command)
@@ -485,6 +483,7 @@ class Wingman:
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
+
         def start_thread(function, *args):
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
@@ -494,3 +493,31 @@ class Wingman:
         thread = threading.Thread(target=start_thread, args=(function, *args))
         thread.start()
         return thread
+
+    async def update_config(
+        self, config: WingmanConfig, validate=False, update_skills=False
+    ):
+        """Update the config of the Wingman. This method should always be called if the config of the Wingman has changed."""
+        if validate:
+            old_config = deepcopy(self.config)
+
+        self.config = config
+
+        if update_skills:
+            await self.init_skills()
+
+        if validate:
+            errors = await self.validate()
+
+            if errors and len(errors) > 0:
+                self.config = old_config
+                return False
+
+        return True
+
+    async def update_settings(self, settings: SettingsConfig):
+        """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
+        self.settings = settings
+        await self.init_skills()
+
+        printr.print(f"Wingman {self.name}'s settings changed", server_only=True)
