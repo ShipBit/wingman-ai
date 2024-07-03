@@ -25,7 +25,6 @@ class AudioPlayer:
         on_playback_finished: Callable[[str], None],
     ) -> None:
         self.is_playing = False
-        self.volume = 1.0
         self.event_queue = event_queue
         self.event_loop = None
         self.stream = None
@@ -39,25 +38,12 @@ class AudioPlayer:
             path.abspath(path.dirname(__file__)), "../audio_samples"
         )
 
-    def set_volume(self, config: SoundConfig, relative_volume: float = 1.0):
-        """Set the volume of the audio player.
-
-        Args:
-            config (SoundConfig): Wingman sound config
-            relative_volume (float): Additional volume modifier between 0.0 and 1.0
-
-        Raises:
-            ValueError: If the relative volume is not between 0.0 and 1.0
-        """
-        if 0.0 <= relative_volume <= 1.0:
-            self.volume = config.volume * relative_volume
-        else:
-            raise ValueError("Volume must be between 0.0 and 1.0")
-
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self.event_loop = loop
 
-    def start_playback(self, audio, sample_rate, channels, finished_callback):
+    def start_playback(
+        self, audio, sample_rate, channels, finished_callback, volume: float
+    ):
         def callback(outdata, frames, time, status):
             nonlocal playhead
             chunksize = frames * channels
@@ -95,7 +81,7 @@ class AudioPlayer:
             # Reshape current_chunk to match outdata's shape, only if size matches
             try:
                 current_chunk = current_chunk.reshape((frames, channels))
-                current_chunk = current_chunk * self.volume
+                current_chunk = current_chunk * volume
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata[:] = current_chunk.astype(outdata.dtype)
                 else:
@@ -200,7 +186,7 @@ class AudioPlayer:
 
         playback_thread = Thread(
             target=self.start_playback,
-            args=(audio, sample_rate, channels, finished_callback),
+            args=(audio, sample_rate, channels, finished_callback, config.volume),
         )
         playback_thread.start()
 
@@ -219,11 +205,11 @@ class AudioPlayer:
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
 
-    def play_wav(self, audio_sample_file: str):
+    def play_wav(self, audio_sample_file: str, volume: float):
         beep_audio, beep_sample_rate = self.get_audio_from_file(
             path.join(self.sample_dir, audio_sample_file)
         )
-        self.start_playback(beep_audio, beep_sample_rate, 1, None)
+        self.start_playback(beep_audio, beep_sample_rate, 1, None, volume)
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")
@@ -394,7 +380,7 @@ class AudioPlayer:
                     )
 
                 data_chunk = data_chunk.flatten()
-                data_chunk = data_chunk * self.volume
+                data_chunk = data_chunk * config.volume
                 data_chunk_bytes = data_chunk.astype(dtype).tobytes()
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
                 buffer = buffer[num_elements * byte_size :]
@@ -413,13 +399,13 @@ class AudioPlayer:
             await self.notify_playback_started(wingman_name)
 
             if config.play_beep:
-                self.play_wav("beep.wav")
+                self.play_wav("beep.wav", config.volume)
             elif config.play_beep_apollo:
-                self.play_wav("Apollo_Beep.wav")
+                self.play_wav("Apollo_Beep.wav", config.volume)
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
             if contains_high_end_radio:
-                self.play_wav("Radio_Static_Beep.wav")
+                self.play_wav("Radio_Static_Beep.wav", config.volume)
 
             self.raw_stream.start()
 
@@ -444,7 +430,7 @@ class AudioPlayer:
                     amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
                     data_in_numpy = data_in_numpy + noise_chunk * amplitude_factor
 
-                data_in_numpy = data_in_numpy * self.volume
+                data_in_numpy = data_in_numpy * config.volume
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(processed_buffer)
                 await self.stream_event.publish("audio", processed_buffer)
@@ -456,12 +442,12 @@ class AudioPlayer:
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
             if contains_high_end_radio:
-                self.play_wav("Radio_Static_Beep.wav")
+                self.play_wav("Radio_Static_Beep.wav", config.volume)
 
             if config.play_beep:
-                self.play_wav("beep.wav")
+                self.play_wav("beep.wav", config.volume)
             elif config.play_beep_apollo:
-                self.play_wav("Apollo_Beep.wav")
+                self.play_wav("Apollo_Beep.wav", config.volume)
 
             self.is_playing = False
             await self.notify_playback_finished(wingman_name)
