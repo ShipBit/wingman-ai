@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
 printr = Printr()
 
+
 class RadioChatter(Skill):
 
     def __init__(
@@ -60,20 +61,19 @@ class RadioChatter(Skill):
         self.radio_knowledge = False
 
         super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
+            config=config,
+            wingman_config=wingman_config,
+            settings=settings,
+            wingman=wingman,
         )
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        self.prompt = self.retrieve_custom_property_value(
-            "prompt", errors
-        )
+        self.prompt = self.retrieve_custom_property_value("prompt", errors)
 
         # prepare voices
-        voices = self.retrieve_custom_property_value(
-            "voices", errors
-        )
+        voices = self.retrieve_custom_property_value("voices", errors)
         if voices:
             elvenlabs_voices = None
 
@@ -97,7 +97,8 @@ class RadioChatter(Skill):
                         errors.append(
                             WingmanInitializationError(
                                 wingman_name=self.wingman.name,
-                                message="Invalid format in 'voices' field. Expected format: 'voice' or 'provider.voice' or 'provider.subprovider.name'. Given: " + voice,
+                                message="Invalid format in 'voices' field. Expected format: 'voice' or 'provider.voice' or 'provider.subprovider.name'. Given: "
+                                + voice,
                                 error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                             )
                         )
@@ -122,7 +123,8 @@ class RadioChatter(Skill):
                     errors.append(
                         WingmanInitializationError(
                             wingman_name=self.wingman.name,
-                            message="Invalid TTS provider in 'voices' field: " + voice_provider,
+                            message="Invalid TTS provider in 'voices' field: "
+                            + voice_provider,
                             error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                         )
                     )
@@ -145,7 +147,10 @@ class RadioChatter(Skill):
                             )
                         )
                         break
-                elif voice_provider == TtsProvider.AZURE and not self.wingman.openai_azure:
+                elif (
+                    voice_provider == TtsProvider.AZURE
+                    and not self.wingman.openai_azure
+                ):
                     await self.wingman.validate_and_set_azure(errors)
                     if not self.wingman.openai_azure:
                         errors.append(
@@ -156,7 +161,10 @@ class RadioChatter(Skill):
                             )
                         )
                         break
-                elif voice_provider == TtsProvider.ELEVENLABS and not self.wingman.elevenlabs:
+                elif (
+                    voice_provider == TtsProvider.ELEVENLABS
+                    and not self.wingman.elevenlabs
+                ):
                     await self.wingman.validate_and_set_elevenlabs(errors)
                     if not self.wingman.elevenlabs:
                         errors.append(
@@ -167,7 +175,10 @@ class RadioChatter(Skill):
                             )
                         )
                         break
-                elif voice_provider == TtsProvider.WINGMAN_PRO and not self.wingman.wingman_pro:
+                elif (
+                    voice_provider == TtsProvider.WINGMAN_PRO
+                    and not self.wingman.wingman_pro
+                ):
                     await self.wingman.validate_and_set_wingman_pro(errors)
                     if not self.wingman.wingman_pro:
                         errors.append(
@@ -180,7 +191,11 @@ class RadioChatter(Skill):
                         break
 
                 # if subprovider invalid, throw error
-                if voice_provider == TtsProvider.WINGMAN_PRO and voice_subprovider not in (member.value for member in WingmanProTtsProvider):
+                if (
+                    voice_provider == TtsProvider.WINGMAN_PRO
+                    and voice_subprovider
+                    not in (member.value for member in WingmanProTtsProvider)
+                ):
                     errors.append(
                         WingmanInitializationError(
                             wingman_name=self.wingman.name,
@@ -189,7 +204,10 @@ class RadioChatter(Skill):
                         )
                     )
                     break
-                elif voice_provider != TtsProvider.WINGMAN_PRO and voice_subprovider is not None:
+                elif (
+                    voice_provider != TtsProvider.WINGMAN_PRO
+                    and voice_subprovider is not None
+                ):
                     errors.append(
                         WingmanInitializationError(
                             wingman_name=self.wingman.name,
@@ -213,7 +231,9 @@ class RadioChatter(Skill):
                 if voice_provider == TtsProvider.ELEVENLABS:
                     # load available voices once
                     if elvenlabs_voices is None:
-                        elvenlabs_voices = self.wingman.elevenlabs.get_available_voices()
+                        elvenlabs_voices = (
+                            self.wingman.elevenlabs.get_available_voices()
+                        )
 
                     found = False
                     for elevenlabs_voice in elvenlabs_voices:
@@ -230,17 +250,18 @@ class RadioChatter(Skill):
                         errors.append(
                             WingmanInitializationError(
                                 wingman_name=self.wingman.name,
-                                message="Voice not found in Elevenlabs voices: " + voice_name,
+                                message="Voice not found in Elevenlabs voices: "
+                                + voice_name,
                                 error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                             )
                         )
                         break
 
-                self.voices.append((voice_provider, voice_subprovider, voice_name, voice_id))
+                self.voices.append(
+                    (voice_provider, voice_subprovider, voice_name, voice_id)
+                )
 
-        self.interval_min = self.retrieve_custom_property_value(
-            "interval_min", errors
-        )
+        self.interval_min = self.retrieve_custom_property_value("interval_min", errors)
         if self.interval_min is not None and self.interval_min < 1:
             errors.append(
                 WingmanInitializationError(
@@ -249,10 +270,12 @@ class RadioChatter(Skill):
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                 )
             )
-        self.interval_max = self.retrieve_custom_property_value(
-            "interval_max", errors
-        )
-        if self.interval_max is not None and self.interval_max < 1 or (self.interval_min is not None and self.interval_max < self.interval_min):
+        self.interval_max = self.retrieve_custom_property_value("interval_max", errors)
+        if (
+            self.interval_max is not None
+            and self.interval_max < 1
+            or (self.interval_min is not None and self.interval_max < self.interval_min)
+        ):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
@@ -260,9 +283,7 @@ class RadioChatter(Skill):
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                 )
             )
-        self.messages_min = self.retrieve_custom_property_value(
-            "messages_min", errors
-        )
+        self.messages_min = self.retrieve_custom_property_value("messages_min", errors)
         if self.messages_min is not None and self.messages_min < 1:
             errors.append(
                 WingmanInitializationError(
@@ -271,10 +292,12 @@ class RadioChatter(Skill):
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG,
                 )
             )
-        self.messages_max = self.retrieve_custom_property_value(
-            "messages_max", errors
-        )
-        if self.messages_max is not None and self.messages_max < 1 or (self.messages_min is not None and self.messages_max < self.messages_min):
+        self.messages_max = self.retrieve_custom_property_value("messages_max", errors)
+        if (
+            self.messages_max is not None
+            and self.messages_max < 1
+            or (self.messages_min is not None and self.messages_max < self.messages_min)
+        ):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
@@ -296,7 +319,14 @@ class RadioChatter(Skill):
         self.participants_max = self.retrieve_custom_property_value(
             "participants_max", errors
         )
-        if self.participants_max is not None and self.participants_max < 1 or (self.participants_min is not None and self.participants_max < self.participants_min):
+        if (
+            self.participants_max is not None
+            and self.participants_max < 1
+            or (
+                self.participants_min is not None
+                and self.participants_max < self.participants_min
+            )
+        ):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
@@ -318,13 +348,9 @@ class RadioChatter(Skill):
             "force_radio_sound", errors
         )
 
-        self.auto_start = self.retrieve_custom_property_value(
-            "auto_start", errors
-        )
+        self.auto_start = self.retrieve_custom_property_value("auto_start", errors)
 
-        self.volume = self.retrieve_custom_property_value(
-            "volume", errors
-        ) or 0.5
+        self.volume = self.retrieve_custom_property_value("volume", errors) or 0.5
         if self.volume < 0 or self.volume > 1:
             errors.append(
                 WingmanInitializationError(
@@ -339,12 +365,10 @@ class RadioChatter(Skill):
         self.radio_knowledge = self.retrieve_custom_property_value(
             "radio_knowledge", errors
         )
-        radio_sounds = self.retrieve_custom_property_value(
-            "radio_sounds", errors
-        )
+        radio_sounds = self.retrieve_custom_property_value("radio_sounds", errors)
         # split by comma
         if radio_sounds:
-            radio_sounds = radio_sounds.lower().replace(' ', '').split(",")
+            radio_sounds = radio_sounds.lower().replace(" ", "").split(",")
             if "low" in radio_sounds:
                 self.radio_sounds.append(SoundEffect.LOW_QUALITY_RADIO)
             if "medium" in radio_sounds:
@@ -353,22 +377,20 @@ class RadioChatter(Skill):
                 self.radio_sounds.append(SoundEffect.HIGH_END_RADIO)
         if not self.radio_sounds:
             self.force_radio_sound = False
-        self.use_beeps = self.retrieve_custom_property_value(
-            "use_beeps", errors
-        )
+        self.use_beeps = self.retrieve_custom_property_value("use_beeps", errors)
 
         return errors
 
     async def prepare(self) -> None:
         self.loaded = True
-        if(self.auto_start):
+        if self.auto_start:
             self.threaded_execution(self._init_chatter)
 
     async def unload(self) -> None:
         self.loaded = False
         self.radio_status = False
 
-    def randrange(self, start, stop = None):
+    def randrange(self, start, stop=None):
         if start == stop:
             return start
         random = randrange(start, stop)
@@ -384,7 +406,7 @@ class RadioChatter(Skill):
                         "name": "turn_on_radio",
                         "description": "Turn the radio on to pick up some chatter on open frequencies.",
                     },
-                }
+                },
             ),
             (
                 "turn_off_radio",
@@ -394,7 +416,7 @@ class RadioChatter(Skill):
                         "name": "turn_off_radio",
                         "description": "Turn the radio off to no longer pick up pick up chatter on open frequencies.",
                     },
-                }
+                },
             ),
             (
                 "radio_status",
@@ -404,11 +426,11 @@ class RadioChatter(Skill):
                         "name": "radio_status",
                         "description": "Get the status (on/off) of the radio.",
                     },
-                }
+                },
             ),
         ]
         return tools
-    
+
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
     ) -> tuple[str, str]:
@@ -446,7 +468,7 @@ class RadioChatter(Skill):
         """Start the radio chatter."""
 
         self.radio_status = True
-        time.sleep(max(5, self.interval_min)) # sleep for min 5s else min interval
+        time.sleep(max(5, self.interval_min))  # sleep for min 5s else min interval
 
         while self.is_active():
             await self._generate_chatter()
@@ -461,12 +483,14 @@ class RadioChatter(Skill):
             return
 
         count_message = self.randrange(self.messages_min, self.messages_max)
-        count_participants = self.randrange(self.participants_min, self.participants_max)
+        count_participants = self.randrange(
+            self.participants_min, self.participants_max
+        )
 
         messages = [
             {
-                'role': 'system',
-                'content': f"""
+                "role": "system",
+                "content": f"""
                     ## Must follow these rules
                     - There are {count_participants} participant(s) in the conversation/monolog
                     - The conversation/monolog must contain exactly {count_message} messages between the participants or in the monolog
@@ -482,12 +506,16 @@ class RadioChatter(Skill):
                 """,
             },
             {
-                'role': 'user',
-                'content': str(self.prompt),
+                "role": "user",
+                "content": str(self.prompt),
             },
         ]
         completion = await self.llm_call(messages)
-        messages = completion.choices[0].message.content if completion and completion.choices else ""
+        messages = (
+            completion.choices[0].message.content
+            if completion and completion.choices
+            else ""
+        )
 
         if not messages:
             return
@@ -508,7 +536,7 @@ class RadioChatter(Skill):
             clean_messages.append((name, text))
 
         original_voice_setting = await self._get_original_voice_setting()
-        original_sound_config = self.wingman.config.sound
+        original_sound_config = copy.deepcopy(self.wingman.config.sound)
         if self.force_radio_sound:
             custom_sound_config = copy.deepcopy(self.wingman.config.sound)
             custom_sound_config.play_beep = self.use_beeps
@@ -521,7 +549,9 @@ class RadioChatter(Skill):
             sound_config = original_sound_config
             if self.force_radio_sound:
                 sound_config = copy.deepcopy(custom_sound_config)
-                sound_config.effects = [self.radio_sounds[self.randrange(len(self.radio_sounds))]]
+                sound_config.effects = [
+                    self.radio_sounds[self.randrange(len(self.radio_sounds))]
+                ]
 
             voice_participant_mapping[name] = (voice_index[i], sound_config)
 
@@ -540,23 +570,23 @@ class RadioChatter(Skill):
             voice_tulple = self.voices[voice_index]
 
             await self._switch_voice(voice_tulple)
-            self.wingman.config.sound = sound_config
             if self.print_chatter:
                 await printr.print_async(
                     text=f"Background radio ({name}): {text}",
                     color=LogType.INFO,
-                    source_name=self.wingman.name
+                    source_name=self.wingman.name,
                 )
-            self.threaded_execution(self.wingman.play_to_user, text, True, self.volume)
+            self.threaded_execution(self.wingman.play_to_user, text, True, sound_config)
             if self.radio_knowledge:
-                await self.wingman.add_assistant_message(f"Background radio chatter: {text}")
+                await self.wingman.add_assistant_message(
+                    f"Background radio chatter: {text}"
+                )
             while not self.audio_player.is_playing:
                 time.sleep(0.1)
             await self._switch_voice(original_voice_setting)
-            self.wingman.config.sound = original_sound_config
 
         while self.audio_player.is_playing:
-            time.sleep(1) # stay in function call until last message got played
+            time.sleep(1)  # stay in function call until last message got played
 
     async def _get_random_voice_index(self, count: int) -> list[int]:
         """Switch voice to a random voice from the list."""
@@ -570,7 +600,7 @@ class RadioChatter(Skill):
         voice_index = []
         for i in range(count):
             while True:
-                index = self.randrange(len(self.voices))-1
+                index = self.randrange(len(self.voices)) - 1
                 if index not in voice_index:
                     voice_index.append(index)
                     break
@@ -591,12 +621,22 @@ class RadioChatter(Skill):
         elif self.wingman.tts_provider == TtsProvider.XVASYNTH:
             self.wingman.config.xvasynth.voice = voice_id
         elif self.wingman.tts_provider == TtsProvider.OPENAI:
-            self.wingman.config.openai.tts_voice = await self._get_openai_voice_by_name(voice_name)
+            self.wingman.config.openai.tts_voice = await self._get_openai_voice_by_name(
+                voice_name
+            )
         elif self.wingman.tts_provider == TtsProvider.WINGMAN_PRO:
             self.wingman.config.wingman_pro.tts_provider = voice_subprovider
-            if self.wingman.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
-                self.wingman.config.openai.tts_voice = await self._get_openai_voice_by_name(voice_name)
-            elif self.wingman.config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+            if (
+                self.wingman.config.wingman_pro.tts_provider
+                == WingmanProTtsProvider.OPENAI
+            ):
+                self.wingman.config.openai.tts_voice = (
+                    await self._get_openai_voice_by_name(voice_name)
+                )
+            elif (
+                self.wingman.config.wingman_pro.tts_provider
+                == WingmanProTtsProvider.AZURE
+            ):
                 self.wingman.config.azure.tts.voice = voice_id
         else:
             printr.print_async(
@@ -623,15 +663,25 @@ class RadioChatter(Skill):
             voice_name = self.wingman.config.openai.tts_voice.value
         elif self.wingman.tts_provider == TtsProvider.WINGMAN_PRO:
             voice_subprovider = self.wingman.config.wingman_pro.tts_provider
-            if self.wingman.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
+            if (
+                self.wingman.config.wingman_pro.tts_provider
+                == WingmanProTtsProvider.OPENAI
+            ):
                 voice_name = self.wingman.config.openai.tts_voice.value
-            elif self.wingman.config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+            elif (
+                self.wingman.config.wingman_pro.tts_provider
+                == WingmanProTtsProvider.AZURE
+            ):
                 voice_id = self.wingman.config.azure.tts.voice
 
         return (voice_provider, voice_subprovider, voice_name, voice_id)
 
     async def _get_openai_voice_by_name(self, voice_name):
         return next(
-            (voice for voice in OpenAiTtsVoice if voice.value.lower() == voice_name.lower()),
+            (
+                voice
+                for voice in OpenAiTtsVoice
+                if voice.value.lower() == voice_name.lower()
+            ),
             voice_name,
         )

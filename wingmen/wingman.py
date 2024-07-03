@@ -4,11 +4,13 @@ import time
 import difflib
 import asyncio
 import threading
+from typing import Optional
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
     CommandConfig,
     SettingsConfig,
+    SoundConfig,
     WingmanConfig,
     WingmanInitializationError,
 )
@@ -285,13 +287,17 @@ class Wingman:
         return ("", "", None)
 
     async def play_to_user(
-        self, text: str, no_interrupt: bool = False, volume: float = 1.0
+        self,
+        text: str,
+        no_interrupt: bool = False,
+        sound_config: Optional[SoundConfig] = None,
     ):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
             text (str): The response of your _get_response_for_transcript. This is usually the "response" from conversation with the AI.
             no_interrupt (bool): prevent interrupting the audio playback
+            sound_config (SoundConfig): An optional sound configuration to use for the playback. If unset, the Wingman's sound config is used.
         """
         pass
 
