@@ -1,18 +1,13 @@
 import os
 import json
 from typing import TYPE_CHECKING
-from api.interface import (
-    SettingsConfig,
-    SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from api.enums import LogType
 from skills.skill_base import Skill
 from services.file import get_writable_dir
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
 
 DEFAULT_MAX_TEXT_SIZE = 15000
 SUPPORTED_FILE_EXTENSIONS = [
@@ -82,21 +77,17 @@ SUPPORTED_FILE_EXTENSIONS = [
     "yaml",
 ]
 
+
 class FileManager(Skill):
 
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-        super().__init__(
-            config=config,
-            wingman_config=wingman_config,
-            settings=settings,
-            wingman=wingman,
-        )
+        super().__init__(config=config, settings=settings, wingman=wingman)
+
         self.allowed_file_extensions = SUPPORTED_FILE_EXTENSIONS
         self.default_file_extension = "txt"
         self.max_text_size = DEFAULT_MAX_TEXT_SIZE
@@ -105,11 +96,13 @@ class FileManager(Skill):
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
+
         self.default_directory = self.retrieve_custom_property_value(
             "default_directory", errors
         )
         if not self.default_directory or self.default_directory == "":
             self.default_directory = self.get_default_directory()
+
         self.allow_overwrite_existing = self.retrieve_custom_property_value(
             "allow_overwrite_existing", errors
         )
@@ -168,7 +161,11 @@ class FileManager(Skill):
                                     "description": "Boolean True/False indicator of whether the user wants to add text to an already existing file.  Defaults to False unless user expresses clear intent to add to existing file.",
                                 },
                             },
-                            "required": ["file_name", "text_content", "add_to_existing_file"],
+                            "required": [
+                                "file_name",
+                                "text_content",
+                                "add_to_existing_file",
+                            ],
                         },
                     },
                 },
@@ -276,17 +273,25 @@ class FileManager(Skill):
                     file_path = os.path.join(directory, file_name)
 
                     # If file already exists, and user does not have overwrite option on, and LLM did not detect an intent to add to the existing file, stop
-                    if os.path.isfile(file_path) and not self.allow_overwrite_existing and not add_to_existing_file:
+                    if (
+                        os.path.isfile(file_path)
+                        and not self.allow_overwrite_existing
+                        and not add_to_existing_file
+                    ):
                         function_response = f"File '{file_name}' already exists at {directory} and overwrite is not allowed."
-                    
+
                     # Otherwise, if file exists but LLM detected user wanted to add to existing file, do that.
                     elif os.path.isfile(file_path) and add_to_existing_file:
                         try:
                             with open(file_path, "a", encoding="utf-8") as file:
                                 file.write(text_content)
-                            function_response = f"Text added to existing file at {file_path}."
+                            function_response = (
+                                f"Text added to existing file at {file_path}."
+                            )
                         except Exception as e:
-                            function_response = f"Failed to append text to {file_path}: {str(e)}"
+                            function_response = (
+                                f"Failed to append text to {file_path}: {str(e)}"
+                            )
 
                     # We are either fine with completely overwriting the file or it does not exist already
                     else:

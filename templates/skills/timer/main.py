@@ -4,46 +4,30 @@ import asyncio
 import time
 import json
 from typing import TYPE_CHECKING
-from api.interface import (
-    SettingsConfig,
-    SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
+from api.interface import SettingsConfig, SkillConfig
 from api.enums import (
     LogSource,
     LogType,
 )
 from skills.skill_base import Skill
-from services.printr import Printr
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
 
-printr = Printr()
 
 class Timer(Skill):
 
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
         self.timers = {}
-        self.wingman = wingman
         self.available_tools = []
         self.active = False
-
-        super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
-        )
-
-    async def validate(self) -> list[WingmanInitializationError]:
-        errors = await super().validate()
-        return errors
 
     async def prepare(self) -> None:
         self.active = True
@@ -90,7 +74,7 @@ class Timer(Skill):
                             "optional": ["is_loop", "loops"],
                         },
                     },
-                }
+                },
             ),
             (
                 "get_timer_status",
@@ -100,7 +84,7 @@ class Timer(Skill):
                         "name": "get_timer_status",
                         "description": "Get a list of all running timers and their remaining time and id.",
                     },
-                }
+                },
             ),
             (
                 "cancel_timer",
@@ -120,7 +104,7 @@ class Timer(Skill):
                             "required": ["id"],
                         },
                     },
-                }
+                },
             ),
             (
                 "change_timer_settings",
@@ -152,7 +136,7 @@ class Timer(Skill):
                             "required": ["id", "delay", "is_loop", "loops"],
                         },
                     },
-                }
+                },
             ),
             (
                 "remind_me",
@@ -166,15 +150,14 @@ class Timer(Skill):
                             "properties": {
                                 "message": {
                                     "type": "string",
-                                    "description": "The message of the reminder to say to the user. For example User: \"Remind me to take a break.\" -> Message: \"This is your reminder to take a break.\"",
+                                    "description": 'The message of the reminder to say to the user. For example User: "Remind me to take a break." -> Message: "This is your reminder to take a break."',
                                 },
                             },
                             "required": ["message"],
                         },
                     },
-                }
+                },
             ),
-
         ]
         return tools
 
@@ -197,7 +180,13 @@ class Timer(Skill):
         function_response = ""
         instant_response = ""
 
-        if tool_name in ["set_timer", "get_timer_status", "cancel_timer", "change_timer_settings", "remind_me"]:
+        if tool_name in [
+            "set_timer",
+            "get_timer_status",
+            "cancel_timer",
+            "change_timer_settings",
+            "remind_me",
+        ]:
             if self.settings.debug_mode:
                 self.start_execution_benchmark()
 
@@ -212,7 +201,9 @@ class Timer(Skill):
             elif tool_name == "get_timer_status":
                 function_response = await self.get_timer_status()
             elif tool_name == "cancel_timer":
-                function_response = await self.cancel_timer(timer_id=parameters.get("id", None))
+                function_response = await self.cancel_timer(
+                    timer_id=parameters.get("id", None)
+                )
             elif tool_name == "change_timer_settings":
                 function_response = await self.change_timer_settings(
                     timer_id=parameters.get("id", None),
@@ -221,7 +212,9 @@ class Timer(Skill):
                     loops=parameters.get("loops", 1),
                 )
             elif tool_name == "remind_me":
-                function_response = await self.reminder(message=parameters.get("message", None))
+                function_response = await self.reminder(
+                    message=parameters.get("message", None)
+                )
 
             if self.settings.debug_mode:
                 await self.print_execution_time()
@@ -256,7 +249,7 @@ class Timer(Skill):
 
                 if is_loop and loops == 0:
                     timers_to_delete.append(timer_id)
-                    continue # skip timers marked for deletion
+                    continue  # skip timers marked for deletion
 
                 if time.time() - start_time >= delay:
                     if self.settings.debug_mode:
@@ -269,7 +262,7 @@ class Timer(Skill):
             for timer_id in timers_to_delete:
                 del self.timers[timer_id]
 
-        self.timers = {} # clear timers
+        self.timers = {}  # clear timers
 
     async def execute_timer(self, timer_id: str) -> None:
         if timer_id not in self.timers:
@@ -282,11 +275,15 @@ class Timer(Skill):
         is_loop = self.timers[timer_id][4]
         loops = self.timers[timer_id][5]
 
-        response = await self.wingman.execute_command_by_function_call(function, parameters)
+        response = await self.wingman.execute_command_by_function_call(
+            function, parameters
+        )
         if response:
-            summary = await self._summarize_timer_execution(function, parameters, response)
+            summary = await self._summarize_timer_execution(
+                function, parameters, response
+            )
             await self.wingman.add_assistant_message(summary)
-            await printr.print_async(
+            await self.printr.print_async(
                 f"{summary}",
                 color=LogType.POSITIVE,
                 source=LogSource.WINGMAN,
@@ -301,11 +298,18 @@ class Timer(Skill):
             self.timers[timer_id][5] = 0
             return
 
-        self.timers[timer_id][3] = time.time() # reset start time
+        self.timers[timer_id][3] = time.time()  # reset start time
         if loops > 0:
-            self.timers[timer_id][5] -= 1 # decrease remaining loops
+            self.timers[timer_id][5] -= 1  # decrease remaining loops
 
-    async def set_timer(self, delay: int = None, is_loop: bool = False, loops: int = -1, function: str = None, parameters: dict[str, any] = None) -> str:
+    async def set_timer(
+        self,
+        delay: int = None,
+        is_loop: bool = False,
+        loops: int = -1,
+        function: str = None,
+        parameters: dict[str, any] = None,
+    ) -> str:
         check_counter = 0
         max_checks = 2
         errors = []
@@ -324,8 +328,12 @@ class Timer(Skill):
             # check if tool call exists
             tool_call = None
             tool_call = next(
-                (tool for tool in self.wingman.build_tools() if tool.get("function", {}).get("name", False) == function),
-                None
+                (
+                    tool
+                    for tool in self.wingman.build_tools()
+                    if tool.get("function", {}).get("name", False) == function
+                ),
+                None,
             )
 
             # if not valid it might be a command
@@ -336,18 +344,32 @@ class Timer(Skill):
             if not tool_call:
                 errors.append(f"Function {function} does not exist.")
             else:
-                if tool_call.get("function", False) and tool_call.get("function", {}).get("parameters", False):
-                    properties = tool_call.get("function", {}).get("parameters", {}).get("properties", {})
-                    required_parameters = tool_call.get("function", {}).get("parameters", {}).get("required", [])
+                if tool_call.get("function", False) and tool_call.get(
+                    "function", {}
+                ).get("parameters", False):
+                    properties = (
+                        tool_call.get("function", {})
+                        .get("parameters", {})
+                        .get("properties", {})
+                    )
+                    required_parameters = (
+                        tool_call.get("function", {})
+                        .get("parameters", {})
+                        .get("required", [])
+                    )
 
                     for name, value in properties.items():
                         if name in parameters:
-                            real_type = await self._get_tool_parameter_type_by_name(value.get("type", "string"))
+                            real_type = await self._get_tool_parameter_type_by_name(
+                                value.get("type", "string")
+                            )
                             if not isinstance(parameters[name], real_type):
                                 errors.append(
                                     f"Parameter {name} must be of type {value.get('type', None)}, but is {type(parameters[name])}."
                                 )
-                            elif value.get("enum", False) and parameters[name] not in value.get("enum", []):
+                            elif value.get("enum", False) and parameters[
+                                name
+                            ] not in value.get("enum", []):
                                 errors.append(
                                     f"Parameter {name} must be one of {value.get('enum', [])}, but is {parameters[name]}."
                                 )
@@ -364,12 +386,20 @@ class Timer(Skill):
                 # try to let it fix itself
                 message_history = []
                 for message in self.wingman.messages:
-                    role = message.role if hasattr(message, "role") else message.get("role", False)
+                    role = (
+                        message.role
+                        if hasattr(message, "role")
+                        else message.get("role", False)
+                    )
                     if role in ["user", "assistant", "system"]:
                         message_history.append(
                             {
                                 "role": role,
-                                "content": message.content if hasattr(message, "content") else message.get("content", False),
+                                "content": (
+                                    message.content
+                                    if hasattr(message, "content")
+                                    else message.get("content", False)
+                                ),
                             }
                         )
                 data = {
@@ -380,7 +410,11 @@ class Timer(Skill):
                         "function": function,
                         "parameters": parameters,
                     },
-                    "message_history": message_history if len(message_history) <= 10 else message_history[:1] + message_history[-9:],
+                    "message_history": (
+                        message_history
+                        if len(message_history) <= 10
+                        else message_history[:1] + message_history[-9:]
+                    ),
                     "tool_calls_definition": self.wingman.build_tools(),
                     "errors": errors,
                 }
@@ -407,10 +441,7 @@ class Timer(Skill):
                             }
                         """,
                     },
-                    {
-                        "role": "user",
-                        "content": json.dumps(data, indent=4)
-                    },
+                    {"role": "user", "content": json.dumps(data, indent=4)},
                 ]
                 json_retry = 0
                 max_json_retries = 1
@@ -427,7 +458,7 @@ class Timer(Skill):
                     # check if data is valid json
                     try:
                         if data.startswith("```json") and data.endswith("```"):
-                            data = data[len("```json"): -len("```")].strip()
+                            data = data[len("```json") : -len("```")].strip()
                         data = json.loads(data)
                     except json.JSONDecodeError:
                         messages.append(
@@ -454,15 +485,24 @@ class Timer(Skill):
 
         # generate a unique id for the timer
         letters_and_digits = string.ascii_letters + string.digits
-        timer_id = ''.join(random.choice(letters_and_digits) for _ in range(10))
+        timer_id = "".join(random.choice(letters_and_digits) for _ in range(10))
 
         # set timer
         current_time = time.time()
-        self.timers[timer_id] = [delay, function, parameters, current_time, is_loop, loops]
+        self.timers[timer_id] = [
+            delay,
+            function,
+            parameters,
+            current_time,
+            is_loop,
+            loops,
+        ]
 
         return f"Timer set with id {timer_id}.\n\n{await self.get_timer_status()}"
 
-    async def _summarize_timer_execution(self, function: str, parameters: dict[str, any], response: str) -> str:
+    async def _summarize_timer_execution(
+        self, function: str, parameters: dict[str, any], response: str
+    ) -> str:
         self.wingman.messages.append(
             {
                 "role": "user",
@@ -487,14 +527,20 @@ class Timer(Skill):
         timers = []
         for timer_id, timer in self.timers.items():
             if timer[4] and timer[5] == 0:
-                continue # skip timers marked for deletion
+                continue  # skip timers marked for deletion
             timers.append(
                 {
                     "id": timer_id,
                     "delay": timer[0],
                     "is_loop": timer[4],
-                    "remaining_loops": (timer[5] if timer[5] > 0 else "infinite") if timer[4] else "N/A",
-                    "remaining_time_in_seconds": round(max(0, timer[0] - (time.time() - timer[3]))),
+                    "remaining_loops": (
+                        (timer[5] if timer[5] > 0 else "infinite")
+                        if timer[4]
+                        else "N/A"
+                    ),
+                    "remaining_time_in_seconds": round(
+                        max(0, timer[0] - (time.time() - timer[3]))
+                    ),
                 }
             )
         return timers
@@ -507,7 +553,9 @@ class Timer(Skill):
         self.timers[timer_id][5] = 0
         return f"Timer with id {timer_id} cancelled.\n\n{await self.get_timer_status()}"
 
-    async def change_timer_settings(self, timer_id: str, delay: int, is_loop: bool, loops: int) -> str:
+    async def change_timer_settings(
+        self, timer_id: str, delay: int, is_loop: bool, loops: int
+    ) -> str:
         if timer_id not in self.timers:
             return f"Timer with id {timer_id} not found."
         self.timers[timer_id][0] = delay

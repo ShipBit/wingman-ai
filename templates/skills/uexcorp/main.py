@@ -1,5 +1,3 @@
-"""Wingman AI Skill to utalize uexcorp api for trade recommendations"""
-
 import asyncio
 import difflib
 import heapq
@@ -14,19 +12,16 @@ from typing import Optional, TYPE_CHECKING
 from datetime import datetime
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
-from api.interface import (
-    SettingsConfig,
-    SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from services.file import get_writable_dir
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
+
 
 class UEXCorp(Skill):
+    """Wingman AI Skill to utalize uexcorp api for trade recommendations"""
 
     # enable for verbose logging
     DEV_MODE = False
@@ -34,13 +29,10 @@ class UEXCorp(Skill):
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-        super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
-        )
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
         self.data_path = get_writable_dir(path.join("skills", "uexcorp", "data"))
         self.logfileerror = path.join(self.data_path, "error.log")
@@ -121,7 +113,9 @@ class UEXCorp(Skill):
 
         self.dynamic_context = ""
 
-    async def _print(self, message: str | dict, is_extensive: bool = False, is_debug: bool = True) -> None:
+    async def _print(
+        self, message: str | dict, is_extensive: bool = False, is_debug: bool = True
+    ) -> None:
         """
         Prints a message if debug mode is enabled. Will be sent to the server terminal, log file and client.
 
@@ -141,7 +135,6 @@ class UEXCorp(Skill):
             with open(self.logfiledebug, "a", encoding="UTF-8") as f:
                 f.write(f"#### Time: {datetime.now()} ####\n")
                 f.write(f"{message}\n\n")
-
 
     def _log(self, message: str | dict, is_extensive: bool = False) -> None:
         """
@@ -289,7 +282,7 @@ class UEXCorp(Skill):
 
         return errors
 
-    async def _load_data(self, reload_prices: bool = False, callback = None) -> None:
+    async def _load_data(self, reload_prices: bool = False, callback=None) -> None:
         """
         Load data for UEX corp wingman.
 
@@ -301,8 +294,8 @@ class UEXCorp(Skill):
             await self._load_commodity_prices()
             self.threaded_execution(self._save_to_cachefile)
             return
-        
-        self.game_version = (await self._fetch_uex_data("game_versions"))['live']
+
+        self.game_version = (await self._fetch_uex_data("game_versions"))["live"]
 
         async def _load_from_cache():
             if not self.uexcorp_cache:
@@ -356,7 +349,11 @@ class UEXCorp(Skill):
 
             if not self.commodities:
                 self.commodities = await self._fetch_uex_data("commodities")
-                self.commodities = [commodity for commodity in self.commodities if commodity["is_available"] == 1]
+                self.commodities = [
+                    commodity
+                    for commodity in self.commodities
+                    if commodity["is_available"] == 1
+                ]
 
             if not self.systems:
                 load_purchase_and_rental = True
@@ -376,7 +373,7 @@ class UEXCorp(Skill):
                     )
                     self.planets += await self._fetch_uex_data(
                         f"planets/id_star_system/{system['id']}"
-                )
+                    )
                 await self._load_commodity_prices()
 
                 # data manipulation
@@ -449,7 +446,9 @@ class UEXCorp(Skill):
 
         for ship in self.ships:
             ship["purchase"] = [
-                purchase for purchase in ships_purchase if purchase["id_vehicle"] == ship["id"]
+                purchase
+                for purchase in ships_purchase
+                if purchase["id_vehicle"] == ship["id"]
             ]
             ship["rental"] = [
                 rental for rental in ships_rental if rental["id_vehicle"] == ship["id"]
@@ -457,10 +456,14 @@ class UEXCorp(Skill):
 
         for terminal in self.terminals:
             terminal["vehicle_rental"] = [
-                rental for rental in ships_rental if rental["id_terminal"] == terminal["id"]
+                rental
+                for rental in ships_rental
+                if rental["id_terminal"] == terminal["id"]
             ]
             terminal["vehicle_purchase"] = [
-                purchase for purchase in ships_purchase if purchase["id_terminal"] == terminal["id"]
+                purchase
+                for purchase in ships_purchase
+                if purchase["id_terminal"] == terminal["id"]
             ]
 
     async def _load_commodity_prices(self) -> None:
@@ -476,7 +479,11 @@ class UEXCorp(Skill):
         # currently the prices are saved in api v1 style to minimize rework time for now
         for i in range(0, len(self.terminals), 10):
             terminals_batch = self.terminals[i : i + 10]
-            terminal_ids = [terminal["id"] for terminal in terminals_batch if terminal["type"] in ["commodity", "commodity_raw"]]
+            terminal_ids = [
+                terminal["id"]
+                for terminal in terminals_batch
+                if terminal["type"] in ["commodity", "commodity_raw"]
+            ]
             if not terminal_ids:
                 continue
 
@@ -498,7 +505,9 @@ class UEXCorp(Skill):
                             None,
                         )
                         if commodity:
-                            transaction_type = "buy" if commodity_price["price_buy"] > 0 else "sell"
+                            transaction_type = (
+                                "buy" if commodity_price["price_buy"] > 0 else "sell"
+                            )
                             price = {
                                 "name": self._format_commodity_name(commodity),
                                 "kind": commodity["kind"],
@@ -507,23 +516,32 @@ class UEXCorp(Skill):
                                 "price_sell": commodity_price["price_sell"],
                                 "date_update": commodity_price["date_modified"],
                                 "is_updated": bool(commodity_price["date_modified"]),
-                                "scu": commodity_price[f"scu_{transaction_type}"] or None,
-                                "scu_average": commodity_price[f"scu_{transaction_type}_avg"] or None,
-                                "scu_average_week": commodity_price[f"scu_{transaction_type}_avg_week"] or None,
+                                "scu": commodity_price[f"scu_{transaction_type}"]
+                                or None,
+                                "scu_average": commodity_price[
+                                    f"scu_{transaction_type}_avg"
+                                ]
+                                or None,
+                                "scu_average_week": commodity_price[
+                                    f"scu_{transaction_type}_avg_week"
+                                ]
+                                or None,
                             }
                             # calculate expected scu
                             count = 0
                             total = 0
                             if price["scu"]:
                                 count += 2
-                                total += (price["scu"] * 2)
+                                total += price["scu"] * 2
                             if price["scu_average"]:
                                 count += 1
                                 total += price["scu_average"]
                             if price["scu_average_week"]:
                                 count += 1
                                 total += price["scu_average_week"]
-                            price["scu_expected"] = int(total / count) if count > 0 else None
+                            price["scu_expected"] = (
+                                int(total / count) if count > 0 else None
+                            )
 
                             terminal["prices"][commodity["id"]] = price
 
@@ -559,11 +577,7 @@ class UEXCorp(Skill):
             planet for planet in self.planets if planet["is_available"] == 1
         ]
 
-        self.moons = [
-            moon
-            for moon in self.moons
-            if moon["is_available"] == 1
-        ]
+        self.moons = [moon for moon in self.moons if moon["is_available"] == 1]
 
         # remove urls from ships
         for ship in self.ships:
@@ -592,10 +606,7 @@ class UEXCorp(Skill):
         for ship in self.ships:
             ship["hull_trading"] = ship["name"] in ships_for_hull_trading
 
-        self.ship_names = [
-            self._format_ship_name(ship)
-            for ship in self.ships
-        ]
+        self.ship_names = [self._format_ship_name(ship) for ship in self.ships]
         self.ship_dict = {
             self._format_ship_name(ship).lower(): ship for ship in self.ships
         }
@@ -618,15 +629,15 @@ class UEXCorp(Skill):
         self.system_dict = {
             self._format_system_name(system).lower(): system for system in self.systems
         }
-        self.system_code_dict = {
-            system["id"]: system for system in self.systems
-        }
+        self.system_code_dict = {system["id"]: system for system in self.systems}
 
         self.terminal_names = [
             self._format_terminal_name(terminal) for terminal in self.terminals
         ]
         self.terminal_names_trading = [
-            self._format_terminal_name(terminal) for terminal in self.terminals if terminal["type"] in ["commodity", "commodity_raw"]
+            self._format_terminal_name(terminal)
+            for terminal in self.terminals
+            if terminal["type"] in ["commodity", "commodity_raw"]
         ]
         self.terminal_dict = {
             self._format_terminal_name(terminal).lower(): terminal
@@ -641,9 +652,7 @@ class UEXCorp(Skill):
             if terminal["id_planet"]:
                 self.terminals_by_planet[terminal["id_planet"]].append(terminal)
             if terminal["id_moon"]:
-                self.terminals_by_moon[terminal["id_moon"]].append(
-                    terminal
-                )
+                self.terminals_by_moon[terminal["id_moon"]].append(terminal)
             if terminal["id_city"]:
                 self.terminals_by_city[terminal["id_city"]].append(terminal)
 
@@ -655,16 +664,11 @@ class UEXCorp(Skill):
         for city in self.cities:
             self.cities_by_planet[city["id_planet"]].append(city)
 
-        self.moon_names = [
-            self._format_moon_name(moon) for moon in self.moons
-        ]
+        self.moon_names = [self._format_moon_name(moon) for moon in self.moons]
         self.moon_dict = {
-            self._format_moon_name(moon).lower(): moon
-            for moon in self.moons
+            self._format_moon_name(moon).lower(): moon for moon in self.moons
         }
-        self.moon_code_dict = {
-            moon["id"]: moon for moon in self.moons
-        }
+        self.moon_code_dict = {moon["id"]: moon for moon in self.moons}
         for moon in self.moons:
             self.moons_by_planet[moon["id_planet"]].append(moon)
 
@@ -674,9 +678,7 @@ class UEXCorp(Skill):
         self.planet_dict = {
             self._format_planet_name(planet).lower(): planet for planet in self.planets
         }
-        self.planet_code_dict = {
-            planet["id"]: planet for planet in self.planets
-        }
+        self.planet_code_dict = {planet["id"]: planet for planet in self.planets}
         for planet in self.planets:
             self.planets_by_system[planet["id_star_system"]].append(planet)
 
@@ -730,7 +732,7 @@ class UEXCorp(Skill):
         Returns:
             dict: The header dictionary with the API key.
         """
-        return {} # no header needed anymore for currently used endpoints
+        return {}  # no header needed anymore for currently used endpoints
         key = self.uexcorp_api_key
         return {"Authorization": f"Bearer {key}"}
 
@@ -754,7 +756,9 @@ class UEXCorp(Skill):
         timeout_error = False
         requests_error = False
 
-        while request_count == 1 or (request_count <= (self.uexcorp_api_timeout_retries + 1) and timeout_error):
+        while request_count == 1 or (
+            request_count <= (self.uexcorp_api_timeout_retries + 1) and timeout_error
+        ):
             if requests_error:
                 await self._print(f"Retrying request #{request_count}...", True)
                 requests_error = False
@@ -784,7 +788,7 @@ class UEXCorp(Skill):
             return []
 
         return response_json.get("data", [])
-    
+
     async def _fetch_lore(self, search: str) -> dict[str, any]:
         """
         Fetches data for a search query.
@@ -796,14 +800,18 @@ class UEXCorp(Skill):
             dict[str, any]: The fetched data as a dictionary.
         """
         url = "https://api.star-citizen.wiki/api/v2/galactapedia/search"
-        await self._print(f"Fetching data from SC wiki ({url}) for search query '{search}' ...", True)
+        await self._print(
+            f"Fetching data from SC wiki ({url}) for search query '{search}' ...", True
+        )
 
         request_count = 1
         max_retries = 2
         timeout_error = False
         requests_error = False
 
-        while request_count == 1 or (request_count <= (max_retries + 1) and timeout_error):
+        while request_count == 1 or (
+            request_count <= (max_retries + 1) and timeout_error
+        ):
             if requests_error:
                 await self._print(f"Retrying request #{request_count}...", True)
                 requests_error = False
@@ -812,7 +820,10 @@ class UEXCorp(Skill):
             try:
                 response = requests.post(
                     url,
-                    headers={"accept": "application/json", "Content-Type": "application/json"},
+                    headers={
+                        "accept": "application/json",
+                        "Content-Type": "application/json",
+                    },
                     json={"query": search},
                     timeout=self.uexcorp_api_timeout,
                 )
@@ -827,7 +838,7 @@ class UEXCorp(Skill):
         if requests_error:
             return {}
 
-        try :
+        try:
             response_json = response.json()
         except json.decoder.JSONDecodeError as e:
             await self._print(f"Error while retrieving data from {url}: {e}")
@@ -841,21 +852,33 @@ class UEXCorp(Skill):
         articles = response_json.get("data", [])[:max_articles]
 
         async def _load_article(article_id: str):
-            article_url = f"https://api.star-citizen.wiki/api/v2/galactapedia/{article_id}"
+            article_url = (
+                f"https://api.star-citizen.wiki/api/v2/galactapedia/{article_id}"
+            )
             try:
-                article_response = requests.get(article_url, timeout=self.uexcorp_api_timeout)
+                article_response = requests.get(
+                    article_url, timeout=self.uexcorp_api_timeout
+                )
                 article_response.raise_for_status()
             except requests.exceptions.RequestException as e:
-                await self._print(f"Error while retrieving data from {article_url}: {e}")
+                await self._print(
+                    f"Error while retrieving data from {article_url}: {e}"
+                )
                 return None
 
             try:
                 article_response_json = article_response.json()
             except json.decoder.JSONDecodeError as e:
-                await self._print(f"Error while retrieving data from {article_url}: {e}")
+                await self._print(
+                    f"Error while retrieving data from {article_url}: {e}"
+                )
                 return None
 
-            response = article_response_json.get("data", {}).get("translations", {}).get("en_EN", "")
+            response = (
+                article_response_json.get("data", {})
+                .get("translations", {})
+                .get("en_EN", "")
+            )
             # scrap links and only keep link name for example [link name](link)
             response = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", response)
             response = re.sub(r"\n", " ", response)
@@ -867,7 +890,10 @@ class UEXCorp(Skill):
         for article in articles:
             self.threaded_execution(_load_article, article["id"])
 
-        while len(loaded_articles) < min_articles and (datetime.now() - start_time).seconds < max_time:
+        while (
+            len(loaded_articles) < min_articles
+            and (datetime.now() - start_time).seconds < max_time
+        ):
             await asyncio.sleep(0.1)
 
         return loaded_articles
@@ -886,10 +912,12 @@ class UEXCorp(Skill):
         """
         if full_name:
             return ship["name_full"]
-        
+
         return ship["name"]
 
-    def _format_terminal_name(self, terminal: dict[str, any], full_name: bool = False) -> str:
+    def _format_terminal_name(
+        self, terminal: dict[str, any], full_name: bool = False
+    ) -> str:
         """
         Formats the name of a terminal.
 
@@ -901,7 +929,7 @@ class UEXCorp(Skill):
         """
         if full_name:
             return terminal["name"]
-        
+
         return terminal["nickname"]
 
     def _format_city_name(self, city: dict[str, any]) -> str:
@@ -973,9 +1001,7 @@ class UEXCorp(Skill):
             "illegal_commodities_allowed",
             "maximal_number_of_routes",
         ]
-        trading_routes_required = [
-            "ship_name"
-        ]
+        trading_routes_required = ["ship_name"]
 
         if self.uexcorp_tradestart_mandatory:
             trading_routes_required.append("position_start_name")
@@ -1209,10 +1235,16 @@ class UEXCorp(Skill):
 
         try:
             if tool_name in functions:
-                if(not self.skill_loaded):
+                if not self.skill_loaded:
                     self.skill_loaded_asked = True
-                    await self._print("UEXcorp skill is not loaded yet. Please wait a moment.", False, False)
-                    function_response = "Data is still beeing loaded. Please wait a moment."
+                    await self._print(
+                        "UEXcorp skill is not loaded yet. Please wait a moment.",
+                        False,
+                        False,
+                    )
+                    function_response = (
+                        "Data is still beeing loaded. Please wait a moment."
+                    )
                     return function_response, instant_response
 
                 self.start_execution_benchmark()
@@ -1222,7 +1254,10 @@ class UEXCorp(Skill):
                 if self.settings.debug_mode:
                     await self.print_execution_time()
                 if self.DEV_MODE:
-                    await self._print(f"_gpt_call_{functions[tool_name]} response: {function_response}", True)
+                    await self._print(
+                        f"_gpt_call_{functions[tool_name]} response: {function_response}",
+                        True,
+                    )
         except Exception:
             file_object = open(self.logfileerror, "a", encoding="UTF-8")
             file_object.write(traceback.format_exc())
@@ -1246,7 +1281,7 @@ class UEXCorp(Skill):
             function_response += "\nTell user there seems to be an error. And you must say that it should be report to the 'uexcorp skill developer (JayMatthew on Discord)'."
 
         return function_response, instant_response
-    
+
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return True
 
@@ -1365,7 +1400,9 @@ class UEXCorp(Skill):
             str: A message indicating that the cached function's argument values have been printed to the console.
         """
         self._log(self.cache["function_args"], True)
-        return "The cached function values are: \n" + json.dumps(self.cache["function_args"])
+        return "The cached function values are: \n" + json.dumps(
+            self.cache["function_args"]
+        )
 
     async def _gpt_call_reload_current_commodity_prices(self) -> str:
         """
@@ -1508,8 +1545,12 @@ class UEXCorp(Skill):
 
         output = {}
         for ship in ships:
+
             async def get_ship_info(ship):
-                output[self._format_ship_name(ship)] = await self._get_converted_ship_for_output(ship)
+                output[self._format_ship_name(ship)] = (
+                    await self._get_converted_ship_for_output(ship)
+                )
+
             self.threaded_execution(get_ship_info, ship)
 
         while len(output) < len(ships):
@@ -1664,12 +1705,16 @@ class UEXCorp(Skill):
                 output.pop(key, None)
 
         if lore:
-            output["background_information"] = await self._fetch_lore(self._format_terminal_name(terminal))
+            output["background_information"] = await self._fetch_lore(
+                self._format_terminal_name(terminal)
+            )
 
         self.cache["readable_objects"][checksum] = output
         return output
 
-    async def _get_converted_city_for_output(self, city: dict[str, any]) -> dict[str, any]:
+    async def _get_converted_city_for_output(
+        self, city: dict[str, any]
+    ) -> dict[str, any]:
         """
         Converts a city dictionary to a dictionary that can be used as output.
 
@@ -1710,7 +1755,9 @@ class UEXCorp(Skill):
                 output.pop(key, None)
 
         if self.uexcorp_add_lore:
-            output["background_information"] = await self._fetch_lore(self._format_city_name(city))
+            output["background_information"] = await self._fetch_lore(
+                self._format_city_name(city)
+            )
 
         self.cache["readable_objects"][checksum] = output
         return output
@@ -1749,7 +1796,9 @@ class UEXCorp(Skill):
                 output.pop(key, None)
 
         if self.uexcorp_add_lore:
-            output["background_information"] = await self._fetch_lore(self._format_moon_name(moon))
+            output["background_information"] = await self._fetch_lore(
+                self._format_moon_name(moon)
+            )
 
         self.cache["readable_objects"][checksum] = output
         return output
@@ -1799,7 +1848,9 @@ class UEXCorp(Skill):
                 output.pop(key, None)
 
         if self.uexcorp_add_lore:
-            output["background_information"] = await self._fetch_lore(self._format_planet_name(planet))
+            output["background_information"] = await self._fetch_lore(
+                self._format_planet_name(planet)
+            )
 
         self.cache["readable_objects"][checksum] = output
         return output
@@ -1838,7 +1889,10 @@ class UEXCorp(Skill):
                         terminal_without_planets.append(terminal)
             if terminal_without_planets:
                 output["space_stations"] = ", ".join(
-                    [self._format_terminal_name(terminal) for terminal in terminal_without_planets]
+                    [
+                        self._format_terminal_name(terminal)
+                        for terminal in terminal_without_planets
+                    ]
                 )
             if gateways:
                 output["gateways"] = ", ".join(
@@ -1852,12 +1906,16 @@ class UEXCorp(Skill):
             )
 
         if self.uexcorp_add_lore:
-            output["background_information"] = await self._fetch_lore(self._format_system_name(system))
+            output["background_information"] = await self._fetch_lore(
+                self._format_system_name(system)
+            )
 
         self.cache["readable_objects"][checksum] = output
         return output
 
-    async def _get_converted_ship_for_output(self, ship: dict[str, any]) -> dict[str, any]:
+    async def _get_converted_ship_for_output(
+        self, ship: dict[str, any]
+    ) -> dict[str, any]:
         """
         Converts a ship dictionary to a dictionary that can be used as output.
 
@@ -1881,24 +1939,24 @@ class UEXCorp(Skill):
         }
 
         if not ship["is_concept"]:
-            if ship['purchase']:
+            if ship["purchase"]:
                 output["purchase_at"] = []
-                for option in ship['purchase']:
-                    terminal = self.terminal_code_dict[option['id_terminal']]
+                for option in ship["purchase"]:
+                    terminal = self.terminal_code_dict[option["id_terminal"]]
                     output["purchase_at"].append(
                         f"Buy at {self._format_terminal_name(terminal)} for {option['price_buy']} aUEC"
                     )
             else:
-                output["purchase_at"] = 'Not available for purchase.'
-            if ship['rental']:
+                output["purchase_at"] = "Not available for purchase."
+            if ship["rental"]:
                 output["rent_at"] = []
-                for option in ship['rental']:
-                    terminal = self.terminal_code_dict[option['id_terminal']]
+                for option in ship["rental"]:
+                    terminal = self.terminal_code_dict[option["id_terminal"]]
                     output["rent_at"].append(
                         f"Rent at {self._format_terminal_name(terminal)} for {option['price_rent']} aUEC per day."
                     )
             else:
-                output["rent_at"] = 'Not available as rental.'
+                output["rent_at"] = "Not available as rental."
 
         if ship["hull_trading"] is True:
             output["trading_info"] = (
@@ -1906,11 +1964,13 @@ class UEXCorp(Skill):
             )
 
         if self.uexcorp_add_lore:
-            output["additional_info"] = await self._fetch_lore(self._format_ship_name(ship, False))
+            output["additional_info"] = await self._fetch_lore(
+                self._format_ship_name(ship, False)
+            )
 
         self.cache["readable_objects"][checksum] = output
         return output
-    
+
     def _get_ship_field_of_activity(self, ship: dict[str, any]) -> str:
         """
         Returns the field of activity of a ship.
@@ -2032,11 +2092,13 @@ class UEXCorp(Skill):
             output[key] = "Yes" if commodity[key] else "No"
 
         if commodity["is_illegal"]:
-            output["notes"] = "Stay away from ship scanns to avoid fines and crimestat, as this commodity is illegal."
+            output["notes"] = (
+                "Stay away from ship scanns to avoid fines and crimestat, as this commodity is illegal."
+            )
 
         if self.uexcorp_add_lore:
             output["additional_info"] = await self._fetch_lore(commodity["name"])
-        
+
         self.cache["readable_objects"][checksum] = output
         return output
 
@@ -2321,7 +2383,10 @@ class UEXCorp(Skill):
         misunderstood = []
         parameters = {
             "ship_name": (ship_name, self.ship_names),
-            "position_start_name": (position_start_name, self.location_names_set_trading),
+            "position_start_name": (
+                position_start_name,
+                self.location_names_set_trading,
+            ),
             "position_end_name": (position_end_name, self.location_names_set_trading),
             "commodity_name": (commodity_name, self.commodity_names),
         }
@@ -2403,8 +2468,7 @@ class UEXCorp(Skill):
                 if (
                     "prices" not in start_terminal
                     or commodity["id"] not in start_terminal["prices"]
-                    or start_terminal["prices"][commodity["id"]]["operation"]
-                    != "buy"
+                    or start_terminal["prices"][commodity["id"]]["operation"] != "buy"
                 ):
                     continue
                 for end_terminal in end_terminals:
@@ -2456,7 +2520,9 @@ class UEXCorp(Skill):
         if len(trading_routes) > 0:
             additional_answer = ""
             if len(trading_routes) < maximal_number_of_routes:
-                additional_answer += f" There are only {len(trading_routes)} routes available."
+                additional_answer += (
+                    f" There are only {len(trading_routes)} routes available."
+                )
             else:
                 additional_answer += f" There are {len(trading_routes)} routes available and these are the best {maximal_number_of_routes} ones."
 
@@ -2590,7 +2656,10 @@ class UEXCorp(Skill):
             for blacklist_item in self.uexcorp_trade_blacklist:
                 if "tradeport" in blacklist_item and blacklist_item["tradeport"]:
                     for terminal in start_terminals:
-                        if self._format_terminal_name(terminal) == blacklist_item["tradeport"]:
+                        if (
+                            self._format_terminal_name(terminal)
+                            == blacklist_item["tradeport"]
+                        ):
                             if (
                                 "commodity" not in blacklist_item
                                 or not blacklist_item["commodity"]
@@ -2608,7 +2677,10 @@ class UEXCorp(Skill):
                                         terminal["prices"].pop(commodity_code)
                                         break
                     for terminal in end_terminals:
-                        if self._format_terminal_name(terminal) == blacklist_item["tradeport"]:
+                        if (
+                            self._format_terminal_name(terminal)
+                            == blacklist_item["tradeport"]
+                        ):
                             if (
                                 "commodity" not in blacklist_item
                                 or not blacklist_item["commodity"]
@@ -2712,19 +2784,37 @@ class UEXCorp(Skill):
                                 )
                             cargo_by_space = cargo_space
                             if self.uexcorp_use_estimated_availability:
-                                cargo_by_availability_sell = temp_price["scu_expected"] or 0
-                                cargo_by_availability_buy = commodity["scu_expected"] or 0
+                                cargo_by_availability_sell = (
+                                    temp_price["scu_expected"] or 0
+                                )
+                                cargo_by_availability_buy = (
+                                    commodity["scu_expected"] or 0
+                                )
                             else:
                                 cargo_by_availability_sell = cargo_by_space
                                 cargo_by_availability_buy = cargo_by_space
 
-                            cargo = min(cargo_by_money, cargo_by_space, cargo_by_availability_sell, cargo_by_availability_buy)
+                            cargo = min(
+                                cargo_by_money,
+                                cargo_by_space,
+                                cargo_by_availability_sell,
+                                cargo_by_availability_buy,
+                            )
                             if cargo >= 1:
                                 info = ""
-                                if min(cargo_by_money, cargo_by_space) > min(cargo_by_availability_buy, cargo_by_availability_sell):
-                                    if cargo_by_availability_buy < cargo_by_availability_sell:
+                                if min(cargo_by_money, cargo_by_space) > min(
+                                    cargo_by_availability_buy,
+                                    cargo_by_availability_sell,
+                                ):
+                                    if (
+                                        cargo_by_availability_buy
+                                        < cargo_by_availability_sell
+                                    ):
                                         info = f"Please mention to user: SCU count limited to {min(cargo_by_availability_buy, cargo_by_availability_sell)} (instead of {min(cargo_by_money, cargo_by_space)}) by estimated availability at buy location."
-                                    elif cargo_by_availability_buy > cargo_by_availability_sell:
+                                    elif (
+                                        cargo_by_availability_buy
+                                        > cargo_by_availability_sell
+                                    ):
                                         info = f"Please mention to user: SCU count limited to {min(cargo_by_availability_buy, cargo_by_availability_sell)} (instead of {min(cargo_by_money, cargo_by_space)}) by estimated availability at sell location."
                                     else:
                                         info = f"Please mention to user: SCU count limited to {min(cargo_by_availability_buy, cargo_by_availability_sell)} (instead of {min(cargo_by_money, cargo_by_space)}) by estimated availability at sell and buy location."
@@ -2881,9 +2971,7 @@ class UEXCorp(Skill):
             str: The name of the system with the specified code.
         """
         return (
-            self._format_system_name(self.system_code_dict.get(code))
-            if code
-            else None
+            self._format_system_name(self.system_code_dict.get(code)) if code else None
         )
 
     def _get_planet_name_by_code(self, code: str) -> str:
@@ -2896,9 +2984,7 @@ class UEXCorp(Skill):
             str: The name of the planet with the specified code.
         """
         return (
-            self._format_planet_name(self.planet_code_dict.get(code))
-            if code
-            else None
+            self._format_planet_name(self.planet_code_dict.get(code)) if code else None
         )
 
     def _get_moon_name_by_code(self, code: str) -> str:
@@ -2910,11 +2996,7 @@ class UEXCorp(Skill):
         Returns:
             str: The name of the moon with the specified code.
         """
-        return (
-            self._format_moon_name(self.moon_code_dict.get(code))
-            if code
-            else None
-        )
+        return self._format_moon_name(self.moon_code_dict.get(code)) if code else None
 
     def _get_city_name_by_code(self, code: str) -> str:
         """Returns the name of the city with the specified code.
@@ -2925,11 +3007,7 @@ class UEXCorp(Skill):
         Returns:
             str: The name of the city with the specified code.
         """
-        return (
-            self._format_city_name(self.city_code_dict.get(code))
-            if code
-            else None
-        )
+        return self._format_city_name(self.city_code_dict.get(code)) if code else None
 
     def _get_commodity_name_by_code(self, code: str) -> str:
         """Returns the name of the commodity with the specified code.
@@ -2957,9 +3035,7 @@ class UEXCorp(Skill):
         """
         return self.commodity_code_dict.get(code) if code else None
 
-    def _get_terminals_by_position_name(
-        self, name: str
-    ) -> list[dict[str, any]]:
+    def _get_terminals_by_position_name(self, name: str) -> list[dict[str, any]]:
         """Returns all terminals with the specified position name.
 
         Args:
@@ -3082,11 +3158,7 @@ class UEXCorp(Skill):
             list[dict[str, any]]: A list of terminals matching the moon name.
         """
         moon = self._get_moon_by_name(name)
-        return (
-            self._get_terminals_by_mooncode(moon["id"])
-            if moon
-            else []
-        )
+        return self._get_terminals_by_mooncode(moon["id"]) if moon else []
 
     def _get_terminals_by_cityname(self, name: str) -> list[dict[str, any]]:
         """Returns all terminals with the specified city name.
@@ -3111,4 +3183,3 @@ class UEXCorp(Skill):
         """
         system = self._get_system_by_name(name)
         return self._get_terminals_by_systemcode(system["id"]) if system else []
-    

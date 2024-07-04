@@ -6,17 +6,12 @@ from typing import TYPE_CHECKING
 from duckduckgo_search import DDGS
 from trafilatura import fetch_url, extract
 from trafilatura.settings import DEFAULT_CONFIG
-from api.interface import (
-    SettingsConfig,
-    SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
+from api.interface import SettingsConfig, SkillConfig
 from api.enums import LogType
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
 
 
 class WebSearch(Skill):
@@ -24,16 +19,10 @@ class WebSearch(Skill):
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-        super().__init__(
-            config=config,
-            wingman_config=wingman_config,
-            settings=settings,
-            wingman=wingman,
-        )
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
         # Set default and custom behavior
         self.max_time = 5
@@ -50,10 +39,6 @@ class WebSearch(Skill):
             "DOWNLOAD_TIMEOUT"
         ] = f"{math.ceil(self.max_time/2)}"
         self.trafilatura_config["DEFAULT"]["MAX_REDIRECTS "] = "3"
-
-    async def validate(self) -> list[WingmanInitializationError]:
-        errors = await super().validate()
-        return errors
 
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
@@ -92,7 +77,7 @@ class WebSearch(Skill):
             ),
         ]
         return tools
-    
+
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return True
 
@@ -121,7 +106,7 @@ class WebSearch(Skill):
                     site_url = search_query
                 except ValueError:
                     await self.printr.print_async(
-                        f"Tried single site search but no valid url to search.",
+                        "Tried single site search but no valid url to search.",
                         color=LogType.INFO,
                     )
 
@@ -133,7 +118,7 @@ class WebSearch(Skill):
                 if search_type == "general":
                     link = result.get("href")
                 body = result.get("body")
-                
+
                 # If doing a deep dive on a single site get as much content as possible
                 if search_type == "single_site":
                     self.max_result_size = 20000
@@ -161,7 +146,7 @@ class WebSearch(Skill):
                             + "\n"
                             + link
                             + "\n"
-                            + trafilatura_result[:self.max_result_size]
+                            + trafilatura_result[: self.max_result_size]
                         )
 
                     else:
@@ -185,10 +170,12 @@ class WebSearch(Skill):
                     search_query, safesearch="off", max_results=self.max_results
                 )
             else:
-                search_results = [{"url": site_url, "title": "Site Requested", "body": "None found"}]
+                search_results = [
+                    {"url": site_url, "title": "Site Requested", "body": "None found"}
+                ]
                 self.min_results = 1
                 self.max_time = 30
-            
+
             self.trafilatura_config["DEFAULT"][
                 "DOWNLOAD_TIMEOUT"
             ] = f"{math.ceil(self.max_time/2)}"

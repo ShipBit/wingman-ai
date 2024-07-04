@@ -78,7 +78,7 @@ class ModuleManager:
 
     @staticmethod
     def load_skill(
-        config: SkillConfig, wingman_config: WingmanConfig, settings: SettingsConfig, wingman: "Wingman"
+        config: SkillConfig, settings: SettingsConfig, wingman: "Wingman"
     ) -> Skill:
 
         @contextmanager
@@ -126,9 +126,7 @@ class ModuleManager:
                     )
 
         DerivedSkillClass = getattr(module, config.name)
-        instance = DerivedSkillClass(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
-        )
+        instance = DerivedSkillClass(config=config, settings=settings, wingman=wingman)
         return instance
 
     @staticmethod

@@ -3,15 +3,13 @@ from typing import TYPE_CHECKING
 from api.interface import (
     SettingsConfig,
     SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
 )
 from api.enums import LogType
 from skills.skill_base import Skill
 import keyboard.keyboard as keyboard
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
 
 
 class TypingAssistant(Skill):
@@ -19,20 +17,10 @@ class TypingAssistant(Skill):
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-        super().__init__(
-            config=config,
-            wingman_config=wingman_config,
-            settings=settings,
-            wingman=wingman,
-        )
-
-    async def validate(self) -> list[WingmanInitializationError]:
-        errors = await super().validate()
-        return errors
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [

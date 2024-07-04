@@ -146,7 +146,6 @@ class Wingman:
             try:
                 skill = ModuleManager.load_skill(
                     config=skill_config,
-                    wingman_config=self.config,
                     settings=self.settings,
                     wingman=self,
                 )

@@ -1,21 +1,16 @@
 import os
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 import pygetwindow as gw
 from clipboard import Clipboard
-from typing import TYPE_CHECKING
-from api.interface import (
-    SettingsConfig,
-    SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
+from api.interface import SettingsConfig, SkillConfig
 from api.enums import LogType
 from skills.skill_base import Skill
 import mouse.mouse as mouse
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
 
 
 class ControlWindows(Skill):
@@ -31,20 +26,10 @@ class ControlWindows(Skill):
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-        super().__init__(
-            config=config,
-            wingman_config=wingman_config,
-            settings=settings,
-            wingman=wingman,
-        )
-
-    async def validate(self) -> list[WingmanInitializationError]:
-        errors = await super().validate()
-        return errors
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
     # Function to recursively list files in a directory
     def list_files(self, directory, extension=""):
@@ -221,7 +206,7 @@ class ControlWindows(Skill):
             return response
         return False
 
-    def place_text_on_clipboard(self, text : str) -> str:
+    def place_text_on_clipboard(self, text: str) -> str:
         try:
             with Clipboard() as clipboard:
                 clipboard.set_clipboard(text)

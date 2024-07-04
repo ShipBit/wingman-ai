@@ -1,31 +1,24 @@
 import json
 from typing import Optional
-import requests
 from typing import TYPE_CHECKING
+import requests
 from api.enums import LogType, WingmanInitializationErrorType
-from api.interface import (
-    SettingsConfig,
-    SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
+
 
 class StarHead(Skill):
 
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-        super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
-        )
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
         # config entry existence not validated yet. Assign later when checked!
         self.starhead_url = ""
