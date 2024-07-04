@@ -514,9 +514,10 @@ class Wingman:
         if validate:
             errors = await self.validate()
 
-            if errors and len(errors) > 0:
-                self.config = old_config
-                return False
+            for error in errors:
+                if error.error_type != WingmanInitializationErrorType.MISSING_SECRET:
+                    self.config = old_config
+                    return False
 
         return True
 
