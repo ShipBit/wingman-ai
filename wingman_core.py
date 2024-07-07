@@ -23,7 +23,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from providers.open_ai import OpenAi
-from providers.whispercpp import Whispercpp
+from providers.whispercpp import MODELS_DIR, Whispercpp
 from providers.wingman_pro import WingmanPro
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -93,14 +93,21 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/send_audio-to-wingman",
+            path="/send-audio-to-wingman",
             endpoint=self.send_audio_to_wingman,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/reset_conversation_history",
+            path="/reset-conversation-history",
             endpoint=self.reset_conversation_history,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/whispercpp-models",
+            response_model=list[str],
+            endpoint=self.get_whispercpp_models,
             tags=tags,
         )
 
@@ -614,3 +621,18 @@ class WingmanCore(WebSocketUser):
                 "Conversation history cleared.",
             )
         return True
+
+    # GET /whispercpp-models
+    def get_whispercpp_models(self):
+        model_files = []
+        try:
+            models_dir = os.path.join(os.path.dirname(self.app_root_path), MODELS_DIR)
+            model_files = [
+                f
+                for f in os.listdir(models_dir)
+                if os.path.isfile(os.path.join(models_dir, f)) and f.endswith(".bin")
+            ]
+        except Exception:
+            # this only works if the app is bundled, so not when running from source
+            pass
+        return model_files
