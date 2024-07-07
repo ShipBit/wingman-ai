@@ -77,7 +77,6 @@ class OpenAiWingman(Wingman):
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
         self.xvasynth: XVASynth = None
-        self.whispercpp: Whispercpp = None
         self.wingman_pro: WingmanPro = None
         self.google: GoogleGenAI = None
 
