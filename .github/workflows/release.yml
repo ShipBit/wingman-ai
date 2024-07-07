@@ -2,8 +2,8 @@ name: Build, Sign and Release
 
 on:
   push:
-    branches:
-      - 'feature/whispercpp-bundled'
+    tags:
+      - '*'
 
 jobs:
   build-windows:
