@@ -56,14 +56,14 @@ class OpenAiWingman(Wingman):
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
-        app_root_path: str,
+        whispercpp: Whispercpp,
     ):
         super().__init__(
             name=name,
             config=config,
             audio_player=audio_player,
             settings=settings,
-            app_root_path=app_root_path,
+            whispercpp=whispercpp,
         )
 
         self.edge_tts = Edge()
@@ -122,9 +122,6 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("xvasynth"):
             await self.validate_and_set_xvasynth(errors)
-
-        if self.uses_provider("whispercpp"):
-            await self.validate_and_set_whispercpp(errors)
 
         if self.uses_provider("azure"):
             await self.validate_and_set_azure(errors)
@@ -318,18 +315,6 @@ class OpenAiWingman(Wingman):
         validation_errors = self.xvasynth.validate_config(config=self.config.xvasynth)
         errors.extend(validation_errors)
 
-    async def validate_and_set_whispercpp(
-        self, errors: list[WingmanInitializationError]
-    ):
-        self.whispercpp = Whispercpp(
-            wingman_name=self.name,
-            app_root_path=self.app_root_path,
-        )
-        validation_errors = self.whispercpp.validate_config(
-            config=self.config.whispercpp
-        )
-        errors.extend(validation_errors)
-
     async def validate_and_set_wingman_pro(self):
         self.wingman_pro = WingmanPro(
             wingman_name=self.name, settings=self.settings.wingman_pro
@@ -343,6 +328,7 @@ class OpenAiWingman(Wingman):
             self.settings.wingman_pro.base_url != settings.wingman_pro.base_url
             or self.settings.wingman_pro.region != settings.wingman_pro.region
         )
+
         await super().update_settings(settings)
 
         if wingman_pro_changed and self.uses_provider("wingman_pro"):

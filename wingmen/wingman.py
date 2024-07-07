@@ -15,6 +15,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
+from providers.whispercpp import Whispercpp
 from services.audio_player import AudioPlayer
 from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
@@ -37,7 +38,7 @@ class Wingman:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
-        app_root_path: str,
+        whispercpp: Whispercpp,
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
@@ -64,8 +65,8 @@ class Wingman:
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
-        self.app_root_path = app_root_path
-        """The path where the main.py is located. This is the _internal directory inside of the Wingman AI installation directory (in the release version)."""
+        self.whispercpp = whispercpp
+        """A class that handles the communication with the Whispercpp server for transcription."""
 
         self.skills: list[Skill] = []
 

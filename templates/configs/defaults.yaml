@@ -106,13 +106,7 @@ azure:
       - en-US
       - de-DE
 whispercpp:
-  host: http://127.0.0.1
-  port: 8080
-  model: ggml-base.bin
-  language: auto
   temperature: 0.0
-  translate_to_english: false
-  use_cuda: false
 xvasynth:
   xvasynth_path: C:\Program Files (x86)\Steam\steamapps\common\xVASynth
   process_device: cpu

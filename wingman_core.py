@@ -154,6 +154,11 @@ class WingmanCore(WebSocketUser):
             "va_settings_changed", self.on_va_settings_changed
         )
 
+        self.whispercpp = Whispercpp(
+            settings=self.settings_service.settings.voice_activation.whispercpp,
+            app_root_path=app_root_path,
+        )
+
         self.voice_service = VoiceService(
             config_manager=self.config_manager, audio_player=self.audio_player
         )
@@ -174,21 +179,13 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
-    async def unload_tower(self):
-        if self.tower:
-            for wingman in self.tower.wingmen:
-                for skill in wingman.skills:
-                    await skill.unload()
-                await wingman.unload()
-            self.tower = None
-            self.config_service.set_tower(None)
-
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         await self.unload_tower()
+
         self.tower = Tower(
             config=config_dir_info.config,
             audio_player=self.audio_player,
-            app_root_path=self.app_root_path,
+            whispercpp=self.whispercpp,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -197,6 +194,15 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(error.message)
 
         self.config_service.set_tower(self.tower)
+
+    async def unload_tower(self):
+        if self.tower:
+            for wingman in self.tower.wingmen:
+                for skill in wingman.skills:
+                    await skill.unload()
+                await wingman.unload()
+            self.tower = None
+            self.config_service.set_tower(None)
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []
@@ -347,29 +353,17 @@ class WingmanCore(WebSocketUser):
 
                 return original_text != text, text
 
-            whisper_config = self.settings_service.settings.voice_activation.whispercpp
-            whisperccp = Whispercpp(
-                wingman_name="system", app_root_path=self.app_root_path
+            transcription = self.whispercpp.transcribe(
+                filename=recording_file,
+                config=self.settings_service.settings.voice_activation.whispercpp_config,
             )
-            errors = whisperccp.validate_config(whisper_config)
-
-            if len(errors) > 0:
-                for error in errors:
-                    self.printr.print(
-                        error.message, server_only=True, color=LogType.ERROR
-                    )
-            else:
-                transcription = whisperccp.transcribe(
-                    filename=recording_file,
-                    config=whisper_config,
+            cleaned, text = filter_and_clean_text(transcription.text)
+            if cleaned:
+                self.printr.print(
+                    f"Cleaned original transcription: {transcription.text}",
+                    server_only=True,
+                    color=LogType.SUBTLE,
                 )
-                cleaned, text = filter_and_clean_text(transcription.text)
-                if cleaned:
-                    self.printr.print(
-                        f"Cleaned original transcription: {transcription.text}",
-                        server_only=True,
-                        color=LogType.SUBTLE,
-                    )
         elif provider == VoiceActivationSttProvider.OPENAI:
             # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
             openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])

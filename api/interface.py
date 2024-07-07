@@ -116,14 +116,17 @@ class AudioSettings(BaseModel):
     output: Optional[int | AudioDeviceSettings] = None
 
 
-class WhispercppSttConfig(BaseModel):
+class WhispercppSettings(BaseModel):
     host: str
     port: int
     model: str
     language: str
-    temperature: float
     translate_to_english: bool
     use_cuda: bool
+
+
+class WhispercppSttConfig(BaseModel):
+    temperature: float
 
 
 class WhispercppTranscript(BaseModel):
@@ -348,7 +351,8 @@ class VoiceActivationSettings(BaseModel):
     stt_provider: VoiceActivationSttProvider
 
     azure: AzureSttConfig
-    whispercpp: WhispercppSttConfig
+    whispercpp: WhispercppSettings
+    whispercpp_config: WhispercppSttConfig
 
 
 class FeaturesConfig(BaseModel):

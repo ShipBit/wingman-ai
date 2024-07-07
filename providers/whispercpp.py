@@ -3,12 +3,8 @@ from os import path
 import platform
 import subprocess
 import requests
-from api.enums import LogType, WingmanInitializationErrorType
-from api.interface import (
-    WhispercppSttConfig,
-    WhispercppTranscript,
-    WingmanInitializationError,
-)
+from api.enums import LogType
+from api.interface import WhispercppSettings, WhispercppSttConfig, WhispercppTranscript
 from services.printr import Printr
 
 STANDARD_DIR = "whispercpp"
@@ -18,11 +14,11 @@ SERVER_EXE = "server.exe"
 
 
 class Whispercpp:
-    def __init__(self, wingman_name: str, app_root_path: str):
-        self.printr = Printr()
-        self.wingman_name = wingman_name
+    def __init__(self, settings: WhispercppSettings, app_root_path: str):
+        self.settings = settings
         self.current_model = None
         self.runnig_process = None
+        self.printr = Printr()
 
         self.is_windows = platform.system() == "Windows"
         if self.is_windows:
@@ -32,49 +28,10 @@ class Whispercpp:
             self.standard_dir = path.join(app_dir, STANDARD_DIR)
             self.cuda_dir = path.join(app_dir, CUDA_DIR)
 
-    def validate_config(self, config: WhispercppSttConfig):
-        errors: list[WingmanInitializationError] = []
-
-        if not self.is_windows:
-            if not self.__is_server_running(config):
-                errors.append(
-                    WingmanInitializationError(
-                        wingman_name=self.wingman_name,
-                        message=f"Please start whispercpp server manually on {config.host}:{config.port}, then restart Wingman AI.",
-                        error_type=WingmanInitializationErrorType.UNKNOWN,
-                    )
-                )
-            return errors
-
-        # On Windows:
-        model_path = path.join(self.models_dir, config.model)
-        if not path.exists(model_path):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman_name,
-                    message=f"whispercpp is missing model file '{model_path}'.",
-                    error_type=WingmanInitializationErrorType.UNKNOWN,
-                )
-            )
-        if not path.exists(self.cuda_dir):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman_name,
-                    message=f"whispercpp is missing dir '{self.cuda_dir}'.",
-                    error_type=WingmanInitializationErrorType.UNKNOWN,
-                )
-            )
-        if not path.exists(self.standard_dir):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman_name,
-                    message=f"whispercpp is missing dir '{self.standard_dir}'.",
-                    error_type=WingmanInitializationErrorType.UNKNOWN,
-                )
-            )
-        # attempt to start whispercpp server
-        self.start_server(config)
-        return errors
+            if self.__validate():
+                self.start_server()
+        else:
+            self.__validate()
 
     def transcribe(
         self,
@@ -84,17 +41,9 @@ class Whispercpp:
         timeout: int = 10,
     ):
         try:
-            self.load_model(config)
-        except requests.HTTPError as e:
-            self.printr.toast_error(
-                text=f"Whispercpp model loading failed: {e.strerror}"
-            )
-            return None
-
-        try:
             with open(filename, "rb") as file:
                 response = requests.post(
-                    url=f"{config.host}:{config.port}/inference",
+                    url=f"{self.settings.host}:{self.settings.port}/inference",
                     files={"file": file},
                     data={
                         "temperature": config.temperature,
@@ -105,7 +54,8 @@ class Whispercpp:
                 response.raise_for_status()
                 # Wrap response.json = {"text":"transcription"} into a Pydantic model for typesafe further processing
                 return WhispercppTranscript(
-                    text=response.json()["text"].strip(), language=config.language
+                    text=response.json()["text"].strip(),
+                    language=self.settings.language,
                 )
         except requests.HTTPError as e:
             self.printr.toast_error(
@@ -117,42 +67,32 @@ class Whispercpp:
                 f"whispercpp file to transcript'{filename}' not found."
             )
 
-    def load_model(self, config: WhispercppSttConfig, timeout=10):
-        if self.current_model != config.model:
-            response = requests.post(
-                f"{config.host}:{config.port}/load",
-                data={"model": path.join(self.models_dir, config.model)},
-                timeout=timeout,
-            )
-            response.raise_for_status()
-            self.current_model = config.model
-
-    def start_server(self, config: WhispercppSttConfig):
-        if self.__is_server_running(config):
+    def start_server(self):
+        if self.__is_server_running():
             return True
 
         args = [
             path.join(
-                self.cuda_dir if config.use_cuda else self.standard_dir,
+                self.cuda_dir if self.settings.use_cuda else self.standard_dir,
                 SERVER_EXE,
             ),
             "-m",
-            path.join(self.models_dir, config.model),
+            path.join(self.models_dir, self.settings.model),
             "-l",
-            config.language,
+            self.settings.language,
         ]
-        if config.translate_to_english:
+        if self.settings.translate_to_english:
             args.append("-tr")
 
         try:
             self.stop_server()
             self.runnig_process = subprocess.Popen(args)
-            self.current_model = config.model
+            self.current_model = self.settings.model
             sleep(2)
-            is_running = self.__is_server_running(config)
+            is_running = self.__is_server_running()
             if is_running:
                 self.printr.print(
-                    f"whispercpp server started on {config.host}:{config.port}.",
+                    f"whispercpp server started on {self.settings.host}:{self.settings.port}.",
                     server_only=True,
                     color=LogType.HIGHLIGHT,
                 )
@@ -176,6 +116,75 @@ class Whispercpp:
                 "whispercpp server stopped.", server_only=True, color=LogType.HIGHLIGHT
             )
 
-    def __is_server_running(self, config: WhispercppSttConfig, timeout=5):
-        response = requests.get(url=f"{config.host}:{config.port}", timeout=timeout)
-        return response.ok
+    def update_settings(self, settings: WhispercppSettings):
+        requires_restart = (
+            self.settings.host != settings.host
+            or self.settings.port != settings.port
+            or self.settings.use_cuda != settings.use_cuda
+            or self.settings.language != settings.language
+            or self.settings.translate_to_english != settings.translate_to_english
+        )
+        if self.__validate():
+            self.settings = settings
+
+            if requires_restart:
+                self.stop_server()
+                self.start_server()
+
+            self.change_model()
+
+    def change_model(self, timeout=10):
+        if self.current_model != self.settings.model:
+            response = requests.post(
+                f"{self.settings.host}:{self.settings.port}/load",
+                data={"model": path.join(self.models_dir, self.settings.model)},
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            self.current_model = self.settings.model
+
+    def __validate(self):
+        if not self.is_windows:
+            if not self.__is_server_running():
+                self.printr.print(
+                    text=f"Please start whispercpp server manually on {self.settings.host}:{self.settings.port}.",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+                return False
+            return True
+
+        # On Windows:
+        model_path = path.join(self.models_dir, self.settings.model)
+        if not path.exists(model_path):
+            self.printr.print(
+                text=f"whispercpp is missing model file '{model_path}'.",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return False
+        if not path.exists(self.cuda_dir):
+            self.printr.print(
+                text=f"whispercpp is missing directory '{self.cuda_dir}'.",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return False
+        if not path.exists(self.standard_dir):
+            self.printr.print(
+                text=f"whispercpp is missing directory '{self.standard_dir}'.",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return False
+
+        return True
+
+    def __is_server_running(self, timeout=5):
+        try:
+            response = requests.get(
+                url=f"{self.settings.host}:{self.settings.port}", timeout=timeout
+            )
+            return response.ok
+        except Exception:
+            return False
