@@ -495,10 +495,11 @@ class RadioChatter(Skill):
         original_voice_setting = await self._get_original_voice_setting()
         original_sound_config = copy.deepcopy(self.wingman.config.sound)
 
-        if self.force_radio_sound:
-            custom_sound_config = copy.deepcopy(self.wingman.config.sound)
-            custom_sound_config.play_beep = self.use_beeps
-            custom_sound_config.play_beep_apollo = False
+        # copy for volume and effects
+        custom_sound_config = copy.deepcopy(self.wingman.config.sound)
+        custom_sound_config.play_beep = self.use_beeps
+        custom_sound_config.play_beep_apollo = False
+        custom_sound_config.volume = custom_sound_config.volume * self.volume
 
         voice_index = await self._get_random_voice_index(len(voice_participant_mapping))
         if not voice_index:
