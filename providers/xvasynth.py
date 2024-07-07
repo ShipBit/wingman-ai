@@ -105,14 +105,19 @@ class XVASynth:
             "useSR": config.use_sr,
             "useCleanup": config.use_cleanup,
         }
-        response = requests.post(synthesize_url, json=data, timeout=10)
-        audio, sample_rate = audio_player.get_audio_from_file(file_path)
+        try:
+            response = requests.post(synthesize_url, json=data, timeout=30)
+            audio, sample_rate = audio_player.get_audio_from_file(file_path)
 
-        await audio_player.play_with_effects(
-            input_data=(audio, sample_rate),
-            config=sound_config,
-            wingman_name=wingman_name,
-        )
+            await audio_player.play_with_effects(
+                input_data=(audio, sample_rate),
+                config=sound_config,
+                wingman_name=wingman_name,
+            )
+        except:
+            self.printr.toast_error(
+                text="There was a problem synthesizing XVASynth voice line."
+            )
 
     def __check_if_running(self, url: str):
         # get base url from synthesize url in config
