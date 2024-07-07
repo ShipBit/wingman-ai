@@ -17,7 +17,6 @@ from api.enums import (
     TtsProvider,
     SttProvider,
     ConversationProvider,
-    SummarizeProvider,
     WingmanProSttProvider,
     WingmanProTtsProvider,
 )
@@ -47,7 +46,6 @@ class OpenAiWingman(Wingman):
         "tts": TtsProvider.AZURE,
         "whisper": [SttProvider.AZURE, SttProvider.AZURE_SPEECH],
         "conversation": ConversationProvider.AZURE,
-        "summarize": SummarizeProvider.AZURE,
     }
 
     def __init__(
@@ -86,6 +84,7 @@ class OpenAiWingman(Wingman):
 
         # generated addional content
         self.instant_responses = []
+        self.last_used_instant_responses = []
 
         self.messages = []
         """The conversation history that is used for the GPT calls"""
@@ -138,7 +137,6 @@ class OpenAiWingman(Wingman):
                     self.config.features.stt_provider == SttProvider.OPENAI,
                     self.config.features.conversation_provider
                     == ConversationProvider.OPENAI,
-                    self.config.features.summarize_provider == SummarizeProvider.OPENAI,
                 ]
             )
         elif provider_type == "mistral":
@@ -146,8 +144,6 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.MISTRAL,
-                    self.config.features.summarize_provider
-                    == SummarizeProvider.MISTRAL,
                 ]
             )
         elif provider_type == "groq":
@@ -155,7 +151,6 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.GROQ,
-                    self.config.features.summarize_provider == SummarizeProvider.GROQ,
                 ]
             )
         elif provider_type == "google":
@@ -163,7 +158,6 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.GOOGLE,
-                    self.config.features.summarize_provider == SummarizeProvider.GOOGLE,
                 ]
             )
         elif provider_type == "openrouter":
@@ -171,8 +165,6 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.OPENROUTER,
-                    self.config.features.summarize_provider
-                    == SummarizeProvider.OPENROUTER,
                 ]
             )
         elif provider_type == "local_llm":
@@ -180,8 +172,6 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.LOCAL_LLM,
-                    self.config.features.summarize_provider
-                    == SummarizeProvider.LOCAL_LLM,
                 ]
             )
         elif provider_type == "azure":
@@ -192,7 +182,6 @@ class OpenAiWingman(Wingman):
                     self.config.features.stt_provider == SttProvider.AZURE_SPEECH,
                     self.config.features.conversation_provider
                     == ConversationProvider.AZURE,
-                    self.config.features.summarize_provider == SummarizeProvider.AZURE,
                 ]
             )
         elif provider_type == "edge_tts":
@@ -208,8 +197,6 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.WINGMAN_PRO,
-                    self.config.features.summarize_provider
-                    == SummarizeProvider.WINGMAN_PRO,
                     self.config.features.tts_provider == TtsProvider.WINGMAN_PRO,
                     self.config.features.stt_provider == SttProvider.WINGMAN_PRO,
                 ]
@@ -482,20 +469,18 @@ class OpenAiWingman(Wingman):
         is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
             response_message, tool_calls
         )
-        interrupt = True  # initial answer should be awaited, if its not there, current audio should be interrupted
+        interrupt = True  # initial answer should be awaited if exists
 
-        if tool_calls:
+        while tool_calls:
             if is_waiting_response_needed:
                 message = None
                 if response_message.content:
                     message = response_message.content
                 elif self.instant_responses:
-                    message = self.instant_responses[
-                        random.randint(0, len(self.instant_responses) - 1)
-                    ]
+                    message = self._get_random_filler()
                     is_summarize_needed = True
                 if message:
-                    self.threaded_execution(self.play_to_user, message)
+                    self.threaded_execution(self.play_to_user, message, interrupt)
                     await printr.print_async(
                         f"{message}",
                         color=LogType.POSITIVE,
@@ -514,13 +499,34 @@ class OpenAiWingman(Wingman):
                 return None, instant_response, None, interrupt
 
             if is_summarize_needed:
-                summarize_response = await self._summarize_function_calls()
-                summarize_response = self._finalize_response(str(summarize_response))
-                return summarize_response, summarize_response, skill, interrupt
+                completion = await self._llm_call(True)
+                if completion is None:
+                    return None, None, None, True
+
+                response_message, tool_calls = await self._process_completion(completion)
+                is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
+                    response_message, tool_calls
+                )
+                if tool_calls:
+                    interrupt = False
             elif is_waiting_response_needed:
                 return None, None, None, interrupt
 
         return response_message.content, response_message.content, None, interrupt
+    
+    def _get_random_filler(self):
+        # get last two used instant responses
+        if len(self.last_used_instant_responses) > 2:
+            self.last_used_instant_responses = self.last_used_instant_responses[-2:]
+        
+        # get a random instant response that was not used in the last two responses
+        random_index = random.randint(0, len(self.instant_responses) - 1)
+        while random_index in self.last_used_instant_responses:
+            random_index = random.randint(0, len(self.instant_responses) - 1)
+
+        # add the index to the last used list and return
+        self.last_used_instant_responses.append(random_index)
+        return self.instant_responses[random_index]
 
     async def _fix_tool_calls(self, tool_calls):
         """Fixes tool calls that have a command name as function name.
@@ -1004,88 +1010,6 @@ class OpenAiWingman(Wingman):
                 self._add_tool_response(tool_call, function_response)
 
         return instant_response, skill
-
-    async def _summarize_function_calls(self):
-        """Summarizes the function call responses using the GPT model specified for summarization in the configuration.
-
-        Returns:
-            The content of the GPT response to the function call summaries.
-        """
-
-        summarize_response = await self._actual_summarize_function_call(self.messages)
-
-        if summarize_response is None:
-            return None
-
-        # do not tamper with this message as it will lead to 400 errors!
-        message = summarize_response.choices[0].message
-        self.messages.append(message)
-        return message.content
-
-    async def _actual_summarize_function_call(self, original_messages):
-        """
-        Perform the actual GPT call with the messages provided.
-        """
-        messages = original_messages.copy()
-
-        await self.add_context(messages)
-
-        if self.config.features.summarize_provider == SummarizeProvider.AZURE:
-            summarize_response = self.openai_azure.ask(
-                messages=messages,
-                api_key=self.azure_api_keys["summarize"],
-                config=self.config.azure.summarize,
-            )
-        elif self.config.features.summarize_provider == SummarizeProvider.OPENAI:
-            summarize_response = self.openai.ask(
-                messages=self.messages,
-                model=self.config.openai.summarize_model.value,
-            )
-        elif self.config.features.summarize_provider == SummarizeProvider.MISTRAL:
-            summarize_response = self.mistral.ask(
-                messages=self.messages,
-                model=self.config.mistral.summarize_model.value,
-            )
-        elif self.config.features.summarize_provider == SummarizeProvider.GROQ:
-            summarize_response = self.groq.ask(
-                messages=self.messages,
-                model=self.config.groq.summarize_model.value,
-            )
-        elif self.config.features.summarize_provider == SummarizeProvider.GOOGLE:
-            summarize_response = self.google.ask(
-                messages=self.messages,
-                model=self.config.google.summarize_model.value,
-            )
-        elif self.config.features.summarize_provider == SummarizeProvider.OPENROUTER:
-            summarize_response = self.openrouter.ask(
-                messages=self.messages,
-                model=self.config.openrouter.summarize_model,
-            )
-        elif self.config.features.summarize_provider == SummarizeProvider.LOCAL_LLM:
-            summarize_response = self.local_llm.ask(
-                messages=self.messages,
-                model=self.config.local_llm.summarize_model,
-            )
-        elif self.config.features.summarize_provider == SummarizeProvider.WINGMAN_PRO:
-            summarize_response = self.wingman_pro.ask(
-                messages=messages,
-                deployment=self.config.wingman_pro.summarize_deployment,
-            )
-
-        return summarize_response
-
-    def _finalize_response(self, summarize_response: str) -> str:
-        """Finalizes the response based on the call of the second (summarize) GPT call.
-
-        Args:
-            summarize_response (str): The response content from the second GPT call.
-
-        Returns:
-            The final response to the user.
-        """
-        if summarize_response is None:
-            return self.messages[-1]["content"]
-        return summarize_response
 
     async def execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
