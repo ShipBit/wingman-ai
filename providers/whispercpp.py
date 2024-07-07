@@ -68,7 +68,7 @@ class Whispercpp:
             )
 
     def start_server(self):
-        if self.__is_server_running():
+        if self.__is_server_running() or not self.is_windows:
             return True
 
         args = [
@@ -130,10 +130,15 @@ class Whispercpp:
             if requires_restart:
                 self.stop_server()
                 self.start_server()
+            else:
+                self.change_model()
 
-            self.change_model()
+            self.printr.print("whispercpp settings updated.", server_only=True)
 
     def change_model(self, timeout=10):
+        if not self.is_windows:
+            return
+
         if self.current_model != self.settings.model:
             response = requests.post(
                 f"{self.settings.host}:{self.settings.port}/load",

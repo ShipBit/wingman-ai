@@ -158,6 +158,7 @@ class WingmanCore(WebSocketUser):
             settings=self.settings_service.settings.voice_activation.whispercpp,
             app_root_path=app_root_path,
         )
+        self.settings_service.initialize(self.whispercpp)
 
         self.voice_service = VoiceService(
             config_manager=self.config_manager, audio_player=self.audio_player

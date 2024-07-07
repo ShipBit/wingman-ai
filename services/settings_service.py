@@ -8,6 +8,7 @@ from api.interface import (
     AudioDeviceSettings,
     SettingsConfig,
 )
+from providers.whispercpp import Whispercpp
 from services.config_manager import ConfigManager
 from services.config_service import ConfigService
 from services.printr import Printr
@@ -22,6 +23,7 @@ class SettingsService:
         self.converted_audio_settings = False
         self.settings = self.get_settings()
         self.settings_events = PubSub()
+        self.whispercpp: Whispercpp = None
 
         self.router = APIRouter()
         tags = ["settings"]
@@ -45,6 +47,9 @@ class SettingsService:
             endpoint=self.set_default_provider,
             tags=tags,
         )
+
+    def initialize(self, whispercpp: Whispercpp):
+        self.whispercpp = whispercpp
 
     # GET /settings
     def get_settings(self):
@@ -73,6 +78,14 @@ class SettingsService:
             )
         ):
             await self._set_audio_devices(settings.audio.input, settings.audio.output)
+
+        # whispercpp
+        if not self.whispercpp:
+            self.printr.toast_error(
+                "Whispercpp is not initialized. Please run SettingsService.initialize()",
+            )
+            return
+        self.whispercpp.update_settings(settings=settings.voice_activation.whispercpp)
 
         # voice activation
         self.config_manager.settings_config.voice_activation = settings.voice_activation
