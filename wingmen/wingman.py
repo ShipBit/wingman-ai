@@ -133,10 +133,18 @@ class Wingman:
     async def unload(self):
         """This method is called when the Wingman is unloaded by Tower. You can override it if you need to clean up resources."""
 
+    async def unload_skills(self):
+        """Call this to trigger unload for all skills."""
+        for skill in self.skills:
+            await skill.unload()
+
     async def init_skills(self) -> list[WingmanInitializationError]:
         """This method is called when the Wingman is instantiated by Tower or when a skill's config changes.
         It is run AFTER validate() so you can access validated params safely here.
         It is used to load and init the skills of the Wingman."""
+        if self.skills:
+            await self.unload_skills()
+
         errors = []
         self.skills = []
         if not self.config.skills:
