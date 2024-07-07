@@ -39,7 +39,7 @@ prompts:
     (END of "skills")
 features:
   tts_provider: wingman_pro
-  stt_provider: wingman_pro
+  stt_provider: whispercpp
   conversation_provider: wingman_pro
   summarize_provider: wingman_pro
   image_generation_provider: wingman_pro
@@ -106,13 +106,13 @@ azure:
       - en-US
       - de-DE
 whispercpp:
-  base_url: http://127.0.0.1:8080
-  autostart: false
-  autostart_settings:
-    whispercpp_exe_path: C:\Whispercpp\server.exe
-    whispercpp_model_path: C:\Whispercpp\models\ggml-base.bin
+  host: http://127.0.0.1
+  port: 8080
+  model: ggml-base.bin
+  language: auto
   temperature: 0.0
-  language: en
+  translate_to_english: false
+  use_cuda: false
 xvasynth:
   xvasynth_path: C:\Program Files (x86)\Steam\steamapps\common\xVASynth
   process_device: cpu

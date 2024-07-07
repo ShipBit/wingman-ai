@@ -41,8 +41,9 @@ from services.websocket_user import WebSocketUser
 
 
 class WingmanCore(WebSocketUser):
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: ConfigManager, app_root_path: str):
         self.printr = Printr()
+        self.app_root_path = app_root_path
 
         self.router = APIRouter()
         tags = ["core"]
@@ -178,7 +179,9 @@ class WingmanCore(WebSocketUser):
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         await self.unload_tower()
         self.tower = Tower(
-            config=config_dir_info.config, audio_player=self.audio_player
+            config=config_dir_info.config,
+            audio_player=self.audio_player,
+            app_root_path=self.app_root_path,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -338,7 +341,9 @@ class WingmanCore(WebSocketUser):
                 return original_text != text, text
 
             whisper_config = self.settings_service.settings.voice_activation.whispercpp
-            whisperccp = Whispercpp(wingman_name="system")
+            whisperccp = Whispercpp(
+                wingman_name="system", app_root_path=self.app_root_path
+            )
             errors = whisperccp.validate_config(whisper_config)
 
             if len(errors) > 0:

@@ -16,13 +16,14 @@ printr = Printr()
 
 
 class Tower:
-    def __init__(self, config: Config, audio_player: AudioPlayer):
+    def __init__(self, config: Config, audio_player: AudioPlayer, app_root_path: str):
         self.audio_player = audio_player
         self.config = config
         self.mouse_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
         self.disabled_wingmen: list[WingmanConfig] = []
         self.log_source_name = "Tower"
+        self.app_root_path = app_root_path
 
     async def instantiate_wingmen(self, settings: SettingsConfig):
         errors: list[WingmanInitializationError] = []
@@ -74,6 +75,7 @@ class Tower:
                     config=wingman_config,
                     settings=settings,
                     audio_player=self.audio_player,
+                    app_root_path=self.app_root_path,
                 )
             else:
                 wingman = OpenAiWingman(
@@ -81,6 +83,7 @@ class Tower:
                     config=wingman_config,
                     settings=settings,
                     audio_player=self.audio_player,
+                    app_root_path=self.app_root_path,
                 )
         except FileNotFoundError as e:  # pylint: disable=broad-except
             wingman_config.disabled = True

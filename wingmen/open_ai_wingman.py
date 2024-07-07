@@ -56,9 +56,14 @@ class OpenAiWingman(Wingman):
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        app_root_path: str,
     ):
         super().__init__(
-            name=name, config=config, audio_player=audio_player, settings=settings
+            name=name,
+            config=config,
+            audio_player=audio_player,
+            settings=settings,
+            app_root_path=app_root_path,
         )
 
         self.edge_tts = Edge()
@@ -318,6 +323,7 @@ class OpenAiWingman(Wingman):
     ):
         self.whispercpp = Whispercpp(
             wingman_name=self.name,
+            app_root_path=self.app_root_path,
         )
         validation_errors = self.whispercpp.validate_config(
             config=self.config.whispercpp

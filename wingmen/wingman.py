@@ -37,6 +37,7 @@ class Wingman:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        app_root_path: str,
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
@@ -62,6 +63,9 @@ class Wingman:
 
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
+
+        self.app_root_path = app_root_path
+        """The path where the main.py is located. This is the _internal directory inside of the Wingman AI installation directory (in the release version)."""
 
         self.skills: list[Skill] = []
 

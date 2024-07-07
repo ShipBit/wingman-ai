@@ -1,6 +1,6 @@
-import os
+from os import path
+import platform
 import subprocess
-import time
 import requests
 from api.enums import WingmanInitializationErrorType
 from api.interface import (
@@ -10,126 +10,148 @@ from api.interface import (
 )
 from services.printr import Printr
 
+STANDARD_DIR = "whispercpp"
+CUDA_DIR = "whispercpp-cuda"
+MODELS_DIR = "whispercpp-models"
+SERVER_EXE = "server.exe"
+
 
 class Whispercpp:
-    def __init__(self, wingman_name: str):
-        self.wingman_name = wingman_name
-        self.times_checked_whispercpp: int = 0
+    def __init__(self, wingman_name: str, app_root_path: str):
         self.printr = Printr()
+        self.wingman_name = wingman_name
+        self.current_model = None
+
+        self.is_windows = platform.system() == "Windows"
+        if self.is_windows:
+            # move one dir up, out of _internal (if bundled)
+            app_dir = path.dirname(app_root_path)
+            self.models_dir = path.join(app_dir, MODELS_DIR)
+            self.standard_dir = path.join(app_dir, STANDARD_DIR)
+            self.cuda_dir = path.join(app_dir, CUDA_DIR)
 
     def validate_config(self, config: WhispercppSttConfig):
         errors: list[WingmanInitializationError] = []
 
-        if not config.base_url:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman_name,
-                    message="Missing base_url for whispercpp.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
-
-        if config.autostart:
-            if not config.autostart_settings:
+        if not self.is_windows:
+            if not self.__is_server_running(config):
                 errors.append(
                     WingmanInitializationError(
                         wingman_name=self.wingman_name,
-                        message="Autostart for Whispercpp requires autostart_settings to be set.",
-                        error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                        message=f"Please start whispercpp server manually on {config.host}:{config.port}, then restart Wingman AI.",
+                        error_type=WingmanInitializationErrorType.UNKNOWN,
                     )
                 )
-            else:
-                if not os.path.exists(config.autostart_settings.whispercpp_exe_path):
-                    errors.append(
-                        WingmanInitializationError(
-                            wingman_name=self.wingman_name,
-                            message=f"whispercpp_exe_path '{config.autostart_settings.whispercpp_exe_path}' could not be found on your system.",
-                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                        )
-                    )
-                if not os.path.exists(config.autostart_settings.whispercpp_model_path):
-                    errors.append(
-                        WingmanInitializationError(
-                            wingman_name=self.wingman_name,
-                            message=f"whispercpp_model_path '{config.autostart_settings.whispercpp_model_path}' could not be found on your system.",
-                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                        )
-                    )
+            return errors
 
-        # check if whispercpp is running a few times, if cannot find it, send error
-        while self.times_checked_whispercpp < 5:
-            is_running_error = self.__check_if_whispercpp_is_running(config=config)
-            if is_running_error == "ok":
-                break
-            self.times_checked_whispercpp += 1
-
-        if is_running_error != "ok":
+        # On Windows:
+        model_path = path.join(self.models_dir, config.model)
+        if not path.exists(model_path):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman_name,
-                    message=is_running_error,
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                    message=f"whispercpp is missing model file '{model_path}'.",
+                    error_type=WingmanInitializationErrorType.UNKNOWN,
                 )
             )
-
+        if not path.exists(self.cuda_dir):
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman_name,
+                    message=f"whispercpp is missing dir '{self.cuda_dir}'.",
+                    error_type=WingmanInitializationErrorType.UNKNOWN,
+                )
+            )
+        if not path.exists(self.standard_dir):
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman_name,
+                    message=f"whispercpp is missing dir '{self.standard_dir}'.",
+                    error_type=WingmanInitializationErrorType.UNKNOWN,
+                )
+            )
+        # attempt to start whispercpp server
+        self.start_server(config)
         return errors
 
     def transcribe(
-        self, filename: str, config: WhispercppSttConfig, response_format: str = "json"
+        self,
+        filename: str,
+        config: WhispercppSttConfig,
+        response_format: str = "json",
+        timeout: int = 10,
     ):
-        url = config.base_url + "/inference"
-        file_path = filename
-        files = {"file": open(file_path, "rb")}
-        data = {
-            "temperature": config.temperature,
-            "response_format": response_format,
-        }
         try:
-            response = requests.post(url, files=files, data=data, timeout=10)
-            response.raise_for_status()
-            # Need to use a pydantic base model to enable openaiwingman to use same transcript.text call as it uses for openai which also uses a pydantic object, otherwise response.json would be fine here, which would return {"text":"transcription"}.
-            return WhispercppTranscript(
-                text=response.json()["text"].strip(), language=config.language
-            )
+            self.load_model(config)
         except requests.HTTPError as e:
             self.printr.toast_error(
-                text=f"Whispercpp transcription request failed: {e.strerror}"
+                text=f"Whispercpp model loading failed: {e.strerror}"
             )
             return None
 
-    def __check_if_whispercpp_is_running(self, config: WhispercppSttConfig):
         try:
-            response = requests.get(config.base_url, timeout=5)
-            response.raise_for_status()
-
-        except requests.RequestException:
-            if self.times_checked_whispercpp == 1 and config.autostart:
-                time.sleep(1)
-                # If not found, try to start whispercpp as a subprocess
-                subprocess.Popen(
-                    [
-                        config.autostart_settings.whispercpp_exe_path,
-                        "-m",
-                        config.autostart_settings.whispercpp_model_path,
-                        "-l",
-                        config.language,
-                    ]
+            with open(filename, "rb") as file:
+                response = requests.post(
+                    url=f"{config.host}:{config.port}/inference",
+                    files={"file": file},
+                    data={
+                        "temperature": config.temperature,
+                        "response_format": response_format,
+                    },
+                    timeout=timeout,
                 )
-                time.sleep(5)
-            return "Whispercpp is not running and autostart failed."
+                response.raise_for_status()
+                # Wrap response.json = {"text":"transcription"} into a Pydantic model for typesafe further processing
+                return WhispercppTranscript(
+                    text=response.json()["text"].strip(), language=config.language
+                )
+        except requests.HTTPError as e:
+            self.printr.toast_error(
+                text=f"whispercpp transcription request failed: {e.strerror}"
+            )
+            return None
+        except FileNotFoundError:
+            self.printr.toast_error(
+                f"whispercpp file to transcript'{filename}' not found."
+            )
 
-        return "ok"
-
-    # Currently unused but whispercpp supports loading models by functions so including for possible future dev use.
-    def load_whispercpp_model(
-        self, config: WhispercppSttConfig, whispercpp_model_path: str
-    ):
-        data = {
-            "model": whispercpp_model_path,
-        }
-        try:
-            response = requests.post(config.base_url + "/load", data=data, timeout=10)
+    def load_model(self, config: WhispercppSttConfig, timeout=10):
+        if self.current_model != config.model:
+            response = requests.post(
+                f"{config.host}:{config.port}/load",
+                data={"model": path.join(self.models_dir, config.model)},
+                timeout=timeout,
+            )
             response.raise_for_status()
-            return "ok"
-        except requests.HTTPError:
-            return "There was an error with loading your whispercpp model. Double check your whispercpp install and model path."
+            self.current_model = config.model
+
+    def start_server(self, config: WhispercppSttConfig):
+        if self.__is_server_running(config):
+            return True
+
+        args = [
+            path.join(
+                self.cuda_dir if config.use_cuda else self.standard_dir,
+                SERVER_EXE,
+            ),
+            "-m",
+            path.join(self.models_dir, config.model),
+            "-l",
+            config.language,
+        ]
+        if config.translate_to_english:
+            args.append("-tr")
+
+        try:
+            subprocess.Popen(args)
+            self.current_model = config.model
+            return self.__is_server_running(config)
+        except Exception:
+            self.printr.toast_error(
+                text="Failed to start whispercpp server. Please start it manually."
+            )
+            return False
+
+    def __is_server_running(self, config: WhispercppSttConfig, timeout=5):
+        response = requests.get(url=f"{config.host}:{config.port}", timeout=timeout)
+        return response.ok

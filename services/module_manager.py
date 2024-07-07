@@ -44,6 +44,7 @@ class ModuleManager:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        app_root_path: str,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -73,6 +74,7 @@ class ModuleManager:
             config=config,
             settings=settings,
             audio_player=audio_player,
+            app_root_path=app_root_path,
         )
         return instance
 

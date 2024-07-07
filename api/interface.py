@@ -116,17 +116,14 @@ class AudioSettings(BaseModel):
     output: Optional[int | AudioDeviceSettings] = None
 
 
-class WhispercppAutostartSettingsConfig(BaseModel):
-    whispercpp_exe_path: str
-    whispercpp_model_path: str
-
-
 class WhispercppSttConfig(BaseModel):
-    base_url: str
-    autostart: bool
-    autostart_settings: Optional[WhispercppAutostartSettingsConfig] = None
-    temperature: float
+    host: str
+    port: int
+    model: str
     language: str
+    temperature: float
+    translate_to_english: bool
+    use_cuda: bool
 
 
 class WhispercppTranscript(BaseModel):
@@ -332,6 +329,7 @@ class SoundConfig(BaseModel):
 
     volume: float
     """The volume for playback. 0.0 - 1.0"""
+
 
 class VoiceActivationSettings(BaseModel):
     """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
