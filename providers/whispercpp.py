@@ -1,8 +1,9 @@
+from time import sleep
 from os import path
 import platform
 import subprocess
 import requests
-from api.enums import WingmanInitializationErrorType
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import (
     WhispercppSttConfig,
     WhispercppTranscript,
@@ -21,6 +22,7 @@ class Whispercpp:
         self.printr = Printr()
         self.wingman_name = wingman_name
         self.current_model = None
+        self.runnig_process = None
 
         self.is_windows = platform.system() == "Windows"
         if self.is_windows:
@@ -143,14 +145,36 @@ class Whispercpp:
             args.append("-tr")
 
         try:
-            subprocess.Popen(args)
+            self.stop_server()
+            self.runnig_process = subprocess.Popen(args)
             self.current_model = config.model
-            return self.__is_server_running(config)
+            sleep(2)
+            is_running = self.__is_server_running(config)
+            if is_running:
+                self.printr.print(
+                    f"whispercpp server started on {config.host}:{config.port}.",
+                    server_only=True,
+                    color=LogType.HIGHLIGHT,
+                )
+            else:
+                self.printr.toast_error(
+                    text="Failed to start whispercpp server. Please start it manually."
+                )
+            return is_running
         except Exception:
             self.printr.toast_error(
                 text="Failed to start whispercpp server. Please start it manually."
             )
             return False
+
+    def stop_server(self) -> str:
+        if self.runnig_process:
+            self.runnig_process.kill()
+            sleep(2)
+            self.runnig_process = None
+            self.printr.print(
+                "whispercpp server stopped.", server_only=True, color=LogType.HIGHLIGHT
+            )
 
     def __is_server_running(self, config: WhispercppSttConfig, timeout=5):
         response = requests.get(url=f"{config.host}:{config.port}", timeout=timeout)
