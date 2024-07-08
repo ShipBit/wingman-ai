@@ -117,8 +117,8 @@ def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
     openapi_schema = get_openapi(
-        title="Wingman AI Core API",
-        version="1.5.0",
+        title="Wingman AI Core REST API",
+        version=str(system_manager.local_version),
         description="Communicate with Wingman AI Core",
         routes=app.routes,
     )
