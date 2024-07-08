@@ -644,11 +644,11 @@ class WingmanCore(WebSocketUser):
     def get_whispercpp_models(self):
         model_files = []
         try:
-            models_dir = os.path.join(os.path.dirname(self.app_root_path), MODELS_DIR)
             model_files = [
                 f
-                for f in os.listdir(models_dir)
-                if os.path.isfile(os.path.join(models_dir, f)) and f.endswith(".bin")
+                for f in os.listdir(self.whispercpp.models_dir)
+                if os.path.isfile(os.path.join(self.whispercpp.models_dir, f))
+                and f.endswith(".bin")
             ]
         except Exception:
             # this only works if the app is bundled, so not when running from source
