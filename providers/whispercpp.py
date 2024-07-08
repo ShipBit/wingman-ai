@@ -115,7 +115,7 @@ class Whispercpp:
     def stop_server(self) -> str:
         if self.runnig_process:
             self.runnig_process.kill()
-            sleep(2)
+            self.runnig_process.wait()
             self.runnig_process = None
             self.printr.print(
                 "whispercpp server stopped.", server_only=True, color=LogType.HIGHLIGHT
