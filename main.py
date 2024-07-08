@@ -47,15 +47,15 @@ printr.print(
 secret_keeper = SecretKeeper()
 SecretKeeper.set_connection_manager(connection_manager)
 
-version_check = SystemManager()
+system_manager = SystemManager()
 printr.print(
-    f"Wingman AI Core v{version_check.local_version}",
+    f"Wingman AI Core v{system_manager.local_version}",
     server_only=True,
     color=LogType.HIGHLIGHT,
 )
 
-is_latest = version_check.check_version()
-if not is_latest:
+is_latest_version = system_manager.check_version()
+if not is_latest_version:
     printr.print(
         "A new Wingman AI version is available! Download at https://www.wingman-ai.com",
         server_only=True,
@@ -118,8 +118,8 @@ def custom_openapi():
         return app.openapi_schema
     openapi_schema = get_openapi(
         title="Wingman AI Core API",
-        version="1.0.0",
-        description="Communicate with the Wingman AI Core",
+        version="1.5.0",
+        description="Communicate with Wingman AI Core",
         routes=app.routes,
     )
 
@@ -188,7 +188,7 @@ app.include_router(core.config_service.router)
 app.include_router(core.settings_service.router)
 app.include_router(core.voice_service.router)
 
-app.include_router(version_check.router)
+app.include_router(system_manager.router)
 app.include_router(secret_keeper.router)
 
 
@@ -232,6 +232,7 @@ async def ping():
 
 
 async def async_main(host: str, port: int, sidecar: bool):
+    await core.config_service.migrate_configs(system_manager)
     await core.config_service.load_config()
     saved_secrets: list[str] = []
     for error in core.tower_errors:
