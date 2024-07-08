@@ -18,7 +18,7 @@ custom_properties:
     property_type: boolean
   - id: voice_changer_voices
     name: Available voices
-    hint: A list of voices seperated by commas. (voicename or provider.voicename) For example -> "elevenlabs.Alice, elevenlabs.zcAOhNBS3c14rBihAFp1, openai.nova, wingman_pro.azure.en-US-EmmaNeural"
+    hint: A list of voices seperated by commas. (voicename or provider.voicename) For example -> "elevenlabs.Alice, elevenlabs.zcAOhNBS3c14rBihAFp1, openai.nova, wingman_pro.azure.en-US-EmmaNeural, xvasynth.terminator.tn-T850".  Note XVASynth Support requires that you configure and save the wingman at least once with XVASynth as TTS provider so other variables are configured.
     value: ""
     required: false
     property_type: string

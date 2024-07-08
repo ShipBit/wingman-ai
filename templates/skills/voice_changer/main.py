@@ -72,6 +72,8 @@ class VoiceChanger(Skill):
             default_subprovider = None
             if self.wingman.config.features.tts_provider == TtsProvider.WINGMAN_PRO:
                 default_subprovider = self.wingman.config.wingman_pro.tts_provider.value
+            if self.wingman.config.features.tts_provider == TtsProvider.XVASYNTH:
+                default_subprovider = self.wingman.config.xvasynth.game_folder_name
 
             for voice in voice_settings:
                 # split provider and voice name
@@ -149,7 +151,13 @@ class VoiceChanger(Skill):
                     await self.wingman.validate_and_set_wingman_pro(errors)
                     if len(errors) > 0:
                         break
-
+                elif (
+                    voice_provider == TtsProvider.XVASYNTH
+                    and not self.wingman.xvasynth
+                ):
+                    await self.wingman.validate_and_set_xvasynth(errors)
+                    if len(errors) > 0:
+                        break
                 # if subprovider invalid, throw error
                 if (
                     voice_provider == TtsProvider.WINGMAN_PRO
@@ -166,6 +174,7 @@ class VoiceChanger(Skill):
                     break
                 elif (
                     voice_provider != TtsProvider.WINGMAN_PRO
+                    and voice_provider != TtsProvider.XVASYNTH
                     and voice_subprovider is not None
                 ):
                     errors.append(
@@ -288,8 +297,10 @@ class VoiceChanger(Skill):
                 ]
 
                 message = f"Switched {self.wingman.name}'s voice to {voice_name} ({voice_provider.value}"
-                if voice_subprovider:
+                if voice_subprovider and voice_provider == TtsProvider.WINGMAN_PRO:
                     message += f"/{voice_subprovider.value}"
+                elif voice_subprovider:
+                    message += f"/{voice_subprovider}"
                 message += ")."
                 break
 
@@ -303,6 +314,8 @@ class VoiceChanger(Skill):
         elif voice_provider == TtsProvider.AZURE:
             self.wingman.config.azure.tts.voice = voice_id
         elif voice_provider == TtsProvider.XVASYNTH:
+            # Note, XVASynth needs to have had its path (xvasynth_path) and language (if different from defaults) set at least once in the GUI for the wingman for it to work, or someday with global settings config edits
+            self.wingman.config.xvasynth.game_folder_name = voice_subprovider
             self.wingman.config.xvasynth.voice = voice_id
         elif voice_provider == TtsProvider.OPENAI:
             self.wingman.config.openai.tts_voice = (
