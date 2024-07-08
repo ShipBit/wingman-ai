@@ -41,7 +41,9 @@ from services.websocket_user import WebSocketUser
 
 
 class WingmanCore(WebSocketUser):
-    def __init__(self, config_manager: ConfigManager, app_root_path: str):
+    def __init__(
+        self, config_manager: ConfigManager, app_root_path: str, app_is_bundled: bool
+    ):
         self.printr = Printr()
         self.app_root_path = app_root_path
 
@@ -157,6 +159,7 @@ class WingmanCore(WebSocketUser):
         self.whispercpp = Whispercpp(
             settings=self.settings_service.settings.voice_activation.whispercpp,
             app_root_path=app_root_path,
+            app_is_bundled=app_is_bundled,
         )
         self.settings_service.initialize(self.whispercpp)
 

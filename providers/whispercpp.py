@@ -14,7 +14,12 @@ SERVER_EXE = "server.exe"
 
 
 class Whispercpp:
-    def __init__(self, settings: WhispercppSettings, app_root_path: str):
+    def __init__(
+        self,
+        settings: WhispercppSettings,
+        app_root_path: str,
+        app_is_bundled: bool,
+    ):
         self.settings = settings
         self.current_model = None
         self.runnig_process = None
@@ -23,7 +28,7 @@ class Whispercpp:
         self.is_windows = platform.system() == "Windows"
         if self.is_windows:
             # move one dir up, out of _internal (if bundled)
-            app_dir = path.dirname(app_root_path)
+            app_dir = path.dirname(app_root_path) if app_is_bundled else app_root_path
             self.models_dir = path.join(app_dir, MODELS_DIR)
             self.standard_dir = path.join(app_dir, STANDARD_DIR)
             self.cuda_dir = path.join(app_dir, CUDA_DIR)

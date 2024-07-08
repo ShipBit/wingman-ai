@@ -168,4 +168,8 @@ cython_debug/
 .frontmatter/database/taxonomyDb.json
 frontmatter.json
 
+# Wingman AI:
 skills/**/dependencies
+whispercpp/
+whispercpp-cuda/
+whispercpp-models/

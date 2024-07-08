@@ -63,7 +63,11 @@ if not is_latest:
     )
 
 # uses the Singletons above, so don't move this up!
-core = WingmanCore(config_manager=config_manager, app_root_path=app_root_path)
+core = WingmanCore(
+    config_manager=config_manager,
+    app_root_path=app_root_path,
+    app_is_bundled=app_is_bundled,
+)
 core.set_connection_manager(connection_manager)
 
 keyboard.hook(core.on_key)
