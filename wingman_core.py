@@ -106,8 +106,20 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
+            methods=["POST"],
+            path="/whispercpp/start",
+            endpoint=self.start_whispercpp,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/whispercpp/stop",
+            endpoint=self.stop_whispercpp,
+            tags=tags,
+        )
+        self.router.add_api_route(
             methods=["GET"],
-            path="/whispercpp-models",
+            path="/whispercpp/models",
             response_model=list[str],
             endpoint=self.get_whispercpp_models,
             tags=tags,
@@ -620,7 +632,15 @@ class WingmanCore(WebSocketUser):
             )
         return True
 
-    # GET /whispercpp-models
+    # POST /whispercpp/start
+    def start_whispercpp(self):
+        self.whispercpp.start_server()
+
+    # POST /whispercpp/stop
+    def stop_whispercpp(self):
+        self.whispercpp.stop_server()
+
+    # GET /whispercpp/models
     def get_whispercpp_models(self):
         model_files = []
         try:
