@@ -163,7 +163,6 @@ class SettingsService:
 
         config = deepcopy(self.config_manager.default_config)
         config.features.conversation_provider = provider
-        config.features.summarize_provider = provider
         config.features.tts_provider = provider
         config.features.stt_provider = provider
 

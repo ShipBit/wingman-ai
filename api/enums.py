@@ -169,17 +169,6 @@ class ImageGenerationProvider(Enum):
     WINGMAN_PRO = "wingman_pro"
 
 
-class SummarizeProvider(Enum):
-    OPENAI = "openai"
-    MISTRAL = "mistral"
-    GROQ = "groq"
-    OPENROUTER = "openrouter"
-    LOCAL_LLM = "local_llm"
-    AZURE = "azure"
-    WINGMAN_PRO = "wingman_pro"
-    GOOGLE = "google"
-
-
 class KeyboardRecordingType(Enum):
     SINGLE = "single"
     MACRO = "macro"
@@ -298,10 +287,6 @@ class ImageGenerationProviderEnumModel(BaseEnumModel):
     image_generation_provider: ImageGenerationProvider
 
 
-class SummarizeProviderEnumModel(BaseEnumModel):
-    summarize_provider: SummarizeProvider
-
-
 class KeyboardRecordingTypeModel(BaseEnumModel):
     recording_type: KeyboardRecordingType
 
@@ -344,7 +329,6 @@ ENUM_TYPES = {
     "SttProvider": SttProviderEnumModel,
     "VoiceActivationSttProvider": VoiceActivationSttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
-    "SummarizeProvider": SummarizeProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
     "WingmanProRegion": WingmanProRegionModel,
     "WingmanProSttProvider": WingmanProSttProviderModel,

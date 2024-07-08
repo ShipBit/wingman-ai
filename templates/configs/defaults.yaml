@@ -41,7 +41,6 @@ features:
   tts_provider: wingman_pro
   stt_provider: whispercpp
   conversation_provider: wingman_pro
-  summarize_provider: wingman_pro
   image_generation_provider: wingman_pro
   use_generic_instant_responses: false
 sound:
@@ -51,22 +50,17 @@ sound:
   volume: 1.0
 openai:
   conversation_model: gpt-4o
-  summarize_model: gpt-4o
   tts_voice: nova
 mistral:
   conversation_model: mistral-large-latest
-  summarize_model: mistral-medium-latest
   endpoint: https://api.mistral.ai/v1
 groq:
   conversation_model: llama3-70b-8192
-  summarize_model: llama3-8b-8192
   endpoint: https://api.groq.com/openai/v1
 google:
   conversation_model: gemini-1.5-flash
-  summarize_model: gemini-1.5-flash
 openrouter:
   conversation_model: meta-llama/llama-3-8b-instruct:free
-  summarize_model: meta-llama/llama-3-8b-instruct:free
   endpoint: https://openrouter.ai/api/v1
 local_llm:
   endpoint: http://localhost:1234/v1 # LMStudio
@@ -89,10 +83,6 @@ azure:
     api_version: 2024-02-15-preview
     deployment_name: whisper
   conversation:
-    api_base_url: https://openai-sweden-c.openai.azure.com/
-    api_version: 2024-02-15-preview
-    deployment_name: gpt-4o
-  summarize:
     api_base_url: https://openai-sweden-c.openai.azure.com/
     api_version: 2024-02-15-preview
     deployment_name: gpt-4o
@@ -121,7 +111,6 @@ xvasynth:
 wingman_pro:
   stt_provider: azure_speech
   tts_provider: azure
-  summarize_deployment: gpt-4o
   conversation_deployment: gpt-4o
 commands:
   - name: ResetConversationHistory

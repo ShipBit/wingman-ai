@@ -20,7 +20,6 @@ from api.enums import (
     OpenAiTtsVoice,
     SoundEffect,
     SttProvider,
-    SummarizeProvider,
     TtsProvider,
     VoiceActivationSttProvider,
     WingmanInitializationErrorType,
@@ -165,7 +164,6 @@ class AzureConfig(BaseModel):
 
     whisper: AzureInstanceConfig
     conversation: AzureInstanceConfig
-    summarize: AzureInstanceConfig
     tts: AzureTtsConfig
     stt: AzureSttConfig
 
@@ -250,10 +248,6 @@ class OpenAiConfig(BaseModel):
     """ The model to use for conversations aka "chit-chat" and for function calls.
     """
 
-    summarize_model: OpenAiModel
-    """ This model summarizes function responses, like API call responses etc. This can be a less capable model.
-    """
-
     tts_voice: OpenAiTtsVoice
     """ The voice to use for OpenAI text-to-speech.
     Only used if features > tts_provider is set to 'openai'.
@@ -280,37 +274,31 @@ class PromptConfig(BaseModel):
 
 class MistralConfig(BaseModel):
     conversation_model: MistralModel
-    summarize_model: MistralModel
     endpoint: str
 
 
 class GroqConfig(BaseModel):
     conversation_model: GroqModel
-    summarize_model: GroqModel
     endpoint: str
 
 
 class GoogleConfig(BaseModel):
     conversation_model: GoogleAiModel
-    summarize_model: GoogleAiModel
 
 
 class OpenRouterConfig(BaseModel):
     conversation_model: str
-    summarize_model: str
     endpoint: str
 
 
 class LocalLlmConfig(BaseModel):
     conversation_model: Optional[str] = None
-    summarize_model: Optional[str] = None
     endpoint: str
 
 
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
-    summarize_deployment: WingmanProAzureDeployment
     conversation_deployment: WingmanProAzureDeployment
     # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
 
@@ -364,7 +352,6 @@ class FeaturesConfig(BaseModel):
     tts_provider: TtsProvider
     stt_provider: SttProvider
     conversation_provider: ConversationProvider
-    summarize_provider: SummarizeProvider
     remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
     use_generic_instant_responses: bool
