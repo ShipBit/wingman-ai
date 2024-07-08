@@ -51,3 +51,14 @@ Open `main.py` and run it. You should see the Wingman AI window should pop up. I
 - you have `main.py` active in the editor when you hit `F5` to run it
 
 We also suggest to install the recommended extensions if you haven't already. We're not forcing any strict syntactic coding styles right now but that might (have to) change in the future. If that will happen, `pylint` will certainly be used to enforce the style and it can help you with some basic stuff already if you aren't super familiar with Python (like us).
+
+## Setup whispercpp
+
+The release version of Wingman AI bundles and uses whispercpp as local STT service and autostarts the service when needed.
+The whispercpp binaries are bundled in the client for various reasons and we did not integrate them into Wingman AI Core.
+
+Here is how you can use the "autostart" functionality in Windows Dev mode (running from source):
+
+- Install the latest Wingman AI release version from the website
+- Copy the `whispercpp`, `whispercpp-cuda` and `whispercpp-models` directories from the Wingman AI installation directory to your repository root.
+- Restart Wingman AI Core and it should autostart whispercpp

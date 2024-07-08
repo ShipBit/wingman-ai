@@ -8,6 +8,7 @@ import sys
 from typing import TYPE_CHECKING
 import yaml
 from api.interface import SettingsConfig, SkillBase, SkillConfig, WingmanConfig
+from providers.whispercpp import Whispercpp
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -44,6 +45,7 @@ class ModuleManager:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        whispercpp: Whispercpp,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -73,6 +75,7 @@ class ModuleManager:
             config=config,
             settings=settings,
             audio_player=audio_player,
+            whispercpp=whispercpp,
         )
         return instance
 

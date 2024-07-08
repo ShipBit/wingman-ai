@@ -23,7 +23,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from providers.open_ai import OpenAi
-from providers.whispercpp import Whispercpp
+from providers.whispercpp import MODELS_DIR, Whispercpp
 from providers.wingman_pro import WingmanPro
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -41,8 +41,11 @@ from services.websocket_user import WebSocketUser
 
 
 class WingmanCore(WebSocketUser):
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(
+        self, config_manager: ConfigManager, app_root_path: str, app_is_bundled: bool
+    ):
         self.printr = Printr()
+        self.app_root_path = app_root_path
 
         self.router = APIRouter()
         tags = ["core"]
@@ -92,14 +95,33 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/send_audio-to-wingman",
+            path="/send-audio-to-wingman",
             endpoint=self.send_audio_to_wingman,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/reset_conversation_history",
+            path="/reset-conversation-history",
             endpoint=self.reset_conversation_history,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/whispercpp/start",
+            endpoint=self.start_whispercpp,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/whispercpp/stop",
+            endpoint=self.stop_whispercpp,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/whispercpp/models",
+            response_model=list[str],
+            endpoint=self.get_whispercpp_models,
             tags=tags,
         )
 
@@ -146,6 +168,13 @@ class WingmanCore(WebSocketUser):
             "va_settings_changed", self.on_va_settings_changed
         )
 
+        self.whispercpp = Whispercpp(
+            settings=self.settings_service.settings.voice_activation.whispercpp,
+            app_root_path=app_root_path,
+            app_is_bundled=app_is_bundled,
+        )
+        self.settings_service.initialize(self.whispercpp)
+
         self.voice_service = VoiceService(
             config_manager=self.config_manager, audio_player=self.audio_player
         )
@@ -166,19 +195,13 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
-    async def unload_tower(self):
-        if self.tower:
-            for wingman in self.tower.wingmen:
-                for skill in wingman.skills:
-                    await skill.unload()
-                await wingman.unload()
-            self.tower = None
-            self.config_service.set_tower(None)
-
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         await self.unload_tower()
+
         self.tower = Tower(
-            config=config_dir_info.config, audio_player=self.audio_player
+            config=config_dir_info.config,
+            audio_player=self.audio_player,
+            whispercpp=self.whispercpp,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -187,6 +210,15 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(error.message)
 
         self.config_service.set_tower(self.tower)
+
+    async def unload_tower(self):
+        if self.tower:
+            for wingman in self.tower.wingmen:
+                for skill in wingman.skills:
+                    await skill.unload()
+                await wingman.unload()
+            self.tower = None
+            self.config_service.set_tower(None)
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []
@@ -337,27 +369,17 @@ class WingmanCore(WebSocketUser):
 
                 return original_text != text, text
 
-            whisper_config = self.settings_service.settings.voice_activation.whispercpp
-            whisperccp = Whispercpp(wingman_name="system")
-            errors = whisperccp.validate_config(whisper_config)
-
-            if len(errors) > 0:
-                for error in errors:
-                    self.printr.print(
-                        error.message, server_only=True, color=LogType.ERROR
-                    )
-            else:
-                transcription = whisperccp.transcribe(
-                    filename=recording_file,
-                    config=whisper_config,
+            transcription = self.whispercpp.transcribe(
+                filename=recording_file,
+                config=self.settings_service.settings.voice_activation.whispercpp_config,
+            )
+            cleaned, text = filter_and_clean_text(transcription.text)
+            if cleaned:
+                self.printr.print(
+                    f"Cleaned original transcription: {transcription.text}",
+                    server_only=True,
+                    color=LogType.SUBTLE,
                 )
-                cleaned, text = filter_and_clean_text(transcription.text)
-                if cleaned:
-                    self.printr.print(
-                        f"Cleaned original transcription: {transcription.text}",
-                        server_only=True,
-                        color=LogType.SUBTLE,
-                    )
         elif provider == VoiceActivationSttProvider.OPENAI:
             # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
             openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
@@ -609,3 +631,26 @@ class WingmanCore(WebSocketUser):
                 "Conversation history cleared.",
             )
         return True
+
+    # POST /whispercpp/start
+    def start_whispercpp(self):
+        self.whispercpp.start_server()
+
+    # POST /whispercpp/stop
+    def stop_whispercpp(self):
+        self.whispercpp.stop_server()
+
+    # GET /whispercpp/models
+    def get_whispercpp_models(self):
+        model_files = []
+        try:
+            models_dir = os.path.join(os.path.dirname(self.app_root_path), MODELS_DIR)
+            model_files = [
+                f
+                for f in os.listdir(models_dir)
+                if os.path.isfile(os.path.join(models_dir, f)) and f.endswith(".bin")
+            ]
+        except Exception:
+            # this only works if the app is bundled, so not when running from source
+            pass
+        return model_files
