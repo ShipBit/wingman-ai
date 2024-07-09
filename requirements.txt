@@ -17,6 +17,7 @@ python-multipart==0.0.9
 PyYAML==6.0.1
 requests==2.32.3
 scipy==1.13.0
+show-in-file-manager==1.1.5
 sounddevice==0.4.7
 soundfile==0.12.1
 SpeechRecognition==3.10.4

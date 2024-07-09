@@ -5,6 +5,7 @@ import threading
 from typing import Optional
 from fastapi import APIRouter, File, UploadFile
 import sounddevice as sd
+from showinfm import show_in_file_manager
 import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
@@ -23,7 +24,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from providers.open_ai import OpenAi
-from providers.whispercpp import MODELS_DIR, Whispercpp
+from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -122,6 +123,24 @@ class WingmanCore(WebSocketUser):
             path="/whispercpp/models",
             response_model=list[str],
             endpoint=self.get_whispercpp_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager",
+            endpoint=self.open_file_manager,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/config",
+            endpoint=self.open_config_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/logs",
+            endpoint=self.open_logs_directory,
             tags=tags,
         )
 
@@ -657,3 +676,15 @@ class WingmanCore(WebSocketUser):
             # in these cases, we return an empty list and the client will lock the controls and show a warning.
             pass
         return model_files
+
+    # POST /open-filemanager
+    def open_file_manager(self, path: str):
+        show_in_file_manager(path)
+
+    # POST /open-filemanager/config
+    def open_config_directory(self, config_name: str):
+        show_in_file_manager(self.config_manager.get_config_dir_path(config_name))
+
+    # POST /open-filemanager/logs
+    def open_logs_directory(self):
+        show_in_file_manager(get_writable_dir("logs"))
