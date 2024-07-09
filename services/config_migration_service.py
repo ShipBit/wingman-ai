@@ -6,7 +6,12 @@ from typing import Callable, Optional
 from pydantic import ValidationError
 from api.enums import LogType
 from api.interface import NestedConfig, SettingsConfig
-from services.config_manager import CONFIGS_DIR, DELETED_PREFIX, ConfigManager
+from services.config_manager import (
+    CONFIGS_DIR,
+    DEFAULT_PREFIX,
+    DELETED_PREFIX,
+    ConfigManager,
+)
 from services.file import get_users_dir
 from services.printr import Printr
 
@@ -197,16 +202,16 @@ class ConfigMigrationService:
                         self.config_manager.write_config(new_file, wingman_diff)
 
                         # The old file was logically deleted and a new one exists that isn't yet
-                        new_undeleted_file = path.join(
+                        new_base_file = path.join(
                             root.replace(old_config_path, new_config_path),
                             filename.replace(DELETED_PREFIX, "", 1),
                         )
                         if filename.startswith(DELETED_PREFIX) and path.exists(
-                            new_undeleted_file
+                            new_base_file
                         ):
-                            os.remove(new_undeleted_file)
+                            os.remove(new_base_file)
 
-                            avatar = new_undeleted_file.replace(".yaml", ".png")
+                            avatar = new_base_file.replace(".yaml", ".png")
                             if path.exists(avatar):
                                 os.remove(avatar)
                             self.log(
@@ -216,6 +221,27 @@ class ConfigMigrationService:
                         self.err(f"Unable to migrate {filename}:\n{str(e)}")
                 else:
                     self.copy_file(old_file, new_file)
+
+            # the old dir was logically deleted and a new one exists that isn't yet
+            new_base_dir = root.replace(old_config_path, new_config_path).replace(
+                DELETED_PREFIX, "", 1
+            )
+            new_undeleted_default_dir = root.replace(
+                old_config_path, new_config_path
+            ).replace(DELETED_PREFIX, DEFAULT_PREFIX, 1)
+
+            target_dir = (
+                new_undeleted_default_dir
+                if path.exists(new_undeleted_default_dir)
+                else new_base_dir if path.exists(new_base_dir) else None
+            )
+            if os.path.basename(root).startswith(DELETED_PREFIX) and path.exists(
+                target_dir
+            ):
+                shutil.rmtree(target_dir)
+                self.log(
+                    f"Logically deleting config {root} like in the previous version"
+                )
 
         success_message = "Migration completed successfully!"
         self.printr.print(
