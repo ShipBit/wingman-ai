@@ -1,3 +1,4 @@
+from datetime import datetime
 from os import path, walk
 import os
 import shutil
@@ -9,11 +10,14 @@ from services.config_manager import CONFIGS_DIR, ConfigManager
 from services.file import get_users_dir
 from services.printr import Printr
 
+MIGRATION_LOG = ".migration"
+
 
 class ConfigMigrationService:
     def __init__(self, config_manager: ConfigManager):
         self.config_manager = config_manager
         self.printr = Printr()
+        self.log_message: str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "\n"
 
     # MIGRATIONS
 
@@ -86,6 +90,7 @@ class ConfigMigrationService:
             color=LogType.SUBTLE if not highlight else LogType.PURPLE,
             server_only=True,
         )
+        self.log_message += f"{message}\n"
 
     def err(self, message: str):
         self.printr.print(
@@ -93,6 +98,7 @@ class ConfigMigrationService:
             color=LogType.ERROR,
             server_only=True,
         )
+        self.log_message += f"{message}\n"
 
     def copy_file(self, old_file: str, new_file: str):
         new_dir = path.dirname(new_file)
@@ -112,18 +118,25 @@ class ConfigMigrationService:
         migrate_wingman: Callable[[dict, Optional[dict]], dict],
     ) -> None:
         users_dir = get_users_dir()
-        old_path = path.join(users_dir, old_version, CONFIGS_DIR)
-        new_path = path.join(users_dir, new_version, CONFIGS_DIR)
+        old_config_path = path.join(users_dir, old_version, CONFIGS_DIR)
+        new_config_path = path.join(users_dir, new_version, CONFIGS_DIR)
+
+        already_migrated = path.exists(path.join(new_config_path, MIGRATION_LOG))
+        if already_migrated:
+            self.log(
+                f"Migration from {old_version} to {new_version} already completed!"
+            )
+            return
 
         self.log(
-            f"Starting migration from {old_version} to {new_version} in {users_dir}...",
+            f"Starting migration from {old_config_path} to {new_config_path}",
             True,
         )
 
-        for root, _dirs, files in walk(old_path):
+        for root, _dirs, files in walk(old_config_path):
             for filename in files:
                 old_file = path.join(root, filename)
-                new_file = old_file.replace(old_path, new_path)
+                new_file = old_file.replace(old_config_path, new_config_path)
 
                 if filename == ".DS_Store":
                     continue
@@ -186,8 +199,16 @@ class ConfigMigrationService:
                         self.err(f"Unable to migrate {filename}:\n{str(e)}")
                 else:
                     self.copy_file(old_file, new_file)
+
+        success_message = "Migration completed successfully!"
         self.printr.print(
-            "Migration completed!",
+            success_message,
             color=LogType.POSITIVE,
             server_only=True,
         )
+        self.log_message += f"{success_message}\n"
+
+        with open(
+            path.join(new_config_path, MIGRATION_LOG), "w", encoding="UTF-8"
+        ) as stream:
+            stream.write(self.log_message)
