@@ -284,7 +284,7 @@ class ConfigManager:
             ),
         )
 
-    def load_config(
+    def parse_config(
         self, config_dir: Optional[ConfigDirInfo] = None
     ) -> Tuple[ConfigDirInfo, Config]:
         """Loads and validates a config. If no config_dir is given, the default config is loaded."""

@@ -185,7 +185,7 @@ class ConfigService:
         if config_name and len(config_name) > 0:
             config_dir = self.config_manager.get_config_dir(config_name)
 
-        loaded_config_dir, config = self.config_manager.load_config(config_dir)
+        loaded_config_dir, config = self.config_manager.parse_config(config_dir)
         return ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
 
     # GET /config-dir-path
@@ -197,7 +197,7 @@ class ConfigService:
         self, config_dir: Optional[ConfigDirInfo] = None
     ) -> ConfigWithDirInfo:
         try:
-            loaded_config_dir, config = self.config_manager.load_config(config_dir)
+            loaded_config_dir, config = self.config_manager.parse_config(config_dir)
         except Exception as e:
             self.printr.toast_error(str(e))
             raise e
@@ -402,36 +402,44 @@ class ConfigService:
         config_dir: ConfigDirInfo,
         wingman_name: str,
     ):
-        _dir, config = self.config_manager.load_config(config_dir)
+        _dir, config = self.config_manager.parse_config(config_dir)
         wingman_config_files = await self.get_wingmen_config_files(config_dir.name)
 
-        # Check if the wingman_name is already the default
-        already_default = any(
-            (
-                config.wingmen[file.name].name == wingman_name
-                and config.wingmen[file.name].is_voice_activation_default
-            )
-            for file in wingman_config_files
-        )
+        made_changes = False
 
         for wingman_config_file in wingman_config_files:
+            if wingman_config_file.is_deleted:
+                continue
+
             wingman_config = config.wingmen[wingman_config_file.name]
 
-            if already_default:
-                # If wingman_name is already default, undefault it
-                wingman_config.is_voice_activation_default = False
+            if wingman_config_file.name == wingman_name:
+                if (
+                    hasattr(wingman_config, "is_voice_activation_default")
+                    and wingman_config.is_voice_activation_default
+                ):
+                    # Undefault the current default wingman
+                    wingman_config.is_voice_activation_default = False
+                    made_changes = True
+                else:
+                    # Set the new default if it's not already
+                    wingman_config.is_voice_activation_default = True
+                    made_changes = True
             else:
-                # Set the new default
-                wingman_config.is_voice_activation_default = (
-                    wingman_config.name == wingman_name
-                )
+                if wingman_config.is_voice_activation_default:
+                    # Ensure other wingmen are not default
+                    wingman_config.is_voice_activation_default = False
+                    made_changes = True
 
-            await self.save_wingman_config(
-                config_dir=config_dir,
-                wingman_file=wingman_config_file,
-                wingman_config=wingman_config,
-                silent=True,
-            )
+            # Only save if there's a change
+            if made_changes:
+                await self.save_wingman_config(
+                    config_dir=config_dir,
+                    wingman_file=wingman_config_file,
+                    wingman_config=wingman_config,
+                    silent=True,
+                )
+                made_changes = False
 
     # GET config/defaults
     async def get_defaults_config(self):
