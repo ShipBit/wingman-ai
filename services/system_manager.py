@@ -4,7 +4,7 @@ import requests
 from packaging import version
 from api.interface import SystemCore, SystemInfo
 
-LOCAL_VERSION = "1.4.1"
+LOCAL_VERSION = "1.5.0"
 VERSION_ENDPOINT = "https://wingman-ai.com/api/version"
 
 
@@ -25,8 +25,6 @@ class SystemManager:
 
     def check_version(self):
         try:
-            app_version = self.local_version
-
             response = requests.get(VERSION_ENDPOINT, timeout=10)
             response.raise_for_status()
 
@@ -35,7 +33,7 @@ class SystemManager:
 
             self.latest_version = remote_version
 
-            return app_version >= remote_version
+            return self.local_version >= remote_version
 
         except requests.RequestException:
             return False

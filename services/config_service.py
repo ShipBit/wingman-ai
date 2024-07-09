@@ -1,5 +1,7 @@
+import os
 from typing import Optional
 from fastapi import APIRouter
+from packaging.version import Version, InvalidVersion
 from api.enums import LogType, OpenAiTtsVoice
 from api.interface import (
     BasicWingmanConfig,
@@ -13,9 +15,12 @@ from api.interface import (
     WingmanConfigFileInfo,
 )
 from services.config_manager import ConfigManager
+from services.config_migration_service import ConfigMigrationService
+from services.file import get_users_dir
 from services.module_manager import ModuleManager
 from services.printr import Printr
 from services.pub_sub import PubSub
+from services.system_manager import SystemManager
 from services.tower import Tower
 
 
@@ -487,3 +492,37 @@ class ConfigService:
                             text=f"Inactive Wingman '{wingman_config.name}'s config saved.",
                             server_only=True,
                         )
+
+    async def migrate_configs(self, system_manager: SystemManager):
+        current_version: str = system_manager.get_local_version()
+        current_version_str = str(current_version).replace(".", "_")
+        version_path = get_users_dir()
+
+        def version_key(version_str):
+            try:
+                return Version(version_str.replace("_", "."))
+            except InvalidVersion:
+                return Version("0.0.0")  # Placeholder for invalid versions
+
+        valid_versions = [
+            v for v in os.listdir(version_path) if version_key(v) > Version("0.0.0")
+        ]
+        all_versions = sorted(valid_versions, key=version_key)
+
+        if current_version_str not in all_versions:
+            raise ValueError(
+                f"Current version {current_version} not found in the directory."
+            )
+
+        current_index = all_versions.index(current_version_str)
+
+        if current_index == 0:
+            return  # Current version is the oldest, no migrations needed
+
+        previous_version_str = all_versions[current_index - 1]
+        migration_func_name = f"migrate_{previous_version_str.replace('_', '')}_to_{current_version_str.replace('_', '')}"
+
+        migraton_service = ConfigMigrationService(config_manager=self.config_manager)
+        if hasattr(migraton_service, migration_func_name):
+            migration_func = getattr(migraton_service, migration_func_name)
+            migration_func()
