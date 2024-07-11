@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 from typing_extensions import Annotated, TypedDict
 from pydantic import (
     Base64Str,
@@ -440,12 +440,18 @@ class LabelValuePair(BaseModel):
     value: str | int | float | bool
 
 
+class VoiceSelection(BaseModel):
+    provider: TtsProvider
+    subprovider: Optional[WingmanProTtsProvider] = None
+    voice: str | ElevenlabsVoiceConfig | OpenAiTtsVoice
+
+
 class CustomProperty(BaseModel):
     id: str
     """The name of the property. Has to be unique"""
     name: str
     """The "friendly" name of the property, displayed in the UI."""
-    value: str | int | float | bool | None
+    value: str | int | float | bool | VoiceSelection | list[VoiceSelection]
     """The value of the property"""
     property_type: CustomPropertyType
     """Determines the type of the property and which controls to render in the UI."""

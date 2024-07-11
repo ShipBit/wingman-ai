@@ -48,6 +48,7 @@ class CustomPropertyType(Enum):
     NUMBER = "number"
     BOOLEAN = "boolean"
     SINGLE_SELECT = "single_select"
+    VOICE_SELECTION = "voice_selection"
 
 
 class AzureApiVersion(Enum):

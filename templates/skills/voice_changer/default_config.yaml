@@ -28,3 +28,12 @@ custom_properties:
     required: false
     value: ""
     property_type: textarea
+  - id: voice_changer_voices_new
+    name: Available voices
+    hint: The voices your Wingman can switch to and use.
+    value: []
+    required: false
+    property_type: voice_selection
+    options:
+      - label: "multiple"
+        value: true

@@ -1,7 +1,12 @@
 import time
 from random import randrange
 from typing import TYPE_CHECKING
-from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from api.interface import (
+    SettingsConfig,
+    SkillConfig,
+    VoiceSelection,
+    WingmanInitializationError,
+)
 from api.enums import (
     LogType,
     WingmanInitializationErrorType,
@@ -57,6 +62,11 @@ class VoiceChanger(Skill):
         )
         if not self.context_prompt:
             self.context_generation = False
+
+        # TODO @JayMatthew: Here we go... use this (and rename it to voice_changer_voices)!
+        voices_new: list[VoiceSelection] = self.retrieve_custom_property_value(
+            "voice_changer_voices_new", errors
+        )
 
         # prepare voices
         voices = self.retrieve_custom_property_value("voice_changer_voices", errors)
