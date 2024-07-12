@@ -68,6 +68,8 @@ class RadioChatter(Skill):
             default_subprovider = None
             if self.wingman.config.features.tts_provider == TtsProvider.WINGMAN_PRO:
                 default_subprovider = self.wingman.config.wingman_pro.tts_provider.value
+            if self.wingman.config.features.tts_provider == TtsProvider.XVASYNTH:
+                default_subprovider = self.wingman.config.xvasynth.game_folder_name
 
             # TODO: this is way too complicated. We should just use the already configured TTS provider from the wingman and offer the voices for this provider.
             for voice in voice_settings:
@@ -146,7 +148,13 @@ class RadioChatter(Skill):
                     await self.wingman.validate_and_set_wingman_pro(errors)
                     if len(errors) > 0:
                         break
-
+                elif (
+                    voice_provider == TtsProvider.XVASYNTH
+                    and not self.wingman.xvasynth
+                ):
+                    await self.wingman.validate_and_set_xvasynth(errors)
+                    if len(errors) > 0:
+                        break
                 # if subprovider invalid, throw error
                 if (
                     voice_provider == TtsProvider.WINGMAN_PRO
@@ -163,6 +171,7 @@ class RadioChatter(Skill):
                     break
                 elif (
                     voice_provider != TtsProvider.WINGMAN_PRO
+                    and voice_provider != TtsProvider.XVASYNTH
                     and voice_subprovider is not None
                 ):
                     errors.append(
@@ -578,6 +587,8 @@ class RadioChatter(Skill):
         elif voice_provider == TtsProvider.AZURE:
             self.wingman.config.azure.tts.voice = voice_id
         elif voice_provider == TtsProvider.XVASYNTH:
+            # Note, XVASynth needs to have had its path (xvasynth_path) and language (if different from defaults) set at least once in the GUI for the wingman for it to work, or someday with global settings config edits
+            self.wingman.config.xvasynth.game_folder_name = voice_subprovider
             self.wingman.config.xvasynth.voice = voice_id
         elif voice_provider == TtsProvider.OPENAI:
             self.wingman.config.openai.tts_voice = await self._get_openai_voice_by_name(
@@ -617,7 +628,8 @@ class RadioChatter(Skill):
         elif voice_provider == TtsProvider.AZURE:
             voice_id = self.wingman.config.azure.tts.voice
         elif voice_provider == TtsProvider.XVASYNTH:
-            voice_id = self.wingman.config.xvasynth.voice
+            self.wingman.config.xvasynth.game_folder_name = voice_subprovider
+            self.wingman.config.xvasynth.voice = voice_id
         elif voice_provider == TtsProvider.OPENAI:
             voice_name = self.wingman.config.openai.tts_voice.value
         elif voice_provider == TtsProvider.WINGMAN_PRO:
