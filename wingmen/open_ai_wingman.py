@@ -212,6 +212,11 @@ class OpenAiWingman(Wingman):
             )
             self.threaded_execution(self._generate_instant_responses)
 
+    async def unload_skills(self):
+        await super().unload_skills()
+        self.tool_skills = {}
+        self.skill_tools = []
+
     async def prepare_skill(self, skill: Skill):
         # prepare the skill and skill tools
         for tool_name, tool in skill.get_tools():

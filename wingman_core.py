@@ -416,13 +416,21 @@ class WingmanCore(WebSocketUser):
             )
 
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
-        # devices: [output_device, input_device]
+        # devices: [input_device, output_device]
+
+        # get current audio devices
+        current_mic = sd.default.device[0]
+
+        # set new devices
         sd.default.device = devices
-        self.audio_recorder.valid_mic = True  # this allows a new error message
-        self.audio_recorder.update_input_stream()
-        if self.is_listening:
-            self.start_voice_recognition(mute=True)
-            self.start_voice_recognition(mute=False)
+
+        # update input stream if the input device has changed
+        if current_mic != devices[0]:
+            self.audio_recorder.valid_mic = True  # this allows a new error message
+            self.audio_recorder.update_input_stream()
+            if self.is_listening:
+                self.start_voice_recognition(mute=True)
+                self.start_voice_recognition(mute=False, adjust_for_ambient_noise=True)
 
     async def set_voice_activation(self, is_enabled: bool):
         if is_enabled:
