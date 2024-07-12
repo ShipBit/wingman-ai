@@ -62,7 +62,7 @@ class AudioRecorder:
             )
             self.microphone = sr.Microphone(
                 sample_rate=self.samplerate,
-                device_index=self.recstream.device
+                device_index=sounddevice.default.device[0], # default input device
             )
             return True
         except Exception:
