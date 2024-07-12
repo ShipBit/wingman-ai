@@ -213,7 +213,7 @@ class OpenAiWingman(Wingman):
             self.threaded_execution(self._generate_instant_responses)
 
     async def unload_skills(self):
-        super().unload_skills()
+        await super().unload_skills()
         self.tool_skills = {}
         self.skill_tools = []
 
