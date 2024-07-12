@@ -122,7 +122,7 @@ class SettingsService:
             await wingman.update_settings(settings=self.config_manager.settings_config)
 
     async def _set_audio_devices(
-        self, output_device: Optional[int] = None, input_device: Optional[int] = None
+        self, input_device: Optional[int] = None, output_device: Optional[int] = None
     ):
         input_settings = None
         output_settings = None
