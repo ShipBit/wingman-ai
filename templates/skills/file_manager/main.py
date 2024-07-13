@@ -5,7 +5,7 @@ from api.interface import SettingsConfig, SkillConfig, WingmanInitializationErro
 from api.enums import LogType
 from skills.skill_base import Skill
 from services.file import get_writable_dir
-
+from showinfm import show_in_file_manager
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
 
@@ -50,6 +50,7 @@ SUPPORTED_FILE_EXTENSIONS = [
     "plist",
     "pl",
     "po",
+    "ps1",
     "pxd",
     "py",
     "resx",
@@ -194,6 +195,30 @@ class FileManager(Skill):
                     },
                 },
             ),
+            (
+                "open_folder",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "open_folder",
+                        "description": "Opens a specified directory in the GUI.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "folder_name": {
+                                    "type": "string",
+                                    "description": "The name of the folder to open.",
+                                },
+                                "directory_path": {
+                                    "type": "string",
+                                    "description": "The path of the directory where the folder to open is located. Defaults to the configured directory.",
+                                },
+                            },
+                            "required": ["folder_name"],
+                        },
+                    },
+                },
+            ),
         ]
         return tools
 
@@ -327,6 +352,31 @@ class FileManager(Skill):
                 except Exception as e:
                     function_response = (
                         f"Failed to create folder '{folder_name}': {str(e)}"
+                    )
+
+        elif tool_name == "open_folder":
+            if self.settings.debug_mode:
+                self.start_execution_benchmark()
+                await self.printr.print_async(
+                    f"Executing open_folder with parameters: {parameters}",
+                    color=LogType.INFO,
+                )
+            folder_name = parameters.get("folder_name")
+            directory_path = parameters.get("directory_path", self.default_directory)
+            if directory_path == "":
+                directory_path = self.default_directory
+            if not folder_name or folder_name == "":
+                function_response = "Folder name not provided."
+            else:
+                full_path = os.path.join(directory_path, folder_name)
+                try:
+                    show_in_file_manager(full_path)
+                    function_response = (
+                        f"Folder '{folder_name}' opened in '{directory_path}'."
+                    )
+                except Exception as e:
+                    function_response = (
+                        f"Failed to open folder '{folder_name}': {str(e)}"
                     )
 
         if self.settings.debug_mode:
