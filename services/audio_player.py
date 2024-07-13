@@ -340,11 +340,16 @@ class AudioPlayer:
                 if mixed_pos >= len(noise_audio):
                     mixed_pos = 0
                 end_pos = min(len(noise_audio), mixed_pos + remaining)
+
+                num_samples_to_copy = end_pos - mixed_pos
+                if num_samples_to_copy > remaining:
+                    num_samples_to_copy = remaining
+
                 chunk[
-                    length - remaining : length - remaining + (end_pos - mixed_pos)
-                ] = noise_audio[mixed_pos:end_pos]
-                remaining -= end_pos - mixed_pos
-                mixed_pos = end_pos
+                    length - remaining : length - remaining + num_samples_to_copy
+                ] = noise_audio[mixed_pos:(mixed_pos + num_samples_to_copy)]
+                remaining -= num_samples_to_copy
+                mixed_pos = mixed_pos + num_samples_to_copy
             return chunk
 
         def callback(outdata, frames, time, status):
