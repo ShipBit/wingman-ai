@@ -1,0 +1,77 @@
+name: APIRequest
+module: skills.api_request.main
+description:
+  en: Use this skill to send HTTP requests to APIs with methods like GET, POST, PUT, etc. Customize headers, handle token bearer authorizations, include API keys, and include different types of request bodies as needed.
+  de: Ein Skill zum Senden von API-Anfragen mit verschiedenen Methoden, Headern, Parametern und Anfragetexten.
+hint:
+  en: Be careful when using APIs that require API keys or have URLs that are specific to you. 
+      Keep personal details in the chat with a wingman and not in configs where they may be accidentally shared with others. 
+      You should use text input or saved files rather than voice for the AI to understand API keys.
+  de: Sei vorsichtig, wenn du APIs verwendest, die API-Schlüssel erfordern oder URLs haben, die nur für dich gedacht sind. 
+      Halte persönliche oder geheime Daten im Chat mit deinem Wingman und nicht in der Konfiguration, wo sie versehentlich mit anderen geteilt werden könnten. 
+      Verwende Texteingaben oder Dateien statt Spracheingaben, damit dein Wingman deine API-Schlüssel gut verstehen kann.
+examples:
+  - question:
+      en: Send a GET request to "https://api.example.com/data".
+      de: Sende eine GET-Anfrage an "https://api.example.com/data".
+    answer:
+      en: (sends a GET request to the specified URL and returns the response data)
+      de: (sendet eine GET-Anfrage an die angegebene URL und gibt die Antwortdaten zurück)
+  - question:
+      en: Send a POST request to "https://api.example.com/data" with JSON body.
+      de: Sende eine POST-Anfrage an "https://api.example.com/data" mit JSON-Körper.
+    answer:
+      en: (sends a POST request to the specified URL with the provided JSON body and returns the response data)
+      de: (sendet eine POST-Anfrage an die angegebene URL mit dem bereitgestellten JSON-Körper und gibt die Antwortdaten zurück)
+  - question:
+      en: Send a PUT request to "https://api.example.com/update" with headers and parameters.
+      de: Sende eine PUT-Anfrage an "https://api.example.com/update" mit Headern und Parametern.
+    answer:
+      en: (sends a PUT request to the specified URL with the provided headers and parameters, and returns the response data)
+      de: (sendet eine PUT-Anfrage an die angegebene URL mit den bereitgestellten Headern und Parametern und gibt die Antwortdaten zurück)
+  - question:
+      en: Send a PATCH request to "https://api.example.com/update" with JSON body.
+      de: Sende eine PATCH-Anfrage an "https://api.example.com/update" mit JSON-Körper.
+    answer:
+      en: (sends a PATCH request to the specified URL with the provided JSON body and returns the response data)
+      de: (sendet eine PATCH-Anfrage an die angegebene URL mit dem bereitgestellten JSON-Körper und gibt die Antwortdaten zurück)
+  - question:
+      en: Send a DELETE request with bearer token authorization.
+      de: Sende eine DELETE-Anfrage mit Bearer-Token-Autorisierung.
+    answer:
+      en: (sends a DELETE request with bearer token authorization and returns the response data)
+      de: (sendet eine DELETE-Anfrage mit Bearer-Token-Autorisierung und gibt die Antwortdaten zurück)
+  - question:
+      en: Send a GET request with an API key.
+      de: Sende eine GET-Anfrage mit einem API-Schlüssel.
+    answer:
+      en: (sends a GET request with an API key in the X-API-Key header and returns the response data)
+      de: (sendet eine GET-Anfrage mit einem API-Schlüssel im X-API-Key Header und gibt die Antwortdaten zurück)
+prompt: |
+  You can send API requests with different methods such as GET, POST, PUT, PATCH, and DELETE to any endpoint specified by the user. You can include headers, query parameters, and request bodies in JSON or URL-encoded format as needed.
+  Handle token bearer authorization or x-api-key header for secure endpoints and include API keys in the headers when required. Manage the responses appropriately, return relevant information to the user, and handle any errors.
+custom_properties:
+  - hint: 'When set to true, the default headers {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "WingmanAI/1.5.0", "Cache-Control": "no-cache", "Accept-Encoding": "gzip, deflate", "Access-Control-Allow-Origin": "http://localhost", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*"} will be included in every API request. Set to false if you do not want to include these default headers automatically.'
+    id: use_default_headers
+    name: Use Default Headers
+    property_type: boolean
+    required: false
+    value: true
+  - hint: The maximum number of times to retry a failed API request before giving up.
+    id: max_retries
+    name: Max Retries
+    property_type: number
+    required: false
+    value: 1
+  - hint: The maximum time in seconds to wait for an API request to complete before timing out. This helps prevent requests from hanging indefinitely.
+    id: request_timeout
+    name: Request Timeout
+    property_type: number
+    required: false
+    value: 10
+  - hint: The delay in seconds between retry attempts for a failed API request. This allows time for the issue to resolve before trying again.
+    id: retry_delay
+    name: Retry Delay
+    property_type: number
+    required: false
+    value: 5
