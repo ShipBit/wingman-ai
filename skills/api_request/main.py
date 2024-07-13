@@ -1,14 +1,16 @@
+import os
 import json
 import time
 import random
 import asyncio
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, Tuple
 import aiohttp
 from aiohttp import ClientError
 from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill
-
+from services.file import get_writable_dir
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -165,12 +167,52 @@ class APIRequest(Skill):
                         timeout=self.request_timeout
                     ) as response:
                         response.raise_for_status()
-                        return await response.text()
+                        
+                        # Default to treating content as text if Content-Type is not specified
+                        content_type = response.headers.get('Content-Type', '').lower()
+                        if "application/json" in content_type:
+                            return await response.text()
+                        elif any(x in content_type for x in ["application/octet-stream", "application/", "audio/mpeg", "audio/wav", "audio/ogg", "image/jpeg", "image/png", "video/mp4", "application/pdf"]):
+                            file_content = await response.read()
+                            
+                            # Determine appropriate file extension and name
+                            if "audio/mpeg" in content_type:
+                                file_extension = ".mp3"
+                            elif "audio/wav" in content_type:
+                                file_extension = ".wav"
+                            elif "audio/ogg" in content_type:
+                                file_extension = ".ogg"
+                            elif "image/jpeg" in content_type:
+                                file_extension = ".jpg"
+                            elif "image/png" in content_type:
+                                file_extension = ".png"
+                            elif "video/mp4" in content_type:
+                                file_extension = ".mp4"
+                            elif "application/pdf" in content_type:
+                                file_extension = ".pdf"
+                            else:
+                                file_extension = ".file"
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            file_name = f"downloaded_file_{timestamp}{file_extension}"  # Use a default name or extract it from response headers if available
+                            
+                            if 'Content-Disposition' in response.headers:
+                                disposition = response.headers['Content-Disposition']
+                                if 'filename=' in disposition:
+                                    file_name = disposition.split('filename=')[1].strip('"')
+
+                            files_directory = get_writable_dir("files")
+                            file_path = os.path.join(files_directory, file_name)
+                            with open(file_path, "wb") as file:
+                                file.write(file_content)
+                            
+                            return f"File returned from API saved as {file_path}"
+                        else:
+                            return await response.text()
             except (ClientError, asyncio.TimeoutError) as e:
                 if attempt <= self.max_retries:
                     if self.settings.debug_mode:
                         await self.printr.print_async(
-                            f"Retrying API request.",
+                            f"Retrying API request due to: {e}.",
                             color=LogType.INFO,
                         )
                     delay = self.retry_delay * (2 ** (attempt - 1)) + random.uniform(0, 0.1 * self.retry_delay)
