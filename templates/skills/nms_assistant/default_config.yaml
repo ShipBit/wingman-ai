@@ -1,0 +1,18 @@
+name: NMSAssistant
+module: skills.nms_assistant.main
+description:
+  en: This skill fetches information about No Man's Sky items, elements, crafting, cooking, expeditions, community missions, game news, and patch notes. Powered by NMS Assistant API (https://nmsassistant.com/).
+  de: Dieser Skill ruft Informationen über No Man's Sky-Artikel, Elemente, Handwerk, Kochen, Expeditionen, Gemeinschaftsmissionen, Spielemeldungen und Patch-Notizen ab.  Unterstützt von NMS Assistant API (https://nmsassistant.com/).
+hint:
+  en: Try asking about an item generally first so the skill retrieves enough identifying information, before asking more detailed crafting or cooking information about it.
+  de: Versuch erstmal allgemein nach einem Gegenstand zu fragen, damit die Fähigkeit genug identifizierende Informationen erhält, bevor du nach detaillierten Handwerks- oder Kochinformationen fragst.
+examples:
+  - question:
+      en: What are the latest patch notes?
+      de: Was sind die neuesten Patch-Notizen?
+    answer:
+      en: (fetches and displays the latest patch notes from the game)
+      de: (ruft die neuesten Patch-Notizen aus dem Spiel ab und zeigt sie an)
+prompt: |
+  You are an assistant for No Man's Sky players. You can fetch information about items, elements, crafting, cooking, expeditions, community missions, and game news.
+  Use the relevant APIs to provide detailed information requested by the user.
