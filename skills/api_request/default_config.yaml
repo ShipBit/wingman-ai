@@ -7,9 +7,11 @@ hint:
   en: Be careful when using APIs that require API keys or have URLs that are specific to you. 
       Keep personal details in the chat with a wingman and not in configs where they may be accidentally shared with others. 
       You should use text input or saved files rather than voice for the AI to understand API keys.
+      You may also use the api_request_key_holder.yaml file, found in your wingman configs / files folder to store API keys in the form of api_service / key.
   de: Sei vorsichtig, wenn du APIs verwendest, die API-Schlüssel erfordern oder URLs haben, die nur für dich gedacht sind. 
       Halte persönliche oder geheime Daten im Chat mit deinem Wingman und nicht in der Konfiguration, wo sie versehentlich mit anderen geteilt werden könnten. 
       Verwende Texteingaben oder Dateien statt Spracheingaben, damit dein Wingman deine API-Schlüssel gut verstehen kann.
+      Sie können auch die Datei api_request_key_holder.yaml verwenden, die Sie in Ihrem Wingman-Ordner configs / files finden, um API-Schlüssel in der Form api_key_service / key.
 examples:
   - question:
       en: Send a GET request to "https://api.example.com/data".
@@ -24,24 +26,6 @@ examples:
       en: (sends a POST request to the specified URL with the provided JSON body and returns the response data)
       de: (sendet eine POST-Anfrage an die angegebene URL mit dem bereitgestellten JSON-Körper und gibt die Antwortdaten zurück)
   - question:
-      en: Send a PUT request to "https://api.example.com/update" with headers and parameters.
-      de: Sende eine PUT-Anfrage an "https://api.example.com/update" mit Headern und Parametern.
-    answer:
-      en: (sends a PUT request to the specified URL with the provided headers and parameters, and returns the response data)
-      de: (sendet eine PUT-Anfrage an die angegebene URL mit den bereitgestellten Headern und Parametern und gibt die Antwortdaten zurück)
-  - question:
-      en: Send a PATCH request to "https://api.example.com/update" with JSON body.
-      de: Sende eine PATCH-Anfrage an "https://api.example.com/update" mit JSON-Körper.
-    answer:
-      en: (sends a PATCH request to the specified URL with the provided JSON body and returns the response data)
-      de: (sendet eine PATCH-Anfrage an die angegebene URL mit dem bereitgestellten JSON-Körper und gibt die Antwortdaten zurück)
-  - question:
-      en: Send a DELETE request with bearer token authorization.
-      de: Sende eine DELETE-Anfrage mit Bearer-Token-Autorisierung.
-    answer:
-      en: (sends a DELETE request with bearer token authorization and returns the response data)
-      de: (sendet eine DELETE-Anfrage mit Bearer-Token-Autorisierung und gibt die Antwortdaten zurück)
-  - question:
       en: Send a GET request with an API key.
       de: Sende eine GET-Anfrage mit einem API-Schlüssel.
     answer:
@@ -50,6 +34,7 @@ examples:
 prompt: |
   You can send API requests with different methods such as GET, POST, PUT, PATCH, and DELETE to any endpoint specified by the user. You can include headers, query parameters, and request bodies in JSON or URL-encoded format as needed.
   Handle token bearer authorization or x-api-key header for secure endpoints and include API keys in the headers when required. Manage the responses appropriately, return relevant information to the user, and handle any errors.
+  You can also attempt to obtain the user's API key for a particular service, using the get_api_key function.
 custom_properties:
   - hint: 'When set to true, the default headers {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "WingmanAI/1.5.0", "Cache-Control": "no-cache", "Accept-Encoding": "gzip, deflate", "Access-Control-Allow-Origin": "http://localhost", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*"} will be included in every API request. Set to false if you do not want to include these default headers automatically.'
     id: use_default_headers

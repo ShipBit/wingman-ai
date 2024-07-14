@@ -3,6 +3,7 @@ import json
 import time
 import random
 import asyncio
+import yaml
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, Tuple
 import aiohttp
@@ -44,6 +45,8 @@ class APIRequest(Skill):
         self.max_retries = 1
         self.request_timeout = 5
         self.retry_delay = 5
+        self.api_keys_dictionary = self.get_api_keys()
+
         super().__init__(config=config, settings=settings, wingman=wingman)
 
     async def validate(self) -> list[WingmanInitializationError]:
@@ -62,8 +65,26 @@ class APIRequest(Skill):
         self.retry_delay = self.retrieve_custom_property_value(
             "retry_delay", errors
         )
+
         return errors
 
+
+    # Retrieve api key aliases in user api key file
+    def get_api_keys(self) -> dict:
+        api_key_holder = os.path.join(get_writable_dir("files"), "api_request_key_holder.yaml")
+        # If no key holder file is present yet, create it
+        if not os.path.isfile(api_key_holder):
+            os.makedirs(os.path.dirname(api_key_holder), exist_ok=True)
+            with open(api_key_holder, "w", encoding="utf-8") as file:
+                pass
+        # Open key holder file to read stored API keys
+        with open(api_key_holder, "r", encoding="UTF-8") as stream:
+            try:
+                parsed = yaml.safe_load(stream)
+                if isinstance(parsed, dict):  # Ensure the parsed content is a dictionary
+                    return parsed  # Return the dictionary of alias/keys
+            except Exception as e:
+                return {}
 
     # Prepare and send API request using parameters provided by LLM response to function call
     async def _send_api_request(self, parameters: Dict[str, Any]) -> str:
@@ -232,7 +253,14 @@ class APIRequest(Skill):
                     )
                 return f"Error, could not complete API request.  Reason was {e}."
 
+    async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        return True
+
     def get_tools(self) -> list[Tuple[str, Dict[str, Any]]]:
+        # Ensure api_keys_dictionary is populated, if not use placeholder
+        if not self.api_keys_dictionary:
+            self.api_keys_dictionary = {"Service":"API_key"}
+            
         return [
             (
                 "send_api_request",
@@ -251,6 +279,27 @@ class APIRequest(Skill):
                                 "data": {"type": "object", "description": "Body or payload for the API request."},
                             },
                             "required": ["url", "method"],
+                        },
+                    },
+                },
+            ),
+            (
+                "get_api_key",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_api_key",
+                        "description": "Obtain the API key needed for an API request.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "api_key_alias": {
+                                    "type": "string", 
+                                    "description": "The API key needed.", 
+                                    "enum": list(self.api_keys_dictionary.keys()),
+                                },
+                            },
+                            "required": ["api_key_alias"],
                         },
                     },
                 },
@@ -278,12 +327,35 @@ class APIRequest(Skill):
                     )
 
             if self.settings.debug_mode:
-                await self.print_execution_time()
-
-            if self.settings.debug_mode:
                 await self.printr.print_async(
                     f"Response from API call: {function_response}",
                     color=LogType.INFO,
                 )
+
+            if self.settings.debug_mode:
+                await self.print_execution_time()
+
+        if tool_name == "get_api_key":
+            self.start_execution_benchmark()
+            if self.settings.debug_mode:
+                await self.printr.print_async(
+                    f"Calling get_api_key with parameters: {parameters}",
+                    color=LogType.INFO,
+                )
+            alias = parameters.get("api_key_alias", "Not found")
+            key = self.api_keys_dictionary.get(alias, None)
+            if key != None and key != "API_key":
+                function_response = f"{alias} API key is: {key}"
+            else:
+                function_response = f"Error.  Could not retrieve {alias} API key.  Not found."
+
+            if self.settings.debug_mode:
+                await self.printr.print_async(
+                    f"Response from get_api_key: {function_response}",
+                    color=LogType.INFO,
+                )
+
+            if self.settings.debug_mode:
+                await self.print_execution_time()
 
         return function_response, instant_response
