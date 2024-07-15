@@ -125,6 +125,8 @@ class VisionAI(Skill):
                 )
 
                 if answer:
+                    if self.settings.debug_mode:
+                        await self.printr.print_async(f"Vision analysis: {answer}.", color=LogType.INFO)
                     function_response = answer
 
         return function_response, instant_response
