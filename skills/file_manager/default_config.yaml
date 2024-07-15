@@ -32,6 +32,7 @@ prompt: |
   (1) determine if it is appropriate to add a new line before the added text or ask the user if you do not know.
   (2) only add content to an existing file if you are sure that is what the user wants.
   (3) when adding content to a file, only add the specific additional content the user wants added, not a duplicate of all of the original content.
+  You can also aid the user in opening folders / directories in the user interface.
 custom_properties:
   - hint: The default directory for file operations. If left blank, will default to your WingmanAI config directory in a sub-directory called "files".
     id: default_directory
