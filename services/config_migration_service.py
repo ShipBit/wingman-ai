@@ -51,12 +51,14 @@ class ConfigMigrationService:
             old["azure"].pop("summarize")
             old["wingman_pro"].pop("summarize_deployment")
             self.log("- removed obsolete properties: summarize_model")
-            old.pop("xvasynth")
-            self.log("- resetting and restructuring XVASynth")
 
             # rest of whispercpp moved to settings.yaml
             old["whispercpp"] = {"temperature": new.whispercpp.temperature}
             self.log("- cleaned up whispercpp properties")
+
+            # xvasynth was restructured
+            old["xvasynth"] = self.config_manager.convert_to_dict(new.xvasynth)
+            self.log("- resetting and restructuring XVASynth")
 
             # patching new default values
             old["features"]["stt_provider"] = new.features.stt_provider.value
@@ -65,6 +67,12 @@ class ConfigMigrationService:
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            def find_skill(skills, module_name):
+                return next(
+                    (skill for skill in skills if skill.get("module") == module_name),
+                    None,
+                )
+
             # remove obsolete properties
             old.get("openai", {}).pop("summarize_model", None)
             old.get("mistral", {}).pop("summarize_model", None)
@@ -78,6 +86,47 @@ class ConfigMigrationService:
 
             old.pop("whispercpp", None)
             self.log("- removed old whispercpp config (if there was any)")
+
+            old.pop("xvasynth", None)
+            self.log("- removed old xvasynth config (if there was any)")
+
+            voice_changer = find_skill(
+                old.get("skills", []), "skills.voice_changer.main"
+            )
+            if voice_changer:
+                voice_changer_custom_properties = voice_changer.get(
+                    "custom_properties", []
+                )
+                voice_changer_voices = next(
+                    (
+                        prop
+                        for prop in voice_changer_custom_properties
+                        if prop.get("id") == "voice_changer_voices"
+                    ),
+                    None,
+                )
+                if voice_changer_voices:
+                    voice_changer_custom_properties.remove(voice_changer_voices)
+                    self.log("- removed old VoiceChanger voices custom property")
+
+            radio_chatter = find_skill(
+                old.get("skills", []), "skills.skills.radio_chatter.main"
+            )
+            if radio_chatter:
+                radio_chatter_custom_properties = voice_changer.get(
+                    "custom_properties", []
+                )
+                radio_chatter_voices = next(
+                    (
+                        prop
+                        for prop in radio_chatter_custom_properties
+                        if prop.get("id") == "voices"
+                    ),
+                    None,
+                )
+                if radio_chatter_voices:
+                    radio_chatter_custom_properties.remove(radio_chatter_voices)
+                    self.log("- removed old RadioChatter voices custom property")
 
             return old
 
