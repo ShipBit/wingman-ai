@@ -55,6 +55,7 @@ class OpenAiWingman(Wingman):
         settings: SettingsConfig,
         audio_player: AudioPlayer,
         whispercpp: Whispercpp,
+        xvasynth: XVASynth,
     ):
         super().__init__(
             name=name,
@@ -62,6 +63,7 @@ class OpenAiWingman(Wingman):
             audio_player=audio_player,
             settings=settings,
             whispercpp=whispercpp,
+            xvasynth=xvasynth,
         )
 
         self.edge_tts = Edge()
@@ -74,7 +76,6 @@ class OpenAiWingman(Wingman):
         self.local_llm: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
-        self.xvasynth: XVASynth = None
         self.wingman_pro: WingmanPro = None
         self.google: GoogleGenAI = None
 
@@ -117,9 +118,6 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
-
-        if self.uses_provider("xvasynth"):
-            await self.validate_and_set_xvasynth(errors)
 
         if self.uses_provider("azure"):
             await self.validate_and_set_azure(errors)
@@ -298,13 +296,6 @@ class OpenAiWingman(Wingman):
                     self.azure_api_keys[key_type] = api_key
         if len(errors) == 0:
             self.openai_azure = OpenAiAzure()
-
-    async def validate_and_set_xvasynth(self, errors: list[WingmanInitializationError]):
-        self.xvasynth = XVASynth(
-            wingman_name=self.name,
-        )
-        validation_errors = self.xvasynth.validate_config(config=self.config.xvasynth)
-        errors.extend(validation_errors)
 
     async def validate_and_set_wingman_pro(self):
         self.wingman_pro = WingmanPro(
@@ -508,9 +499,11 @@ class OpenAiWingman(Wingman):
                 if completion is None:
                     return None, None, None, True
 
-                response_message, tool_calls = await self._process_completion(completion)
-                is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
-                    response_message, tool_calls
+                response_message, tool_calls = await self._process_completion(
+                    completion
+                )
+                is_waiting_response_needed, is_summarize_needed = (
+                    await self._add_gpt_response(response_message, tool_calls)
                 )
                 if tool_calls:
                     interrupt = False
@@ -518,12 +511,12 @@ class OpenAiWingman(Wingman):
                 return None, None, None, interrupt
 
         return response_message.content, response_message.content, None, interrupt
-    
+
     def _get_random_filler(self):
         # get last two used instant responses
         if len(self.last_used_instant_responses) > 2:
             self.last_used_instant_responses = self.last_used_instant_responses[-2:]
-        
+
         # get a random instant response that was not used in the last two responses
         random_index = random.randint(0, len(self.instant_responses) - 1)
         while random_index in self.last_used_instant_responses:

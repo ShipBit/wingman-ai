@@ -3,7 +3,12 @@ import copy
 from os import path
 from random import randrange
 from typing import TYPE_CHECKING
-from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from api.interface import (
+    SettingsConfig,
+    SkillConfig,
+    VoiceSelection,
+    WingmanInitializationError,
+)
 from api.enums import (
     LogType,
     WingmanInitializationErrorType,
@@ -57,7 +62,10 @@ class RadioChatter(Skill):
         self.prompt = self.retrieve_custom_property_value("prompt", errors)
 
         # prepare voices
-        voices = self.retrieve_custom_property_value("voices", errors)
+        # TODO @JayMatthew: Here we go... This has the new structure now
+        voices: list[VoiceSelection] = self.retrieve_custom_property_value(
+            "voices", errors
+        )
         if voices:
             elvenlabs_voices = None
 

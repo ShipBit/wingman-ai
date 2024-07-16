@@ -9,6 +9,7 @@ from api.interface import (
     SettingsConfig,
 )
 from providers.whispercpp import Whispercpp
+from providers.xvasynth import XVASynth
 from services.config_manager import ConfigManager
 from services.config_service import ConfigService
 from services.printr import Printr
@@ -24,6 +25,7 @@ class SettingsService:
         self.settings = self.get_settings()
         self.settings_events = PubSub()
         self.whispercpp: Whispercpp = None
+        self.xvasynth: XVASynth = None
 
         self.router = APIRouter()
         tags = ["settings"]
@@ -48,8 +50,9 @@ class SettingsService:
             tags=tags,
         )
 
-    def initialize(self, whispercpp: Whispercpp):
+    def initialize(self, whispercpp: Whispercpp, xvasynth: XVASynth):
         self.whispercpp = whispercpp
+        self.xvasynth = xvasynth
 
     # GET /settings
     def get_settings(self):
@@ -86,6 +89,15 @@ class SettingsService:
             )
             return
         self.whispercpp.update_settings(settings=settings.voice_activation.whispercpp)
+
+        # XVASynth
+        if not self.xvasynth:
+            self.printr.toast_error(
+                "XVASynth is not initialized. Please run SettingsService.initialize()",
+            )
+            return
+        self.xvasynth.update_settings(settings=settings.xvasynth)
+        self.config_manager.settings_config.xvasynth = settings.xvasynth
 
         # voice activation
         self.config_manager.settings_config.voice_activation = settings.voice_activation

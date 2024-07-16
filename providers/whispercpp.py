@@ -22,7 +22,7 @@ class Whispercpp:
     ):
         self.settings = settings
         self.current_model = None
-        self.runnig_process = None
+        self.running_process = None
         self.printr = Printr()
 
         self.is_windows = platform.system() == "Windows"
@@ -91,7 +91,7 @@ class Whispercpp:
 
         try:
             self.stop_server()
-            self.runnig_process = subprocess.Popen(args)
+            self.running_process = subprocess.Popen(args)
             self.current_model = self.settings.model
             sleep(2)
             is_running = self.__is_server_running()
@@ -112,11 +112,11 @@ class Whispercpp:
             )
             return False
 
-    def stop_server(self) -> str:
-        if self.runnig_process:
-            self.runnig_process.kill()
-            self.runnig_process.wait()
-            self.runnig_process = None
+    def stop_server(self):
+        if self.running_process:
+            self.running_process.kill()
+            self.running_process.wait()
+            self.running_process = None
             self.printr.print(
                 "whispercpp server stopped.", server_only=True, color=LogType.HIGHLIGHT
             )

@@ -31,10 +31,13 @@ custom_properties:
     property_type: textarea
   - id: voices
     name: Available voices
-    hint: A list of voices seperated by commas. (voicename or provider.voicename or provider.subprovider.voicename) For example -> "elevenlabs.Alice, elevenlabs.zcAOhNBS3c14rBihAFp1, openai.nova, wingman_pro.azure.en-US-EmmaNeural, wingman_pro.openai.nova"
-    value: ""
+    hint: The voices used in the radio chatter
+    value: []
     required: false
-    property_type: textarea
+    property_type: voice_selection
+    options:
+      - label: "multiple"
+        value: true
   - id: interval_min
     name: Min interval
     hint: The minimum time in seconds between radio chatter. This is also the time used until the first chatter event occurs.
@@ -94,7 +97,14 @@ custom_properties:
     hint: The volume (relative to the wingman's volume) of the radio chatter. Must be between 0.0 (silent) and 1.0 (same volume as wingman).
     value: 0.5
     required: false
-    property_type: number
+    property_type: slider
+    options:
+      - label: "min"
+        value: 0.0
+      - label: "max"
+        value: 1.0
+      - label: "step"
+        value: 0.1
   - id: print_chatter
     name: Print chatter
     hint: Print the generated chatter to message overview.

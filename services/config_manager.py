@@ -841,6 +841,9 @@ class ConfigManager:
                     else:
                         diff.append(wingman_dict[item_key])
                 return diff
+            else:
+                # If the dictionaries don't have an identifier key, take the wingman list as diff
+                return wingman_list
         else:
             # If the lists are basic types or not dictionaries, sort and compare
             default_list_sorted = sorted(default_list)

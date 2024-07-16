@@ -1,7 +1,12 @@
 import time
 from random import randrange
 from typing import TYPE_CHECKING
-from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from api.interface import (
+    SettingsConfig,
+    SkillConfig,
+    VoiceSelection,
+    WingmanInitializationError,
+)
 from api.enums import (
     LogType,
     WingmanInitializationErrorType,
@@ -59,8 +64,11 @@ class VoiceChanger(Skill):
             self.context_generation = False
 
         # prepare voices
-        voices = self.retrieve_custom_property_value("voice_changer_voices", errors)
-        if not voices:
+        # TODO @JayMatthew: Here we go... This has the new structure now
+        voices: list[VoiceSelection] = self.retrieve_custom_property_value(
+            "voice_changer_voices", errors
+        )
+        if not voices or len(voices) == 0:
             self.voice_switching = False
         else:
             elvenlabs_voices = None

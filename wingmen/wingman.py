@@ -16,6 +16,7 @@ from api.interface import (
 )
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from providers.whispercpp import Whispercpp
+from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
@@ -39,6 +40,7 @@ class Wingman:
         settings: SettingsConfig,
         audio_player: AudioPlayer,
         whispercpp: Whispercpp,
+        xvasynth: XVASynth,
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
@@ -67,6 +69,9 @@ class Wingman:
 
         self.whispercpp = whispercpp
         """A class that handles the communication with the Whispercpp server for transcription."""
+
+        self.xvasynth = xvasynth
+        """A class that handles the communication with the XVASynth server for TTS."""
 
         self.skills: list[Skill] = []
 

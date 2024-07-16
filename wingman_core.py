@@ -26,6 +26,7 @@ from api.interface import (
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
+from providers.xvasynth import XVASynth
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.file import get_writable_dir
@@ -127,6 +128,32 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/xvasynth/start",
+            endpoint=self.start_xvasynth,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/xvasynth/stop",
+            endpoint=self.stop_xvasynth,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/xvsynth/model_dirs",
+            response_model=list[str],
+            endpoint=self.get_xvasynth_model_dirs,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/xvsynth/voices",
+            response_model=list[str],
+            endpoint=self.get_xvasynth_voices,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/open-filemanager",
             endpoint=self.open_file_manager,
             tags=tags,
@@ -192,10 +219,15 @@ class WingmanCore(WebSocketUser):
             app_root_path=app_root_path,
             app_is_bundled=app_is_bundled,
         )
-        self.settings_service.initialize(self.whispercpp)
+        self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
+        self.settings_service.initialize(
+            whispercpp=self.whispercpp, xvasynth=self.xvasynth
+        )
 
         self.voice_service = VoiceService(
-            config_manager=self.config_manager, audio_player=self.audio_player
+            config_manager=self.config_manager,
+            audio_player=self.audio_player,
+            xvasynth=self.xvasynth,
         )
 
         # restore settings
@@ -221,6 +253,7 @@ class WingmanCore(WebSocketUser):
             config=config_dir_info.config,
             audio_player=self.audio_player,
             whispercpp=self.whispercpp,
+            xvasynth=self.xvasynth,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -665,7 +698,10 @@ class WingmanCore(WebSocketUser):
 
     # POST /whispercpp/stop
     def stop_whispercpp(self):
-        self.whispercpp.stop_server()
+        try:
+            self.whispercpp.stop_server()
+        except Exception:
+            pass
 
     # GET /whispercpp/models
     def get_whispercpp_models(self):
@@ -684,6 +720,50 @@ class WingmanCore(WebSocketUser):
             # in these cases, we return an empty list and the client will lock the controls and show a warning.
             pass
         return model_files
+
+    # POST /xvasynth/start
+    def start_xvasynth(self):
+        self.xvasynth.start_server()
+
+    # POST /xvasynth/stop
+    def stop_xvasynth(self):
+        try:
+            self.xvasynth.stop_server()
+        except Exception:
+            pass
+
+    def get_xvasynth_model_dirs(self):
+        subfolders = []
+        try:
+            subfolders = [
+                dir.name for dir in os.scandir(self.xvasynth.models_dir) if dir.is_dir()
+            ]
+        except Exception:
+            pass
+
+        return subfolders
+
+    def get_xvasynth_voices(self, model_directory: str):
+        voices = []
+        directory = os.path.join(self.xvasynth.models_dir, model_directory)
+        try:
+            # listing all files in the directory
+            files = [
+                f
+                for f in os.listdir(directory)
+                if os.path.isfile(os.path.join(directory, f))
+            ]
+
+            # extracting unique base filenames
+            unique_base_filenames = set(os.path.splitext(f)[0] for f in files)
+            voices = list(unique_base_filenames)
+        except Exception:
+            # this can fail:
+            # - on MacOS (always)
+            # - in Dev mode if the dev hasn't copied the whispercpp-models dir to the repository
+            # in these cases, we return an empty list and the client will lock the controls and show a warning.
+            pass
+        return voices
 
     # POST /open-filemanager
     def open_file_manager(self, path: str):
