@@ -126,7 +126,19 @@ class ConfigMigrationService:
                 )
                 if radio_chatter_voices:
                     radio_chatter_custom_properties.remove(radio_chatter_voices)
-                    self.log("- removed old RadioChatter voices custom property")
+                    self.log("- removed changed RadioChatter custom property: voices")
+
+                radio_chatter_volume = next(
+                    (
+                        prop
+                        for prop in radio_chatter_custom_properties
+                        if prop.get("id") == "volume"
+                    ),
+                    None,
+                )
+                if radio_chatter_volume:
+                    radio_chatter_custom_properties.remove(radio_chatter_volume)
+                    self.log("- removed changed RadioChatter custom property: volume")
 
             return old
 

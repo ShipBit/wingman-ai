@@ -97,7 +97,14 @@ custom_properties:
     hint: The volume (relative to the wingman's volume) of the radio chatter. Must be between 0.0 (silent) and 1.0 (same volume as wingman).
     value: 0.5
     required: false
-    property_type: number
+    property_type: slider
+    options:
+      - label: "min"
+        value: 0.0
+      - label: "max"
+        value: 1.0
+      - label: "step"
+        value: 0.1
   - id: print_chatter
     name: Print chatter
     hint: Print the generated chatter to message overview.
