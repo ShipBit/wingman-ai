@@ -35,6 +35,9 @@ class ConfigMigrationService:
                 new.voice_activation.whispercpp
             )
             self.log("- applied new split whispercpp settings/config structure")
+
+            old["xvasynth"] = self.config_manager.convert_to_dict(new.xvasynth)
+            self.log("- adding new XVASynth settings")
             return old
 
         def migrate_defaults(old: dict, new: NestedConfig) -> dict:

@@ -671,6 +671,11 @@ class ConfigManager:
 
     def write_config(self, file_path: str, content) -> bool:
         yaml.add_multi_representer(Enum, enum_representer)
+
+        dir_path = path.dirname(file_path)
+        if not path.exists(dir_path):
+            makedirs(dir_path)
+
         with open(file_path, "w", encoding="UTF-8") as stream:
             try:
                 yaml.dump(
