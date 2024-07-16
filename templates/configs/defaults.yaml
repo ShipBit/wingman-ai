@@ -98,16 +98,13 @@ azure:
 whispercpp:
   temperature: 0.0
 xvasynth:
-  xvasynth_path: C:\Program Files (x86)\Steam\steamapps\common\xVASynth
-  process_device: cpu
-  game_folder_name: terminator
-  voice: tn-T850
-  language: en
+  voice:
+    model_directory: ""
+    voice_name: ""
+    language: en
   pace: 1.0
-  use_sr: false
+  use_super_resolution: false
   use_cleanup: false
-  synthesize_url: http://127.0.0.1:8008/synthesize
-  load_model_url: http://127.0.0.1:8008/loadModel
 wingman_pro:
   stt_provider: azure_speech
   tts_provider: azure

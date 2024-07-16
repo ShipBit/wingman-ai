@@ -6,6 +6,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from providers.whispercpp import Whispercpp
+from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.module_manager import ModuleManager
 from services.printr import Printr
@@ -18,7 +19,11 @@ printr = Printr()
 
 class Tower:
     def __init__(
-        self, config: Config, audio_player: AudioPlayer, whispercpp: Whispercpp
+        self,
+        config: Config,
+        audio_player: AudioPlayer,
+        whispercpp: Whispercpp,
+        xvasynth: XVASynth,
     ):
         self.audio_player = audio_player
         self.config = config
@@ -27,6 +32,7 @@ class Tower:
         self.disabled_wingmen: list[WingmanConfig] = []
         self.log_source_name = "Tower"
         self.whispercpp = whispercpp
+        self.xvasynth = xvasynth
 
     async def instantiate_wingmen(self, settings: SettingsConfig):
         errors: list[WingmanInitializationError] = []
@@ -79,6 +85,7 @@ class Tower:
                     settings=settings,
                     audio_player=self.audio_player,
                     whispercpp=self.whispercpp,
+                    xvasynth=self.xvasynth,
                 )
             else:
                 wingman = OpenAiWingman(
@@ -87,6 +94,7 @@ class Tower:
                     settings=settings,
                     audio_player=self.audio_player,
                     whispercpp=self.whispercpp,
+                    xvasynth=self.xvasynth,
                 )
         except FileNotFoundError as e:  # pylint: disable=broad-except
             wingman_config.disabled = True

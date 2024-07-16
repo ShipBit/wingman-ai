@@ -138,7 +138,7 @@ class Printr(WebSocketUser):
         self.print(text, toast=ToastType.WARNING)
 
     def toast_error(self, text: str):
-        self.print(text, toast=ToastType.ERROR)
+        self.print(text, toast=ToastType.ERROR, color=LogType.ERROR)
 
     # INTERNAL METHODS
 
