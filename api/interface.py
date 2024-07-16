@@ -485,7 +485,7 @@ class CustomProperty(BaseModel):
     required: Optional[bool] = False
     """Marks the property as required in the UI."""
     options: Optional[list[LabelValuePair]] = None
-    """If property_type is set to 'single_select', you can provide options here."""
+    """If property_type is set to 'single_select', you can provide options here. May also hold meta information for other property types like "multiple" for voice_selection."""
 
 
 class LocalizedMetadata(BaseModel):
