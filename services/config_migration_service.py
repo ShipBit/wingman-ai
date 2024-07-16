@@ -51,6 +51,8 @@ class ConfigMigrationService:
             old["azure"].pop("summarize")
             old["wingman_pro"].pop("summarize_deployment")
             self.log("- removed obsolete properties: summarize_model")
+            old.pop("xvasynth")
+            self.log("- resetting and restructuring XVASynth")
 
             # rest of whispercpp moved to settings.yaml
             old["whispercpp"] = {"temperature": new.whispercpp.temperature}
