@@ -1,5 +1,6 @@
 name: NMSAssistant
 module: skills.nms_assistant.main
+category: no_mans_sky
 description:
   en: Fetch information about No Man's Sky items, elements, crafting, cooking, expeditions, community missions, game news, and patch notes. Powered by <a class="anchor" target="_blank" href="https://nmsassistant.com">NMS Assistant API</a>.
   de: Rufe Informationen über No Man's Sky-Artikel, Elemente, Handwerk, Kochen, Expeditionen, Gemeinschaftsmissionen, Spielemeldungen und Patch-Notizen ab. Unterstützt von <a class="anchor" target="_blank" href="https://nmsassistant.com">NMS Assistant API</a>.

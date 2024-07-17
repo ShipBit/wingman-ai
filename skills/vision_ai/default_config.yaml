@@ -1,5 +1,6 @@
 name: VisionAI
 module: skills.vision_ai.main
+category: general
 description:
   en: Let your Wingman analyse whatever is on your screen.
   de: Lass deinen Wingman alles analysieren, was auf deinem Bildschirm zu sehen ist.

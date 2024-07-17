@@ -1,5 +1,6 @@
 name: StarHead
 module: skills.star_head.main
+category: star_citizen
 description:
   en: Use the StarHead API to retrieve detailed information about spaceships, weapons and more. StarHead can also calculate optimal trading routes based on live data.
   de: Nutze die StarHead API, um detaillierte Informationen über Raumschiffe, Waffen und mehr abzurufen. StarHead kann auch optimale Handelsrouten anhand von Live-Daten berechnen.

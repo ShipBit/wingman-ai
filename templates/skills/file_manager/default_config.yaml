@@ -1,5 +1,6 @@
 name: FileManager
 module: skills.file_manager.main
+category: general
 description:
   en: Manage local files, save, load and create directories. Supports various text-based file formats.
   de: Verwalte lokale Dateien, speichere, lade oder erstelle Verzeichnisse. Unterstützt verschiedene text-basierte Formate.
@@ -26,7 +27,7 @@ examples:
       en: (creates a directory named 'Projects' in the default directory)
       de: (erstellt ein Verzeichnis namens 'Projekte' im Standardverzeichnis)
 prompt: |
-  You can also save text to various file formats, load text from files, or create directories as specified by the user.  
+  You can also save text to various file formats, load text from files, or create directories as specified by the user.
   You support all plain text file formats.
   When adding text to an existing file, you follow these rules:
   (1) determine if it is appropriate to add a new line before the added text or ask the user if you do not know.

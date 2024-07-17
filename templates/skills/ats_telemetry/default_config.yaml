@@ -1,5 +1,6 @@
 name: ATSTelemetry
 module: skills.ats_telemetry.main
+category: truck_simulator
 description:
   en: Retrieve live game state information from American Truck Simulator/Euro Truck Simulator 2. Also includes a 'dispatch mode' that automatically observes key state changes and comments on them.
   de: Erhalte live Spielstatus-Informationen von American Truck Simulator/Euro Truck Simulator 2. Enthält auch einen 'Dispatch-Modus', der automatisch wichtige Statusänderungen beobachtet und diese kommentiert.

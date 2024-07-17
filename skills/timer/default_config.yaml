@@ -1,5 +1,6 @@
 name: Timer
 module: skills.timer.main
+category: general
 description:
   en: Gives your Wingman the ability to delay actions - be it a reminder, a command or a function call.
   de: Gibt deinem Wingman die Möglichkeit, Aktionen zu verzögern - sei es eine Erinnerung, ein Befehl oder ein Funktionsaufruf.

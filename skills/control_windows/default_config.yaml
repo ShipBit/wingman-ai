@@ -1,5 +1,6 @@
 name: ControlWindows
 module: skills.control_windows.main
+category: general
 description:
   en: Launch applications and control your Windows computer. Utilize the clipboard of your computer.
   de: Starte Anwendungen und steuere deinen Windows-Computer. Nutze die Zwischenablage deines Computers.

@@ -1,5 +1,6 @@
 name: APIRequest
 module: skills.api_request.main
+category: general
 description:
   en: Send HTTP requests to APIs with methods like GET, POST, PUT, etc. Combine it with the WebSearch skill to fetch API specs on-the-fly, so that your Wingman can interact with any API.
   de: Sende API-Anfragen mit verschiedenen Methoden wie GET, POST, PUT etc. Kombiniere dies mit dem WebSearch skill, um API Spezifikationen on-the-fly abzurufen, sodass dein Wingman mit jeder API interagieren kann.

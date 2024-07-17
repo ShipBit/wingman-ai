@@ -1,5 +1,6 @@
 name: RadioChatter
 module: skills.radio_chatter.main
+category: general
 description:
   en: Randomly playback radio chatter over time. Customize the participants and their voices.
   de: Spielt zufällige Funkgespräche ab. Passe die Teilnehmer und ihre Stimmen an.

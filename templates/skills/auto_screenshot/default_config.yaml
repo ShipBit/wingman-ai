@@ -1,5 +1,6 @@
 name: AutoScreenshot
 module: skills.auto_screenshot.main
+category: general
 description:
   en: Take screenshots on command or automatically when you show excitement.
   de: Mache Screenshots auf Befehl oder automatisch wenn du Aufregung zeigst.

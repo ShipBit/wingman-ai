@@ -10,6 +10,7 @@ from api.enums import (
     ImageGenerationProvider,
     MistralModel,
     CustomPropertyType,
+    SkillCategory,
     TtsVoiceGender,
     ElevenlabsModel,
     OpenAiModel,
@@ -506,6 +507,7 @@ class SkillConfig(CustomClassConfig):
     """You can add custom properties here to use in your custom skill class."""
     hint: Optional[LocalizedMetadata] = None
     examples: Optional[list[SkillExample]] = None
+    category: Optional[SkillCategory] = None
 
 
 class SkillBase(BaseModel):
