@@ -1,8 +1,8 @@
 name: RadioChatter
 module: skills.radio_chatter.main
 description:
-  en: Randomly playback radio chatter over time.
-  de: Spielt zufällige Funkgespräche ab.
+  en: Randomly playback radio chatter over time. Customize the participants and their voices.
+  de: Spielt zufällige Funkgespräche ab. Passe die Teilnehmer und ihre Stimmen an.
 examples:
   - question:
       en: What is the status of the radio?
@@ -16,12 +16,6 @@ examples:
     answer:
       en: The radio is now turned on.
       de: Das Funkgerät wurde eingeschaltet.
-  - question:
-      en: Please turn the radio off.
-      de: Bitte schalte das Funkgerät aus.
-    answer:
-      en: The radio is now off.
-      de: Das Funkgerät wurde ausgeschaltet.
 custom_properties:
   - id: prompt
     name: Prompt for message generation
@@ -76,7 +70,7 @@ custom_properties:
     property_type: number
   - id: force_radio_sound
     name: Force radio effect
-    hint: Overwrites wingman sound effects for radio chatter with selected radio effects. Needs at least one valid value in "Availale radio effectss".
+    hint: Overwrites wingman sound effects for radio chatter with selected radio effects. Needs at least one valid value in "Availale radio effects".
     value: True
     required: false
     property_type: boolean
@@ -88,13 +82,13 @@ custom_properties:
     property_type: string
   - id: auto_start
     name: Auto start
-    hint: Automatically start the radio chatter with your wingman.
+    hint: Automatically start the radio chatter with your Wingman.
     value: False
     required: false
     property_type: boolean
   - id: volume
     name: Volume
-    hint: The volume (relative to the wingman's volume) of the radio chatter. Must be between 0.0 (silent) and 1.0 (same volume as wingman).
+    hint: The volume (relative to the Wingman's volume) of the radio chatter. Must be between 0.0 (silent) and 1.0 (same volume as Wingman).
     value: 0.5
     required: false
     property_type: slider

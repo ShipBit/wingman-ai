@@ -1,17 +1,11 @@
 name: APIRequest
 module: skills.api_request.main
 description:
-  en: Use this skill to send HTTP requests to APIs with methods like GET, POST, PUT, etc. Customize headers, handle token bearer authorizations, include API keys, and include different types of request bodies as needed.
-  de: Ein Skill zum Senden von API-Anfragen mit verschiedenen Methoden, Headern, Parametern und Anfragetexten.
+  en: Send HTTP requests to APIs with methods like GET, POST, PUT, etc. Combine it with the WebSearch skill to fetch API specs on-the-fly, so that your Wingman can interact with any API.
+  de: Sende API-Anfragen mit verschiedenen Methoden wie GET, POST, PUT etc. Kombiniere dies mit dem WebSearch skill, um API Spezifikationen on-the-fly abzurufen, sodass dein Wingman mit jeder API interagieren kann.
 hint:
-  en: Be careful when using APIs that require API keys or have URLs that are specific to you. 
-      Keep personal details in the chat with a wingman and not in configs where they may be accidentally shared with others. 
-      You should use text input or saved files rather than voice for the AI to understand API keys.
-      You may also use the api_request_key_holder.yaml file, found in your wingman configs / files folder to store API keys in the form of api_service / key.
-  de: Sei vorsichtig, wenn du APIs verwendest, die API-Schlüssel erfordern oder URLs haben, die nur für dich gedacht sind. 
-      Halte persönliche oder geheime Daten im Chat mit deinem Wingman und nicht in der Konfiguration, wo sie versehentlich mit anderen geteilt werden könnten. 
-      Verwende Texteingaben oder Dateien statt Spracheingaben, damit dein Wingman deine API-Schlüssel gut verstehen kann.
-      Sie können auch die Datei api_request_key_holder.yaml verwenden, die Sie in Ihrem Wingman-Ordner configs / files finden, um API-Schlüssel in der Form api_key_service / key.
+  en: Do not hardcode API keys in the skill context or your Wingman configuration. Enter them during a conversation (preferrably by text) or store them in `/files/api_request_key_holder.yaml`.
+  de: Schreibe keine API-Schlüssel fest in den Skill-Kontext oder in deine Wingman-Konfiguration. Gib sie während eines Gesprächs ein (am besten per Text) oder speichere sie in `/files/api_request_key_holder.yaml`.
 examples:
   - question:
       en: Send a GET request to "https://api.example.com/data".
@@ -19,12 +13,6 @@ examples:
     answer:
       en: (sends a GET request to the specified URL and returns the response data)
       de: (sendet eine GET-Anfrage an die angegebene URL und gibt die Antwortdaten zurück)
-  - question:
-      en: Send a POST request to "https://api.example.com/data" with JSON body.
-      de: Sende eine POST-Anfrage an "https://api.example.com/data" mit JSON-Körper.
-    answer:
-      en: (sends a POST request to the specified URL with the provided JSON body and returns the response data)
-      de: (sendet eine POST-Anfrage an die angegebene URL mit dem bereitgestellten JSON-Körper und gibt die Antwortdaten zurück)
   - question:
       en: Send a GET request with an API key.
       de: Sende eine GET-Anfrage mit einem API-Schlüssel.
@@ -36,7 +24,7 @@ prompt: |
   Handle token bearer authorization or x-api-key header for secure endpoints and include API keys in the headers when required. Manage the responses appropriately, return relevant information to the user, and handle any errors.
   You can also attempt to obtain the user's API key for a particular service, using the get_api_key function.
 custom_properties:
-  - hint: 'When set to true, the default headers {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "WingmanAI/1.5.0", "Cache-Control": "no-cache", "Accept-Encoding": "gzip, deflate", "Access-Control-Allow-Origin": "http://localhost", "Access-Control-Allow-Methods": "*", "Access-Control-Allow-Headers": "*"} will be included in every API request. Set to false if you do not want to include these default headers automatically.'
+  - hint: Include the default headers every API request, allowing API endpoints to identify that the request came from Wingman AI.
     id: use_default_headers
     name: Use Default Headers
     property_type: boolean
