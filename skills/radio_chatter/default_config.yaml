@@ -42,7 +42,7 @@ custom_properties:
   - id: interval_max
     name: Max interval
     hint: The maximum time in seconds between radio chatter.
-    value: 300
+    value: 600
     required: true
     property_type: number
   - id: messages_min
@@ -109,7 +109,7 @@ custom_properties:
   - id: radio_knowledge
     name: Radio knowledge
     hint: If enabled, the radio chatter messages will be added to the wingman conversation. This way you can talk with your wingman about the radio chatter.
-    value: True
+    value: False
     required: false
     property_type: boolean
   - id: use_beeps
