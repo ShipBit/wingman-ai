@@ -399,7 +399,7 @@ class ATSTelemetry(Skill):
                     telemetry_started = False
             # Try again in ten seconds; maybe user has not loaded up Truck Simulator yet
             time.sleep(10)
-        if self.loaded == True:
+        if self.loaded:
             await self.initialize_telemetry_cache_loop(10)
 
     # Autostart dispatch mode if option turned on in config
