@@ -388,7 +388,7 @@ class ATSTelemetry(Skill):
     # Function to autostart dispatch mode
     async def autostart_dispatcher_mode(self):
         telemetry_started = False
-        while not telemetry_started:
+        while not telemetry_started and self.loaded:
             telemetry_started = await self.initialize_telemetry()
             # Init could fail if truck telemetry module already started elsewhere, so make sure we cannot just query truck telemetry data yet to be sure it's not initialized
             if not telemetry_started:
@@ -399,7 +399,8 @@ class ATSTelemetry(Skill):
                     telemetry_started = False
             # Try again in ten seconds; maybe user has not loaded up Truck Simulator yet
             time.sleep(10)
-        await self.initialize_telemetry_cache_loop(10)
+        if self.loaded:
+            await self.initialize_telemetry_cache_loop(10)
 
     # Autostart dispatch mode if option turned on in config
     async def prepare(self) -> None:
