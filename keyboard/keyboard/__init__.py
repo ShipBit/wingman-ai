@@ -439,7 +439,7 @@ def key_to_scan_codes(key, error_if_missing=True):
         e = exception
 
     if not t and error_if_missing:
-        raise ValueError('Key {} is not mapped to any known key.'.format(repr(key)), e)
+        raise ValueError(f'Key {repr(key)} is not mapped to any known key.', e)
     else:
         return t
 
@@ -941,7 +941,7 @@ def restore_modifiers(scan_codes):
     """
     restore_state((scan_code for scan_code in scan_codes if is_modifier(scan_code)))
 
-def write(text, delay=0, restore_state_after=True, exact=None):
+def write(text, delay=0, restore_state_after=True, exact=None, hold=0, compatibility=True):
     """
     Sends artificial keyboard events to the OS, simulating the typing of a given
     text. Characters not available on the keyboard are typed as explicit unicode
@@ -959,40 +959,71 @@ def write(text, delay=0, restore_state_after=True, exact=None):
     alt+codepoint or special events). If None, uses platform-specific suggested
     value.
     """
-    if exact is None:
-        exact = _platform.system() == 'Windows'
+    # 2ms wait times min for MacOS
+    hold = max(hold, 0.002)
+    delay = max(delay, 0.002)
+    is_windows = _platform.system() == 'Windows'
 
-    state = stash_state()
-    
-    # Window's typing of unicode characters is quite efficient and should be preferred.
-    if exact:
-        for letter in text:
-            if letter in '\n\b':
-                send(letter)
+    if exact is None:
+        exact = is_windows
+
+    def write_unicode(letter):
+        # type_unicode does currently not support hold times.
+        _os_keyboard.type_unicode(letter)
+
+    def write_scan_codes(letter, hold):
+        try:
+            if is_windows:
+                additional_modifiers = []
+                # if letter is upper case and we are on windows, we need to press shift
+                if letter.isupper():
+                    additional_modifiers.append('shift')
+                    letter = letter.lower()
+                entries = _os_keyboard.map_name(normalize_name(letter), True)
+                scan_code, modifiers, is_extended = next(iter(entries))
+                # combine the additional modifiers with the modifiers from the scan code
+                modifiers = set(modifiers) | set(additional_modifiers)
             else:
-                _os_keyboard.type_unicode(letter)
-            if delay: _time.sleep(delay)
-    else:
-        for letter in text:
-            try:
                 entries = _os_keyboard.map_name(normalize_name(letter))
                 scan_code, modifiers = next(iter(entries))
-            except (KeyError, ValueError, StopIteration):
-                _os_keyboard.type_unicode(letter)
-                _time.sleep(max(delay, 0.002))  # needed for macOS to catch up
-                continue
-            
-            for modifier in modifiers:
-                press(modifier)
+        except (KeyError, ValueError, StopIteration):
+            write_unicode(letter)
+            return
 
+        for modifier in modifiers:
+            press(modifier)
+            _time.sleep(0.002)
+
+        if is_windows:
+            _os_keyboard.press(scan_code, is_extended)
+        else:
             _os_keyboard.press(scan_code)
+        _time.sleep(hold)
+        if is_windows:
+            _os_keyboard.release(scan_code, is_extended)
+        else:
             _os_keyboard.release(scan_code)
 
-            for modifier in modifiers:
-                release(modifier)
+        for modifier in modifiers:
+            release(modifier)
+            _time.sleep(0.002)
 
-            if delay:
-                _time.sleep(delay)
+        if delay:
+            _time.sleep(delay)
+
+    state = stash_state()
+
+    for letter in text:
+        if exact and letter in '\n\b':
+            send(letter)
+            continue
+
+        if exact and not compatibility:
+            write_unicode(letter)
+        else:
+            write_scan_codes(letter, hold)
+        if delay:
+            _time.sleep(delay)
 
     if restore_state_after:
         restore_modifiers(state)

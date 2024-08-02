@@ -529,15 +529,17 @@ def listen(callback):
         TranslateMessage(msg)
         DispatchMessage(msg)
 
-def map_name(name):
+def map_name(name, yield_extended=False):
     _setup_name_tables()
-
     entries = from_name.get(name)
     if not entries:
         raise ValueError('Key name {} is not mapped to any known key.'.format(repr(name)))
     for i, entry in entries:
         scan_code, vk, is_extended, modifiers = entry
-        yield scan_code or -vk, modifiers
+        if yield_extended:
+            yield scan_code or -vk, modifiers, is_extended
+        else:
+            yield scan_code or -vk, modifiers
 
 def direct_event(code, event_type):
     _send_event(code, event_type)
@@ -567,8 +569,8 @@ def _send_event(code, event_type):
 
     # alt gr is 541, but it's actually right alt (56, extended)
     if code == 541:
-            code = 56
-            event_type = event_type+1
+        code = 56
+        event_type = event_type+1
     vk = 0
     if code < 0:
         vk = -code

@@ -68,7 +68,7 @@ class TypingAssistant(Skill):
             content_to_type = parameters.get("content_to_type")
             press_enter = parameters.get("end_by_pressing_enter")
 
-            keyboard.write(content_to_type)
+            keyboard.write(content_to_type, delay=0.01, hold=0.01)
 
             if press_enter is True:
                 keyboard.press("enter")
