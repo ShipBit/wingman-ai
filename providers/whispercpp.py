@@ -67,6 +67,11 @@ class Whispercpp:
                 text=f"whispercpp transcription request failed: {e.strerror}"
             )
             return None
+        except requests.Timeout:
+            self.printr.toast_error(
+                text=f"whispercpp transcription request timed out after {timeout}s."
+            )
+            return None
         except FileNotFoundError:
             self.printr.toast_error(
                 f"whispercpp file to transcript'{filename}' not found."

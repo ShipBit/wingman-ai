@@ -425,13 +425,14 @@ class WingmanCore(WebSocketUser):
                 filename=recording_file,
                 config=self.settings_service.settings.voice_activation.whispercpp_config,
             )
-            cleaned, text = filter_and_clean_text(transcription.text)
-            if cleaned:
-                self.printr.print(
-                    f"Cleaned original transcription: {transcription.text}",
-                    server_only=True,
-                    color=LogType.SUBTLE,
-                )
+            if transcription:
+                cleaned, text = filter_and_clean_text(transcription.text)
+                if cleaned:
+                    self.printr.print(
+                        f"Cleaned original transcription: {transcription.text}",
+                        server_only=True,
+                        color=LogType.SUBTLE,
+                    )
         elif provider == VoiceActivationSttProvider.OPENAI:
             # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
             openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
