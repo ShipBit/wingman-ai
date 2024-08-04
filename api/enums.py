@@ -108,6 +108,7 @@ class GoogleAiModel(Enum):
 
 class WingmanProAzureDeployment(Enum):
     GPT_4O = "gpt-4o"
+    GPT_4O_MINI = "gpt-4o-mini"
     MISTRAL_LARGE = "mistral-large-latest"
     LLAMA3_8B = "llama3-8b"
     LLAMA3_70B = "llama3-70b"
