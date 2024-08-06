@@ -21,9 +21,11 @@ from api.interface import (
     AudioDevice,
     AzureSttConfig,
     ConfigWithDirInfo,
+    ElevenlabsModel,
     VoiceActivationSettings,
     WingmanInitializationError,
 )
+from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
@@ -183,6 +185,13 @@ class WingmanCore(WebSocketUser):
             path="/models/groq",
             response_model=list,
             endpoint=self.get_groq_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/elevenlabs",
+            response_model=list[ElevenlabsModel],
+            endpoint=self.get_elevenlabs_models,
             tags=tags,
         )
 
@@ -812,3 +821,21 @@ class WingmanCore(WebSocketUser):
         response.raise_for_status()
         content = response.json()
         return content.get("data", [])
+
+    async def get_elevenlabs_models(self):
+        elevenlabs_api_key = await self.secret_keeper.retrieve(
+            key="elevenlabs", requester="Elevenlabs"
+        )
+        elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
+        models = elevenlabs.get_available_models()
+        convert = lambda model: ElevenlabsModel(
+            name=model.name,
+            model_id=model.modelID,
+            description=model.description,
+            max_characters=model.maxCharacters,
+            cost_factor=model.costFactor,
+            supported_languages=model.supportedLanguages,
+            metadata=model.metadata,
+        )
+        result = [convert(model) for model in models]
+        return result

@@ -11,7 +11,6 @@ from api.enums import (
     CustomPropertyType,
     SkillCategory,
     TtsVoiceGender,
-    ElevenlabsModel,
     OpenAiModel,
     OpenAiTtsVoice,
     SoundEffect,
@@ -174,6 +173,38 @@ class AzureConfig(BaseModel):
     stt: AzureSttConfig
 
 
+class ElevenlabsLanguage(BaseModel):
+    language_id: str
+    name: str
+
+
+class ElevenlabsModelMetadata(BaseModel):
+    model_id: str
+    name: str
+    can_be_finetuned: bool
+    can_do_text_to_speech: bool
+    can_do_voice_conversion: bool
+    can_use_style: bool
+    can_use_speaker_boost: bool
+    serves_pro_voices: bool
+    token_cost_factor: bool
+    description: str
+    requires_alpha_access: bool
+    max_characters_request_free_user: int
+    max_characters_request_subscribed_user: int
+    maximum_text_length_per_request: int
+
+
+class ElevenlabsModel(BaseModel):
+    name: str
+    model_id: str
+    description: str
+    max_characters: int
+    cost_factor: int
+    supported_languages: list[ElevenlabsLanguage]
+    metadata: ElevenlabsModelMetadata
+
+
 class ElevenlabsVoiceConfig(BaseModel):
     """You can either set a voice by name or by ID. If you set both, the ID will be used."""
 
@@ -206,7 +237,7 @@ class ElevenlabsVoiceSettingsConfig(BaseModel):
 
 
 class ElevenlabsConfig(BaseModel):
-    model: ElevenlabsModel
+    model: str
     """see https://elevenlabs.io/docs/speech-synthesis/models"""
 
     latency: Annotated[int, Field(strict=True, ge=0, le=4)]

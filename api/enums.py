@@ -62,12 +62,6 @@ class AzureRegion(Enum):
     NORTHCENTRALUS = "northcentralus"
 
 
-class ElevenlabsModel(Enum):
-    ELEVEN_MULTILINGUAL_V2 = "eleven_multilingual_v2"
-    ELEVEN_TURBO_V2 = "eleven_turbo_v2"
-    ELEVEN_MONOLINGUAL_V1 = "eleven_monolingual_v1"
-
-
 class TtsVoiceGender(Enum):
     UNKNOWN = "Unknown"
     MALE = "Male"
@@ -233,10 +227,6 @@ class AzureRegionEnumModel(BaseEnumModel):
     region: AzureRegion
 
 
-class ElevenlabsModelEnumModel(BaseEnumModel):
-    model: ElevenlabsModel
-
-
 class TtsVoiceGenderEnumModel(BaseEnumModel):
     gender: TtsVoiceGender
 
@@ -318,7 +308,6 @@ ENUM_TYPES = {
     "CustomPropertyType": CustomPropertyTypeEnumModel,
     "AzureApiVersion": AzureApiVersionEnumModel,
     "AzureRegion": AzureRegionEnumModel,
-    "ElevenlabsModel": ElevenlabsModelEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "OpenAiModel": OpenAiModelEnumModel,
     "MistralModel": MistralModelEnumModel,
