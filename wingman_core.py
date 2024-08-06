@@ -4,6 +4,7 @@ import re
 import threading
 from typing import Optional
 from fastapi import APIRouter, File, UploadFile
+import requests
 import sounddevice as sd
 from showinfm import show_in_file_manager
 import azure.cognitiveservices.speech as speechsdk
@@ -168,6 +169,20 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/open-filemanager/logs",
             endpoint=self.open_logs_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/openrouter",
+            response_model=list,
+            endpoint=self.get_openrouter_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/groq",
+            response_model=list,
+            endpoint=self.get_groq_models,
             tags=tags,
         )
 
@@ -777,3 +792,23 @@ class WingmanCore(WebSocketUser):
     # POST /open-filemanager/logs
     def open_logs_directory(self):
         show_in_file_manager(get_writable_dir("logs"))
+
+    async def get_openrouter_models(self):
+        response = requests.get(url=f"https://openrouter.ai/api/v1/models", timeout=10)
+        response.raise_for_status()
+        content = response.json()
+        return content.get("data", [])
+
+    async def get_groq_models(self):
+        groq_api_key = await self.secret_keeper.retrieve(key="groq", requester="Groq")
+        response = requests.get(
+            url=f"https://api.groq.com/openai/v1/models",
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {groq_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        content = response.json()
+        return content.get("data", [])

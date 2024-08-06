@@ -873,7 +873,7 @@ class OpenAiWingman(Wingman):
             completion = self.groq.ask(
                 messages=messages,
                 tools=tools,
-                model=self.config.groq.conversation_model.value,
+                model=self.config.groq.conversation_model,
             )
         elif self.config.features.conversation_provider == ConversationProvider.GOOGLE:
             completion = self.google.ask(

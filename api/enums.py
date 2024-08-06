@@ -92,15 +92,6 @@ class MistralModel(Enum):
     MISTRAL_LARGE = "mistral-large-latest"
 
 
-class GroqModel(Enum):
-    """https://console.groq.com/docs/models"""
-
-    LLAMA3_8B_8192 = "llama3-8b-8192"
-    LLAMA3_70B_8192 = "llama3-70b-8192"
-    MIXTRAL_8X7B = "mixtral-8x7b-32768"
-    GEMMA_7B = "gemma-7b-it"
-
-
 class GoogleAiModel(Enum):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
     GEMINI_1_5_PRO = "gemini-1.5-pro"
@@ -258,10 +249,6 @@ class MistralModelEnumModel(BaseEnumModel):
     model: MistralModel
 
 
-class GroqModelEnumModel(BaseEnumModel):
-    model: GroqModel
-
-
 class GoogleAiModelEnumModel(BaseEnumModel):
     model: GoogleAiModel
 
@@ -335,7 +322,6 @@ ENUM_TYPES = {
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "OpenAiModel": OpenAiModelEnumModel,
     "MistralModel": MistralModelEnumModel,
-    "GroqModel": GroqModelEnumModel,
     "GoogleAiModel": GoogleAiModelEnumModel,
     "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,

@@ -5,7 +5,6 @@ from api.enums import (
     AzureApiVersion,
     AzureRegion,
     ConversationProvider,
-    GroqModel,
     GoogleAiModel,
     ImageGenerationProvider,
     MistralModel,
@@ -282,7 +281,7 @@ class MistralConfig(BaseModel):
 
 
 class GroqConfig(BaseModel):
-    conversation_model: GroqModel
+    conversation_model: str
     endpoint: str
 
 
