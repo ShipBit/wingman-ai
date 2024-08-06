@@ -100,9 +100,7 @@ class VoiceChanger(Skill):
                         voice_provider == TtsProvider.WINGMAN_PRO
                         and not self.wingman.wingman_pro
                     ):
-                        await self.wingman.validate_and_set_wingman_pro(errors)
-                        if len(errors) > 0:
-                            initiate_provider_error = True
+                        await self.wingman.validate_and_set_wingman_pro()
 
             if not initiate_provider_error:
                 self.voices = voices
