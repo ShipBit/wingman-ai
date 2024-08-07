@@ -47,17 +47,22 @@ class ConfigMigrationService:
         def migrate_defaults(old: dict, new: NestedConfig) -> dict:
             # add new properties
             old["sound"]["volume"] = new.sound.volume
+            if old["sound"].get("play_beep_apollo", None) is None:
+                old["sound"]["play_beep_apollo"] = new.sound.play_beep_apollo
             old["google"] = self.config_manager.convert_to_dict(new.google)
             self.log("- added new properties: sound.volume, google")
 
             # remove obsolete properties
+            old["features"].pop("summarize_provider")
             old["openai"].pop("summarize_model")
             old["mistral"].pop("summarize_model")
             old["groq"].pop("summarize_model")
             old["openrouter"].pop("summarize_model")
             old["azure"].pop("summarize")
             old["wingman_pro"].pop("summarize_deployment")
-            self.log("- removed obsolete properties: summarize_model")
+            self.log(
+                "- removed obsolete properties: summarize_provider, summarize_model"
+            )
 
             # rest of whispercpp moved to settings.yaml
             old["whispercpp"] = {"temperature": new.whispercpp.temperature}
@@ -70,6 +75,7 @@ class ConfigMigrationService:
             # patching new default values
             old["features"]["stt_provider"] = new.features.stt_provider.value
             self.log("- set whispercpp as new default STT provider")
+
             old["openai"]["conversation_model"] = new.openai.conversation_model.value
             old["azure"]["conversation"][
                 "deployment_name"
@@ -89,6 +95,7 @@ class ConfigMigrationService:
                 )
 
             # remove obsolete properties
+            old.get("features", {}).pop("summarize_provider", None)
             old.get("openai", {}).pop("summarize_model", None)
             old.get("mistral", {}).pop("summarize_model", None)
             old.get("groq", {}).pop("summarize_model", None)
@@ -98,6 +105,20 @@ class ConfigMigrationService:
             self.log(
                 "- removed obsolete properties: summarize_model (if there were any)"
             )
+
+            changed_openai_model = False
+            if old.get("openai", None):
+                old["openai"]["conversation_model"] = "gpt-4o-mini"
+                changed_openai_model = True
+            if old.get("wingman_pro", None):
+                old["wingman_pro"]["conversation_deployment"] = "gpt-4o-mini"
+                changed_openai_model = True
+            if changed_openai_model:
+                self.log("- setting OpenAI model to gpt-4o-mini")
+
+            if old.get("features", {}).get("stt_provider", None):
+                old["features"]["stt_provider"] = "whispercpp"
+                self.log("- setting STT provider to whispercpp")
 
             old.pop("whispercpp", None)
             self.log("- removed old whispercpp config (if there was any)")
