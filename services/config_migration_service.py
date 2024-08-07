@@ -66,6 +66,14 @@ class ConfigMigrationService:
             # patching new default values
             old["features"]["stt_provider"] = new.features.stt_provider.value
             self.log("- set whispercpp as new default STT provider")
+            old["openai"]["conversation_model"] = new.openai.conversation_model.value
+            old["azure"]["conversation"][
+                "deployment_name"
+            ] = new.azure.conversation.deployment_name
+            old["wingman_pro"][
+                "conversation_deployment"
+            ] = new.wingman_pro.conversation_deployment.value
+            self.log("- set gpt-4o-mini as new default LLM model")
 
             return old
 
