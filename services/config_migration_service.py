@@ -254,16 +254,16 @@ class ConfigMigrationService:
                 elif filename.endswith(".yaml"):
                     self.log(f"Migrating Wingman {filename}...", True)
                     # defaults are already migrated because the Wingman config is in a subdirectory
-                    default_config = self.config_manager.read_default_config()
-                    migrated_wingman = migrate_wingman(
-                        old=self.config_manager.read_config(old_file),
-                        new=(
-                            self.config_manager.read_config(new_file)
-                            if path.exists(new_file)
-                            else None
-                        ),
-                    )
                     try:
+                        default_config = self.config_manager.read_default_config()
+                        migrated_wingman = migrate_wingman(
+                            old=self.config_manager.read_config(old_file),
+                            new=(
+                                self.config_manager.read_config(new_file)
+                                if path.exists(new_file)
+                                else None
+                            ),
+                        )
                         # validate the merged config
                         _wingman_config = self.config_manager.merge_configs(
                             default_config, migrated_wingman
@@ -291,8 +291,9 @@ class ConfigMigrationService:
                             self.log(
                                 f"Logically deleting Wingman {filename} like in the previous version"
                             )
-                    except ValidationError as e:
+                    except Exception as e:
                         self.err(f"Unable to migrate {filename}:\n{str(e)}")
+                        continue
                 else:
                     self.copy_file(old_file, new_file)
 
