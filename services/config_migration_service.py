@@ -14,6 +14,7 @@ from services.config_manager import (
 )
 from services.file import get_users_dir
 from services.printr import Printr
+from services.secret_keeper import SecretKeeper
 
 MIGRATION_LOG = ".migration"
 
@@ -186,7 +187,7 @@ class ConfigMigrationService:
 
         shutil.copyfile(old_file, new_file)
 
-        self.log(f"Copied file: {path.basename(new_file)}")
+        self.log(f"Copied file: {path.basename(new_file)}", highlight=True)
 
     def migrate(
         self,
@@ -222,6 +223,8 @@ class ConfigMigrationService:
                 # secrets
                 if filename == "secrets.yaml":
                     self.copy_file(old_file, new_file)
+                    secret_keeper = SecretKeeper()
+                    secret_keeper.secrets = secret_keeper.load()
                 # settings
                 elif filename == "settings.yaml":
                     self.log("Migrating settings.yaml...", True)
