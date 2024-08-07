@@ -172,6 +172,18 @@ class Wingman:
                     skill.threaded_execution = self.threaded_execution
 
                     validation_errors = await skill.validate()
+
+                    # Give the user 2*5 seconds to enter the secret if one is required and missing
+                    if any(
+                        error.error_type == "missing_secret"
+                        for error in validation_errors
+                    ):
+                        for _attempt in range(2):
+                            await asyncio.sleep(5)
+                            validation_errors = await skill.validate()
+                            if not validation_errors:
+                                break
+
                     errors.extend(validation_errors)
 
                     if len(errors) == 0:
