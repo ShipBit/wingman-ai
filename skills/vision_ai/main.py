@@ -4,19 +4,11 @@ from typing import TYPE_CHECKING
 from mss import mss
 from PIL import Image
 from api.enums import LogSource, LogType
-from api.interface import (
-    SettingsConfig,
-    SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill
-from services.printr import Printr
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
-
-printr = Printr()
+    from wingmen.open_ai_wingman import OpenAiWingman
 
 
 class VisionAI(Skill):
@@ -24,16 +16,10 @@ class VisionAI(Skill):
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-        super().__init__(
-            config=config,
-            wingman_config=wingman_config,
-            settings=settings,
-            wingman=wingman,
-        )
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
         self.display = 1
         self.show_screenshots = False
@@ -99,7 +85,7 @@ class VisionAI(Skill):
                 png_base64 = self.pil_image_to_base64(resized_image)
 
                 if self.show_screenshots:
-                    await printr.print_async(
+                    await self.printr.print_async(
                         "Analyzing this image",
                         color=LogType.INFO,
                         source=LogSource.WINGMAN,
@@ -139,6 +125,8 @@ class VisionAI(Skill):
                 )
 
                 if answer:
+                    if self.settings.debug_mode:
+                        await self.printr.print_async(f"Vision analysis: {answer}.", color=LogType.INFO)
                     function_response = answer
 
         return function_response, instant_response

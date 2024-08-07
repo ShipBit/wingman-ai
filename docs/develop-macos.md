@@ -47,3 +47,15 @@ This process is not trusted! Input event monitoring will not be possible until i
 ```
 
 Go to `System Settings > Privacy & Security > Accessibility` and enable VSCode there, too.
+
+## Setup whispercpp
+
+The release version of Wingman AI bundles and uses whispercpp as local STT service and autostarts the service when neeed.
+Unfortunately, this only works on Windows. On MacOS, you have to start the service manually.
+
+- Download the latest stable MacOS release from the [whispercpp repository](https://github.com/ggerganov/whisper.cpp/releases) or build it from source
+- Download a model and copy it to `whispercpp/models` directory. We recommend to start with the `ggml-base.bin` model.
+- Start whispercpp on the host and port configured in Wingman AI. You can check the Wingman AI client and it will tell you the exact start cmd to execute.
+- Restart Wingman AI Core and it should connect to your running whispercpp instance.
+
+You obviously can't change the whispercpp settings in the Wingman AI UI on MacOS but the UI might give you a hint on how you can configure whispercpp server.

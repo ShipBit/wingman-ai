@@ -1,20 +1,27 @@
+import os
 from typing import Optional
 from fastapi import APIRouter
-from api.enums import OpenAiTtsVoice
+from packaging.version import Version, InvalidVersion
+from api.enums import LogType, OpenAiTtsVoice
 from api.interface import (
     BasicWingmanConfig,
     ConfigDirInfo,
     ConfigWithDirInfo,
     ConfigsInfo,
+    NestedConfig,
     NewWingmanTemplate,
     SkillBase,
     WingmanConfig,
     WingmanConfigFileInfo,
 )
 from services.config_manager import ConfigManager
+from services.config_migration_service import ConfigMigrationService
+from services.file import get_users_dir
 from services.module_manager import ModuleManager
 from services.printr import Printr
 from services.pub_sub import PubSub
+from services.system_manager import SystemManager
+from services.tower import Tower
 
 
 class ConfigService:
@@ -22,10 +29,12 @@ class ConfigService:
         self.printr = Printr()
         self.config_manager = config_manager
         self.config_events = PubSub()
+        self.source_name = "Config Service"
 
         self.current_config_dir: ConfigDirInfo = (
             self.config_manager.find_default_config()
         )
+        self.tower: Tower = None
         self.current_config = None
 
         self.router = APIRouter()
@@ -133,6 +142,22 @@ class ConfigService:
             response_model=list[SkillBase],
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/config/defaults",
+            endpoint=self.get_defaults_config,
+            response_model=NestedConfig,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/defaults",
+            endpoint=self.save_defaults_config,
+            tags=tags,
+        )
+
+    def set_tower(self, tower: Tower):
+        self.tower = tower
 
     # GET /available-skills
     def get_available_skills(self):
@@ -160,9 +185,8 @@ class ConfigService:
         if config_name and len(config_name) > 0:
             config_dir = self.config_manager.get_config_dir(config_name)
 
-        config_info = await self.load_config(config_dir)
-
-        return config_info
+        loaded_config_dir, config = self.config_manager.parse_config(config_dir)
+        return ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
 
     # GET /config-dir-path
     def get_config_dir_path(self, config_name: Optional[str] = ""):
@@ -173,7 +197,7 @@ class ConfigService:
         self, config_dir: Optional[ConfigDirInfo] = None
     ) -> ConfigWithDirInfo:
         try:
-            loaded_config_dir, config = self.config_manager.load_config(config_dir)
+            loaded_config_dir, config = self.config_manager.parse_config(config_dir)
         except Exception as e:
             self.printr.toast_error(str(e))
             raise e
@@ -183,6 +207,13 @@ class ConfigService:
 
         config_dir_info = ConfigWithDirInfo(config=config, config_dir=loaded_config_dir)
         await self.config_events.publish("config_loaded", config_dir_info)
+
+        await self.printr.print_async(
+            f"Loaded config: {loaded_config_dir.name}.",
+            color=LogType.HIGHLIGHT,
+            source_name=self.source_name,
+            command_tag="config_loaded",
+        )
 
         return config_dir_info
 
@@ -240,12 +271,12 @@ class ConfigService:
             avatar=avatar,
         )
 
-        await self.save_wingman_config(
+        self.config_manager.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
-            auto_recover=False,
         )
+        await self.load_config(config_dir)
 
     # POST config/save-wingman
     async def save_wingman_config(
@@ -253,37 +284,52 @@ class ConfigService:
         config_dir: ConfigDirInfo,
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
-        auto_recover: bool = False,
         silent: bool = False,
+        validate: bool = False,
+        update_skills: bool = False,
     ):
+        # update the wingman
+        wingman = self.tower.get_wingman_by_name(wingman_file.name)
+        if not wingman:
+            # try to enable a previously disabled wingman
+            disabled_config = self.tower.get_disabled_wingman_by_name(
+                wingman_config.name
+            )
+            if disabled_config and not wingman_config.disabled:
+                enabled = await self.tower.enable_wingman(
+                    wingman_name=wingman_config.name,
+                    settings=self.config_manager.settings_config,
+                )
+                if enabled:
+                    # now this should work
+                    wingman = self.tower.get_wingman_by_name(wingman_file.name)
+            # else fail
+            if not wingman:
+                self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
+                return
+
+        updated = await wingman.update_config(
+            config=wingman_config, validate=validate, update_skills=update_skills
+        )
+
+        if not updated:
+            self.printr.toast_error(
+                f"New config for Wingman '{wingman_config.name}' is invalid."
+            )
+            return
+
+        # save the config file
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
         )
-        try:
-            if not silent:
-                await self.load_config(config_dir)
-                self.printr.toast("Wingman saved successfully.")
-        except Exception:
-            error_message = "Invalid Wingman configuration."
-            if auto_recover:
-                deleted = self.config_manager.delete_wingman_config(
-                    config_dir, wingman_file
-                )
-                if deleted:
-                    self.config_manager.copy_templates()
 
-                await self.load_config(config_dir)
-
-                restored_message = (
-                    "Deleted broken config (and restored default if there is a template for it)."
-                    if deleted
-                    else ""
-                )
-                self.printr.toast_error(f"{error_message} {restored_message}")
-            else:
-                self.printr.toast_error(f"{error_message}")
+        message = f"Wingman {wingman_config.name}'s config changed."
+        if not silent:
+            self.printr.toast(message)
+        else:
+            self.printr.print(text=message, server_only=True)
 
     # POST config/save-wingman-basic
     async def save_basic_wingman_config(
@@ -292,12 +338,27 @@ class ConfigService:
         wingman_file: WingmanConfigFileInfo,
         basic_config: BasicWingmanConfig,
         silent: bool = False,
+        validate: bool = False,
     ):
-        # get the current config
-        wingman_config = self.config_manager.load_wingman_config(
-            config_dir=config_dir, wingman_file=wingman_file
-        )
+        # update the wingman
+        wingman = self.tower.get_wingman_by_name(wingman_file.name)
+        if not wingman:
+            # try to enable a previously disabled wingman
+            disabled_config = self.tower.get_disabled_wingman_by_name(basic_config.name)
+            if disabled_config and not basic_config.disabled:
+                enabled = await self.tower.enable_wingman(
+                    wingman_name=basic_config.name,
+                    settings=self.config_manager.settings_config,
+                )
+                if enabled:
+                    # now this should work
+                    wingman = self.tower.get_wingman_by_name(wingman_file.name)
+            # else fail
+            if not wingman:
+                self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
+                return
 
+        wingman_config = wingman.config
         wingman_config.name = basic_config.name
         wingman_config.disabled = basic_config.disabled
         wingman_config.record_key = basic_config.record_key
@@ -309,17 +370,31 @@ class ConfigService:
         except ValueError:
             wingman_config.azure.tts.voice = basic_config.voice
 
+        updated = await wingman.update_config(config=wingman_config, validate=validate)
+
+        if not updated:
+            self.printr.toast_error(
+                f"New config for Wingman '{wingman_config.name}' is invalid."
+            )
+            return
+
+        renamed = wingman_file.name != wingman_config.name
+
+        # save the config file
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
             wingman_config=wingman_config,
         )
-        try:
-            if not silent:
-                await self.load_config(config_dir)
-                self.printr.toast("Wingman saved successfully.")
-        except Exception as e:
-            self.printr.toast_error(f"Invalid Wingman configuration: {str(e)}")
+
+        if renamed:
+            await self.load_config(config_dir=config_dir)
+
+        message = f"Wingman {wingman_config.name}'s basic config changed."
+        if not silent:
+            self.printr.toast(message)
+        else:
+            self.printr.print(text=message, server_only=True)
 
     # POST config/wingman/default
     async def set_default_wingman(
@@ -327,35 +402,135 @@ class ConfigService:
         config_dir: ConfigDirInfo,
         wingman_name: str,
     ):
-        _dir, config = self.config_manager.load_config(config_dir)
+        _dir, config = self.config_manager.parse_config(config_dir)
         wingman_config_files = await self.get_wingmen_config_files(config_dir.name)
 
-        # Check if the wingman_name is already the default
-        already_default = any(
-            (
-                config.wingmen[file.name].name == wingman_name
-                and config.wingmen[file.name].is_voice_activation_default
-            )
-            for file in wingman_config_files
-        )
+        made_changes = False
 
         for wingman_config_file in wingman_config_files:
+            if wingman_config_file.is_deleted:
+                continue
+
             wingman_config = config.wingmen[wingman_config_file.name]
 
-            if already_default:
-                # If wingman_name is already default, undefault it
-                wingman_config.is_voice_activation_default = False
+            if wingman_config_file.name == wingman_name:
+                if (
+                    hasattr(wingman_config, "is_voice_activation_default")
+                    and wingman_config.is_voice_activation_default
+                ):
+                    # Undefault the current default wingman
+                    wingman_config.is_voice_activation_default = False
+                    made_changes = True
+                else:
+                    # Set the new default if it's not already
+                    wingman_config.is_voice_activation_default = True
+                    made_changes = True
             else:
-                # Set the new default
-                wingman_config.is_voice_activation_default = (
-                    wingman_config.name == wingman_name
-                )
+                if wingman_config.is_voice_activation_default:
+                    # Ensure other wingmen are not default
+                    wingman_config.is_voice_activation_default = False
+                    made_changes = True
 
-            await self.save_wingman_config(
-                config_dir=config_dir,
-                wingman_file=wingman_config_file,
-                wingman_config=wingman_config,
-                silent=True,
+            # Only save if there's a change
+            if made_changes:
+                await self.save_wingman_config(
+                    config_dir=config_dir,
+                    wingman_file=wingman_config_file,
+                    wingman_config=wingman_config,
+                    silent=True,
+                )
+                made_changes = False
+
+    # GET config/defaults
+    async def get_defaults_config(self):
+        return self.config_manager.load_defaults_config()
+
+    # POST config/defaults
+    async def save_defaults_config(
+        self,
+        config: NestedConfig,
+        silent: bool = False,
+        validate: bool = False,
+    ):
+        # save the defaults config file
+        self.config_manager.default_config = config
+        saved = self.config_manager.save_defaults_config()
+
+        if not saved:
+            self.printr.toast_error("Failed to save default configuration.")
+            return
+
+        message = "Default configuration changed."
+        if not silent:
+            self.printr.toast(message)
+        else:
+            self.printr.print(text=message, server_only=True)
+
+        # rewrite the Wingman config in each config dir, building a new diff to the the new defaults
+        for config_dir in self.config_manager.get_config_dirs():
+            for wingman_file in await self.get_wingmen_config_files(config_dir.name):
+                wingman = self.tower.get_wingman_by_name(wingman_file.name)
+
+                if wingman:
+                    # load the wingman config from file so that the new defaults take effect
+                    # if we'd use wingman.config, it would still have the old defaults and detect its diffs as changes
+                    wingman_config = self.config_manager.load_wingman_config(
+                        config_dir=config_dir, wingman_file=wingman_file
+                    )
+                    # active wingman that needs to be updated and saved
+                    await self.save_wingman_config(
+                        config_dir=config_dir,
+                        wingman_file=wingman_file,
+                        wingman_config=wingman_config,
+                        silent=silent,
+                        validate=validate,
+                    )
+
+                else:
+                    # wingman in inactive config - just save the file
+                    wingman_config = self.config_manager.load_wingman_config(
+                        config_dir=config_dir, wingman_file=wingman_file
+                    )
+                    if self.config_manager.save_wingman_config(
+                        config_dir=config_dir,
+                        wingman_file=wingman_file,
+                        wingman_config=wingman_config,
+                    ):
+                        self.printr.print(
+                            text=f"Inactive Wingman '{wingman_config.name}'s config saved.",
+                            server_only=True,
+                        )
+
+    async def migrate_configs(self, system_manager: SystemManager):
+        current_version: str = system_manager.get_local_version()
+        current_version_str = str(current_version).replace(".", "_")
+        version_path = get_users_dir()
+
+        def version_key(version_str):
+            try:
+                return Version(version_str.replace("_", "."))
+            except InvalidVersion:
+                return Version("0.0.0")  # Placeholder for invalid versions
+
+        valid_versions = [
+            v for v in os.listdir(version_path) if version_key(v) > Version("0.0.0")
+        ]
+        all_versions = sorted(valid_versions, key=version_key)
+
+        if current_version_str not in all_versions:
+            raise ValueError(
+                f"Current version {current_version} not found in the directory."
             )
 
-        await self.load_config(config_dir)
+        current_index = all_versions.index(current_version_str)
+
+        if current_index == 0:
+            return  # Current version is the oldest, no migrations needed
+
+        previous_version_str = all_versions[current_index - 1]
+        migration_func_name = f"migrate_{previous_version_str.replace('_', '')}_to_{current_version_str.replace('_', '')}"
+
+        migraton_service = ConfigMigrationService(config_manager=self.config_manager)
+        if hasattr(migraton_service, migration_func_name):
+            migration_func = getattr(migraton_service, migration_func_name)
+            migration_func()

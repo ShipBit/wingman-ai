@@ -39,6 +39,7 @@ class CommandTag(Enum):
     PLAYBACK_STARTED = "playback_started"
     PLAYBACK_STOPPED = "playback_stopped"
     UNAUTHORIZED = "unauthorized"
+    CONFIG_LOADED = "config_loaded"
 
 
 class CustomPropertyType(Enum):
@@ -47,6 +48,8 @@ class CustomPropertyType(Enum):
     NUMBER = "number"
     BOOLEAN = "boolean"
     SINGLE_SELECT = "single_select"
+    VOICE_SELECTION = "voice_selection"
+    SLIDER = "slider"
 
 
 class AzureApiVersion(Enum):
@@ -59,12 +62,6 @@ class AzureRegion(Enum):
     NORTHCENTRALUS = "northcentralus"
 
 
-class ElevenlabsModel(Enum):
-    ELEVEN_MULTILINGUAL_V2 = "eleven_multilingual_v2"
-    ELEVEN_TURBO_V2 = "eleven_turbo_v2"
-    ELEVEN_MONOLINGUAL_V1 = "eleven_monolingual_v1"
-
-
 class TtsVoiceGender(Enum):
     UNKNOWN = "Unknown"
     MALE = "Male"
@@ -75,6 +72,7 @@ class OpenAiModel(Enum):
     """https://platform.openai.com/docs/models/overview"""
 
     GPT_4O = "gpt-4o"
+    GPT_4O_MINI = "gpt-4o-mini"
 
 
 class MistralModel(Enum):
@@ -88,17 +86,14 @@ class MistralModel(Enum):
     MISTRAL_LARGE = "mistral-large-latest"
 
 
-class GroqModel(Enum):
-    """https://console.groq.com/docs/models"""
-
-    LLAMA3_8B_8192 = "llama3-8b-8192"
-    LLAMA3_70B_8192 = "llama3-70b-8192"
-    MIXTRAL_8X7B = "mixtral-8x7b-32768"
-    GEMMA_7B = "gemma-7b-it"
+class GoogleAiModel(Enum):
+    GEMINI_1_5_FLASH = "gemini-1.5-flash"
+    GEMINI_1_5_PRO = "gemini-1.5-pro"
 
 
 class WingmanProAzureDeployment(Enum):
     GPT_4O = "gpt-4o"
+    GPT_4O_MINI = "gpt-4o-mini"
     MISTRAL_LARGE = "mistral-large-latest"
     LLAMA3_8B = "llama3-8b"
     LLAMA3_70B = "llama3-70b"
@@ -155,19 +150,11 @@ class ConversationProvider(Enum):
     LOCAL_LLM = "local_llm"
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
+    GOOGLE = "google"
+
 
 class ImageGenerationProvider(Enum):
     OPENAI = "openai"
-    WINGMAN_PRO = "wingman_pro"
-
-
-class SummarizeProvider(Enum):
-    OPENAI = "openai"
-    MISTRAL = "mistral"
-    GROQ = "groq"
-    OPENROUTER = "openrouter"
-    LOCAL_LLM = "local_llm"
-    AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
 
 
@@ -190,6 +177,13 @@ class WingmanProSttProvider(Enum):
 class WingmanProTtsProvider(Enum):
     AZURE = "azure"
     OPENAI = "openai"
+
+
+class SkillCategory(Enum):
+    GENERAL = "general"
+    STAR_CITIZEN = "star_citizen"
+    TRUCK_SIMULATOR = "truck_simulator"
+    NO_MANS_SKY = "no_mans_sky"
 
 
 # Pydantic models for enums
@@ -233,10 +227,6 @@ class AzureRegionEnumModel(BaseEnumModel):
     region: AzureRegion
 
 
-class ElevenlabsModelEnumModel(BaseEnumModel):
-    model: ElevenlabsModel
-
-
 class TtsVoiceGenderEnumModel(BaseEnumModel):
     gender: TtsVoiceGender
 
@@ -249,8 +239,8 @@ class MistralModelEnumModel(BaseEnumModel):
     model: MistralModel
 
 
-class GroqModelEnumModel(BaseEnumModel):
-    model: GroqModel
+class GoogleAiModelEnumModel(BaseEnumModel):
+    model: GoogleAiModel
 
 
 class WingmanProAzureDeploymentEnumModel(BaseEnumModel):
@@ -280,12 +270,9 @@ class VoiceActivationSttProviderEnumModel(BaseEnumModel):
 class ConversationProviderEnumModel(BaseEnumModel):
     conversation_provider: ConversationProvider
 
+
 class ImageGenerationProviderEnumModel(BaseEnumModel):
     image_generation_provider: ImageGenerationProvider
-
-
-class SummarizeProviderEnumModel(BaseEnumModel):
-    summarize_provider: SummarizeProvider
 
 
 class KeyboardRecordingTypeModel(BaseEnumModel):
@@ -304,6 +291,10 @@ class WingmanProTtsProviderModel(BaseEnumModel):
     tts_provider: WingmanProTtsProvider
 
 
+class SkillCategoryModel(BaseEnumModel):
+    category: SkillCategory
+
+
 # Add all additional Pydantic models for enums as needed
 
 
@@ -317,11 +308,10 @@ ENUM_TYPES = {
     "CustomPropertyType": CustomPropertyTypeEnumModel,
     "AzureApiVersion": AzureApiVersionEnumModel,
     "AzureRegion": AzureRegionEnumModel,
-    "ElevenlabsModel": ElevenlabsModelEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "OpenAiModel": OpenAiModelEnumModel,
     "MistralModel": MistralModelEnumModel,
-    "GroqModel": GroqModelEnumModel,
+    "GoogleAiModel": GoogleAiModelEnumModel,
     "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,
@@ -329,11 +319,11 @@ ENUM_TYPES = {
     "SttProvider": SttProviderEnumModel,
     "VoiceActivationSttProvider": VoiceActivationSttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
-    "SummarizeProvider": SummarizeProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
     "WingmanProRegion": WingmanProRegionModel,
     "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
+    "SkillCategory": SkillCategoryModel,
     # Add new enums here as key-value pairs
 }
 

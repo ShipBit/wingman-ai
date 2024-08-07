@@ -41,11 +41,14 @@ class AudioPlayer:
     def set_event_loop(self, loop: asyncio.AbstractEventLoop):
         self.event_loop = loop
 
-    def start_playback(self, audio, sample_rate, channels, finished_callback):
+    def start_playback(
+        self, audio, sample_rate, channels, finished_callback, volume: float
+    ):
         def callback(outdata, frames, time, status):
             nonlocal playhead
             chunksize = frames * channels
 
+            # If we are at the end of the audio buffer, stop playback
             if playhead * channels >= len(audio):
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata.fill(0.0)  # Fill with zero for floats
@@ -55,44 +58,57 @@ class AudioPlayer:
                     )  # Fill with zeros for buffer of int types
                 raise sd.CallbackStop
 
-            end = min(playhead + chunksize, len(audio) // channels)
+            # Define the end of the current chunk
+            end = min(playhead + chunksize, len(audio))
             current_chunk = audio[playhead:end]
 
+            # Handle multi-channel conversion if necessary
             if channels > 1 and current_chunk.ndim == 1:
-                current_chunk = np.tile(current_chunk[:, None], (1, channels)).flatten()
+                current_chunk = np.tile(current_chunk[:, np.newaxis], (1, channels))
 
-            # It's critical that current_chunk matches the number of elements in outdata
+            # Flat the chunk
+            current_chunk = current_chunk.ravel()
+
             required_length = frames * channels
-            current_chunk = current_chunk[:required_length]
 
+            # Ensure current_chunk has the required length
             if len(current_chunk) < required_length:
-                current_chunk = np.pad(
-                    current_chunk, (0, required_length - len(current_chunk)), "constant"
-                )
-
-            if outdata.dtype == np.float32 or outdata.dtype == np.float64:
-                outdata[:required_length] = current_chunk.astype(outdata.dtype).reshape(
-                    outdata.shape
-                )
+                padding_length = required_length - len(current_chunk)
+                current_chunk = np.pad(current_chunk, (0, padding_length), "constant")
             else:
-                current_chunk_bytes = current_chunk.astype(outdata.dtype).tobytes()
-                outdata[: len(current_chunk_bytes)] = current_chunk_bytes[
-                    : len(outdata)
-                ]
+                current_chunk = current_chunk[:required_length]
 
-            playhead += chunksize
+            # Reshape current_chunk to match outdata's shape, only if size matches
+            try:
+                current_chunk = current_chunk.reshape((frames, channels))
+                current_chunk = current_chunk * volume
+                if np.issubdtype(outdata.dtype, np.floating):
+                    outdata[:] = current_chunk.astype(outdata.dtype)
+                else:
+                    outdata_bytes = current_chunk.astype(outdata.dtype).tobytes()
+                    outdata_flat = np.frombuffer(outdata_bytes, dtype=outdata.dtype)
+                    outdata[:] = outdata_flat.reshape(outdata.shape)
+            except ValueError as e:
+                print(f"Reshape error: {e}")
+                outdata.fill(
+                    0.0 if np.issubdtype(outdata.dtype, np.floating) else 0
+                )  # Safely fill zero to avoid noise
 
-            if end >= len(audio):
+            # Update playhead
+            playhead = end
+
+            # Check if playback should stop (end of audio)
+            if playhead >= len(audio):
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata.fill(0.0)  # Fill with zero for floats
                 else:
-                    outdata[:] = bytes(
-                        len(outdata)
-                    )  # Fill with zeros buffer of int types
+                    outdata[:] = bytes(len(outdata))
                 raise sd.CallbackStop
 
-        playhead = 0  # Tracks the position in the audio
+        # Initial playhead position
+        playhead = 0
 
+        # Create and start the audio stream
         self.stream = sd.OutputStream(
             samplerate=sample_rate,
             channels=channels,
@@ -170,7 +186,7 @@ class AudioPlayer:
 
         playback_thread = Thread(
             target=self.start_playback,
-            args=(audio, sample_rate, channels, finished_callback),
+            args=(audio, sample_rate, channels, finished_callback, config.volume),
         )
         playback_thread.start()
 
@@ -189,11 +205,11 @@ class AudioPlayer:
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
 
-    def play_wav(self, audio_sample_file: str):
+    def play_wav(self, audio_sample_file: str, volume: float):
         beep_audio, beep_sample_rate = self.get_audio_from_file(
             path.join(self.sample_dir, audio_sample_file)
         )
-        self.start_playback(beep_audio, beep_sample_rate, 1, None)
+        self.start_playback(beep_audio, beep_sample_rate, 1, None, volume)
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")
@@ -324,11 +340,16 @@ class AudioPlayer:
                 if mixed_pos >= len(noise_audio):
                     mixed_pos = 0
                 end_pos = min(len(noise_audio), mixed_pos + remaining)
+
+                num_samples_to_copy = end_pos - mixed_pos
+                if num_samples_to_copy > remaining:
+                    num_samples_to_copy = remaining
+
                 chunk[
-                    length - remaining : length - remaining + (end_pos - mixed_pos)
-                ] = noise_audio[mixed_pos:end_pos]
-                remaining -= end_pos - mixed_pos
-                mixed_pos = end_pos
+                    length - remaining : length - remaining + num_samples_to_copy
+                ] = noise_audio[mixed_pos:(mixed_pos + num_samples_to_copy)]
+                remaining -= num_samples_to_copy
+                mixed_pos = mixed_pos + num_samples_to_copy
             return chunk
 
         def callback(outdata, frames, time, status):
@@ -364,6 +385,7 @@ class AudioPlayer:
                     )
 
                 data_chunk = data_chunk.flatten()
+                data_chunk = data_chunk * config.volume
                 data_chunk_bytes = data_chunk.astype(dtype).tobytes()
                 outdata[: len(data_chunk_bytes)] = data_chunk_bytes[: len(outdata)]
                 buffer = buffer[num_elements * byte_size :]
@@ -382,13 +404,13 @@ class AudioPlayer:
             await self.notify_playback_started(wingman_name)
 
             if config.play_beep:
-                self.play_wav("beep.wav")
+                self.play_wav("beep.wav", config.volume)
             elif config.play_beep_apollo:
-                self.play_wav("Apollo_Beep.wav")
+                self.play_wav("Apollo_Beep.wav", config.volume)
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
             if contains_high_end_radio:
-                self.play_wav("Radio_Static_Beep.wav")
+                self.play_wav("Radio_Static_Beep.wav", config.volume)
 
             self.raw_stream.start()
 
@@ -413,6 +435,7 @@ class AudioPlayer:
                     amplitude_factor = 10 ** (mix_layer_gain_boost_db / 20)
                     data_in_numpy = data_in_numpy + noise_chunk * amplitude_factor
 
+                data_in_numpy = data_in_numpy * config.volume
                 processed_buffer = data_in_numpy.astype(dtype).tobytes()
                 buffer.extend(processed_buffer)
                 await self.stream_event.publish("audio", processed_buffer)
@@ -424,12 +447,12 @@ class AudioPlayer:
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
             if contains_high_end_radio:
-                self.play_wav("Radio_Static_Beep.wav")
+                self.play_wav("Radio_Static_Beep.wav", config.volume)
 
             if config.play_beep:
-                self.play_wav("beep.wav")
+                self.play_wav("beep.wav", config.volume)
             elif config.play_beep_apollo:
-                self.play_wav("Apollo_Beep.wav")
+                self.play_wav("Apollo_Beep.wav", config.volume)
 
             self.is_playing = False
             await self.notify_playback_finished(wingman_name)

@@ -5,28 +5,28 @@ from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
-    WingmanConfig,
     WingmanInitializationError,
 )
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
+
 
 class Skill:
+    """DO NOT cache wingman.config or other wingman properties in your skill! Access them when needed using self.wingman.config.property_name."""
+
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-
         self.config = config
         self.settings = settings
-        self.wingman_config = wingman_config
         self.wingman = wingman
+
         self.secret_keeper = SecretKeeper()
         self.name = self.__class__.__name__
         self.printr = Printr()
@@ -36,6 +36,14 @@ class Skill:
     async def validate(self) -> list[WingmanInitializationError]:
         """Validates the skill configuration."""
         return []
+
+    async def unload(self) -> None:
+        """Unload the skill. Use this hook to clear background tasks, etc."""
+        pass
+
+    async def prepare(self) -> None:
+        """Prepare the skill. Use this hook to initialize background tasks, etc."""
+        pass
 
     def get_tools(self) -> list[tuple[str, dict]]:
         """Returns a list of tools available in the skill."""
@@ -62,7 +70,7 @@ class Skill:
     async def is_summarize_needed(self, tool_name: str) -> bool:
         """Returns whether a tool needs to be summarized."""
         return True
-    
+
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         """Returns whether a tool probably takes long and a message should be printet in between."""
         return False

@@ -34,10 +34,9 @@ class Printr(WebSocketUser):
             ch = logging.StreamHandler()
             ch.setLevel(logging.INFO)
             cls._instance.logger.addHandler(ch)
-            now = datetime.now()
-            dateTimeStr = now.strftime("%Y-%m-%d-%H-%M-%S")
+            date_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
             fh = logging.FileHandler(
-                path.join(get_writable_dir("logs"), f"wingman-core.{dateTimeStr}.log")
+                path.join(get_writable_dir("logs"), f"wingman-core.{date_time_str}.log")
             )
             fh.setLevel(logging.INFO)
             cls._instance.logger.addHandler(fh)
@@ -139,7 +138,7 @@ class Printr(WebSocketUser):
         self.print(text, toast=ToastType.WARNING)
 
     def toast_error(self, text: str):
-        self.print(text, toast=ToastType.ERROR)
+        self.print(text, toast=ToastType.ERROR, color=LogType.ERROR)
 
     # INTERNAL METHODS
 

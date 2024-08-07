@@ -1,5 +1,6 @@
 name: Spotify
 module: skills.spotify.main
+category: general
 description:
   en: Control Spotify using the the WebAPI. Play songs, artists playlists. Control playback, volume, and more. All powered by AI!
   de: Steuere Spotify mit der WebAPI. Spiele Lieder, Künstler und Playlists ab. Steuere die Wiedergabe, Lautstärke und mehr. Alles von KI gesteuert!

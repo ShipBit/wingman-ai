@@ -1,17 +1,22 @@
+from copy import deepcopy
 import random
 import time
 import difflib
 import asyncio
 import threading
+from typing import Optional
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
     CommandConfig,
     SettingsConfig,
+    SoundConfig,
     WingmanConfig,
     WingmanInitializationError,
 )
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
+from providers.whispercpp import Whispercpp
+from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
@@ -34,6 +39,8 @@ class Wingman:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        whispercpp: Whispercpp,
+        xvasynth: XVASynth,
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
@@ -60,14 +67,11 @@ class Wingman:
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
-        self.debug: bool = self.settings.debug_mode
-        """If enabled, the Wingman will print more debug messages and benchmark results."""
+        self.whispercpp = whispercpp
+        """A class that handles the communication with the Whispercpp server for transcription."""
 
-        self.tts_provider = self.config.features.tts_provider
-        self.stt_provider = self.config.features.stt_provider
-        self.conversation_provider = self.config.features.conversation_provider
-        self.summarize_provider = self.config.features.summarize_provider
-        self.image_generation_provider = self.config.features.image_generation_provider
+        self.xvasynth = xvasynth
+        """A class that handles the communication with the XVASynth server for TTS."""
 
         self.skills: list[Skill] = []
 
@@ -136,20 +140,30 @@ class Wingman:
 
         You can override it if you need to load async data from an API or file."""
 
+    async def unload(self):
+        """This method is called when the Wingman is unloaded by Tower. You can override it if you need to clean up resources."""
+
+    async def unload_skills(self):
+        """Call this to trigger unload for all skills."""
+        for skill in self.skills:
+            await skill.unload()
+
     async def init_skills(self) -> list[WingmanInitializationError]:
-        """This method is called only once when the Wingman is instantiated by Tower.
+        """This method is called when the Wingman is instantiated by Tower or when a skill's config changes.
         It is run AFTER validate() so you can access validated params safely here.
         It is used to load and init the skills of the Wingman."""
+        if self.skills:
+            await self.unload_skills()
+
         errors = []
-        skills_config = self.config.skills
-        if not skills_config:
+        self.skills = []
+        if not self.config.skills:
             return errors
 
-        for skill_config in skills_config:
+        for skill_config in self.config.skills:
             try:
                 skill = ModuleManager.load_skill(
                     config=skill_config,
-                    wingman_config=self.config,
                     settings=self.settings,
                     wingman=self,
                 )
@@ -158,11 +172,24 @@ class Wingman:
                     skill.threaded_execution = self.threaded_execution
 
                     validation_errors = await skill.validate()
+
+                    # Give the user 2*5 seconds to enter the secret if one is required and missing
+                    if any(
+                        error.error_type == "missing_secret"
+                        for error in validation_errors
+                    ):
+                        for _attempt in range(2):
+                            await asyncio.sleep(5)
+                            validation_errors = await skill.validate()
+                            if not validation_errors:
+                                break
+
                     errors.extend(validation_errors)
 
                     if len(errors) == 0:
                         self.skills.append(skill)
                         await self.prepare_skill(skill)
+                        await skill.prepare()
                         printr.print(
                             f"Skill '{skill_config.name}' loaded successfully.",
                             color=LogType.INFO,
@@ -215,14 +242,14 @@ class Wingman:
 
         process_result = None
 
-        if self.debug and not transcript:
+        if self.settings.debug_mode and not transcript:
             await printr.print_async("Starting transcription...", color=LogType.INFO)
 
         if not transcript:
             # transcribe the audio.
             transcript = await self._transcribe(audio_input_wav)
 
-        if self.debug and not transcript:
+        if self.settings.debug_mode and not transcript:
             await self.print_execution_time(reset_timer=True)
 
         if transcript:
@@ -233,7 +260,7 @@ class Wingman:
                 source=LogSource.USER,
             )
 
-            if self.debug:
+            if self.settings.debug_mode:
                 await printr.print_async(
                     "Getting response for transcript...", color=LogType.INFO
                 )
@@ -243,7 +270,7 @@ class Wingman:
                 await self._get_response_for_transcript(transcript)
             )
 
-            if self.debug:
+            if self.settings.debug_mode:
                 await self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
@@ -288,12 +315,18 @@ class Wingman:
         """
         return ("", "", None)
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False):
+    async def play_to_user(
+        self,
+        text: str,
+        no_interrupt: bool = False,
+        sound_config: Optional[SoundConfig] = None,
+    ):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
             text (str): The response of your _get_response_for_transcript. This is usually the "response" from conversation with the AI.
             no_interrupt (bool): prevent interrupting the audio playback
+            sound_config (SoundConfig): An optional sound configuration to use for the playback. If unset, the Wingman's sound config is used.
         """
         pass
 
@@ -332,7 +365,9 @@ class Wingman:
 
         return random.choice(command_responses)
 
-    async def _execute_instant_activation_command(self, transcript: str) -> list[CommandConfig] | None:
+    async def _execute_instant_activation_command(
+        self, transcript: str
+    ) -> list[CommandConfig] | None:
         """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
 
         Args:
@@ -353,7 +388,9 @@ class Wingman:
                         commands_by_instant_activation[phrase.lower()] = [command]
 
         # find best matching phrase
-        phrase = difflib.get_close_matches(transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8)
+        phrase = difflib.get_close_matches(
+            transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8
+        )
 
         # if no phrase found, return None
         if not phrase:
@@ -384,7 +421,7 @@ class Wingman:
             await printr.print_async(
                 f"Executing command: {command.name}", color=LogType.INFO
             )
-            if not self.debug:
+            if not self.settings.debug_mode:
                 # in debug mode we already printed the separate execution times
                 await self.print_execution_time()
             self.execute_action(command)
@@ -481,6 +518,7 @@ class Wingman:
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
+
         def start_thread(function, *args):
             new_loop = asyncio.new_event_loop()
             asyncio.set_event_loop(new_loop)
@@ -490,3 +528,32 @@ class Wingman:
         thread = threading.Thread(target=start_thread, args=(function, *args))
         thread.start()
         return thread
+
+    async def update_config(
+        self, config: WingmanConfig, validate=False, update_skills=False
+    ):
+        """Update the config of the Wingman. This method should always be called if the config of the Wingman has changed."""
+        if validate:
+            old_config = deepcopy(self.config)
+
+        self.config = config
+
+        if update_skills:
+            await self.init_skills()
+
+        if validate:
+            errors = await self.validate()
+
+            for error in errors:
+                if error.error_type != WingmanInitializationErrorType.MISSING_SECRET:
+                    self.config = old_config
+                    return False
+
+        return True
+
+    async def update_settings(self, settings: SettingsConfig):
+        """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
+        self.settings = settings
+        await self.init_skills()
+
+        printr.print(f"Wingman {self.name}'s settings changed", server_only=True)

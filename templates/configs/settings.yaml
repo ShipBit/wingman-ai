@@ -4,26 +4,27 @@ voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
   energy_threshold: 0.01
-
-  stt_provider: wingman_pro # or azure, whispercpp, openai
-
+  stt_provider: whispercpp # azure, whispercpp, openai
   azure:
     region: westeurope
     languages:
       - en-US
       - de-DE
-
   whispercpp:
-    base_url: http://127.0.0.1:8080
-    autostart: false
-    autostart_settings:
-      whispercpp_exe_path: C:\Whispercpp\server.exe
-      whispercpp_model_path: C:\Whispercpp\models\ggml-base.bin
+    host: http://127.0.0.1
+    port: 8080
+    model: ggml-base.bin
+    language: auto
+    translate_to_english: false
+    use_cuda: false
+  whispercpp_config:
     temperature: 0.0
-    language: en
-
-# todo: OpenAI base_url and organization
-
 wingman_pro:
   base_url: https://wingman-ai.azurewebsites.net
   region: europe
+xvasynth:
+  enable: false
+  host: http://127.0.0.1
+  port: 8008
+  install_dir: C:\Program Files (x86)\Steam\steamapps\common\xVASynth
+  process_device: cpu

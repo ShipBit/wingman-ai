@@ -1,5 +1,6 @@
 name: VoiceChanger
 module: skills.voice_changer.main
+category: general
 description:
   en: Changes the voice of your Wingman automatically. Customize it to your liking.
   de: Wechselt die Stimme deines Wingman automatisch. Konfigurierbar nach eigenen Vorlieben.
@@ -18,10 +19,13 @@ custom_properties:
     property_type: boolean
   - id: voice_changer_voices
     name: Available voices
-    hint: A list of voices seperated by commas. (voicename or provider.voicename) For example -> "elevenlabs.Alice, elevenlabs.zcAOhNBS3c14rBihAFp1, openai.nova, wingman_pro.azure.en-US-EmmaNeural"
-    value: ""
+    hint: The voices your Wingman can use.
+    value: []
     required: false
-    property_type: string
+    property_type: voice_selection
+    options:
+      - label: "multiple"
+        value: true
   - id: voice_changer_personalityprompt
     name: Personality Prompt
     hint: A prompt used on voice change to generate a new personality. Leave empty to disable.

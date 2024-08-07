@@ -1,25 +1,20 @@
 from typing import Optional
 from typing_extensions import Annotated, TypedDict
-from pydantic import (
-    Base64Str,
-    BaseModel,
-    Field,
-)
+from pydantic import Base64Str, BaseModel, Field, model_validator
 from api.enums import (
     AzureApiVersion,
     AzureRegion,
     ConversationProvider,
-    GroqModel,
+    GoogleAiModel,
     ImageGenerationProvider,
     MistralModel,
     CustomPropertyType,
+    SkillCategory,
     TtsVoiceGender,
-    ElevenlabsModel,
     OpenAiModel,
     OpenAiTtsVoice,
     SoundEffect,
     SttProvider,
-    SummarizeProvider,
     TtsProvider,
     VoiceActivationSttProvider,
     WingmanInitializationErrorType,
@@ -115,17 +110,27 @@ class AudioSettings(BaseModel):
     output: Optional[int | AudioDeviceSettings] = None
 
 
-class WhispercppAutostartSettingsConfig(BaseModel):
-    whispercpp_exe_path: str
-    whispercpp_model_path: str
+class WhispercppSettings(BaseModel):
+    host: str
+    port: int
+    model: str
+    language: str
+    translate_to_english: bool
+    use_cuda: bool
+
+
+class XVASynthSettings(BaseModel):
+    enable: bool
+    host: str
+    port: int
+    install_dir: str
+    """The path to your installation of XVASynth. Usually in your Steam installation directory."""
+    process_device: str
+    """Can be cpu or gpu. You may need to take additional steps to have XVASynth run on your GPU."""
 
 
 class WhispercppSttConfig(BaseModel):
-    base_url: str
-    autostart: bool
-    autostart_settings: Optional[WhispercppAutostartSettingsConfig] = None
     temperature: float
-    language: str
 
 
 class WhispercppTranscript(BaseModel):
@@ -164,9 +169,40 @@ class AzureConfig(BaseModel):
 
     whisper: AzureInstanceConfig
     conversation: AzureInstanceConfig
-    summarize: AzureInstanceConfig
     tts: AzureTtsConfig
     stt: AzureSttConfig
+
+
+class ElevenlabsLanguage(BaseModel):
+    language_id: str
+    name: str
+
+
+class ElevenlabsModelMetadata(BaseModel):
+    model_id: str
+    name: str
+    can_be_finetuned: bool
+    can_do_text_to_speech: bool
+    can_do_voice_conversion: bool
+    can_use_style: bool
+    can_use_speaker_boost: bool
+    serves_pro_voices: bool
+    token_cost_factor: bool
+    description: str
+    requires_alpha_access: bool
+    max_characters_request_free_user: int
+    max_characters_request_subscribed_user: int
+    maximum_text_length_per_request: int
+
+
+class ElevenlabsModel(BaseModel):
+    name: str
+    model_id: str
+    description: str
+    max_characters: int
+    cost_factor: int
+    supported_languages: list[ElevenlabsLanguage]
+    metadata: ElevenlabsModelMetadata
 
 
 class ElevenlabsVoiceConfig(BaseModel):
@@ -201,7 +237,7 @@ class ElevenlabsVoiceSettingsConfig(BaseModel):
 
 
 class ElevenlabsConfig(BaseModel):
-    model: ElevenlabsModel
+    model: str
     """see https://elevenlabs.io/docs/speech-synthesis/models"""
 
     latency: Annotated[int, Field(strict=True, ge=0, le=4)]
@@ -221,36 +257,29 @@ class EdgeTtsConfig(BaseModel):
     """
 
 
-class XVASynthTtsConfig(BaseModel):
-    xvasynth_path: str
-    """The path to your install of XVASynth.  If you do not provide this and try to use XVASynth there will be an error."""
-    game_folder_name: str
-    """The game folder name of the voice you donwloaded to use as your primary XVASynth voice. This can be overwritten in a particular wingman. If you do not provide this and try to use XVASynth, there will be an error."""
-    voice: str
-    """The name of the voice you downloaded to use.  This can be overwritten in a particular wingman. If you do not provide this and try to use XVASynth there will be an error."""
+class XVASynthVoiceConfig(BaseModel):
+    model_directory: str
+    """The model (or game) directory in which your downloaded voice resides. The model directories are located in [xva-install-dir]/resources/app/models/."""
+    voice_name: str
+    """The name of the voice you downloaded to use (without file extension)"""
     language: str
-    """The language the voice will speak in. Some XVASynth voices are trained to be multi-lingual. Defaults to 'en' (English)."""
+    """The language the voice will speak in as 2-letter locale code. Some XVASynth voices are trained to be multilingual."""
+
+
+class XVASynthTtsConfig(BaseModel):
     pace: float
-    """The speed of the voice playback. Defaults to 1."""
-    use_sr: bool
-    """Whether to use XVASynth's super resolution mode. Will take longer and generally not recommended. Defaults to false."""
+    """The speed of the voice playback."""
+    use_super_resolution: bool
+    """Whether to use XVASynth's super resolution mode. Will take longer and generally not recommended."""
     use_cleanup: bool
-    """Whether to use XVASynth's cleanup mode. May make voice quality better or worse depending on the voice model. Defaults to false."""
-    process_device: str
-    """Can be cpu or gpu. You may need to take more steps to have xvasynth run on your GPU. Defaults to cpu."""
-    synthesize_url: str
-    """This should typically be left alone, changing it will cause errors unless you manually changed XVASynth's server."""
-    load_model_url: str
-    """This should be typically left alone, changing it will cause errors unless you manually changed XVASynth's server."""
+    """Whether to use XVASynth's cleanup mode. May make voice quality better or worse depending on the voice model."""
+
+    voice: XVASynthVoiceConfig
 
 
 class OpenAiConfig(BaseModel):
     conversation_model: OpenAiModel
     """ The model to use for conversations aka "chit-chat" and for function calls.
-    """
-
-    summarize_model: OpenAiModel
-    """ This model summarizes function responses, like API call responses etc. This can be a less capable model.
     """
 
     tts_voice: OpenAiTtsVoice
@@ -279,32 +308,31 @@ class PromptConfig(BaseModel):
 
 class MistralConfig(BaseModel):
     conversation_model: MistralModel
-    summarize_model: MistralModel
     endpoint: str
 
 
 class GroqConfig(BaseModel):
-    conversation_model: GroqModel
-    summarize_model: GroqModel
+    conversation_model: str
     endpoint: str
+
+
+class GoogleConfig(BaseModel):
+    conversation_model: GoogleAiModel
 
 
 class OpenRouterConfig(BaseModel):
     conversation_model: str
-    summarize_model: str
     endpoint: str
 
 
 class LocalLlmConfig(BaseModel):
     conversation_model: Optional[str] = None
-    summarize_model: Optional[str] = None
     endpoint: str
 
 
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
-    summarize_deployment: WingmanProAzureDeployment
     conversation_deployment: WingmanProAzureDeployment
     # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
 
@@ -324,6 +352,9 @@ class SoundConfig(BaseModel):
     effects: list[SoundEffect]
     """You can put as many sound effects here as you want. They stack and are added in the defined order here."""
 
+    volume: float
+    """The volume for playback. 0.0 - 1.0"""
+
 
 class VoiceActivationSettings(BaseModel):
     """You can configure the voice activation here. If you don't want to use voice activation, just set 'enabled' to false."""
@@ -342,7 +373,8 @@ class VoiceActivationSettings(BaseModel):
     stt_provider: VoiceActivationSttProvider
 
     azure: AzureSttConfig
-    whispercpp: WhispercppSttConfig
+    whispercpp: WhispercppSettings
+    whispercpp_config: WhispercppSttConfig
 
 
 class FeaturesConfig(BaseModel):
@@ -354,7 +386,6 @@ class FeaturesConfig(BaseModel):
     tts_provider: TtsProvider
     stt_provider: SttProvider
     conversation_provider: ConversationProvider
-    summarize_provider: SummarizeProvider
     remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
     use_generic_instant_responses: bool
@@ -443,12 +474,40 @@ class LabelValuePair(BaseModel):
     value: str | int | float | bool
 
 
+class VoiceSelection(BaseModel):
+    provider: TtsProvider
+    subprovider: Optional[WingmanProTtsProvider] = None
+    voice: str | ElevenlabsVoiceConfig | OpenAiTtsVoice | XVASynthVoiceConfig
+
+    @model_validator(mode="before")
+    def check_voice_config(cls, values):
+
+        def __parse_voice(provider: any, voice: any):
+            if provider == "elevenlabs":
+                return ElevenlabsVoiceConfig.model_validate(voice)
+            if provider == "openai":
+                return OpenAiTtsVoice(voice)
+            if provider == "xvasynth":
+                return XVASynthVoiceConfig.model_validate(voice)
+            return str(voice)
+
+        if isinstance(values, list):
+            for value in values:
+                value["voice"] = __parse_voice(
+                    value.get("provider"), value.get("voice")
+                )
+        else:
+            values["voice"] = __parse_voice(values.get("provider"), values.get("voice"))
+
+        return values
+
+
 class CustomProperty(BaseModel):
     id: str
     """The name of the property. Has to be unique"""
     name: str
     """The "friendly" name of the property, displayed in the UI."""
-    value: str | int | float | bool | None
+    value: str | int | float | bool | VoiceSelection | list[VoiceSelection]
     """The value of the property"""
     property_type: CustomPropertyType
     """Determines the type of the property and which controls to render in the UI."""
@@ -457,7 +516,7 @@ class CustomProperty(BaseModel):
     required: Optional[bool] = False
     """Marks the property as required in the UI."""
     options: Optional[list[LabelValuePair]] = None
-    """If property_type is set to 'single_select', you can provide options here."""
+    """If property_type is set to 'single_select', you can provide options here. May also hold meta information for other property types like "multiple" for voice_selection."""
 
 
 class LocalizedMetadata(BaseModel):
@@ -478,6 +537,7 @@ class SkillConfig(CustomClassConfig):
     """You can add custom properties here to use in your custom skill class."""
     hint: Optional[LocalizedMetadata] = None
     examples: Optional[list[SkillExample]] = None
+    category: Optional[SkillCategory] = None
 
 
 class SkillBase(BaseModel):
@@ -493,6 +553,7 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     mistral: MistralConfig
     groq: GroqConfig
+    google: GoogleConfig
     openrouter: OpenRouterConfig
     local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig
@@ -573,4 +634,5 @@ class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
+    xvasynth: XVASynthSettings
     debug_mode: bool = False

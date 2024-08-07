@@ -3,7 +3,7 @@ from elevenlabslib import (
     GenerationOptions,
     PlaybackOptions,
 )
-from api.enums import ElevenlabsModel, SoundEffect, WingmanInitializationErrorType
+from api.enums import SoundEffect, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
 from services.secret_keeper import SecretKeeper
@@ -55,12 +55,12 @@ class ElevenLabs:
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
             if contains_high_end_radio:
-                audio_player.play_wav("Radio_Static_Beep.wav")
+                audio_player.play_wav("Radio_Static_Beep.wav", sound_config.volume)
 
             if sound_config.play_beep:
-                audio_player.play_wav("beep.wav")
+                audio_player.play_wav("beep.wav", sound_config.volume)
             elif sound_config.play_beep_apollo:
-                audio_player.play_wav("Apollo_Beep.wav")
+                audio_player.play_wav("Apollo_Beep.wav", sound_config.volume)
 
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_finished(wingman_name)
@@ -68,13 +68,13 @@ class ElevenLabs:
 
         def notify_playback_started():
             if sound_config.play_beep:
-                audio_player.play_wav("beep.wav")
+                audio_player.play_wav("beep.wav", sound_config.volume)
             elif sound_config.play_beep_apollo:
-                audio_player.play_wav("Apollo_Beep.wav")
+                audio_player.play_wav("Apollo_Beep.wav", sound_config.volume)
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
             if contains_high_end_radio:
-                audio_player.play_wav("Radio_Static_Beep.wav")
+                audio_player.play_wav("Radio_Static_Beep.wav", sound_config.volume)
 
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_started(wingman_name)
@@ -102,14 +102,14 @@ class ElevenLabs:
             playback_options.audioPostProcessor = audio_post_processor
 
         generation_options = GenerationOptions(
-            model=config.model.value,
+            model=config.model,
             latencyOptimizationLevel=config.latency,
             use_speaker_boost=config.voice_settings.use_speaker_boost,
             stability=config.voice_settings.stability,
             similarity_boost=config.voice_settings.similarity_boost,
             style=(
                 config.voice_settings.style
-                if config.model != ElevenlabsModel.ELEVEN_TURBO_V2
+                if config.model != "eleven_turbo_v2"
                 else None
             ),
         )
@@ -145,3 +145,7 @@ class ElevenLabs:
     def get_available_voices(self):
         user = User(self.api_key)
         return user.get_available_voices()
+
+    def get_available_models(self):
+        user = User(self.api_key)
+        return user.get_models()

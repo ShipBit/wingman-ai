@@ -2,23 +2,13 @@ from os import path
 import json
 import datetime
 from typing import TYPE_CHECKING
-from api.interface import (
-    SettingsConfig,
-    WingmanConfig,
-    SkillConfig,
-    WingmanInitializationError,
-)
-from api.enums import (
-    LogType,
-)
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from api.enums import LogType
 from services.file import get_writable_dir
-from services.printr import Printr
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
-
-printr = Printr()
+    from wingmen.open_ai_wingman import OpenAiWingman
 
 
 class QuickCommands(Skill):
@@ -26,15 +16,13 @@ class QuickCommands(Skill):
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
         # get file paths
-        self.data_path = get_writable_dir(
-            path.join("skills", "quick_commands", "data")
-        )
+        self.data_path = get_writable_dir(path.join("skills", "quick_commands", "data"))
         self.file_ipl = path.join(self.data_path, "instant_phrase_learning.json")
 
         # learning data
@@ -44,13 +32,6 @@ class QuickCommands(Skill):
 
         # rules
         self.rule_count = 3
-
-        super().__init__(
-            config=config,
-            wingman_config=wingman_config,
-            settings=settings,
-            wingman=wingman,
-        )
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -71,7 +52,9 @@ class QuickCommands(Skill):
         for phrase, commands in self.learning_learned.items():
             await self._add_instant_activation_phrase(phrase, commands)
 
-    async def _add_instant_activation_phrase(self, phrase: str, commands: list[str]) -> None:
+    async def _add_instant_activation_phrase(
+        self, phrase: str, commands: list[str]
+    ) -> None:
         """Add an instant activation phrase."""
         for command in commands:
             command = self.wingman.get_command(command)
@@ -84,7 +67,9 @@ class QuickCommands(Skill):
     async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
         """Hook to start learning process."""
         if tool_calls:
-            self.threaded_execution(self._process_messages, tool_calls, self.wingman.messages[-1])
+            self.threaded_execution(
+                self._process_messages, tool_calls, self.wingman.messages[-1]
+            )
 
     async def _process_messages(self, tool_calls, last_message) -> None:
         """Process messages to learn phrases and commands."""
@@ -108,7 +93,9 @@ class QuickCommands(Skill):
                 return
 
         role = (
-            last_message.role if hasattr(last_message, "role") else last_message.get("role", False)
+            last_message.role
+            if hasattr(last_message, "role")
+            else last_message.get("role", False)
         )
         if role != "user":
             return
@@ -223,8 +210,9 @@ class QuickCommands(Skill):
         completion = await self.llm_call(messages)
         answer = completion.choices[0].message.content or ""
         if answer.lower() == "yes":
-            await printr.print_async(
-                f"Instant activation phrase for '{', '.join(commands)}' learned.", color=LogType.INFO
+            await self.printr.print_async(
+                f"Instant activation phrase for '{', '.join(commands)}' learned.",
+                color=LogType.INFO,
             )
             self.learning_learned[phrase] = commands
             self.learning_data.pop(phrase)
@@ -236,8 +224,9 @@ class QuickCommands(Skill):
 
     async def _add_to_blacklist(self, phrase: str) -> None:
         """Add a phrase to the blacklist."""
-        await printr.print_async(
-            f"Added phrase to blacklist: '{phrase if len(phrase) <= 25 else phrase[:25]+'...'}'", color=LogType.INFO
+        await self.printr.print_async(
+            f"Added phrase to blacklist: '{phrase if len(phrase) <= 25 else phrase[:25]+'...'}'",
+            color=LogType.INFO,
         )
         self.learning_blacklist.append(phrase)
         self.learning_data.pop(phrase)
@@ -261,7 +250,7 @@ class QuickCommands(Skill):
             try:
                 data = json.load(file)
             except json.JSONDecodeError:
-                await printr.print_async(
+                await self.printr.print_async(
                     "Could not read learning data file. Resetting learning data..",
                     color=LogType.ERROR,
                 )

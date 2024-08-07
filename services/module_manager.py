@@ -8,6 +8,8 @@ import sys
 from typing import TYPE_CHECKING
 import yaml
 from api.interface import SettingsConfig, SkillBase, SkillConfig, WingmanConfig
+from providers.whispercpp import Whispercpp
+from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -44,6 +46,8 @@ class ModuleManager:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        whispercpp: Whispercpp,
+        xvasynth: XVASynth,
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -73,12 +77,14 @@ class ModuleManager:
             config=config,
             settings=settings,
             audio_player=audio_player,
+            whispercpp=whispercpp,
+            xvasynth=xvasynth,
         )
         return instance
 
     @staticmethod
     def load_skill(
-        config: SkillConfig, wingman_config: WingmanConfig, settings: SettingsConfig, wingman: "Wingman"
+        config: SkillConfig, settings: SettingsConfig, wingman: "Wingman"
     ) -> Skill:
 
         @contextmanager
@@ -126,9 +132,7 @@ class ModuleManager:
                     )
 
         DerivedSkillClass = getattr(module, config.name)
-        instance = DerivedSkillClass(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
-        )
+        instance = DerivedSkillClass(config=config, settings=settings, wingman=wingman)
         return instance
 
     @staticmethod

@@ -202,7 +202,7 @@ class ConfigManager:
             default_template_dir = path.join(
                 self.templates_dir,
                 CONFIGS_DIR,
-                f"{DEFAULT_PREFIX}.{config_dir.directory}",
+                f"{DEFAULT_PREFIX}{config_dir.directory}",
             )
             if path.exists(default_template_dir):
                 return ConfigDirInfo(
@@ -266,7 +266,7 @@ class ConfigManager:
         return base64_data_uri
 
     def get_new_wingman_template(self):
-        parsed_config = self.__read_default_config()
+        parsed_config = self.read_default_config()
         wingman_config = {
             "name": "",
             "description": "",
@@ -276,7 +276,7 @@ class ConfigManager:
             "skills": [],
             "prompts": {"backstory": ""},
         }
-        validated_config = self.__merge_configs(parsed_config, wingman_config)
+        validated_config = self.merge_configs(parsed_config, wingman_config)
         return NewWingmanTemplate(
             wingman_config=validated_config,
             avatar=self.__load_image_as_base64(
@@ -284,7 +284,7 @@ class ConfigManager:
             ),
         )
 
-    def load_config(
+    def parse_config(
         self, config_dir: Optional[ConfigDirInfo] = None
     ) -> Tuple[ConfigDirInfo, Config]:
         """Loads and validates a config. If no config_dir is given, the default config is loaded."""
@@ -292,13 +292,13 @@ class ConfigManager:
             config_dir = self.find_default_config()
 
         config_path = path.join(self.config_dir, config_dir.directory)
-        default_config = self.__read_default_config()
+        default_config = self.read_default_config()
 
         for root, _, files in walk(config_path):
             for filename in files:
                 if filename.endswith(".yaml") and not filename.startswith("."):
-                    wingman_config = self.__read_config(path.join(root, filename))
-                    merged_config = self.__merge_configs(default_config, wingman_config)
+                    wingman_config = self.read_config(path.join(root, filename))
+                    merged_config = self.merge_configs(default_config, wingman_config)
                     default_config["wingmen"][
                         filename.replace(".yaml", "")
                     ] = merged_config
@@ -307,13 +307,6 @@ class ConfigManager:
         # not catching ValidationExceptions here, because we can't recover from it
         # TODO: Notify the client about the error somehow
 
-        self.printr.print(
-            f"Loaded and validated config: {config_dir.name}.",
-            color=LogType.INFO,
-            server_only=True,
-            source=LogSource.SYSTEM,
-            source_name=self.log_source_name,
-        )
         return config_dir, validated_config
 
     def rename_config(self, config_dir: ConfigDirInfo, new_name: str):
@@ -585,9 +578,9 @@ class ConfigManager:
             config_dir.directory,
             wingman_file.file,
         )
-        default_config = self.__read_default_config()
-        wingman_config_dict = self.__convert_to_dict(wingman_config)
-        wingman_config_diff = self.__deep_diff(default_config, wingman_config_dict)
+        default_config = self.read_default_config()
+        wingman_config_dict = self.convert_to_dict(wingman_config)
+        wingman_config_diff = self.deep_diff(default_config, wingman_config_dict)
 
         if wingman_config.skills:
             skills = []
@@ -597,16 +590,16 @@ class ConfigManager:
                 skill_default_config_path = path.join(
                     get_writable_dir(skill_dir), DEFAULT_SKILLS_CONFIG
                 )
-                skill_default_config = self.__read_config(skill_default_config_path)
-                skill_config_diff = self.__deep_diff(
-                    skill_default_config, self.__convert_to_dict(skill_config)
+                skill_default_config = self.read_config(skill_default_config_path)
+                skill_config_diff = self.deep_diff(
+                    skill_default_config, self.convert_to_dict(skill_config)
                 )
                 skill_config_diff["module"] = skill_config.module
                 skills.append(skill_config_diff)
 
             wingman_config_diff["skills"] = skills
 
-        return self.__write_config(config_path, wingman_config_diff)
+        return self.write_config(config_path, wingman_config_diff)
 
     def get_wingman_avatar_path(
         self, config_dir: ConfigDirInfo, wingman_file_base_name: str, create=False
@@ -659,12 +652,12 @@ class ConfigManager:
             )
         return False
 
-    def __read_default_config(self):
-        config = self.__read_config(self.default_config_path)
+    def read_default_config(self):
+        config = self.read_config(self.default_config_path)
         config["wingmen"] = {}
         return config
 
-    def __read_config(self, file_path: str):
+    def read_config(self, file_path: str):
         """Loads a config file (without validating it)"""
         with open(file_path, "r", encoding="UTF-8") as stream:
             try:
@@ -676,8 +669,13 @@ class ConfigManager:
                 )
         return None
 
-    def __write_config(self, file_path: str, content) -> bool:
+    def write_config(self, file_path: str, content) -> bool:
         yaml.add_multi_representer(Enum, enum_representer)
+
+        dir_path = path.dirname(file_path)
+        if not path.exists(dir_path):
+            makedirs(dir_path)
+
         with open(file_path, "w", encoding="UTF-8") as stream:
             try:
                 yaml.dump(
@@ -728,7 +726,7 @@ class ConfigManager:
 
     def load_settings_config(self):
         """Load and validate Settings config"""
-        parsed = self.__read_config(self.settings_config_path)
+        parsed = self.read_config(self.settings_config_path)
         if parsed:
             try:
                 validated = SettingsConfig(**parsed)
@@ -741,7 +739,7 @@ class ConfigManager:
 
     def load_defaults_config(self):
         """Load and validate Defaults config"""
-        parsed = self.__read_default_config()
+        parsed = self.read_default_config()
         if parsed:
             try:
                 validated = NestedConfig(**parsed)
@@ -757,32 +755,32 @@ class ConfigManager:
     ):
         """Load and validate Wingman config"""
         full_path = path.join(self.config_dir, config_dir.directory, wingman_file.file)
-        default_config = self.__read_default_config()
-        wingman_config_parsed = self.__read_config(full_path)
-        merged_config = self.__merge_configs(default_config, wingman_config_parsed)
+        default_config = self.read_default_config()
+        wingman_config_parsed = self.read_config(full_path)
+        merged_config = self.merge_configs(default_config, wingman_config_parsed)
         return merged_config
 
     def save_settings_config(self):
         """Write Settings config to file"""
-        return self.__write_config(self.settings_config_path, self.settings_config)
+        return self.write_config(self.settings_config_path, self.settings_config)
 
     def save_defaults_config(self):
         """Write Defaults config to file"""
-        return self.__write_config(self.default_config_path, self.default_config)
+        return self.write_config(self.default_config_path, self.default_config)
 
     # Config merging:
 
-    def __convert_to_dict(self, obj):
+    def convert_to_dict(self, obj):
         if isinstance(obj, BaseModel):
             json_obj = obj.model_dump_json(exclude_none=True, exclude_unset=True)
             return json.loads(json_obj)
         elif isinstance(obj, dict):
-            return {k: self.__convert_to_dict(v) for k, v in obj.items()}
+            return {k: self.convert_to_dict(v) for k, v in obj.items()}
         elif isinstance(obj, list):
-            return [self.__convert_to_dict(i) for i in obj]
+            return [self.convert_to_dict(i) for i in obj]
         return obj
 
-    def __deep_diff(self, default_config, wingman_config):
+    def deep_diff(self, default_config, wingman_config):
         """
         Recursively compare two dictionaries and return an object that only contains the changes defined in the wingman_config.
         """
@@ -801,7 +799,7 @@ class ConfigManager:
                 diff[key] = wingman_value
             elif isinstance(wingman_value, dict) and isinstance(default_value, dict):
                 # If the key exists in both configurations and both values are dictionaries, recurse.
-                nested_diff = self.__deep_diff(default_value, wingman_value)
+                nested_diff = self.deep_diff(default_value, wingman_value)
                 if nested_diff:
                     diff[key] = nested_diff
             elif isinstance(wingman_value, list) and isinstance(default_value, list):
@@ -840,7 +838,7 @@ class ConfigManager:
                 diff = []
                 for item_key in wingman_dict:
                     if item_key in default_dict:
-                        nested_diff = self.__deep_diff(
+                        nested_diff = self.deep_diff(
                             default_dict[item_key], wingman_dict[item_key]
                         )
                         if nested_diff:
@@ -848,6 +846,9 @@ class ConfigManager:
                     else:
                         diff.append(wingman_dict[item_key])
                 return diff
+            else:
+                # If the dictionaries don't have an identifier key, take the wingman list as diff
+                return wingman_list
         else:
             # If the lists are basic types or not dictionaries, sort and compare
             default_list_sorted = sorted(default_list)
@@ -861,7 +862,7 @@ class ConfigManager:
                     if isinstance(wingman_value, dict) and isinstance(
                         default_value, dict
                     ):
-                        nested_diff = self.__deep_diff(default_value, wingman_value)
+                        nested_diff = self.deep_diff(default_value, wingman_value)
                         if nested_diff:
                             diff.append(nested_diff)
                     elif wingman_value != default_value:
@@ -929,7 +930,7 @@ class ConfigManager:
         # Convert merged commands back to a list since that's the expected format
         return list(merged_commands.values())
 
-    def __merge_configs(self, default: Config, wingman):
+    def merge_configs(self, default: Config, wingman):
         """Merge general settings with a specific wingman's overrides, including commands."""
         # Start with a copy of the wingman's specific config to keep it intact.
         merged = wingman.copy()
@@ -941,6 +942,7 @@ class ConfigManager:
             "openai",
             "mistral",
             "groq",
+            "google",
             "openrouter",
             "local_llm",
             "edge_tts",
@@ -979,7 +981,7 @@ class ConfigManager:
                 skill_default_config_path = path.join(
                     self.skills_dir, skill_dir, DEFAULT_SKILLS_CONFIG
                 )
-                skill_config = self.__read_config(skill_default_config_path)
+                skill_config = self.read_config(skill_default_config_path)
                 skill_config = self.__deep_merge(skill_config, skill_config_wingman)
 
                 merged_skills.append(skill_config)

@@ -2,8 +2,14 @@ import json
 import time
 import asyncio
 import random
-from typing import Mapping
-from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
+from typing import Mapping, Optional
+from openai.types.chat import ChatCompletion
+from api.interface import (
+    SettingsConfig,
+    SoundConfig,
+    WingmanConfig,
+    WingmanInitializationError,
+)
 from api.enums import (
     ImageGenerationProvider,
     LogType,
@@ -11,12 +17,12 @@ from api.enums import (
     TtsProvider,
     SttProvider,
     ConversationProvider,
-    SummarizeProvider,
     WingmanProSttProvider,
     WingmanProTtsProvider,
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
+from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
@@ -40,7 +46,6 @@ class OpenAiWingman(Wingman):
         "tts": TtsProvider.AZURE,
         "whisper": [SttProvider.AZURE, SttProvider.AZURE_SPEECH],
         "conversation": ConversationProvider.AZURE,
-        "summarize": SummarizeProvider.AZURE,
     }
 
     def __init__(
@@ -49,9 +54,16 @@ class OpenAiWingman(Wingman):
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        whispercpp: Whispercpp,
+        xvasynth: XVASynth,
     ):
         super().__init__(
-            name=name, config=config, audio_player=audio_player, settings=settings
+            name=name,
+            config=config,
+            audio_player=audio_player,
+            settings=settings,
+            whispercpp=whispercpp,
+            xvasynth=xvasynth,
         )
 
         self.edge_tts = Edge()
@@ -64,9 +76,8 @@ class OpenAiWingman(Wingman):
         self.local_llm: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
-        self.xvasynth: XVASynth = None
-        self.whispercpp: Whispercpp = None
         self.wingman_pro: WingmanPro = None
+        self.google: GoogleGenAI = None
 
         # tool queue
         self.pending_tool_calls = []
@@ -74,6 +85,7 @@ class OpenAiWingman(Wingman):
 
         # generated addional content
         self.instant_responses = []
+        self.last_used_instant_responses = []
 
         self.messages = []
         """The conversation history that is used for the GPT calls"""
@@ -95,6 +107,9 @@ class OpenAiWingman(Wingman):
         if self.uses_provider("groq"):
             await self.validate_and_set_groq(errors)
 
+        if self.uses_provider("google"):
+            await self.validate_and_set_google(errors)
+
         if self.uses_provider("openrouter"):
             await self.validate_and_set_openrouter(errors)
 
@@ -104,17 +119,11 @@ class OpenAiWingman(Wingman):
         if self.uses_provider("elevenlabs"):
             await self.validate_and_set_elevenlabs(errors)
 
-        if self.uses_provider("xvasynth"):
-            await self.validate_and_set_xvasynth(errors)
-
-        if self.uses_provider("whispercpp"):
-            await self.validate_and_set_whispercpp(errors)
-
         if self.uses_provider("azure"):
             await self.validate_and_set_azure(errors)
 
         if self.uses_provider("wingman_pro"):
-            await self.validate_and_set_wingman_pro(errors)
+            await self.validate_and_set_wingman_pro()
 
         return errors
 
@@ -122,65 +131,72 @@ class OpenAiWingman(Wingman):
         if provider_type == "openai":
             return any(
                 [
-                    self.tts_provider == TtsProvider.OPENAI,
-                    self.stt_provider == SttProvider.OPENAI,
-                    self.conversation_provider == ConversationProvider.OPENAI,
-                    self.summarize_provider == SummarizeProvider.OPENAI,
+                    self.config.features.tts_provider == TtsProvider.OPENAI,
+                    self.config.features.stt_provider == SttProvider.OPENAI,
+                    self.config.features.conversation_provider
+                    == ConversationProvider.OPENAI,
                 ]
             )
         elif provider_type == "mistral":
             return any(
                 [
-                    self.conversation_provider == ConversationProvider.MISTRAL,
-                    self.summarize_provider == SummarizeProvider.MISTRAL,
+                    self.config.features.conversation_provider
+                    == ConversationProvider.MISTRAL,
                 ]
             )
         elif provider_type == "groq":
             return any(
                 [
-                    self.conversation_provider == ConversationProvider.GROQ,
-                    self.summarize_provider == SummarizeProvider.GROQ,
+                    self.config.features.conversation_provider
+                    == ConversationProvider.GROQ,
+                ]
+            )
+        elif provider_type == "google":
+            return any(
+                [
+                    self.config.features.conversation_provider
+                    == ConversationProvider.GOOGLE,
                 ]
             )
         elif provider_type == "openrouter":
             return any(
                 [
-                    self.conversation_provider == ConversationProvider.OPENROUTER,
-                    self.summarize_provider == SummarizeProvider.OPENROUTER,
+                    self.config.features.conversation_provider
+                    == ConversationProvider.OPENROUTER,
                 ]
             )
         elif provider_type == "local_llm":
             return any(
                 [
-                    self.conversation_provider == ConversationProvider.LOCAL_LLM,
-                    self.summarize_provider == SummarizeProvider.LOCAL_LLM,
+                    self.config.features.conversation_provider
+                    == ConversationProvider.LOCAL_LLM,
                 ]
             )
         elif provider_type == "azure":
             return any(
                 [
-                    self.tts_provider == TtsProvider.AZURE,
-                    self.stt_provider == SttProvider.AZURE,
-                    self.stt_provider == SttProvider.AZURE_SPEECH,
-                    self.conversation_provider == ConversationProvider.AZURE,
-                    self.summarize_provider == SummarizeProvider.AZURE,
+                    self.config.features.tts_provider == TtsProvider.AZURE,
+                    self.config.features.stt_provider == SttProvider.AZURE,
+                    self.config.features.stt_provider == SttProvider.AZURE_SPEECH,
+                    self.config.features.conversation_provider
+                    == ConversationProvider.AZURE,
                 ]
             )
         elif provider_type == "edge_tts":
-            return self.tts_provider == TtsProvider.EDGE_TTS
+            return self.config.features.tts_provider == TtsProvider.EDGE_TTS
         elif provider_type == "elevenlabs":
-            return self.tts_provider == TtsProvider.ELEVENLABS
+            return self.config.features.tts_provider == TtsProvider.ELEVENLABS
         elif provider_type == "xvasynth":
-            return self.tts_provider == TtsProvider.XVASYNTH
+            return self.config.features.tts_provider == TtsProvider.XVASYNTH
         elif provider_type == "whispercpp":
-            return self.stt_provider == SttProvider.WHISPERCPP
+            return self.config.features.stt_provider == SttProvider.WHISPERCPP
         elif provider_type == "wingman_pro":
             return any(
                 [
-                    self.conversation_provider == ConversationProvider.WINGMAN_PRO,
-                    self.summarize_provider == SummarizeProvider.WINGMAN_PRO,
-                    self.tts_provider == TtsProvider.WINGMAN_PRO,
-                    self.stt_provider == SttProvider.WINGMAN_PRO,
+                    self.config.features.conversation_provider
+                    == ConversationProvider.WINGMAN_PRO,
+                    self.config.features.tts_provider == TtsProvider.WINGMAN_PRO,
+                    self.config.features.stt_provider == SttProvider.WINGMAN_PRO,
                 ]
             )
         return False
@@ -193,6 +209,11 @@ class OpenAiWingman(Wingman):
                 server_only=True,
             )
             self.threaded_execution(self._generate_instant_responses)
+
+    async def unload_skills(self):
+        await super().unload_skills()
+        self.tool_skills = {}
+        self.skill_tools = []
 
     async def prepare_skill(self, skill: Skill):
         # prepare the skill and skill tools
@@ -230,6 +251,11 @@ class OpenAiWingman(Wingman):
                 api_key=api_key,
                 base_url=self.config.groq.endpoint,
             )
+
+    async def validate_and_set_google(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("google", errors)
+        if api_key:
+            self.google = GoogleGenAI(api_key=api_key)
 
     async def validate_and_set_openrouter(
         self, errors: list[WingmanInitializationError]
@@ -271,30 +297,28 @@ class OpenAiWingman(Wingman):
         if len(errors) == 0:
             self.openai_azure = OpenAiAzure()
 
-    async def validate_and_set_xvasynth(self, errors: list[WingmanInitializationError]):
-        self.xvasynth = XVASynth(
-            wingman_name=self.name,
-        )
-        validation_errors = self.xvasynth.validate_config(config=self.config.xvasynth)
-        errors.extend(validation_errors)
-
-    async def validate_and_set_whispercpp(
-        self, errors: list[WingmanInitializationError]
-    ):
-        self.whispercpp = Whispercpp(
-            wingman_name=self.name,
-        )
-        validation_errors = self.whispercpp.validate_config(
-            config=self.config.whispercpp
-        )
-        errors.extend(validation_errors)
-
-    async def validate_and_set_wingman_pro(
-        self, errors: list[WingmanInitializationError]
-    ):
+    async def validate_and_set_wingman_pro(self):
         self.wingman_pro = WingmanPro(
             wingman_name=self.name, settings=self.settings.wingman_pro
         )
+
+    # overrides the base class method
+    async def update_settings(self, settings: SettingsConfig):
+        """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
+
+        wingman_pro_changed = (
+            self.settings.wingman_pro.base_url != settings.wingman_pro.base_url
+            or self.settings.wingman_pro.region != settings.wingman_pro.region
+        )
+
+        await super().update_settings(settings)
+
+        if wingman_pro_changed and self.uses_provider("wingman_pro"):
+            await self.validate_and_set_wingman_pro()
+            printr.print(
+                f"Wingman {self.name}: reinitialized Wingman Pro with new settings",
+                server_only=True,
+            )
 
     async def _generate_instant_responses(self) -> None:
         """Generates general instant responses based on given context."""
@@ -365,23 +389,23 @@ class OpenAiWingman(Wingman):
         """
         transcript = None
 
-        if self.stt_provider == SttProvider.AZURE:
+        if self.config.features.stt_provider == SttProvider.AZURE:
             transcript = self.openai_azure.transcribe_whisper(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["whisper"],
                 config=self.config.azure.whisper,
             )
-        elif self.stt_provider == SttProvider.AZURE_SPEECH:
+        elif self.config.features.stt_provider == SttProvider.AZURE_SPEECH:
             transcript = self.openai_azure.transcribe_azure_speech(
                 filename=audio_input_wav,
                 api_key=self.azure_api_keys["tts"],
                 config=self.config.azure.stt,
             )
-        elif self.stt_provider == SttProvider.WHISPERCPP:
+        elif self.config.features.stt_provider == SttProvider.WHISPERCPP:
             transcript = self.whispercpp.transcribe(
                 filename=audio_input_wav, config=self.config.whispercpp
             )
-        elif self.stt_provider == SttProvider.WINGMAN_PRO:
+        elif self.config.features.stt_provider == SttProvider.WINGMAN_PRO:
             if self.config.wingman_pro.stt_provider == WingmanProSttProvider.WHISPER:
                 transcript = self.wingman_pro.transcribe_whisper(
                     filename=audio_input_wav
@@ -393,7 +417,7 @@ class OpenAiWingman(Wingman):
                 transcript = self.wingman_pro.transcribe_azure_speech(
                     filename=audio_input_wav, config=self.config.azure.stt
                 )
-        elif self.stt_provider == SttProvider.OPENAI:
+        elif self.config.features.stt_provider == SttProvider.OPENAI:
             transcript = self.openai.transcribe(filename=audio_input_wav)
 
         if not transcript:
@@ -441,20 +465,18 @@ class OpenAiWingman(Wingman):
         is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
             response_message, tool_calls
         )
-        interrupt = True  # initial answer should be awaited, if its not there, current audio should be interrupted
+        interrupt = True  # initial answer should be awaited if exists
 
-        if tool_calls:
+        while tool_calls:
             if is_waiting_response_needed:
                 message = None
                 if response_message.content:
                     message = response_message.content
                 elif self.instant_responses:
-                    message = self.instant_responses[
-                        random.randint(0, len(self.instant_responses) - 1)
-                    ]
+                    message = self._get_random_filler()
                     is_summarize_needed = True
                 if message:
-                    self.threaded_execution(self.play_to_user, message)
+                    self.threaded_execution(self.play_to_user, message, interrupt)
                     await printr.print_async(
                         f"{message}",
                         color=LogType.POSITIVE,
@@ -473,13 +495,36 @@ class OpenAiWingman(Wingman):
                 return None, instant_response, None, interrupt
 
             if is_summarize_needed:
-                summarize_response = await self._summarize_function_calls()
-                summarize_response = self._finalize_response(str(summarize_response))
-                return summarize_response, summarize_response, skill, interrupt
+                completion = await self._llm_call(True)
+                if completion is None:
+                    return None, None, None, True
+
+                response_message, tool_calls = await self._process_completion(
+                    completion
+                )
+                is_waiting_response_needed, is_summarize_needed = (
+                    await self._add_gpt_response(response_message, tool_calls)
+                )
+                if tool_calls:
+                    interrupt = False
             elif is_waiting_response_needed:
                 return None, None, None, interrupt
 
         return response_message.content, response_message.content, None, interrupt
+
+    def _get_random_filler(self):
+        # get last two used instant responses
+        if len(self.last_used_instant_responses) > 2:
+            self.last_used_instant_responses = self.last_used_instant_responses[-2:]
+
+        # get a random instant response that was not used in the last two responses
+        random_index = random.randint(0, len(self.instant_responses) - 1)
+        while random_index in self.last_used_instant_responses:
+            random_index = random.randint(0, len(self.instant_responses) - 1)
+
+        # add the index to the last used list and return
+        self.last_used_instant_responses.append(random_index)
+        return self.instant_responses[random_index]
 
     async def _fix_tool_calls(self, tool_calls):
         """Fixes tool calls that have a command name as function name.
@@ -515,7 +560,7 @@ class OpenAiWingman(Wingman):
                     tool_call.function.name = function_name
                     tool_call.function.arguments = json.dumps(function_args)
 
-                    if self.debug:
+                    if self.settings.debug_mode:
                         await printr.print_async(
                             "Applied command call fix.", color=LogType.WARNING
                         )
@@ -656,7 +701,7 @@ class OpenAiWingman(Wingman):
         del self.messages[start_index : end_index + 1]
         self.messages.extend(message_block)
 
-        if self.debug:
+        if self.settings.debug_mode:
             await printr.print_async(
                 "Moved message block to the end.", color=LogType.INFO
             )
@@ -723,7 +768,7 @@ class OpenAiWingman(Wingman):
                 and mesage.get("tool_call_id") in self.pending_tool_calls
             ):
                 self.pending_tool_calls.remove(mesage.get("tool_call_id"))
-                if self.debug:
+                if self.settings.debug_mode:
                     await printr.print_async(
                         f"Removing pending tool call {mesage.get('tool_call_id')} due to message history clean up.",
                         color=LogType.WARNING,
@@ -733,7 +778,7 @@ class OpenAiWingman(Wingman):
         del self.messages[:cutoff_index]
 
         # Optional debugging printout.
-        if self.debug and total_deleted_messages > 0:
+        if self.settings.debug_mode and total_deleted_messages > 0:
             await printr.print_async(
                 f"Deleted {total_deleted_messages} messages from the conversation history.",
                 color=LogType.WARNING,
@@ -792,54 +837,71 @@ class OpenAiWingman(Wingman):
         Generates an image from the provided text configured provider.
         """
 
-        if self.image_generation_provider == ImageGenerationProvider.WINGMAN_PRO:
+        if (
+            self.config.features.image_generation_provider
+            == ImageGenerationProvider.WINGMAN_PRO
+        ):
             return await self.wingman_pro.generate_image(text)
 
         return ""
 
     async def actual_llm_call(self, messages, tools: list[dict] = None):
         """
-        Perform the actual GPT call with the messages provided.
+        Perform the actual LLM call with the messages provided.
         """
 
-        if self.conversation_provider == ConversationProvider.AZURE:
+        if self.config.features.conversation_provider == ConversationProvider.AZURE:
             completion = self.openai_azure.ask(
                 messages=messages,
                 api_key=self.azure_api_keys["conversation"],
                 config=self.config.azure.conversation,
                 tools=tools,
             )
-        elif self.conversation_provider == ConversationProvider.OPENAI:
+        elif self.config.features.conversation_provider == ConversationProvider.OPENAI:
             completion = self.openai.ask(
                 messages=messages,
                 tools=tools,
                 model=self.config.openai.conversation_model.value,
             )
-        elif self.conversation_provider == ConversationProvider.MISTRAL:
+        elif self.config.features.conversation_provider == ConversationProvider.MISTRAL:
             completion = self.mistral.ask(
                 messages=messages,
                 tools=tools,
                 model=self.config.mistral.conversation_model.value,
             )
-        elif self.conversation_provider == ConversationProvider.GROQ:
+        elif self.config.features.conversation_provider == ConversationProvider.GROQ:
             completion = self.groq.ask(
                 messages=messages,
                 tools=tools,
-                model=self.config.groq.conversation_model.value,
+                model=self.config.groq.conversation_model,
             )
-        elif self.conversation_provider == ConversationProvider.OPENROUTER:
+        elif self.config.features.conversation_provider == ConversationProvider.GOOGLE:
+            completion = self.google.ask(
+                messages=messages,
+                tools=tools,
+                model=self.config.google.conversation_model.value,
+            )
+        elif (
+            self.config.features.conversation_provider
+            == ConversationProvider.OPENROUTER
+        ):
             completion = self.openrouter.ask(
                 messages=messages,
                 tools=tools,
                 model=self.config.openrouter.conversation_model,
             )
-        elif self.conversation_provider == ConversationProvider.LOCAL_LLM:
+        elif (
+            self.config.features.conversation_provider == ConversationProvider.LOCAL_LLM
+        ):
             completion = self.local_llm.ask(
                 messages=messages,
                 tools=tools,
                 model=self.config.local_llm.conversation_model,
             )
-        elif self.conversation_provider == ConversationProvider.WINGMAN_PRO:
+        elif (
+            self.config.features.conversation_provider
+            == ConversationProvider.WINGMAN_PRO
+        ):
             completion = self.wingman_pro.ask(
                 messages=messages,
                 deployment=self.config.wingman_pro.conversation_deployment,
@@ -862,7 +924,7 @@ class OpenAiWingman(Wingman):
         # build tools
         tools = self.build_tools() if allow_tool_calls else None
 
-        if self.debug:
+        if self.settings.debug_mode:
             self.start_execution_benchmark()
             await printr.print_async(
                 f"Calling LLM with {(len(self.messages))} messages (excluding context) and {len(tools) if tools else 0} tools.",
@@ -873,7 +935,7 @@ class OpenAiWingman(Wingman):
         await self.add_context(messages)
         completion = await self.actual_llm_call(messages, tools)
 
-        if self.debug:
+        if self.settings.debug_mode:
             await self.print_execution_time(reset_timer=True)
 
         # if request isnt most recent, ignore the response
@@ -885,7 +947,7 @@ class OpenAiWingman(Wingman):
 
         return completion
 
-    async def _process_completion(self, completion):
+    async def _process_completion(self, completion: ChatCompletion):
         """Processes the completion returned by the LLM call.
 
         Args:
@@ -947,83 +1009,6 @@ class OpenAiWingman(Wingman):
 
         return instant_response, skill
 
-    async def _summarize_function_calls(self):
-        """Summarizes the function call responses using the GPT model specified for summarization in the configuration.
-
-        Returns:
-            The content of the GPT response to the function call summaries.
-        """
-
-        summarize_response = await self._actual_summarize_function_call(self.messages)
-
-        if summarize_response is None:
-            return None
-
-        # do not tamper with this message as it will lead to 400 errors!
-        message = summarize_response.choices[0].message
-        self.messages.append(message)
-        return message.content
-
-    async def _actual_summarize_function_call(self, original_messages):
-        """
-        Perform the actual GPT call with the messages provided.
-        """
-        messages = original_messages.copy()
-
-        await self.add_context(messages)
-
-        if self.summarize_provider == SummarizeProvider.AZURE:
-            summarize_response = self.openai_azure.ask(
-                messages=messages,
-                api_key=self.azure_api_keys["summarize"],
-                config=self.config.azure.summarize,
-            )
-        elif self.summarize_provider == SummarizeProvider.OPENAI:
-            summarize_response = self.openai.ask(
-                messages=self.messages,
-                model=self.config.openai.summarize_model.value,
-            )
-        elif self.summarize_provider == SummarizeProvider.MISTRAL:
-            summarize_response = self.mistral.ask(
-                messages=self.messages,
-                model=self.config.mistral.summarize_model.value,
-            )
-        elif self.summarize_provider == SummarizeProvider.GROQ:
-            summarize_response = self.groq.ask(
-                messages=self.messages,
-                model=self.config.groq.summarize_model.value,
-            )
-        elif self.summarize_provider == SummarizeProvider.OPENROUTER:
-            summarize_response = self.openrouter.ask(
-                messages=self.messages,
-                model=self.config.openrouter.summarize_model,
-            )
-        elif self.summarize_provider == SummarizeProvider.LOCAL_LLM:
-            summarize_response = self.local_llm.ask(
-                messages=self.messages,
-                model=self.config.local_llm.summarize_model,
-            )
-        elif self.summarize_provider == SummarizeProvider.WINGMAN_PRO:
-            summarize_response = self.wingman_pro.ask(
-                messages=messages,
-                deployment=self.config.wingman_pro.summarize_deployment,
-            )
-
-        return summarize_response
-
-    def _finalize_response(self, summarize_response: str) -> str:
-        """Finalizes the response based on the call of the second (summarize) GPT call.
-
-        Args:
-            summarize_response (str): The response content from the second GPT call.
-
-        Returns:
-            The final response to the user.
-        """
-        if summarize_response is None:
-            return self.messages[-1]["content"]
-        return summarize_response
-
     async def execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]
     ) -> tuple[str, str, Skill | None]:
@@ -1069,13 +1054,33 @@ class OpenAiWingman(Wingman):
 
         return function_response, instant_response, used_skill
 
-    async def play_to_user(self, text: str, no_interrupt: bool = False):
+    async def play_to_user(
+        self,
+        text: str,
+        no_interrupt: bool = False,
+        sound_config: Optional[SoundConfig] = None,
+    ):
         """Plays audio to the user using the configured TTS Provider (default: OpenAI TTS).
         Also adds sound effects if enabled in the configuration.
 
         Args:
             text (str): The text to play as audio.
         """
+        if sound_config:
+            printr.print(
+                "Using custom sound config for playback", LogType.INFO, server_only=True
+            )
+        else:
+            sound_config = self.config.sound
+
+        if sound_config.volume == 0.0:
+            printr.print(
+                "Volume modifier is set to 0, skipping TTS processing.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
+
         # remove Markdown, links, emotes and code blocks
         text, contains_links, contains_code_blocks = cleanup_text(text)
 
@@ -1084,54 +1089,54 @@ class OpenAiWingman(Wingman):
             while self.audio_player.is_playing:
                 await asyncio.sleep(0.1)
 
-        if self.tts_provider == TtsProvider.EDGE_TTS:
+        if self.config.features.tts_provider == TtsProvider.EDGE_TTS:
             await self.edge_tts.play_audio(
                 text=text,
                 config=self.config.edge_tts,
-                sound_config=self.config.sound,
+                sound_config=sound_config,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
             )
-        elif self.tts_provider == TtsProvider.ELEVENLABS:
+        elif self.config.features.tts_provider == TtsProvider.ELEVENLABS:
             await self.elevenlabs.play_audio(
                 text=text,
                 config=self.config.elevenlabs,
-                sound_config=self.config.sound,
+                sound_config=sound_config,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
                 stream=self.config.elevenlabs.output_streaming,
             )
-        elif self.tts_provider == TtsProvider.AZURE:
+        elif self.config.features.tts_provider == TtsProvider.AZURE:
             await self.openai_azure.play_audio(
                 text=text,
                 api_key=self.azure_api_keys["tts"],
                 config=self.config.azure.tts,
-                sound_config=self.config.sound,
+                sound_config=sound_config,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
             )
-        elif self.tts_provider == TtsProvider.XVASYNTH:
+        elif self.config.features.tts_provider == TtsProvider.XVASYNTH:
             await self.xvasynth.play_audio(
                 text=text,
                 config=self.config.xvasynth,
-                sound_config=self.config.sound,
+                sound_config=sound_config,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
             )
-        elif self.tts_provider == TtsProvider.OPENAI:
+        elif self.config.features.tts_provider == TtsProvider.OPENAI:
             await self.openai.play_audio(
                 text=text,
                 voice=self.config.openai.tts_voice,
-                sound_config=self.config.sound,
+                sound_config=sound_config,
                 audio_player=self.audio_player,
                 wingman_name=self.name,
             )
-        elif self.tts_provider == TtsProvider.WINGMAN_PRO:
+        elif self.config.features.tts_provider == TtsProvider.WINGMAN_PRO:
             if self.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
                 await self.wingman_pro.generate_openai_speech(
                     text=text,
                     voice=self.config.openai.tts_voice,
-                    sound_config=self.config.sound,
+                    sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,
                 )
@@ -1139,12 +1144,14 @@ class OpenAiWingman(Wingman):
                 await self.wingman_pro.generate_azure_speech(
                     text=text,
                     config=self.config.azure.tts,
-                    sound_config=self.config.sound,
+                    sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,
                 )
         else:
-            printr.toast_error(f"Unsupported TTS provider: {self.tts_provider}")
+            printr.toast_error(
+                f"Unsupported TTS provider: {self.config.features.tts_provider}"
+            )
 
     async def _execute_command(self, command: dict) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.

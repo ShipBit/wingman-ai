@@ -1,5 +1,6 @@
 name: UEXCorp
 module: skills.uexcorp.main
+category: star_citizen
 description:
   en: Use the UEXCorp API to get live trading and lore information about ships, locations, commodities and more in Star Citizen.
   de: Nutze die UEXCorp API, um live Handels- und Lore-Informationen über Schiffe, Orte, Rohstoffe und mehr in Star Citizen zu erhalten.

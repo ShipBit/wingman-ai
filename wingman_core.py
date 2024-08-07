@@ -4,7 +4,9 @@ import re
 import threading
 from typing import Optional
 from fastapi import APIRouter, File, UploadFile
+import requests
 import sounddevice as sd
+from showinfm import show_in_file_manager
 import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
@@ -19,11 +21,15 @@ from api.interface import (
     AudioDevice,
     AzureSttConfig,
     ConfigWithDirInfo,
+    ElevenlabsModel,
+    VoiceActivationSettings,
     WingmanInitializationError,
 )
+from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
+from providers.xvasynth import XVASynth
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.file import get_writable_dir
@@ -40,8 +46,11 @@ from services.websocket_user import WebSocketUser
 
 
 class WingmanCore(WebSocketUser):
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(
+        self, config_manager: ConfigManager, app_root_path: str, app_is_bundled: bool
+    ):
         self.printr = Printr()
+        self.app_root_path = app_root_path
 
         self.router = APIRouter()
         tags = ["core"]
@@ -91,14 +100,98 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/send_audio-to-wingman",
+            path="/send-audio-to-wingman",
             endpoint=self.send_audio_to_wingman,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/reset_conversation_history",
+            path="/reset-conversation-history",
             endpoint=self.reset_conversation_history,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/whispercpp/start",
+            endpoint=self.start_whispercpp,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/whispercpp/stop",
+            endpoint=self.stop_whispercpp,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/whispercpp/models",
+            response_model=list[str],
+            endpoint=self.get_whispercpp_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/xvasynth/start",
+            endpoint=self.start_xvasynth,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/xvasynth/stop",
+            endpoint=self.stop_xvasynth,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/xvsynth/model_dirs",
+            response_model=list[str],
+            endpoint=self.get_xvasynth_model_dirs,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/xvsynth/voices",
+            response_model=list[str],
+            endpoint=self.get_xvasynth_voices,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager",
+            endpoint=self.open_file_manager,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/config",
+            endpoint=self.open_config_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/logs",
+            endpoint=self.open_logs_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/openrouter",
+            response_model=list,
+            endpoint=self.get_openrouter_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/groq",
+            response_model=list,
+            endpoint=self.get_groq_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/elevenlabs",
+            response_model=list[ElevenlabsModel],
+            endpoint=self.get_elevenlabs_models,
             tags=tags,
         )
 
@@ -142,11 +235,23 @@ class WingmanCore(WebSocketUser):
             "voice_activation_changed", self.set_voice_activation
         )
         self.settings_service.settings_events.subscribe(
-            "va_treshold_changed", self.on_va_treshold_changed
+            "va_settings_changed", self.on_va_settings_changed
+        )
+
+        self.whispercpp = Whispercpp(
+            settings=self.settings_service.settings.voice_activation.whispercpp,
+            app_root_path=app_root_path,
+            app_is_bundled=app_is_bundled,
+        )
+        self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
+        self.settings_service.initialize(
+            whispercpp=self.whispercpp, xvasynth=self.xvasynth
         )
 
         self.voice_service = VoiceService(
-            config_manager=self.config_manager, audio_player=self.audio_player
+            config_manager=self.config_manager,
+            audio_player=self.audio_player,
+            xvasynth=self.xvasynth,
         )
 
         # restore settings
@@ -166,14 +271,30 @@ class WingmanCore(WebSocketUser):
             await self.set_voice_activation(is_enabled=True)
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
+        await self.unload_tower()
+
         self.tower = Tower(
-            config=config_dir_info.config, audio_player=self.audio_player
+            config=config_dir_info.config,
+            audio_player=self.audio_player,
+            whispercpp=self.whispercpp,
+            xvasynth=self.xvasynth,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
         )
         for error in self.tower_errors:
             self.printr.toast_error(error.message)
+
+        self.config_service.set_tower(self.tower)
+
+    async def unload_tower(self):
+        if self.tower:
+            for wingman in self.tower.wingmen:
+                for skill in wingman.skills:
+                    await skill.unload()
+                await wingman.unload()
+            self.tower = None
+            self.config_service.set_tower(None)
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []
@@ -324,18 +445,18 @@ class WingmanCore(WebSocketUser):
 
                 return original_text != text, text
 
-            whisperccp = Whispercpp(wingman_name="system")
-            transcription = whisperccp.transcribe(
+            transcription = self.whispercpp.transcribe(
                 filename=recording_file,
-                config=self.settings_service.settings.voice_activation.whispercpp,
+                config=self.settings_service.settings.voice_activation.whispercpp_config,
             )
-            cleaned, text = filter_and_clean_text(transcription.text)
-            if cleaned:
-                self.printr.print(
-                    f"Cleaned original transcription: {transcription.text}",
-                    server_only=True,
-                    color=LogType.SUBTLE,
-                )
+            if transcription:
+                cleaned, text = filter_and_clean_text(transcription.text)
+                if cleaned:
+                    self.printr.print(
+                        f"Cleaned original transcription: {transcription.text}",
+                        server_only=True,
+                        color=LogType.SUBTLE,
+                    )
         elif provider == VoiceActivationSttProvider.OPENAI:
             # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
             openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
@@ -353,10 +474,21 @@ class WingmanCore(WebSocketUser):
             )
 
     async def on_audio_devices_changed(self, devices: tuple[int | None, int | None]):
-        # devices: [output_device, input_device]
+        # devices: [input_device, output_device]
+
+        # get current audio devices
+        current_mic = sd.default.device[0]
+
+        # set new devices
         sd.default.device = devices
-        self.audio_recorder.valid_mic = True  # this allows a new error message
-        self.audio_recorder.update_input_stream()
+
+        # update input stream if the input device has changed
+        if current_mic != devices[0]:
+            self.audio_recorder.valid_mic = True  # this allows a new error message
+            self.audio_recorder.update_input_stream()
+            if self.is_listening:
+                self.start_voice_recognition(mute=True)
+                self.start_voice_recognition(mute=False, adjust_for_ambient_noise=True)
 
     async def set_voice_activation(self, is_enabled: bool):
         if is_enabled:
@@ -444,7 +576,7 @@ class WingmanCore(WebSocketUser):
             callback, wingman_name = await self.event_queue.get()
             await callback(wingman_name)
 
-    def on_va_treshold_changed(self, _va_energy_threshold: float):
+    def on_va_settings_changed(self, _va_settings: VoiceActivationSettings):
         # restart VA with new settings
         if self.is_listening:
             self.start_voice_recognition(mute=True)
@@ -584,3 +716,126 @@ class WingmanCore(WebSocketUser):
                 "Conversation history cleared.",
             )
         return True
+
+    # POST /whispercpp/start
+    def start_whispercpp(self):
+        self.whispercpp.start_server()
+
+    # POST /whispercpp/stop
+    def stop_whispercpp(self):
+        try:
+            self.whispercpp.stop_server()
+        except Exception:
+            pass
+
+    # GET /whispercpp/models
+    def get_whispercpp_models(self):
+        model_files = []
+        try:
+            model_files = [
+                f
+                for f in os.listdir(self.whispercpp.models_dir)
+                if os.path.isfile(os.path.join(self.whispercpp.models_dir, f))
+                and f.endswith(".bin")
+            ]
+        except Exception:
+            # this can fail:
+            # - on MacOS (always)
+            # - in Dev mode if the dev hasn't copied the whispercpp-models dir to the repository
+            # in these cases, we return an empty list and the client will lock the controls and show a warning.
+            pass
+        return model_files
+
+    # POST /xvasynth/start
+    def start_xvasynth(self):
+        self.xvasynth.start_server()
+
+    # POST /xvasynth/stop
+    def stop_xvasynth(self):
+        try:
+            self.xvasynth.stop_server()
+        except Exception:
+            pass
+
+    def get_xvasynth_model_dirs(self):
+        subfolders = []
+        try:
+            subfolders = [
+                dir.name for dir in os.scandir(self.xvasynth.models_dir) if dir.is_dir()
+            ]
+        except Exception:
+            pass
+
+        return subfolders
+
+    def get_xvasynth_voices(self, model_directory: str):
+        voices = []
+        directory = os.path.join(self.xvasynth.models_dir, model_directory)
+        try:
+            # listing all files in the directory
+            files = [
+                f
+                for f in os.listdir(directory)
+                if os.path.isfile(os.path.join(directory, f))
+            ]
+
+            # extracting unique base filenames
+            unique_base_filenames = set(os.path.splitext(f)[0] for f in files)
+            voices = list(unique_base_filenames)
+        except Exception:
+            # this can fail:
+            # - on MacOS (always)
+            # - in Dev mode if the dev hasn't copied the whispercpp-models dir to the repository
+            # in these cases, we return an empty list and the client will lock the controls and show a warning.
+            pass
+        return voices
+
+    # POST /open-filemanager
+    def open_file_manager(self, path: str):
+        show_in_file_manager(path)
+
+    # POST /open-filemanager/config
+    def open_config_directory(self, config_name: str):
+        show_in_file_manager(self.config_manager.get_config_dir_path(config_name))
+
+    # POST /open-filemanager/logs
+    def open_logs_directory(self):
+        show_in_file_manager(get_writable_dir("logs"))
+
+    async def get_openrouter_models(self):
+        response = requests.get(url=f"https://openrouter.ai/api/v1/models", timeout=10)
+        response.raise_for_status()
+        content = response.json()
+        return content.get("data", [])
+
+    async def get_groq_models(self):
+        groq_api_key = await self.secret_keeper.retrieve(key="groq", requester="Groq")
+        response = requests.get(
+            url=f"https://api.groq.com/openai/v1/models",
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {groq_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        content = response.json()
+        return content.get("data", [])
+
+    async def get_elevenlabs_models(self):
+        elevenlabs_api_key = await self.secret_keeper.retrieve(
+            key="elevenlabs", requester="Elevenlabs"
+        )
+        elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
+        models = elevenlabs.get_available_models()
+        convert = lambda model: ElevenlabsModel(
+            name=model.name,
+            model_id=model.modelID,
+            description=model.description,
+            max_characters=model.maxCharacters,
+            cost_factor=model.costFactor,
+            supported_languages=model.supportedLanguages,
+            metadata=model.metadata,
+        )
+        result = [convert(model) for model in models]
+        return result

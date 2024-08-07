@@ -55,11 +55,14 @@ class AudioRecorder:
             self.recstream.close()
 
         try:
-            # throw exception to test
             self.recstream = sounddevice.InputStream(
                 callback=self.__handle_input_stream,
                 channels=self.channels,
                 samplerate=self.samplerate,
+            )
+            self.microphone = sr.Microphone(
+                sample_rate=self.samplerate,
+                device_index=sounddevice.default.device[0], # default input device
             )
             return True
         except Exception:

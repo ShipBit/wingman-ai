@@ -1,32 +1,26 @@
 from os import path
+from typing import TYPE_CHECKING
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from typing import TYPE_CHECKING
-from api.enums import LogSource, LogType
-from api.interface import (
-    SettingsConfig,
-    SkillConfig,
-    WingmanConfig,
-    WingmanInitializationError,
-)
+from api.enums import LogType
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from services.file import get_writable_dir
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
+
 
 class Spotify(Skill):
 
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
-        super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
-        )
+        super().__init__(config=config, settings=settings, wingman=wingman)
+
         self.data_path = get_writable_dir(path.join("skills", "spotify", "data"))
         self.spotify: spotipy.Spotify = None
         self.available_devices = []

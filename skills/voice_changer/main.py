@@ -4,33 +4,29 @@ from typing import TYPE_CHECKING
 from api.interface import (
     SettingsConfig,
     SkillConfig,
-    WingmanConfig,
+    VoiceSelection,
     WingmanInitializationError,
 )
 from api.enums import (
     LogType,
-    WingmanInitializationErrorType,
     TtsProvider,
-    OpenAiTtsVoice,
     WingmanProTtsProvider,
 )
 from skills.skill_base import Skill
-from services.printr import Printr
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.open_ai_wingman import OpenAiWingman
 
-printr = Printr()
 
 class VoiceChanger(Skill):
 
     def __init__(
         self,
         config: SkillConfig,
-        wingman_config: WingmanConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "OpenAiWingman",
     ) -> None:
+        super().__init__(config=config, settings=settings, wingman=wingman)
 
         self.voice_switching = True
         self.voices = []
@@ -44,9 +40,7 @@ class VoiceChanger(Skill):
         self.context_personality = ""
         self.context_personality_next = ""
 
-        super().__init__(
-            config=config, wingman_config=wingman_config, settings=settings, wingman=wingman
-        )
+        self.active = False
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -68,182 +62,67 @@ class VoiceChanger(Skill):
             self.context_generation = False
 
         # prepare voices
-        voices = self.retrieve_custom_property_value(
+        voices: list[VoiceSelection] = self.retrieve_custom_property_value(
             "voice_changer_voices", errors
         )
-        if not voices:
+        if not voices or len(voices) == 0:
             self.voice_switching = False
         else:
-            elvenlabs_voices = None
+            # we have to initiate all providers here
+            initiated_providers = []
+            initiate_provider_error = False
 
-            # replace whitespace and split by comma
-            voice_settings = voices.replace(" ", "").split(",")
+            for voice in voices:
+                voice_provider = voice.provider
+                if voice_provider not in initiated_providers:
+                    initiated_providers.append(voice_provider)
 
-            default_provider = self.wingman.tts_provider.value
-            default_subprovider = None
-            if self.wingman.tts_provider == TtsProvider.WINGMAN_PRO:
-                default_subprovider = self.wingman.config.wingman_pro.tts_provider.value
+                    # initiate provider
+                    if voice_provider == TtsProvider.OPENAI and not self.wingman.openai:
+                        await self.wingman.validate_and_set_openai(errors)
+                        if len(errors) > 0:
+                            initiate_provider_error = True
+                    elif (
+                        voice_provider == TtsProvider.AZURE
+                        and not self.wingman.openai_azure
+                    ):
+                        await self.wingman.validate_and_set_azure(errors)
+                        if len(errors) > 0:
+                            initiate_provider_error = True
+                    elif (
+                        voice_provider == TtsProvider.ELEVENLABS
+                        and not self.wingman.elevenlabs
+                    ):
+                        await self.wingman.validate_and_set_elevenlabs(errors)
+                        if len(errors) > 0:
+                            initiate_provider_error = True
+                    elif (
+                        voice_provider == TtsProvider.WINGMAN_PRO
+                        and not self.wingman.wingman_pro
+                    ):
+                        await self.wingman.validate_and_set_wingman_pro()
 
-            for voice in voice_settings:
-                # split provider and voice name
-                voice_provider = default_provider
-                voice_subprovider = default_subprovider
-                voice_name = voice
-                voice_id = voice
-                if voice.find("."):
-                    voice_split = voice.split(".")
-                    if len(voice_split) > 3:
-                        errors.append(
-                            WingmanInitializationError(
-                                wingman_name=self.wingman.name,
-                                message="Invalid format in 'voices' field. Expected format: 'voice' or 'provider.voice' or 'provider.subprovider.name'. Given: " + voice,
-                                error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                            )
-                        )
-                        break
-                    else:
-                        if len(voice_split) == 3:
-                            voice_provider = voice_split[0].lower()
-                            voice_subprovider = voice_split[1].lower()
-                            voice_name = voice_split[2]
-                            voice_id = voice_name
-                        elif len(voice_split) == 2:
-                            voice_provider = voice_split[0].lower()
-                            voice_subprovider = None
-                            voice_name = voice_split[1]
-                            voice_id = voice_name
-                        else:
-                            voice_name = voice_split[0]
-                            voice_id = voice_name
-
-                # if provider not in enum (TtsProvider), throw error
-                if voice_provider not in (member.value for member in TtsProvider):
-                    errors.append(
-                        WingmanInitializationError(
-                            wingman_name=self.wingman.name,
-                            message="Invalid TTS provider in 'voices' field: " + voice_provider,
-                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                        )
-                    )
-                    break
-                else:
-                    for member in TtsProvider:
-                        if member.value == voice_provider:
-                            voice_provider = member
-                            break
-
-                # check if api key is set for provider -> will open prompt if not set
-                if voice_provider == TtsProvider.OPENAI and not self.wingman.openai:
-                    await self.wingman.validate_and_set_openai(errors)
-                    if not self.wingman.openai:
-                        errors.append(
-                            WingmanInitializationError(
-                                wingman_name=self.wingman.name,
-                                message="OpenAI could not be initialized. Please make sure an API key is set.",
-                                error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                            )
-                        )
-                        break
-                elif voice_provider == TtsProvider.AZURE and not self.wingman.openai_azure:
-                    await self.wingman.validate_and_set_azure(errors)
-                    if not self.wingman.openai_azure:
-                        errors.append(
-                            WingmanInitializationError(
-                                wingman_name=self.wingman.name,
-                                message="Azure could not be initialized. Please make sure an API key is set.",
-                                error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                            )
-                        )
-                        break
-                elif voice_provider == TtsProvider.ELEVENLABS and not self.wingman.elevenlabs:
-                    await self.wingman.validate_and_set_elevenlabs(errors)
-                    if not self.wingman.elevenlabs:
-                        errors.append(
-                            WingmanInitializationError(
-                                wingman_name=self.wingman.name,
-                                message="Elevenlabs could not be initialized. Please make sure an API key is set.",
-                                error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                            )
-                        )
-                        break
-                elif voice_provider == TtsProvider.WINGMAN_PRO and not self.wingman.wingman_pro:
-                    await self.wingman.validate_and_set_wingman_pro(errors)
-                    if not self.wingman.wingman_pro:
-                        errors.append(
-                            WingmanInitializationError(
-                                wingman_name=self.wingman.name,
-                                message="Wingman Pro could not be initialized. Please make sure you are logged in and have a valid Wingman Pro subscription.",
-                                error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                            )
-                        )
-                        break
-
-                # if subprovider invalid, throw error
-                if voice_provider == TtsProvider.WINGMAN_PRO and voice_subprovider not in (member.value for member in WingmanProTtsProvider):
-                    errors.append(
-                        WingmanInitializationError(
-                            wingman_name=self.wingman.name,
-                            message=f"Invalid Wingman Pro sub provider in 'voices' field: {voice_subprovider.value} in {voice}",
-                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                        )
-                    )
-                    break
-                elif voice_provider != TtsProvider.WINGMAN_PRO and voice_subprovider is not None:
-                    errors.append(
-                        WingmanInitializationError(
-                            wingman_name=self.wingman.name,
-                            message=f"Sub provider not supported for TTS provider: {voice_provider.value} in {voice}",
-                            error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                        )
-                    )
-                    break
-                elif voice_provider == TtsProvider.WINGMAN_PRO:
-                    for member in WingmanProTtsProvider:
-                        if member.value == voice_subprovider:
-                            voice_subprovider = member
-                            break
-
-                for member in TtsProvider:
-                    if member.value == voice_provider:
-                        voice_provider = member
-                        break
-
-                # special handling for elevenlabs to sync voice id and name
-                if voice_provider == TtsProvider.ELEVENLABS:
-                    # load available voices once
-                    if elvenlabs_voices is None:
-                        elvenlabs_voices = self.wingman.elevenlabs.get_available_voices()
-
-                    found = False
-                    for elevenlabs_voice in elvenlabs_voices:
-                        if elevenlabs_voice.voiceID == voice_id:
-                            voice_name = elevenlabs_voice.name
-                            found = True
-                            break
-                        if elevenlabs_voice.name == voice_name:
-                            voice_id = elevenlabs_voice.voiceID
-                            found = True
-                            break
-
-                    if not found:
-                        errors.append(
-                            WingmanInitializationError(
-                                wingman_name=self.wingman.name,
-                                message="Voice not found in Elevenlabs voices: " + voice_name,
-                                error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                            )
-                        )
-                        break
-
-                self.voices.append((voice_provider, voice_subprovider, voice_name, voice_id))
-
-        #prepare first personality
-        if self.context_generation:
-            self.threaded_execution(self._generate_new_context)
+            if not initiate_provider_error:
+                self.voices = voices
+            else:
+                self.voice_switching = False
 
         return errors
 
+    async def prepare(self) -> None:
+        self.active = True
+
+        # prepare first personality
+        if self.context_generation:
+            self.threaded_execution(self._generate_new_context)
+
+    async def unload(self) -> None:
+        self.active = False
+
     async def on_add_user_message(self, message: str):
+        if not self.active:
+            return
+
         if self.voice_last_message is None:
             await self._initiate_change()
             self.voice_last_message = time.time()
@@ -269,63 +148,82 @@ class VoiceChanger(Skill):
         messages = [await message for message in messages if message]
 
         if messages:
-            await printr.print_async(
+            await self.printr.print_async(
                 text="\n".join(messages),
                 color=LogType.INFO,
-                source_name=self.wingman.name
+                source_name=self.wingman.name,
             )
 
     async def _switch_voice(self) -> str:
-        """Switch voice to a random voice from the list."""
-
-        message = ""
+        """Switch voice to the given voice setting."""
 
         # choose voice
         while True:
-            index = randrange(len(self.voices))-1
-            if self.voice_current_index is None or len(self.voices) == 1 or index != self.voice_current_index:
+            index = randrange(len(self.voices)) - 1
+            if (
+                self.voice_current_index is None
+                or len(self.voices) == 1
+                or index != self.voice_current_index
+            ):
                 self.voice_current_index = index
-
-                voice_provider, voice_subprovider, voice_name, voice_id = self.voices[index]
-
-                message = f"Switched {self.wingman.name}'s voice to {voice_name} ({voice_provider.value}"
-                if voice_subprovider:
-                    message += f"/{voice_subprovider.value}"
-                message += ")."
+                voice_setting = self.voices[index]
                 break
 
-        # set voice
-        self.wingman.tts_provider = voice_provider
-        if self.wingman.tts_provider == TtsProvider.EDGE_TTS:
-            self.wingman.config.edge_tts.voice = voice_id
-        elif self.wingman.tts_provider == TtsProvider.ELEVENLABS:
-            self.wingman.config.elevenlabs.voice.id = voice_id
-            self.wingman.config.elevenlabs.voice.name = voice_name
-        elif self.wingman.tts_provider == TtsProvider.AZURE:
-            self.wingman.config.azure.tts.voice = voice_id
-        elif self.wingman.tts_provider == TtsProvider.XVASYNTH:
-            self.wingman.config.xvasynth.voice = voice_id
-        elif self.wingman.tts_provider == TtsProvider.OPENAI:
-            self.wingman.config.openai.tts_voice = await self.__get_openai_voice_by_name(voice_name)
-        elif self.wingman.tts_provider == TtsProvider.WINGMAN_PRO:
-            self.wingman.config.wingman_pro.tts_provider = voice_subprovider
-            if self.wingman.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
-                self.wingman.config.openai.tts_voice = await self.__get_openai_voice_by_name(voice_name)
-            elif self.wingman.config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
-                self.wingman.config.azure.tts.voice = voice_id
-        else:
-            printr.print_async(
-                f"Voice switching is not supported for the selected TTS provider: {self.wingman.tts_provider.value}.",
-                LogType.WARNING,
+        if not voice_setting:
+            await self.printr.print_async(
+                "Voice switching failed due to missing voice settings.",
+                LogType.ERROR,
             )
+            return "Voice switching failed due to missing voice settings."
 
-        return message
+        voice_provider = voice_setting.provider
+        voice = voice_setting.voice
+        voice_name = None
+        error = False
 
-    async def __get_openai_voice_by_name(self, voice_name: str):
-        return next(
-            (voice for voice in OpenAiTtsVoice if voice.value.lower() == voice_name.lower()),
-            None,
-        )
+        if voice_provider == TtsProvider.WINGMAN_PRO:
+            if voice_setting.subprovider == WingmanProTtsProvider.OPENAI:
+                voice_name = voice.value
+                provider_name = "Wingman Pro / OpenAI"
+                self.wingman.config.openai.tts_voice = voice
+            elif voice_setting.subprovider == WingmanProTtsProvider.AZURE:
+                voice_name = voice
+                provider_name = "Wingman Pro / Azure TTS"
+                self.wingman.config.azure.tts.voice = voice
+        elif voice_provider == TtsProvider.OPENAI:
+            voice_name = voice.value
+            provider_name = "OpenAI"
+            self.wingman.config.openai.tts_voice = voice
+        elif voice_provider == TtsProvider.ELEVENLABS:
+            voice_name = voice.name or voice.id
+            provider_name = "Elevenlabs"
+            self.wingman.config.elevenlabs.voice = voice
+            self.wingman.config.elevenlabs.output_streaming = False
+        elif voice_provider == TtsProvider.AZURE:
+            voice_name = voice
+            provider_name = "Azure TTS"
+            self.wingman.config.azure.tts.voice = voice
+        elif voice_provider == TtsProvider.XVASYNTH:
+            voice_name = voice.voice_name
+            provider_name = "XVASynth"
+            self.wingman.config.xvasynth.voice = voice
+        elif voice_provider == TtsProvider.EDGE_TTS:
+            voice_name = voice
+            provider_name = "Edge TTS"
+            self.wingman.config.edge_tts.voice = voice
+        else:
+            error = True
+
+        if error or not voice_name or not voice_provider:
+            await self.printr.print_async(
+                "Voice switching failed due to an unknown voice provider/subprovider. Setting: {voice_setting}",
+                LogType.ERROR,
+            )
+            return f"Voice switching failed due to an unknown voice provider/subprovider. Setting: {voice_setting}"
+
+        self.wingman.config.features.tts_provider = voice_provider
+
+        return f"Switched {self.wingman.name}'s voice to {voice_name} ({provider_name})"
 
     async def _switch_personality(self) -> str:
         # if no next context is available, generate a new one
@@ -342,20 +240,24 @@ class VoiceChanger(Skill):
     async def _generate_new_context(self):
         messages = [
             {
-                'role': 'system',
-                'content': """
+                "role": "system",
+                "content": """
                     Generate new context based on the input in the \"You\"-perspective.
                     Like \"You are a grumpy...\" or \"You are an enthusiastic...\" and so on.
                     Only output the personality description without additional context or commentary.
                 """,
             },
             {
-                'role': 'user',
-                'content': self.context_prompt,
+                "role": "user",
+                "content": self.context_prompt,
             },
         ]
         completion = await self.llm_call(messages)
-        generated_context = completion.choices[0].message.content if completion and completion.choices else ""
+        generated_context = (
+            completion.choices[0].message.content
+            if completion and completion.choices
+            else ""
+        )
 
         self.context_personality_next = generated_context
 

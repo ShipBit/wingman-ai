@@ -1,5 +1,6 @@
 name: TypingAssistant
 module: skills.typing_assistant.main
+category: general
 description:
   en: Let your Wingman type text for you!
   de: Lass deinen Wingman Texte für dich tippen!

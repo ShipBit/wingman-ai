@@ -18,9 +18,15 @@ from services.config_manager import ConfigManager
 
 
 class VoiceService:
-    def __init__(self, config_manager: ConfigManager, audio_player: AudioPlayer):
+    def __init__(
+        self,
+        config_manager: ConfigManager,
+        audio_player: AudioPlayer,
+        xvasynth: XVASynth,
+    ):
         self.config_manager = config_manager
         self.audio_player = audio_player
+        self.xvasynth = xvasynth
 
         self.router = APIRouter()
         tags = ["voice"]
@@ -198,8 +204,7 @@ class VoiceService:
     async def play_xvasynth_tts(
         self, text: str, config: XVASynthTtsConfig, sound_config: SoundConfig
     ):
-        xvasynth = XVASynth(wingman_name="")
-        await xvasynth.play_audio(
+        await self.xvasynth.play_audio(
             text=text,
             config=config,
             sound_config=sound_config,

@@ -1,0 +1,2 @@
+Version: 1.5.1
+Arguments: ['C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-szuhsfuw\\cp311-win_amd64\\build\\venv\\Scripts\\delvewheel', 'repair', '--add-path', 'C:/vcpkg/installed/x64-windows/bin', '-w', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-szuhsfuw\\cp311-win_amd64\\repaired_wheel', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-szuhsfuw\\cp311-win_amd64\\built_wheel\\pyproj-3.6.1-cp311-cp311-win_amd64.whl']
