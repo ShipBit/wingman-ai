@@ -39,6 +39,9 @@ class ConfigMigrationService:
 
             old["xvasynth"] = self.config_manager.convert_to_dict(new.xvasynth)
             self.log("- adding new XVASynth settings")
+
+            old.pop("audio", None)
+            self.log("- removed audio device settings because DirectSound was removed")
             return old
 
         def migrate_defaults(old: dict, new: NestedConfig) -> dict:
