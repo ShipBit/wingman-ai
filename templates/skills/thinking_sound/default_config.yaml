@@ -1,0 +1,20 @@
+name: ThinkingSound
+module: skills.thinking_sound.main
+category: general
+description:
+  en: Plays back sounds while waiting on AI response.
+  de: Spielt Sounds ab, während auf die Antwort der AI gewartet wird.
+custom_properties:
+  - id: volume
+    name: Volume
+    hint: The volume (relative to the Wingman's volume) for playback. Must be between 0.0 (silent) and 1.0 (same volume as Wingman).
+    value: 0.5
+    required: false
+    property_type: slider
+    options:
+      - label: min
+        value: 0.0
+      - label: max
+        value: 1.0
+      - label: step
+        value: 0.05

@@ -42,14 +42,16 @@ class AudioPlayer:
         self.event_loop = loop
 
     def start_playback(
-        self, audio, sample_rate, channels, finished_callback, volume: float
+        self, audio, sample_rate, channels, finished_callback, volume: list[float]|float
     ):
         def callback(outdata, frames, time, status):
+            # this is a super hacky way to update volume while the playback is running
+            local_volume = volume[0] if isinstance(volume, list) else volume
             nonlocal playhead
             chunksize = frames * channels
 
             # If we are at the end of the audio buffer, stop playback
-            if playhead * channels >= len(audio):
+            if playhead >= len(audio):
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata.fill(0.0)  # Fill with zero for floats
                 else:
@@ -66,10 +68,10 @@ class AudioPlayer:
             if channels > 1 and current_chunk.ndim == 1:
                 current_chunk = np.tile(current_chunk[:, np.newaxis], (1, channels))
 
-            # Flat the chunk
+            # Flatten the chunk
             current_chunk = current_chunk.ravel()
 
-            required_length = frames * channels
+            required_length = chunksize
 
             # Ensure current_chunk has the required length
             if len(current_chunk) < required_length:
@@ -81,7 +83,7 @@ class AudioPlayer:
             # Reshape current_chunk to match outdata's shape, only if size matches
             try:
                 current_chunk = current_chunk.reshape((frames, channels))
-                current_chunk = current_chunk * volume
+                current_chunk = current_chunk * local_volume
                 if np.issubdtype(outdata.dtype, np.floating):
                     outdata[:] = current_chunk.astype(outdata.dtype)
                 else:
@@ -95,7 +97,7 @@ class AudioPlayer:
                 )  # Safely fill zero to avoid noise
 
             # Update playhead
-            playhead = end
+            playhead += frames
 
             # Check if playback should stop (end of audio)
             if playhead >= len(audio):
