@@ -415,6 +415,15 @@ class CommandKeyboardConfig(BaseModel):
     release: Optional[bool] = None
     """Whether to release the key. Optional."""
 
+class AudioFileConfig(BaseModel):
+    path: str
+    """The audio file to play. Required."""
+
+    volume: Optional[float] = None
+    """The volume to play the audio file at. Optional."""
+
+    wait: Optional[bool] = None
+    """Whether to wait for the audio file to finish playing before continuing. Optional."""
 
 class CommandMouseConfig(BaseModel):
     button: Optional[str] = None
@@ -445,6 +454,9 @@ class CommandActionConfig(BaseModel):
 
     write: Optional[str] = None
     """The word or phrase to type, for example, to type text in a login screen.  Must have associated button press to work.  May need special formatting for special characters."""
+
+    audio: Optional[AudioFileConfig] = None
+    """The audio file to play. Optional."""
 
 
 class CommandConfig(BaseModel):

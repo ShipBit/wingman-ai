@@ -21,6 +21,7 @@ from services.audio_player import AudioPlayer
 from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
+from services.audio_player_service import play_audio_file
 
 from skills.skill_base import Skill
 
@@ -516,14 +517,26 @@ class Wingman:
             if action.wait:
                 time.sleep(action.wait)
 
+            if action.audio:
+                volume = (action.audio.volume or 1.0) * self.config.sound.volume
+                filepath = action.audio.path
+
+                if action.audio.wait:
+                    play_audio_file(filepath, volume)
+                else:
+                    self.threaded_execution(play_audio_file, filepath, volume)
+
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
 
         def start_thread(function, *args):
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            new_loop.run_until_complete(function(*args))
-            new_loop.close()
+            if asyncio.iscoroutinefunction(function):
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                new_loop.run_until_complete(function(*args))
+                new_loop.close()
+            else:
+                function(*args)
 
         thread = threading.Thread(target=start_thread, args=(function, *args))
         thread.start()

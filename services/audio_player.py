@@ -1,5 +1,6 @@
 import asyncio
 import io
+import wave
 from os import path
 from threading import Thread
 from typing import Callable
@@ -15,7 +16,6 @@ from services.sound_effects import (
     get_azure_workaround_gain_boost,
     get_sound_effects,
 )
-
 
 class AudioPlayer:
     def __init__(
@@ -211,7 +211,19 @@ class AudioPlayer:
         beep_audio, beep_sample_rate = self.get_audio_from_file(
             path.join(self.sample_dir, audio_sample_file)
         )
-        self.start_playback(beep_audio, beep_sample_rate, 1, None, volume)
+        with wave.open(audio_sample_file, "rb") as audio_file:
+            num_channels = audio_file.getnchannels()
+        self.start_playback(beep_audio, beep_sample_rate, num_channels, None, volume)
+
+    def play_mp3(self, audio_sample_file: str, volume: float):
+        audio, sample_rate = self.get_audio_from_file(audio_sample_file)
+        self.start_playback(audio, sample_rate, 2, None, volume)
+
+    def play_audio_file(self, filename: str, volume: float):
+        if filename.endswith(".mp3"):
+            self.play_mp3(filename, volume)
+        elif filename.endswith(".wav"):
+            self.play_wav(filename, volume)
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")
