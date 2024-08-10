@@ -415,8 +415,15 @@ class CommandKeyboardConfig(BaseModel):
     release: Optional[bool] = None
     """Whether to release the key. Optional."""
 
-class AudioFileConfig(BaseModel):
+class AudioFile(BaseModel):
     path: str
+    """The audio file to play. Required."""
+    
+    name: str[Optional]
+    """The name of the audio file. Optional."""
+
+class AudioFileConfig(BaseModel):
+    file: AudioFile
     """The audio file to play. Required."""
 
     volume: Optional[float] = None

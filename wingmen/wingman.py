@@ -21,7 +21,7 @@ from services.audio_player import AudioPlayer
 from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
-from services.audio_player_service import play_audio_file
+from services.audio_library import AudioLibrary
 
 from skills.skill_base import Skill
 
@@ -40,6 +40,7 @@ class Wingman:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        audio_library: AudioLibrary,
         whispercpp: Whispercpp,
         xvasynth: XVASynth,
     ):
@@ -64,6 +65,9 @@ class Wingman:
 
         self.audio_player = audio_player
         """A service that allows you to play audio files and add sound effects to them."""
+        
+        self.audio_library = audio_library
+        """A service that allows you to play and manage audio files from the audio library."""
 
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
@@ -518,13 +522,7 @@ class Wingman:
                 time.sleep(action.wait)
 
             if action.audio:
-                volume = (action.audio.volume or 1.0) * self.config.sound.volume
-                filepath = action.audio.path
-
-                if action.audio.wait:
-                    play_audio_file(filepath, volume)
-                else:
-                    self.threaded_execution(play_audio_file, filepath, volume)
+                self.audio_library.start_playback(action.audio, self.config.sound.volume)
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""

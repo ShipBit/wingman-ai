@@ -7,7 +7,6 @@ from openai.types.chat import ChatCompletion
 from api.interface import (
     SettingsConfig,
     SoundConfig,
-    WingmanConfig,
     WingmanInitializationError,
 )
 from api.enums import (
@@ -25,9 +24,6 @@ from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
-from providers.xvasynth import XVASynth
-from providers.whispercpp import Whispercpp
-from services.audio_player import AudioPlayer
 from services.markdown import cleanup_text
 from services.printr import Printr
 from skills.skill_base import Skill
@@ -48,23 +44,8 @@ class OpenAiWingman(Wingman):
         "conversation": ConversationProvider.AZURE,
     }
 
-    def __init__(
-        self,
-        name: str,
-        config: WingmanConfig,
-        settings: SettingsConfig,
-        audio_player: AudioPlayer,
-        whispercpp: Whispercpp,
-        xvasynth: XVASynth,
-    ):
-        super().__init__(
-            name=name,
-            config=config,
-            audio_player=audio_player,
-            settings=settings,
-            whispercpp=whispercpp,
-            xvasynth=xvasynth,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.edge_tts = Edge()
 

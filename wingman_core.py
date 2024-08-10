@@ -19,6 +19,7 @@ from api.enums import (
 )
 from api.interface import (
     AudioDevice,
+    AudioFile,
     AzureSttConfig,
     ConfigWithDirInfo,
     ElevenlabsModel,
@@ -37,6 +38,7 @@ from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
 from services.audio_player import AudioPlayer
+from services.audio_library import AudioLibrary
 from services.audio_recorder import RECORDING_PATH, AudioRecorder
 from services.config_manager import ConfigManager
 from services.printr import Printr
@@ -201,6 +203,13 @@ class WingmanCore(WebSocketUser):
             endpoint=self.get_elevenlabs_models,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/audio-library",
+            response_model=list[AudioFile],
+            endpoint=self.get_audio_library,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_service = ConfigService(config_manager=config_manager)
@@ -216,6 +225,7 @@ class WingmanCore(WebSocketUser):
             on_playback_started=self.on_playback_started,
             on_playback_finished=self.on_playback_finished,
         )
+        self.audio_library = AudioLibrary()
 
         self.tower: Tower = None
 
@@ -283,6 +293,7 @@ class WingmanCore(WebSocketUser):
         self.tower = Tower(
             config=config_dir_info.config,
             audio_player=self.audio_player,
+            audio_library=self.audio_library,
             whispercpp=self.whispercpp,
             xvasynth=self.xvasynth,
         )
@@ -862,3 +873,6 @@ class WingmanCore(WebSocketUser):
         )
         result = [convert(model) for model in models]
         return result
+    
+    async def get_audio_library(self):
+        return self.audio_library.get_audio_files()

@@ -42,7 +42,12 @@ class AudioPlayer:
         self.event_loop = loop
 
     def start_playback(
-        self, audio, sample_rate, channels, finished_callback, volume: list[float]|float
+        self,
+        audio,
+        sample_rate,
+        channels,
+        finished_callback,
+        volume: list[float] | float,
     ):
         def callback(outdata, frames, time, status):
             # this is a super hacky way to update volume while the playback is running
@@ -197,17 +202,23 @@ class AudioPlayer:
 
         await self.notify_playback_started(wingman_name)
 
-    async def notify_playback_started(self, wingman_name: str):
-        await self.playback_events.publish("started", wingman_name)
+    async def notify_playback_started(
+        self, wingman_name: str, publish_event: bool = True
+    ):
+        if publish_event:
+            await self.playback_events.publish("started", wingman_name)
         if callable(self.on_playback_started):
             await self.on_playback_started(wingman_name)
 
-    async def notify_playback_finished(self, wingman_name: str):
-        await self.playback_events.publish("finished", wingman_name)
+    async def notify_playback_finished(
+        self, wingman_name: str, publish_event: bool = True
+    ):
+        if publish_event:
+            await self.playback_events.publish("finished", wingman_name)
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
 
-    def play_wav(self, audio_sample_file: str, volume: float):
+    def play_wav(self, audio_sample_file: str, volume: list[float] | float):
         beep_audio, beep_sample_rate = self.get_audio_from_file(
             path.join(self.sample_dir, audio_sample_file)
         )
@@ -215,15 +226,23 @@ class AudioPlayer:
             num_channels = audio_file.getnchannels()
         self.start_playback(beep_audio, beep_sample_rate, num_channels, None, volume)
 
-    def play_mp3(self, audio_sample_file: str, volume: float):
+    def play_mp3(self, audio_sample_file: str, volume: list[float] | float):
         audio, sample_rate = self.get_audio_from_file(audio_sample_file)
         self.start_playback(audio, sample_rate, 2, None, volume)
 
-    def play_audio_file(self, filename: str, volume: float):
+    def play_audio_file(
+        self,
+        filename: str,
+        volume: list[float] | float,
+        wingman_name: str = None,
+        publish_event: bool = True,
+    ):
+        self.notify_playback_started(wingman_name, publish_event)
         if filename.endswith(".mp3"):
             self.play_mp3(filename, volume)
         elif filename.endswith(".wav"):
             self.play_wav(filename, volume)
+        self.notify_playback_finished(wingman_name, publish_event)
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")
@@ -359,9 +378,9 @@ class AudioPlayer:
                 if num_samples_to_copy > remaining:
                     num_samples_to_copy = remaining
 
-                chunk[
-                    length - remaining : length - remaining + num_samples_to_copy
-                ] = noise_audio[mixed_pos:(mixed_pos + num_samples_to_copy)]
+                chunk[length - remaining : length - remaining + num_samples_to_copy] = (
+                    noise_audio[mixed_pos : (mixed_pos + num_samples_to_copy)]
+                )
                 remaining -= num_samples_to_copy
                 mixed_pos = mixed_pos + num_samples_to_copy
             return chunk
