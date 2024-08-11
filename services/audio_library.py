@@ -6,18 +6,20 @@ from api.interface import AudioFile, AudioFileConfig
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 
+AUDIO_LIBRARY_DIR = "audio_library"
+
 class AudioLibrary:
     def __init__(
         self,
-        callback_playback_started: callable|None = None,
-        callback_playback_finished: callable|None = None
+        callback_playback_started: callable = None,
+        callback_playback_finished: callable = None
     ):
         # Configurable settings
         self.callback_playback_started = callback_playback_started # Parameters: AudioFileConfig, AudioPlayer, volume(float)
         self.callback_playback_finished = callback_playback_finished # Parameters: AudioFileConfig
         
         # Internal settings
-        self.audio_library_path = get_writable_dir("audio_library")
+        self.audio_library_path = get_writable_dir(AUDIO_LIBRARY_DIR)
         self.current_playbacks = []
 
     ### Playback functions ###
@@ -88,7 +90,7 @@ class AudioLibrary:
 
             self.current_playbacks.pop(audio_file.file.path, None)
 
-    async def get_playback_status(self, audio_file: AudioFile|AudioFileConfig) -> [bool, AudioPlayer|None, float|None]:
+    async def get_playback_status(self, audio_file: AudioFile|AudioFileConfig) -> list[bool, AudioPlayer|None, float|None]:
         audio_file = self.__get_audio_file_config(audio_file)
 
         if audio_file.file.path in self.current_playbacks:
@@ -138,13 +140,9 @@ class AudioLibrary:
                 AudioFile(path=f, name=path.basename(f))
                 for f in listdir(self.audio_library_path)
                 if path.isfile(path.join(self.audio_library_path, f))
-                and f.endswith(".wav")
+                and (f.endswith(".wav") or f.endswith(".mp3"))
             ]
         except Exception:
-            # this can fail:
-            # - on MacOS (always)
-            # - in Dev mode if the dev hasn't copied the whispercpp-models dir to the repository
-            # in these cases, we return an empty list and the client will lock the controls and show a warning.
             pass
         return audio_files
 

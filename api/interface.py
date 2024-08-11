@@ -419,17 +419,17 @@ class AudioFile(BaseModel):
     path: str
     """The audio file to play. Required."""
     
-    name: str[Optional]
+    name: str
     """The name of the audio file. Optional."""
 
 class AudioFileConfig(BaseModel):
     file: AudioFile
     """The audio file to play. Required."""
 
-    volume: Optional[float] = None
+    volume: float = None
     """The volume to play the audio file at. Optional."""
 
-    wait: Optional[bool] = None
+    wait: bool = None
     """Whether to wait for the audio file to finish playing before continuing. Optional."""
 
 class CommandMouseConfig(BaseModel):
