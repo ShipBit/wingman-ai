@@ -2,13 +2,17 @@
 
 Wingman AI allows you to use your voice to talk to various AI providers and LLMs, process your conversations, and ultimately trigger actions such as pressing buttons or reading answers. Our _Wingmen_ are like characters and your interface to this world, and you can easily control their behavior and characteristics, even if you're not a developer.
 
+**1.5.0 Showreel:**
+
+[![Wingman AI 1.5 Showreel](https://img.youtube.com/vi/qR8FjmQJRGE/0.jpg)](https://youtu.be/qR8FjmQJRGE 'Wingman AI Showreel')
+
 **Release trailer:**
 
-[![IMAGE ALT TEXT](https://img.youtube.com/vi/--GkXcA5msw/0.jpg)](https://www.youtube.com/watch?v=--GkXcA5msw 'Wingman AI Release Trailer')
+[![Wingman AI 1.0 Release Trailer](https://img.youtube.com/vi/HR1Zc9QD1jE/0.jpg)](https://www.youtube.com/watch?v=HR1Zc9QD1jE 'Wingman AI Release Trailer')
 
 **In-depth tutorial:**
 
-[![IMAGE ALT TEXT](https://img.youtube.com/vi/HR1Zc9QD1jE/0.jpg)](https://www.youtube.com/watch?v=HR1Zc9QD1jE 'Wingman AI Tutorial')
+[![Wingman AI 1.0 Tutorial](https://img.youtube.com/vi/--GkXcA5msw/0.jpg)](https://www.youtube.com/watch?v=--GkXcA5msw 'Wingman AI Tutorial')
 
 AI is complex and it scares people. It's also **not just ChatGPT**. We want to make it as easy as possible for you to get started. That's what _Wingman AI_ is all about. It's a **framework** that allows you to build your own Wingmen and use them in your games and programs.
 
