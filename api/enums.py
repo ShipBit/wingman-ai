@@ -184,6 +184,7 @@ class SkillCategory(Enum):
     STAR_CITIZEN = "star_citizen"
     TRUCK_SIMULATOR = "truck_simulator"
     NO_MANS_SKY = "no_mans_sky"
+    FLIGHT_SIMULATOR = "flight_simulator"
 
 
 # Pydantic models for enums

@@ -1,6 +1,6 @@
 name: Msfs2020Control
 module: skills.msfs2020_control.main
-category: general
+category: flight_simulator
 description:
   en: Control and retrieve data from MSFS2020 dynamically using SimConnect.
   de: Steuern und Abrufen von Daten aus MSFS2020 dynamisch mit SimConnect.
