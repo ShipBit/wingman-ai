@@ -234,6 +234,9 @@ class StarHead(Skill):
 
         items = await self._fetch_data(f"shop/{shop['id']}/items")
 
+        for item in items:
+            item["pricePerItem"] = item["pricePerItem"] * 100
+
         shop_details = json.dumps(items)
         return shop_details
 
