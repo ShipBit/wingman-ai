@@ -91,7 +91,7 @@ class VisionAI(Skill):
                         source=LogSource.WINGMAN,
                         source_name=self.wingman.name,
                         skill_name=self.name,
-                        additional_data={"image": png_base64},
+                        additional_data={"image_base64": png_base64},
                     )
 
                 question = parameters.get("question", "What's in this image?")
