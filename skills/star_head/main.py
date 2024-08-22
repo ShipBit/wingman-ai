@@ -129,12 +129,12 @@ class StarHead(Skill):
             function_response = await self._get_best_trading_route(**parameters)
         if tool_name == "get_ship_information":
             function_response = await self._get_ship_information(**parameters)
-        if tool_name == "get_shop_information_of_specific_shop":
-            function_response = await self._get_shop_information_of_specific_shop(
+        if tool_name == "get_trading_information_of_specific_shop":
+            function_response = await self._get_trading_information_of_specific_shop(
                 **parameters
             )
-        if tool_name == "get_shop_information_for_celestial_objects":
-            function_response = await self._get_shop_information_for_celestial_objects(
+        if tool_name == "get_trading_shop_information_for_celestial_objects":
+            function_response = await self._get_trading_shop_information_for_celestial_objects(
                 **parameters
             )
         return function_response, instant_response
@@ -184,11 +184,11 @@ class StarHead(Skill):
                 },
             ),
             (
-                "get_shop_information_of_specific_shop",
+                "get_trading_information_of_specific_shop",
                 {
                     "type": "function",
                     "function": {
-                        "name": "get_shop_information",
+                        "name": "get_trading_information_of_specific_shop",
                         "description": "Gives trading information about the given shop, like which commodities you can sell or buy and for which price. If the name of the shop is not unique, you have to specify the celestial object.",
                         "parameters": {
                             "type": "object",
@@ -201,11 +201,11 @@ class StarHead(Skill):
                 },
             ),
             (
-                "get_shop_information_for_celestial_objects",
+                "get_trading_shop_information_for_celestial_objects",
                 {
                     "type": "function",
                     "function": {
-                        "name": "get_shop_information_for_celestial_objects",
+                        "name": "get_trading_shop_information_for_celestial_objects",
                         "description": "Gives trading information about the given celestial object, like which commodities you can sell or buy at which shop and for which price. All shops with shop items on that celestial object will be returned.",
                         "parameters": {
                             "type": "object",
@@ -224,7 +224,7 @@ class StarHead(Skill):
 
         return tools
 
-    async def _get_shop_information_for_celestial_objects(
+    async def _get_trading_shop_information_for_celestial_objects(
         self, celestial_object: str
     ) -> str:
         object_id = self._get_celestial_object_id(celestial_object)
@@ -239,12 +239,13 @@ class StarHead(Skill):
             items = await self._fetch_data(f"shop/{shop['id']}/items")
             for item in items:
                 item["pricePerItem"] = item["pricePerItem"] * 100
+                item["tradeType"] = "Sold by store" if item["tradeType"] == "buy" else "The shop buys"
             shop_items[f"{shop['parent']['name']} - {shop['name']}"] = items
 
         shop_details = json.dumps(shop_items)
         return shop_details
 
-    async def _get_shop_information_of_specific_shop(
+    async def _get_trading_information_of_specific_shop(
         self, shop: str = None
     ) -> str:
         # Get all shops with the given name
