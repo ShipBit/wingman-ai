@@ -129,8 +129,14 @@ class StarHead(Skill):
             function_response = await self._get_best_trading_route(**parameters)
         if tool_name == "get_ship_information":
             function_response = await self._get_ship_information(**parameters)
-        if tool_name == "get_shop_information":
-            function_response = await self._get_shop_information(**parameters)
+        if tool_name == "get_shop_information_of_specific_shop":
+            function_response = await self._get_shop_information_of_specific_shop(
+                **parameters
+            )
+        if tool_name == "get_shop_information_for_celestial_objects":
+            function_response = await self._get_shop_information_for_celestial_objects(
+                **parameters
+            )
         return function_response, instant_response
 
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
@@ -178,22 +184,38 @@ class StarHead(Skill):
                 },
             ),
             (
-                "get_shop_information",
+                "get_shop_information_of_specific_shop",
                 {
                     "type": "function",
                     "function": {
                         "name": "get_shop_information",
-                        "description": "Gives information about the given shop. If the shop name is not unique, use the parent name as well.",
+                        "description": "Gives trading information about the given shop, like which commodities you can sell or buy and for which price. If the name of the shop is not unique, you have to specify the celestial object.",
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "shop": {"type": "string", "enum": self.shop_names},
-                                "parent": {
-                                    "type": "string",
-                                    "enum": self.shop_parent_names,
-                                },
                             },
                             "required": ["shop"],
+                        },
+                    },
+                },
+            ),
+            (
+                "get_shop_information_for_celestial_objects",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_shop_information_for_celestial_objects",
+                        "description": "Gives trading information about the given celestial object, like which commodities you can sell or buy at which shop and for which price. All shops with shop items on that celestial object will be returned.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "celestial_object": {
+                                    "type": "string",
+                                    "enum": self.celestial_object_names,
+                                },
+                            },
+                            "required": ["celestial_object"],
                         },
                     },
                 },
@@ -202,40 +224,50 @@ class StarHead(Skill):
 
         return tools
 
-    async def _get_shop_information(self, shop: str, parent: str = None) -> str:
-        if parent:
-            # Get all shops with the given name and parent
-            shops = [
-                shop
-                for shop in self.shops
-                if shop["name"].lower() == shop["name"].lower()
-                and shop["parent"]["name"].lower() == parent.lower()
-            ]
+    async def _get_shop_information_for_celestial_objects(
+        self, celestial_object: str
+    ) -> str:
+        object_id = self._get_celestial_object_id(celestial_object)
 
-            # Check if there are multiple shops with the same name and parent
-            if len(shops) > 1:
-                return f"Multiple shops with the name '{shop}' and parent '{parent}' found."
-        else:
-            # Get all shops with the given name
-            shops = [
-                shop
-                for shop in self.shops
-                if shop["name"].lower() == shop["name"].lower()
-            ]
+        if not object_id:
+            return f"Could not find celestial object '{celestial_object}' in the StarHead database."
 
-            # Check if there are multiple shops with the same name
-            if len(shops) > 1:
-                return f"Multiple shops with the name '{shop}' found. Please specify the parent object."
+        shops = await self._fetch_data(f"shop?celestialObjectFilter={object_id}")
+
+        shop_items = {}
+        for shop in shops:
+            items = await self._fetch_data(f"shop/{shop['id']}/items")
+            for item in items:
+                item["pricePerItem"] = item["pricePerItem"] * 100
+            shop_items[f"{shop['parent']['name']} - {shop['name']}"] = items
+
+        shop_details = json.dumps(shop_items)
+        return shop_details
+
+    async def _get_shop_information_of_specific_shop(
+        self, shop: str = None
+    ) -> str:
+        # Get all shops with the given name
+        shops = [
+            shop
+            for shop in self.shops
+            if shop["name"].lower() == shop["name"].lower()
+        ]
+
+        # Check if there are multiple shops with the same name
+        if len(shops) > 1:
+            return f"Multiple shops with the name '{shop}' found. Please specify the celestial object."
 
         if not shops:
             return f"Could not find shop '{shop}' in the StarHead database."
-        
-        shop = shops[0]
 
-        items = await self._fetch_data(f"shop/{shop['id']}/items")
+        shop_items = {}
 
-        for item in items:
-            item["pricePerItem"] = item["pricePerItem"] * 100
+        for shop in shops:
+            items = await self._fetch_data(f"shop/{shop['id']}/items")
+            for item in items:
+                item["pricePerItem"] = item["pricePerItem"] * 100
+            shop_items[shop["name"]] = items
 
         shop_details = json.dumps(items)
         return shop_details
