@@ -37,6 +37,7 @@ class UEXCorpDataSubmission(UEXCorp):
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
+
         if not self.api_key:
             errors.append(
                 WingmanInitializationError(
@@ -46,6 +47,19 @@ class UEXCorpDataSubmission(UEXCorp):
                     secret_name="uexcorp",
                 )
             )
+
+        # Check for required skills
+        required_skills = ["auto_screenshot", "vision_ai"]
+        for skill_name in required_skills:
+            if not any(skill.name == skill_name for skill in self.wingman.skills):
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.name,
+                        message=f"Missing required skill: {skill_name}",
+                        error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                    )
+                )
+
         return errors
 
     def get_tools(self) -> List[tuple[str, Dict]]:
@@ -86,40 +100,14 @@ class UEXCorpDataSubmission(UEXCorp):
         )
 
     async def extract_data_from_screenshot(self, screenshot: str) -> Dict[str, Any]:
-        vision_ai_skill = self.wingman.get_skill("vision_ai")
-        prompt = """
-        Analyze this Star Citizen commodity terminal screenshot and extract the following information in a structured format:
-        - Faction affinity (if visible)
-        - Game version (if visible)
-        - List of commodities with their buy or sell information
+        vision_ai_skill = next(
+            (skill for skill in self.wingman.skills if skill.name == "vision_ai"),
+            None,
+        )
+        if not vision_ai_skill:
+            raise ValueError("Vision AI skill is not available")
 
-        For each commodity, provide:
-        - Commodity name (exactly as shown)
-        - Buy price (if available)
-        - Sell price (if available)
-        - Buy quantity/SCU (if available)
-        - Sell quantity/SCU (if available)
-        - Buy status (1-7, where 1 is out of stock and 7 is maximum inventory)
-        - Sell status (1-7, where 1 is out of stock and 7 is maximum inventory)
-
-        Output the data in the following JSON structure:
-        {
-            "faction_affinity": int,
-            "game_version": string,
-            "commodities": [
-                {
-                    "name": string,
-                    "buy_price": float,
-                    "sell_price": float,
-                    "buy_quantity": int,
-                    "sell_quantity": int,
-                    "buy_status": int,
-                    "sell_status": int
-                },
-                ...
-            ]
-        }
-        """
+        prompt = self.get_vision_ai_prompt()
         extracted_data = await vision_ai_skill.analyse_image(screenshot, prompt)
         try:
             return json.loads(extracted_data)
@@ -252,8 +240,31 @@ class UEXCorpDataSubmission(UEXCorp):
     ) -> tuple[str, str]:
         try:
             terminal_id = await self.get_terminal_id(location_description)
-            screenshot = await self.capture_screenshot()
-            extracted_data = await self.extract_data_from_screenshot(screenshot)
+
+            auto_screenshot_skill = next(
+                (
+                    skill
+                    for skill in self.wingman.skills
+                    if skill.name == "auto_screenshot"
+                ),
+                None,
+            )
+            if not auto_screenshot_skill:
+                raise ValueError("Auto Screenshot skill is not available")
+            screenshot = await auto_screenshot_skill.take_screenshot(
+                "Capturing commodity terminal"
+            )
+
+            vision_ai_skill = next(
+                (skill for skill in self.wingman.skills if skill.name == "vision_ai"),
+                None,
+            )
+            if not vision_ai_skill:
+                raise ValueError("Vision AI skill is not available")
+            extracted_data = await vision_ai_skill.analyse_image(
+                screenshot, self.get_vision_ai_prompt()
+            )
+
             processed_data = self.process_extracted_data(terminal_id, extracted_data)
             processed_data["screenshot"] = self.get_base64_screenshot(screenshot)
 
@@ -263,6 +274,41 @@ class UEXCorpDataSubmission(UEXCorp):
             error_msg = f"Error in capture_and_submit_terminal_data: {str(e)}"
             self.printr.print(error_msg, color=LogType.ERROR)
             return error_msg, ""
+
+    def get_vision_ai_prompt(self) -> str:
+        return """
+        Analyze this Star Citizen commodity terminal screenshot and extract the following information in a structured format:
+        - Faction affinity (if visible)
+        - Game version (if visible)
+        - List of commodities with their buy or sell information
+
+        For each commodity, provide:
+        - Commodity name (exactly as shown)
+        - Buy price (if available)
+        - Sell price (if available)
+        - Buy quantity/SCU (if available)
+        - Sell quantity/SCU (if available)
+        - Buy status (1-7, where 1 is out of stock and 7 is maximum inventory)
+        - Sell status (1-7, where 1 is out of stock and 7 is maximum inventory)
+
+        Output the data in the following JSON structure:
+        {
+            "faction_affinity": int,
+            "game_version": string,
+            "commodities": [
+                {
+                    "name": string,
+                    "buy_price": float,
+                    "sell_price": float,
+                    "buy_quantity": int,
+                    "sell_quantity": int,
+                    "buy_status": int,
+                    "sell_status": int
+                },
+                ...
+            ]
+        }
+        """
 
     def ensure_data_loaded(self):
         if not self.commodities or not self.terminals:
