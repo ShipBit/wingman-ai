@@ -8,6 +8,7 @@ from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
+    from skills.vision_ai.main import VisionAI
 
 
 class StarHead(Skill):
@@ -119,6 +120,19 @@ class StarHead(Skill):
         """Formats name by combining model and name, avoiding repetition"""
         return vehicle["name"]
 
+    async def _ask_vision_ai(self, prompt: str) -> str:
+        function_response = ""
+
+        vision_ai_skill: Optional[VisionAI] = next(
+            (skill for skill in self.wingman.skills if skill.name == "VisionAI"),
+            None,
+        )
+
+        if vision_ai_skill:
+            function_response = await vision_ai_skill.analyse_screen(prompt, desired_image_width=1800)
+
+        return function_response
+
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
     ) -> tuple[str, str]:
@@ -134,9 +148,14 @@ class StarHead(Skill):
                 **parameters
             )
         if tool_name == "get_trading_shop_information_for_celestial_objects":
-            function_response = await self._get_trading_shop_information_for_celestial_objects(
-                **parameters
+            function_response = (
+                await self._get_trading_shop_information_for_celestial_objects(
+                    **parameters
+                )
             )
+        if tool_name == "capture_and_submit_trading_terminal_data":
+            function_response = await self._ask_vision_ai(self._get_vision_ai_prompt())
+
         return function_response, instant_response
 
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
@@ -220,9 +239,53 @@ class StarHead(Skill):
                     },
                 },
             ),
+            (
+                "capture_and_submit_trading_terminal_data",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "capture_and_submit_trading_terminal_data",
+                        "description": "Capture a screenshot of a Star Citizen commodity terminal, extract data, and submit to StarHead",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "shop": {"type": "string", "enum": self.shop_names},
+                            },
+                            "required": ["shop"],
+                        },
+                    },
+                },
+            ),
         ]
 
         return tools
+    
+    def _get_vision_ai_prompt(self) -> str:
+        return """
+        Analyze this Star Citizen commodity terminal screenshot and extract the following information in a structured format:
+        - List of commodities with their buy or sell information but just list them if they have either a buy or sell price.
+
+        For each commodity, provide:
+        - Commodity name (exactly as shown)
+        - Buy price (if available), is formatted as 'x/SCU', located below the quantity
+        - Sell price (if available), is formatted as 'x/SCU', located below the quantity
+        - Buy quantity/SCU (if available), is formatted as 'x SCU', located above the price
+        - Sell quantity/SCU (if available), is formatted as 'x SCU', located above the price
+
+        Output the data in the following JSON structure:
+        {
+            "commodities": [
+                {
+                    "name": string,
+                    "buy_price": float,
+                    "sell_price": float,
+                    "buy_quantity": int,
+                    "sell_quantity": int,
+                },
+                ...
+            ]
+        }
+        """
 
     async def _get_trading_shop_information_for_celestial_objects(
         self, celestial_object: str
@@ -239,20 +302,18 @@ class StarHead(Skill):
             items = await self._fetch_data(f"shop/{shop['id']}/items")
             for item in items:
                 item["pricePerItem"] = item["pricePerItem"] * 100
-                item["tradeType"] = "Sold by store" if item["tradeType"] == "buy" else "The shop buys"
+                item["tradeType"] = (
+                    "Sold by store" if item["tradeType"] == "buy" else "The shop buys"
+                )
             shop_items[f"{shop['parent']['name']} - {shop['name']}"] = items
 
         shop_details = json.dumps(shop_items)
         return shop_details
 
-    async def _get_trading_information_of_specific_shop(
-        self, shop: str = None
-    ) -> str:
+    async def _get_trading_information_of_specific_shop(self, shop: str = None) -> str:
         # Get all shops with the given name
         shops = [
-            shop
-            for shop in self.shops
-            if shop["name"].lower() == shop["name"].lower()
+            shop for shop in self.shops if shop["name"].lower() == shop["name"].lower()
         ]
 
         # Check if there are multiple shops with the same name

@@ -66,70 +66,78 @@ class VisionAI(Skill):
         instant_response = ""
 
         if tool_name == "analyse_what_you_or_user_sees":
-            # Take a screenshot
-            with mss() as sct:
-                main_display = sct.monitors[self.display]
-                screenshot = sct.grab(main_display)
 
-                # Create a PIL image from array
-                image = Image.frombytes(
-                    "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
-                )
+            question = parameters.get("question", "What's in this image?")
+            answer = await self.analyse_screen(question)
 
-                desired_width = 1000
-                aspect_ratio = image.height / image.width
-                new_height = int(desired_width * aspect_ratio)
-
-                resized_image = image.resize((desired_width, new_height))
-
-                png_base64 = self.pil_image_to_base64(resized_image)
-
-                if self.show_screenshots:
+            if answer:
+                if self.settings.debug_mode:
                     await self.printr.print_async(
-                        "Analyzing this image",
-                        color=LogType.INFO,
-                        source=LogSource.WINGMAN,
-                        source_name=self.wingman.name,
-                        skill_name=self.name,
-                        additional_data={"image_base64": png_base64},
+                        f"Vision analysis: {answer}.", color=LogType.INFO
                     )
-
-                question = parameters.get("question", "What's in this image?")
-
-                messages = [
-                    {
-                        "role": "system",
-                        "content": """
-                            You are a helpful ai assistant.
-                        """,
-                    },
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": question},
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{png_base64}",
-                                    "detail": "high",
-                                },
-                            },
-                        ],
-                    },
-                ]
-                completion = await self.llm_call(messages)
-                answer = (
-                    completion.choices[0].message.content
-                    if completion and completion.choices
-                    else ""
-                )
-
-                if answer:
-                    if self.settings.debug_mode:
-                        await self.printr.print_async(f"Vision analysis: {answer}.", color=LogType.INFO)
-                    function_response = answer
+                function_response = answer
 
         return function_response, instant_response
+
+    async def analyse_screen(self, prompt: str, desired_image_width: int = 1000):
+        function_response = ""
+
+        # Take a screenshot
+        with mss() as sct:
+            main_display = sct.monitors[self.display]
+            screenshot = sct.grab(main_display)
+
+            # Create a PIL image from array
+            image = Image.frombytes(
+                "RGB", screenshot.size, screenshot.bgra, "raw", "BGRX"
+            )
+
+            aspect_ratio = image.height / image.width
+            new_height = int(desired_image_width * aspect_ratio)
+
+            resized_image = image.resize((desired_image_width, new_height))
+
+            png_base64 = self.pil_image_to_base64(resized_image)
+
+            if self.show_screenshots:
+                await self.printr.print_async(
+                    "Analyzing this image",
+                    color=LogType.INFO,
+                    source=LogSource.WINGMAN,
+                    source_name=self.wingman.name,
+                    skill_name=self.name,
+                    additional_data={"image_base64": png_base64},
+                )
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": """
+                        You are a helpful ai assistant.
+                    """,
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{png_base64}",
+                                "detail": "high",
+                            },
+                        },
+                    ],
+                },
+            ]
+            completion = await self.llm_call(messages)
+            function_response = (
+                completion.choices[0].message.content
+                if completion and completion.choices
+                else ""
+            )
+
+        return function_response
 
     async def is_summarize_needed(self, tool_name: str) -> bool:
         """Returns whether a tool needs to be summarized."""
