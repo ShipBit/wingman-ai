@@ -68,7 +68,23 @@ class ImageGeneration(Skill):
                         if self.settings.debug_mode:
                             await self.printr.print_async(f"Image displayed and saved at {image_path}.", color=LogType.INFO)
 
+            await self.generate_image(prompt)
+            function_response = "Here is an image based on your prompt."
         return function_response, instant_response
+    
+    async def generate_image(self, prompt: str) -> str:
+        if self.settings.debug_mode:
+            await self.printr.print_async(f"Generate image with prompt: {prompt}.", color=LogType.INFO)
+
+        image = await self.wingman.generate_image(prompt)
+        await self.printr.print_async(
+                "",
+                color=LogType.INFO,
+                source=LogSource.WINGMAN,
+                source_name=self.wingman.name,
+                skill_name=self.name,
+                additional_data={"image_url": image},
+            )
 
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return True

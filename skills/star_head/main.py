@@ -153,8 +153,11 @@ class StarHead(Skill):
                     **parameters
                 )
             )
-        if tool_name == "capture_and_submit_trading_terminal_data":
+        if tool_name == "capture_and_verify_trading_terminal_data":
+            print(f"capture_and_verify_trading_terminal_data {parameters}")
             function_response = await self._ask_vision_ai(self._get_vision_ai_prompt())
+        if tool_name == "submit_verified_data_to_starhead":
+            print(f"submit_verified_data_to_starhead {parameters}")
 
         return function_response, instant_response
 
@@ -240,18 +243,49 @@ class StarHead(Skill):
                 },
             ),
             (
-                "capture_and_submit_trading_terminal_data",
+                "capture_and_verify_trading_terminal_data",
                 {
                     "type": "function",
                     "function": {
-                        "name": "capture_and_submit_trading_terminal_data",
-                        "description": "Capture a screenshot of a Star Citizen commodity terminal, extract data, and submit to StarHead",
+                        "name": "capture_and_verify_trading_terminal_data",
+                        "description": "Captures a screenshot of a Star Citizen commodity terminal and extracts the data and verfiy it by the user. Always ask for the shop name.",
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "shop": {"type": "string", "enum": self.shop_names},
                             },
                             "required": ["shop"],
+                        },
+                    },
+                },
+            ),
+            (
+                "submit_verified_data_to_starhead",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "submit_verified_data_to_starhead",
+                        "description": "Submits the verified data from a Star Citizen commodity terminal to StarHead. Always verify the data before submitting it.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "commodities": {
+                                    "description": "Data extracted from the commodity terminal.",
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "shop": {"type": "string", "enum": self.shop_names},
+                                            "name": {"type": "string"},
+                                            "buy_price": {"type": "number"},
+                                            "sell_price": {"type": "number"},
+                                            "buy_quantity": {"type": "number"},
+                                            "sell_quantity": {"type": "number"},
+                                        },
+                                    }
+                                },
+                            },
+                            "required": ["commodities"],
                         },
                     },
                 },
@@ -285,6 +319,11 @@ class StarHead(Skill):
                 ...
             ]
         }
+
+        The goal is to submit this data to StarHead, but it should always be verified and maybe modified by the user first.
+        Always ask the user to verify the data before submitting it. If the user has corrected any part of the data, ask again for verification.
+
+        If you call 'capture_trading_terminal_data' always ask for the shop name if it's not clear.
         """
 
     async def _get_trading_shop_information_for_celestial_objects(
