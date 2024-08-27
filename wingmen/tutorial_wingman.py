@@ -33,6 +33,13 @@ class TutorialWingman(OpenAiWingman):
             xvasynth=xvasynth,
         )
 
+    async def start_tutorial(self):
+        """
+        Start the tutorial. TODO: Add API hook to listen for frontend to be ready to start tutorial.
+        """
+        response = await self._get_response_for_transcript("start tutorial")
+        print(response)
+
     async def validate(self):
         errors = await super().validate()
 

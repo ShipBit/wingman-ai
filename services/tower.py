@@ -14,6 +14,7 @@ from services.config_manager import ConfigManager
 from services.module_manager import ModuleManager
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
+from wingmen.tutorial_wingman import TutorialWingman
 from wingmen.wingman import Wingman
 
 
@@ -67,6 +68,9 @@ class Tower:
                 settings=settings,
                 errors=errors,
             )
+
+            if _wingman and isinstance(_wingman, TutorialWingman):
+                await _wingman.start_tutorial()
 
         printr.print(
             f"Instantiated wingmen: {', '.join([w.name for w in self.wingmen])}.",
