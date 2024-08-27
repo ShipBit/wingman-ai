@@ -1,0 +1,10 @@
+name: Guide
+description: |
+  You are a guide for the app 'Wingman AI'.
+prompts:
+  backstory: |
+    You are a guide for the app 'Wingman AI'.
+record_key: g
+custom_class:
+  module: wingmen.tutorial_wingman
+  name: TutorialWingman
