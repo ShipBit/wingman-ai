@@ -5,19 +5,17 @@ import itertools
 import json
 import math
 import traceback
-from os import path
 import collections
 import re
-from typing import Optional, TYPE_CHECKING
+import requests
+from os import path
+from typing import Optional
 from datetime import datetime
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
-from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from api.interface import WingmanInitializationError
 from services.file import get_writable_dir
 from skills.skill_base import Skill
-
-if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
 
 
 class UEXCorp(Skill):
@@ -26,13 +24,8 @@ class UEXCorp(Skill):
     # enable for verbose logging
     DEV_MODE = False
 
-    def __init__(
-        self,
-        config: SkillConfig,
-        settings: SettingsConfig,
-        wingman: "OpenAiWingman",
-    ) -> None:
-        super().__init__(config=config, settings=settings, wingman=wingman)
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
 
         self.data_path = get_writable_dir(path.join("skills", "uexcorp", "data"))
         self.logfileerror = path.join(self.data_path, "error.log")
@@ -295,7 +288,7 @@ class UEXCorp(Skill):
             self.threaded_execution(self._save_to_cachefile)
             return
 
-        self.game_version = (await self._fetch_uex_data("game_versions"))["live"]
+        self.game_version = (await self.get_game_version())
 
         async def _load_from_cache():
             if not self.uexcorp_cache:
@@ -1212,6 +1205,26 @@ class UEXCorp(Skill):
                 ),
             )
 
+            tools.append(
+                (
+                    "search_terminal",
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "search_terminal",
+                            "description": "Searches for terminals by a concated string (name and location). Basically, what the user said. For example 'Terminal XYZ in City XYZ.'",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "search": {"type": "string"},
+                                },
+                                "required": ["search"],
+                            },
+                        },
+                    }
+                )
+            )
+
         return tools
 
     async def execute_tool(
@@ -1231,6 +1244,7 @@ class UEXCorp(Skill):
             "get_commodity_prices_and_terminals": "get_commodity_information",
             "reload_current_commodity_prices": "reload_current_commodity_prices",
             "show_cached_function_values": "show_cached_function_values",
+            "search_terminal": "search_terminal",
         }
 
         try:
@@ -1284,9 +1298,36 @@ class UEXCorp(Skill):
 
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return True
+    
+    async def _fuzzy_search(self, query: str, haystack, use_llm: bool = False):
+        """Finds data that match the query using fuzzy search.
+        In comparison to the _find_closest_match function, this function is used with tulples in the haystack.
+        Like: [(object, "searchable string"), (object, "searchable string"), ...]
+
+        Args:
+            query (str): The query to search for.
+            haystack (list[tuple(any, str)]): The list of data to string value to search in.
+            
+        Returns:
+            None: If no data is found.
+            Matched tulple if value got matched.
+        """
+
+        # get pure string list
+        pure_haystack = [string for _, string in haystack]
+
+        # get best match in string list
+        best_match = await self._find_closest_match(query, pure_haystack, use_llm)
+        if not best_match:
+            return None
+
+        # return the original data item
+        index = pure_haystack.index(best_match)
+        matched_data = haystack[index]
+        return matched_data
 
     async def _find_closest_match(
-        self, search: str | None, lst: list[str] | set[str]
+        self, search: str | None, lst: list[str] | set[str], use_llm: bool = True
     ) -> str | None:
         """
         Finds the closest match to a given string in a list.
@@ -1315,9 +1356,24 @@ class UEXCorp(Skill):
             self._log(f"Found exact match to '{search}' in list.", True)
             return search
 
+        if not use_llm:
+            closest_match = difflib.get_close_matches(search, lst, n=1, cutoff=0.9)
+            if closest_match:
+                self._log(
+                    f"Found closest match to '{search}' in list: '{closest_match[0]}'",
+                    True,
+                )
+                return closest_match[0]
+            else:
+                self._log(
+                    f"No closest match found for '{search}' in list. Returning None.", True
+                )
+                return None
+
         # make a list of possible matches
         closest_matches = difflib.get_close_matches(search, lst, n=10, cutoff=0.4)
         closest_matches.extend(item for item in lst if search.lower() in item.lower())
+        
         self._log(
             f"Making a list for closest matches for search term '{search}': {', '.join(closest_matches)}",
             True,
@@ -1403,6 +1459,14 @@ class UEXCorp(Skill):
         return "The cached function values are: \n" + json.dumps(
             self.cache["function_args"]
         )
+        
+    async def _gpt_call_search_terminal(self, search: str):
+        print (search)
+        terminal = await self.fuzzy_search_terminal(search)
+        if not terminal:
+            return "No terminal found."
+        
+        return self._get_converted_terminal_for_output(terminal, True)
 
     async def _gpt_call_reload_current_commodity_prices(self) -> str:
         """
@@ -3183,3 +3247,54 @@ class UEXCorp(Skill):
         """
         system = self._get_system_by_name(name)
         return self._get_terminals_by_systemcode(system["id"]) if system else []
+
+    #######################################
+    ## Helper functions for external use ##
+    #######################################
+
+    async def get_game_version(self, deployment: str = "live") -> str:
+        """
+        Get the game version from UEX corp API.
+
+        Args:
+            type (str, optional): The type of game version to get. Defaults to "live".
+
+        Returns:
+            str: The game version.
+        """
+        return (await self._fetch_uex_data("game_versions"))[deployment]
+
+    async def fuzzy_search_terminal(self, query: str, include_location_names: bool = True, use_llm: bool = True):
+        """Finds terminals that match the query using fuzzy search.
+
+        Args:
+            query (str): The query to search for.
+
+        Returns:
+            list[dict[str, any]]: A list of terminals matching the query.
+        """
+        # get a huge list of possible descriptions
+        haystack = []
+        for terminal in self.terminals:
+            names = []
+            if terminal.get("name"):
+                names.append(terminal.get("name"))
+            if terminal.get("nickname"):
+                names.append(terminal.get("nickname"))
+
+            for name in names:
+                haystack.append((terminal, name))
+
+                if include_location_names:
+                    if terminal.get("star_system_name", ""):
+                        haystack.append((terminal, f"{name} {terminal['star_system_name']}"))
+                    if terminal.get("planet_name", ""):
+                        haystack.append((terminal, f"{name} {terminal['planet_name']}"))
+                    if terminal.get("moon_name", ""):
+                        haystack.append((terminal, f"{name} {terminal['moon_name']}"))
+                    if terminal.get("orbit_name", "") and terminal.get("planet_name", "") != terminal.get("orbit_name", ""):
+                        haystack.append((terminal, f"{name} {terminal['orbit_name']}"))
+                    if terminal.get("city_name", ""):
+                        haystack.append((terminal, f"{name} {terminal['city_name']}"))
+
+        return await self._fuzzy_search(query, haystack, use_llm)
