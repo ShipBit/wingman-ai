@@ -6,7 +6,7 @@ from api.interface import AudioFile, AudioFileConfig
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 
-AUDIO_LIBRARY_DIR = "audio_library"
+DIR_AUDIO_LIBRARY = "audio_library"
 
 class AudioLibrary:
     def __init__(
@@ -17,14 +17,16 @@ class AudioLibrary:
         # Configurable settings
         self.callback_playback_started = callback_playback_started # Parameters: AudioFileConfig, AudioPlayer, volume(float)
         self.callback_playback_finished = callback_playback_finished # Parameters: AudioFileConfig
-        
+
         # Internal settings
-        self.audio_library_path = get_writable_dir(AUDIO_LIBRARY_DIR)
-        self.current_playbacks = []
+        self.audio_library_path = get_writable_dir(DIR_AUDIO_LIBRARY)
+        self.current_playbacks = {}
 
+    ##########################
     ### Playback functions ###
+    ##########################
 
-    async def start_playback(
+    def start_playback(
         self, audio_file: AudioFile|AudioFileConfig, volume_modifier: float = 1.0
     ):
         audio_file = self.__get_audio_file_config(audio_file)
@@ -32,12 +34,12 @@ class AudioLibrary:
             asyncio.get_event_loop(), self.on_playback_started, self.on_playback_finish
         )
 
-        def start_playback(
+        async def actual_start_playback(
             audio_file: AudioFileConfig,
             audio_player: AudioPlayer,
             volume: list,
         ):
-            audio_player.play_audio_file(
+            await audio_player.play_audio_file(
                 filename=path.join(self.audio_library_path, audio_file.file.path),
                 volume=volume,
                 wingman_name=audio_file.file.path,
@@ -47,9 +49,9 @@ class AudioLibrary:
         volume = [(audio_file.volume or 1.0) * volume_modifier]
         self.current_playbacks[audio_file.file.path] = [audio_player, volume, audio_file]
         if audio_file.wait:
-            start_playback(audio_file, audio_player, volume)
+            asyncio.create_task(actual_start_playback(audio_file, audio_player, volume))
         else:
-            self.__threaded_execution(start_playback, audio_file, audio_player, volume)
+            self.__threaded_execution(actual_start_playback, audio_file, audio_player, volume)
 
     async def stop_playback(
         self,
@@ -71,7 +73,7 @@ class AudioLibrary:
             while audio_player.is_playing and volume[0] > 0.0001:
                 volume[0] -= step_size
                 await asyncio.sleep(step_duration)
-            asyncio.sleep(0.05)  # 50ms grace period
+            await asyncio.sleep(0.05)  # 50ms grace period
             await audio_player.stop_playback()
 
         if audio_file.file.path in self.current_playbacks:
@@ -111,7 +113,6 @@ class AudioLibrary:
     async def on_playback_started(self, wingman_name: str):
         self.notify_playback_started(wingman_name)
         # Placeholder for future implementations
-        pass
 
     async def on_playback_finish(self, wingman_name: str):
         self.notify_playback_finished(wingman_name)
@@ -124,14 +125,16 @@ class AudioLibrary:
             audio_player = self.current_playbacks[wingman_name][0]
             volume = self.current_playbacks[wingman_name][1][0]
             self.callback_playback_started(audio_file, audio_player, volume)
-            
+
     def notify_playback_finished(self, wingman_name: str):
         if self.callback_playback_finished:
             # Give the callback the audio file that finished playing
             audio_file = self.current_playbacks[wingman_name][2]
             self.callback_playback_finished(audio_file)
 
+    ###############################
     ### Audio Library functions ###
+    ###############################
 
     def get_audio_files(self) -> list[AudioFile]:
         audio_files = []
@@ -146,7 +149,9 @@ class AudioLibrary:
             pass
         return audio_files
 
+    ########################
     ### Helper functions ###
+    ########################
 
     def __threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""

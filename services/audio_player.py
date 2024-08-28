@@ -230,19 +230,19 @@ class AudioPlayer:
         audio, sample_rate = self.get_audio_from_file(audio_sample_file)
         self.start_playback(audio, sample_rate, 2, None, volume)
 
-    def play_audio_file(
+    async def play_audio_file(
         self,
         filename: str,
         volume: list[float] | float,
         wingman_name: str = None,
         publish_event: bool = True,
     ):
-        self.notify_playback_started(wingman_name, publish_event)
+        await self.notify_playback_started(wingman_name, publish_event)
         if filename.endswith(".mp3"):
             self.play_mp3(filename, volume)
         elif filename.endswith(".wav"):
             self.play_wav(filename, volume)
-        self.notify_playback_finished(wingman_name, publish_event)
+        await self.notify_playback_finished(wingman_name, publish_event)
 
     def get_audio_from_file(self, filename: str) -> tuple:
         audio, sample_rate = sf.read(filename, dtype="float32")

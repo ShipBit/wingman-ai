@@ -130,6 +130,6 @@ class ThinkingSound(Skill):
         while self.playing and self.active and self.volume[0] > 0.0001:
             self.volume[0] -= step_size
             await asyncio.sleep(step_duration)
-        asyncio.sleep(0.1) # grace period
+        await asyncio.sleep(0.1) # grace period
         self.playing = False
         await self.audio_player.stop_playback()
