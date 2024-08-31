@@ -24,7 +24,7 @@ custom_properties:
   - id: api_url
     name: UEX Corp API URL
     hint: The URL for the UEX Corp data submission API
-    value: https://uexcorp.space/api/2.0/data_submit
+    value: https://uexcorp.space/api/2.0
     required: true
     property_type: string
   - id: max_retries
