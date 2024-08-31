@@ -1,9 +1,10 @@
 import base64
-import difflib
 import json
+import os
 import logging
 import time
 from typing import Any, Dict, List, Optional
+from dataclasses import asdict, dataclass
 
 import requests
 from requests.exceptions import RequestException
@@ -15,13 +16,19 @@ from skills.uexcorp.main import UEXCorp
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class VerifiedData:
+    terminal_id: int
+    faction_affinity: int
+    game_version: str
+    prices: List[Dict[str, Any]]
+    screenshot: str
+
+
 class UEXCorpDataSubmission(UEXCorp):
     def __init__(
-        self,
-        config: SkillConfig,
-        settings: SettingsConfig,
-        wingman: "OpenAiWingman",
-    ) -> None:
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
+    ):
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.api_url = self.config.custom_properties.get(
             "api_url", "https://uexcorp.space/api/2.0"
@@ -35,6 +42,49 @@ class UEXCorpDataSubmission(UEXCorp):
             prompt_if_missing=True,
         )
         self.verified_data = None
+        self.verified_data_key = "verified_data"
+
+    async def store_verified_data(self, verified_data: VerifiedData):
+        try:
+            # Load existing cache
+            cache_data = self._load_cache()
+
+            # Update the verified data in the cache
+            cache_data[self.verified_data_key] = asdict(verified_data)
+
+            # Save the updated cache
+            self._save_cache(cache_data)
+
+            self.printr.print("Verified data stored successfully", color=LogType.INFO)
+        except Exception as e:
+            self.printr.print(
+                f"Error storing verified data: {str(e)}", color=LogType.ERROR
+            )
+
+    async def get_latest_verified_data(self) -> Optional[VerifiedData]:
+        try:
+            cache_data = self._load_cache()
+            verified_data_dict = cache_data.get(self.verified_data_key)
+
+            if verified_data_dict:
+                return VerifiedData(**verified_data_dict)
+            else:
+                return None
+        except Exception as e:
+            self.printr.print(
+                f"Error retrieving verified data: {str(e)}", color=LogType.ERROR
+            )
+            return None
+
+    def _load_cache(self) -> Dict[str, Any]:
+        if os.path.exists(self.cachefile):
+            with open(self.cachefile, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return {}
+
+    def _save_cache(self, cache_data: Dict[str, Any]):
+        with open(self.cachefile, "w", encoding="utf-8") as f:
+            json.dump(cache_data, f, indent=2)
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -134,31 +184,71 @@ class UEXCorpDataSubmission(UEXCorp):
             processed_data = self.process_extracted_data(terminal_id, extracted_data)
             processed_data["screenshot"] = self.get_base64_screenshot(screenshot)
 
-            self.verified_data = processed_data
+            verified_data = await self.process_and_validate_data(
+                terminal_id, extracted_data, screenshot
+            )
+
+            # Store the verified data
+            await self.store_verified_data(verified_data)
+
             return (
                 f"Data captured and verified for {location_description}. Ready for submission.",
                 "",
             )
+        except ValueError as ve:
+            return str(ve), ""
         except Exception as e:
             error_msg = f"Error in capture_and_verify_trading_terminal_data: {str(e)}"
             self.printr.print(error_msg, color=LogType.ERROR)
             return error_msg, ""
 
     async def submit_verified_data_to_uexcorp(self) -> tuple[str, str]:
-        if not self.verified_data:
-            return (
-                "No verified data available for submission. Please capture and verify data first.",
-                "",
-            )
-
         try:
-            response = self.submit_data_to_uexcorp(self.verified_data)
-            self.verified_data = None  # Clear the data after submission
+            verified_data = await self.get_latest_verified_data()
+            if verified_data is None:
+                return (
+                    "No verified data available for submission. Please capture and verify data first.",
+                    "",
+                )
+
+            response = await self.submit_data_to_uexcorp(asdict(verified_data))
             return f"Data submitted successfully: {response}", ""
         except Exception as e:
             error_msg = f"Error in submit_verified_data_to_uexcorp: {str(e)}"
             self.printr.print(error_msg, color=LogType.ERROR)
             return error_msg, ""
+
+    async def process_and_validate_data(
+        self, terminal_id: int, extracted_data: Dict[str, Any], screenshot: str
+    ) -> VerifiedData:
+        processed_data = self.process_extracted_data(terminal_id, extracted_data)
+        self.validate_processed_data(processed_data)
+
+        verified_data = VerifiedData(
+            terminal_id=terminal_id,
+            faction_affinity=processed_data["faction_affinity"],
+            game_version=self.game_version,
+            prices=processed_data["prices"],
+            screenshot=self.get_base64_screenshot(screenshot),
+        )
+
+        await self.store_verified_data(verified_data)
+        return verified_data
+
+    def validate_processed_data(self, processed_data: Dict[str, Any]):
+        if not processed_data["prices"]:
+            raise ValueError("No valid commodity data extracted")
+
+        if not -100 <= processed_data["faction_affinity"] <= 100:
+            raise ValueError(
+                f"Invalid faction affinity: {processed_data['faction_affinity']}"
+            )
+
+        for price_data in processed_data["prices"]:
+            if "status_buy" in price_data and not 1 <= price_data["status_buy"] <= 7:
+                raise ValueError(f"Invalid status_buy: {price_data['status_buy']}")
+            if "status_sell" in price_data and not 1 <= price_data["status_sell"] <= 7:
+                raise ValueError(f"Invalid status_sell: {price_data['status_sell']}")
 
     def process_extracted_data(
         self, terminal_id: int, extracted_data: Dict[str, Any]
@@ -219,21 +309,6 @@ class UEXCorpDataSubmission(UEXCorp):
                 self.printr.print("Failed to fetch game version", color=LogType.WARNING)
         except Exception as e:
             self.printr.print(f"Error fetching game version: {e}", color=LogType.ERROR)
-
-    def validate_processed_data(self, processed_data: Dict[str, Any]):
-        if not processed_data["prices"]:
-            raise ValueError("No valid commodity data extracted")
-
-        if not -100 <= processed_data["faction_affinity"] <= 100:
-            raise ValueError(
-                f"Invalid faction affinity: {processed_data['faction_affinity']}"
-            )
-
-        for price_data in processed_data["prices"]:
-            if "status_buy" in price_data and not 1 <= price_data["status_buy"] <= 7:
-                raise ValueError(f"Invalid status_buy: {price_data['status_buy']}")
-            if "status_sell" in price_data and not 1 <= price_data["status_sell"] <= 7:
-                raise ValueError(f"Invalid status_sell: {price_data['status_sell']}")
 
     async def find_commodity_id(self, commodity_name: str) -> int | None:
         """
