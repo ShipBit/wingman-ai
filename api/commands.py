@@ -26,11 +26,12 @@ class SaveSecretCommand(WebSocketCommandModel):
 
 class RecordKeyboardActionsCommand(WebSocketCommandModel):
     command: Literal["record_keyboard_actions"] = "record_keyboard_actions"
-    recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
+    recording_type: KeyboardRecordingType
 
 
 class StopRecordingCommand(WebSocketCommandModel):
     command: Literal["stop_recording"] = "stop_recording"
+    recording_type: KeyboardRecordingType
 
 
 # SENT TO CLIENT
