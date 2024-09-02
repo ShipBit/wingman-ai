@@ -240,7 +240,7 @@ If you want to read some code first and understand how it all works, we recommen
 - `OpenAIWingman.py` - derived from Wingman, using all the providers
 - `Tower.py` - the factory that creates Wingmen
 
-If you're planning to develop a major feature or new integration, please contact us on [Discord](https://discord.com/invite/k8tTBar3gZ) first and let us know what you're up to. We'll be happy to help you get started and make sure your work isn't wasted because we're already working on something similar.
+If you're planning to develop a major feature or new integration, please contact us on [Discord](https://www.shipbit.de/discord) first and let us know what you're up to. We'll be happy to help you get started and make sure your work isn't wasted because we're already working on something similar.
 
 ## Acknowledgements
 
@@ -271,7 +271,7 @@ We would like to thank their creators for their great work and contributions to 
 
 ### Individual persons
 
-This list will inevitably remain incomplete. If you miss your name here, please let us know in [Discord](https://discord.com/invite/k8tTBar3gZ) or via [Patreon](https://www.patreon.com/ShipBit).
+This list will inevitably remain incomplete. If you miss your name here, please let us know in [Discord](https://www.shipbit.de/discord) or via [Patreon](https://www.patreon.com/ShipBit).
 
 #### Special thanks
 
