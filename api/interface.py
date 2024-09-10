@@ -311,6 +311,7 @@ class MistralConfig(BaseModel):
     conversation_model: MistralModel
     endpoint: str
 
+
 class PerplexityConfig(BaseModel):
     conversation_model: PerplexityModel
     endpoint: str

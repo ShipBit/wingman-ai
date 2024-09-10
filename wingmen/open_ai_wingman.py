@@ -195,6 +195,13 @@ class OpenAiWingman(Wingman):
                     self.config.features.stt_provider == SttProvider.WINGMAN_PRO,
                 ]
             )
+        elif provider_type == "perplexity":
+            return any(
+                [
+                    self.config.features.conversation_provider
+                    == ConversationProvider.PERPLEXITY,
+                ]
+            )
         return False
 
     async def prepare(self):
@@ -927,6 +934,14 @@ class OpenAiWingman(Wingman):
                 messages=messages,
                 deployment=self.config.wingman_pro.conversation_deployment,
                 tools=tools,
+            )
+        elif (
+            self.config.features.conversation_provider == ConversationProvider.PERPLEXITY
+        ):
+            completion = self.perplexity.ask(
+                messages=messages,
+                tools=tools,
+                model=self.config.perplexity.conversation_model.value,
             )
 
         return completion
