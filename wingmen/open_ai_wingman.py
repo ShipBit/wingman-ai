@@ -60,6 +60,7 @@ class OpenAiWingman(Wingman):
         self.elevenlabs: ElevenLabs = None
         self.wingman_pro: WingmanPro = None
         self.google: GoogleGenAI = None
+        self.perplexity: OpenAi = None
 
         # tool queue
         self.pending_tool_calls = []
@@ -109,6 +110,9 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("wingman_pro"):
             await self.validate_and_set_wingman_pro()
+
+        if self.uses_provider("perplexity"):
+            await self.validate_and_set_perplexity(errors)
 
         return errors
 
@@ -302,6 +306,14 @@ class OpenAiWingman(Wingman):
         self.wingman_pro = WingmanPro(
             wingman_name=self.name, settings=self.settings.wingman_pro
         )
+
+    async def validate_and_set_perplexity(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("perplexity", errors)
+        if api_key:
+            self.perplexity = OpenAi(
+                api_key=api_key,
+                base_url=self.config.perplexity.endpoint,
+            )
 
     # overrides the base class method
     async def update_settings(self, settings: SettingsConfig):

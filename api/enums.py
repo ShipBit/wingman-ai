@@ -86,6 +86,16 @@ class MistralModel(Enum):
     MISTRAL_MEDIUM = "mistral-medium-latest"
     MISTRAL_LARGE = "mistral-large-latest"
 
+class PerplexityModel(Enum):
+    """https://docs.perplexity.ai/guides/model-cards"""
+
+    SONAR_SMALL = "llama-3.1-sonar-small-128k-online"
+    SONAR_MEDIUM = "llama-3.1-sonar-large-128k-online"
+    SONAR_LARGE = "llama-3.1-sonar-huge-128k-online"
+    CHAT_SMALL = "llama-3.1-sonar-small-128k-chat"
+    CHAT_LARGE = "llama-3.1-sonar-large-128k-chat"
+    LLAMA3_8B = "llama-3.1-8b-instruct"
+    LLAMA3_70B = "llama-3.1-70b-instruct"
 
 class GoogleAiModel(Enum):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
@@ -153,6 +163,7 @@ class ConversationProvider(Enum):
     WINGMAN_PRO = "wingman_pro"
     GOOGLE = "google"
     CEREBRAS = "cerebras"
+    PERPLEXITY = "perplexity"
 
 
 class ImageGenerationProvider(Enum):
@@ -241,6 +252,8 @@ class OpenAiModelEnumModel(BaseEnumModel):
 class MistralModelEnumModel(BaseEnumModel):
     model: MistralModel
 
+class PerplexityModelEnumModel(BaseEnumModel):
+    model: PerplexityModel
 
 class GoogleAiModelEnumModel(BaseEnumModel):
     model: GoogleAiModel
@@ -327,6 +340,7 @@ ENUM_TYPES = {
     "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
     "SkillCategory": SkillCategoryModel,
+    "PerplexityModel": PerplexityModelEnumModel,
     # Add new enums here as key-value pairs
 }
 

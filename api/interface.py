@@ -22,6 +22,7 @@ from api.enums import (
     WingmanProRegion,
     WingmanProSttProvider,
     WingmanProTtsProvider,
+    PerplexityModel,
 )
 
 
@@ -308,6 +309,10 @@ class PromptConfig(BaseModel):
 
 class MistralConfig(BaseModel):
     conversation_model: MistralModel
+    endpoint: str
+
+class PerplexityConfig(BaseModel):
+    conversation_model: PerplexityModel
     endpoint: str
 
 
@@ -598,6 +603,7 @@ class NestedConfig(BaseModel):
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
     wingman_pro: WingmanProConfig
+    perplexity: PerplexityConfig
     commands: Optional[list[CommandConfig]] = None
     skills: Optional[list[SkillConfig]] = None
 
