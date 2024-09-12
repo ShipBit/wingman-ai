@@ -43,10 +43,8 @@ class CommandHandler:
                     RecordKeyboardActionsCommand(**command), websocket
                 )
             elif command_name == "stop_recording":
-                # Get Enum from string
-                recording_type = KeyboardRecordingType(command["recording_type"])
                 await self.handle_stop_recording(
-                    StopRecordingCommand(**command), websocket, recording_type
+                    StopRecordingCommand(**command), websocket
                 )
             else:
                 raise ValueError("Unknown command")
@@ -110,7 +108,7 @@ class CommandHandler:
         def _on_key_event(event):
             if event.event_type == "down" and event.name == "esc":
                 WebSocketUser.ensure_async(
-                    self.handle_stop_recording(None, None, command.recording_type)
+                    self.handle_stop_recording(command, websocket)
                 )
             if (
                 event.scan_code == 58
@@ -129,7 +127,7 @@ class CommandHandler:
                 and self._is_hotkey_recording_finished(self.recorded_keys)
             ):
                 WebSocketUser.ensure_async(
-                    self.handle_stop_recording(None, None, command.recording_type)
+                    self.handle_stop_recording(command, websocket)
                 )
 
         self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
@@ -138,7 +136,6 @@ class CommandHandler:
         self,
         command: StopRecordingCommand,
         websocket: WebSocket,
-        recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE,
     ):
         if self.hook_callback:
             keyboard.unhook(self.hook_callback)
@@ -148,7 +145,7 @@ class CommandHandler:
 
         actions = (
             self._get_actions_from_recorded_keys(recorded_keys)
-            if recording_type == KeyboardRecordingType.MACRO_ADVANCED
+            if command.recording_type == KeyboardRecordingType.MACRO_ADVANCED
             else self._get_actions_from_recorded_hotkey(recorded_keys)
         )
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
