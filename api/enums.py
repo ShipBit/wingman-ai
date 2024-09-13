@@ -69,13 +69,6 @@ class TtsVoiceGender(Enum):
     FEMALE = "Female"
 
 
-class OpenAiModel(Enum):
-    """https://platform.openai.com/docs/models/overview"""
-
-    GPT_4O = "gpt-4o"
-    GPT_4O_MINI = "gpt-4o-mini"
-
-
 class MistralModel(Enum):
     """https://docs.mistral.ai/getting-started/models/"""
 
@@ -245,10 +238,6 @@ class TtsVoiceGenderEnumModel(BaseEnumModel):
     gender: TtsVoiceGender
 
 
-class OpenAiModelEnumModel(BaseEnumModel):
-    model: OpenAiModel
-
-
 class MistralModelEnumModel(BaseEnumModel):
     model: MistralModel
 
@@ -325,7 +314,6 @@ ENUM_TYPES = {
     "AzureApiVersion": AzureApiVersionEnumModel,
     "AzureRegion": AzureRegionEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
-    "OpenAiModel": OpenAiModelEnumModel,
     "MistralModel": MistralModelEnumModel,
     "GoogleAiModel": GoogleAiModelEnumModel,
     "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,

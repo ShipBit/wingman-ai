@@ -205,6 +205,13 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["GET"],
+            path="/models/openai",
+            response_model=list,
+            endpoint=self.get_openai_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
             path="/models/elevenlabs",
             response_model=list[ElevenlabsModel],
             endpoint=self.get_elevenlabs_models,
@@ -879,7 +886,7 @@ class WingmanCore(WebSocketUser):
 
     async def get_cerebras_models(self):
         cerebras_api_key = await self.secret_keeper.retrieve(
-            key="cerebras", requester="Groq"
+            key="cerebras", requester="Cerebras"
         )
         response = requests.get(
             url="https://api.cerebras.ai/v1/models",
@@ -893,6 +900,23 @@ class WingmanCore(WebSocketUser):
         content = response.json()
         return content.get("data", [])
 
+    async def get_openai_models(self):
+        openai_api_key = await self.secret_keeper.retrieve(
+            key="openai", requester="OpenAI"
+        )
+        response = requests.get(
+            url="https://api.openai.com/v1/models",
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {openai_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        content = response.json()
+        return content.get("data", [])
+
+    async def get_elevenlabs_models(self):
     # GET /models/elevenlabs
     async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:
         elevenlabs_api_key = await self.secret_keeper.retrieve(
