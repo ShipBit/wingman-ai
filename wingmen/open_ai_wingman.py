@@ -72,6 +72,7 @@ class OpenAiWingman(Wingman):
         self.openai: OpenAi = None
         self.mistral: OpenAi = None
         self.groq: OpenAi = None
+        self.cerebras: OpenAi = None
         self.openrouter: OpenAi = None
         self.local_llm: OpenAi = None
         self.openai_azure: OpenAiAzure = None
@@ -106,6 +107,9 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("groq"):
             await self.validate_and_set_groq(errors)
+
+        if self.uses_provider("cerebras"):
+            await self.validate_and_set_cerebras(errors)
 
         if self.uses_provider("google"):
             await self.validate_and_set_google(errors)
@@ -149,6 +153,13 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.GROQ,
+                ]
+            )
+        elif provider_type == "cerebras":
+            return any(
+                [
+                    self.config.features.conversation_provider
+                    == ConversationProvider.CEREBRAS,
                 ]
             )
         elif provider_type == "google":
@@ -250,6 +261,15 @@ class OpenAiWingman(Wingman):
             self.groq = OpenAi(
                 api_key=api_key,
                 base_url=self.config.groq.endpoint,
+            )
+
+    async def validate_and_set_cerebras(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("cerebras", errors)
+        if api_key:
+            # TODO: maybe use their native client (or LangChain) instead of OpenAI(?)
+            self.cerebras = OpenAi(
+                api_key=api_key,
+                base_url=self.config.cerebras.endpoint,
             )
 
     async def validate_and_set_google(self, errors: list[WingmanInitializationError]):
@@ -874,6 +894,14 @@ class OpenAiWingman(Wingman):
                 messages=messages,
                 tools=tools,
                 model=self.config.groq.conversation_model,
+            )
+        elif (
+            self.config.features.conversation_provider == ConversationProvider.CEREBRAS
+        ):
+            completion = self.cerebras.ask(
+                messages=messages,
+                tools=tools,
+                model=self.config.cerebras.conversation_model,
             )
         elif self.config.features.conversation_provider == ConversationProvider.GOOGLE:
             completion = self.google.ask(

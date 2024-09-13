@@ -57,6 +57,9 @@ mistral:
 groq:
   conversation_model: llama3-70b-8192
   endpoint: https://api.groq.com/openai/v1
+cerebras:
+  conversation_model: llama3.1-70b
+  endpoint: https://api.cerebras.ai/v1
 google:
   conversation_model: gemini-1.5-flash
 openrouter:

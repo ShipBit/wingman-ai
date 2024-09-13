@@ -316,6 +316,11 @@ class GroqConfig(BaseModel):
     endpoint: str
 
 
+class CerebrasConfig(BaseModel):
+    conversation_model: str
+    endpoint: str
+
+
 class GoogleConfig(BaseModel):
     conversation_model: GoogleAiModel
 
@@ -553,6 +558,7 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     mistral: MistralConfig
     groq: GroqConfig
+    cerebras: CerebrasConfig
     google: GoogleConfig
     openrouter: OpenRouterConfig
     local_llm: LocalLlmConfig
