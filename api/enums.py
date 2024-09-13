@@ -151,6 +151,7 @@ class ConversationProvider(Enum):
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
     GOOGLE = "google"
+    CEREBRAS = "cerebras"
 
 
 class ImageGenerationProvider(Enum):

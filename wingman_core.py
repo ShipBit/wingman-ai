@@ -189,6 +189,13 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["GET"],
+            path="/models/cerebras",
+            response_model=list,
+            endpoint=self.get_cerebras_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
             path="/models/elevenlabs",
             response_model=list[ElevenlabsModel],
             endpoint=self.get_elevenlabs_models,
@@ -811,10 +818,26 @@ class WingmanCore(WebSocketUser):
     async def get_groq_models(self):
         groq_api_key = await self.secret_keeper.retrieve(key="groq", requester="Groq")
         response = requests.get(
-            url=f"https://api.groq.com/openai/v1/models",
+            url="https://api.groq.com/openai/v1/models",
             timeout=10,
             headers={
                 "Authorization": f"Bearer {groq_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        content = response.json()
+        return content.get("data", [])
+
+    async def get_cerebras_models(self):
+        cerebras_api_key = await self.secret_keeper.retrieve(
+            key="cerebras", requester="Groq"
+        )
+        response = requests.get(
+            url="https://api.cerebras.ai/v1/models",
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {cerebras_api_key}",
                 "Content-Type": "application/json",
             },
         )

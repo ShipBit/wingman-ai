@@ -942,6 +942,7 @@ class ConfigManager:
             "openai",
             "mistral",
             "groq",
+            "cerebras",
             "google",
             "openrouter",
             "local_llm",
