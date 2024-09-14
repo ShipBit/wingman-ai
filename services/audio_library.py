@@ -1,4 +1,5 @@
 import asyncio
+import os
 import threading
 from os import path, listdir
 
@@ -37,20 +38,25 @@ class AudioLibrary:
             asyncio.get_event_loop(), self.on_playback_started, self.on_playback_finish
         )
 
+        playback_key = path.join(audio_file.file.path, audio_file.file.name)
+
         async def actual_start_playback(
             audio_file: AudioFileConfig,
             audio_player: AudioPlayer,
             volume: list,
         ):
+            full_path = path.join(
+                self.audio_library_path, audio_file.file.path, audio_file.file.name
+            )
             await audio_player.play_audio_file(
-                filename=path.join(self.audio_library_path, audio_file.file.path),
+                filename=full_path,
                 volume=volume,
-                wingman_name=audio_file.file.path,
+                wingman_name=playback_key,
                 publish_event=False,
             )
 
         volume = [(audio_file.volume or 1.0) * volume_modifier]
-        self.current_playbacks[audio_file.file.path] = [
+        self.current_playbacks[playback_key] = [
             audio_player,
             volume,
             audio_file,
@@ -69,6 +75,7 @@ class AudioLibrary:
         fade_out_resolution: int = 20,
     ):
         audio_file = self.__get_audio_file_config(audio_file)
+        playback_key = path.join(audio_file.file.path, audio_file.file.name)
 
         async def fade_out(
             audio_player: AudioPlayer,
@@ -85,28 +92,29 @@ class AudioLibrary:
             await asyncio.sleep(0.05)  # 50ms grace period
             await audio_player.stop_playback()
 
-        if audio_file.file.path in self.current_playbacks:
-            audio_player = self.current_playbacks[audio_file.file.path][0]
-            volume = self.current_playbacks[audio_file.file.path][1]
+        if playback_key in self.current_playbacks:
+            audio_player = self.current_playbacks[playback_key][0]
+            volume = self.current_playbacks[playback_key][1]
 
             if fade_out_time > 0:
                 await fade_out(audio_player, volume, fade_out_time, fade_out_resolution)
             else:
                 await audio_player.stop_playback()
 
-            self.current_playbacks.pop(audio_file.file.path, None)
+            self.current_playbacks.pop(playback_key, None)
 
     async def get_playback_status(
         self, audio_file: AudioFile | AudioFileConfig
     ) -> list[bool, AudioPlayer | None, float | None]:
         audio_file = self.__get_audio_file_config(audio_file)
+        playback_key = path.join(audio_file.file.path, audio_file.file.name)
 
-        if audio_file.file.path in self.current_playbacks:
-            audio_player = self.current_playbacks[audio_file.file.path][0]
+        if playback_key in self.current_playbacks:
+            audio_player = self.current_playbacks[playback_key][0]
             return [
                 audio_player.is_playing,  # Is playing
                 audio_player,  # AudioPlayer
-                self.current_playbacks[audio_file.file.path][1][0],  # Current Volume
+                self.current_playbacks[playback_key][1][0],  # Current Volume
             ]
         return [False, None, None]
 
@@ -114,9 +122,10 @@ class AudioLibrary:
         self, audio_file: AudioFile | AudioFileConfig, volume: float
     ):
         audio_file = self.__get_audio_file_config(audio_file)
+        playback_key = path.join(audio_file.file.path, audio_file.file.name)
 
-        if audio_file.file.path in self.current_playbacks:
-            self.current_playbacks[audio_file.file.path][1][0] = volume
+        if playback_key in self.current_playbacks:
+            self.current_playbacks[playback_key][1][0] = volume
 
     async def on_playback_started(self, wingman_name: str):
         self.notify_playback_started(wingman_name)
@@ -147,12 +156,12 @@ class AudioLibrary:
     def get_audio_files(self) -> list[AudioFile]:
         audio_files = []
         try:
-            audio_files = [
-                AudioFile(path=f, name=path.basename(f))
-                for f in listdir(self.audio_library_path)
-                if path.isfile(path.join(self.audio_library_path, f))
-                and (f.endswith(".wav") or f.endswith(".mp3"))
-            ]
+            for root, _, files in os.walk(self.audio_library_path):
+                for file in files:
+                    if file.endswith((".wav", ".mp3")):
+                        rel_path = path.relpath(root, self.audio_library_path)
+                        rel_path = "" if rel_path == "." else rel_path
+                        audio_files.append(AudioFile(path=rel_path, name=file))
         except Exception:
             pass
         return audio_files
@@ -181,5 +190,5 @@ class AudioLibrary:
         self, audio_file: AudioFile | AudioFileConfig
     ) -> AudioFileConfig:
         if isinstance(audio_file, AudioFile):
-            return AudioFileConfig(path=audio_file.path, volume=1, wait=False)
+            return AudioFileConfig(file=audio_file, volume=1, wait=False)
         return audio_file
