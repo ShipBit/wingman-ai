@@ -405,7 +405,7 @@ class AudioFile(BaseModel):
 
 
 class AudioFileConfig(BaseModel):
-    file: AudioFile
+    file: list[AudioFile]
     """The audio file to play. Required."""
 
     volume: float
