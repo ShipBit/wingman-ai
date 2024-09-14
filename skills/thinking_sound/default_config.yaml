@@ -5,16 +5,15 @@ description:
   en: Plays back sounds while waiting on AI response.
   de: Spielt Sounds ab, während auf die Antwort der AI gewartet wird.
 custom_properties:
-  - id: volume
-    name: Volume
-    hint: The volume (relative to the Wingman's volume) for playback. Must be between 0.0 (silent) and 1.0 (same volume as Wingman).
-    value: 0.2
-    required: false
-    property_type: slider
+  - id: audio_config
+    name: Audio Configuration
+    hint: Choose your files (random selection) and volume for playback. Recommended volume is 0.2 - 0.4.
+    required: true
+    property_type: audio_config
     options:
-      - label: min
-        value: 0.0
-      - label: max
-        value: 1.0
-      - label: step
-        value: 0.05
+      - label: allow_wait
+        value: false
+      - label: allow_multiple
+        value: true
+      - label: alow_volume
+        value: true
