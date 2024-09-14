@@ -396,6 +396,25 @@ class FeaturesConfig(BaseModel):
     use_generic_instant_responses: bool
 
 
+class AudioFile(BaseModel):
+    path: str
+    """The audio file to play. Required."""
+
+    name: str
+    """The name of the audio file."""
+
+
+class AudioFileConfig(BaseModel):
+    audio_file: AudioFile
+    """The audio file to play. Required."""
+
+    volume: float
+    """The volume to play the audio file at."""
+
+    wait: bool
+    """Whether to wait for the audio file to finish playing before continuing."""
+
+
 class CommandKeyboardConfig(BaseModel):
     hotkey: str
     """The hotkey. Can be a single key like 'a' or a combination like 'ctrl+shift+a'."""
@@ -414,25 +433,6 @@ class CommandKeyboardConfig(BaseModel):
 
     release: Optional[bool] = None
     """Whether to release the key. Optional."""
-
-
-class AudioFile(BaseModel):
-    path: str
-    """The audio file to play. Required."""
-
-    name: str
-    """The name of the audio file."""
-
-
-class AudioFileConfig(BaseModel):
-    file: AudioFile
-    """The audio file to play. Required."""
-
-    volume: float
-    """The volume to play the audio file at."""
-
-    wait: bool
-    """Whether to wait for the audio file to finish playing before continuing."""
 
 
 class CommandMouseConfig(BaseModel):

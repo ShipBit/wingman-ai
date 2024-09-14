@@ -131,6 +131,29 @@ def custom_openapi():
     # Ensure the components.schemas key exists
     openapi_schema.setdefault("components", {}).setdefault("schemas", {})
 
+    # Add enums to schema
+    for enum_name, enum_model in ENUM_TYPES.items():
+        enum_field_name, enum_type = next(iter(enum_model.__annotations__.items()))
+        if issubclass(enum_type, Enum):
+            enum_values = [e.value for e in enum_type]
+            enum_schema = {
+                "type": "string",
+                "enum": enum_values,
+                "description": f"Possible values for {enum_name}",
+            }
+            openapi_schema["components"]["schemas"][enum_name] = enum_schema
+
+    openapi_schema["components"]["schemas"]["CommandActionConfig"] = {
+        "type": "object",
+        "properties": {
+            "keyboard": {"$ref": "#/components/schemas/CommandKeyboardConfig"},
+            "wait": {"type": "number"},
+            "mouse": {"$ref": "#/components/schemas/CommandMouseConfig"},
+            "write": {"type": "string"},
+            "audio": {"$ref": "#/components/schemas/AudioFileConfig"},
+        },
+    }
+
     # Add WebSocket command models to schema
     for cls in WebSocketCommandModel.__subclasses__():
         cls_schema_dict = cls.model_json_schema(
@@ -155,18 +178,6 @@ def custom_openapi():
 
                 cls_schema_dict.setdefault("required", []).append(field_name)
         openapi_schema["components"]["schemas"][cls.__name__] = cls_schema_dict
-
-    # Add enums to schema
-    for enum_name, enum_model in ENUM_TYPES.items():
-        enum_field_name, enum_type = next(iter(enum_model.__annotations__.items()))
-        if issubclass(enum_type, Enum):
-            enum_values = [e.value for e in enum_type]
-            enum_schema = {
-                "type": "string",
-                "enum": enum_values,
-                "description": f"Possible values for {enum_name}",
-            }
-            openapi_schema["components"]["schemas"][enum_name] = enum_schema
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
