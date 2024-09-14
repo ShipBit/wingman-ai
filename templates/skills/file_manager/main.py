@@ -10,7 +10,7 @@ from pdfminer.high_level import extract_text
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
 
-DEFAULT_MAX_TEXT_SIZE = 15000
+DEFAULT_MAX_TEXT_SIZE = 24000
 SUPPORTED_FILE_EXTENSIONS = [
     "adoc",
     "asc",
