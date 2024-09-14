@@ -64,7 +64,9 @@ class AudioLibrary:
             selected_file,
         ]
         if audio_file.wait:
-            asyncio.create_task(actual_start_playback(selected_file, audio_player, volume))
+            asyncio.create_task(
+                actual_start_playback(selected_file, audio_player, volume)
+            )
         else:
             self.__threaded_execution(
                 actual_start_playback, selected_file, audio_player, volume
@@ -78,7 +80,8 @@ class AudioLibrary:
     ):
         audio_file = self.__get_audio_file_config(audio_file)
         playback_keys = [
-            path.join(current_file.path, current_file.name) for current_file in audio_file.file
+            path.join(current_file.path, current_file.name)
+            for current_file in audio_file.files
         ]
 
         async def fade_out(
@@ -103,7 +106,11 @@ class AudioLibrary:
 
                 if fade_out_time > 0:
                     self.__threaded_execution(
-                        fade_out, audio_player, volume, fade_out_time, fade_out_resolution
+                        fade_out,
+                        audio_player,
+                        volume,
+                        fade_out_time,
+                        fade_out_resolution,
                     )
                 else:
                     await audio_player.stop_playback()
@@ -130,7 +137,8 @@ class AudioLibrary:
     ):
         audio_file = self.__get_audio_file_config(audio_file)
         playback_keys = [
-            path.join(current_file.path, current_file.name) for current_file in audio_file.file
+            path.join(current_file.path, current_file.name)
+            for current_file in audio_file.files
         ]
 
         for playback_key in playback_keys:
@@ -200,14 +208,16 @@ class AudioLibrary:
         self, audio_file: AudioFile | AudioFileConfig
     ) -> AudioFileConfig:
         if isinstance(audio_file, AudioFile):
-            return AudioFileConfig(file=audio_file, volume=1, wait=False)
+            return AudioFileConfig(files=audio_file, volume=1, wait=False)
         return audio_file
 
-    def __get_random_audio_file_from_config(self, audio_file: AudioFileConfig) -> AudioFile:
-        size = len(audio_file.file)
+    def __get_random_audio_file_from_config(
+        self, audio_file: AudioFileConfig
+    ) -> AudioFile:
+        size = len(audio_file.files)
         if size > 1:
             index = randint(0, size - 1)
         else:
             index = 0
 
-        return audio_file.file[index]
+        return audio_file.files[index]

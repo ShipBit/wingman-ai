@@ -405,8 +405,8 @@ class AudioFile(BaseModel):
 
 
 class AudioFileConfig(BaseModel):
-    file: list[AudioFile]
-    """The audio file to play. Required."""
+    files: list[AudioFile]
+    """The audio file(s) to play. If there are multiple, a random file will be played."""
 
     volume: float
     """The volume to play the audio file at."""
