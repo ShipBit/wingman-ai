@@ -1,3 +1,4 @@
+import asyncio
 from elevenlabslib import (
     User,
     GenerationOptions,
@@ -141,6 +142,24 @@ class ElevenLabs:
                 output_stream.abort()
 
             audio_player.playback_events.subscribe("finished", playback_finished)
+
+    async def generate_sound_effect(self, prompt: str):
+        user = User(self.api_key)
+        req, _ = user.generate_sfx(prompt)
+
+        result_ready = asyncio.Event()
+        audio: bytes = None
+
+        def get_result(future: asyncio.Future[bytes]):
+            nonlocal audio
+            audio = future.result()
+            result_ready.set()  # Signal that the result is ready
+
+        req.add_done_callback(get_result)
+
+        # Wait for the result to be ready
+        await result_ready.wait()
+        return audio
 
     def get_available_voices(self):
         user = User(self.api_key)

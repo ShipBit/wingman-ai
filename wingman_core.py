@@ -209,6 +209,7 @@ class WingmanCore(WebSocketUser):
             endpoint=self.get_elevenlabs_models,
             tags=tags,
         )
+        # TODO: Refactor - move these to a new AudioLibrary service:
         self.router.add_api_route(
             methods=["GET"],
             path="/audio-library",
@@ -220,6 +221,12 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/audio-library/play",
             endpoint=self.play_from_audio_library,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/audio-library/generate-sfx-elevenlabs",
+            endpoint=self.generate_sfx_elevenlabs,
             tags=tags,
         )
 
@@ -836,12 +843,14 @@ class WingmanCore(WebSocketUser):
     def open_audio_library_directory(self):
         show_in_file_manager(get_writable_dir("audio_library"))
 
+    # GET /models/openrouter
     async def get_openrouter_models(self):
         response = requests.get(url=f"https://openrouter.ai/api/v1/models", timeout=10)
         response.raise_for_status()
         content = response.json()
         return content.get("data", [])
 
+    # GET /models/groq
     async def get_groq_models(self):
         groq_api_key = await self.secret_keeper.retrieve(key="groq", requester="Groq")
         response = requests.get(
@@ -872,6 +881,7 @@ class WingmanCore(WebSocketUser):
         content = response.json()
         return content.get("data", [])
 
+    # GET /models/elevenlabs
     async def get_elevenlabs_models(self):
         elevenlabs_api_key = await self.secret_keeper.retrieve(
             key="elevenlabs", requester="Elevenlabs"
@@ -890,12 +900,34 @@ class WingmanCore(WebSocketUser):
         result = [convert(model) for model in models]
         return result
 
+    # GET /audio-library
     async def get_audio_library(self):
         return self.audio_library.get_audio_files()
 
+    # POST /audio-library/play
     async def play_from_audio_library(
         self, name: str, path: str, volume: Optional[float] = 1.0
     ):
-        return self.audio_library.start_playback(
+        self.audio_library.start_playback(
             audio_file=AudioFile(name=name, path=path), volume_modifier=volume
         )
+
+    # POST /audio-library/generate-sfx-elevenlabs
+    async def generate_sfx_elevenlabs(self, prompt: str, path: str, name: str):
+        elevenlabs_api_key = await self.secret_keeper.retrieve(
+            key="elevenlabs", requester="Elevenlabs"
+        )
+        elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
+        audio_bytes = await elevenlabs.generate_sound_effect(prompt=prompt)
+
+        if not name.endswith(".mp3"):
+            name += ".mp3"
+
+        full_path = get_writable_dir(os.path.join("audio_library", path))
+        # TODO: check if file already exists and if so, rename to XYZ (1).mp3 etc.
+        with open(os.path.join(full_path, name), "wb") as f:
+            f.write(audio_bytes)
+
+        self.audio_library.start_playback(audio_file=AudioFile(name=name, path=path))
+
+        return True
