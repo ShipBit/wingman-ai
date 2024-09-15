@@ -176,6 +176,12 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/audio-library",
+            endpoint=self.open_audio_library_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
             methods=["GET"],
             path="/models/openrouter",
             response_model=list,
@@ -208,6 +214,12 @@ class WingmanCore(WebSocketUser):
             path="/audio-library",
             response_model=list[AudioFile],
             endpoint=self.get_audio_library,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/audio-library/play",
+            endpoint=self.play_from_audio_library,
             tags=tags,
         )
 
@@ -820,6 +832,10 @@ class WingmanCore(WebSocketUser):
     def open_logs_directory(self):
         show_in_file_manager(get_writable_dir("logs"))
 
+    # POST /open-filemanager/audio-library
+    def open_audio_library_directory(self):
+        show_in_file_manager(get_writable_dir("audio_library"))
+
     async def get_openrouter_models(self):
         response = requests.get(url=f"https://openrouter.ai/api/v1/models", timeout=10)
         response.raise_for_status()
@@ -873,6 +889,13 @@ class WingmanCore(WebSocketUser):
         )
         result = [convert(model) for model in models]
         return result
-    
+
     async def get_audio_library(self):
         return self.audio_library.get_audio_files()
+
+    async def play_from_audio_library(
+        self, name: str, path: str, volume: Optional[float] = 1.0
+    ):
+        return self.audio_library.start_playback(
+            audio_file=AudioFile(name=name, path=path), volume_modifier=volume
+        )
