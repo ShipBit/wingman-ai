@@ -534,7 +534,15 @@ class CustomProperty(BaseModel):
     """The name of the property. Has to be unique"""
     name: str
     """The "friendly" name of the property, displayed in the UI."""
-    value: str | int | float | bool | VoiceSelection | list[VoiceSelection]
+    value: (
+        str
+        | int
+        | float
+        | bool
+        | VoiceSelection
+        | list[VoiceSelection]
+        | AudioFileConfig
+    )
     """The value of the property"""
     property_type: CustomPropertyType
     """Determines the type of the property and which controls to render in the UI."""
