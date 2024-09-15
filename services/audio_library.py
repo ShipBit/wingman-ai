@@ -208,7 +208,7 @@ class AudioLibrary:
         self, audio_file: AudioFile | AudioFileConfig
     ) -> AudioFileConfig:
         if isinstance(audio_file, AudioFile):
-            return AudioFileConfig(files=audio_file, volume=1, wait=False)
+            return AudioFileConfig(files=[audio_file], volume=1, wait=False)
         return audio_file
 
     def __get_random_audio_file_from_config(
