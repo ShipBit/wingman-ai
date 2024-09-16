@@ -6,10 +6,11 @@ from api.enums import LogType
 from skills.skill_base import Skill
 from services.file import get_writable_dir
 from showinfm import show_in_file_manager
+from pdfminer.high_level import extract_text
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
 
-DEFAULT_MAX_TEXT_SIZE = 15000
+DEFAULT_MAX_TEXT_SIZE = 24000
 SUPPORTED_FILE_EXTENSIONS = [
     "adoc",
     "asc",
@@ -46,6 +47,7 @@ SUPPORTED_FILE_EXTENSIONS = [
     "m3u",
     "map",
     "md",
+    "pdf",
     "pyd",
     "plist",
     "pl",
@@ -63,11 +65,13 @@ SUPPORTED_FILE_EXTENSIONS = [
     "sql",
     "svg",
     "ts",
+    "tscn",
     "tcl",
     "tex",
     "tmpl",
     "toml",
     "tpl",
+    "tres",
     "tsv",
     "txt",
     "vtt",
@@ -128,6 +132,10 @@ class FileManager(Skill):
                                 "directory_path": {
                                     "type": "string",
                                     "description": "The directory from where the file should be loaded. Defaults to the configured directory.",
+                                },
+                                "pdf_page_number_to_load": {
+                                    "type": "number",
+                                    "description": "The page number of a pdf to load, if expressly specified by the user.",
                                 },
                             },
                             "required": ["file_name"],
@@ -237,25 +245,31 @@ class FileManager(Skill):
                 )
             file_name = parameters.get("file_name")
             directory = parameters.get("directory_path", self.default_directory)
+            pdf_page_number = parameters.get("pdf_page_number_to_load")
             if directory == "":
                 directory = self.default_directory
             if not file_name or file_name == "":
                 function_response = "File name not provided."
             else:
                 file_extension = file_name.split(".")[-1]
-                if file_extension not in self.allowed_file_extensions:
+                if file_extension.lower() not in self.allowed_file_extensions:
                     function_response = f"Unsupported file extension: {file_extension}"
                 else:
                     file_path = os.path.join(directory, file_name)
                     try:
-                        with open(file_path, "r", encoding="utf-8") as file:
-                            file_content = file.read()
-                            if len(file_content) > self.max_text_size:
-                                function_response = (
-                                    "File content exceeds the maximum allowed size."
-                                )
-                            else:
-                                function_response = f"File content loaded from {file_path}:\n{file_content}"
+                        # if PDF, use pdfminer.six's extract text to read (optionally passing the specific page to read - zero-indexed so subtract 1), otherwise open and parse file
+                        file_content = ""
+                        if file_extension.lower() == "pdf":
+                            file_content = extract_text(file_path, page_numbers=[pdf_page_number-1]) if pdf_page_number else extract_text(file_path) 
+                        else:
+                            with open(file_path, "r", encoding="utf-8") as file:
+                                file_content = file.read()
+                        if len(file_content) > self.max_text_size:
+                            function_response = (
+                                "File content exceeds the maximum allowed size."
+                            )
+                        else:
+                            function_response = f"File content loaded from {file_path}:\n{file_content}"
                     except FileNotFoundError:
                         function_response = (
                             f"File '{file_name}' not found in '{directory}'."
@@ -282,12 +296,12 @@ class FileManager(Skill):
                 function_response = "File name or text content not provided."
             else:
                 file_extension = file_name.split(".")[-1]
-                if file_extension not in self.allowed_file_extensions:
+                if file_extension.lower() not in self.allowed_file_extensions:
                     file_name += f".{self.default_file_extension}"
                 if len(text_content) > self.max_text_size:
                     function_response = "Text content exceeds the maximum allowed size."
                 else:
-                    if file_extension == "json":
+                    if file_extension.lower() == "json":
                         try:
                             json_content = json.loads(text_content)
                             text_content = json.dumps(json_content, indent=4)
