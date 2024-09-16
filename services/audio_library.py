@@ -50,8 +50,8 @@ class AudioLibrary:
             )
             return
 
-        # stop running playbacks of this file
-        await self.stop_playback(selected_file, 0.1)
+        # stop running playbacks of configured files
+        await self.stop_playback(audio_file, 0.1)
 
         async def actual_start_playback(
             audio_file: AudioFile,
