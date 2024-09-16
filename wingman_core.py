@@ -225,8 +225,15 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/audio-library/generate-sfx-elevenlabs",
+            path="/elevenlabs/generate-sfx",
             endpoint=self.generate_sfx_elevenlabs,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/elevenlabs/subscription-data",
+            endpoint=self.get_elevenlabs_subscription_data,
+            response_model=dict,
             tags=tags,
         )
 
@@ -912,7 +919,7 @@ class WingmanCore(WebSocketUser):
             audio_file=AudioFile(name=name, path=path), volume_modifier=volume
         )
 
-    # POST /audio-library/generate-sfx-elevenlabs
+    # POST /elevenlabs/generate-sfx
     async def generate_sfx_elevenlabs(
         self,
         prompt: str,
@@ -951,6 +958,16 @@ class WingmanCore(WebSocketUser):
         with open(os.path.join(directory, name), "wb") as f:
             f.write(audio_bytes)
 
-        await self.audio_library.start_playback(audio_file=AudioFile(name=name, path=path))
+        await self.audio_library.start_playback(
+            audio_file=AudioFile(name=name, path=path)
+        )
 
         return True
+
+    # GET /elevenlabs/subscription-data
+    async def get_elevenlabs_subscription_data(self):
+        elevenlabs_api_key = await self.secret_keeper.retrieve(
+            key="elevenlabs", requester="Elevenlabs"
+        )
+        elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
+        return elevenlabs.get_subscription_data()

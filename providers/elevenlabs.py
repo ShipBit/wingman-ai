@@ -173,3 +173,7 @@ class ElevenLabs:
     def get_available_models(self):
         user = User(self.api_key)
         return user.get_models()
+
+    def get_subscription_data(self):
+        user = User(self.api_key)
+        return user.get_subscription_data()
