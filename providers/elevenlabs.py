@@ -1,9 +1,6 @@
 import asyncio
-from elevenlabslib import (
-    User,
-    GenerationOptions,
-    PlaybackOptions,
-)
+from typing import Optional
+from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXGenerationOptions
 from api.enums import SoundEffect, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
@@ -143,9 +140,17 @@ class ElevenLabs:
 
             audio_player.playback_events.subscribe("finished", playback_finished)
 
-    async def generate_sound_effect(self, prompt: str):
+    async def generate_sound_effect(
+        self,
+        prompt: str,
+        duration_seconds: Optional[float] = None,
+        prompt_influence: Optional[float] = None,
+    ):
         user = User(self.api_key)
-        req, _ = user.generate_sfx(prompt)
+        options = SFXGenerationOptions(
+            duration_seconds=duration_seconds, prompt_influence=prompt_influence
+        )
+        req, _ = user.generate_sfx(prompt, options)
 
         result_ready = asyncio.Event()
         audio: bytes = None

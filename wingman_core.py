@@ -913,19 +913,42 @@ class WingmanCore(WebSocketUser):
         )
 
     # POST /audio-library/generate-sfx-elevenlabs
-    async def generate_sfx_elevenlabs(self, prompt: str, path: str, name: str):
+    async def generate_sfx_elevenlabs(
+        self,
+        prompt: str,
+        path: str,
+        name: str,
+        duration_seconds: Optional[float] = None,
+        prompt_influence: Optional[float] = None,
+    ):
         elevenlabs_api_key = await self.secret_keeper.retrieve(
             key="elevenlabs", requester="Elevenlabs"
         )
         elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
-        audio_bytes = await elevenlabs.generate_sound_effect(prompt=prompt)
+        audio_bytes = await elevenlabs.generate_sound_effect(
+            prompt=prompt,
+            duration_seconds=duration_seconds,
+            prompt_influence=prompt_influence,
+        )
 
         if not name.endswith(".mp3"):
             name += ".mp3"
 
-        full_path = get_writable_dir(os.path.join("audio_library", path))
-        # TODO: check if file already exists and if so, rename to XYZ (1).mp3 etc.
-        with open(os.path.join(full_path, name), "wb") as f:
+        directory = get_writable_dir(os.path.join("audio_library", path))
+
+        if os.path.exists(os.path.join(directory, name)):
+
+            def get_unique_filename(directory: str, filename: str) -> str:
+                base, extension = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(os.path.join(directory, filename)):
+                    filename = f"{base}-{counter}{extension}"
+                    counter += 1
+                return filename
+
+            name = get_unique_filename(directory, name)
+
+        with open(os.path.join(directory, name), "wb") as f:
             f.write(audio_bytes)
 
         await self.audio_library.start_playback(audio_file=AudioFile(name=name, path=path))
