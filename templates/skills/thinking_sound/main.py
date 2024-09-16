@@ -16,7 +16,9 @@ class ThinkingSound(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
         self.audio_config = self.retrieve_custom_property_value("audio_config", errors)
-        self.audio_config.wait = False # force no wait for this skill to work
+        if self.audio_config:
+            # force no wait for this skill to work
+            self.audio_config.wait = False
         return errors
 
     async def unload(self) -> None:
@@ -35,7 +37,7 @@ class ThinkingSound(Skill):
         pass
 
     async def on_add_user_message(self, message: str) -> None:
-        self.wingman.audio_library.stop_playback(self.audio_config, 0)
+        await self.wingman.audio_library.stop_playback(self.audio_config, 0)
 
         if self.wingman.settings.debug_mode:
             await self.printr.print_async(
@@ -58,7 +60,9 @@ class ThinkingSound(Skill):
 
         if not self.playing:
             self.playing = True
-            self.wingman.audio_library.start_playback(self.audio_config, self.wingman.config.sound.volume)
+            await self.wingman.audio_library.start_playback(
+                self.audio_config, self.wingman.config.sound.volume
+            )
 
     async def stop_playback(self):
         await self.wingman.audio_library.stop_playback(

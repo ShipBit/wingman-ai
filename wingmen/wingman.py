@@ -429,7 +429,7 @@ class Wingman:
             if not self.settings.debug_mode:
                 # in debug mode we already printed the separate execution times
                 await self.print_execution_time()
-            self.execute_action(command)
+            await self.execute_action(command)
 
         if len(command.actions or []) == 0:
             await printr.print_async(
@@ -442,7 +442,7 @@ class Wingman:
 
         return self._select_command_response(command) or "Ok"
 
-    def execute_action(self, command: CommandConfig):
+    async def execute_action(self, command: CommandConfig):
         """Executes the actions defined in the command (in order).
 
         Args:
@@ -522,7 +522,7 @@ class Wingman:
                 time.sleep(action.wait)
 
             if action.audio:
-                self.audio_library.start_playback(action.audio, self.config.sound.volume)
+                await self.audio_library.start_playback(action.audio, self.config.sound.volume)
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""

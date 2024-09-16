@@ -908,7 +908,7 @@ class WingmanCore(WebSocketUser):
     async def play_from_audio_library(
         self, name: str, path: str, volume: Optional[float] = 1.0
     ):
-        self.audio_library.start_playback(
+        await self.audio_library.start_playback(
             audio_file=AudioFile(name=name, path=path), volume_modifier=volume
         )
 
@@ -928,6 +928,6 @@ class WingmanCore(WebSocketUser):
         with open(os.path.join(full_path, name), "wb") as f:
             f.write(audio_bytes)
 
-        self.audio_library.start_playback(audio_file=AudioFile(name=name, path=path))
+        await self.audio_library.start_playback(audio_file=AudioFile(name=name, path=path))
 
         return True

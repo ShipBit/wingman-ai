@@ -114,6 +114,7 @@ class AudioPlayer:
 
         # Initial playhead position
         playhead = 0
+        self.is_playing = True
 
         # Create and start the audio stream
         self.stream = sd.OutputStream(

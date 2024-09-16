@@ -7,7 +7,7 @@ description:
 custom_properties:
   - id: audio_config
     name: Audio Configuration
-    hint: Choose your files (random selection) and volume for playback. Recommended volume is 0.2 - 0.4.
+    hint: Choose your files (random selection on multiple) and volume for playback. Recommended volume is 0.2 - 0.4.
     required: true
     property_type: audio_files
     options:
@@ -19,5 +19,5 @@ custom_properties:
         value: true
     value:
       files: []
-      volume: 1.0
+      volume: 0.4
       wait: false
