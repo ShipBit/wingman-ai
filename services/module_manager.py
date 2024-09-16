@@ -179,7 +179,6 @@ class ModuleManager:
                 skill = SkillBase(
                     name=skill_config["name"],
                     config=skill_config,
-                    description=skill_config["description"],
                     logo=logo,
                 )
                 skills.append(skill)

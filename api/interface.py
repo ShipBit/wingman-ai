@@ -396,6 +396,25 @@ class FeaturesConfig(BaseModel):
     use_generic_instant_responses: bool
 
 
+class AudioFile(BaseModel):
+    path: str
+    """The audio file to play. Required."""
+
+    name: str
+    """The name of the audio file."""
+
+
+class AudioFileConfig(BaseModel):
+    files: list[AudioFile]
+    """The audio file(s) to play. If there are multiple, a random file will be played."""
+
+    volume: float
+    """The volume to play the audio file at."""
+
+    wait: bool
+    """Whether to wait for the audio file to finish playing before continuing."""
+
+
 class CommandKeyboardConfig(BaseModel):
     hotkey: str
     """The hotkey. Can be a single key like 'a' or a combination like 'ctrl+shift+a'."""
@@ -445,6 +464,9 @@ class CommandActionConfig(BaseModel):
 
     write: Optional[str] = None
     """The word or phrase to type, for example, to type text in a login screen.  Must have associated button press to work.  May need special formatting for special characters."""
+
+    audio: Optional[AudioFileConfig] = None
+    """The audio file to play. Optional."""
 
 
 class CommandConfig(BaseModel):
@@ -512,7 +534,15 @@ class CustomProperty(BaseModel):
     """The name of the property. Has to be unique"""
     name: str
     """The "friendly" name of the property, displayed in the UI."""
-    value: str | int | float | bool | VoiceSelection | list[VoiceSelection]
+    value: (
+        str
+        | int
+        | float
+        | bool
+        | VoiceSelection
+        | list[VoiceSelection]
+        | AudioFileConfig
+    )
     """The value of the property"""
     property_type: CustomPropertyType
     """Determines the type of the property and which controls to render in the UI."""

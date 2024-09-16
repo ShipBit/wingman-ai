@@ -19,6 +19,7 @@ from api.enums import (
 )
 from api.interface import (
     AudioDevice,
+    AudioFile,
     AzureSttConfig,
     ConfigWithDirInfo,
     ElevenlabsModel,
@@ -37,6 +38,7 @@ from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
 from services.audio_player import AudioPlayer
+from services.audio_library import AudioLibrary
 from services.audio_recorder import RECORDING_PATH, AudioRecorder
 from services.config_manager import ConfigManager
 from services.printr import Printr
@@ -174,6 +176,12 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/audio-library",
+            endpoint=self.open_audio_library_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
             methods=["GET"],
             path="/models/openrouter",
             response_model=list,
@@ -201,6 +209,33 @@ class WingmanCore(WebSocketUser):
             endpoint=self.get_elevenlabs_models,
             tags=tags,
         )
+        # TODO: Refactor - move these to a new AudioLibrary service:
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/audio-library",
+            response_model=list[AudioFile],
+            endpoint=self.get_audio_library,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/audio-library/play",
+            endpoint=self.play_from_audio_library,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/elevenlabs/generate-sfx",
+            endpoint=self.generate_sfx_elevenlabs,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/elevenlabs/subscription-data",
+            endpoint=self.get_elevenlabs_subscription_data,
+            response_model=dict,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_service = ConfigService(config_manager=config_manager)
@@ -216,6 +251,7 @@ class WingmanCore(WebSocketUser):
             on_playback_started=self.on_playback_started,
             on_playback_finished=self.on_playback_finished,
         )
+        self.audio_library = AudioLibrary()
 
         self.tower: Tower = None
 
@@ -283,6 +319,7 @@ class WingmanCore(WebSocketUser):
         self.tower = Tower(
             config=config_dir_info.config,
             audio_player=self.audio_player,
+            audio_library=self.audio_library,
             whispercpp=self.whispercpp,
             xvasynth=self.xvasynth,
         )
@@ -809,12 +846,18 @@ class WingmanCore(WebSocketUser):
     def open_logs_directory(self):
         show_in_file_manager(get_writable_dir("logs"))
 
+    # POST /open-filemanager/audio-library
+    def open_audio_library_directory(self):
+        show_in_file_manager(get_writable_dir("audio_library"))
+
+    # GET /models/openrouter
     async def get_openrouter_models(self):
         response = requests.get(url=f"https://openrouter.ai/api/v1/models", timeout=10)
         response.raise_for_status()
         content = response.json()
         return content.get("data", [])
 
+    # GET /models/groq
     async def get_groq_models(self):
         groq_api_key = await self.secret_keeper.retrieve(key="groq", requester="Groq")
         response = requests.get(
@@ -845,6 +888,7 @@ class WingmanCore(WebSocketUser):
         content = response.json()
         return content.get("data", [])
 
+    # GET /models/elevenlabs
     async def get_elevenlabs_models(self):
         elevenlabs_api_key = await self.secret_keeper.retrieve(
             key="elevenlabs", requester="Elevenlabs"
@@ -862,3 +906,68 @@ class WingmanCore(WebSocketUser):
         )
         result = [convert(model) for model in models]
         return result
+
+    # GET /audio-library
+    async def get_audio_library(self):
+        return self.audio_library.get_audio_files()
+
+    # POST /audio-library/play
+    async def play_from_audio_library(
+        self, name: str, path: str, volume: Optional[float] = 1.0
+    ):
+        await self.audio_library.start_playback(
+            audio_file=AudioFile(name=name, path=path), volume_modifier=volume
+        )
+
+    # POST /elevenlabs/generate-sfx
+    async def generate_sfx_elevenlabs(
+        self,
+        prompt: str,
+        path: str,
+        name: str,
+        duration_seconds: Optional[float] = None,
+        prompt_influence: Optional[float] = None,
+    ):
+        elevenlabs_api_key = await self.secret_keeper.retrieve(
+            key="elevenlabs", requester="Elevenlabs"
+        )
+        elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
+        audio_bytes = await elevenlabs.generate_sound_effect(
+            prompt=prompt,
+            duration_seconds=duration_seconds,
+            prompt_influence=prompt_influence,
+        )
+
+        if not name.endswith(".mp3"):
+            name += ".mp3"
+
+        directory = get_writable_dir(os.path.join("audio_library", path))
+
+        if os.path.exists(os.path.join(directory, name)):
+
+            def get_unique_filename(directory: str, filename: str) -> str:
+                base, extension = os.path.splitext(filename)
+                counter = 1
+                while os.path.exists(os.path.join(directory, filename)):
+                    filename = f"{base}-{counter}{extension}"
+                    counter += 1
+                return filename
+
+            name = get_unique_filename(directory, name)
+
+        with open(os.path.join(directory, name), "wb") as f:
+            f.write(audio_bytes)
+
+        await self.audio_library.start_playback(
+            audio_file=AudioFile(name=name, path=path)
+        )
+
+        return True
+
+    # GET /elevenlabs/subscription-data
+    async def get_elevenlabs_subscription_data(self):
+        elevenlabs_api_key = await self.secret_keeper.retrieve(
+            key="elevenlabs", requester="Elevenlabs"
+        )
+        elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
+        return elevenlabs.get_subscription_data()
