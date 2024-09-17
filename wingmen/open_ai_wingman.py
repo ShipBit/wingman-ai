@@ -881,7 +881,7 @@ class OpenAiWingman(Wingman):
             completion = self.openai.ask(
                 messages=messages,
                 tools=tools,
-                model=self.config.openai.conversation_model.value,
+                model=self.config.openai.conversation_model,
             )
         elif self.config.features.conversation_provider == ConversationProvider.MISTRAL:
             completion = self.mistral.ask(

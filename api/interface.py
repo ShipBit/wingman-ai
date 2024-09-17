@@ -11,7 +11,6 @@ from api.enums import (
     CustomPropertyType,
     SkillCategory,
     TtsVoiceGender,
-    OpenAiModel,
     OpenAiTtsVoice,
     SoundEffect,
     SttProvider,
@@ -279,7 +278,7 @@ class XVASynthTtsConfig(BaseModel):
 
 
 class OpenAiConfig(BaseModel):
-    conversation_model: OpenAiModel
+    conversation_model: str
     """ The model to use for conversations aka "chit-chat" and for function calls.
     """
 
