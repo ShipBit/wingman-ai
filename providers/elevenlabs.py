@@ -53,12 +53,12 @@ class ElevenLabs:
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
             if contains_high_end_radio:
-                audio_player.play_wav("Radio_Static_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("Radio_Static_Beep.wav", sound_config.volume)
 
             if sound_config.play_beep:
-                audio_player.play_wav("beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("beep.wav", sound_config.volume)
             elif sound_config.play_beep_apollo:
-                audio_player.play_wav("Apollo_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("Apollo_Beep.wav", sound_config.volume)
 
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_finished(wingman_name)
@@ -66,13 +66,13 @@ class ElevenLabs:
 
         def notify_playback_started():
             if sound_config.play_beep:
-                audio_player.play_wav("beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("beep.wav", sound_config.volume)
             elif sound_config.play_beep_apollo:
-                audio_player.play_wav("Apollo_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("Apollo_Beep.wav", sound_config.volume)
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
             if contains_high_end_radio:
-                audio_player.play_wav("Radio_Static_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("Radio_Static_Beep.wav", sound_config.volume)
 
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_started(wingman_name)
