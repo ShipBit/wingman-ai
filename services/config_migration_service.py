@@ -15,41 +15,141 @@ from services.config_manager import (
 from services.file import get_users_dir
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+from services.system_manager import SystemManager
 
 MIGRATION_LOG = ".migration"
 
 
 class ConfigMigrationService:
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: ConfigManager, system_manager: SystemManager):
         self.config_manager = config_manager
+        self.system_manager = system_manager
         self.printr = Printr()
         self.log_message: str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "\n"
+        self.users_dir = get_users_dir()
+        self.latest_version = MIGRATIONS[-1][1]
+        self.latest_config_path = path.join(
+            self.users_dir, self.latest_version, CONFIGS_DIR
+        )
+
+    def migrate_to_latest(self):
+
+        # Find the earliest existing version that needs migration
+        earliest_version = self.find_earliest_existing_version(self.users_dir)
+
+        if not earliest_version:
+            self.log("No valid version directories found for migration.", True)
+            return
+
+        # Check if the latest version is already migrated
+
+        migration_file = path.join(self.latest_config_path, MIGRATION_LOG)
+
+        if path.exists(migration_file):
+            self.log(
+                f"Found {self.latest_version} configs. No migrations needed.", True
+            )
+            return
+
+        self.log(
+            f"Starting migration from version {earliest_version.replace('_', '.')} to {self.latest_version.replace('_', '.')}",
+            True,
+        )
+
+        # Perform migrations
+        current_version = earliest_version
+        while current_version != self.latest_version:
+            next_version = self.find_next_version(current_version)
+            self.perform_migration(current_version, next_version)
+            current_version = next_version
+
+        self.log(
+            f"Migration completed successfully. Current version: {self.latest_version.replace('_', '.')}",
+            True,
+        )
+
+    def find_earliest_existing_version(self, users_dir):
+        versions = self.get_valid_versions(users_dir)
+        versions.sort(key=lambda v: [int(n) for n in v.split("_")])
+
+        for version in versions:
+            if version != self.latest_version:
+                return version
+
+        return None
+
+    def find_next_version(self, current_version):
+        for old, new, _ in MIGRATIONS:
+            if old == current_version:
+                return new
+        return None
+
+    def perform_migration(self, old_version, new_version):
+        migration_func = next(
+            (m[2] for m in MIGRATIONS if m[0] == old_version and m[1] == new_version),
+            None,
+        )
+
+        if migration_func:
+            self.log(
+                f"Migrating from {old_version.replace('_', '.')} to {new_version.replace('_', '.')}",
+                True,
+            )
+            migration_func(self)
+        else:
+            self.err(f"No migration path found from {old_version} to {new_version}")
+            raise ValueError(
+                f"No migration path found from {old_version} to {new_version}"
+            )
+
+    def find_previous_version(self, users_dir, current_version):
+        versions = self.get_valid_versions(users_dir)
+        versions.sort(key=lambda v: [int(n) for n in v.split("_")])
+        index = versions.index(current_version)
+        return versions[index - 1] if index > 0 else None
+
+    def get_valid_versions(self, users_dir):
+        versions = next(os.walk(users_dir))[1]
+        return [v for v in versions if self.is_valid_version(v)]
+
+    def find_latest_user_version(self, users_dir):
+        valid_versions = self.get_valid_versions(users_dir)
+        return max(
+            valid_versions,
+            default=None,
+            key=lambda v: [int(n) for n in v.split("_")],
+        )
+
+    def is_valid_version(self, version):
+        return any(version in migration[:2] for migration in MIGRATIONS)
 
     # MIGRATIONS
 
     def migrate_140_to_150(self):
-        def migrate_settings(old: dict, new: SettingsConfig) -> dict:
+        def migrate_settings(old: dict, new: dict) -> dict:
             old["voice_activation"]["whispercpp_config"] = {
-                "temperature": new.voice_activation.whispercpp_config.temperature
+                "temperature": new["voice_activation"]["whispercpp_config"][
+                    "temperature"
+                ]
             }
-            old["voice_activation"]["whispercpp"] = self.config_manager.convert_to_dict(
-                new.voice_activation.whispercpp
-            )
+            old["voice_activation"]["whispercpp"] = new["voice_activation"][
+                "whispercpp"
+            ]
             self.log("- applied new split whispercpp settings/config structure")
 
-            old["xvasynth"] = self.config_manager.convert_to_dict(new.xvasynth)
+            old["xvasynth"] = new["xvasynth"]
             self.log("- adding new XVASynth settings")
 
             old.pop("audio", None)
             self.log("- removed audio device settings because DirectSound was removed")
             return old
 
-        def migrate_defaults(old: dict, new: NestedConfig) -> dict:
+        def migrate_defaults(old: dict, new: dict) -> dict:
             # add new properties
-            old["sound"]["volume"] = new.sound.volume
+            old["sound"]["volume"] = new["sound"]["volume"]
             if old["sound"].get("play_beep_apollo", None) is None:
-                old["sound"]["play_beep_apollo"] = new.sound.play_beep_apollo
-            old["google"] = self.config_manager.convert_to_dict(new.google)
+                old["sound"]["play_beep_apollo"] = new["sound"]["play_beep_apollo"]
+            old["google"] = new["google"]
             self.log("- added new properties: sound.volume, google")
 
             # remove obsolete properties
@@ -65,24 +165,24 @@ class ConfigMigrationService:
             )
 
             # rest of whispercpp moved to settings.yaml
-            old["whispercpp"] = {"temperature": new.whispercpp.temperature}
+            old["whispercpp"] = {"temperature": new["whispercpp"]["temperature"]}
             self.log("- cleaned up whispercpp properties")
 
             # xvasynth was restructured
-            old["xvasynth"] = self.config_manager.convert_to_dict(new.xvasynth)
+            old["xvasynth"] = new["xvasynth"]
             self.log("- resetting and restructuring XVASynth")
 
             # patching new default values
-            old["features"]["stt_provider"] = new.features.stt_provider.value
+            old["features"]["stt_provider"] = new["features"]["stt_provider"]
             self.log("- set whispercpp as new default STT provider")
 
-            old["openai"]["conversation_model"] = new.openai.conversation_model.value
-            old["azure"]["conversation"][
-                "deployment_name"
-            ] = new.azure.conversation.deployment_name
-            old["wingman_pro"][
+            old["openai"]["conversation_model"] = new["openai"]["conversation_model"]
+            old["azure"]["conversation"]["deployment_name"] = new["azure"][
+                "conversation"
+            ]["deployment_name"]
+            old["wingman_pro"]["conversation_deployment"] = new["wingman_pro"][
                 "conversation_deployment"
-            ] = new.wingman_pro.conversation_deployment.value
+            ]
             self.log("- set gpt-4o-mini as new default LLM model")
 
             return old
@@ -186,6 +286,30 @@ class ConfigMigrationService:
             migrate_wingman=migrate_wingman,
         )
 
+    def migrate_150_to_160(self):
+        def migrate_settings(old: dict, new: dict) -> dict:
+            return old
+
+        def migrate_defaults(old: dict, new: dict) -> dict:
+            # add new properties
+            old["cerebras"] = new["cerebras"]
+            old["perplexity"] = new["perplexity"]
+
+            self.log("- added new properties: cerebras, perplexity")
+
+            return old
+
+        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            return old
+
+        self.migrate(
+            old_version="1_5_0",
+            new_version="1_6_0",
+            migrate_settings=migrate_settings,
+            migrate_defaults=migrate_defaults,
+            migrate_wingman=migrate_wingman,
+        )
+
     # INTERNAL
 
     def log(self, message: str, highlight: bool = False):
@@ -217,13 +341,22 @@ class ConfigMigrationService:
         self,
         old_version: str,
         new_version: str,
-        migrate_settings: Callable[[dict, SettingsConfig], dict],
-        migrate_defaults: Callable[[dict, NestedConfig], dict],
+        migrate_settings: Callable[[dict, dict], dict],
+        migrate_defaults: Callable[[dict, dict], dict],
         migrate_wingman: Callable[[dict, Optional[dict]], dict],
     ) -> None:
         users_dir = get_users_dir()
         old_config_path = path.join(users_dir, old_version, CONFIGS_DIR)
         new_config_path = path.join(users_dir, new_version, CONFIGS_DIR)
+
+        if not path.exists(path.join(users_dir, new_version)):
+            shutil.copytree(
+                path.join(users_dir, self.latest_version, "migration", new_version),
+                path.join(users_dir, new_version),
+            )
+            self.log(
+                f"{new_version} configs not found during multi-step migration. Copied migration templates."
+            )
 
         already_migrated = path.exists(path.join(new_config_path, MIGRATION_LOG))
         if already_migrated:
@@ -242,24 +375,27 @@ class ConfigMigrationService:
                 old_file = path.join(root, filename)
                 new_file = old_file.replace(old_config_path, new_config_path)
 
-                if filename == ".DS_Store":
+                if filename == ".DS_Store" or filename == MIGRATION_LOG:
                     continue
                 # secrets
                 if filename == "secrets.yaml":
                     self.copy_file(old_file, new_file)
-                    secret_keeper = SecretKeeper()
-                    secret_keeper.secrets = secret_keeper.load()
+
+                    if new_config_path == self.latest_config_path:
+                        secret_keeper = SecretKeeper()
+                        secret_keeper.secrets = secret_keeper.load()
                 # settings
                 elif filename == "settings.yaml":
                     self.log("Migrating settings.yaml...", True)
                     migrated_settings = migrate_settings(
                         old=self.config_manager.read_config(old_file),
-                        new=self.config_manager.settings_config,
+                        new=self.config_manager.read_config(new_file),
                     )
                     try:
-                        self.config_manager.settings_config = SettingsConfig(
-                            **migrated_settings
-                        )
+                        if new_config_path == self.latest_config_path:
+                            self.config_manager.settings_config = SettingsConfig(
+                                **migrated_settings
+                            )
                         self.config_manager.save_settings_config()
                     except ValidationError as e:
                         self.err(f"Unable to migrate settings.yaml:\n{str(e)}")
@@ -268,7 +404,7 @@ class ConfigMigrationService:
                     self.log("Migrating defaults.yaml...", True)
                     migrated_defaults = migrate_defaults(
                         old=self.config_manager.read_config(old_file),
-                        new=self.config_manager.default_config,
+                        new=self.config_manager.read_config(new_file),
                     )
                     try:
                         self.config_manager.default_config = NestedConfig(
@@ -292,9 +428,10 @@ class ConfigMigrationService:
                             ),
                         )
                         # validate the merged config
-                        _wingman_config = self.config_manager.merge_configs(
-                            default_config, migrated_wingman
-                        )
+                        if new_config_path == self.latest_config_path:
+                            _wingman_config = self.config_manager.merge_configs(
+                                default_config, migrated_wingman
+                            )
                         # diff it
                         wingman_diff = self.config_manager.deep_diff(
                             default_config, migrated_wingman
@@ -357,3 +494,10 @@ class ConfigMigrationService:
             path.join(new_config_path, MIGRATION_LOG), "w", encoding="UTF-8"
         ) as stream:
             stream.write(self.log_message)
+
+
+MIGRATIONS = [
+    ("1_4_0", "1_5_0", ConfigMigrationService.migrate_140_to_150),
+    ("1_5_0", "1_6_0", ConfigMigrationService.migrate_150_to_160),
+    # Add new migrations here in order
+]
