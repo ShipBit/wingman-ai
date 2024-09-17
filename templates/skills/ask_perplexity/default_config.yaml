@@ -1,0 +1,31 @@
+name: AskPerplexity
+module: skills.ask_perplexity.main
+category: general
+description:
+  en: Uses the Perplexity API to get up-to-date information on a wide range of topics. Perplexity is a paid service, you will need a funded account with an active API key, see https://www.perplexity.ai/settings/api
+  de: Verwendet die Perplexity-API, um aktuelle Informationen zu einer Vielzahl von Themen zu erhalten. Perplexity ist ein kostenpflichtiger Dienst, ein Konto mit Guthaben und aktiven API key ist notwendig, siehe https://www.perplexity.ai/settings/api
+examples:
+  - question:
+      en: How is the weather today in Berlin?
+      de: Wie ist das Wetter heute?
+    answer:
+      en: Today, the weather in Berlin is cloudy with a high of 20°C and a ... (more details)
+      de: Heute ist das Wetter in Berlin bewölkt, mit einer Höchsttemperatur von 20°C und ... (mehr Details)
+  - question:
+      en: In Star Citizen mining, what is currently the best way to find quantanium?
+      de: Beim Mining in Star Citizen, wie finde ich aktuell am besten Quantanium?
+    answer:
+      en: To find Quantanium for mining in Star Citizen, your best bet is Lyria, as it offers ... (more details)
+      de: Um Quantanium im Star Citizen Universum zu finden, ist Lyria der beste Ort, da dort ... (mehr Details)
+prompt: |
+  There is a new function: 'ask_perplexity'
+  Perplexity is a powerful tool that can provide you with up-to-date information on a wide range of topics.
+  Use it everytime the user asks a question that implies the need for up-to-date information.
+  Always use this if no other available skill matches the request better to get up-to-date information.
+custom_properties:
+  - id: instant_response
+    name: Instant Response
+    hint: If set, the Perplexity answer will be used instantly and unprocessed. This is faster but will not include format and/or language guidelines set in your wingman.
+    value: False
+    required: false
+    property_type: boolean
