@@ -237,6 +237,12 @@ class WingmanCore(WebSocketUser):
             response_model=dict,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/shutdown",
+            endpoint=self.shutdown,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_service = ConfigService(config_manager=config_manager)
@@ -335,8 +341,6 @@ class WingmanCore(WebSocketUser):
     async def unload_tower(self):
         if self.tower:
             for wingman in self.tower.wingmen:
-                for skill in wingman.skills:
-                    await skill.unload()
                 await wingman.unload()
             self.tower = None
             self.config_service.set_tower(None)
@@ -990,3 +994,6 @@ class WingmanCore(WebSocketUser):
             return data
         except ValueError as e:
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
+
+    async def shutdown(self):
+        await self.unload_tower()

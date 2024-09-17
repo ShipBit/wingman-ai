@@ -148,6 +148,7 @@ class Wingman:
 
     async def unload(self):
         """This method is called when the Wingman is unloaded by Tower. You can override it if you need to clean up resources."""
+        await self.unload_skills()
 
     async def unload_skills(self):
         """Call this to trigger unload for all skills."""
