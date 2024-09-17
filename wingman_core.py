@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 import os
 import re
 import threading
@@ -889,23 +890,33 @@ class WingmanCore(WebSocketUser):
         return content.get("data", [])
 
     # GET /models/elevenlabs
-    async def get_elevenlabs_models(self):
+    async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:
         elevenlabs_api_key = await self.secret_keeper.retrieve(
             key="elevenlabs", requester="Elevenlabs"
         )
         elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
-        models = elevenlabs.get_available_models()
-        convert = lambda model: ElevenlabsModel(
-            name=model.name,
-            model_id=model.modelID,
-            description=model.description,
-            max_characters=model.maxCharacters,
-            cost_factor=model.costFactor,
-            supported_languages=model.supportedLanguages,
-            metadata=model.metadata,
-        )
-        result = [convert(model) for model in models]
-        return result
+        try:
+            # Run the synchronous method in a separate thread
+            loop = asyncio.get_running_loop()
+            with ThreadPoolExecutor() as pool:
+                models = await loop.run_in_executor(
+                    pool, elevenlabs.get_available_models
+                )
+
+            convert = lambda model: ElevenlabsModel(
+                name=model.name,
+                model_id=model.modelID,
+                description=model.description,
+                max_characters=model.maxCharacters,
+                cost_factor=model.costFactor,
+                supported_languages=model.supportedLanguages,
+                metadata=model.metadata,
+            )
+            result = [convert(model) for model in models]
+            return result
+        except ValueError as e:
+            self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
+            return []
 
     # GET /audio-library
     async def get_audio_library(self):
@@ -932,35 +943,39 @@ class WingmanCore(WebSocketUser):
             key="elevenlabs", requester="Elevenlabs"
         )
         elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
-        audio_bytes = await elevenlabs.generate_sound_effect(
-            prompt=prompt,
-            duration_seconds=duration_seconds,
-            prompt_influence=prompt_influence,
-        )
+        try:
+            audio_bytes = await elevenlabs.generate_sound_effect(
+                prompt=prompt,
+                duration_seconds=duration_seconds,
+                prompt_influence=prompt_influence,
+            )
 
-        if not name.endswith(".mp3"):
-            name += ".mp3"
+            if not name.endswith(".mp3"):
+                name += ".mp3"
 
-        directory = get_writable_dir(os.path.join("audio_library", path))
+            directory = get_writable_dir(os.path.join("audio_library", path))
 
-        if os.path.exists(os.path.join(directory, name)):
+            if os.path.exists(os.path.join(directory, name)):
 
-            def get_unique_filename(directory: str, filename: str) -> str:
-                base, extension = os.path.splitext(filename)
-                counter = 1
-                while os.path.exists(os.path.join(directory, filename)):
-                    filename = f"{base}-{counter}{extension}"
-                    counter += 1
-                return filename
+                def get_unique_filename(directory: str, filename: str) -> str:
+                    base, extension = os.path.splitext(filename)
+                    counter = 1
+                    while os.path.exists(os.path.join(directory, filename)):
+                        filename = f"{base}-{counter}{extension}"
+                        counter += 1
+                    return filename
 
-            name = get_unique_filename(directory, name)
+                name = get_unique_filename(directory, name)
 
-        with open(os.path.join(directory, name), "wb") as f:
-            f.write(audio_bytes)
+            with open(os.path.join(directory, name), "wb") as f:
+                f.write(audio_bytes)
 
-        await self.audio_library.start_playback(
-            audio_file=AudioFile(name=name, path=path)
-        )
+            await self.audio_library.start_playback(
+                audio_file=AudioFile(name=name, path=path)
+            )
+        except ValueError as e:
+            self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
+            return False
 
         return True
 
@@ -970,4 +985,13 @@ class WingmanCore(WebSocketUser):
             key="elevenlabs", requester="Elevenlabs"
         )
         elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
-        return elevenlabs.get_subscription_data()
+        try:
+            # Run the synchronous method in a separate thread
+            loop = asyncio.get_running_loop()
+            with ThreadPoolExecutor() as pool:
+                data = await loop.run_in_executor(
+                    pool, elevenlabs.get_subscription_data
+                )
+            return data
+        except ValueError as e:
+            self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
