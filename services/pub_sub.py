@@ -14,10 +14,16 @@ class PubSub:
         if event_type in self.subscribers:
             self.subscribers[event_type].remove(fn)
 
-    async def publish(self, event_type, data):
+    async def publish(self, event_type, data=None):
         if event_type in self.subscribers:
             for fn in self.subscribers[event_type]:
                 if asyncio.iscoroutinefunction(fn):
-                    await fn(data)
+                    if data is None:
+                        await fn()
+                    else:
+                        await fn(data)
                 else:
-                    fn(data)
+                    if data is None:
+                        fn()
+                    else:
+                        fn(data)

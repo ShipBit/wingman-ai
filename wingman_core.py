@@ -896,12 +896,7 @@ class WingmanCore(WebSocketUser):
         )
         elevenlabs = ElevenLabs(api_key=elevenlabs_api_key, wingman_name="")
         try:
-            # Run the synchronous method in a separate thread
-            loop = asyncio.get_running_loop()
-            with ThreadPoolExecutor() as pool:
-                models = await loop.run_in_executor(
-                    pool, elevenlabs.get_available_models
-                )
+            models = elevenlabs.get_available_models()
 
             convert = lambda model: ElevenlabsModel(
                 name=model.name,

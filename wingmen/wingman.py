@@ -59,13 +59,14 @@ class Wingman:
 
         self.secret_keeper = SecretKeeper()
         """A service that allows you to store and retrieve secrets like API keys. It can prompt the user for secrets if necessary."""
+        self.secret_keeper.secret_events.subscribe("secrets_saved", self.validate)
 
         self.name = name
         """The name of the wingman. This is the key you gave it in the config, e.g. "atc"."""
 
         self.audio_player = audio_player
         """A service that allows you to play audio files and add sound effects to them."""
-        
+
         self.audio_library = audio_library
         """A service that allows you to play and manage audio files from the audio library."""
 
@@ -522,7 +523,9 @@ class Wingman:
                 time.sleep(action.wait)
 
             if action.audio:
-                await self.audio_library.start_playback(action.audio, self.config.sound.volume)
+                await self.audio_library.start_playback(
+                    action.audio, self.config.sound.volume
+                )
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""

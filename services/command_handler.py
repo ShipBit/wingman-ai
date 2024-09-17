@@ -64,7 +64,7 @@ class CommandHandler:
         secret_name = command.secret_name
         secret_value = command.secret_value
         self.secret_keeper.secrets[secret_name] = secret_value
-        self.secret_keeper.save()
+        await self.secret_keeper.save()
 
         if command.show_message:
             await self.printr.print_async(

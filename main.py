@@ -255,7 +255,7 @@ async def async_main(host: str, port: int, sidecar: bool):
             secret = input(f"Please enter your '{error.secret_name}' API key/secret: ")
             if secret:
                 secret_keeper.secrets[error.secret_name] = secret
-                secret_keeper.save()
+                await secret_keeper.save()
                 saved_secrets.append(error.secret_name)
             else:
                 return
