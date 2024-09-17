@@ -28,10 +28,15 @@ class Skill:
         self.wingman = wingman
 
         self.secret_keeper = SecretKeeper()
+        self.secret_keeper.secret_events.subscribe("secrets_saved", self.secret_changed)
         self.name = self.__class__.__name__
         self.printr = Printr()
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
+
+    async def secret_changed(self, secrets: dict[str, any]):
+        """Called when a secret is changed."""
+        pass
 
     async def validate(self) -> list[WingmanInitializationError]:
         """Validates the skill configuration."""
@@ -39,7 +44,9 @@ class Skill:
 
     async def unload(self) -> None:
         """Unload the skill. Use this hook to clear background tasks, etc."""
-        pass
+        self.secret_keeper.secret_events.unsubscribe(
+            "secrets_saved", self.secret_changed
+        )
 
     async def prepare(self) -> None:
         """Prepare the skill. Use this hook to initialize background tasks, etc."""
