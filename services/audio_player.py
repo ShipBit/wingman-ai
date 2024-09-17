@@ -219,13 +219,15 @@ class AudioPlayer:
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
 
-    def play_wav(self, audio_sample_file: str, volume: list[float] | float):
-        beep_audio, beep_sample_rate = self.get_audio_from_file(
-            path.join(self.sample_dir, audio_sample_file)
-        )
-        with wave.open(audio_sample_file, "rb") as audio_file:
+    def play_wav_sample(self, audio_sample_file: str, volume: float):
+        file_path = path.join(self.sample_dir, audio_sample_file)
+        self.play_wav(file_path, volume)
+
+    def play_wav(self, audio_file: str, volume: list[float] | float):
+        audio, sample_rate = self.get_audio_from_file(audio_file)
+        with wave.open(audio_file, "rb") as audio_file:
             num_channels = audio_file.getnchannels()
-        self.start_playback(beep_audio, beep_sample_rate, num_channels, None, volume)
+        self.start_playback(audio, sample_rate, num_channels, None, volume)
 
     def play_mp3(self, audio_sample_file: str, volume: list[float] | float):
         audio, sample_rate = self.get_audio_from_file(audio_sample_file)
@@ -438,13 +440,13 @@ class AudioPlayer:
             await self.notify_playback_started(wingman_name)
 
             if config.play_beep:
-                self.play_wav("beep.wav", config.volume)
+                self.play_wav_sample("beep.wav", config.volume)
             elif config.play_beep_apollo:
-                self.play_wav("Apollo_Beep.wav", config.volume)
+                self.play_wav_sample("Apollo_Beep.wav", config.volume)
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
             if contains_high_end_radio:
-                self.play_wav("Radio_Static_Beep.wav", config.volume)
+                self.play_wav_sample("Radio_Static_Beep.wav", config.volume)
 
             self.raw_stream.start()
 
@@ -481,12 +483,12 @@ class AudioPlayer:
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in config.effects
             if contains_high_end_radio:
-                self.play_wav("Radio_Static_Beep.wav", config.volume)
+                self.play_wav_sample("Radio_Static_Beep.wav", config.volume)
 
             if config.play_beep:
-                self.play_wav("beep.wav", config.volume)
+                self.play_wav_sample("beep.wav", config.volume)
             elif config.play_beep_apollo:
-                self.play_wav("Apollo_Beep.wav", config.volume)
+                self.play_wav_sample("Apollo_Beep.wav", config.volume)
 
             self.is_playing = False
             await self.notify_playback_finished(wingman_name)
