@@ -1,8 +1,7 @@
+import asyncio
 import base64
 import json
-import os
 import logging
-import time
 from typing import Any, Dict, List, Optional
 from dataclasses import asdict, dataclass
 
@@ -30,64 +29,33 @@ class UEXCorpDataSubmission(UEXCorp):
         self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
     ):
         super().__init__(config=config, settings=settings, wingman=wingman)
-        self.api_url = self.config.custom_properties.get(
-            "api_url", "https://uexcorp.space/api/2.0"
+
+        errors: List[WingmanInitializationError] = []
+
+        self.api_url = self.retrieve_custom_property_value(
+            "uexcorp_api_url", "https://uexcorp.space/api/2.0"
         )
-        self.max_retries = self.config.custom_properties.get("max_retries", 3)
-        self.retry_delay = self.config.custom_properties.get("retry_delay", 2)
-        self.ensure_data_loaded()
-        self.api_key = self.secret_keeper.retrieve(
+        self.max_retries = self.retrieve_custom_property_value("max_retries", 3)
+        self.retry_delay = self.retrieve_custom_property_value("retry_delay", 2)
+
+        self.api_key = None
+        self.verified_data = None
+
+        if errors:
+            error_messages = "\n".join(error.message for error in errors)
+            self.printr.print(
+                f"Initialization warnings occurred:\n{error_messages}",
+                color=LogType.WARNING,
+            )
+
+    async def validate(self) -> list[WingmanInitializationError]:
+        errors = await super().validate()
+
+        self.api_key = await self.secret_keeper.retrieve(
             requester=self.name,
             key="uexcorp",
             prompt_if_missing=True,
         )
-        self.verified_data = None
-        self.verified_data_key = "verified_data"
-
-    async def store_verified_data(self, verified_data: VerifiedData):
-        try:
-            # Load existing cache
-            cache_data = self._load_cache()
-
-            # Update the verified data in the cache
-            cache_data[self.verified_data_key] = asdict(verified_data)
-
-            # Save the updated cache
-            self._save_cache(cache_data)
-
-            self.printr.print("Verified data stored successfully", color=LogType.INFO)
-        except Exception as e:
-            self.printr.print(
-                f"Error storing verified data: {str(e)}", color=LogType.ERROR
-            )
-
-    async def get_latest_verified_data(self) -> Optional[VerifiedData]:
-        try:
-            cache_data = self._load_cache()
-            verified_data_dict = cache_data.get(self.verified_data_key)
-
-            if verified_data_dict:
-                return VerifiedData(**verified_data_dict)
-            else:
-                return None
-        except Exception as e:
-            self.printr.print(
-                f"Error retrieving verified data: {str(e)}", color=LogType.ERROR
-            )
-            return None
-
-    def _load_cache(self) -> Dict[str, Any]:
-        if os.path.exists(self.cachefile):
-            with open(self.cachefile, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return {}
-
-    def _save_cache(self, cache_data: Dict[str, Any]):
-        with open(self.cachefile, "w", encoding="utf-8") as f:
-            json.dump(cache_data, f, indent=2)
-
-    async def validate(self) -> list[WingmanInitializationError]:
-        errors = await super().validate()
 
         if not self.api_key:
             errors.append(
@@ -157,15 +125,15 @@ class UEXCorpDataSubmission(UEXCorp):
     ) -> tuple[str, str]:
         if tool_name == "capture_and_verify_trading_terminal_data":
             return await self.capture_and_verify_trading_terminal_data(**parameters)
-        elif tool_name == "submit_verified_data_to_uexcorp":
-            return await self.submit_verified_data_to_uexcorp()
         return "", ""
 
     async def capture_and_verify_trading_terminal_data(
         self, location_description: str
     ) -> tuple[str, str]:
         try:
-            terminal_id = await self.get_terminal_id(location_description)
+            terminal = await self.fuzzy_search_terminal(location_description)
+            if not terminal:
+                raise ValueError(f"Terminal not found for: {location_description}")
 
             auto_screenshot_skill = self.wingman.get_skill("auto_screenshot")
             if not auto_screenshot_skill:
@@ -181,15 +149,11 @@ class UEXCorpDataSubmission(UEXCorp):
                 screenshot, self.get_vision_ai_prompt()
             )
 
-            processed_data = self.process_extracted_data(terminal_id, extracted_data)
-            processed_data["screenshot"] = self.get_base64_screenshot(screenshot)
-
             verified_data = await self.process_and_validate_data(
-                terminal_id, extracted_data, screenshot
+                terminal["id"], extracted_data, screenshot
             )
 
-            # Store the verified data
-            await self.store_verified_data(verified_data)
+            self.verified_data = verified_data
 
             return (
                 f"Data captured and verified for {location_description}. Ready for submission.",
@@ -204,14 +168,13 @@ class UEXCorpDataSubmission(UEXCorp):
 
     async def submit_verified_data_to_uexcorp(self) -> tuple[str, str]:
         try:
-            verified_data = await self.get_latest_verified_data()
-            if verified_data is None:
+            if self.verified_data is None:
                 return (
                     "No verified data available for submission. Please capture and verify data first.",
                     "",
                 )
 
-            response = await self.submit_data_to_uexcorp(asdict(verified_data))
+            response = await self.submit_data_to_uexcorp(asdict(self.verified_data))
             return f"Data submitted successfully: {response}", ""
         except Exception as e:
             error_msg = f"Error in submit_verified_data_to_uexcorp: {str(e)}"
@@ -227,15 +190,19 @@ class UEXCorpDataSubmission(UEXCorp):
         verified_data = VerifiedData(
             terminal_id=terminal_id,
             faction_affinity=processed_data["faction_affinity"],
-            game_version=self.game_version,
+            game_version=await self.get_game_version(),
             prices=processed_data["prices"],
             screenshot=self.get_base64_screenshot(screenshot),
         )
 
-        await self.store_verified_data(verified_data)
         return verified_data
 
     def validate_processed_data(self, processed_data: Dict[str, Any]):
+        if not isinstance(processed_data["prices"], list):
+            raise ValueError(
+                f"'prices' should be a list, got {type(processed_data['prices'])}"
+            )
+
         if not processed_data["prices"]:
             raise ValueError("No valid commodity data extracted")
 
@@ -250,6 +217,21 @@ class UEXCorpDataSubmission(UEXCorp):
             if "status_sell" in price_data and not 1 <= price_data["status_sell"] <= 7:
                 raise ValueError(f"Invalid status_sell: {price_data['status_sell']}")
 
+    def find_commodity_id(self, commodity_name: str) -> int | None:
+        """
+        Find the commodity ID using the name.
+
+        Args:
+            commodity_name (str): The name of the commodity to search for.
+
+        Returns:
+            int | None: The ID of the commodity if found, None otherwise.
+        """
+        commodity = self._get_commodity_by_name(commodity_name)
+        if commodity:
+            return commodity["id"]
+        return None
+
     def process_extracted_data(
         self, terminal_id: int, extracted_data: Dict[str, Any]
     ) -> Dict[str, Any]:
@@ -258,8 +240,7 @@ class UEXCorpDataSubmission(UEXCorp):
             "type": "commodity",
             "is_production": 0,
             "faction_affinity": extracted_data.get("faction_affinity", 0),
-            "game_version": self.game_version,  # Use the fetched game version
-            "prices": [],
+            "prices": [],  # Ensure this is initialized as a list
         }
 
         for commodity in extracted_data.get("commodities", []):
@@ -290,134 +271,26 @@ class UEXCorpDataSubmission(UEXCorp):
                     }
                 )
 
+            if not isinstance(processed_data["prices"], list):
+                raise TypeError("processed_data['prices'] should be a list")
+
+            # Is this the source of the error?
             processed_data["prices"].append(commodity_data)
 
         self.validate_processed_data(processed_data)
         return processed_data
 
-    async def update_game_version(self):
-        """Fetch the current game version from the /commodities_prices endpoint"""
-        try:
-            url = f"{self.api_url}/commodities_prices"
-            response = await self._fetch_uex_data(url)
-            if response and len(response) > 0:
-                self.game_version = response[0].get("game_version")
-                self.printr.print(
-                    f"Updated game version: {self.game_version}", color=LogType.INFO
-                )
-            else:
-                self.printr.print("Failed to fetch game version", color=LogType.WARNING)
-        except Exception as e:
-            self.printr.print(f"Error fetching game version: {e}", color=LogType.ERROR)
-
-    async def find_commodity_id(self, commodity_name: str) -> int | None:
-        """
-        Find the commodity ID using a fuzzy name match.
-
-        Args:
-            commodity_name (str): The name of the commodity to search for.
-
-        Returns:
-            int | None: The ID of the commodity if found, None otherwise.
-        """
-        url = f"{self.uexcorp_api_url}/commodities"
-        params = {"commodity_name": commodity_name}
-
-        try:
-            response = await self._fetch_uex_data(url, params)
-            if response and len(response) > 0:
-                return response[0]["id"]
-        except Exception as e:
-            await self._print(f"Error finding commodity ID: {e}")
-
-        return None
-
     def get_base64_screenshot(self, screenshot: str) -> str:
         return base64.b64encode(screenshot.encode()).decode("utf-8")
 
-    async def get_terminal_id(self, terminal_name: str) -> int | None:
-        """
-        Get the terminal ID using a fuzzy name match.
-
-        Args:
-            terminal_name (str): The name of the terminal to search for.
-
-        Returns:
-            int | None: The ID of the terminal if found, None otherwise.
-        """
-        url = f"{self.uexcorp_api_url}/terminals"
-        params = {"name": terminal_name}
-
-        try:
-            response = await self._fetch_uex_data(url, params)
-            if response and len(response) > 0:
-                return response[0]["id"]
-        except Exception as e:
-            await self._print(f"Error getting terminal ID: {e}")
-
-        return None
-
-    async def _fetch_uex_data(
-        self, endpoint: str, params: Optional[dict[str, any]] = None
-    ) -> list[dict[str, any]]:
-        """
-        Fetches data from the specified endpoint.
-
-        Args:
-            endpoint (str): The API endpoint to fetch data from.
-            params (Optional[dict[str, any]]): Optional parameters to include in the request.
-
-        Returns:
-            list[dict[str, any]]: The fetched data as a list of dictionaries.
-        """
-        url = f"{endpoint}"
-        await self._print(f"Fetching data from {url} with params {params}...", True)
-
-        request_count = 1
-        timeout_error = False
-        requests_error = False
-
-        while request_count == 1 or (
-            request_count <= (self.uexcorp_api_timeout_retries + 1) and timeout_error
-        ):
-            if requests_error:
-                await self._print(f"Retrying request #{request_count}...", True)
-                requests_error = False
-
-            timeout_error = False
-            try:
-                response = requests.get(
-                    url,
-                    params=params,
-                    timeout=(self.uexcorp_api_timeout * request_count),
-                    headers=self._get_header(),
-                )
-                response.raise_for_status()
-            except requests.exceptions.RequestException as e:
-                await self._print(f"Error while retrieving data from {url}: {e}")
-                requests_error = True
-                if isinstance(e, requests.exceptions.Timeout):
-                    timeout_error = True
-            request_count += 1
-
-        if requests_error:
-            return []
-
-        response_json = response.json()
-        if "status" not in response_json or response_json["status"] != "ok":
-            await self._print(f"Error while retrieving data from {url}")
-            return []
-
-        return response_json.get("data", [])
-
-    def submit_data_to_uexcorp(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def submit_data_to_uexcorp(self, data: Dict[str, Any]) -> Dict[str, Any]:
         headers = {"secret_key": self.api_key}
-        max_retries = 3
+        url = f"{self.api_url}/data_submit"
 
-        for attempt in range(max_retries):
+        for attempt in range(self.max_retries):
             try:
                 response = requests.post(
-                    f"{self.uexcorp_api_url}/data_submit",
+                    url,
                     json=data,
                     headers=headers,
                     timeout=10,
@@ -425,13 +298,15 @@ class UEXCorpDataSubmission(UEXCorp):
                 response.raise_for_status()
                 return response.json()
             except RequestException as e:
-                if attempt == max_retries - 1:
+                if attempt == self.max_retries - 1:
                     raise
                 self.printr.print(
-                    f"Request failed, retrying ({attempt + 1}/{max_retries}): {str(e)}",
+                    f"Request failed, retrying ({attempt + 1}/{self.max_retries}): {str(e)}",
                     color=LogType.WARNING,
                 )
-                time.sleep(2**attempt)  # Exponential backoff
+                await asyncio.sleep(
+                    self.retry_delay * (2**attempt)
+                )  # Exponential backoff
 
     def get_vision_ai_prompt(self) -> str:
         return """
@@ -466,7 +341,3 @@ class UEXCorpDataSubmission(UEXCorp):
             ]
         }
         """
-
-    def ensure_data_loaded(self):
-        if not self.commodities or not self.terminals:
-            self._load_data()
