@@ -2,8 +2,8 @@ name: ImageGeneration
 module: skills.image_generation.main
 category: general
 description:
-  en: Use Wingamn AI to generate images based on your input. It uses DALL-E 3.
-  de: Verwende Wingamn AI, um Bilder basierend auf deinen Eingaben zu generieren. Es verwendet DALL-E 3.
+  en: Use Wingman AI to generate images based on your input. It uses DALL-E 3.
+  de: Verwende Wingman AI, um Bilder basierend auf deinen Eingaben zu generieren. Es verwendet DALL-E 3.
 # hint:
 #   en:
 #   de:
@@ -16,3 +16,10 @@ examples:
       de: Hier ist ein Bild einer Katze.
 prompt: |
   You can also generate images.
+custom_properties:
+  - hint: Whether generated images should be saved to disk.  Images will be saved in the skill folder in a folder called "generated_images."
+    id: save_images
+    name: Save generated images
+    property_type: boolean
+    required: false
+    value: false
