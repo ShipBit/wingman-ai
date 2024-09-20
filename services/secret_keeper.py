@@ -7,6 +7,7 @@ from services.config_manager import CONFIGS_DIR, SECRETS_FILE
 from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
 from services.printr import Printr
+from services.pub_sub import PubSub
 
 
 class SecretKeeper(WebSocketUser):
@@ -19,6 +20,7 @@ class SecretKeeper(WebSocketUser):
     config_file: str
     secrets: Dict[str, Any]
     prompted_secrets: list[str] = []
+    secret_events: PubSub
 
     def __new__(cls):
         if cls._instance is None:
@@ -44,6 +46,7 @@ class SecretKeeper(WebSocketUser):
                 get_writable_dir(CONFIGS_DIR), SECRETS_FILE
             )
             cls._instance.secrets = cls._instance.load() or {}
+            cls._instance.secret_events = PubSub()
 
         return cls._instance
 
@@ -60,7 +63,7 @@ class SecretKeeper(WebSocketUser):
             self.printr.toast_error(f"Could not load ({SECRETS_FILE})\n{str(e)}")
             return {}
 
-    def save(self) -> bool:
+    async def save(self) -> bool:
         if not self.config_file:
             self.printr.toast_error("No config file path provided.")
             return False
@@ -68,6 +71,7 @@ class SecretKeeper(WebSocketUser):
             with open(self.config_file, "w", encoding="UTF-8") as stream:
                 yaml.dump(self.secrets, stream)
                 self.load()
+                await self.secret_events.publish("secrets_saved", self.secrets)
                 return True
         except yaml.YAMLError as e:
             self.printr.toast_error(f"Could not write ({SECRETS_FILE})\n{str(e)}")
@@ -105,5 +109,5 @@ class SecretKeeper(WebSocketUser):
         for key, value in secrets.items():
             self.secrets[key] = value
 
-        if self.save():
+        if await self.save():
             self.printr.print("Secrets updated.", server_only=True)

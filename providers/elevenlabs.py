@@ -1,8 +1,6 @@
-from elevenlabslib import (
-    User,
-    GenerationOptions,
-    PlaybackOptions,
-)
+import asyncio
+from typing import Optional
+from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXGenerationOptions
 from api.enums import SoundEffect, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
@@ -55,12 +53,12 @@ class ElevenLabs:
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
             if contains_high_end_radio:
-                audio_player.play_wav("Radio_Static_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("Radio_Static_Beep.wav", sound_config.volume)
 
             if sound_config.play_beep:
-                audio_player.play_wav("beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("beep.wav", sound_config.volume)
             elif sound_config.play_beep_apollo:
-                audio_player.play_wav("Apollo_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("Apollo_Beep.wav", sound_config.volume)
 
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_finished(wingman_name)
@@ -68,13 +66,13 @@ class ElevenLabs:
 
         def notify_playback_started():
             if sound_config.play_beep:
-                audio_player.play_wav("beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("beep.wav", sound_config.volume)
             elif sound_config.play_beep_apollo:
-                audio_player.play_wav("Apollo_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("Apollo_Beep.wav", sound_config.volume)
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
             if contains_high_end_radio:
-                audio_player.play_wav("Radio_Static_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample("Radio_Static_Beep.wav", sound_config.volume)
 
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_started(wingman_name)
@@ -142,6 +140,32 @@ class ElevenLabs:
 
             audio_player.playback_events.subscribe("finished", playback_finished)
 
+    async def generate_sound_effect(
+        self,
+        prompt: str,
+        duration_seconds: Optional[float] = None,
+        prompt_influence: Optional[float] = None,
+    ):
+        user = User(self.api_key)
+        options = SFXGenerationOptions(
+            duration_seconds=duration_seconds, prompt_influence=prompt_influence
+        )
+        req, _ = user.generate_sfx(prompt, options)
+
+        result_ready = asyncio.Event()
+        audio: bytes = None
+
+        def get_result(future: asyncio.Future[bytes]):
+            nonlocal audio
+            audio = future.result()
+            result_ready.set()  # Signal that the result is ready
+
+        req.add_done_callback(get_result)
+
+        # Wait for the result to be ready
+        await result_ready.wait()
+        return audio
+
     def get_available_voices(self):
         user = User(self.api_key)
         return user.get_available_voices()
@@ -149,3 +173,7 @@ class ElevenLabs:
     def get_available_models(self):
         user = User(self.api_key)
         return user.get_models()
+
+    def get_subscription_data(self):
+        user = User(self.api_key)
+        return user.get_subscription_data()

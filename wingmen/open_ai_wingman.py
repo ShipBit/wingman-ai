@@ -7,7 +7,6 @@ from openai.types.chat import ChatCompletion
 from api.interface import (
     SettingsConfig,
     SoundConfig,
-    WingmanConfig,
     WingmanInitializationError,
 )
 from api.enums import (
@@ -25,9 +24,6 @@ from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
-from providers.xvasynth import XVASynth
-from providers.whispercpp import Whispercpp
-from services.audio_player import AudioPlayer
 from services.markdown import cleanup_text
 from services.printr import Printr
 from skills.skill_base import Skill
@@ -48,23 +44,8 @@ class OpenAiWingman(Wingman):
         "conversation": ConversationProvider.AZURE,
     }
 
-    def __init__(
-        self,
-        name: str,
-        config: WingmanConfig,
-        settings: SettingsConfig,
-        audio_player: AudioPlayer,
-        whispercpp: Whispercpp,
-        xvasynth: XVASynth,
-    ):
-        super().__init__(
-            name=name,
-            config=config,
-            audio_player=audio_player,
-            settings=settings,
-            whispercpp=whispercpp,
-            xvasynth=xvasynth,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
         self.edge_tts = Edge()
 
@@ -72,12 +53,14 @@ class OpenAiWingman(Wingman):
         self.openai: OpenAi = None
         self.mistral: OpenAi = None
         self.groq: OpenAi = None
+        self.cerebras: OpenAi = None
         self.openrouter: OpenAi = None
         self.local_llm: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
         self.wingman_pro: WingmanPro = None
         self.google: GoogleGenAI = None
+        self.perplexity: OpenAi = None
 
         # tool queue
         self.pending_tool_calls = []
@@ -107,6 +90,9 @@ class OpenAiWingman(Wingman):
         if self.uses_provider("groq"):
             await self.validate_and_set_groq(errors)
 
+        if self.uses_provider("cerebras"):
+            await self.validate_and_set_cerebras(errors)
+
         if self.uses_provider("google"):
             await self.validate_and_set_google(errors)
 
@@ -124,6 +110,9 @@ class OpenAiWingman(Wingman):
 
         if self.uses_provider("wingman_pro"):
             await self.validate_and_set_wingman_pro()
+
+        if self.uses_provider("perplexity"):
+            await self.validate_and_set_perplexity(errors)
 
         return errors
 
@@ -149,6 +138,13 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.GROQ,
+                ]
+            )
+        elif provider_type == "cerebras":
+            return any(
+                [
+                    self.config.features.conversation_provider
+                    == ConversationProvider.CEREBRAS,
                 ]
             )
         elif provider_type == "google":
@@ -197,6 +193,13 @@ class OpenAiWingman(Wingman):
                     == ConversationProvider.WINGMAN_PRO,
                     self.config.features.tts_provider == TtsProvider.WINGMAN_PRO,
                     self.config.features.stt_provider == SttProvider.WINGMAN_PRO,
+                ]
+            )
+        elif provider_type == "perplexity":
+            return any(
+                [
+                    self.config.features.conversation_provider
+                    == ConversationProvider.PERPLEXITY,
                 ]
             )
         return False
@@ -252,6 +255,15 @@ class OpenAiWingman(Wingman):
                 base_url=self.config.groq.endpoint,
             )
 
+    async def validate_and_set_cerebras(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("cerebras", errors)
+        if api_key:
+            # TODO: maybe use their native client (or LangChain) instead of OpenAI(?)
+            self.cerebras = OpenAi(
+                api_key=api_key,
+                base_url=self.config.cerebras.endpoint,
+            )
+
     async def validate_and_set_google(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("google", errors)
         if api_key:
@@ -301,6 +313,14 @@ class OpenAiWingman(Wingman):
         self.wingman_pro = WingmanPro(
             wingman_name=self.name, settings=self.settings.wingman_pro
         )
+
+    async def validate_and_set_perplexity(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("perplexity", errors)
+        if api_key:
+            self.perplexity = OpenAi(
+                api_key=api_key,
+                base_url=self.config.perplexity.endpoint,
+            )
 
     # overrides the base class method
     async def update_settings(self, settings: SettingsConfig):
@@ -861,7 +881,7 @@ class OpenAiWingman(Wingman):
             completion = self.openai.ask(
                 messages=messages,
                 tools=tools,
-                model=self.config.openai.conversation_model.value,
+                model=self.config.openai.conversation_model,
             )
         elif self.config.features.conversation_provider == ConversationProvider.MISTRAL:
             completion = self.mistral.ask(
@@ -874,6 +894,14 @@ class OpenAiWingman(Wingman):
                 messages=messages,
                 tools=tools,
                 model=self.config.groq.conversation_model,
+            )
+        elif (
+            self.config.features.conversation_provider == ConversationProvider.CEREBRAS
+        ):
+            completion = self.cerebras.ask(
+                messages=messages,
+                tools=tools,
+                model=self.config.cerebras.conversation_model,
             )
         elif self.config.features.conversation_provider == ConversationProvider.GOOGLE:
             completion = self.google.ask(
@@ -906,6 +934,14 @@ class OpenAiWingman(Wingman):
                 messages=messages,
                 deployment=self.config.wingman_pro.conversation_deployment,
                 tools=tools,
+            )
+        elif (
+            self.config.features.conversation_provider == ConversationProvider.PERPLEXITY
+        ):
+            completion = self.perplexity.ask(
+                messages=messages,
+                tools=tools,
+                model=self.config.perplexity.conversation_model.value,
             )
 
         return completion

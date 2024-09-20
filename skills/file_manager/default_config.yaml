@@ -2,11 +2,11 @@ name: FileManager
 module: skills.file_manager.main
 category: general
 description:
-  en: Manage local files, save, load and create directories. Supports various text-based file formats.
-  de: Verwalte lokale Dateien, speichere, lade oder erstelle Verzeichnisse. Unterstützt verschiedene text-basierte Formate.
+  en: Manage local files, save, load and create directories. Supports various text-based file formats and reading PDFs.
+  de: Verwalte lokale Dateien, speichere, lade und erstelle Verzeichnisse. Unterstützt verschiedene text-basierte Formate und das Lesen von PDFs.
 hint:
-  en: <ul><li>You should provide an exact file path and name for where you want to create a directory or save or load a text file. <br />For example "save that text to a file called samplefile in my C drive in the directory called Documents."</li><li>If you do not, a directory called "files" in your Wingman config dir will be created and used.</li><li>Supported file formats are plain text file formats, such as txt, md, log, yaml, py, json, etc.</li></ul>
-  de: <ul><li>Gib einen möglichst genauen Speicherort für deine Verzeichnisse oder Dateien an, beispielsweise "Speichere diesen Text in eine Daten namens beispieldatei auf meinem C-Laufwerk im Verzeichnis Dokumente".</li><li>Wenn du das nicht machst, wird ein Verzeichnis namens "files" in deinem Wingman-Konfigurationsverzeichnis erstellt und verwendet.</li><li>Unterstützte Dateiformate sind einfache Textdateiformate wie txt, md, log, yaml, py, json usw</li></ul>
+  en: <ul><li>You should provide an exact file path and name for where you want to create a directory or save or load a text file. <br />For example "save that text to a file called samplefile in my C drive in the directory called Documents."</li><li>If you do not, a directory called "files" in your Wingman config dir will be created and used.</li><li>Supported file formats are plain text file formats, such as txt, md, log, yaml, py, json, etc., and PDFs.</li></ul>
+  de: <ul><li>Gib einen möglichst genauen Speicherort für deine Verzeichnisse oder Dateien an, beispielsweise "Speichere diesen Text in eine Daten namens beispieldatei auf meinem C-Laufwerk im Verzeichnis Dokumente".</li><li>Wenn du das nicht machst, wird ein Verzeichnis namens "files" in deinem Wingman-Konfigurationsverzeichnis erstellt und verwendet.</li><li>Unterstützte Dateiformate sind einfache Textdateiformate wie txt, md, log, yaml, py, json usw., und PDFs.</li></ul>
 examples:
   - question:
       en: Save 'Hello, World!' to hello.txt.
@@ -26,9 +26,15 @@ examples:
     answer:
       en: (creates a directory named 'Projects' in the default directory)
       de: (erstellt ein Verzeichnis namens 'Projekte' im Standardverzeichnis)
+  - question:
+      en: Read page 5 of example.pdf.
+      de: Lies Seite 5 von example.pdf.
+    answer:
+      en: (loads page 5 of example.pdf and reads it into memory)
+      de: (lädt Seite 5 von example.pdf und liest sie in den Speicher)
 prompt: |
   You can also save text to various file formats, load text from files, or create directories as specified by the user.
-  You support all plain text file formats.
+  You support reading and writing all plain text file formats and reading PDF files.
   When adding text to an existing file, you follow these rules:
   (1) determine if it is appropriate to add a new line before the added text or ask the user if you do not know.
   (2) only add content to an existing file if you are sure that is what the user wants.

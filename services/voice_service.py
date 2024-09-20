@@ -1,3 +1,5 @@
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
 from api.enums import AzureRegion, OpenAiTtsVoice
 from api.interface import (
@@ -15,6 +17,7 @@ from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.config_manager import ConfigManager
+from services.printr import Printr
 
 
 class VoiceService:
@@ -24,6 +27,7 @@ class VoiceService:
         audio_player: AudioPlayer,
         xvasynth: XVASynth,
     ):
+        self.printr = Printr()
         self.config_manager = config_manager
         self.audio_player = audio_player
         self.xvasynth = xvasynth
@@ -114,13 +118,22 @@ class VoiceService:
             )
 
     # GET /voices/elevenlabs
-    def get_elevenlabs_voices(self, api_key: str):
+    async def get_elevenlabs_voices(self, api_key: str) -> list[VoiceInfo]:
         elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
-        voices = elevenlabs.get_available_voices()
-        convert = lambda voice: VoiceInfo(id=voice.voiceID, name=voice.name)
-        result = [convert(voice) for voice in voices]
+        try:
+            # Run the synchronous method in a separate thread
+            loop = asyncio.get_running_loop()
+            with ThreadPoolExecutor() as pool:
+                voices = await loop.run_in_executor(
+                    pool, elevenlabs.get_available_voices
+                )
 
-        return result
+            convert = lambda voice: VoiceInfo(id=voice.voiceID, name=voice.name)
+            result = [convert(voice) for voice in voices]
+            return result
+        except ValueError as e:
+            self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
+            return []
 
     # GET /voices/azure
     def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):

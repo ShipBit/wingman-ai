@@ -21,6 +21,7 @@ from services.audio_player import AudioPlayer
 from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
+from services.audio_library import AudioLibrary
 
 from skills.skill_base import Skill
 
@@ -39,6 +40,7 @@ class Wingman:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        audio_library: AudioLibrary,
         whispercpp: Whispercpp,
         xvasynth: XVASynth,
     ):
@@ -57,12 +59,16 @@ class Wingman:
 
         self.secret_keeper = SecretKeeper()
         """A service that allows you to store and retrieve secrets like API keys. It can prompt the user for secrets if necessary."""
+        self.secret_keeper.secret_events.subscribe("secrets_saved", self.validate)
 
         self.name = name
         """The name of the wingman. This is the key you gave it in the config, e.g. "atc"."""
 
         self.audio_player = audio_player
         """A service that allows you to play audio files and add sound effects to them."""
+
+        self.audio_library = audio_library
+        """A service that allows you to play and manage audio files from the audio library."""
 
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
@@ -142,6 +148,7 @@ class Wingman:
 
     async def unload(self):
         """This method is called when the Wingman is unloaded by Tower. You can override it if you need to clean up resources."""
+        await self.unload_skills()
 
     async def unload_skills(self):
         """Call this to trigger unload for all skills."""
@@ -424,7 +431,7 @@ class Wingman:
             if not self.settings.debug_mode:
                 # in debug mode we already printed the separate execution times
                 await self.print_execution_time()
-            self.execute_action(command)
+            await self.execute_action(command)
 
         if len(command.actions or []) == 0:
             await printr.print_async(
@@ -437,7 +444,7 @@ class Wingman:
 
         return self._select_command_response(command) or "Ok"
 
-    def execute_action(self, command: CommandConfig):
+    async def execute_action(self, command: CommandConfig):
         """Executes the actions defined in the command (in order).
 
         Args:
@@ -516,14 +523,22 @@ class Wingman:
             if action.wait:
                 time.sleep(action.wait)
 
+            if action.audio:
+                await self.audio_library.start_playback(
+                    action.audio, self.config.sound.volume
+                )
+
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
 
         def start_thread(function, *args):
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            new_loop.run_until_complete(function(*args))
-            new_loop.close()
+            if asyncio.iscoroutinefunction(function):
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                new_loop.run_until_complete(function(*args))
+                new_loop.close()
+            else:
+                function(*args)
 
         thread = threading.Thread(target=start_thread, args=(function, *args))
         thread.start()

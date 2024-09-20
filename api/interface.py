@@ -11,7 +11,6 @@ from api.enums import (
     CustomPropertyType,
     SkillCategory,
     TtsVoiceGender,
-    OpenAiModel,
     OpenAiTtsVoice,
     SoundEffect,
     SttProvider,
@@ -22,6 +21,7 @@ from api.enums import (
     WingmanProRegion,
     WingmanProSttProvider,
     WingmanProTtsProvider,
+    PerplexityModel,
 )
 
 
@@ -278,7 +278,7 @@ class XVASynthTtsConfig(BaseModel):
 
 
 class OpenAiConfig(BaseModel):
-    conversation_model: OpenAiModel
+    conversation_model: str
     """ The model to use for conversations aka "chit-chat" and for function calls.
     """
 
@@ -311,7 +311,17 @@ class MistralConfig(BaseModel):
     endpoint: str
 
 
+class PerplexityConfig(BaseModel):
+    conversation_model: PerplexityModel
+    endpoint: str
+
+
 class GroqConfig(BaseModel):
+    conversation_model: str
+    endpoint: str
+
+
+class CerebrasConfig(BaseModel):
     conversation_model: str
     endpoint: str
 
@@ -391,6 +401,25 @@ class FeaturesConfig(BaseModel):
     use_generic_instant_responses: bool
 
 
+class AudioFile(BaseModel):
+    path: str
+    """The audio file to play. Required."""
+
+    name: str
+    """The name of the audio file."""
+
+
+class AudioFileConfig(BaseModel):
+    files: list[AudioFile]
+    """The audio file(s) to play. If there are multiple, a random file will be played."""
+
+    volume: float
+    """The volume to play the audio file at."""
+
+    wait: bool
+    """Whether to wait for the audio file to finish playing before continuing."""
+
+
 class CommandKeyboardConfig(BaseModel):
     hotkey: str
     """The hotkey. Can be a single key like 'a' or a combination like 'ctrl+shift+a'."""
@@ -440,6 +469,9 @@ class CommandActionConfig(BaseModel):
 
     write: Optional[str] = None
     """The word or phrase to type, for example, to type text in a login screen.  Must have associated button press to work.  May need special formatting for special characters."""
+
+    audio: Optional[AudioFileConfig] = None
+    """The audio file to play. Optional."""
 
 
 class CommandConfig(BaseModel):
@@ -507,7 +539,15 @@ class CustomProperty(BaseModel):
     """The name of the property. Has to be unique"""
     name: str
     """The "friendly" name of the property, displayed in the UI."""
-    value: str | int | float | bool | VoiceSelection | list[VoiceSelection]
+    value: (
+        str
+        | int
+        | float
+        | bool
+        | VoiceSelection
+        | list[VoiceSelection]
+        | AudioFileConfig
+    )
     """The value of the property"""
     property_type: CustomPropertyType
     """Determines the type of the property and which controls to render in the UI."""
@@ -553,6 +593,7 @@ class NestedConfig(BaseModel):
     openai: OpenAiConfig
     mistral: MistralConfig
     groq: GroqConfig
+    cerebras: CerebrasConfig
     google: GoogleConfig
     openrouter: OpenRouterConfig
     local_llm: LocalLlmConfig
@@ -562,6 +603,7 @@ class NestedConfig(BaseModel):
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
     wingman_pro: WingmanProConfig
+    perplexity: PerplexityConfig
     commands: Optional[list[CommandConfig]] = None
     skills: Optional[list[SkillConfig]] = None
 

@@ -54,9 +54,15 @@ openai:
 mistral:
   conversation_model: mistral-large-latest
   endpoint: https://api.mistral.ai/v1
+perplexity:
+  conversation_model: llama-3.1-sonar-large-128k-online
+  endpoint: https://api.perplexity.ai
 groq:
   conversation_model: llama3-70b-8192
   endpoint: https://api.groq.com/openai/v1
+cerebras:
+  conversation_model: llama3.1-70b
+  endpoint: https://api.cerebras.ai/v1
 google:
   conversation_model: gemini-1.5-flash
 openrouter:

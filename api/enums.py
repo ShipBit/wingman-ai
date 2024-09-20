@@ -50,6 +50,7 @@ class CustomPropertyType(Enum):
     SINGLE_SELECT = "single_select"
     VOICE_SELECTION = "voice_selection"
     SLIDER = "slider"
+    AUDIO_FILES = "audio_files"
 
 
 class AzureApiVersion(Enum):
@@ -68,13 +69,6 @@ class TtsVoiceGender(Enum):
     FEMALE = "Female"
 
 
-class OpenAiModel(Enum):
-    """https://platform.openai.com/docs/models/overview"""
-
-    GPT_4O = "gpt-4o"
-    GPT_4O_MINI = "gpt-4o-mini"
-
-
 class MistralModel(Enum):
     """https://docs.mistral.ai/getting-started/models/"""
 
@@ -85,6 +79,16 @@ class MistralModel(Enum):
     MISTRAL_MEDIUM = "mistral-medium-latest"
     MISTRAL_LARGE = "mistral-large-latest"
 
+class PerplexityModel(Enum):
+    """https://docs.perplexity.ai/guides/model-cards"""
+
+    SONAR_SMALL = "llama-3.1-sonar-small-128k-online"
+    SONAR_MEDIUM = "llama-3.1-sonar-large-128k-online"
+    SONAR_LARGE = "llama-3.1-sonar-huge-128k-online"
+    CHAT_SMALL = "llama-3.1-sonar-small-128k-chat"
+    CHAT_LARGE = "llama-3.1-sonar-large-128k-chat"
+    LLAMA3_8B = "llama-3.1-8b-instruct"
+    LLAMA3_70B = "llama-3.1-70b-instruct"
 
 class GoogleAiModel(Enum):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
@@ -151,6 +155,8 @@ class ConversationProvider(Enum):
     AZURE = "azure"
     WINGMAN_PRO = "wingman_pro"
     GOOGLE = "google"
+    CEREBRAS = "cerebras"
+    PERPLEXITY = "perplexity"
 
 
 class ImageGenerationProvider(Enum):
@@ -184,6 +190,7 @@ class SkillCategory(Enum):
     STAR_CITIZEN = "star_citizen"
     TRUCK_SIMULATOR = "truck_simulator"
     NO_MANS_SKY = "no_mans_sky"
+    FLIGHT_SIMULATOR = "flight_simulator"
 
 
 # Pydantic models for enums
@@ -231,13 +238,11 @@ class TtsVoiceGenderEnumModel(BaseEnumModel):
     gender: TtsVoiceGender
 
 
-class OpenAiModelEnumModel(BaseEnumModel):
-    model: OpenAiModel
-
-
 class MistralModelEnumModel(BaseEnumModel):
     model: MistralModel
 
+class PerplexityModelEnumModel(BaseEnumModel):
+    model: PerplexityModel
 
 class GoogleAiModelEnumModel(BaseEnumModel):
     model: GoogleAiModel
@@ -309,7 +314,6 @@ ENUM_TYPES = {
     "AzureApiVersion": AzureApiVersionEnumModel,
     "AzureRegion": AzureRegionEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
-    "OpenAiModel": OpenAiModelEnumModel,
     "MistralModel": MistralModelEnumModel,
     "GoogleAiModel": GoogleAiModelEnumModel,
     "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,
@@ -324,6 +328,7 @@ ENUM_TYPES = {
     "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
     "SkillCategory": SkillCategoryModel,
+    "PerplexityModel": PerplexityModelEnumModel,
     # Add new enums here as key-value pairs
 }
 

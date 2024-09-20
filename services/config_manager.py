@@ -942,6 +942,7 @@ class ConfigManager:
             "openai",
             "mistral",
             "groq",
+            "cerebras",
             "google",
             "openrouter",
             "local_llm",
@@ -951,6 +952,7 @@ class ConfigManager:
             "whispercpp",
             "xvasynth",
             "wingman_pro",
+            "perplexity",
         ]:
             if key in default:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.

@@ -8,6 +8,7 @@ from api.interface import (
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
+from services.audio_library import AudioLibrary
 from services.module_manager import ModuleManager
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -22,10 +23,12 @@ class Tower:
         self,
         config: Config,
         audio_player: AudioPlayer,
+        audio_library: AudioLibrary,
         whispercpp: Whispercpp,
         xvasynth: XVASynth,
     ):
         self.audio_player = audio_player
+        self.audio_library = audio_library
         self.config = config
         self.mouse_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
@@ -84,6 +87,7 @@ class Tower:
                     config=wingman_config,
                     settings=settings,
                     audio_player=self.audio_player,
+                    audio_library=self.audio_library,
                     whispercpp=self.whispercpp,
                     xvasynth=self.xvasynth,
                 )
@@ -93,6 +97,7 @@ class Tower:
                     config=wingman_config,
                     settings=settings,
                     audio_player=self.audio_player,
+                    audio_library=self.audio_library,
                     whispercpp=self.whispercpp,
                     xvasynth=self.xvasynth,
                 )

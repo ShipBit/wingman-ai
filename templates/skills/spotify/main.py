@@ -24,16 +24,23 @@ class Spotify(Skill):
         self.data_path = get_writable_dir(path.join("skills", "spotify", "data"))
         self.spotify: spotipy.Spotify = None
         self.available_devices = []
+        self.secret: str = None
+
+    async def secret_changed(self, secrets: dict[str, any]):
+        await super().secret_changed(secrets)
+
+        if secrets["spotify_client_secret"] != self.secret:
+            await self.validate()
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        secret = await self.retrieve_secret("spotify_client_secret", errors)
+        self.secret = await self.retrieve_secret("spotify_client_secret", errors)
         client_id = self.retrieve_custom_property_value("spotify_client_id", errors)
         redirect_url = self.retrieve_custom_property_value(
             "spotify_redirect_url", errors
         )
-        if secret and client_id and redirect_url:
+        if self.secret and client_id and redirect_url:
             # now that we have everything, initialize the Spotify client
             cache_handler = spotipy.cache_handler.CacheFileHandler(
                 cache_path=f"{self.data_path}/.cache"
@@ -41,7 +48,7 @@ class Spotify(Skill):
             self.spotify = spotipy.Spotify(
                 auth_manager=SpotifyOAuth(
                     client_id=client_id,
-                    client_secret=secret,
+                    client_secret=self.secret,
                     redirect_uri=redirect_url,
                     scope=[
                         "user-library-read",
