@@ -125,11 +125,13 @@ class ConfigManager:
         for root, dirs, files in walk(self.templates_dir):
             relative_path = path.relpath(root, self.templates_dir)
             if relative_path != ".":
-                config_dir = self.get_config_dir(
-                    relative_path.replace(DELETED_PREFIX, "", 1)  # ..
+                config_dir_name = (
+                    relative_path.replace(DELETED_PREFIX, "", 1)
                     .replace(DEFAULT_PREFIX, "", 1)
-                    .replace(f"{CONFIGS_DIR}/", "", 1)
+                    .replace(f"{CONFIGS_DIR}{path.sep}", "", 1)
+                    .replace("/", path.sep)
                 )
+                config_dir = self.get_config_dir(config_dir_name)
                 if not force and config_dir:
                     # skip logically deleted and default (renamed) config dirs
                     continue

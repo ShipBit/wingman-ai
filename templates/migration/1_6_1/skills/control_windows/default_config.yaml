@@ -1,0 +1,30 @@
+name: ControlWindows
+module: skills.control_windows.main
+category: general
+description:
+  en: Launch applications and control your Windows computer. Utilize the clipboard of your computer.
+  de: Starte Anwendungen und steuere deinen Windows-Computer. Nutze die Zwischenablage deines Computers.
+hint:
+  en: This skill looks for applications in your Start Menu directory (%APPDATA%/Microsoft/Windows/Start Menu/Programs), so if it tells you that it cannot find an application, create a shortcut in that directory.
+  de: Dieser Skill sucht nach Anwendungen in deinem Startmenü-Verzeichnis (%APPDATA%/Microsoft/Windows/Start Menu/Programs). Wenn er dir also sagt, dass er eine Anwendung nicht finden kann, erstelle eine Verknüpfung in diesem Verzeichnis.
+examples:
+  - question:
+      en: Open Spotify.
+      de: Öffne Spotify.
+    answer:
+      en: (opens the Spotify application)
+      de: (öffnet die Spotify-Anwendung)
+  - question:
+      en: Activate Notepad.
+      de: Aktiviere Notepad.
+    answer:
+      en: (maximizes the Notepad application)
+      de: (maximiert die Notepad Anwendung)
+  - question:
+      en: Close Notepad.
+      de: Schließe Notepad.
+    answer:
+      en: (closes the Notepad application)
+      de: (schließt die Notepad Anwendung)
+prompt: |
+  You can also control Windows Functions, like opening, closing, moving, and listing active applications, reading text from the clipboard, and place or save text on the clipboard.
