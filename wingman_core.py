@@ -1019,4 +1019,6 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
 
     async def shutdown(self):
+        await self.stop_whispercpp()
+        await self.stop_xvasynth()
         await self.unload_tower()
