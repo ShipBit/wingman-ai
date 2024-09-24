@@ -310,6 +310,24 @@ class ConfigMigrationService:
             migrate_wingman=migrate_wingman,
         )
 
+    def migrate_160_to_161(self):
+        def migrate_settings(old: dict, new: dict) -> dict:
+            return old
+
+        def migrate_defaults(old: dict, new: dict) -> dict:
+            return old
+
+        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            return old
+
+        self.migrate(
+            old_version="1_6_0",
+            new_version="1_6_1",
+            migrate_settings=migrate_settings,
+            migrate_defaults=migrate_defaults,
+            migrate_wingman=migrate_wingman,
+        )
+
     # INTERNAL
 
     def log(self, message: str, highlight: bool = False):
@@ -499,5 +517,6 @@ class ConfigMigrationService:
 MIGRATIONS = [
     ("1_4_0", "1_5_0", ConfigMigrationService.migrate_140_to_150),
     ("1_5_0", "1_6_0", ConfigMigrationService.migrate_150_to_160),
+    ("1_6_0", "1_6_1", ConfigMigrationService.migrate_160_to_161),
     # Add new migrations here in order
 ]
