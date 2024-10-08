@@ -103,6 +103,7 @@ class AudioLibrary:
                 volume[0] -= step_size
                 await asyncio.sleep(step_duration)
             await asyncio.sleep(0.05)  # 50ms grace period
+            audio_player.on_playback_finished = None
             await audio_player.stop_playback()
 
         for file in self.__get_audio_file_config(audio_file).files:
@@ -119,8 +120,10 @@ class AudioLibrary:
                         fade_out_resolution,
                     )
                 else:
+                    audio_player.on_playback_finished = None
                     await audio_player.stop_playback()
 
+                self.notify_playback_finished(self.__get_playback_key(file))
                 self.current_playbacks.pop(self.__get_playback_key(file), None)
 
     def get_playback_status(
