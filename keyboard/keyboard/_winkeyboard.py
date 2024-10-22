@@ -574,6 +574,10 @@ def _send_event(code, event_type):
     vk = 0
     if code < 0:
         vk = -code
+    elif code in {
+        91, 92, # Windows key fix
+    }:
+        vk = code
     else:
         vk = scan_code_to_vk.get(code, 0)
 
