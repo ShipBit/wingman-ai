@@ -295,6 +295,7 @@ class CommandHandler:
     def _get_actions_from_recorded_hotkey(self, recorded):
         # legacy function used for single key recording
         actions: list[CommandActionConfig] = []
+        extended: None|bool = None
 
         key_down_time = {}  # Track initial down times for keys
         last_up_time = None  # Track the last up time to measure durations of inactivity
@@ -308,6 +309,12 @@ class CommandHandler:
         for key in recorded:
             key_name = key.name.lower()
             key_code = key.scan_code
+            key_extended = key.is_extended
+            if extended is None:
+                extended = key_extended
+            elif extended != key_extended:
+                # fallback to advanced mode, if mixed extended flags are detected
+                return self._get_actions_from_recorded_keys(recorded)
             if key.event_type == "down":
                 # Ignore further processing if 'esc' was pressed
                 if key_name == "esc":
@@ -353,7 +360,7 @@ class CommandHandler:
                         key_config.keyboard.hotkey_codes = [
                             key.scan_code for key in keys_pressed
                         ]
-                        key_config.keyboard.hotkey_extended = bool(key.is_extended)
+                        key_config.keyboard.hotkey_extended = bool(key_extended)
 
                         if press_duration > 0.2 and len(keys_pressed) == 1:
                             key_config.keyboard.hold = round(press_duration, 2)
