@@ -237,7 +237,7 @@ Please follow our guides to setup your dev environment:
 
 If you want to read some code first and understand how it all works, we recommend you start here (in this order):
 
-- `http://127.0.0.1:8000/docs` - The OpenAPI (ex: Swagger) spec
+- `http://127.0.0.1:49111/docs` - The OpenAPI (ex: Swagger) spec
 - `wingman_core.py` - most of the public API endpoints that Wingman AI exposes
 - The config files in `%APP_DATA%\ShipBit\WingmanAI\[version]` to get an idea of what's configurable.
 - `Wingman.py` - the base class for all Wingmen
