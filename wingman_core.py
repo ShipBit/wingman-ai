@@ -332,6 +332,8 @@ class WingmanCore(WebSocketUser):
 
         self.tower = Tower(
             config=config_dir_info.config,
+            config_dir=config_dir_info.config_dir,
+            config_manager=self.config_manager,
             audio_player=self.audio_player,
             audio_library=self.audio_library,
             whispercpp=self.whispercpp,

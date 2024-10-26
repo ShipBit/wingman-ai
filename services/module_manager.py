@@ -4,12 +4,17 @@ from importlib import import_module, util
 from os import path
 import os
 import sys
-
 from typing import TYPE_CHECKING
 import yaml
-from api.interface import SettingsConfig, SkillBase, SkillConfig, WingmanConfig
+from api.interface import (
+    SettingsConfig,
+    SkillBase,
+    SkillConfig,
+    WingmanConfig,
+)
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
+from services.audio_library import AudioLibrary
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -17,6 +22,7 @@ from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
+    from services.tower import Tower
 
 SKILLS_DIR = "skills"
 
@@ -46,8 +52,10 @@ class ModuleManager:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        audio_library: AudioLibrary,
         whispercpp: Whispercpp,
         xvasynth: XVASynth,
+        tower: "Tower",
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -56,6 +64,10 @@ class ModuleManager:
             config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
             settings (SettingsConfig): The general user settings.
             audio_player (AudioPlayer): The audio player handling the playback of audio files.
+            audio_library (AudioLibrary): The audio library handling the storage and retrieval of audio files.
+            whispercpp (Whispercpp): The Whispercpp provider for speech-to-text.
+            xvasynth (XVASynth): The XVASynth provider for text-to-speech.
+            tower (Tower): The Tower instance, that manages loaded Wingmen.
         """
 
         try:
@@ -77,8 +89,10 @@ class ModuleManager:
             config=config,
             settings=settings,
             audio_player=audio_player,
+            audio_library=audio_library,
             whispercpp=whispercpp,
             xvasynth=xvasynth,
+            tower=tower,
         )
         return instance
 

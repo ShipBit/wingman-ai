@@ -4,7 +4,10 @@ import time
 import difflib
 import asyncio
 import threading
-from typing import Optional
+from typing import (
+    Optional,
+    TYPE_CHECKING,
+)
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
@@ -14,7 +17,11 @@ from api.interface import (
     WingmanConfig,
     WingmanInitializationError,
 )
-from api.enums import LogSource, LogType, WingmanInitializationErrorType
+from api.enums import (
+    LogSource,
+    LogType,
+    WingmanInitializationErrorType,
+)
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
@@ -22,8 +29,10 @@ from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.audio_library import AudioLibrary
-
 from skills.skill_base import Skill
+
+if TYPE_CHECKING:
+    from services.tower import Tower
 
 printr = Printr()
 
@@ -43,6 +52,7 @@ class Wingman:
         audio_library: AudioLibrary,
         whispercpp: Whispercpp,
         xvasynth: XVASynth,
+        tower: "Tower",
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
 
@@ -78,6 +88,9 @@ class Wingman:
 
         self.xvasynth = xvasynth
         """A class that handles the communication with the XVASynth server for TTS."""
+
+        self.tower = tower
+        """The Tower instance that manages all Wingmen in the same config dir."""
 
         self.skills: list[Skill] = []
 
@@ -565,6 +578,10 @@ class Wingman:
                     return False
 
         return True
+
+    async def save_config(self):
+        """Save the config of the Wingman."""
+        self.tower.save_wingman(self.name)
 
     async def update_settings(self, settings: SettingsConfig):
         """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
