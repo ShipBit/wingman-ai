@@ -193,6 +193,7 @@ class SkillCategory(Enum):
     TRUCK_SIMULATOR = "truck_simulator"
     NO_MANS_SKY = "no_mans_sky"
     FLIGHT_SIMULATOR = "flight_simulator"
+    MINECRAFT = "minecraft"
 
 
 # Pydantic models for enums
