@@ -15,23 +15,8 @@ class TutorialWingman(OpenAiWingman):
     """Tutorial Wingman
     """
 
-    def __init__(
-        self,
-        name: str,
-        config: WingmanConfig,
-        settings: SettingsConfig,
-        audio_player: AudioPlayer,
-        whispercpp: Whispercpp,
-        xvasynth: XVASynth,
-    ):
-        super().__init__(
-            name=name,
-            config=config,
-            audio_player=audio_player,
-            settings=settings,
-            whispercpp=whispercpp,
-            xvasynth=xvasynth,
-        )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     async def start_tutorial(self):
         """
