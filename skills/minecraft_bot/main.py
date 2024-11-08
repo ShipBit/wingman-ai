@@ -25,6 +25,8 @@ class MinecraftBot(Skill):
 
         self.bot = None
 
+        self.player_name = "Yoda3001"
+
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
         return errors
@@ -51,6 +53,16 @@ class MinecraftBot(Skill):
                     },
                 },
             ),
+            (
+                "follow_the_player",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "follow_the_player",
+                        "description": "Endlessly follow the player.",
+                    },
+                },
+            ),
         ]
         return tools
     
@@ -64,8 +76,7 @@ class MinecraftBot(Skill):
 
     async def go_to_player(self):
         movements = pathfinder.Movements(self.bot)
-        player = self.bot.players['Yoda3001']
-        print(self.bot.players)
+        player = self.bot.players[self.player_name]
         target = player.entity
         if not target:
             self.bot.chat("I don't see you !")
@@ -74,6 +85,12 @@ class MinecraftBot(Skill):
         pos = target.position
         self.bot.pathfinder.setMovements(movements)
         self.bot.pathfinder.setGoal(pathfinder.goals.GoalNear(pos.x, pos.y, pos.z, 1))
+
+    async def follow_the_player(self):
+        player = self.bot.players[self.player_name]
+        move = pathfinder.Movements(self.bot)
+        self.bot.pathfinder.setMovements(move);
+        self.bot.pathfinder.setGoal(pathfinder.goals.GoalFollow(player, 4), True);
 
     async def execute_tool(self, tool_name: str, parameters: dict[str, any]) -> tuple[str, str]:
         function_response = ""
@@ -86,6 +103,10 @@ class MinecraftBot(Skill):
         if tool_name == "go_to_player":
             await self.go_to_player()
             function_response = "On my way."
+
+        if tool_name == "follow_the_player":
+            await self.follow_the_player()
+            function_response = "Ok I'll follow you."
 
         if self.settings.debug_mode:
             await self.printr.print_async(f"Executed {tool_name} with parameters {parameters}. Result: {function_response}", color=LogType.INFO)
