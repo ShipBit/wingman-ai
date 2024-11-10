@@ -113,6 +113,16 @@ class FileManager(Skill):
         )
         return errors
 
+    def get_text_from_file(self, file_path: str, file_extension: str, pdf_page_number: int = None) -> str:
+        try:
+            if file_extension.lower() == "pdf":
+                return extract_text(file_path, page_numbers=[pdf_page_number-1]) if pdf_page_number else extract_text(file_path)
+            else:
+                with open(file_path, "r", encoding="utf-8") as file:
+                    return file.read()
+        except Exception as e:
+            return None
+
     def get_tools(self) -> list[tuple[str, dict]]:
         tools = [
             (
@@ -227,6 +237,34 @@ class FileManager(Skill):
                     },
                 },
             ),
+            (
+                "read_file_aloud",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "read_file_aloud",
+                        "description": "Reads aloud the content of a specified text file.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "file_name": {
+                                    "type": "string",
+                                    "description": "The name of the file to read aloud, including the file extension.",
+                                },
+                                "directory_path": {
+                                    "type": "string",
+                                    "description": "The directory from where the file should be loaded. Defaults to the configured directory.",
+                                },
+                                "pdf_page_number_to_load": {
+                                    "type": "number",
+                                    "description": "The page number of a PDF to read aloud, if specified.",
+                                },
+                            },
+                            "required": ["file_name"],
+                        },
+                    },
+                },
+            ),
         ]
         return tools
 
@@ -258,26 +296,17 @@ class FileManager(Skill):
                     file_path = os.path.join(directory, file_name)
                     try:
                         # if PDF, use pdfminer.six's extract text to read (optionally passing the specific page to read - zero-indexed so subtract 1), otherwise open and parse file
-                        file_content = ""
-                        if file_extension.lower() == "pdf":
-                            file_content = extract_text(file_path, page_numbers=[pdf_page_number-1]) if pdf_page_number else extract_text(file_path) 
-                        else:
-                            with open(file_path, "r", encoding="utf-8") as file:
-                                file_content = file.read()
-                        if len(file_content) > self.max_text_size:
-                            function_response = (
-                                "File content exceeds the maximum allowed size."
-                            )
+                        file_content = self.get_text_from_file(file_path, file_extension, pdf_page_number)
+                        if len(file_content) < 3 or not file_content:
+                            function_response = f"File at {file_path} appears not to have any content.  If file is a .pdf it may be an image format that cannot be read."
+                        elif len(file_content) > self.max_text_size:
+                            function_response = f"File content at {file_path} exceeds the maximum allowed size."
                         else:
                             function_response = f"File content loaded from {file_path}:\n{file_content}"
                     except FileNotFoundError:
-                        function_response = (
-                            f"File '{file_name}' not found in '{directory}'."
-                        )
+                        function_response = f"File '{file_name}' not found in '{directory}'."
                     except Exception as e:
-                        function_response = (
-                            f"Failed to read file '{file_name}': {str(e)}"
-                        )
+                        function_response = f"Failed to read file '{file_name}': {str(e)}"
 
         elif tool_name == "save_text_to_file":
             if self.settings.debug_mode:
@@ -339,9 +368,7 @@ class FileManager(Skill):
                                 file.write(text_content)
                             function_response = f"Text saved to {file_path}."
                         except Exception as e:
-                            function_response = (
-                                f"Failed to save text to {file_path}: {str(e)}"
-                            )
+                            function_response = f"Failed to save text to {file_path}: {str(e)}"
 
         elif tool_name == "create_folder":
             if self.settings.debug_mode:
@@ -360,9 +387,7 @@ class FileManager(Skill):
                 full_path = os.path.join(directory_path, folder_name)
                 try:
                     os.makedirs(full_path, exist_ok=True)
-                    function_response = (
-                        f"Folder '{folder_name}' created at '{directory_path}'."
-                    )
+                    function_response = f"Folder '{folder_name}' created at '{directory_path}'."
                 except Exception as e:
                     function_response = (
                         f"Failed to create folder '{folder_name}': {str(e)}"
@@ -393,11 +418,48 @@ class FileManager(Skill):
                         f"Failed to open folder '{folder_name}': {str(e)}"
                     )
 
+        elif tool_name == "read_file_aloud":
+            if self.settings.debug_mode:
+                self.start_execution_benchmark()
+                await self.printr.print_async(
+                    f"Executing read file aloud function with parameters: {parameters}",
+                    color=LogType.INFO,
+                )
+            file_name = parameters.get("file_name")
+            directory = parameters.get("directory_path", self.default_directory)
+            pdf_page_number = parameters.get("pdf_page_number_to_load")
+
+            if directory == "":
+                directory = self.default_directory
+            if not file_name:
+                function_response = "File name not provided."
+            else:
+                file_extension = file_name.split(".")[-1]
+                if file_extension.lower() not in self.allowed_file_extensions:
+                    function_response = f"Unsupported file extension: {file_extension}"
+                else:
+                    file_path = os.path.join(directory, file_name)
+                    try:
+                        file_content = self.get_text_from_file(file_path, file_extension, pdf_page_number)
+                        if len(file_content) < 3 or not file_content:
+                            function_response = f"File at {file_path} appears not to have any content so could not read it aloud.  If file is a .pdf it may be an image format that cannot be read."
+                        elif len(file_content) > self.max_text_size:
+                            function_response = f"File content at {file_path} exceeds the maximum allowed size so could not read it aloud."
+                        else:
+                            await self.wingman.play_to_user(file_content)
+                            function_response = f"File content from {file_path} read aloud."
+                    except FileNotFoundError:
+                        function_response = f"File '{file_name}' not found in '{directory}'."
+                    except IOError as e:
+                        function_response = str(e)
+
         if self.settings.debug_mode:
             await self.printr.print_async(
                 f"Finished calling {tool_name} tool and returned function response: {function_response}",
                 color=LogType.INFO,
             )
+            await self.print_execution_time()
+
         return function_response, instant_response
 
     def get_default_directory(self) -> str:
