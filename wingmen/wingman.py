@@ -1,3 +1,4 @@
+import traceback
 from copy import deepcopy
 import random
 import time
@@ -137,20 +138,34 @@ class Wingman:
         """Use this method to retrieve secrets like API keys from the SecretKeeper.
         If the key is missing, the user will be prompted to enter it.
         """
-        api_key = await self.secret_keeper.retrieve(
-            requester=self.name,
-            key=secret_name,
-            prompt_if_missing=True,
-        )
-        if not api_key:
+        try:
+            api_key = await self.secret_keeper.retrieve(
+                requester=self.name,
+                key=secret_name,
+                prompt_if_missing=True,
+            )
+            if not api_key:
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.name,
+                        message=f"Missing secret '{secret_name}'.",
+                        error_type=WingmanInitializationErrorType.MISSING_SECRET,
+                        secret_name=secret_name,
+                    )
+                )
+        except Exception as e:
+            printr.print(f"Error retrieving secret ''{secret_name}: {e}", color=LogType.ERROR, server_only=True)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.name,
-                    message=f"Missing secret '{secret_name}'.",
+                    message=f"Could not retrieve secret '{secret_name}': {str(e)}",
                     error_type=WingmanInitializationErrorType.MISSING_SECRET,
                     secret_name=secret_name,
                 )
             )
+            api_key = None
+
         return api_key
 
     async def prepare(self):
@@ -166,7 +181,12 @@ class Wingman:
     async def unload_skills(self):
         """Call this to trigger unload for all skills."""
         for skill in self.skills:
-            await skill.unload()
+            try:
+                await skill.unload()
+                raise Exception("Test unload fail")
+            except Exception as e:
+                await printr.print_async(f"Error unloading skill '{skill.name}': {str(e)}", color=LogType.ERROR)
+                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     async def init_skills(self) -> list[WingmanInitializationError]:
         """This method is called when the Wingman is instantiated by Tower or when a skill's config changes.
@@ -221,10 +241,8 @@ class Wingman:
                             color=LogType.ERROR,
                         )
             except Exception as e:
-                await printr.print_async(
-                    f"Could not load skill '{skill_config.name}': {str(e)}",
-                    color=LogType.ERROR,
-                )
+                await printr.print_async(f"Error loading skill '{skill_config.name}': {str(e)}", color=LogType.ERROR)
+                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
         return errors
 
@@ -258,54 +276,59 @@ class Wingman:
             - async play_to_user: do something with the response, e.g. play it as audio
         """
 
-        self.start_execution_benchmark()
+        try:
+            self.start_execution_benchmark()
 
-        process_result = None
+            process_result = None
 
-        if self.settings.debug_mode and not transcript:
-            await printr.print_async("Starting transcription...", color=LogType.INFO)
+            if self.settings.debug_mode and not transcript:
+                await printr.print_async("Starting transcription...", color=LogType.INFO)
 
-        if not transcript:
-            # transcribe the audio.
-            transcript = await self._transcribe(audio_input_wav)
+            if not transcript:
+                # transcribe the audio.
+                transcript = await self._transcribe(audio_input_wav)
 
-        if self.settings.debug_mode and not transcript:
-            await self.print_execution_time(reset_timer=True)
-
-        if transcript:
-            await printr.print_async(
-                f"{transcript}",
-                color=LogType.PURPLE,
-                source_name="User",
-                source=LogSource.USER,
-            )
-
-            if self.settings.debug_mode:
-                await printr.print_async(
-                    "Getting response for transcript...", color=LogType.INFO
-                )
-
-            # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response, skill, interrupt = (
-                await self._get_response_for_transcript(transcript)
-            )
-
-            if self.settings.debug_mode:
+            if self.settings.debug_mode and not transcript:
                 await self.print_execution_time(reset_timer=True)
 
-            actual_response = instant_response or process_result
-            if actual_response:
+            interrupt = None
+            if transcript:
                 await printr.print_async(
-                    f"{actual_response}",
-                    color=LogType.POSITIVE,
-                    source=LogSource.WINGMAN,
-                    source_name=self.name,
-                    skill_name=skill.name if skill else "",
+                    f"{transcript}",
+                    color=LogType.PURPLE,
+                    source_name="User",
+                    source=LogSource.USER,
                 )
 
-        # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
-        if process_result:
-            await self.play_to_user(str(process_result), not interrupt)
+                if self.settings.debug_mode:
+                    await printr.print_async(
+                        "Getting response for transcript...", color=LogType.INFO
+                    )
+
+                # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
+                process_result, instant_response, skill, interrupt = (
+                    await self._get_response_for_transcript(transcript)
+                )
+
+                if self.settings.debug_mode:
+                    await self.print_execution_time(reset_timer=True)
+
+                actual_response = instant_response or process_result
+                if actual_response:
+                    await printr.print_async(
+                        f"{actual_response}",
+                        color=LogType.POSITIVE,
+                        source=LogSource.WINGMAN,
+                        source_name=self.name,
+                        skill_name=skill.name if skill else "",
+                    )
+
+            # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
+            if process_result:
+                await self.play_to_user(str(process_result), not interrupt)
+        except Exception as e:
+            await printr.print_async(f"Error during processing of wingmann ''{self.name}: {str(e)}", color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     # ───────────────── virtual methods / hooks ───────────────── #
 
@@ -322,7 +345,7 @@ class Wingman:
 
     async def _get_response_for_transcript(
         self, transcript: str
-    ) -> tuple[str, str, Skill | None]:
+    ) -> tuple[str, str, Skill | None, bool | None]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
@@ -333,7 +356,7 @@ class Wingman:
         Returns:
             A tuple of strings representing the response to a function call and/or an instant response.
         """
-        return ("", "", None)
+        return "", "", None, None
 
     async def play_to_user(
         self,
@@ -397,32 +420,37 @@ class Wingman:
             {} | None: The executed instant_activation command.
         """
 
-        # create list with phrases pointing to commands
-        commands_by_instant_activation = {}
-        for command in self.config.commands:
-            if command.instant_activation:
-                for phrase in command.instant_activation:
-                    if phrase.lower() in commands_by_instant_activation:
-                        commands_by_instant_activation[phrase.lower()].append(command)
-                    else:
-                        commands_by_instant_activation[phrase.lower()] = [command]
+        try:
+            # create list with phrases pointing to commands
+            commands_by_instant_activation = {}
+            for command in self.config.commands:
+                if command.instant_activation:
+                    for phrase in command.instant_activation:
+                        if phrase.lower() in commands_by_instant_activation:
+                            commands_by_instant_activation[phrase.lower()].append(command)
+                        else:
+                            commands_by_instant_activation[phrase.lower()] = [command]
 
-        # find best matching phrase
-        phrase = difflib.get_close_matches(
-            transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8
-        )
+            # find best matching phrase
+            phrase = difflib.get_close_matches(
+                transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8
+            )
 
-        # if no phrase found, return None
-        if not phrase:
+            # if no phrase found, return None
+            if not phrase:
+                return None
+
+            # execute all commands for the phrase
+            commands = commands_by_instant_activation[phrase[0]]
+            for command in commands:
+                await self._execute_command(command)
+
+            # return the executed command
+            return commands
+        except Exception as e:
+            await printr.print_async(f"Error during instant activation in wingmann '{self.name}': {str(e)}", color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
-
-        # execute all commands for the phrase
-        commands = commands_by_instant_activation[phrase[0]]
-        for command in commands:
-            await self._execute_command(command)
-
-        # return the executed command
-        return commands
 
     async def _execute_command(self, command: CommandConfig) -> str:
         """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
@@ -437,25 +465,30 @@ class Wingman:
         if not command:
             return "Command not found"
 
-        if len(command.actions or []) > 0:
-            await printr.print_async(
-                f"Executing command: {command.name}", color=LogType.INFO
-            )
-            if not self.settings.debug_mode:
-                # in debug mode we already printed the separate execution times
-                await self.print_execution_time()
-            await self.execute_action(command)
+        try:
+            if len(command.actions or []) > 0:
+                await printr.print_async(
+                    f"Executing command: {command.name}", color=LogType.INFO
+                )
+                if not self.settings.debug_mode:
+                    # in debug mode we already printed the separate execution times
+                    await self.print_execution_time()
+                await self.execute_action(command)
 
-        if len(command.actions or []) == 0:
-            await printr.print_async(
-                f"No actions found for command: {command.name}", color=LogType.WARNING
-            )
+            if len(command.actions or []) == 0:
+                await printr.print_async(
+                    f"No actions found for command: {command.name}", color=LogType.WARNING
+                )
 
-        # handle the global special commands:
-        if command.name == "ResetConversationHistory":
-            self.reset_conversation_history()
+            # handle the global special commands:
+            if command.name == "ResetConversationHistory":
+                self.reset_conversation_history()
 
-        return self._select_command_response(command) or "Ok"
+            return self._select_command_response(command) or "Ok"
+        except Exception as e:
+            await printr.print_async(f"Error executing command '{command.name}' for wingman '{self.name}': {str(e)}", color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return "ERROR DURING PROCESSING" # hints to AI that there was an Error
 
     async def execute_action(self, command: CommandConfig):
         """Executes the actions defined in the command (in order).
@@ -466,118 +499,131 @@ class Wingman:
         if not command or not command.actions:
             return
 
-        for action in command.actions:
-            if action.keyboard:
-                if action.keyboard.press == action.keyboard.release:
-                    # compressed key events
-                    hold = action.keyboard.hold or 0.1
-                    if (
-                        action.keyboard.hotkey_codes
-                        and len(action.keyboard.hotkey_codes) == 1
-                    ):
-                        keyboard.direct_event(
-                            action.keyboard.hotkey_codes[0],
-                            0 + (1 if action.keyboard.hotkey_extended else 0),
-                        )
-                        time.sleep(hold)
-                        keyboard.direct_event(
-                            action.keyboard.hotkey_codes[0],
-                            2 + (1 if action.keyboard.hotkey_extended else 0),
-                        )
+        try:
+            for action in command.actions:
+                if action.keyboard:
+                    if action.keyboard.press == action.keyboard.release:
+                        # compressed key events
+                        hold = action.keyboard.hold or 0.1
+                        if (
+                            action.keyboard.hotkey_codes
+                            and len(action.keyboard.hotkey_codes) == 1
+                        ):
+                            keyboard.direct_event(
+                                action.keyboard.hotkey_codes[0],
+                                0 + (1 if action.keyboard.hotkey_extended else 0),
+                            )
+                            time.sleep(hold)
+                            keyboard.direct_event(
+                                action.keyboard.hotkey_codes[0],
+                                2 + (1 if action.keyboard.hotkey_extended else 0),
+                            )
+                        else:
+                            keyboard.press(
+                                action.keyboard.hotkey_codes or action.keyboard.hotkey
+                            )
+                            time.sleep(hold)
+                            keyboard.release(
+                                action.keyboard.hotkey_codes or action.keyboard.hotkey
+                            )
                     else:
-                        keyboard.press(
-                            action.keyboard.hotkey_codes or action.keyboard.hotkey
-                        )
-                        time.sleep(hold)
-                        keyboard.release(
-                            action.keyboard.hotkey_codes or action.keyboard.hotkey
-                        )
-                else:
-                    # single key events
-                    if (
-                        action.keyboard.hotkey_codes
-                        and len(action.keyboard.hotkey_codes) == 1
-                    ):
-                        keyboard.direct_event(
-                            action.keyboard.hotkey_codes[0],
-                            (0 if action.keyboard.press else 2)
-                            + (1 if action.keyboard.hotkey_extended else 0),
-                        )
-                    else:
-                        keyboard.send(
-                            action.keyboard.hotkey_codes or action.keyboard.hotkey,
-                            action.keyboard.press,
-                            action.keyboard.release,
-                        )
+                        # single key events
+                        if (
+                            action.keyboard.hotkey_codes
+                            and len(action.keyboard.hotkey_codes) == 1
+                        ):
+                            keyboard.direct_event(
+                                action.keyboard.hotkey_codes[0],
+                                (0 if action.keyboard.press else 2)
+                                + (1 if action.keyboard.hotkey_extended else 0),
+                            )
+                        else:
+                            keyboard.send(
+                                action.keyboard.hotkey_codes or action.keyboard.hotkey,
+                                action.keyboard.press,
+                                action.keyboard.release,
+                            )
 
-            if action.mouse:
-                if action.mouse.move_to:
-                    x, y = action.mouse.move_to
-                    mouse.move(x, y)
+                if action.mouse:
+                    if action.mouse.move_to:
+                        x, y = action.mouse.move_to
+                        mouse.move(x, y)
 
-                if action.mouse.move:
-                    x, y = action.mouse.move
-                    mouse.move(x, y, absolute=False, duration=0.5)
+                    if action.mouse.move:
+                        x, y = action.mouse.move
+                        mouse.move(x, y, absolute=False, duration=0.5)
 
-                if action.mouse.scroll:
-                    mouse.wheel(action.mouse.scroll)
+                    if action.mouse.scroll:
+                        mouse.wheel(action.mouse.scroll)
 
-                if action.mouse.button:
-                    if action.mouse.hold:
-                        mouse.press(button=action.mouse.button)
-                        time.sleep(action.mouse.hold)
-                        mouse.release(button=action.mouse.button)
-                    else:
-                        mouse.click(button=action.mouse.button)
+                    if action.mouse.button:
+                        if action.mouse.hold:
+                            mouse.press(button=action.mouse.button)
+                            time.sleep(action.mouse.hold)
+                            mouse.release(button=action.mouse.button)
+                        else:
+                            mouse.click(button=action.mouse.button)
 
-            if action.write:
-                keyboard.write(action.write)
+                if action.write:
+                    keyboard.write(action.write)
 
-            if action.wait:
-                time.sleep(action.wait)
+                if action.wait:
+                    time.sleep(action.wait)
 
-            if action.audio:
-                await self.audio_library.start_playback(
-                    action.audio, self.config.sound.volume
-                )
+                if action.audio:
+                    await self.audio_library.start_playback(
+                        action.audio, self.config.sound.volume
+                    )
+        except Exception as e:
+            await printr.print_async(f"Error executing actions of command '{command.name}' for wingman '{self.name}': {str(e)}", color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
-    def threaded_execution(self, function, *args) -> threading.Thread:
+    def threaded_execution(self, function, *args) -> threading.Thread | None:
         """Execute a function in a separate thread."""
+        try:
+            def start_thread(function, *args):
+                if asyncio.iscoroutinefunction(function):
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    new_loop.run_until_complete(function(*args))
+                    new_loop.close()
+                else:
+                    function(*args)
 
-        def start_thread(function, *args):
-            if asyncio.iscoroutinefunction(function):
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                new_loop.run_until_complete(function(*args))
-                new_loop.close()
-            else:
-                function(*args)
-
-        thread = threading.Thread(target=start_thread, args=(function, *args))
-        thread.start()
-        return thread
+            thread = threading.Thread(target=start_thread, args=(function, *args))
+            thread.start()
+            return thread
+        except Exception as e:
+            printr.print(f"Error starting threaded execution: {str(e)}", color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return None
 
     async def update_config(
         self, config: WingmanConfig, validate=False, update_skills=False
-    ):
+    ) -> bool:
         """Update the config of the Wingman. This method should always be called if the config of the Wingman has changed."""
-        if validate:
-            old_config = deepcopy(self.config)
+        try:
+            if validate:
+                old_config = deepcopy(self.config)
 
-        self.config = config
+            self.config = config
 
-        if update_skills:
-            await self.init_skills()
+            if update_skills:
+                await self.init_skills()
 
-        if validate:
-            errors = await self.validate()
+            if validate:
+                errors = await self.validate()
 
-            for error in errors:
-                if error.error_type != WingmanInitializationErrorType.MISSING_SECRET:
-                    self.config = old_config
-                    return False
+                for error in errors:
+                    if error.error_type != WingmanInitializationErrorType.MISSING_SECRET:
+                        self.config = old_config
+                        return False
 
-        return True
+            return True
+        except Exception as e:
+            await printr.print_async(f"Error updating config for wingman '{self.name}': {str(e)}", color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return False
 
     async def save_config(self):
         """Save the config of the Wingman."""
