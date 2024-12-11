@@ -1,5 +1,6 @@
 from datetime import datetime
 import logging
+import sys
 from logging import Formatter
 from logging.handlers import RotatingFileHandler
 from os import path
@@ -8,6 +9,23 @@ from api.enums import CommandTag, LogSource, LogType, ToastType
 from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
 
+class StreamToLogger:
+    def __init__(self, logger, log_level=logging.INFO, stream=sys.stdout):
+        self.logger = logger
+        self.log_level = log_level
+        self.linebuf = ''
+        self.stream = stream
+
+    def write(self, buf):
+        for line in buf.rstrip().splitlines():
+            self.logger.log(self.log_level, line.rstrip())
+            self.stream.write(line + '\n')
+
+    def flush(self):
+        self.stream.flush()
+
+    def isatty(self):
+        return False
 
 class Printr(WebSocketUser):
     """Singleton"""
@@ -53,6 +71,10 @@ class Printr(WebSocketUser):
             console_formatter = Formatter('%(message)s')
             ch.setFormatter(console_formatter)
             cls._instance.console_logger.addHandler(ch)
+
+            # Redirect stdout and stderr
+            sys.stdout = StreamToLogger(cls._instance.logger, logging.INFO, sys.stdout)
+            sys.stderr = StreamToLogger(cls._instance.logger, logging.ERROR, sys.stderr)
         return cls._instance
 
     async def __send_to_gui(
