@@ -523,9 +523,9 @@ class ConfigManager:
             )
             if "base64," in wingman_file.avatar:
                 avatar = wingman_file.avatar.split("base64,", 1)[1]
-            image_data = base64.b64decode(avatar)
-            with open(avatar_path, "wb") as file:
-                file.write(image_data)
+                image_data = base64.b64decode(avatar)
+                with open(avatar_path, "wb") as file:
+                    file.write(image_data)
 
         # wingman was renamed
         if wingman_config.name != wingman_file.name:

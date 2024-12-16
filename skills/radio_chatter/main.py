@@ -368,9 +368,13 @@ class RadioChatter(Skill):
             if not message:
                 continue
 
-            # get name before first ":"
-            name = message.split(":")[0].strip()
-            text = message.split(":", 1)[1].strip()
+            if ":" not in message:
+                name = "Unknown"
+                text = message.strip()
+            else:
+                # get name before first ":"
+                name = message.split(":")[0].strip()
+                text = message.split(":", 1)[1].strip()
 
             if name not in voice_participant_mapping:
                 voice_participant_mapping[name] = None

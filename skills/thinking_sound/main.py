@@ -71,7 +71,7 @@ class ThinkingSound(Skill):
 
     async def auto_stop_playback(self):
         # Wait for main playback to start
-        while not self.wingman.audio_player.is_playing and self.active:
+        while not ( self.wingman.audio_player.stream or self.wingman.audio_player.raw_stream ) and self.active:
             await asyncio.sleep(0.1)
 
         if self.wingman.settings.debug_mode:

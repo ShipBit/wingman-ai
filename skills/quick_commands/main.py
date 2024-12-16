@@ -49,13 +49,20 @@ class QuickCommands(Skill):
         """Initialize the skill."""
         await self._load_learning_data()
         await self._cleanup_learning_data()
+        added = False
         for phrase, commands in self.learning_learned.items():
-            await self._add_instant_activation_phrase(phrase, commands)
+            await self._add_instant_activation_phrase(phrase, commands, False)
+            added = True
+
+        if added:
+            await self.wingman.save_config()
 
     async def _add_instant_activation_phrase(
-        self, phrase: str, commands: list[str]
+        self, phrase: str, commands: list[str], save_wingman: bool = True
     ) -> None:
         """Add an instant activation phrase."""
+        changed = False
+
         for command in commands:
             command = self.wingman.get_command(command)
             if not command.instant_activation:
@@ -63,6 +70,10 @@ class QuickCommands(Skill):
 
             if phrase not in command.instant_activation:
                 command.instant_activation.append(phrase)
+                changed = True
+
+        if changed and save_wingman:
+            await self.wingman.save_config()
 
     async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
         """Hook to start learning process."""
