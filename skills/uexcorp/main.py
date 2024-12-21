@@ -21,8 +21,10 @@ if TYPE_CHECKING:
 
 
 class UEXCorp(Skill):
-    """Wingman AI Skill to utalize uexcorp api for trade recommendations"""
+    """Wingman AI Skill to utilize uexcorp api for trade recommendations"""
 
+    # current skill version
+    VERSION = "v14"
     # enable for verbose logging
     DEV_MODE = False
 
@@ -39,7 +41,6 @@ class UEXCorp(Skill):
         self.logfiledebug = path.join(self.data_path, "debug.log")
         self.cachefile = path.join(self.data_path, "cache.json")
 
-        self.skill_version = "v13"
         self.skill_loaded = False
         self.skill_loaded_asked = False
         self.game_version = "unknown"
@@ -314,7 +315,7 @@ class UEXCorp(Skill):
                 data.get("timestamp")
                 and data.get("timestamp") + self.uexcorp_cache_duration
                 > self._get_timestamp()
-                and data.get("skill_version") == self.skill_version
+                and data.get("skill_version") == self.VERSION
                 and data.get("game_version") == self.game_version
             ):
                 if data.get("ships"):
@@ -421,7 +422,7 @@ class UEXCorp(Skill):
         ):
             data = {
                 "timestamp": self._get_timestamp(),
-                "skill_version": self.skill_version,
+                "skill_version": self.VERSION,
                 "game_version": self.game_version,
                 "ships": self.ships,
                 "commodities": self.commodities,
@@ -639,10 +640,13 @@ class UEXCorp(Skill):
             for terminal in self.terminals
             if terminal["type"] in ["commodity", "commodity_raw"]
         ]
-        self.terminal_dict = {
-            self._format_terminal_name(terminal).lower(): terminal
-            for terminal in self.terminals
-        }
+        self.terminal_dict = {}
+        for terminal in self.terminals:
+            nickname = self._format_terminal_name(terminal).lower()
+            if nickname not in self.terminal_dict:
+                self.terminal_dict[nickname] = [terminal]
+            else:
+                self.terminal_dict[nickname].append(terminal)
         self.terminal_code_dict = {
             terminal["id"]: terminal for terminal in self.terminals
         }
@@ -1115,9 +1119,9 @@ class UEXCorp(Skill):
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "ship_name": {"type": "string"},
+                                "ship": {"type": "string"},
                             },
-                            "required": ["ship_name"],
+                            "required": ["ship"],
                         },
                     },
                 },
@@ -1132,12 +1136,12 @@ class UEXCorp(Skill):
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                "ship_names": {
+                                "ships": {
                                     "type": "array",
                                     "items": {"type": "string"},
                                 },
                             },
-                            "required": ["ship_names"],
+                            "required": ["ships"],
                         },
                     },
                 },
@@ -1269,7 +1273,7 @@ class UEXCorp(Skill):
             )
             file_object.write(f"With parameters: {parameters}\n")
             file_object.write(f"On date: {datetime.now()}\n")
-            file_object.write(f"Version: {self.skill_version}\n")
+            file_object.write(f"Version: {self.VERSION}\n")
             file_object.write(
                 "========================================================================================\n"
             )
@@ -1466,20 +1470,20 @@ class UEXCorp(Skill):
             self._log(output_commodity, True)
             return json.dumps(output_commodity)
 
-    async def _gpt_call_get_ship_information(self, ship_name: str = None) -> str:
+    async def _gpt_call_get_ship_information(self, ship: str = None) -> str:
         """
         Retrieves information about a specific ship.
 
         Args:
-            ship_name (str, optional): The name of the ship. Defaults to None.
+            ship (str, optional): The name of the ship. Defaults to None.
 
         Returns:
             str: The ship information or an error message.
 
         """
-        self._log(f"Parameters: Ship: {ship_name}", True)
+        self._log(f"Parameters: Ship: {ship}", True)
 
-        ship_name = self._get_function_arg_from_cache("ship_name", ship_name)
+        ship_name = self._get_function_arg_from_cache("ship_name", ship)
 
         if ship_name is None:
             self._log("No ship given. Ask for a ship. Dont say sorry.", True)
@@ -1508,33 +1512,33 @@ class UEXCorp(Skill):
             self._log(output_ship, True)
             return json.dumps(output_ship)
 
-    async def _gpt_call_get_ship_comparison(self, ship_names: list[str] = None) -> str:
+    async def _gpt_call_get_ship_comparison(self, ships: list[str] = None) -> str:
         """
         Retrieves information about multiple ships.
 
         Args:
-            ship_names (list[str], optional): The names of the ships. Defaults to None.
+            ships (list[str], optional): The names of the ships. Defaults to None.
 
         Returns:
             str: The ship information or an error message.
         """
-        self._log(f"Parameters: Ships: {', '.join(ship_names)}", True)
+        self._log(f"Parameters: Ships: {', '.join(ships)}", True)
 
-        if ship_names is None or not ship_names:
+        if ships is None or not ships:
             self._log("No ship given. Ask for a ship. Dont say sorry.", True)
             return "No ship given. Ask for a ship. Dont say sorry."
 
         misunderstood = []
-        ships = []
-        for ship_name in ship_names:
+        ships_resolved = []
+        for ship_name in ships:
             closest_match = await self._find_closest_match(ship_name, self.ship_names)
             if closest_match is None:
                 misunderstood.append(ship_name)
             else:
                 ship_name = closest_match
-                ships.append(self._get_ship_by_name(ship_name))
+                ships_resolved.append(self._get_ship_by_name(ship_name))
 
-        self._log(f"Interpreted Parameters: Ships: {', '.join(ship_names)}", True)
+        self._log(f"Interpreted Parameters: Ships: {', '.join(self._format_ship_name(ship) for ship in ships_resolved)}", True)
 
         if misunderstood:
             self._log(
@@ -1544,7 +1548,7 @@ class UEXCorp(Skill):
             return f"These ship names do not exist in game. Exactly ask for clarification of these ships: {', '.join(misunderstood)}"
 
         output = {}
-        for ship in ships:
+        for ship in ships_resolved:
 
             async def get_ship_info(ship):
                 output[self._format_ship_name(ship)] = (
@@ -1607,11 +1611,13 @@ class UEXCorp(Skill):
         formating = "Summarize in natural language: "
 
         # get a clone of the data
-        terminal = self._get_terminal_by_name(location_name)
-        if terminal is not None:
-            output = await self._get_converted_terminal_for_output(terminal)
-            self._log(output, True)
-            return formating + json.dumps(output)
+        terminals = self._get_terminals_by_name(location_name)
+        if terminals:
+            for terminal in terminals:
+                output = await self._get_converted_terminal_for_output(terminal)
+                self._log(output, True)
+                formating += json.dumps(output)
+            return formating
         city = self._get_city_by_name(location_name)
         if city is not None:
             output = await self._get_converted_city_for_output(city)
@@ -1931,12 +1937,19 @@ class UEXCorp(Skill):
 
         output = {
             "type": "Ship" if ship["is_spaceship"] else "Groud Vehicle",
-            "name": self._format_ship_name(ship),
+            "name": self._format_ship_name(ship, True),
             "manufacturer": ship["company_name"],
             "cargo_capacity": f"{ship['scu']} SCU",
             # "added_on_version": "Unknown" if ship["is_concept"] else ship["game_version"],
             "field_of_activity": self._get_ship_field_of_activity(ship),
         }
+
+        if ship["crew"]:
+            if "," in ship["crew"]:
+                crew_min, crew_max = ship["crew"].split(",")
+                output["crew"] = f"{crew_min} - {crew_max}"
+            else:
+                output["crew"] = f"{ship['crew']}"
 
         if not ship["is_concept"]:
             if ship["purchase"]:
@@ -2864,17 +2877,6 @@ class UEXCorp(Skill):
         """
         return self.ship_dict.get(name.lower()) if name else None
 
-    def _get_terminal_by_name(self, name: str) -> dict[str, any] | None:
-        """Finds the terminal with the specified name and returns the terminal or None.
-
-        Args:
-            name (str): The name of the terminal to search for.
-
-        Returns:
-            Optional[object]: The terminal object if found, otherwise None.
-        """
-        return self.terminal_dict.get(name.lower()) if name else None
-
     def _get_terminal_by_code(self, code: str) -> dict[str, any] | None:
         """Finds the terminal with the specified code and returns the terminal or None.
 
@@ -3035,6 +3037,17 @@ class UEXCorp(Skill):
         """
         return self.commodity_code_dict.get(code) if code else None
 
+    def _get_terminals_by_name(self, name: str) -> dict[dict[str, any]]:
+        """Finds the terminal with the specified name and returns the terminal or None.
+
+        Args:
+            name (str): The name of the terminal to search for.
+
+        Returns:
+            Optional[object]: The terminal object if found, otherwise None.
+        """
+        return self.terminal_dict.get(name.lower()) if name else []
+
     def _get_terminals_by_position_name(self, name: str) -> list[dict[str, any]]:
         """Returns all terminals with the specified position name.
 
@@ -3048,11 +3061,7 @@ class UEXCorp(Skill):
             return []
 
         terminals = []
-
-        terminal_temp = self._get_terminal_by_name(name)
-        if terminal_temp:
-            terminals.append(terminal_temp)
-
+        terminals.extend(self._get_terminals_by_name(name))
         terminals.extend(self._get_terminals_by_systemname(name))
         terminals.extend(self._get_terminals_by_planetname(name))
         terminals.extend(self._get_terminals_by_moonname(name))
