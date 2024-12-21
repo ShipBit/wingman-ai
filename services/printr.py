@@ -1,11 +1,31 @@
 from datetime import datetime
 import logging
+import sys
+from logging import Formatter
+from logging.handlers import RotatingFileHandler
 from os import path
 from api.commands import LogCommand, ToastCommand
 from api.enums import CommandTag, LogSource, LogType, ToastType
 from services.file import get_writable_dir
 from services.websocket_user import WebSocketUser
 
+class StreamToLogger:
+    def __init__(self, logger, log_level=logging.INFO, stream=sys.stdout):
+        self.logger = logger
+        self.log_level = log_level
+        self.linebuf = ''
+        self.stream = stream
+
+    def write(self, buf):
+        for line in buf.rstrip().splitlines():
+            self.logger.log(self.log_level, line.rstrip())
+            self.stream.write(line + '\n')
+
+    def flush(self):
+        self.stream.flush()
+
+    def isatty(self):
+        return False
 
 class Printr(WebSocketUser):
     """Singleton"""
@@ -29,17 +49,32 @@ class Printr(WebSocketUser):
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Printr, cls).__new__(cls)
-            cls._instance.logger = logging.getLogger()
+            cls._instance.logger = logging.getLogger('file_logger')
             cls._instance.logger.setLevel(logging.INFO)
+
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+            # Info file handler with timestamp
+            fh = RotatingFileHandler(
+                path.join(get_writable_dir("logs"), f"wingman-core.{timestamp}.log")
+            )
+            fh.setLevel(logging.DEBUG)
+            file_formatter = Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+            fh.setFormatter(file_formatter)
+            cls._instance.logger.addHandler(fh)
+
+            # Console logger with color
+            cls._instance.console_logger = logging.getLogger('console_logger')
+            cls._instance.console_logger.setLevel(logging.INFO)
             ch = logging.StreamHandler()
             ch.setLevel(logging.INFO)
-            cls._instance.logger.addHandler(ch)
-            date_time_str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-            fh = logging.FileHandler(
-                path.join(get_writable_dir("logs"), f"wingman-core.{date_time_str}.log")
-            )
-            fh.setLevel(logging.INFO)
-            cls._instance.logger.addHandler(fh)
+            console_formatter = Formatter('%(message)s')
+            ch.setFormatter(console_formatter)
+            cls._instance.console_logger.addHandler(ch)
+
+            # Redirect stdout and stderr
+            sys.stdout = StreamToLogger(cls._instance.logger, logging.INFO, sys.stdout)
+            sys.stderr = StreamToLogger(cls._instance.logger, logging.ERROR, sys.stderr)
         return cls._instance
 
     async def __send_to_gui(
@@ -164,4 +199,5 @@ class Printr(WebSocketUser):
         return f"{color}{text}{Printr.CLEAR}"
 
     def print_colored(self, text, color):
-        self.logger.info(self.clr(text, color))
+        self.console_logger.info(self.clr(text, color))
+        self.logger.info(text)

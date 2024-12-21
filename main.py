@@ -262,16 +262,25 @@ async def async_main(host: str, port: int, sidecar: bool):
         else:
             core.startup_errors.append(error)
 
-    await core.startup()
-    event_loop = asyncio.get_running_loop()
-    core.audio_player.set_event_loop(event_loop)
-    asyncio.create_task(core.process_events())
-    core.is_started = True
+    try:
+        await core.startup()
+        event_loop = asyncio.get_running_loop()
+        core.audio_player.set_event_loop(event_loop)
+        asyncio.create_task(core.process_events())
+        core.is_started = True
+    except Exception as e:
+        printr.print(f"Error starting Wingman AI Core: {str(e)}", color=LogType.ERROR)
+        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        return
 
-    config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
-    server = uvicorn.Server(config)
-    await server.serve()
-
+    try:
+        config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
+        server = uvicorn.Server(config)
+        await server.serve()
+    except Exception as e:
+        printr.print(f"Error starting uvicorn server: {str(e)}", color=LogType.ERROR)
+        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        return
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the FastAPI server.")
