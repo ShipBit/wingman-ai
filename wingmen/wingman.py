@@ -4,6 +4,7 @@ import time
 import difflib
 import asyncio
 import threading
+import traceback
 from typing import (
     Optional,
     TYPE_CHECKING,
@@ -29,6 +30,7 @@ from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.audio_library import AudioLibrary
+
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -222,7 +224,7 @@ class Wingman:
                         )
             except Exception as e:
                 await printr.print_async(
-                    f"Could not load skill '{skill_config.name}': {str(e)}",
+                    f"Could not load skill '{skill_config.name}': {str(e)}\n{traceback.format_exc()}",
                     color=LogType.ERROR,
                 )
 
@@ -554,6 +556,7 @@ class Wingman:
                 function(*args)
 
         thread = threading.Thread(target=start_thread, args=(function, *args))
+        thread.name = function.__name__
         thread.start()
         return thread
 
