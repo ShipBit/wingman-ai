@@ -1,0 +1,251 @@
+import inspect
+
+from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.orbit_data_access import OrbitDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+from skills.uexcorp_beta.uexcorp.helper import Helper
+
+class Validator:
+
+    VALIDATE_NUMBER = "number"
+    VALIDATE_BOOL = "bool"
+    VALIDATE_SHIP = "ship"
+    VALIDATE_VEHICLE = "vehicle"
+    VALIDATE_STAR_SYSTEM = "star_system"
+    VALIDATE_COMMODITY = "commodity"
+    VALIDATE_LOCATION = "location"
+
+    def __init__(
+        self,
+        logic: str,
+        multiple: bool = False,
+        config: dict[str, any] | None = None,
+    ):
+        if logic not in [
+            self.VALIDATE_NUMBER,
+            self.VALIDATE_BOOL,
+            self.VALIDATE_SHIP,
+            self.VALIDATE_VEHICLE,
+            self.VALIDATE_STAR_SYSTEM,
+            self.VALIDATE_COMMODITY,
+            self.VALIDATE_LOCATION,
+        ]:
+            raise ValueError("Invalid validation logic")
+        self.__method_validate: callable = getattr(self, f"_Validator__validate_{logic}")
+        self.__method_definition: callable = getattr(self, f"_Validator__definition_{logic}")
+        self.__multiple: bool = multiple
+        self.__config: dict[str, any] = config if config else {}
+        self.__helper: Helper = Helper.get_instance()
+
+    async def validate(self, values: any) -> any:
+        validated_values = []
+
+        if self.__multiple:
+            if not isinstance(values, list):
+                return None
+        else:
+            if isinstance(values, list):
+                return None
+            values = [values]
+
+        for value in values:
+            if inspect.iscoroutinefunction(self.__method_validate):
+                validated = await self.__method_validate(value, **self.__config)
+            else:
+                validated = self.__method_validate(value, **self.__config)
+
+            if validated is None:
+                return None
+
+            validated_values.append(validated)
+
+        if self.__multiple:
+            return validated_values
+        else:
+            return validated_values[0]
+
+    def get_llm_definition(self) -> dict[str, any]:
+        definition = self.__method_definition(**self.__config)
+        if self.__multiple:
+            definition = {
+                "type": "array",
+                "items": definition,
+            }
+
+        return definition
+
+    def __validate_number(self, number: str | int, min: int | None = None, max: int | None = None) -> int | None:
+        if not isinstance(number, int):
+            if number.isdigit():
+                number = int(number)
+            else:
+                return None
+
+        if min and number < min:
+            return None
+
+        if max and number > max:
+            return None
+
+        return number
+
+    def __definition_number(self, **kwargs) -> dict[str, any]:
+        return {"type": "number"}
+
+    def __validate_bool(self, boolean: str|bool) -> bool | None:
+        if isinstance(boolean, bool):
+            return boolean
+
+        if boolean.lower() == "true" or "1":
+            return True
+
+        elif boolean.lower() == "false" or "0":
+            return False
+
+        return None
+
+    def __definition_bool(self, **kwargs) -> dict[str, any]:
+        return {"type": "boolean"}
+
+    async def __validate_ship(self, name: str) -> str | None:
+        ships = VehicleDataAccess().add_filter_by_is_spaceship(True).load()
+        ship_names = []
+        for ship in ships:
+            ship_names.append(str(ship))
+
+        closest_match = await self.__helper.get_llm().find_closest_match(name, ship_names)
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_ship(self, **kwargs) -> dict[str, any]:
+        return {"type": "string"}
+
+    async def __validate_vehicle(self, name: str) -> str | None:
+        vehicles = VehicleDataAccess().load()
+        vehicle_names = []
+        for vehicle in vehicles:
+            vehicle_names.append(str(vehicle))
+
+        closest_match = await self.__helper.get_llm().find_closest_match(name, vehicle_names)
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_vehicle(self, **kwargs) -> dict[str, any]:
+        return {"type": "string"}
+
+    async def __validate_star_system(self, name: str, available: bool = False) -> str | None:
+        star_system_data_access = StarSystemDataAccess()
+        if available:
+            star_system_data_access = star_system_data_access.add_filter_by_is_available_live(True)
+
+        star_systems = star_system_data_access.load()
+        star_system_names = []
+        for star_system in star_systems:
+            star_system_names.append(str(star_system))
+
+        closest_match = await self.__helper.get_llm().find_closest_match(name, star_system_names)
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_star_system(self, available: bool = False) -> dict[str, any]:
+        if not available:
+            return {"type": "string"}
+
+        star_systems = StarSystemDataAccess().add_filter_by_is_available_live(True).load()
+        star_system_names = [str(star_system) for star_system in star_systems]
+        return {"type": "string", "enum": star_system_names}
+
+    async def __validate_commodity(self, name: str, for_trading: bool = False) -> str | None:
+        commodity_data_access = CommodityDataAccess()
+        if for_trading:
+            commodity_data_access = commodity_data_access.add_filter_has_sell_price().add_filter_has_buy_price()
+        commodities = commodity_data_access.load()
+        commodity_names = []
+        for commodity in commodities:
+            commodity_names.append(str(commodity))
+
+        closest_match = await self.__helper.get_llm().find_closest_match(name, commodity_names)
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_commodity(self, **kwargs) -> dict[str, any]:
+        return {"type": "string"}
+
+    async def __validate_location(self, name: str, for_trading: bool = False) -> str | None:
+        name_collection = []
+
+        star_systems = StarSystemDataAccess().add_filter_by_is_available(True).load() # TODO change to "is_available_live" later
+        for star_system in star_systems:
+            name_collection.append(str(star_system))
+
+            planets = PlanetDataAccess().add_filter_by_id_star_system(star_system.get_id()).add_filter_by_is_available_live(True).load()
+            for planet in planets:
+                name_collection.append(str(planet))
+
+            moons = MoonDataAccess().add_filter_by_id_star_system(star_system.get_id()).add_filter_by_is_available_live(True).load()
+            for moon in moons:
+                name_collection.append(str(moon))
+
+            space_station_data_access = SpaceStationDataAccess().add_filter_by_id_star_system(star_system.get_id()).add_filter_by_is_available_live(True)
+            if for_trading:
+                space_station_data_access = space_station_data_access.add_filter_by_has_trade_terminal(True)
+            space_stations = space_station_data_access.load()
+            for space_station in space_stations:
+                name_collection.append(str(space_station))
+
+            orbits = OrbitDataAccess().add_filter_by_id_star_system(star_system.get_id()).load()
+            for orbit in orbits:
+                name_collection.append(str(orbit))
+
+            terminal_data_access = TerminalDataAccess().add_filter_by_id_star_system(star_system.get_id())
+            if for_trading:
+                terminal_data_access.add_filter_by_type("commodity")
+            terminals = terminal_data_access.load()
+            for terminal in terminals:
+                name_collection.append(str(terminal))
+
+            city_data_access = CityDataAccess().add_filter_by_id_star_system(star_system.get_id()).add_filter_by_is_available_live(True)
+            if for_trading:
+                city_data_access.add_filter_by_has_trade_terminal(True)
+            cities = city_data_access.load()
+            for city in cities:
+                name_collection.append(str(city))
+
+            poi_data_access = PoiDataAccess().add_filter_by_id_star_system(star_system.get_id()).add_filter_by_is_available_live(True)
+            if for_trading:
+                poi_data_access.add_filter_by_has_trade_terminal(True)
+            pois = poi_data_access.load()
+            for poi in pois:
+                name_collection.append(str(poi))
+
+            outpost_data_access = OutpostDataAccess().add_filter_by_id_star_system(star_system.get_id()).add_filter_by_is_available_live(True)
+            if for_trading:
+                outpost_data_access.add_filter_by_has_trade_terminal(True)
+            outposts = outpost_data_access.load()
+            for outpost in outposts:
+                name_collection.append(str(outpost))
+
+        closest_match = await self.__helper.get_llm().find_closest_match(name, name_collection)
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_location(self, **kwargs) -> dict[str, any]:
+        return {"type": "string"}

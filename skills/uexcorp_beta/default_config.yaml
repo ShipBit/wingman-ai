@@ -1,0 +1,93 @@
+name: UEXCorpBeta
+module: skills.uexcorp_beta.main
+category: star_citizen
+description:
+  en: Uses the UEXCorp API to get commodity routes and ship information for Star Citizen.
+  de: Nutzt die UEXCorp API, um Handelsrouten und Schiffsinformationen für Star Citizen zu erhalten.
+examples:
+  - question:
+      en: Please provide me a the best two trading routes for my Caterpillar, Im currently at Hurston.
+      de: Bitte gib mir die zwei besten Handelsrouten für meine Caterpillar, ich bin gerade bei Hurston.
+    answer:
+      en: You have two highly profitable trading routes available. The first route involves [...]
+      de: Du hast zwei profitable Handelsrouten zur Verfügung. Auf der ersten Route transportierst du [...]
+  - question:
+      en: What can you tell me about the Hull-C?
+      de: Was kannst du mir über den Hull-C erzählen?
+    answer:
+      en: The Hull-C is manufactured by Musashi Industrial & Starflight Concern and falls under the 'HULL' series. It [...]
+      de: Die Hull-C wird von Musashi Industrial & Starflight Concern hergestellt und gehört zur "HULL"-Serie. Sie dient als [...]
+prompt: |
+  You also have tools to access the UEXCorp API to get live data for Star Citizen.
+  Use these functions as possible. Prefer executing them with less data first before asking the user for more details.
+  Efficiently use filters, if available in a function, to get the best results the user asked for.
+  
+  Available functions are:
+  -   name: uex_get_vehicle_information
+      Description: ship information to compare ships or get details about a specific ship.
+      Parameters:
+        - ships: A list of ship names including the short manufacturer name and the ship name. (e.g. "RSI Aurora MR")
+  -   name: uex_get_trade_routes
+      Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition. Never ask for optional parameters if not asked by the user.
+      Parameters:
+        - filter_commodity_whitelist: Shows only trade routes for these commodities.
+        - filter_commodity_blacklist: Excludes trade routes for these commodities.
+        - filter_allow_illegal_commodities: If false, routes for illegal commodities are excluded.
+        - filter_star_system_whitelist: Shows only trade routes that end and start in given star systems. eg ["Stanton", "Pyro"]
+        - filter_star_system_blacklist": Excludes routes that end and start in given star systems. eg ["Stanton", "Pyro"]
+        - limit: Number of trade routes to show.
+        - offset: Number of trade routes to skip. e.g. offset 2, limit 1 will only show the third best trade route
+        - used_ship: The ship name including the short manufacturer name will. If given shows optimized trade routes for this ship.
+        - available_money: Shows trade routes optimized for this amount of money.
+        - available_cargo_space_scu: Shows trade routes optimized for this amount of free cargo space.
+        - filter_allow_star_system_change: If false, only routes within the same star system are shown. eg only in Stanton if route start is in Stanton or only in Pyro if route star is in Pyro.
+        - filter_location_blacklist: Excludes trade routes starting or ending at these locations. eg ["Hurston", "Bloom"]
+        - filter_destination_location: Shows only trade routes ending at this location. eg "Stanton"
+        - filter_start_location: Shows only trade routes starting at this location. eg "Pyro"
+
+custom_properties:
+  # If enabled ("true"), this will ask for the uex api key and will offer more possibilities with this skill.
+  # Some functions may be added to the future to utilize this.
+  - id: api_use_key
+    name: Use uex api key
+    hint: If enable, this will ask for the uex api key and will offer more possibilities with this skill.
+    value: false
+    required: true
+    property_type: boolean
+
+  # Set this option to "true" to make the start location for trade route calculation a mandatory information.
+  # Set this option to "false" to make the start location for trade route calculation a optional information.
+  # If "false" and no start location is given, all tradeports are taken into account.
+  - id: commodity_route_start_location_mandatory
+    name: Trade start mandatory
+    hint: Set this option to "true" to make the start location for trade route calculation a mandatory information. If "false" and no start location is given, all tradeports are taken into account.
+    value: true
+    required: true
+    property_type: boolean
+
+  # Set this option to the amount of trade routes you want to show at default.
+  # You can always tell Wingman AI to show more or less trade routes for one request, if that number is not given, this setting is used.
+  - id: commodity_route_default_count
+    name: Default trade route count
+    hint: Set this option to the amount of trade routes you want to show at default.
+    value: 1
+    required: true
+    property_type: number
+
+  # Set this option to true to take estimated scu availability into account for trade route calculations.
+  # This will reduce the amount of trade routes shown, but will give you more accurate results.
+  - id: commodity_route_use_estimated_availability
+    name: Use Estimated Availability
+    hint: Enable this option to take estimated scu availability into account for trade route calculations.
+    value: true
+    required: true
+    property_type: boolean
+
+  # Set this option to true to show advanced information for trade routes.
+  # This will include additional location data, monitoring flags, UEXCorp scores and more.
+  - id: commodity_route_advanced_info
+    name: Show advanced trade route info
+    hint: Shows additional information as more location data (terminal name is always included), flags if locations are monitored and more like the score by uexcorp.
+    value: false
+    required: true
+    property_type: boolean
