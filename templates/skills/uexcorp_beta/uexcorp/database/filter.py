@@ -56,7 +56,7 @@ class Filter:
         return self.__limit
 
     def resolve_limit(self) -> str:
-        return f"LIMIT {self.__limit}" if self.__limit is not None else ""
+        return f"LIMIT {self.__limit}" if self.__limit is not None else "LIMIT -1"
 
     def offset(self, offset: int):
         self.__offset = offset

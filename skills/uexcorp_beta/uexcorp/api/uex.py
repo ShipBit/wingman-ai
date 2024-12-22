@@ -67,7 +67,7 @@ class Uex:
         results = []
         if get and any(isinstance(value, list) for value in get.values()):
             keys, values = zip(*((k, v if isinstance(v, list) else [v]) for k, v in get.items()))
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
                 future_to_combination = {executor.submit(self.__actual_fetch, endpoint, dict(zip(keys, combination)), params): combination for combination in product(*values)}
                 for future in concurrent.futures.as_completed(future_to_combination):
                     result = future.result()
@@ -102,13 +102,13 @@ class Uex:
             self.session = requests.Session()
 
         request_count = 1
-        max_retries = 2
+        max_retries = 4
         timeout_error = False
         requests_error = False
         response_json = {}
 
         while request_count == 1 or (
-            request_count <= (max_retries + 1) and timeout_error
+            request_count <= (max_retries + 1) and (timeout_error or requests_error)
         ):
             self.helper.get_handler_debug().write(f"Fetching data (request {request_count}/{max_retries+1}) from {url} ...")
             requests_error = False
@@ -117,7 +117,7 @@ class Uex:
                 response = self.session.get(
                     url,
                     params=params,
-                    timeout=(self.helper.get_handler_config().get_api_timeout() * request_count),
+                    timeout=self.helper.get_handler_config().get_api_timeout(),
                     headers=self._get_headers(),
                     stream = True
                 )

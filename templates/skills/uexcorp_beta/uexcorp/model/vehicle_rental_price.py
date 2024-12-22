@@ -34,18 +34,25 @@ class VehicleRentalPrice(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
-    def get_data_for_ai(self):
+    def get_data_for_ai(self, show_vehicle_data: bool = True) -> dict:
         from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
         from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
 
-        vehicle = Vehicle(self.get_id_vehicle(), load=True) if self.get_id_vehicle() else None
+
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
-        return {
+        information = {
             "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
-            "vehicle": vehicle.get_data_for_ai_minimal() if vehicle else None,
             "price_rent": self.get_price_rent(),
         }
+
+        if show_vehicle_data:
+            vehicle = Vehicle(self.get_id_vehicle(), load=True) if self.get_id_vehicle() else None
+            information.update({
+                "vehicle": vehicle.get_data_for_ai_minimal() if vehicle else None,
+            })
+
+        return information
 
     def get_data_for_ai_minimal(self) -> dict:
         return {
@@ -85,4 +92,4 @@ class VehicleRentalPrice(DataModel):
         return self.data["terminal_name"]
 
     def __str__(self):
-        return f"Rent {self.get_vehicle_name()} at {self.get_terminal_name()} for {self.get_vehicle_name()}"
+        return f"Rent {self.get_vehicle_name()} at {self.get_terminal_name()} for {self.get_price_rent()}"

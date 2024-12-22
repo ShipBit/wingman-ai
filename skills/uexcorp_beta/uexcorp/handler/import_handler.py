@@ -39,11 +39,11 @@ class ImportHandler:
             "fuel_price": self.__import_data_fuel_price,
             "vehicle_purchase_price": self.__import_data_vehicle_purchase_price,
             "vehicle_rental_price": self.__import_data_vehicle_rental_price,
-            "game_version": self.__import_data_game_version,
             "commodity_alert": self.__import_data_commodity_alert,
             "commodity_price": self.__import_data_commodity_price,
             "commodity_raw_price": self.__import_data_commodity_raw_price,
-            "commodity_route": self.__import_data_commodity_route
+            "commodity_route": self.__import_data_commodity_route,
+            "game_version": self.__import_data_game_version,
         }
         self.__common_data = {
             "last_import_run_id": 0,

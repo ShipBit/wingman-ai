@@ -204,7 +204,7 @@ class Vehicle(DataModel):
         from skills.uexcorp_beta.uexcorp.model.company import Company
 
         company = Company(self.get_id_company(), load=True) if self.get_id_company() else None
-        parent = Vehicle(self.get_id_parent(), load=True) if self.get_id_parent() else None
+        parent = Vehicle(self.get_id_parent(), load=True) if self.get_id_parent() and self.get_id_parent() != self.get_id() else None
 
         data = {
             "name": self.get_name_full(),
@@ -231,7 +231,7 @@ class Vehicle(DataModel):
         return data
 
     def get_data_for_ai_minimal(self) -> dict[str, any]:
-        parent = Vehicle(self.get_id_parent(), load=True) if self.get_id_parent() else None
+        parent = Vehicle(self.get_id_parent(), load=True) if self.get_id_parent() and self.get_id_parent() != self.get_id() else None
 
         data = {
             "name": self.get_name_full(),
@@ -249,7 +249,7 @@ class Vehicle(DataModel):
         prices = VehiclePurchasePriceDataAccess().add_filter_by_id_vehicle(self.get_id()).load()
         price_data = []
         for price in prices:
-            price_data.append(price.get_data_for_ai())
+            price_data.append(price.get_data_for_ai(show_vehicle_data=False))
 
         return price_data
 
@@ -257,7 +257,7 @@ class Vehicle(DataModel):
         prices = VehicleRentalPriceDataAccess().add_filter_by_id_vehicle(self.get_id()).load()
         price_data = []
         for price in prices:
-            price_data.append(price.get_data_for_ai())
+            price_data.append(price.get_data_for_ai(show_vehicle_data=False))
 
         return price_data
 

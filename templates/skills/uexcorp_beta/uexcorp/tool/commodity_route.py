@@ -160,8 +160,6 @@ class CommodityRoute(Tool):
             "filter_commodity_whitelist": Validator(Validator.VALIDATE_COMMODITY, multiple=True, config={"for_trading": True}),
             "filter_commodity_blacklist": Validator(Validator.VALIDATE_COMMODITY, multiple=True, config={"for_trading": True}),
             "filter_allow_illegal_commodities": Validator(Validator.VALIDATE_BOOL),
-            "filter_star_system_whitelist": Validator(Validator.VALIDATE_STAR_SYSTEM, multiple=True),
-            "filter_star_system_blacklist": Validator(Validator.VALIDATE_STAR_SYSTEM, multiple=True),
             "limit": Validator(Validator.VALIDATE_NUMBER, config={"min": 1, "max": 15}),
             "offset": Validator(Validator.VALIDATE_NUMBER, config={"min": 0}),
             "used_ship": Validator(Validator.VALIDATE_SHIP),
@@ -170,6 +168,10 @@ class CommodityRoute(Tool):
             "filter_allow_star_system_change": Validator(Validator.VALIDATE_BOOL),
             "filter_location_blacklist": Validator(Validator.VALIDATE_LOCATION, multiple=True, config={"for_trading": True}),
             "filter_destination_location": Validator(Validator.VALIDATE_LOCATION, config={"for_trading": True}),
+
+            # Currently used unreliably by AI
+            # "filter_star_system_whitelist": Validator(Validator.VALIDATE_STAR_SYSTEM, multiple=True),
+            # "filter_star_system_blacklist": Validator(Validator.VALIDATE_STAR_SYSTEM, multiple=True),
         }
 
         if not helper.get_handler_config().get_behavior_commodity_route_start_location_mandatory():

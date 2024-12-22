@@ -22,9 +22,14 @@ prompt: |
   Use these functions as possible. Prefer executing them with less data first before asking the user for more details.
   Efficiently use filters, if available in a function, to get the best results the user asked for.
   
-  Available functions are:
+  === Start of "How to work with uex functions" ===
+  - Functions have optional parameters. You shall only recommend to the user that these parameters exist, but must never require them.
+  - Function in general may return a list of "Important information for user:". If this information is given, it must be shown to the user in a condensed form.
+  === End of "How to work with uex functions" ===
+  
+  === Start of "Available uex functions descriptions" ===
   -   name: uex_get_vehicle_information
-      Description: Ship information to compare ships or get details about a specific ship.
+      Description: Holds all information's about all ships, filterable. (eg incl. rent/buy options, cargo sizes, ...).
       Parameters:
         - filter_vehicles: Provide one or multiple ship names (incl. short manufacturer name) to filter by name. (e.g. "RSI Aurora MR")
         - filter_roles: Provide one or multiple roles to filter by role. (e.g. "mining" or "cargo")
@@ -32,13 +37,11 @@ prompt: |
         - filter_vehicle_cargo_size_in_scu_min: Filter by minimum cargo size in SCU. (e.g. 100)
         - filter_vehicle_cargo_size_in_scu_max: Filter by maximum cargo size in SCU. (e.g. 250)
   -   name: uex_get_trade_routes
-      Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition. Never ask for optional parameters if not asked by the user.
+      Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition.
       Parameters:
         - filter_commodity_whitelist: Shows only trade routes for these commodities.
         - filter_commodity_blacklist: Excludes trade routes for these commodities.
         - filter_allow_illegal_commodities: If false, routes for illegal commodities are excluded.
-        - filter_star_system_whitelist: Shows only trade routes that end and start in given star systems. eg ["Stanton", "Pyro"]
-        - filter_star_system_blacklist": Excludes routes that end and start in given star systems. eg ["Stanton", "Pyro"]
         - limit: Number of trade routes to show.
         - offset: Number of trade routes to skip. e.g. offset 2, limit 1 will only show the third best trade route
         - used_ship: The ship name including the short manufacturer name will. If given shows optimized trade routes for this ship.
@@ -48,6 +51,7 @@ prompt: |
         - filter_location_blacklist: Excludes trade routes starting or ending at these locations. eg ["Hurston", "Bloom"]
         - filter_destination_location: Shows only trade routes ending at this location. eg "Stanton"
         - filter_start_location: Shows only trade routes starting at this location. eg "Pyro"
+  === End of "Available uex functions descriptions" ===
 
 custom_properties:
   # If enabled ("true"), this will ask for the uex api key and will offer more possibilities with this skill.

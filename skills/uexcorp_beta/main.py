@@ -32,15 +32,15 @@ class UEXCorpBeta(Skill):
         self.__helper.set_loaded(False)
 
     def loop_master(self):
-        # wait 5 minutes before starting the loop
+        # wait 2 minutes before starting the loop
         self.__helper.wait(120)
-        self.__helper.get_handler_debug().write("Starting master loop")
+        self.__helper.get_handler_debug().write("Starting master loop with a 300s cycle")
         while self.__helper.is_loaded():
             if self.__helper.is_ready() and self.__helper.get_handler_import().get_imported_percent() == 100:
                 self.__helper.get_handler_debug().write("Automated import data refresh by master loop.")
                 self.__helper.ensure_version_parity()
                 self.__helper.get_handler_import().import_data()
-            self.__helper.wait(60)
+            self.__helper.wait(300)
         self.__helper.get_handler_debug().write("Stopping master loop")
 
     def threaded_prepare(self):

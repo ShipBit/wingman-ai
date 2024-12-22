@@ -25,10 +25,9 @@ class ConfigHandler:
         self.__api_timeout: int = 10
         self.__api_retries: int = 2
 
-        # TODO: Change cache lifetimes back to reasonable values after "release"
-        self.__cache_lifetime_short: int = 30 * 60 * 100000# 30 minutes
-        self.__cache_lifetime_mid: int = 24 * 60 * 60 * 100000 # 24 hours
-        self.__cache_lifetime_long: int = 14 * 24 * 60 * 60 * 100000 # 14 days
+        self.__cache_lifetime_short: int = 60 * 60# 30 minutes
+        self.__cache_lifetime_mid: int = 24 * 60 * 60 # 24 hours
+        self.__cache_lifetime_long: int = 14 * 24 * 60 * 60 # 14 days
 
         self.__behavior_commodity_route_start_location_mandatory: bool = True
         self.__behavior_commodity_route_default_count: int = 1
