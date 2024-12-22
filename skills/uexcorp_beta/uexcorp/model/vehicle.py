@@ -9,6 +9,35 @@ class Vehicle(DataModel):
 
     required_keys = ["id"]
 
+    VEHICLE_ROLES = {
+        "spaceship": "is_spaceship",
+        "ground vehicle": "is_ground_vehicle",
+        "military": "is_military",
+        "civilian": "is_civilian",
+        "boarding vessel": "is_boarding",
+        "bomber": "is_bomber",
+        "cargo transporter": "is_cargo",
+        "vehicle carrier": "is_carrier",
+        "construction": "is_construction",
+        "data runner": "is_datarunner",
+        "exploration": "is_exploration",
+        "industrial": "is_industrial",
+        "interdiction": "is_interdiction",
+        "medical": "is_medical",
+        "mining": "is_mining",
+        "passenger transport": "is_passenger",
+        "racing": "is_racing",
+        "refinery": "is_refinery",
+        "refueling vessel": "is_refuel",
+        "repairing vessel": "is_repair",
+        "research": "is_research",
+        "salvage": "is_salvage",
+        "scanning": "is_scanning",
+        "science": "is_science",
+        "starter": "is_starter",
+        "stealth": "is_stealth",
+    }
+
     def __init__(
             self,
             id: int, # int(11)
@@ -142,95 +171,77 @@ class Vehicle(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_roles(self) -> list[str]:
+        roles = []
+
+        for role, attribute in self.VEHICLE_ROLES.items():
+            if getattr(self, f"get_{attribute}")():
+                roles.append(role)
+
+        return roles
+
+    def get_additional_information(self) -> list[str]:
+        additional_information = []
+
+        if self.get_is_concept():
+            additional_information.append("currently in concept phase, not flyable")
+        if self.get_is_docking():
+            additional_information.append("has docking port")
+        if self.get_is_emp():
+            additional_information.append("has EMP")
+        if self.get_is_loading_dock():
+            additional_information.append("needs loading dock for loading/unloading")
+        if self.get_is_qed():
+            additional_information.append("has qed (quantum enforcement device)")
+        if self.get_is_showdown_winner():
+            additional_information.append("showdown winner")
+        if self.get_is_tractor_beam():
+            additional_information.append("has tractor beam")
+
+        return additional_information
+
     def get_data_for_ai(self) -> dict[str, any]:
+        from skills.uexcorp_beta.uexcorp.model.company import Company
+
+        company = Company(self.get_id_company(), load=True) if self.get_id_company() else None
+        parent = Vehicle(self.get_id_parent(), load=True) if self.get_id_parent() else None
+
         data = {
-            "name_full": self.get_name_full(),
-            "company_name": self.get_company_name(),
-            "scu": self.get_scu() or "unknown",
-            "crew": self.get_crew().replace(",", " - ") if self.get_crew else "unknown",
-            "mass": self.get_mass() or "unknown",
-            "width": self.get_width() or "unknown",
-            "height": self.get_height() or "unknown",
-            "length": self.get_length() or "unknown",
-            "fuel_quantum": self.get_fuel_quantum() or "unknown",
-            "fuel_hydrogen": self.get_fuel_hydrogen() or "unknown",
-            "scu_container_compatibility": self.get_container_sizes() or "unknown",
+            "name": self.get_name_full(),
+            "parent": parent.get_data_for_ai_minimal() if parent else "",
+            "company": company.get_data_for_ai_minimal() if company else "",
+            "scu": self.get_scu(),
+            "crew": self.get_crew().replace(",", " - ") if self.get_crew() else "unknown",
             "needed_hangar_pad_size": self.get_pad_type(),
-            "game_version": self.get_game_version(),
             "purchase_options": self.get_purchase_options(),
             "rental_options": self.get_rental_options(),
-            "roles": [],
-            "additional_information": [],
+            "roles": self.get_roles(),
+            "additional_information": self.get_additional_information(),
+
+            # TODO: check why this currently holds no data
+            # "mass": self.get_mass() or "unknown",
+            # "width": self.get_width() or "unknown",
+            # "height": self.get_height() or "unknown",
+            # "length": self.get_length() or "unknown",
+            # "fuel_quantum_in_scu": self.get_fuel_quantum() or "unknown",
+            # "fuel_hydrogen_in_scu": self.get_fuel_hydrogen() or "unknown",
+            # "scu_container_compatibility": self.get_container_sizes() or "unknown",
         }
 
-        if self.get_is_spaceship():
-            data["roles"].append("spaceship")
-        if self.get_is_ground_vehicle():
-            data["roles"].append("ground vehicle")
-        if self.get_is_military():
-            data["roles"].append("military")
-        if self.get_is_civilian():
-            data["roles"].append("civilian")
-        if self.get_is_boarding():
-            data["roles"].append("boarding vessel")
-        if self.get_is_bomber():
-            data["roles"].append("bomber")
-        if self.get_is_cargo():
-            data["roles"].append("cargo transporter")
-        if self.get_is_carrier():
-            data["roles"].append("vehicle carrier")
-        if self.get_is_concept():
-            data["additional_information"].append("currently in concept phase")
-        if self.get_is_construction():
-            data["roles"].append("construction")
-        if self.get_is_datarunner():
-            data["roles"].append("data runner")
-        if self.get_is_docking():
-            data["additional_information"].append("has docking port")
-        if self.get_is_emp():
-            data["additional_information"].append("has EMP")
-        if self.get_is_exploration():
-            data["roles"].append("exploration")
-        # if self.get_is_hangar():
-        #     data["roles"].append("hangar")
-        if self.get_is_industrial():
-            data["roles"].append("industrial")
-        if self.get_is_interdiction():
-            data["roles"].append("interdiction")
-        if self.get_is_loading_dock():
-            data["additional_information"].append("needs loading dock for loading/unloading")
-        if self.get_is_medical():
-            data["roles"].append("medical")
-        if self.get_is_mining():
-            data["roles"].append("mining")
-        if self.get_is_passenger():
-            data["roles"].append("passenger transport")
-        if self.get_is_qed():
-            data["additional_information"].append("has qed (quantum enforcement device)")
-        if self.get_is_racing():
-            data["roles"].append("racing")
-        if self.get_is_refinery():
-            data["roles"].append("refinery")
-        if self.get_is_refuel():
-            data["roles"].append("refuel")
-        if self.get_is_repair():
-            data["roles"].append("repair")
-        if self.get_is_research():
-            data["roles"].append("research")
-        if self.get_is_salvage():
-            data["roles"].append("salvage")
-        if self.get_is_scanning():
-            data["roles"].append("scanning")
-        if self.get_is_science():
-            data["roles"].append("science")
-        if self.get_is_showdown_winner():
-            data["additional_information"].append("showdown winner")
-        if self.get_is_starter():
-            data["roles"].append("starter")
-        if self.get_is_stealth():
-            data["roles"].append("stealth")
-        if self.get_is_tractor_beam():
-            data["additional_information"].append("has tractor beam")
+        return data
+
+    def get_data_for_ai_minimal(self) -> dict[str, any]:
+        parent = Vehicle(self.get_id_parent(), load=True) if self.get_id_parent() else None
+
+        data = {
+            "name": self.get_name_full(),
+            "parent": str(parent) if parent else "",
+            "company": self.get_company_name(),
+            "scu": self.get_scu(),
+            "crew": self.get_crew().replace(",", " - ") if self.get_crew() else "unknown",
+            "roles": self.get_roles(),
+            "additional_information": self.get_additional_information(),
+        }
 
         return data
 

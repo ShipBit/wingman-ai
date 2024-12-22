@@ -35,11 +35,23 @@ class VehicleRentalPrice(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self):
+        from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+        from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+
+        vehicle = Vehicle(self.get_id_vehicle(), load=True) if self.get_id_vehicle() else None
+        terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+
         return {
-            "terminal_name": self.data["terminal_name"],
-            "vehicle_name": self.data["vehicle_name"],
-            "price_rent": self.data["price_rent"],
-            "date_modified": self.get_date_modified_readable().strftime("%Y-%m-%d %H:%M:%S") if self.get_date_modified() else self.get_date_added_readable().strftime("%Y-%m-%d %H:%M:%S"),
+            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
+            "vehicle": vehicle.get_data_for_ai_minimal() if vehicle else None,
+            "price_rent": self.get_price_rent(),
+        }
+
+    def get_data_for_ai_minimal(self) -> dict:
+        return {
+            "terminal": self.get_terminal_name(),
+            "vehicle": self.get_vehicle_name(),
+            "price_rent": self.get_price_rent(),
         }
 
     def get_id(self) -> int:
@@ -73,4 +85,4 @@ class VehicleRentalPrice(DataModel):
         return self.data["terminal_name"]
 
     def __str__(self):
-        return str(self.data["vehicle_name"])
+        return f"Rent {self.get_vehicle_name()} at {self.get_terminal_name()} for {self.get_vehicle_name()}"

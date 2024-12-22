@@ -17,6 +17,9 @@ class PoiDataAccess(DataAccess):
             "id_planet",
             "id_orbit",
             "id_moon",
+            "id_space_station",
+            "id_city",
+            "id_outpost",
             "id_faction",
             "id_jurisdiction",
             "name",
@@ -57,33 +60,49 @@ class PoiDataAccess(DataAccess):
             "jurisdiction_name"
         ]
 
-    def load(self) -> list[Poi]:
-        return super().load()
+    def load(self, **params) -> list[Poi]:
+        return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> Poi | None:
         return super().load_by_property(property, value)
 
-    def add_filter_by_id_star_system(self, id_star_system: int) -> "PoiDataAccess":
+    def add_filter_by_id_star_system(self, id_star_system: int | list[int]) -> "PoiDataAccess":
         self.filter.where("id_star_system", id_star_system)
         return self
     
-    def add_filter_by_id_planet(self, id_planet: int) -> "PoiDataAccess":
+    def add_filter_by_id_planet(self, id_planet: int | list[int]) -> "PoiDataAccess":
         self.filter.where("id_planet", id_planet)
         return self
     
-    def add_filter_by_id_orbit(self, id_orbit: int) -> "PoiDataAccess":
+    def add_filter_by_id_orbit(self, id_orbit: int | list[int]) -> "PoiDataAccess":
         self.filter.where("id_orbit", id_orbit)
         return self
 
-    def add_filter_by_id_faction(self, id_faction: int) -> "PoiDataAccess":
+    def add_filter_by_id_moon(self, id_moon: int | list[int]) -> "PoiDataAccess":
+        self.filter.where("id_moon", id_moon)
+        return self
+
+    def add_filter_by_id_space_station(self, id_space_station: int | list[int]) -> "PoiDataAccess":
+        self.filter.where("id_space_station", id_space_station)
+        return self
+
+    def add_filter_by_id_city(self, id_city: int | list[int]) -> "PoiDataAccess":
+        self.filter.where("id_city", id_city)
+        return self
+
+    def add_filter_by_id_outpost(self, id_outpost: int | list[int]) -> "PoiDataAccess":
+        self.filter.where("id_outpost", id_outpost)
+        return self
+
+    def add_filter_by_id_faction(self, id_faction: int | list[int]) -> "PoiDataAccess":
         self.filter.where("id_faction", id_faction)
         return self
 
-    def add_filter_by_id_jurisdiction(self, id_jurisdiction: int) -> "PoiDataAccess":
+    def add_filter_by_id_jurisdiction(self, id_jurisdiction: int | list[int]) -> "PoiDataAccess":
         self.filter.where("id_jurisdiction", id_jurisdiction)
         return self
 
-    def add_filter_by_name(self, name: str) -> "PoiDataAccess":
+    def add_filter_by_name(self, name: str | list[str]) -> "PoiDataAccess":
         self.filter.where("name", name)
         return self
 
@@ -179,22 +198,22 @@ class PoiDataAccess(DataAccess):
         self.filter.where("is_lagrange", is_lagrange)
         return self
 
-    def add_filter_by_star_system_name(self, star_system_name: str) -> "PoiDataAccess":
+    def add_filter_by_star_system_name(self, star_system_name: str | list[str]) -> "PoiDataAccess":
         self.filter.where("star_system_name", star_system_name)
         return self
 
-    def add_filter_by_planet_name(self, planet_name: str) -> "PoiDataAccess":
+    def add_filter_by_planet_name(self, planet_name: str | list[str]) -> "PoiDataAccess":
         self.filter.where("planet_name", planet_name)
         return self
 
-    def add_filter_by_orbit_name(self, orbit_name: str) -> "PoiDataAccess":
+    def add_filter_by_orbit_name(self, orbit_name: str | list[str]) -> "PoiDataAccess":
         self.filter.where("orbit_name", orbit_name)
         return self
 
-    def add_filter_by_faction_name(self, faction_name: str) -> "PoiDataAccess":
+    def add_filter_by_faction_name(self, faction_name: str | list[str]) -> "PoiDataAccess":
         self.filter.where("faction_name", faction_name)
         return self
 
-    def add_filter_by_jurisdiction_name(self, jurisdiction_name: str) -> "PoiDataAccess":
+    def add_filter_by_jurisdiction_name(self, jurisdiction_name: str | list[str]) -> "PoiDataAccess":
         self.filter.where("jurisdiction_name", jurisdiction_name)
         return self

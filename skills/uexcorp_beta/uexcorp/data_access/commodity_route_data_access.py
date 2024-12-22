@@ -86,8 +86,8 @@ class CommodityRouteDataAccess(DataAccess):
             "date_added",
         ]
 
-    def load(self) -> list[CommodityRoute]:
-        return super().load()
+    def load(self, **params) -> list[CommodityRoute]:
+        return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> CommodityRoute:
         return super().load_by_property(property, value)
@@ -120,7 +120,7 @@ class CommodityRouteDataAccess(DataAccess):
         return self
 
     def add_filter_by_in_same_star_system(self) -> "CommodityRouteDataAccess":
-        self.filter.where("origin_star_system_name", "destination_star_system_name")
+        self.filter.where("origin_star_system_name", "destination_star_system_name", value_is_field=True)
         return self
 
     def add_filter_by_id_star_system_origin(self, id_star_system_origin: int | list[int], **params) -> "CommodityRouteDataAccess":

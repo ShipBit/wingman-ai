@@ -38,6 +38,64 @@ class Faction(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+
+        information = {
+            "name": self.data["name"],
+            "star_systems": [],
+            "is_piracy": self.data["is_piracy"],
+            "is_bounty_hunting": self.data["is_bounty_hunting"],
+            "friendly_factions": [],
+            "hostile_factions": [],
+        }
+
+        if self.get_ids_star_systems():
+            for id_star_system in self.get_ids_star_systems().split(","):
+                star_system = StarSystem(int(id_star_system), load=True)
+                information["star_systems"].append(star_system.get_data_for_ai_minimal())
+
+        if self.get_ids_factions_friendly():
+            for id_faction in self.get_ids_factions_friendly().split(","):
+                faction = Faction(int(id_faction), load=True)
+                information["friendly_factions"].append(faction.get_data_for_ai_minimal())
+
+        if self.get_ids_factions_hostile():
+            for id_faction in self.get_ids_factions_hostile().split(","):
+                faction = Faction(int(id_faction), load=True)
+                information["hostile_factions"].append(faction.get_data_for_ai_minimal())
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+
+        information = {
+            "name": self.data["name"],
+            "star_systems": [],
+            "is_piracy": self.data["is_piracy"],
+            "is_bounty_hunting": self.data["is_bounty_hunting"],
+            "friendly_factions": [],
+            "hostile_factions": [],
+        }
+
+        if self.get_ids_star_systems():
+            for id_star_system in self.get_ids_star_systems().split(","):
+                star_system = StarSystem(int(id_star_system), load=True)
+                information["star_systems"].append(str(star_system))
+
+        if self.get_ids_factions_friendly():
+            for id_faction in self.get_ids_factions_friendly().split(","):
+                faction = Faction(int(id_faction), load=True)
+                information["friendly_factions"].append(str(faction))
+
+        if self.get_ids_factions_hostile():
+            for id_faction in self.get_ids_factions_hostile().split(","):
+                faction = Faction(int(id_faction), load=True)
+                information["hostile_factions"].append(str(faction))
+
+        return information
+
     def get_id(self) -> int:
         return self.data["id"]
 

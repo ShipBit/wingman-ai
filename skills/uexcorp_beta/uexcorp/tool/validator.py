@@ -11,6 +11,7 @@ from skills.uexcorp_beta.uexcorp.data_access.star_system_data_access import Star
 from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
 from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+from skills.uexcorp_beta.uexcorp.data_access.company_data_access import CompanyDataAccess
 from skills.uexcorp_beta.uexcorp.helper import Helper
 
 class Validator:
@@ -19,9 +20,11 @@ class Validator:
     VALIDATE_BOOL = "bool"
     VALIDATE_SHIP = "ship"
     VALIDATE_VEHICLE = "vehicle"
+    VALIDATE_VEHICLE_ROLE = "vehicle_role"
     VALIDATE_STAR_SYSTEM = "star_system"
     VALIDATE_COMMODITY = "commodity"
     VALIDATE_LOCATION = "location"
+    VALIDATE_COMPANY = "company"
 
     def __init__(
         self,
@@ -34,9 +37,11 @@ class Validator:
             self.VALIDATE_BOOL,
             self.VALIDATE_SHIP,
             self.VALIDATE_VEHICLE,
+            self.VALIDATE_VEHICLE_ROLE,
             self.VALIDATE_STAR_SYSTEM,
             self.VALIDATE_COMMODITY,
             self.VALIDATE_LOCATION,
+            self.VALIDATE_COMPANY,
         ]:
             raise ValueError("Invalid validation logic")
         self.__method_validate: callable = getattr(self, f"_Validator__validate_{logic}")
@@ -145,6 +150,18 @@ class Validator:
     def __definition_vehicle(self, **kwargs) -> dict[str, any]:
         return {"type": "string"}
 
+    async def __validate_vehicle_role(self, name: str) -> str | None:
+        from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+        closest_match = await self.__helper.get_llm().find_closest_match(name, list(Vehicle.VEHICLE_ROLES.keys()))
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_vehicle_role(self, **kwargs) -> dict[str, any]:
+        from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+        return {"type": "string", "enum": list(Vehicle.VEHICLE_ROLES.keys())}
+
     async def __validate_star_system(self, name: str, available: bool = False) -> str | None:
         star_system_data_access = StarSystemDataAccess()
         if available:
@@ -248,4 +265,25 @@ class Validator:
         return None
 
     def __definition_location(self, **kwargs) -> dict[str, any]:
+        return {"type": "string"}
+
+    async def __validate_company(self, name: str, is_item_manufacturer: bool|None = None, is_vehicle_manufacturer: bool|None = None) -> str | None:
+        company_data_access = CompanyDataAccess()
+        if is_item_manufacturer is not None:
+            company_data_access = company_data_access.add_filter_by_is_item_manufacturer(is_item_manufacturer)
+        if is_vehicle_manufacturer is not None:
+            company_data_access = company_data_access.add_filter_by_is_vehicle_manufacturer(is_vehicle_manufacturer)
+        companies = company_data_access.load()
+
+        company_names = []
+        for company in companies:
+            company_names.append(str(company))
+
+        closest_match = await self.__helper.get_llm().find_closest_match(name, company_names)
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_company(self, **kwargs) -> dict[str, any]:
         return {"type": "string"}

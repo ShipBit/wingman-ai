@@ -64,6 +64,29 @@ class CommodityPrice(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
+        from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+
+        commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
+        terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+
+        return {
+            "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
+            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
+            "price_buy": self.get_price_buy(),
+            "price_sell": self.get_price_sell(),
+            # "status_buy": self.get_status_buy(), # TODO: Import status
+            # "status_sell": self.get_status_sell(), # TODO: Import status
+            "scu_buy": self.get_scu_buy(),
+            "scu_buy_avg": self.get_scu_buy_avg(),
+            "scu_sell_stock": self.get_scu_sell_stock(),
+            "scu_sell_stock_avg": self.get_scu_sell_stock_avg(),
+        }
+
+    def get_data_for_ai_minimal(self) -> dict:
+        return self.get_data_for_ai()
+
     def get_id(self) -> int:
         return self.data["id"]
 
@@ -140,4 +163,7 @@ class CommodityPrice(DataModel):
         return self.data["terminal_slug"]
 
     def __str__(self):
-        return str(self.data["name"])
+        if self.get_price_sell():
+            return f"Sell {self.get_commodity_name()} at {self.get_terminal_name()} for {self.get_price_sell()}"
+        else:
+            return f"Buy {self.get_commodity_name()} at {self.get_terminal_name()} for {self.get_price_buy()}"

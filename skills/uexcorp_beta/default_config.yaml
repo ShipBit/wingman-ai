@@ -24,9 +24,13 @@ prompt: |
   
   Available functions are:
   -   name: uex_get_vehicle_information
-      Description: ship information to compare ships or get details about a specific ship.
+      Description: Ship information to compare ships or get details about a specific ship.
       Parameters:
-        - ships: A list of ship names including the short manufacturer name and the ship name. (e.g. "RSI Aurora MR")
+        - filter_vehicles: Provide one or multiple ship names (incl. short manufacturer name) to filter by name. (e.g. "RSI Aurora MR")
+        - filter_roles: Provide one or multiple roles to filter by role. (e.g. "mining" or "cargo")
+        - filter_manufacturers: Provide one or multiple manufacturers to filter by manufacturer. (e.g. "Aegis Dynamics")
+        - filter_vehicle_cargo_size_in_scu_min: Filter by minimum cargo size in SCU. (e.g. 100)
+        - filter_vehicle_cargo_size_in_scu_max: Filter by maximum cargo size in SCU. (e.g. 250)
   -   name: uex_get_trade_routes
       Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition. Never ask for optional parameters if not asked by the user.
       Parameters:

@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from skills.uexcorp_beta.uexcorp.model.category import Category
 from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
 
@@ -31,6 +30,22 @@ class CategoryAttribute(DataModel):
             if not self.data["id"]:
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
+
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.category import Category
+
+        category = Category(self.get_id_category(), load=True) if self.get_id_category() else None
+
+        return {
+            "name": self.get_name(),
+            "category": category.get_data_for_ai_minimal() if category else None,
+        }
+
+    def get_data_for_ai_minimal(self) -> dict:
+        return {
+            "name": self.get_name(),
+            "category": self.get_category_name(),
+        }
 
     def get_id(self) -> int:
         return self.data["id"]

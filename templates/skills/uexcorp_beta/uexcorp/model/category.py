@@ -34,6 +34,18 @@ class Category(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        return {
+            "name": self.get_name(),
+            "type": self.get_type(),
+            "section": self.get_section(),
+            "is_game_related": self.get_is_game_related(),
+            "is_mining": self.get_is_mining(),
+        }
+
+    def get_data_for_ai_minimal(self) -> dict:
+        return self.get_data_for_ai()
+
     def get_id(self) -> int:
         return self.data["id"]
 

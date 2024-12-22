@@ -27,25 +27,25 @@ class StarSystemDataAccess(DataAccess):
             "jurisdiction_name",
         ]
 
-    def load(self) -> list[StarSystem]:
-        return super().load()
+    def load(self, **params) -> list[StarSystem]:
+        return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> StarSystem | None:
         return super().load_by_property(property, value)
 
-    def add_filter_by_id_faction(self, id_faction: int) -> "StarSystemDataAccess":
+    def add_filter_by_id_faction(self, id_faction: int | list[int]) -> "StarSystemDataAccess":
         self.filter.where("id_faction", id_faction)
         return self
 
-    def add_filter_by_id_jurisdiction(self, id_jurisdiction: int) -> "StarSystemDataAccess":
+    def add_filter_by_id_jurisdiction(self, id_jurisdiction: int | list[int]) -> "StarSystemDataAccess":
         self.filter.where("id_jurisdiction", id_jurisdiction)
         return self
 
-    def add_filter_by_name(self, name: str) -> "StarSystemDataAccess":
+    def add_filter_by_name(self, name: str | list[str]) -> "StarSystemDataAccess":
         self.filter.where("name", name)
         return self
 
-    def add_filter_by_code(self, code: str) -> "StarSystemDataAccess":
+    def add_filter_by_code(self, code: str | list[str]) -> "StarSystemDataAccess":
         self.filter.where("code", code)
         return self
 

@@ -12,6 +12,9 @@ class Poi(DataModel):
         id_planet: int | None = None,  # int(11)
         id_orbit: int | None = None,  # int(11)
         id_moon: int | None = None,  # int(11)
+        id_space_station: int | None = None,  # int(11)
+        id_city: int | None = None,  # int(11)
+        id_outpost: int | None = None,  # int(11)
         id_faction: int | None = None,  # int(11)
         id_jurisdiction: int | None = None,  # int(11)
         name: str | None = None,  # string(255)
@@ -59,6 +62,9 @@ class Poi(DataModel):
             "id_planet": id_planet,
             "id_orbit": id_orbit,
             "id_moon": id_moon,
+            "id_space_station": id_space_station,
+            "id_city": id_city,
+            "id_outpost": id_outpost,
             "id_faction": id_faction,
             "id_jurisdiction": id_jurisdiction,
             "name": name,
@@ -104,6 +110,121 @@ class Poi(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_offerings(self) -> list[str]:
+        offerings = []
+        if self.get_has_trade_terminal():
+            offerings.append("Trade Terminal")
+        if self.get_has_habitation():
+            offerings.append("Habitation")
+        if self.get_has_refinery():
+            offerings.append("Refinery")
+        if self.get_has_cargo_center():
+            offerings.append("Cargo Center")
+        if self.get_has_clinic():
+            offerings.append("Clinic")
+        if self.get_has_food():
+            offerings.append("Food")
+        if self.get_has_shops():
+            offerings.append("Shops")
+        if self.get_has_refuel():
+            offerings.append("Refuel")
+        if self.get_has_repair():
+            offerings.append("Repair")
+        if self.get_has_loading_dock():
+            offerings.append("Loading Dock")
+        if self.get_has_docking_port():
+            offerings.append("Docking Port")
+        if self.get_has_freight_elevator():
+            offerings.append("Freight Elevator")
+        return offerings
+
+    def get_properties(self) -> list[str]:
+        properties = []
+        if self.get_is_monitored():
+            properties.append("Monitored")
+        else:
+            properties.append("Not Monitored")
+        if self.get_is_armistice():
+            properties.append("Armistice")
+        else:
+            properties.append("No Armistice")
+        if self.get_is_landable():
+            properties.append("Landable")
+        else:
+            properties.append("Not Landable")
+        if self.get_is_decommissioned():
+            properties.append("Decommissioned")
+        if self.get_has_quantum_marker():
+            properties.append("Quantum Marker")
+        else:
+            properties.append("No Quantum Marker")
+        return properties
+
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.city import City
+        from skills.uexcorp_beta.uexcorp.model.space_station import SpaceStation
+        from skills.uexcorp_beta.uexcorp.model.moon import Moon
+        from skills.uexcorp_beta.uexcorp.model.planet import Planet
+        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+
+        terminals = TerminalDataAccess().add_filter_by_id_city(self.get_id()).load()
+        faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
+        jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "Point of Interest",
+            "located_at": {},
+            "faction": faction.get_data_for_ai_minimal() if faction else None,
+            "jurisdiction": jurisdiction.get_data_for_ai_minimal() if jurisdiction else None,
+            "terminals": [terminal.get_data_for_ai_minimal() for terminal in terminals],
+            "pad_types": self.get_pad_types(),
+            "properties": self.get_properties(),
+            "offerings": self.get_offerings(),
+        }
+
+        if self.get_id_city():
+            city = City(self.get_id_city(), load=True)
+            information["located_at"] = city.get_data_for_ai_minimal()
+        elif self.get_id_space_station():
+            space_station = SpaceStation(self.get_id_space_station(), load=True)
+            information["located_at"] = space_station.get_data_for_ai_minimal()
+        elif self.get_id_moon():
+            moon = Moon(self.get_id_moon(), load=True)
+            information["located_at"] = moon.get_data_for_ai_minimal()
+        elif self.get_id_planet():
+            planet = Planet(self.get_id_planet(), load=True)
+            information["located_at"] = planet.get_data_for_ai_minimal()
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+
+        terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "Point of Interest",
+            "located_at": "",
+            "faction": self.get_faction_name(),
+            "jurisdiction": self.get_jurisdiction_name(),
+            "terminals": [str(terminal) for terminal in terminals],
+        }
+
+        if self.get_id_city():
+            information["located_at"] = self.get_city_name()
+        elif self.get_id_space_station():
+            information["located_at"] = self.get_space_station_name()
+        elif self.get_id_moon():
+            information["located_at"] = self.get_moon_name()
+        elif self.get_id_planet():
+            information["located_at"] = self.get_planet_name()
+
+        return information
+
     def get_id(self) -> int:
         return self.data["id"]
 
@@ -118,6 +239,15 @@ class Poi(DataModel):
 
     def get_id_moon(self) -> int | None:
         return self.data["id_moon"]
+
+    def get_id_space_station(self) -> int | None:
+        return self.data["id_space_station"]
+
+    def get_id_city(self) -> int | None:
+        return self.data["id_city"]
+
+    def get_id_outpost(self) -> int | None:
+        return self.data["id_outpost"]
 
     def get_id_faction(self) -> int | None:
         return self.data["id_faction"]

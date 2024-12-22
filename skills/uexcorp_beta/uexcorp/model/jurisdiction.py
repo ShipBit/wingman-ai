@@ -8,7 +8,7 @@ class Jurisdiction(DataModel):
     def __init__(
             self,
             id: int, # int(11)
-            id_faction: str | None = None,  # comma separated
+            id_faction: int | None = None,  # comma separated
             name: str | None = None, # varchar(255)
             nickname: str | None = None,  # varchar(255)
             is_available: int | None = None,  # tinyint(1)
@@ -42,10 +42,26 @@ class Jurisdiction(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+
+        faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
+
+        return {
+            "name": self.get_name(),
+            "faction": faction.get_data_for_ai_minimal() if faction else None,
+        }
+
+    def get_data_for_ai_minimal(self) -> dict:
+        return {
+            "name": self.get_name(),
+            "faction": self.get_faction_name(),
+        }
+
     def get_id(self) -> int:
         return self.data["id"]
 
-    def get_id_faction(self) -> str | None:
+    def get_id_faction(self) -> int | None:
         return self.data["id_faction"]
 
     def get_name(self) -> str | None:

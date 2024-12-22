@@ -23,7 +23,7 @@ class DebugHandler:
 
     def __get_debug_header(self):
         timestamp = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
-        thread_note = "" if threading.get_ident() == self.helper.get_default_thread_ident() else f" | Thread: {threading.current_thread().name})"
+        thread_note = "" if threading.get_ident() == self.helper.get_default_thread_ident() else f" | Thread: {threading.current_thread().name}"
         return f"\n{timestamp} (Ver: {self.helper.get_version_skill_short()}{thread_note})"
 
     def write(self, content: str, print_to_console: bool = False):

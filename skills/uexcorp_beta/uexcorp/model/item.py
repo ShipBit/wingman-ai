@@ -52,6 +52,80 @@ class Item(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.category import Category
+        from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+        from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+        from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+
+        category = Category(self.get_id_category(), load=True) if self.get_id_category() else None
+
+        information = {
+            "name": self.get_name(),
+            "category": category.get_data_for_ai_minimal() if category else None,
+            "is_exclusive_pledge": self.get_is_exclusive_pledge(),
+            "is_exclusive_subscriber": self.get_is_exclusive_subscriber(),
+            "is_exclusive_concierge": self.get_is_exclusive_concierge(),
+            "notes": self.get_notification(),
+        }
+
+        if self.get_id_parent():
+            parent = Item(self.get_id_parent(), load=True)
+            information["parent"] = parent.get_data_for_ai_minimal()
+
+        if self.get_id_vehicle():
+            vehicle = Vehicle(self.get_id_vehicle(), load=True)
+            information["for_vehicle"] = vehicle.get_data_for_ai_minimal()
+
+        if self.get_attributes():
+            attributes = {}
+            for id_category_attribute, value in self.get_attributes().items():
+                category_attribute = CategoryAttribute(id_category_attribute, load=True)
+                attributes[category_attribute.get_name()] = value
+
+        prices = ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load()
+        offers = []
+        for price in prices:
+            offers.append(price.get_data_for_ai_minimal())
+        if offers:
+            information["offers"] = offers
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+        from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+        from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+
+        information = {
+            "name": self.get_name(),
+            "section": self.get_section(),
+            "category": self.get_category(),
+        }
+
+        if self.get_id_parent():
+            parent = Item(self.get_id_parent(), load=True)
+            information["parent"] = parent.get_name()
+
+        if self.get_id_vehicle():
+            vehicle = Vehicle(self.get_id_vehicle(), load=True)
+            information["for_vehicle"] = vehicle.get_name()
+
+        if self.get_attributes():
+            attributes = {}
+            for id_category_attribute, value in self.get_attributes().items():
+                category_attribute = CategoryAttribute(id_category_attribute, load=True)
+                attributes[category_attribute.get_name()] = value
+
+        prices = ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load()
+        offers = []
+        for price in prices:
+            offers.append(str(price))
+        if offers:
+            information["offers"] = offers
+
+        return information
+
     def get_id(self) -> int:
         return self.data["id"]
 

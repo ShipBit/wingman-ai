@@ -56,41 +56,41 @@ class CityDataAccess(DataAccess):
             "jurisdiction_name",
         ]
 
-    def load(self) -> list[City]:
-        return super().load()
+    def load(self, **params) -> list[City]:
+        return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> City | None:
         return super().load_by_property(property, value)
 
-    def add_filter_by_id_star_system(self, id_star_system: int) -> "CityDataAccess":
+    def add_filter_by_id_star_system(self, id_star_system: int | list[int]) -> "CityDataAccess":
         self.filter.where("id_star_system", id_star_system)
         return self
     
-    def add_filter_by_id_planet(self, id_planet: int) -> "CityDataAccess":
+    def add_filter_by_id_planet(self, id_planet: int | list[int]) -> "CityDataAccess":
         self.filter.where("id_planet", id_planet)
         return self
     
-    def add_filter_by_id_orbit(self, id_orbit: int) -> "CityDataAccess":
+    def add_filter_by_id_orbit(self, id_orbit: int | list[int]) -> "CityDataAccess":
         self.filter.where("id_orbit", id_orbit)
         return self
 
-    def add_filter_by_id_moon(self, id_moon: int) -> "CityDataAccess":
+    def add_filter_by_id_moon(self, id_moon: int | list[int]) -> "CityDataAccess":
         self.filter.where("id_moon", id_moon)
         return self
 
-    def add_filter_by_id_faction(self, id_faction: int) -> "CityDataAccess":
+    def add_filter_by_id_faction(self, id_faction: int | list[int]) -> "CityDataAccess":
         self.filter.where("id_faction", id_faction)
         return self
 
-    def add_filter_by_id_jurisdiction(self, id_jurisdiction: int) -> "CityDataAccess":
+    def add_filter_by_id_jurisdiction(self, id_jurisdiction: int | list[int]) -> "CityDataAccess":
         self.filter.where("id_jurisdiction", id_jurisdiction)
         return self
 
-    def add_filter_by_name(self, name: str) -> "CityDataAccess":
+    def add_filter_by_name(self, name: str | list[str]) -> "CityDataAccess":
         self.filter.where("name", name)
         return self
 
-    def add_filter_by_code(self, code: str) -> "CityDataAccess":
+    def add_filter_by_code(self, code: str | list[str]) -> "CityDataAccess":
         self.filter.where("code", code)
         return self
 
@@ -182,42 +182,42 @@ class CityDataAccess(DataAccess):
         self.filter.where("has_freight_elevator", has_freight_elevator)
         return self
 
-    def add_filter_by_pad_types(self, pad_types: str) -> "CityDataAccess":
+    def add_filter_by_pad_types(self, pad_types: str | list[str]) -> "CityDataAccess":
         self.filter.where("pad_types", pad_types)
         return self
 
-    def add_filter_by_wiki(self, wiki: str) -> "CityDataAccess":
+    def add_filter_by_wiki(self, wiki: str | list[str]) -> "CityDataAccess":
         self.filter.where("wiki", wiki)
         return self
 
-    def add_filter_by_date_added(self, date_added: int) -> "CityDataAccess":
+    def add_filter_by_date_added(self, date_added: int | list[int]) -> "CityDataAccess":
         self.filter.where("date_added", date_added)
         return self
 
-    def add_filter_by_date_modified(self, date_modified: int) -> "CityDataAccess":
+    def add_filter_by_date_modified(self, date_modified: int | list[int]) -> "CityDataAccess":
         self.filter.where("date_modified", date_modified)
         return self
 
-    def add_filter_by_star_system_name(self, star_system_name: str) -> "CityDataAccess":
+    def add_filter_by_star_system_name(self, star_system_name: str | list[str]) -> "CityDataAccess":
         self.filter.where("star_system_name", star_system_name)
         return self
 
-    def add_filter_by_planet_name(self, planet_name: str) -> "CityDataAccess":
+    def add_filter_by_planet_name(self, planet_name: str | list[str]) -> "CityDataAccess":
         self.filter.where("planet_name", planet_name)
         return self
 
-    def add_filter_by_orbit_name(self, orbit_name: str) -> "CityDataAccess":
+    def add_filter_by_orbit_name(self, orbit_name: str | list[str]) -> "CityDataAccess":
         self.filter.where("orbit_name", orbit_name)
         return self
 
-    def add_filter_by_moon_name(self, moon_name: str) -> "CityDataAccess":
+    def add_filter_by_moon_name(self, moon_name: str | list[str]) -> "CityDataAccess":
         self.filter.where("moon_name", moon_name)
         return self
 
-    def add_filter_by_faction_name(self, faction_name: str) -> "CityDataAccess":
+    def add_filter_by_faction_name(self, faction_name: str | list[str]) -> "CityDataAccess":
         self.filter.where("faction_name", faction_name)
         return self
 
-    def add_filter_by_jurisdiction_name(self, jurisdiction_name: str) -> "CityDataAccess":
+    def add_filter_by_jurisdiction_name(self, jurisdiction_name: str | list[str]) -> "CityDataAccess":
         self.filter.where("jurisdiction_name", jurisdiction_name)
         return self

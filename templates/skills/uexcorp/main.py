@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class UEXCorp(Skill):
-    """Wingman AI Skill to utalize uexcorp api for trade recommendations"""
+    """Wingman AI Skill to utilize uexcorp api for bidirectional information transmission"""
 
     # enable for verbose logging
     DEV_MODE = False
@@ -34,9 +34,6 @@ class UEXCorp(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
-        self.data_path = get_writable_dir(path.join("skills", "uexcorp", "data"))
-        self.logfileerror = path.join(self.data_path, "error.log")
-        self.logfiledebug = path.join(self.data_path, "debug.log")
         self.cachefile = path.join(self.data_path, "cache.json")
 
         self.skill_version = "v13"

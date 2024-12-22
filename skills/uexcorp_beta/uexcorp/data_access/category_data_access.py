@@ -21,8 +21,8 @@ class CategoryDataAccess(DataAccess):
             "date_modified"
         ]
 
-    def load(self) -> list[Category]:
-        return super().load()
+    def load(self, **params) -> list[Category]:
+        return super().load(**params)
 
     def add_filter_by_type(self, type: str) -> "CategoryDataAccess":
         self.filter.where("type", type)

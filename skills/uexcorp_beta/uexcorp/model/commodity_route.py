@@ -185,7 +185,7 @@ class CommodityRoute(DataModel):
 
         if helper.get_handler_config().get_behavior_commodity_route_advanced_info():
             data.update({
-                "distance": self.get_distance(),
+                "distance_in_giga_meters": self.get_distance(),
                 "profit_margin": self.get_price_margin(),
                 "origin_orbit_name": self.get_origin_orbit_name(),
                 "origin_faction_name": self.get_origin_faction_name(),

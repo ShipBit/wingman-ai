@@ -52,6 +52,82 @@ class Planet(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+
+        star_system = StarSystem(self.get_id_star_system(), load=True) if self.get_id_star_system() else None
+        cities = CityDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
+        moons = MoonDataAccess().add_filter_by_id_planet(self.get_id()).load()
+        pois = PoiDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
+        outposts = OutpostDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
+        space_stations = SpaceStationDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
+        faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
+        jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "Planet",
+            "faction": faction.get_data_for_ai_minimal() if faction else None,
+            "jurisdiction": jurisdiction.get_data_for_ai_minimal() if jurisdiction else None,
+            "star_system": star_system.get_data_for_ai_minimal() if star_system else None,
+            "cities": [city.get_data_for_ai_minimal() for city in cities],
+            "moons": [moon.get_data_for_ai_minimal() for moon in moons],
+            "orbital_stations": [],
+            "lagrange_stations": [],
+            "points_of_interest": [poi.get_data_for_ai_minimal() for poi in pois],
+            "outposts": [outpost.get_data_for_ai_minimal() for outpost in outposts],
+        }
+
+        for space_station in space_stations:
+            if space_station.get_is_lagrange():
+                information["lagrange_stations"].append(space_station.get_data_for_ai_minimal())
+            else:
+                information["orbital_stations"].append(space_station.get_data_for_ai_minimal())
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+
+        cities = CityDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
+        moons = MoonDataAccess().add_filter_by_id_planet(self.get_id()).load()
+        pois = PoiDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
+        outposts = OutpostDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
+        space_stations = SpaceStationDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "Planet",
+            "faction": self.get_faction_name(),
+            "jurisdiction": self.get_jurisdiction_name(),
+            "star_system": self.get_star_system_name(),
+            "cities": [str(city) for city in cities],
+            "moons": [str(moon) for moon in moons],
+            "orbital_stations": [],
+            "lagrange_stations": [],
+            "points_of_interest": [str(poi) for poi in pois],
+            "outposts": [str(outpost) for outpost in outposts],
+        }
+
+        for space_station in space_stations:
+            if space_station.get_is_lagrange():
+                information["lagrange_stations"].append(str(space_station))
+            else:
+                information["orbital_stations"].append(str(space_station))
+
+        return information
+
     def get_id(self) -> int:
         return self.data["id"]
 

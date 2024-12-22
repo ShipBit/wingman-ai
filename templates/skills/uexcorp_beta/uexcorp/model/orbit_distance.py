@@ -43,6 +43,39 @@ class OrbitDistance(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
+
+        star_system_origin = StarSystem(self.get_id_star_system_origin(), load=True) if self.get_id_star_system_origin() else None
+        star_system_destination = StarSystem(self.get_id_star_system_destination(), load=True) if self.get_id_star_system_destination() else None
+        orbit_origin = Orbit(self.get_id_orbit_origin(), load=True) if self.get_id_orbit_origin() else None
+        orbit_destination = Orbit(self.get_id_orbit_destination(), load=True) if self.get_id_orbit_destination() else None
+
+        information = {
+            "star_system_origin": star_system_origin.get_data_for_ai_minimal() if star_system_origin else None,
+            "star_system_destination": star_system_destination.get_data_for_ai_minimal() if star_system_destination else None,
+            "orbit_origin": orbit_origin.get_data_for_ai_minimal() if orbit_origin else None,
+            "orbit_destination": orbit_destination.get_data_for_ai_minimal() if orbit_destination else None,
+            "distance_in_giga_meters": self.get_distance(),
+        }
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+
+        star_system_origin = StarSystem(self.get_id_star_system_origin(), load=True) if self.get_id_star_system_origin() else None
+        star_system_destination = StarSystem(self.get_id_star_system_destination(), load=True) if self.get_id_star_system_destination() else None
+
+        return {
+            "star_system_origin": str(star_system_origin) if star_system_origin else None,
+            "star_system_destination": str(star_system_destination) if star_system_destination else None,
+            "orbit_origin": self.get_orbit_origin_name(),
+            "orbit_destination": self.get_orbit_destination_name(),
+            "distance_in_giga_meters": self.get_distance(),
+        }
+
     def get_id(self) -> int:
         return self.data["id"]
 

@@ -100,6 +100,12 @@ class Filter:
                         self.add_bind(item_param_name, item)
                         placeholders.append(f":{item_param_name}")
                     value = f"{field} {operation if operation is not None else 'IN'} ({','.join(placeholders)})"
+                elif isinstance(value, int):
+                    self.add_bind(param_name, value)
+                    if value == 0:
+                        value = f"({field} {operation if operation is not None else '='} :{param_name} OR {field} IS NULL)"
+                    else:
+                        value = f"{field} {operation if operation is not None else '='} :{param_name}"
                 else:
                     if value_is_field:
                         value = f"{field} {operation if operation is not None else '='} {value}"

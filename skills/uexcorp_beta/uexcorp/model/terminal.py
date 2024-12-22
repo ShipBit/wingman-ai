@@ -123,6 +123,138 @@ class Terminal(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_types(self) -> list[str]:
+        types = [self.get_type()]
+        if self.get_is_habitation():
+            types.append("Habitation")
+        if self.get_is_refinery():
+            types.append("Refinery")
+        if self.get_is_cargo_center():
+            types.append("Cargo Center")
+        if self.get_is_medical():
+            types.append("Medical")
+        if self.get_is_food():
+            types.append("Food")
+        if self.get_is_shop_fps():
+            types.append("Shop FPS")
+        if self.get_is_shop_vehicle():
+            types.append("Shop Vehicle")
+        if self.get_is_refuel():
+            types.append("Refuel")
+        if self.get_is_repair():
+            types.append("Repair")
+        if self.get_is_nqa():
+            types.append("NQA")
+        return types
+
+    def get_extras(self) -> list[str]:
+        extras = []
+        if self.get_has_docking_port():
+            extras.append("Docking Port")
+        if self.get_has_loading_dock():
+            extras.append("Loading Dock")
+        if self.get_has_freight_elevator():
+            extras.append("Freight Elevator")
+        if self.get_is_blacklisted():
+            extras.append("Blacklisted for trade recommendations through advanced uex skill configuration")
+        if self.get_is_affinity_influenceable():
+            extras.append("Faction Affinity Influenceable")
+        return extras
+
+    def get_offerings(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+
+        offerings = {}
+
+        vehicle_rental_prices = VehicleRentalPriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
+        if vehicle_rental_prices:
+            offerings['vehicle_rental'] = [vehicle_rental_price.get_data_for_ai_minimal() for vehicle_rental_price in vehicle_rental_prices]
+
+        vehicle_purchase_prices = VehiclePurchasePriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
+        if vehicle_purchase_prices:
+            offerings['vehicle_purchase'] = [vehicle_purchase_price.get_data_for_ai_minimal() for vehicle_purchase_price in vehicle_purchase_prices]
+
+        item_prices = ItemPriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
+        if item_prices:
+            offerings['item'] = [item_price.get_data_for_ai_minimal() for item_price in item_prices]
+
+        commodity_prices = CommodityPriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
+        if commodity_prices:
+            offerings['commodity'] = [commodity_price.get_data_for_ai_minimal() for commodity_price in commodity_prices]
+
+        commodity_raw_prices = CommodityRawPriceDataAccess().add_filter_by_id_terminal(self.get_id()).load()
+        if commodity_raw_prices:
+            offerings['commodity_raw'] = [commodity_raw_price.get_data_for_ai_minimal() for commodity_raw_price in commodity_raw_prices]
+
+        return offerings
+
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.city import City
+        from skills.uexcorp_beta.uexcorp.model.poi import Poi
+        from skills.uexcorp_beta.uexcorp.model.outpost import Outpost
+        from skills.uexcorp_beta.uexcorp.model.space_station import SpaceStation
+        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+
+        faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "Terminal",
+            "terminal_types": self.get_types(),
+            "terminal_extras": self.get_extras(),
+            "parent_location": {},
+            "company_name": self.get_company_name(),
+            "faction": faction.get_data_for_ai_minimal() if faction else None,
+            "offerings": self.get_offerings(),
+        }
+
+        if self.get_max_container_size():
+            information["max_container_size_in_scu"] = self.get_max_container_size()
+
+        parent_location = None
+        if self.get_id_city():
+            parent_location = City(self.get_id_city(), load=True)
+        elif self.get_id_poi():
+            parent_location = Poi(self.get_id_poi(), load=True)
+        elif self.get_id_outpost():
+            parent_location = Outpost(self.get_id_outpost(), load=True)
+        elif self.get_id_space_station():
+            parent_location = SpaceStation(self.get_id_space_station(), load=True)
+        if parent_location:
+            information["parent_location"] = parent_location.get_data_for_ai_minimal()
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.poi import Poi
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "Terminal",
+            "terminal_types": self.get_types(),
+            "terminal_extras": self.get_extras(),
+            "parent_location": "",
+            "company_name": self.get_company_name(),
+            "faction_name": self.get_faction_name(),
+            # "offerings": self.get_offerings(), # TODO: decide if we want to include this in minimal data
+        }
+
+        if self.get_id_city():
+            information["parent_location"] = self.get_city_name()
+        elif self.get_id_poi():
+            poi = Poi(self.get_id_poi(), load=True)
+            information["parent_location"] = str(poi)
+        elif self.get_id_outpost():
+            information["parent_location"] = self.get_outpost_name()
+        elif self.get_id_space_station():
+            information["parent_location"] = self.get_space_station_name()
+
+        return information
+
     def get_id(self) -> int:
         return self.data["id"]
 

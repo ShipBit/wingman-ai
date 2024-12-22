@@ -39,6 +39,28 @@ class ItemPrice(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.item import Item
+        from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+
+        terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+        item = Item(self.get_id_item(), load=True) if self.get_id_item() else None
+
+        return {
+            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
+            "item": item.get_data_for_ai_minimal() if item else None,
+            "price_buy": self.get_price_buy(),
+            "price_sell": self.get_price_sell(),
+        }
+
+    def get_data_for_ai_minimal(self) -> dict:
+        return {
+            "terminal": self.get_terminal_name(),
+            "item_name": self.get_item_name(),
+            "price_buy": self.get_price_buy(),
+            "price_sell": self.get_price_sell(),
+        }
+
     def get_id(self) -> int:
         return self.data["id"]
 
@@ -76,4 +98,4 @@ class ItemPrice(DataModel):
         return self.data["terminal_name"]
 
     def __str__(self):
-        return f"{self.data['item_name']} - {self.data['terminal_name']}: Buy {self.data['price_buy']} UEC, Sell {self.data['price_sell']} UEC"
+        return f"{self.data['item_name']} at {self.data['terminal_name']}: Buy {self.data['price_buy']}, Sell {self.data['price_sell']}"

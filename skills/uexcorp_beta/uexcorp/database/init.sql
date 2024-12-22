@@ -165,13 +165,13 @@ CREATE TABLE commodity_price(
 );
 
 CREATE TABLE commodity_status(
-    `code` TEXT PRIMARY KEY,
+    `code` TEXT,
     `name` TEXT,
     `name_short` TEXT,
     `name_abbr` TEXT,
     `percentage` TEXT,
-    `color_buy` TEXT,
-    `color_sell` TEXT,
+    `colors` TEXT,
+    `is_buy` BIT,
     `last_import_run_id` INTEGER
 );
 
@@ -264,7 +264,7 @@ CREATE TABLE item_price(
 
 CREATE TABLE jurisdiction(
     `id` INTEGER PRIMARY KEY,
-    `id_faction` TEXT,
+    `id_faction` INTEGER,
     `name` TEXT,
     `nickname` TEXT,
     `is_available` BIT,
@@ -411,6 +411,9 @@ CREATE TABLE poi(
     `id_planet` INTEGER,
     `id_orbit` INTEGER,
     `id_moon` INTEGER,
+    `id_space_station` INTEGER,
+    `id_city` INTEGER,
+    `id_outpost` INTEGER,
     `id_faction` INTEGER,
     `id_jurisdiction` INTEGER,
     `name` TEXT,
@@ -781,5 +784,22 @@ CREATE TABLE commodity_route(
     `destination_terminal_is_player_owned` BIT,
     `destination_faction_name` TEXT,
     `date_added` INTEGER,
+    `last_import_run_id` INTEGER
+);
+
+CREATE TABLE commodity_raw_price(
+    `id` INTEGER PRIMARY KEY,
+    `id_commodity` INTEGER,
+    `id_terminal` INTEGER,
+    `price_sell` REAL,
+    `price_sell_avg` REAL,
+    `date_added` INTEGER,
+    `date_modified` INTEGER,
+    `commodity_name` TEXT,
+    `commodity_code` TEXT,
+    `commodity_slug` TEXT,
+    `terminal_name` INTEGER,
+    `terminal_code` INTEGER,
+    `terminal_slug` INTEGER,
     `last_import_run_id` INTEGER
 );

@@ -1,6 +1,7 @@
 from datetime import datetime
 from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
 
+# Currently unused, as information is included in the Item model
 class ItemAttribute(DataModel):
 
     required_keys = ["id"]
@@ -39,6 +40,30 @@ class ItemAttribute(DataModel):
             if not self.data["id"]:
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
+
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.item import Item
+        from skills.uexcorp_beta.uexcorp.model.category import Category
+        from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+
+        item = Item(self.get_id_item(), load=True) if self.get_id_item() else None
+        category = Category(self.get_id_category(), load=True) if self.get_id_category() else None
+        category_attribute = CategoryAttribute(self.get_id_category_attribute(), load=True) if self.get_id_category_attribute() else None
+
+        return {
+            "item": item.get_data_for_ai_minimal() if item else None,
+            "category": category.get_data_for_ai_minimal() if category else None,
+            "category_attribute": category_attribute.get_data_for_ai_minimal() if category_attribute else None,
+            "value": self.get_value(),
+            "unit": self.get_unit(),
+        }
+
+    def get_data_for_ai_minimal(self) -> dict:
+        return {
+            "category_attribute": self.get_attribute_name(),
+            "value": self.get_value(),
+            "unit": self.get_unit(),
+        }
 
     def get_id(self) -> int:
         return self.data["id"]

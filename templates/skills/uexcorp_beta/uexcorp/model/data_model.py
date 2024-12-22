@@ -18,6 +18,9 @@ class DataModel:
     def get_data_for_ai(self) -> dict:
         return self.get_data()
 
+    def get_data_for_ai_minimal(self) -> dict:
+        return self.get_data_for_ai()
+
     def persist(self, skip_commit: bool = False) -> bool:
         if not self.data or not self.table:
             return False
@@ -54,17 +57,38 @@ class DataModel:
     def get_database_table(self) -> str:
         return self.table
 
-    def load_by_value(self, key: str, value: int|str|None = None) -> bool:
+    def load_by_value(
+            self,
+            key: str,
+            value: int|str|None = None,
+            key_two: str | None = None,
+            value_two: int|str|bool|None = None
+    ) -> bool:
         if not self.table:
             return False
 
-        if value is not None:
-            self.data[key] = value
+        parameters = []
+        sql = f"SELECT * FROM `{self.table}` WHERE"
 
-        self.helper.get_database().get_cursor().execute(
-            f"SELECT * FROM `{self.table}` WHERE `{key}` = ?",
-            (self.data[key],)
-        )
+        if value is not None:
+            sql += f" `{key}` = ?"
+            self.data[key] = value
+            if isinstance(value, bool):
+                value = int(value)
+            parameters.append(value)
+        else:
+            sql += f" `{key}` IS NULL"
+        if key_two is not None:
+            if value_two is not None:
+                sql += f" AND `{key_two}` = ?"
+                self.data[key_two] = value_two
+                if isinstance(value_two, bool):
+                    value_two = int(value_two)
+                parameters.append(value_two)
+            else:
+                sql += f" AND `{key_two}` IS NULL"
+
+        self.helper.get_database().get_cursor().execute(sql, parameters)
         result = self.helper.get_database().get_cursor().fetchmany(1)
 
         if not result:

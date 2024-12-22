@@ -53,8 +53,8 @@ class OutpostDataAccess(DataAccess):
             "jurisdiction_name"
         ]
 
-    def load(self) -> list[Outpost]:
-        return super().load()
+    def load(self, **params) -> list[Outpost]:
+        return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> Outpost | None:
         return super().load_by_property(property, value)
@@ -69,6 +69,10 @@ class OutpostDataAccess(DataAccess):
     
     def add_filter_by_id_orbit(self, id_orbit: int | list[int]) -> "OutpostDataAccess":
         self.filter.where("id_orbit", id_orbit)
+        return self
+
+    def add_filter_by_id_moon(self, id_moon: int | list[int]) -> "OutpostDataAccess":
+        self.filter.where("id_moon", id_moon)
         return self
 
     def add_filter_by_id_faction(self, id_faction: int | list[int]) -> "OutpostDataAccess":

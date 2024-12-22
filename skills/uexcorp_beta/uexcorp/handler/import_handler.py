@@ -33,7 +33,7 @@ class ImportHandler:
             "space_station": self.__import_data_space_station,
             "terminal": self.__import_data_terminal,
             "vehicle": self.__import_data_vehicle,
-            # "commodity_status": self.__import_data_commodity_status, # TODO: Fix with actual API return
+            "commodity_status": self.__import_data_commodity_status,
             "item_price": self.__import_data_item_price,
             "refinery_audit": self.__import_data_refinery_audit,
             "fuel_price": self.__import_data_fuel_price,
@@ -42,6 +42,7 @@ class ImportHandler:
             "game_version": self.__import_data_game_version,
             "commodity_alert": self.__import_data_commodity_alert,
             "commodity_price": self.__import_data_commodity_price,
+            "commodity_raw_price": self.__import_data_commodity_raw_price,
             "commodity_route": self.__import_data_commodity_route
         }
         self.__common_data = {
@@ -262,6 +263,34 @@ class ImportHandler:
         )
         return len(commodity_price_data)
 
+    def __import_data_commodity_raw_price(self) -> bool | int:
+        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+        from skills.uexcorp_beta.uexcorp.model.commodity_raw_price import CommodityRawPrice
+        if not self.__helper.get_database().table_exists("commodity_raw_price"):
+            return False
+
+        commodity_raw_price_import = ImportData("commodity_raw_price", load=True)
+        if not commodity_raw_price_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_short()):
+            return False
+
+        self.__helper.start_timer("import")
+
+        commodity_raw_price_data = self.__api.fetch(self.__api.COMMODITIES_RAW_PRICES)
+        if commodity_raw_price_data:
+            for index, data in enumerate(commodity_raw_price_data):
+                commodity_raw_price = CommodityRawPrice(data["id"])
+                commodity_raw_price.set_data(data)
+                commodity_raw_price.persist(index < len(commodity_raw_price_data) - 1)
+
+        commodity_raw_price_import.set_date_imported(self.__helper.get_timestamp())
+        commodity_raw_price_import.set_dataset_count(len(commodity_raw_price_data))
+        commodity_raw_price_import.set_time_taken(self.__helper.end_timer("import"))
+        commodity_raw_price_import.persist()
+        self.__helper.get_handler_debug().write(
+            f"Commodity Raw Price data imported: {commodity_raw_price_import.get_dataset_count()} record(s) in {commodity_raw_price_import.get_time_taken()}s"
+        )
+        return len(commodity_raw_price_data)
+
     def __import_data_commodity_status(self) -> bool | int:
         from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
         from skills.uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
@@ -276,10 +305,16 @@ class ImportHandler:
 
         commodity_status_data = self.__api.fetch(self.__api.COMMODITIES_STATUS)
         if commodity_status_data:
-            for index, data in enumerate(commodity_status_data):
-                commodity_status = CommodityStatus(data["code"])
-                commodity_status.set_data(data)
-                commodity_status.persist(index < len(commodity_status_data) - 1)
+            if "buy" in commodity_status_data:
+                for index, data in enumerate(commodity_status_data["buy"]):
+                    commodity_status = CommodityStatus(data["code"], True)
+                    commodity_status.set_data(data)
+                    commodity_status.persist(index < len(commodity_status_data["buy"]) - 1)
+            if "sell" in commodity_status_data:
+                for index, data in enumerate(commodity_status_data["sell"]):
+                    commodity_status = CommodityStatus(data["code"], False)
+                    commodity_status.set_data(data)
+                    commodity_status.persist(index < len(commodity_status_data["sell"]) - 1)
 
         commodity_status_import.set_date_imported(self.__helper.get_timestamp())
         commodity_status_import.set_dataset_count(len(commodity_status_data))
@@ -601,7 +636,7 @@ class ImportHandler:
         self.__helper.start_timer("import")
 
         star_system_ids = []
-        star_systems = StarSystemDataAccess().load()
+        star_systems = StarSystemDataAccess().add_filter_by_is_available(True).load()
         for star_system in star_systems:
             star_system_ids.append(star_system.get_id())
 

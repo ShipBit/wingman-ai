@@ -52,6 +52,52 @@ class Orbit(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+
+        star_system = StarSystem(self.get_id_star_system(), load=True) if self.get_id_star_system() else None
+        space_stations = SpaceStationDataAccess().add_filter_by_id_orbit(self.get_id()).load()
+        planets = PlanetDataAccess().add_filter_by_name(self.get_name()).load() if self.get_name() else []
+        faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
+        jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
+
+        information = {
+            "name": self.get_name(),
+            "locations_type": "Orbit",
+            "space_stations_in_orbit": [space_station.get_data_for_ai_minimal() for space_station in space_stations],
+            "planets_in_orbit": [planet.get_data_for_ai_minimal() for planet in planets],
+            "star_system": star_system.get_data_for_ai_minimal() if star_system else None,
+            "is_lagrange": self.get_is_lagrange(),
+            "faction": faction.get_data_for_ai_minimal() if faction else None,
+            "jurisdiction": jurisdiction.get_data_for_ai_minimal() if jurisdiction else None,
+        }
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+
+        space_stations = SpaceStationDataAccess().add_filter_by_id_orbit(self.get_id()).load()
+        planets = PlanetDataAccess().add_filter_by_name(self.get_name()).load()
+
+        information = {
+            "name": self.get_name(),
+            "locations_type": "Orbit",
+            "space_stations_in_orbit": [str(space_station) for space_station in space_stations],
+            "planets_in_orbit": [str(planet) for planet in planets],
+            "star_system": self.get_star_system_name(),
+            "is_lagrange": self.get_is_lagrange(),
+            "faction": self.get_faction_name() if self.get_faction_name() else None,
+            "jurisdiction": self.get_jurisdiction_name() if self.get_jurisdiction_name() else None,
+        }
+
+        return information
+
     def get_id(self) -> int:
         return self.data["id"]
 

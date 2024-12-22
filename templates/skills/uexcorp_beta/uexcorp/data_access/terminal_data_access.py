@@ -65,8 +65,8 @@ class TerminalDataAccess(DataAccess):
             "is_blacklisted",
         ]
 
-    def load(self) -> list[Terminal]:
-        return super().load()
+    def load(self, **params) -> list[Terminal]:
+        return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> Terminal:
         return super().load_by_property(property, value)

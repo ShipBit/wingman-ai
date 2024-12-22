@@ -69,6 +69,90 @@ class Commodity(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_properties(self) -> list[str]:
+        properties = []
+
+        if self.get_is_raw():
+            properties.append("raw")
+        if self.get_is_refined():
+            properties.append("refined")
+        if self.get_is_mineral():
+            properties.append("mineral")
+        if self.get_is_harvestable():
+            properties.append("harvestable")
+        if self.get_is_buyable():
+            properties.append("buyable")
+        else:
+            properties.append("not_buyable")
+        if self.get_is_sellable():
+            properties.append("sellable")
+        else:
+            properties.append("not_sellable")
+        if self.get_is_temporary():
+            properties.append("temporary")
+        if self.get_is_illegal():
+            properties.append("illegal")
+        else:
+            properties.append("legal")
+        if self.get_is_fuel():
+            properties.append("fuel")
+        if self.get_is_blacklisted():
+            properties.append("Blacklisted for trade recommendations through advanced uex skill configuration")
+
+        return properties
+
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+
+        information = {
+            "name": self.get_name(),
+            "wight_scu": self.get_weight_scu(),
+            "properties": self.get_properties(),
+            "buy_sell_options": [],
+        }
+
+        if self.get_id_parent():
+            parent = Commodity(self.get_id_parent(), load=True)
+            information["parent"] = parent.get_data_for_ai_minimal()
+
+        if self.get_is_buyable() or self.get_is_sellable():
+            prices = CommodityPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
+            for price in prices:
+                information["buy_sell_options"].append(price.get_data_for_ai_minimal())
+
+            prices_raw = CommodityRawPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
+            for price_raw in prices_raw:
+                information["buy_sell_options"].append(price_raw.get_data_for_ai_minimal())
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+
+        information = {
+            "name": self.get_name(),
+            "wight_scu": self.get_weight_scu(),
+            "properties": self.get_properties(),
+            "buy_sell_options": [],
+        }
+
+        if self.get_id_parent():
+            parent = Commodity(self.get_id_parent(), load=True)
+            information["parent"] = parent.get_data_for_ai_minimal()
+
+        if self.get_is_buyable() or self.get_is_sellable():
+            prices = CommodityPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
+            for price in prices:
+                information["buy_sell_options"].append(str(price))
+
+            prices_raw = CommodityRawPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
+            for price_raw in prices_raw:
+                information["buy_sell_options"].append(str(price_raw))
+
+        return information
+
     def get_id(self) -> int:
         return self.data["id"]
 

@@ -100,6 +100,104 @@ class City(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_offerings(self) -> list[str]:
+        offerings = []
+        if self.get_has_trade_terminal():
+            offerings.append("Trade Terminal")
+        if self.get_has_habitation():
+            offerings.append("Habitation")
+        if self.get_has_refinery():
+            offerings.append("Refinery")
+        if self.get_has_cargo_center():
+            offerings.append("Cargo Center")
+        if self.get_has_clinic():
+            offerings.append("Clinic")
+        if self.get_has_food():
+            offerings.append("Food")
+        if self.get_has_shops():
+            offerings.append("Shops")
+        if self.get_has_refuel():
+            offerings.append("Refuel")
+        if self.get_has_repair():
+            offerings.append("Repair")
+        if self.get_has_loading_dock():
+            offerings.append("Loading Dock")
+        if self.get_has_docking_port():
+            offerings.append("Docking Port")
+        if self.get_has_freight_elevator():
+            offerings.append("Freight Elevator")
+        return offerings
+
+    def get_properties(self) -> list[str]:
+        properties = []
+        if self.get_is_monitored():
+            properties.append("Monitored")
+        else:
+            properties.append("Not Monitored")
+        if self.get_is_armistice():
+            properties.append("Armistice")
+        else:
+            properties.append("No Armistice")
+        if self.get_is_landable():
+            properties.append("Landable")
+        else:
+            properties.append("Not Landable")
+        if self.get_is_decommissioned():
+            properties.append("Decommissioned")
+        if self.get_has_quantum_marker():
+            properties.append("Quantum Marker")
+        else:
+            properties.append("No Quantum Marker")
+        return properties
+
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.planet import Planet
+        from skills.uexcorp_beta.uexcorp.model.moon import Moon
+        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+
+        terminals = TerminalDataAccess().add_filter_by_id_city(self.get_id()).load()
+        faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
+        jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "City",
+            "located_at": {},
+            "faction": faction.get_data_for_ai_minimal() if faction else None,
+            "jurisdiction": jurisdiction.get_data_for_ai_minimal() if jurisdiction else None,
+            "terminals": [terminal.get_data_for_ai_minimal() for terminal in terminals],
+            "pad_types": self.get_pad_types(),
+            "properties": self.get_properties(),
+            "offerings": self.get_offerings(),
+        }
+
+        if self.get_id_moon():
+            moon = Moon(self.get_id_moon(), load=True)
+            information["located_at"] = moon.get_data_for_ai_minimal()
+        elif self.get_id_planet():
+            planet = Planet(self.get_id_planet(), load=True)
+            information["located_at"] = planet.get_data_for_ai_minimal()
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+
+        terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "City",
+            "located_at": self.get_moon_name() if self.get_id_moon() else self.get_planet_name(),
+            "faction": self.get_faction_name(),
+            "jurisdiction": self.get_jurisdiction_name(),
+            "terminals": [str(terminal) for terminal in terminals],
+        }
+
+        return information
+
     def get_id(self) -> int:
         return self.data["id"]
 

@@ -31,33 +31,33 @@ class PlanetDataAccess(DataAccess):
             "jurisdiction_name",
         ]
 
-    def load(self) -> list[Planet]:
-        return super().load()
+    def load(self, **params) -> list[Planet]:
+        return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> Planet | None:
         return super().load_by_property(property, value)
 
-    def add_filter_by_id_star_system(self, id_star_system: int) -> "PlanetDataAccess":
+    def add_filter_by_id_star_system(self, id_star_system: int | list[int]) -> "PlanetDataAccess":
         self.filter.where("id_star_system", id_star_system)
         return self
 
-    def add_filter_by_id_faction(self, id_faction: int) -> "PlanetDataAccess":
+    def add_filter_by_id_faction(self, id_faction: int | list[int]) -> "PlanetDataAccess":
         self.filter.where("id_faction", id_faction)
         return self
 
-    def add_filter_by_id_jurisdiction(self, id_jurisdiction: int) -> "PlanetDataAccess":
+    def add_filter_by_id_jurisdiction(self, id_jurisdiction: int | list[int]) -> "PlanetDataAccess":
         self.filter.where("id_jurisdiction", id_jurisdiction)
         return self
 
-    def add_filter_by_name(self, name: str) -> "PlanetDataAccess":
+    def add_filter_by_name(self, name: str | list[str]) -> "PlanetDataAccess":
         self.filter.where("name", name)
         return self
 
-    def add_filter_by_name_origin(self, name_origin: str) -> "PlanetDataAccess":
+    def add_filter_by_name_origin(self, name_origin: str | list[str]) -> "PlanetDataAccess":
         self.filter.where("name_origin", name_origin)
         return self
 
-    def add_filter_by_code(self, code: str) -> "PlanetDataAccess":
+    def add_filter_by_code(self, code: str | list[str]) -> "PlanetDataAccess":
         self.filter.where("code", code)
         return self
 
@@ -81,14 +81,14 @@ class PlanetDataAccess(DataAccess):
         self.filter.where("is_lagrange", is_lagrange)
         return self
 
-    def add_filter_by_star_system_name(self, star_system_name: str) -> "PlanetDataAccess":
+    def add_filter_by_star_system_name(self, star_system_name: str | list[str]) -> "PlanetDataAccess":
         self.filter.where("star_system_name", star_system_name)
         return self
 
-    def add_filter_by_faction_name(self, faction_name: str) -> "PlanetDataAccess":
+    def add_filter_by_faction_name(self, faction_name: str | list[str]) -> "PlanetDataAccess":
         self.filter.where("faction_name", faction_name)
         return self
 
-    def add_filter_by_jurisdiction_name(self, jurisdiction_name: str) -> "PlanetDataAccess":
+    def add_filter_by_jurisdiction_name(self, jurisdiction_name: str | list[str]) -> "PlanetDataAccess":
         self.filter.where("jurisdiction_name", jurisdiction_name)
         return self

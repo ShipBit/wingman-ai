@@ -44,6 +44,27 @@ class FuelPrice(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
+        from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+
+        commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
+        terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+
+        return {
+            "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
+            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
+            "price_buy": self.get_price_buy(),
+            "price_buy_avg": self.get_price_buy_avg(),
+        }
+
+    def get_data_for_ai_minimal(self) -> dict:
+        return {
+            "commodity": self.get_commodity_name(),
+            "terminal": self.get_terminal_name(),
+            "price_buy": self.get_price_buy(),
+        }
+
     def get_id(self) -> int:
         return self.data["id"]
 

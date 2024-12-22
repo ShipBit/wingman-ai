@@ -16,6 +16,7 @@ class Uex:
     COMMODITIES = 'commodities'
     COMMODITIES_ALERTS = 'commodities_alerts'
     COMMODITIES_PRICES = 'commodities_prices_all'
+    COMMODITIES_RAW_PRICES = 'commodities_raw_prices_all'
     COMMODITIES_STATUS = 'commodities_status'
     COMMODITIES_ROUTES = 'commodities_routes'
     COMPANIES = 'companies'

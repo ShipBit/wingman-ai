@@ -136,7 +136,7 @@ class CommodityRoute(Tool):
 
         commodity_route_data_access.order_by("id_star_system_origin = id_star_system_destination", "DESC")
         commodity_route_data_access.order_by("distance", "ASC")
-        routes = commodity_route_data_access.load()
+        routes = commodity_route_data_access.load(debug=True) # TODO remove debug=True
 
         routes = [route.get_data_for_ai() for route in routes]
         return json.dumps(routes), ""

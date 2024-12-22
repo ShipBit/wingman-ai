@@ -38,8 +38,8 @@ class CommodityDataAccess(DataAccess):
             "is_blacklisted",
         ]
 
-    def load(self) -> list[Commodity]:
-        return super().load()
+    def load(self, **params) -> list[Commodity]:
+        return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> Commodity:
         return super().load_by_property(property, value)

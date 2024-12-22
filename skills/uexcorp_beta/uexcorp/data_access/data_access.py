@@ -38,7 +38,7 @@ class DataAccess :
         self.additional_cols.append((col, alias))
         return self
 
-    def __select(self) -> None:
+    def __select(self, debug: bool = False) -> None:
         def resolve_additional_cols() -> str:
             cols = ""
             for col, alias in self.additional_cols:
@@ -54,23 +54,22 @@ class DataAccess :
             {self.filter.resolve_limit()} {self.filter.resolve_offset()}
         """
 
-        # for debugging print sql with resolved binds
-        # resolved_sql = sql
-        # for key, value in self.filter.get_bind().items():
-        #     if isinstance(value, str):
-        #         resolved_sql = resolved_sql.replace(f":{key}", f"'{value}'")
-        #     else:
-        #         resolved_sql = resolved_sql.replace(f":{key}", repr(value))
-        # if self.table == "terminal" or self.table == "commodity_route":
-        #     print(resolved_sql)
+        if debug:
+            resolved_sql = sql
+            for key, value in self.filter.get_bind().items():
+                if isinstance(value, str):
+                    resolved_sql = resolved_sql.replace(f":{key}", f"'{value}'")
+                else:
+                    resolved_sql = resolved_sql.replace(f":{key}", repr(value))
+            self.helper.get_handler_debug().write(resolved_sql, True)
 
         self.database.get_cursor().execute(sql, self.filter.get_bind())
-    def _fetch_one(self ) -> list[dict[str, any]]:
-        self.__select()
+    def _fetch_one(self, debug: bool = False) -> list[dict[str, any]]:
+        self.__select(debug)
         return self.database.get_cursor().fetchmany(1)
 
-    def _fetch_all(self) -> list[dict[str, any]]:
-        self.__select()
+    def _fetch_all(self, debug: bool = False) -> list[dict[str, any]]:
+        self.__select(debug)
         return self.database.get_cursor().fetchall()
 
     def load_one(self) -> DataModel | None:
@@ -88,8 +87,11 @@ class DataAccess :
             return item
         return None
 
-    def load(self) -> list[DataModel]:
-        data = self._fetch_all()
+    def load(self, **params) -> list[DataModel]:
+        debug = False
+        if params and "debug" in params and params["debug"]:
+            debug = True
+        data = self._fetch_all(debug)
         items = []
         for row in data:
             item_data = {"table": self.table}

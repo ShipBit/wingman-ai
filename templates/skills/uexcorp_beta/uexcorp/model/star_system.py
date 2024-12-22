@@ -46,6 +46,56 @@ class StarSystem(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+    def get_data_for_ai(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+
+        faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
+        jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
+
+        information = {
+            "name": self.get_name(),
+            "location_type": "Star System",
+            "faction": faction.get_data_for_ai_minimal() if faction else None,
+            "jurisdiction": jurisdiction.get_data_for_ai_minimal() if jurisdiction else None,
+            "planets": [],
+            "space_stations": [],
+        }
+
+        planets = PlanetDataAccess().add_filter_by_id_star_system(self.get_id()).load()
+        for planet in planets:
+            information["planets"].append(planet.get_data_for_ai_minimal())
+
+        space_station_data_access = SpaceStationDataAccess()
+        space_station_data_access.add_filter_by_id_star_system(self.get_id())
+        space_station_data_access.add_filter_by_id_planet(0)
+        space_stations = space_station_data_access.load()
+        for space_station in space_stations:
+            information["space_stations"].append(space_station.get_data_for_ai_minimal())
+
+        return information
+
+    def get_data_for_ai_minimal(self) -> dict:
+        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+
+        planets = PlanetDataAccess().add_filter_by_id_star_system(self.get_id()).load()
+        space_station_data_access = SpaceStationDataAccess()
+        space_station_data_access.add_filter_by_id_star_system(self.get_id())
+        space_station_data_access.add_filter_by_id_planet(0)
+        space_stations = space_station_data_access.load()
+
+        return {
+            "name": self.get_name(),
+            "location_type": "Star System",
+            "planets": [str(planet) for planet in planets],
+            "space_stations": [str(space_station) for space_station in space_stations],
+            "jurisdiction_name": self.get_jurisdiction_name(),
+            "faction_name": self.get_faction_name(),
+        }
+
     def get_id(self) -> int:
         return self.data["id"]
 

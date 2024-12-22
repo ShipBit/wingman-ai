@@ -286,7 +286,7 @@ if __name__ == "__main__":
         "-p",
         "--port",
         type=str,
-        default="49111",
+        default="8000",
         help="Port for the FastAPI server to listen on.",
     )
     parser.add_argument(
