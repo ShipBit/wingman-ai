@@ -1,8 +1,10 @@
-import threading
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill
-from skills.uexcorp_beta.uexcorp.helper import Helper
+try:
+    from skills.uexcorp_beta.uexcorp.helper import Helper
+except ImportError:
+    from uexcorp_beta.uexcorp.helper import Helper
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman

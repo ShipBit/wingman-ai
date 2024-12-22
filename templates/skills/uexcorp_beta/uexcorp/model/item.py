@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Item(DataModel):
 
@@ -53,10 +56,16 @@ class Item(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.category import Category
-        from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
-        from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
-        from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.model.category import Category
+            from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+            from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+            from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.category import Category
+            from uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+            from uexcorp_beta.uexcorp.model.vehicle import Vehicle
+            from uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
 
         category = Category(self.get_id_category(), load=True) if self.get_id_category() else None
 
@@ -93,9 +102,14 @@ class Item(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
-        from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-        from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+        try:
+            from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+            from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+            from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+            from uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+            from uexcorp_beta.uexcorp.model.vehicle import Vehicle
 
         information = {
             "name": self.get_name(),

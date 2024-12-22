@@ -2,14 +2,16 @@ import os
 import yaml
 import traceback
 from typing import TYPE_CHECKING
-
 from api.enums import WingmanInitializationErrorType
 from api.interface import WingmanInitializationError
 from services.file import get_writable_dir
 
 if TYPE_CHECKING:
-    from skills.uexcorp_beta.uexcorp.helper import Helper
     from wingmen.open_ai_wingman import OpenAiWingman
+    try:
+        from skills.uexcorp_beta.uexcorp.helper import Helper
+    except ImportError:
+        from uexcorp_beta.uexcorp.helper import Helper
 
 class ConfigHandler:
     def __init__(
@@ -81,7 +83,10 @@ class ConfigHandler:
         self.__sync_terminal_blacklist()
 
     def __sync_commodity_blacklist(self):
-        from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
 
         if not self.__helper.is_ready():
             return False
@@ -131,7 +136,10 @@ class ConfigHandler:
             file.write(yaml.dump(commodity_data))
 
     def __sync_terminal_blacklist(self):
-        from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
         if not self.__helper.is_ready():
             return False

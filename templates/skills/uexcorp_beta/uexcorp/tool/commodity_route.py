@@ -1,6 +1,10 @@
 import json
-from skills.uexcorp_beta.uexcorp.tool.tool import Tool
-from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+try:
+    from skills.uexcorp_beta.uexcorp.tool.tool import Tool
+    from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+except ImportError:
+    from uexcorp_beta.uexcorp.tool.tool import Tool
+    from uexcorp_beta.uexcorp.tool.validator import Validator
 
 
 class CommodityRoute(Tool):
@@ -25,11 +29,19 @@ class CommodityRoute(Tool):
             filter_destination_location: str | None = None,
             filter_location_blacklist: list[str] | None = None,
     ) -> (str, str):
-        from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
-        from skills.uexcorp_beta.uexcorp.helper import Helper
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
+            from skills.uexcorp_beta.uexcorp.helper import Helper
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+            from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+            from uexcorp_beta.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
+            from uexcorp_beta.uexcorp.helper import Helper
+
         helper = Helper.get_instance()
 
         commodity_route_data_access = CommodityRouteDataAccess()
@@ -142,7 +154,11 @@ class CommodityRoute(Tool):
         return json.dumps(routes), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
-        from skills.uexcorp_beta.uexcorp.helper import Helper
+        try:
+            from skills.uexcorp_beta.uexcorp.helper import Helper
+        except ImportError:
+            from uexcorp_beta.uexcorp.helper import Helper
+
         helper = Helper.get_instance()
 
         fields = {}
@@ -153,7 +169,11 @@ class CommodityRoute(Tool):
         return fields
 
     def get_optional_fields(self) -> dict[str, Validator]:
-        from skills.uexcorp_beta.uexcorp.helper import Helper
+        try:
+            from skills.uexcorp_beta.uexcorp.helper import Helper
+        except ImportError:
+            from uexcorp_beta.uexcorp.helper import Helper
+
         helper = Helper.get_instance()
 
         fields = {

@@ -1,7 +1,9 @@
-
-from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
-from skills.uexcorp_beta.uexcorp.model.moon import Moon
-
+try:
+    from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from skills.uexcorp_beta.uexcorp.model.moon import Moon
+except ImportError:
+    from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from uexcorp_beta.uexcorp.model.moon import Moon
 
 class MoonDataAccess(DataAccess):
     def __init__(

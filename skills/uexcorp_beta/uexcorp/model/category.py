@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Category(DataModel):
 

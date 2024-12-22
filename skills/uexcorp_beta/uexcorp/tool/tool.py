@@ -1,5 +1,9 @@
-from skills.uexcorp_beta.uexcorp.helper import Helper
-from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+try:
+    from skills.uexcorp_beta.uexcorp.helper import Helper
+    from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+except ImportError:
+    from uexcorp_beta.uexcorp.helper import Helper
+    from uexcorp_beta.uexcorp.tool.validator import Validator
 
 
 class Tool:

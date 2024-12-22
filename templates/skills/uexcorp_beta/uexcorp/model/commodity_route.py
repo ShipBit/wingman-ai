@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class CommodityRoute(DataModel):
 
@@ -165,7 +168,10 @@ class CommodityRoute(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.helper import Helper
+        try:
+            from skills.uexcorp_beta.uexcorp.helper import Helper
+        except ImportError:
+            from uexcorp_beta.uexcorp.helper import Helper
 
         helper = Helper.get_instance()
 

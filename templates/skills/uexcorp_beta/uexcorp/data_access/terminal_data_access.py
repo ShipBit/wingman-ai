@@ -1,6 +1,11 @@
-from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
-from skills.uexcorp_beta.uexcorp.database.filter import Filter
-from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+try:
+    from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from skills.uexcorp_beta.uexcorp.database.filter import Filter
+    from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+except ImportError:
+    from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from uexcorp_beta.uexcorp.database.filter import Filter
+    from uexcorp_beta.uexcorp.model.terminal import Terminal
 
 
 class TerminalDataAccess(DataAccess):

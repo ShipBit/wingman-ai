@@ -1,6 +1,9 @@
-
-from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
-from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
+try:
+    from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
+except ImportError:
+    from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from uexcorp_beta.uexcorp.model.orbit import Orbit
 
 
 class OrbitDataAccess(DataAccess):

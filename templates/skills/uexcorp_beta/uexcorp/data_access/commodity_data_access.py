@@ -1,5 +1,9 @@
-from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
-from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
+try:
+    from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
+except ImportError:
+    from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from uexcorp_beta.uexcorp.model.commodity import Commodity
 
 
 class CommodityDataAccess(DataAccess):

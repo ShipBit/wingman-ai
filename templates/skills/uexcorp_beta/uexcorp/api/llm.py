@@ -3,7 +3,10 @@ import json
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from skills.uexcorp_beta.uexcorp.helper import Helper
+    try:
+        from skills.uexcorp_beta.uexcorp.helper import Helper
+    except ImportError:
+        from uexcorp_beta.uexcorp.helper import Helper
 
 class Message:
 

@@ -1,6 +1,10 @@
 import json
-from skills.uexcorp_beta.uexcorp.tool.tool import Tool
-from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+try:
+    from skills.uexcorp_beta.uexcorp.tool.tool import Tool
+    from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+except ImportError:
+    from uexcorp_beta.uexcorp.tool.tool import Tool
+    from uexcorp_beta.uexcorp.tool.validator import Validator
 
 
 class LocationInformation(Tool):
@@ -12,15 +16,26 @@ class LocationInformation(Tool):
             self,
             location_name: list[str] | None = None,
     ) -> (str, str):
-        from skills.uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.orbit_data_access import OrbitDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.orbit_data_access import OrbitDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+            from uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+            from uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+            from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+            from uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+            from uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+            from uexcorp_beta.uexcorp.data_access.orbit_data_access import OrbitDataAccess
 
         locations = []
 

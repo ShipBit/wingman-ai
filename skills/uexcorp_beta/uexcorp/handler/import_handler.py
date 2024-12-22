@@ -1,8 +1,14 @@
-from skills.uexcorp_beta.uexcorp.api.uex import Uex
 from typing import TYPE_CHECKING
+try:
+    from skills.uexcorp_beta.uexcorp.api.uex import Uex
+except ImportError:
+    from uexcorp_beta.uexcorp.api.uex import Uex
 
 if TYPE_CHECKING:
-    from skills.uexcorp_beta.uexcorp.helper import Helper
+    try:
+        from skills.uexcorp_beta.uexcorp.helper import Helper
+    except ImportError:
+        from uexcorp_beta.uexcorp.helper import Helper
 
 
 class ImportHandler:
@@ -80,7 +86,11 @@ class ImportHandler:
         return self.__common_data
 
     def get_version_uex(self, force_check: bool = False) -> str:
-        from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
+        try:
+            from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.game_version import GameVersion
+
         self.__import_data_game_version(force_check)
         return GameVersion(load=True).get_live()
 
@@ -96,8 +106,13 @@ class ImportHandler:
         return total_count
 
     def __import_data_category(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.category import Category
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.category import Category
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.category import Category
+
         if not self.__helper.get_database().table_exists("category"):
             return False
 
@@ -124,8 +139,13 @@ class ImportHandler:
         return len(category_data)
 
     def __import_data_category_attribute(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
+
         if not self.__helper.get_database().table_exists("category_attribute"):
             return False
 
@@ -152,8 +172,13 @@ class ImportHandler:
         return len(category_attribute_data)
 
     def __import_data_city(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.city import City
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.city import City
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.city import City
+
         if not self.__helper.get_database().table_exists("city"):
             return False
 
@@ -180,8 +205,13 @@ class ImportHandler:
         return len(city_data)
 
     def __import_data_commodity(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.commodity import Commodity
+
         if not self.__helper.get_database().table_exists("commodity"):
             return False
 
@@ -208,8 +238,13 @@ class ImportHandler:
         return len(commodity_data)
 
     def __import_data_commodity_alert(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.commodity_alert import CommodityAlert
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.commodity_alert import CommodityAlert
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.commodity_alert import CommodityAlert
+
         if not self.__helper.get_database().table_exists("commodity_alert"):
             return False
 
@@ -236,8 +271,13 @@ class ImportHandler:
         return len(commodity_alert_data)
 
     def __import_data_commodity_price(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.commodity_price import CommodityPrice
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.commodity_price import CommodityPrice
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.commodity_price import CommodityPrice
+
         if not self.__helper.get_database().table_exists("commodity_price"):
             return False
 
@@ -264,8 +304,13 @@ class ImportHandler:
         return len(commodity_price_data)
 
     def __import_data_commodity_raw_price(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.commodity_raw_price import CommodityRawPrice
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.commodity_raw_price import CommodityRawPrice
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.commodity_raw_price import CommodityRawPrice
+
         if not self.__helper.get_database().table_exists("commodity_raw_price"):
             return False
 
@@ -292,8 +337,13 @@ class ImportHandler:
         return len(commodity_raw_price_data)
 
     def __import_data_commodity_status(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
+
         if not self.__helper.get_database().table_exists("commodity_status"):
             return False
 
@@ -326,9 +376,15 @@ class ImportHandler:
         return len(commodity_status_data)
 
     def __import_data_commodity_route(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.commodity_route import CommodityRoute
-        from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.commodity_route import CommodityRoute
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.commodity_route import CommodityRoute
+            from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+
         if not self.__helper.get_database().table_exists("commodity_route"):
             return False
 
@@ -363,8 +419,13 @@ class ImportHandler:
         return len(commodity_route_data)
 
     def __import_data_company(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.company import Company
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.company import Company
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.company import Company
+
         if not self.__helper.get_database().table_exists("company"):
             return False
 
@@ -391,8 +452,13 @@ class ImportHandler:
         return len(company_data)
 
     def __import_data_faction(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.faction import Faction
+
         if not self.__helper.get_database().table_exists("faction"):
             return False
 
@@ -419,8 +485,13 @@ class ImportHandler:
         return len(faction_data)
 
     def __import_data_fuel_price(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.fuel_price import FuelPrice
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.fuel_price import FuelPrice
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.fuel_price import FuelPrice
+
         if not self.__helper.get_database().table_exists("fuel_price"):
             return False
 
@@ -447,8 +518,13 @@ class ImportHandler:
         return len(fuel_price_data)
 
     def __import_data_game_version(self, force_check: bool = False) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.game_version import GameVersion
+
         if not self.__helper.get_database().table_exists("game_version"):
             return False
 
@@ -474,9 +550,15 @@ class ImportHandler:
         return len(game_version_data)
 
     def __import_data_item(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.item import Item
-        from skills.uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.item import Item
+            from skills.uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.item import Item
+            from uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
+
         if not self.__helper.get_database().table_exists("item"):
             return False
 
@@ -508,8 +590,13 @@ class ImportHandler:
         return len(item_data)
 
     def __import_data_item_price(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.item_price import ItemPrice
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.item_price import ItemPrice
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.item_price import ItemPrice
+
         if not self.__helper.get_database().table_exists("item_price"):
             return False
 
@@ -536,8 +623,13 @@ class ImportHandler:
         return len(item_price_data)
 
     def __import_data_jurisdiction(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+
         if not self.__helper.get_database().table_exists("jurisdiction"):
             return False
 
@@ -564,8 +656,13 @@ class ImportHandler:
         return len(jurisdiction_data)
 
     def __import_data_moon(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.moon import Moon
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.moon import Moon
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.moon import Moon
+
         if not self.__helper.get_database().table_exists("moon"):
             return False
 
@@ -592,8 +689,13 @@ class ImportHandler:
         return len(moon_data)
 
     def __import_data_orbit(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.orbit import Orbit
+
         if not self.__helper.get_database().table_exists("orbit"):
             return False
 
@@ -620,9 +722,15 @@ class ImportHandler:
         return len(orbit_data)
 
     def __import_data_orbit_distance(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.orbit_distance import OrbitDistance
-        from skills.uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.orbit_distance import OrbitDistance
+            from skills.uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.orbit_distance import OrbitDistance
+            from uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+
         if not self.__helper.get_database().table_exists("orbit_distance"):
             return False
 
@@ -657,8 +765,13 @@ class ImportHandler:
         return len(orbit_distance_data)
 
     def __import_data_outpost(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.outpost import Outpost
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.outpost import Outpost
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.outpost import Outpost
+
         if not self.__helper.get_database().table_exists("outpost"):
             return False
 
@@ -685,8 +798,13 @@ class ImportHandler:
         return len(outpost_data)
 
     def __import_data_planet(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.planet import Planet
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.planet import Planet
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.planet import Planet
+
         if not self.__helper.get_database().table_exists("planet"):
             return False
 
@@ -713,8 +831,13 @@ class ImportHandler:
         return len(planet_data)
 
     def __import_data_poi(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.poi import Poi
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.poi import Poi
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.poi import Poi
+
         if not self.__helper.get_database().table_exists("poi"):
             return False
 
@@ -741,8 +864,13 @@ class ImportHandler:
         return len(poi_data)
 
     def __import_data_refinery_audit(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.refinery_audit import RefineryAudit
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.refinery_audit import RefineryAudit
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.refinery_audit import RefineryAudit
+
         if not self.__helper.get_database().table_exists("refinery_audit"):
             return False
 
@@ -769,8 +897,13 @@ class ImportHandler:
         return len(refinery_audit_data)
 
     def __import_data_refinery_method(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.refinery_method import RefineryMethod
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.refinery_method import RefineryMethod
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.refinery_method import RefineryMethod
+
         if not self.__helper.get_database().table_exists("refinery_method"):
             return False
 
@@ -797,8 +930,13 @@ class ImportHandler:
         return len(refinery_method_data)
 
     def __import_data_space_station(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.space_station import SpaceStation
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.space_station import SpaceStation
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.space_station import SpaceStation
+
         if not self.__helper.get_database().table_exists("space_station"):
             return False
 
@@ -825,8 +963,13 @@ class ImportHandler:
         return len(space_station_data)
 
     def __import_data_star_system(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.star_system import StarSystem
+
         if not self.__helper.get_database().table_exists("star_system"):
             return False
 
@@ -853,8 +996,13 @@ class ImportHandler:
         return len(star_system_data)
 
     def __import_data_terminal(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.terminal import Terminal
+
         if not self.__helper.get_database().table_exists("terminal"):
             return False
 
@@ -881,8 +1029,13 @@ class ImportHandler:
         return len(terminal_data)
 
     def __import_data_vehicle(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.vehicle import Vehicle
+
         if not self.__helper.get_database().table_exists("vehicle"):
             return False
 
@@ -909,8 +1062,13 @@ class ImportHandler:
         return len(vehicle_data)
 
     def __import_data_vehicle_purchase_price(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
+
         if not self.__helper.get_database().table_exists("vehicle_purchase_price"):
             return False
 
@@ -937,8 +1095,13 @@ class ImportHandler:
         return len(vehicle_price_data)
 
     def __import_data_vehicle_rental_price(self) -> bool | int:
-        from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
-        from skills.uexcorp_beta.uexcorp.model.vehicle_rental_price import VehicleRentalPrice
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.vehicle_rental_price import VehicleRentalPrice
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.vehicle_rental_price import VehicleRentalPrice
+
         if not self.__helper.get_database().table_exists("vehicle_rental_price"):
             return False
 

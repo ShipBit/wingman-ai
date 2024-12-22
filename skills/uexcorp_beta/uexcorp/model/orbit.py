@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Orbit(DataModel):
 
@@ -53,11 +56,18 @@ class Orbit(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
-        from skills.uexcorp_beta.uexcorp.model.faction import Faction
-        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
-        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+            from skills.uexcorp_beta.uexcorp.model.faction import Faction
+            from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+            from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.star_system import StarSystem
+            from uexcorp_beta.uexcorp.model.faction import Faction
+            from uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+            from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
 
         star_system = StarSystem(self.get_id_star_system(), load=True) if self.get_id_star_system() else None
         space_stations = SpaceStationDataAccess().add_filter_by_id_orbit(self.get_id()).load()
@@ -79,8 +89,12 @@ class Orbit(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
 
         space_stations = SpaceStationDataAccess().add_filter_by_id_orbit(self.get_id()).load()
         planets = PlanetDataAccess().add_filter_by_name(self.get_name()).load()

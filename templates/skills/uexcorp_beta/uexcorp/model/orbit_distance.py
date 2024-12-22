@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class OrbitDistance(DataModel):
 
@@ -44,8 +47,12 @@ class OrbitDistance(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
-        from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
+        try:
+            from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+            from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.star_system import StarSystem
+            from uexcorp_beta.uexcorp.model.orbit import Orbit
 
         star_system_origin = StarSystem(self.get_id_star_system_origin(), load=True) if self.get_id_star_system_origin() else None
         star_system_destination = StarSystem(self.get_id_star_system_destination(), load=True) if self.get_id_star_system_destination() else None
@@ -63,7 +70,10 @@ class OrbitDistance(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        try:
+            from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.star_system import StarSystem
 
         star_system_origin = StarSystem(self.get_id_star_system_origin(), load=True) if self.get_id_star_system_origin() else None
         star_system_destination = StarSystem(self.get_id_star_system_destination(), load=True) if self.get_id_star_system_destination() else None

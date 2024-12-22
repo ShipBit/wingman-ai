@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Commodity(DataModel):
 
@@ -102,8 +105,12 @@ class Commodity(DataModel):
         return properties
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+            from uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
 
         information = {
             "name": self.get_name(),
@@ -128,8 +135,12 @@ class Commodity(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+            from uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
 
         information = {
             "name": self.get_name(),

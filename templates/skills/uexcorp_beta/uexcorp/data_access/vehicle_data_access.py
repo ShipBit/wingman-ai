@@ -1,6 +1,9 @@
-from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+try:
+    from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
+except ImportError:
+    from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
+    from uexcorp_beta.uexcorp.model.vehicle import Vehicle
 
 
 class VehicleDataAccess(DataAccess):

@@ -1,7 +1,10 @@
 import json
-
-from skills.uexcorp_beta.uexcorp.tool.tool import Tool
-from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+try:
+    from skills.uexcorp_beta.uexcorp.tool.tool import Tool
+    from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+except ImportError:
+    from uexcorp_beta.uexcorp.tool.tool import Tool
+    from uexcorp_beta.uexcorp.tool.validator import Validator
 
 
 class VehicleInformation(Tool):
@@ -19,8 +22,13 @@ class VehicleInformation(Tool):
         limit: int | None = None,
         offset: int | None = None
     ) -> (str, str):
-        from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-        from skills.uexcorp_beta.uexcorp.helper import Helper
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+            from skills.uexcorp_beta.uexcorp.helper import Helper
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+            from uexcorp_beta.uexcorp.helper import Helper
+
         helper = Helper.get_instance()
 
         if not any([

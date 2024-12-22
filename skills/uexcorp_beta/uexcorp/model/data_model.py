@@ -1,6 +1,8 @@
 import json
-
-from skills.uexcorp_beta.uexcorp.helper import Helper
+try:
+    from skills.uexcorp_beta.uexcorp.helper import Helper
+except ImportError:
+    from uexcorp_beta.uexcorp.helper import Helper
 
 
 class DataModel:

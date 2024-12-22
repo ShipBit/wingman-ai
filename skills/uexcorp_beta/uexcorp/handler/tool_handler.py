@@ -1,11 +1,18 @@
 import inspect
 import traceback
 from typing import TYPE_CHECKING
-from skills.uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
-from skills.uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
+try:
+    from skills.uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
+    from skills.uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
+except ImportError:
+    from uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
+    from uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
 
 if TYPE_CHECKING:
-    from skills.uexcorp_beta.uexcorp.helper import Helper
+    try:
+        from uexcorp_beta.uexcorp.helper import Helper
+    except ImportError:
+        from skills.uexcorp_beta.uexcorp.helper import Helper
 
 
 class ToolHandler:

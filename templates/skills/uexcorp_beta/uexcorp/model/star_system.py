@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class StarSystem(DataModel):
 
@@ -47,10 +50,16 @@ class StarSystem(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        from skills.uexcorp_beta.uexcorp.model.faction import Faction
-        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from skills.uexcorp_beta.uexcorp.model.faction import Faction
+            from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+            from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from uexcorp_beta.uexcorp.model.faction import Faction
+            from uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
 
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
         jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
@@ -78,8 +87,12 @@ class StarSystem(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
+            from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
 
         planets = PlanetDataAccess().add_filter_by_id_star_system(self.get_id()).load()
         space_station_data_access = SpaceStationDataAccess()

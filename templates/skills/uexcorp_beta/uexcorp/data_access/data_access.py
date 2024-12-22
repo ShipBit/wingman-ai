@@ -1,6 +1,11 @@
-from skills.uexcorp_beta.uexcorp.database.filter import Filter
-from skills.uexcorp_beta.uexcorp.helper import Helper
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.database.filter import Filter
+    from skills.uexcorp_beta.uexcorp.helper import Helper
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.database.filter import Filter
+    from uexcorp_beta.uexcorp.helper import Helper
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 
 class DataAccess :

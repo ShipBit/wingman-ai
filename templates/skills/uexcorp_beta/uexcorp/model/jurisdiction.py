@@ -1,5 +1,9 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
+
 
 class Jurisdiction(DataModel):
 
@@ -43,7 +47,10 @@ class Jurisdiction(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        try:
+            from skills.uexcorp_beta.uexcorp.model.faction import Faction
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.faction import Faction
 
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
 

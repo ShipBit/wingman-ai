@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Planet(DataModel):
 
@@ -53,14 +56,24 @@ class Planet(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
-        from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
-        from skills.uexcorp_beta.uexcorp.model.faction import Faction
-        from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        try:
+            from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+            from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+            from skills.uexcorp_beta.uexcorp.model.faction import Faction
+            from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.star_system import StarSystem
+            from uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+            from uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+            from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+            from uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+            from uexcorp_beta.uexcorp.model.faction import Faction
+            from uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
 
         star_system = StarSystem(self.get_id_star_system(), load=True) if self.get_id_star_system() else None
         cities = CityDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
@@ -94,11 +107,18 @@ class Planet(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
-        from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+        except ImportError:
+            from uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
+            from uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
+            from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from uexcorp_beta.uexcorp.data_access.poi_data_access import PoiDataAccess
+            from uexcorp_beta.uexcorp.data_access.outpost_data_access import OutpostDataAccess
 
         cities = CityDataAccess().add_filter_by_id_planet(self.get_id()).add_filter_by_id_moon(0).load()
         moons = MoonDataAccess().add_filter_by_id_planet(self.get_id()).load()

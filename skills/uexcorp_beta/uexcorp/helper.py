@@ -5,15 +5,26 @@ from typing import TYPE_CHECKING
 from os import path
 from services.file import get_writable_dir
 from services.secret_keeper import SecretKeeper
-from skills.uexcorp_beta.uexcorp.handler.config_handler import ConfigHandler
-from skills.uexcorp_beta.uexcorp.database.database import Database
-from skills.uexcorp_beta.uexcorp.handler.import_handler import ImportHandler
-from skills.uexcorp_beta.uexcorp.handler.debug_handler import DebugHandler
-from skills.uexcorp_beta.uexcorp.handler.error_handler import ErrorHandler
-from skills.uexcorp_beta.uexcorp.api.llm import Llm
+try:
+    from skills.uexcorp_beta.uexcorp.handler.config_handler import ConfigHandler
+    from skills.uexcorp_beta.uexcorp.database.database import Database
+    from skills.uexcorp_beta.uexcorp.handler.import_handler import ImportHandler
+    from skills.uexcorp_beta.uexcorp.handler.debug_handler import DebugHandler
+    from skills.uexcorp_beta.uexcorp.handler.error_handler import ErrorHandler
+    from skills.uexcorp_beta.uexcorp.api.llm import Llm
+except ImportError:
+    from uexcorp_beta.uexcorp.handler.config_handler import ConfigHandler
+    from uexcorp_beta.uexcorp.database.database import Database
+    from uexcorp_beta.uexcorp.handler.import_handler import ImportHandler
+    from uexcorp_beta.uexcorp.handler.debug_handler import DebugHandler
+    from uexcorp_beta.uexcorp.handler.error_handler import ErrorHandler
+    from uexcorp_beta.uexcorp.api.llm import Llm
 
 if TYPE_CHECKING:
-    from skills.uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
+    try:
+        from skills.uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
+    except ImportError:
+        from uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
     from wingmen.open_ai_wingman import OpenAiWingman
 
 class Helper:
@@ -52,7 +63,10 @@ class Helper:
         self.__wingman = None
 
     def prepare(self, threaded_execution: callable, wingman: "OpenAiWingman"):
-        from skills.uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
+        try:
+            from skills.uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
+        except ImportError:
+            from uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
 
         self.__wingman = wingman
         self.__threaded_execution = threaded_execution
@@ -167,7 +181,10 @@ class Helper:
         return self.get_version_skill().split("-")[0]
 
     def get_version_uex(self, force_check: bool = False):
-        from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
+        try:
+            from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.game_version import GameVersion
 
         if force_check:
             self.__version_uex = self.__handler_import.get_version_uex(force_check)

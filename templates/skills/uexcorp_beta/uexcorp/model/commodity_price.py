@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class CommodityPrice(DataModel):
 
@@ -65,8 +68,12 @@ class CommodityPrice(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
-        from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+        try:
+            from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
+            from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.commodity import Commodity
+            from uexcorp_beta.uexcorp.model.terminal import Terminal
 
         commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None

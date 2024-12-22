@@ -1,5 +1,8 @@
 from datetime import datetime
-from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+try:
+    from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
+except ImportError:
+    from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Faction(DataModel):
 
@@ -39,7 +42,10 @@ class Faction(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        try:
+            from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.star_system import StarSystem
 
         information = {
             "name": self.data["name"],
@@ -68,7 +74,10 @@ class Faction(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        try:
+            from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
+        except ImportError:
+            from uexcorp_beta.uexcorp.model.star_system import StarSystem
 
         information = {
             "name": self.data["name"],
