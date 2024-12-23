@@ -151,28 +151,31 @@ class ModuleManager:
 
     @staticmethod
     def read_available_skill_configs() -> list[tuple[str, str]]:
+        skill_dirs = [
+            get_writable_dir(SKILLS_DIR)
+        ]
+
         if os.path.isdir(SKILLS_DIR):
-            skills_dir = SKILLS_DIR
-        else:
-            skills_dir = get_writable_dir(SKILLS_DIR)
+            skill_dirs.append(SKILLS_DIR)
 
-        skills_default_configs = []
-        # Traverse the skills directory
-        for skill_name in os.listdir(skills_dir):
-            # Construct the path to the skill's directory
-            skill_path = os.path.join(skills_dir, skill_name)
+        skills_default_configs = {}
+        for skills_dir in skill_dirs:
+            # Traverse the skills directory
+            for skill_name in os.listdir(skills_dir):
+                # Construct the path to the skill's directory
+                skill_path = os.path.join(skills_dir, skill_name)
 
-            # Check if the path is a directory (to avoid non-folder files)
-            if os.path.isdir(skill_path):
-                # Construct the path to the default_config.yaml file
-                default_config_path = os.path.join(skill_path, "default_config.yaml")
+                # Check if the path is a directory (to avoid non-folder files)
+                if os.path.isdir(skill_path):
+                    # Construct the path to the default_config.yaml file
+                    default_config_path = os.path.join(skill_path, "default_config.yaml")
 
-                # Check if the default_config.yaml file exists
-                if os.path.isfile(default_config_path):
-                    # Add the skill name and the default_config.yaml file path to the list
-                    skills_default_configs.append((skill_name, default_config_path))
+                    # Check if the default_config.yaml file exists
+                    if os.path.isfile(default_config_path):
+                        # Add the skill name and the default_config.yaml file path to the list
+                        skills_default_configs.update({skill_name: (skill_name, default_config_path)})
 
-        return skills_default_configs
+        return list(skills_default_configs.values())
 
     @staticmethod
     def read_available_skills() -> list[SkillBase]:
