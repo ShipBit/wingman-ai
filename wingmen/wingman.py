@@ -183,7 +183,6 @@ class Wingman:
         for skill in self.skills:
             try:
                 await skill.unload()
-                raise Exception("Test unload fail")
             except Exception as e:
                 await printr.print_async(f"Error unloading skill '{skill.name}': {str(e)}", color=LogType.ERROR)
                 printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
