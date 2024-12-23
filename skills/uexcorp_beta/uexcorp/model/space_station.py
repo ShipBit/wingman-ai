@@ -1,6 +1,6 @@
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class SpaceStation(DataModel):
@@ -165,7 +165,7 @@ class SpaceStation(DataModel):
             from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
             from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
             from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.planet import Planet
             from uexcorp_beta.uexcorp.model.moon import Moon
             from uexcorp_beta.uexcorp.model.star_system import StarSystem
@@ -206,7 +206,7 @@ class SpaceStation(DataModel):
     def get_data_for_ai_minimal(self) -> dict:
         try:
             from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
         terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()

@@ -4,14 +4,14 @@ from typing import TYPE_CHECKING
 try:
     from skills.uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
     from skills.uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
     from uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
 
 if TYPE_CHECKING:
     try:
         from uexcorp_beta.uexcorp.helper import Helper
-    except ImportError:
+    except ModuleNotFoundError:
         from skills.uexcorp_beta.uexcorp.helper import Helper
 
 
@@ -101,7 +101,8 @@ class ToolHandler:
 
                 notes = self.get_notes(clear=True)
                 if notes:
-                    function_response += f"\n\nImportant information for user:\n-{'\n-'.join(notes)}"
+                    notes = '\n-'.join(notes)
+                    function_response += f"\n\nImportant information for user:\n-{notes}"
 
                 self.__helper.get_handler_debug().write(
                     f"Execution of '{tool_name}' took {self.__helper.end_timer(tool_name)} ms."

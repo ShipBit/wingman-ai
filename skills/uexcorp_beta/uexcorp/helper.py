@@ -12,7 +12,7 @@ try:
     from skills.uexcorp_beta.uexcorp.handler.debug_handler import DebugHandler
     from skills.uexcorp_beta.uexcorp.handler.error_handler import ErrorHandler
     from skills.uexcorp_beta.uexcorp.api.llm import Llm
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.handler.config_handler import ConfigHandler
     from uexcorp_beta.uexcorp.database.database import Database
     from uexcorp_beta.uexcorp.handler.import_handler import ImportHandler
@@ -23,7 +23,7 @@ except ImportError:
 if TYPE_CHECKING:
     try:
         from skills.uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
-    except ImportError:
+    except ModuleNotFoundError:
         from uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
     from wingmen.open_ai_wingman import OpenAiWingman
 
@@ -65,7 +65,7 @@ class Helper:
     def prepare(self, threaded_execution: callable, wingman: "OpenAiWingman"):
         try:
             from skills.uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.handler.tool_handler import ToolHandler
 
         self.__wingman = wingman
@@ -183,7 +183,7 @@ class Helper:
     def get_version_uex(self, force_check: bool = False):
         try:
             from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.game_version import GameVersion
 
         if force_check:

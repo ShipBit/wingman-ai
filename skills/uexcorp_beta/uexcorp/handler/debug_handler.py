@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     try:
         from skills.uexcorp_beta.uexcorp.helper import Helper
-    except ImportError:
+    except ModuleNotFoundError:
         from uexcorp_beta.uexcorp.helper import Helper
 
 printr = Printr()

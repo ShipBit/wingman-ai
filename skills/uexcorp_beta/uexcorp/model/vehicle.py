@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Vehicle(DataModel):
@@ -202,7 +202,7 @@ class Vehicle(DataModel):
     def get_data_for_ai(self) -> dict[str, any]:
         try:
             from skills.uexcorp_beta.uexcorp.model.company import Company
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.company import Company
 
         company = Company(self.get_id_company(), load=True) if self.get_id_company() else None
@@ -250,7 +250,7 @@ class Vehicle(DataModel):
     def get_purchase_options(self) -> list[dict[str, any]]:
         try:
             from skills.uexcorp_beta.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
 
         prices = VehiclePurchasePriceDataAccess().add_filter_by_id_vehicle(self.get_id()).load()
@@ -263,7 +263,7 @@ class Vehicle(DataModel):
     def get_rental_options(self) -> list[dict[str, any]]:
         try:
             from skills.uexcorp_beta.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
 
         prices = VehicleRentalPriceDataAccess().add_filter_by_id_vehicle(self.get_id()).load()

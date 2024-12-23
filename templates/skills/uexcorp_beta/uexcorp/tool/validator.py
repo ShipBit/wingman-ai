@@ -13,7 +13,7 @@ try:
     from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
     from skills.uexcorp_beta.uexcorp.data_access.company_data_access import CompanyDataAccess
     from skills.uexcorp_beta.uexcorp.helper import Helper
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
     from uexcorp_beta.uexcorp.data_access.moon_data_access import MoonDataAccess
     from uexcorp_beta.uexcorp.data_access.orbit_data_access import OrbitDataAccess
@@ -167,7 +167,7 @@ class Validator:
     async def __validate_vehicle_role(self, name: str) -> str | None:
         try:
             from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.vehicle import Vehicle
 
         closest_match = await self.__helper.get_llm().find_closest_match(name, list(Vehicle.VEHICLE_ROLES.keys()))
@@ -179,7 +179,7 @@ class Validator:
     def __definition_vehicle_role(self, **kwargs) -> dict[str, any]:
         try:
             from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.vehicle import Vehicle
 
         return {"type": "string", "enum": list(Vehicle.VEHICLE_ROLES.keys())}

@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class ImportData(DataModel):
@@ -44,7 +44,7 @@ class ImportData(DataModel):
                 return True
 
             self.helper.get_database().get_cursor().execute(
-                f"DELETE FROM {self.get_table()} WHERE last_import_run_id != {str(int(self.data["last_import_run_id"] or 0))}"
+                f"DELETE FROM {self.get_table()} WHERE last_import_run_id != {str(int(self.data['last_import_run_id'] or 0))}"
             )
             if not skip_commit:
                 self.helper.get_database().get_connection().commit()

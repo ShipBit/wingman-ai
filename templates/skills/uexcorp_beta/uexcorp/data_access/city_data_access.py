@@ -1,7 +1,7 @@
 try:
     from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
     from skills.uexcorp_beta.uexcorp.model.city import City
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
     from uexcorp_beta.uexcorp.model.city import City
 

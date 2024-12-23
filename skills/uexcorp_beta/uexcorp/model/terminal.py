@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Terminal(DataModel):
@@ -171,7 +171,7 @@ class Terminal(DataModel):
             from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
             from uexcorp_beta.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
             from uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
@@ -209,7 +209,7 @@ class Terminal(DataModel):
             from skills.uexcorp_beta.uexcorp.model.outpost import Outpost
             from skills.uexcorp_beta.uexcorp.model.space_station import SpaceStation
             from skills.uexcorp_beta.uexcorp.model.faction import Faction
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.city import City
             from uexcorp_beta.uexcorp.model.poi import Poi
             from uexcorp_beta.uexcorp.model.outpost import Outpost
@@ -249,7 +249,7 @@ class Terminal(DataModel):
     def get_data_for_ai_minimal(self) -> dict:
         try:
             from skills.uexcorp_beta.uexcorp.model.poi import Poi
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.poi import Poi
 
         information = {

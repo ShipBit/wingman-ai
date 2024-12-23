@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class OrbitDistance(DataModel):
@@ -50,7 +50,7 @@ class OrbitDistance(DataModel):
         try:
             from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
             from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.star_system import StarSystem
             from uexcorp_beta.uexcorp.model.orbit import Orbit
 
@@ -72,7 +72,7 @@ class OrbitDistance(DataModel):
     def get_data_for_ai_minimal(self) -> dict:
         try:
             from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.star_system import StarSystem
 
         star_system_origin = StarSystem(self.get_id_star_system_origin(), load=True) if self.get_id_star_system_origin() else None

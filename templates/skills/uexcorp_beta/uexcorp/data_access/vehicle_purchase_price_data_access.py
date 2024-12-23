@@ -1,7 +1,7 @@
 try:
     from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
     from skills.uexcorp_beta.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
     from uexcorp_beta.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class VehiclePurchasePrice(DataModel):
@@ -41,7 +41,7 @@ class VehiclePurchasePrice(DataModel):
         try:
             from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
             from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.vehicle import Vehicle
             from uexcorp_beta.uexcorp.model.terminal import Terminal
 

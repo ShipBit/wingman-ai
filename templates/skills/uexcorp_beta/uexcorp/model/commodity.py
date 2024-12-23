@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Commodity(DataModel):
@@ -108,7 +108,7 @@ class Commodity(DataModel):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
             from uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
 
@@ -138,7 +138,7 @@ class Commodity(DataModel):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
             from uexcorp_beta.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
 

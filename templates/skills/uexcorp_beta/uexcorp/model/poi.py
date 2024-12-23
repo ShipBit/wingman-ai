@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Poi(DataModel):
@@ -172,7 +172,7 @@ class Poi(DataModel):
             from skills.uexcorp_beta.uexcorp.model.faction import Faction
             from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
             from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.city import City
             from uexcorp_beta.uexcorp.model.space_station import SpaceStation
             from uexcorp_beta.uexcorp.model.moon import Moon
@@ -215,7 +215,7 @@ class Poi(DataModel):
     def get_data_for_ai_minimal(self) -> dict:
         try:
             from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
         terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()

@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 
@@ -49,7 +49,7 @@ class Jurisdiction(DataModel):
     def get_data_for_ai(self) -> dict:
         try:
             from skills.uexcorp_beta.uexcorp.model.faction import Faction
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.faction import Faction
 
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None

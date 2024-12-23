@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class CommodityRoute(DataModel):
@@ -170,19 +170,19 @@ class CommodityRoute(DataModel):
     def get_data_for_ai(self) -> dict:
         try:
             from skills.uexcorp_beta.uexcorp.helper import Helper
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.helper import Helper
 
         helper = Helper.get_instance()
 
         data = {
             "commodity": self.get_commodity_name(),
-            "buy_for_in_auec": self.get_price_origin() * self.get_scu_origin(),
+            "buy_for": self.get_price_origin() * self.get_scu_origin(),
             "buy_at": self.get_origin_terminal_name(),
             "buy_volume_in_scu": self.get_scu_origin(),
-            "sell_for_in_auec": self.get_price_destination() * self.get_scu_origin(),
+            "sell_for": self.get_price_destination() * self.get_scu_origin(),
             "sell_at": self.get_destination_terminal_name(),
-            "estimated_profit_in_auec": self.get_profit(),
+            "estimated_profit": self.get_profit(),
             "origin_star_system_name": self.get_origin_star_system_name(),
             "origin_planet_name": self.get_origin_planet_name(),
             "destination_star_system_name": self.get_destination_star_system_name(),

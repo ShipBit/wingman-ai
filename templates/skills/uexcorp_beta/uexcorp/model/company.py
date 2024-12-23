@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Company(DataModel):
@@ -45,7 +45,7 @@ class Company(DataModel):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
             from skills.uexcorp_beta.uexcorp.model.faction import Faction
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
             from uexcorp_beta.uexcorp.model.faction import Faction
 
@@ -69,7 +69,7 @@ class Company(DataModel):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
             from skills.uexcorp_beta.uexcorp.model.faction import Faction
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
             from uexcorp_beta.uexcorp.model.faction import Faction
 

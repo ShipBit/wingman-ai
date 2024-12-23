@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class Item(DataModel):
@@ -61,7 +61,7 @@ class Item(DataModel):
             from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
             from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
             from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.category import Category
             from uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
             from uexcorp_beta.uexcorp.model.vehicle import Vehicle
@@ -106,7 +106,7 @@ class Item(DataModel):
             from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
             from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
             from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
             from uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
             from uexcorp_beta.uexcorp.model.vehicle import Vehicle

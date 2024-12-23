@@ -2,7 +2,7 @@ import json
 try:
     from skills.uexcorp_beta.uexcorp.tool.tool import Tool
     from skills.uexcorp_beta.uexcorp.tool.validator import Validator
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.tool.tool import Tool
     from uexcorp_beta.uexcorp.tool.validator import Validator
 
@@ -25,7 +25,7 @@ class VehicleInformation(Tool):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
             from skills.uexcorp_beta.uexcorp.helper import Helper
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
             from uexcorp_beta.uexcorp.helper import Helper
 

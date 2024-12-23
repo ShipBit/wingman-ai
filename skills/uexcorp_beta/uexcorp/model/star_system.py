@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 class StarSystem(DataModel):
@@ -55,7 +55,7 @@ class StarSystem(DataModel):
             from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
             from skills.uexcorp_beta.uexcorp.model.faction import Faction
             from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
             from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
             from uexcorp_beta.uexcorp.model.faction import Faction
@@ -90,7 +90,7 @@ class StarSystem(DataModel):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.planet_data_access import PlanetDataAccess
             from uexcorp_beta.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
 

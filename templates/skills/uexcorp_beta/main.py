@@ -1,9 +1,15 @@
+import sys
+import os
+
+# add skill to sys path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill
 try:
     from skills.uexcorp_beta.uexcorp.helper import Helper
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.helper import Helper
 
 if TYPE_CHECKING:

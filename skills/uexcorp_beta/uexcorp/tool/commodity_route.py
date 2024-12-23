@@ -2,7 +2,7 @@ import json
 try:
     from skills.uexcorp_beta.uexcorp.tool.tool import Tool
     from skills.uexcorp_beta.uexcorp.tool.validator import Validator
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.tool.tool import Tool
     from uexcorp_beta.uexcorp.tool.validator import Validator
 
@@ -35,7 +35,7 @@ class CommodityRoute(Tool):
             from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
             from skills.uexcorp_beta.uexcorp.helper import Helper
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
             from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
             from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
@@ -156,7 +156,7 @@ class CommodityRoute(Tool):
     def get_mandatory_fields(self) -> dict[str, Validator]:
         try:
             from skills.uexcorp_beta.uexcorp.helper import Helper
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.helper import Helper
 
         helper = Helper.get_instance()
@@ -171,7 +171,7 @@ class CommodityRoute(Tool):
     def get_optional_fields(self) -> dict[str, Validator]:
         try:
             from skills.uexcorp_beta.uexcorp.helper import Helper
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.helper import Helper
 
         helper = Helper.get_instance()

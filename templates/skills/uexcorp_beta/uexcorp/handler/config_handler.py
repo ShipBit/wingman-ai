@@ -10,7 +10,7 @@ if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
     try:
         from skills.uexcorp_beta.uexcorp.helper import Helper
-    except ImportError:
+    except ModuleNotFoundError:
         from uexcorp_beta.uexcorp.helper import Helper
 
 class ConfigHandler:
@@ -85,7 +85,7 @@ class ConfigHandler:
     def __sync_commodity_blacklist(self):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
 
         if not self.__helper.is_ready():
@@ -138,7 +138,7 @@ class ConfigHandler:
     def __sync_terminal_blacklist(self):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
         if not self.__helper.is_ready():

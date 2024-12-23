@@ -1,13 +1,13 @@
 from typing import TYPE_CHECKING
 try:
     from skills.uexcorp_beta.uexcorp.api.uex import Uex
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.api.uex import Uex
 
 if TYPE_CHECKING:
     try:
         from skills.uexcorp_beta.uexcorp.helper import Helper
-    except ImportError:
+    except ModuleNotFoundError:
         from uexcorp_beta.uexcorp.helper import Helper
 
 
@@ -78,7 +78,7 @@ class ImportHandler:
         self.__helper.start_timer("import_total")
         total_count = self.__import_data()
         self.__helper.get_handler_debug().write(
-            f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer("import_total")}s"
+            f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s"
         )
         self.__helper.on_import_completed(total_count)
 
@@ -88,7 +88,7 @@ class ImportHandler:
     def get_version_uex(self, force_check: bool = False) -> str:
         try:
             from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.game_version import GameVersion
 
         self.__import_data_game_version(force_check)
@@ -109,7 +109,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.category import Category
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.category import Category
 
@@ -142,7 +142,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
 
@@ -175,7 +175,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.city import City
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.city import City
 
@@ -208,7 +208,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.commodity import Commodity
 
@@ -241,7 +241,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.commodity_alert import CommodityAlert
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.commodity_alert import CommodityAlert
 
@@ -274,7 +274,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.commodity_price import CommodityPrice
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.commodity_price import CommodityPrice
 
@@ -307,7 +307,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.commodity_raw_price import CommodityRawPrice
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.commodity_raw_price import CommodityRawPrice
 
@@ -340,7 +340,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
 
@@ -380,7 +380,7 @@ class ImportHandler:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.commodity_route import CommodityRoute
             from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.commodity_route import CommodityRoute
             from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
@@ -422,7 +422,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.company import Company
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.company import Company
 
@@ -455,7 +455,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.faction import Faction
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.faction import Faction
 
@@ -488,7 +488,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.fuel_price import FuelPrice
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.fuel_price import FuelPrice
 
@@ -521,7 +521,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.game_version import GameVersion
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.game_version import GameVersion
 
@@ -554,7 +554,7 @@ class ImportHandler:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.item import Item
             from skills.uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.item import Item
             from uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
@@ -593,7 +593,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.item_price import ItemPrice
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.item_price import ItemPrice
 
@@ -626,7 +626,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.jurisdiction import Jurisdiction
 
@@ -659,7 +659,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.moon import Moon
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.moon import Moon
 
@@ -692,7 +692,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.orbit import Orbit
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.orbit import Orbit
 
@@ -726,7 +726,7 @@ class ImportHandler:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.orbit_distance import OrbitDistance
             from skills.uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.orbit_distance import OrbitDistance
             from uexcorp_beta.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
@@ -768,7 +768,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.outpost import Outpost
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.outpost import Outpost
 
@@ -801,7 +801,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.planet import Planet
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.planet import Planet
 
@@ -834,7 +834,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.poi import Poi
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.poi import Poi
 
@@ -867,7 +867,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.refinery_audit import RefineryAudit
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.refinery_audit import RefineryAudit
 
@@ -900,7 +900,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.refinery_method import RefineryMethod
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.refinery_method import RefineryMethod
 
@@ -933,7 +933,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.space_station import SpaceStation
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.space_station import SpaceStation
 
@@ -966,7 +966,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.star_system import StarSystem
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.star_system import StarSystem
 
@@ -999,7 +999,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.terminal import Terminal
 
@@ -1032,7 +1032,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.vehicle import Vehicle
 
@@ -1065,7 +1065,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
 
@@ -1098,7 +1098,7 @@ class ImportHandler:
         try:
             from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
             from skills.uexcorp_beta.uexcorp.model.vehicle_rental_price import VehicleRentalPrice
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.import_data import ImportData
             from uexcorp_beta.uexcorp.model.vehicle_rental_price import VehicleRentalPrice
 

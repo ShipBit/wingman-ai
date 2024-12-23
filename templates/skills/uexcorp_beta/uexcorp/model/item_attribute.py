@@ -1,7 +1,7 @@
 from datetime import datetime
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
-except ImportError:
+except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
 
 # Currently unused, as information is included in the Item model
@@ -49,7 +49,7 @@ class ItemAttribute(DataModel):
             from skills.uexcorp_beta.uexcorp.model.item import Item
             from skills.uexcorp_beta.uexcorp.model.category import Category
             from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
-        except ImportError:
+        except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.item import Item
             from uexcorp_beta.uexcorp.model.category import Category
             from uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
