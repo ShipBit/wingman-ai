@@ -22,7 +22,6 @@ class Item(DataModel):
         is_exclusive_pledge: int | None = None,  # int(1)
         is_exclusive_subscriber: int | None = None,  # int(1)
         is_exclusive_concierge: int | None = None,  # int(1)
-        screenshot: str | None = None,  # string(255) // item image URL
         attributes: dict | None = None,  # json // item specifications (ids) are associated with categories_attributes
         notification: dict | None = None,  # json // heads up about an item, such as known bugs, etc.
         date_added: int | None = None,  # int(11) // timestamp
@@ -43,7 +42,6 @@ class Item(DataModel):
             "is_exclusive_pledge": is_exclusive_pledge,
             "is_exclusive_subscriber": is_exclusive_subscriber,
             "is_exclusive_concierge": is_exclusive_concierge,
-            "screenshot": screenshot,
             "attributes": attributes,
             "notification": notification,
             "date_added": date_added,
@@ -175,9 +173,6 @@ class Item(DataModel):
 
     def get_is_exclusive_concierge(self) -> bool | None:
         return bool(self.data["is_exclusive_concierge"])
-
-    def get_screenshot(self) -> str | None:
-        return self.data["screenshot"]
 
     def get_attributes(self) -> dict | None:
         return self.data["attributes"]

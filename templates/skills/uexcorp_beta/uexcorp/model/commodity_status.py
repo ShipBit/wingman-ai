@@ -9,7 +9,7 @@ class CommodityStatus(DataModel):
 
     def __init__(
             self,
-            code: str, # string(255)
+            code: int, # int(11)
             is_buy: bool, # int(1)
             name: str | None = None, # string(255)
             name_short: str | None = None, # string(255)
@@ -30,7 +30,7 @@ class CommodityStatus(DataModel):
             "last_import_run_id": None,
         }
         if load:
-            if not self.data["code"] or not self.data["is_buy"]:
+            if not self.data["code"] or self.data["is_buy"] is None:
                 raise Exception("code and is_buy is required to load data")
             self.load_by_value("code", self.data["code"], "is_buy", self.data["is_buy"])
 
@@ -42,7 +42,11 @@ class CommodityStatus(DataModel):
         }
 
     def get_data_for_ai_minimal(self) -> dict:
-        return self.get_data_for_ai()
+        return {
+            "name": self.get_name(),
+            "percentage": self.get_percentage(),
+            "type": "buy (higher percentage = better)" if self.get_is_buy() else "sell (lower percentage = better)",
+        }
 
     def get_code(self) -> str:
         return self.data["code"]
@@ -66,4 +70,4 @@ class CommodityStatus(DataModel):
         return self.data["color_sell"]
 
     def __str__(self):
-        return str(self.data["name"])
+        return f"{self.get_name_short()} ({self.get_percentage()})"

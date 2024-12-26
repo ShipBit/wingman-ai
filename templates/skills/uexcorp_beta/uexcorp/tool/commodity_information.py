@@ -1,0 +1,107 @@
+import json
+try:
+    from skills.uexcorp_beta.uexcorp.tool.tool import Tool
+    from skills.uexcorp_beta.uexcorp.tool.validator import Validator
+except ModuleNotFoundError:
+    from uexcorp_beta.uexcorp.tool.tool import Tool
+    from uexcorp_beta.uexcorp.tool.validator import Validator
+
+
+class CommodityInformation(Tool):
+
+    def __init__(self):
+        super().__init__()
+
+    def execute(
+            self,
+            filter_commodity_names: list[str] | None = None,
+            filter_is_tradeable: bool | None = None,
+            filter_is_legal: bool | None = None,
+            filter_location_whitelist: list[str] | None = None,
+            filter_location_blacklist: list[str] | None = None,
+    ) -> (str, str):
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+            from skills.uexcorp_beta.uexcorp.helper import Helper
+        except ModuleNotFoundError:
+            from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+            from uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+            from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from uexcorp_beta.uexcorp.model.terminal import Terminal
+            from uexcorp_beta.uexcorp.helper import Helper
+
+        helper = Helper().get_instance()
+
+        commodity_data_access = CommodityDataAccess()
+
+        if filter_commodity_names is not None:
+            commodity_data_access.add_filter_by_name(filter_commodity_names)
+
+        if filter_is_tradeable is not None:
+            commodity_data_access.add_filter_by_is_buyable(filter_is_tradeable).add_filter_by_is_sellable(filter_is_tradeable)
+
+        if filter_is_legal is not None:
+            commodity_data_access.add_filter_by_is_illegal(not filter_is_legal)
+
+        if filter_location_whitelist is not None or filter_location_blacklist is not None:
+            terminal_ids = []
+            terminal_data_access = TerminalDataAccess()
+            terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
+            terminal_data_access.add_filter_by_is_available(True)
+
+            if filter_location_whitelist is not None:
+                terminal_data_access.add_filter_by_location_name_whitelist(filter_location_whitelist)
+
+            if filter_location_blacklist is not None:
+                terminal_data_access.add_filter_by_location_name_blacklist(filter_location_blacklist)
+
+            for terminal in terminal_data_access.load():
+                terminal_ids.append(terminal.get_id())
+
+            commodity_price_data_access = CommodityPriceDataAccess()
+            commodity_price_data_access.add_filter_by_id_terminal(terminal_ids)
+            commodity_data_access.add_filter_by_id([
+                commodity_price.get_id_commodity() for commodity_price in commodity_price_data_access.load()
+            ])
+
+        commodities = commodity_data_access.load()
+
+        if not commodities:
+            helper.get_handler_tool().add_note(
+                "No matching commodities found. Please check filter criteria."
+            )
+            return [], ""
+        elif len(commodities) <= 10:
+            commodities = [commodity.get_data_for_ai() for commodity in commodities]
+        elif len(commodities) <= 20:
+            commodities = [commodity.get_data_for_ai_minimal() for commodity in commodities]
+            helper.get_handler_tool().add_note(
+                f"Found {len(commodities)} matching commodities. Filter criteria are somewhat broad. (max 10 commodities for advanced information)"
+            )
+        else:
+            commodities = [str(commodity) for commodity in commodities]
+            helper.get_handler_tool().add_note(
+                f"Found {len(commodities)} matching commodities. Filter criteria are too broad. (max 20 commodities for information about each commodity)"
+            )
+
+        return json.dumps(commodities), ""
+
+    def get_mandatory_fields(self) -> dict[str, Validator]:
+        return {}
+
+    def get_optional_fields(self) -> dict[str, Validator]:
+        return {
+            "filter_commodity_names": Validator(Validator.VALIDATE_COMMODITY, multiple=True),
+            "filter_is_tradeable": Validator(Validator.VALIDATE_BOOL),
+            "filter_is_legal": Validator(Validator.VALIDATE_BOOL),
+            "filter_location_whitelist": Validator(Validator.VALIDATE_LOCATION, multiple=True),
+
+            # Didn't really make sense
+            # "filter_location_blacklist": Validator(Validator.VALIDATE_LOCATION, multiple=True),
+        }
+
+    def get_description(self) -> str:
+        return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage."

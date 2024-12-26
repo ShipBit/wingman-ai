@@ -17,10 +17,10 @@ class DataModel:
         self.table = table
         self.data = {}
 
-    def get_data_for_ai(self) -> dict:
+    def get_data_for_ai(self, **kwargs) -> dict:
         return self.get_data()
 
-    def get_data_for_ai_minimal(self) -> dict:
+    def get_data_for_ai_minimal(self, **kwargs) -> dict:
         return self.get_data_for_ai()
 
     def persist(self, skip_commit: bool = False) -> bool:

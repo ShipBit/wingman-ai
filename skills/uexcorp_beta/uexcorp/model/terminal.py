@@ -8,6 +8,14 @@ class Terminal(DataModel):
 
     required_keys = ["id"]
 
+    TYPE_COMMODITY = "commodity"
+    TYPE_COMMODITY_RAW = "commodity_raw"
+    TYPE_FUEL = "fuel"
+    TYPE_ITEM = "item"
+    TYPE_REFINERY = "refinery"
+    TYPE_VEHICLE_BUY = "vehicle_buy"
+    TYPE_VEHICLE_RENT = "vehicle_rent"
+
     def __init__(
             self,
             id: int, # int(11)
@@ -25,10 +33,6 @@ class Terminal(DataModel):
             nickname: str | None = None,  # varchar(255)
             code: str | None = None,  # varchar(6)
             type: str | None = None,  # varchar(20)
-            screenshot: str | None = None,  # varchar(255)
-            screenshot_thumbnail: str | None = None,  # varchar(255)
-            screenshot_author: str | None = None,  # varchar(255)
-            # mcs: int | None = None,  # int(11) - deprecated
             is_available: str | None = None,  # varchar(255)
             is_available_live: int | None = None,  # tinyint(1)
             is_visible: int | None = None,  # tinyint(1)
@@ -82,10 +86,6 @@ class Terminal(DataModel):
             "nickname": nickname,
             "code": code,
             "type": type,
-            "screenshot": screenshot,
-            "screenshot_thumbnail": screenshot_thumbnail,
-            "screenshot_author": screenshot_author,
-            # "mcs": mcs, # int(11) - deprecated
             "is_available": is_available,
             "is_available_live": is_available_live,
             "is_visible": is_visible,
@@ -253,7 +253,7 @@ class Terminal(DataModel):
             from uexcorp_beta.uexcorp.model.poi import Poi
 
         information = {
-            "name": self.get_name(),
+            "name": self.get_nickname(),
             "location_type": "Terminal",
             "terminal_types": self.get_types(),
             "terminal_extras": self.get_extras(),
@@ -319,15 +319,6 @@ class Terminal(DataModel):
 
     def get_type(self) -> str | None:
         return self.data["type"]
-
-    def get_screenshot(self) -> str | None:
-        return self.data["screenshot"]
-
-    def get_screenshot_thumbnail(self) -> str | None:
-        return self.data["screenshot_thumbnail"]
-
-    def get_screenshot_author(self) -> str | None:
-        return self.data["screenshot_author"]
 
     def get_is_available(self) -> str | None:
         return self.data["is_available"]

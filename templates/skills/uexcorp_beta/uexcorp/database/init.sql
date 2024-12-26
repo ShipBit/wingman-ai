@@ -165,7 +165,7 @@ CREATE TABLE commodity_price(
 );
 
 CREATE TABLE commodity_status(
-    `code` TEXT,
+    `code` INTEGER,
     `name` TEXT,
     `name_short` TEXT,
     `name_abbr` TEXT,
@@ -240,7 +240,6 @@ CREATE TABLE item(
     `is_exclusive_pledge` BIT,
     `is_exclusive_subscriber` BIT,
     `is_exclusive_concierge` BIT,
-    `screenshot` TEXT,
     `attributes` TEXT,
     `notification` TEXT,
     `date_added` INTEGER,
@@ -583,9 +582,6 @@ CREATE TABLE terminal(
     `nickname` TEXT,
     `code` TEXT,
     `type` TEXT,
-    `screenshot` TEXT,
-    `screenshot_thumbnail` TEXT,
-    `screenshot_author` TEXT,
     `is_available` BIT,
     `is_available_live` BIT,
     `is_visible` BIT,

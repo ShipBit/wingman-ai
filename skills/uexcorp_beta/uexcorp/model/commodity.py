@@ -83,14 +83,6 @@ class Commodity(DataModel):
             properties.append("mineral")
         if self.get_is_harvestable():
             properties.append("harvestable")
-        if self.get_is_buyable():
-            properties.append("buyable")
-        else:
-            properties.append("not_buyable")
-        if self.get_is_sellable():
-            properties.append("sellable")
-        else:
-            properties.append("not_sellable")
         if self.get_is_temporary():
             properties.append("temporary")
         if self.get_is_illegal():
@@ -101,6 +93,16 @@ class Commodity(DataModel):
             properties.append("fuel")
         if self.get_is_blacklisted():
             properties.append("Blacklisted for trade recommendations through advanced uex skill configuration")
+
+        # this can be interpreted from the price data
+        # if self.get_is_buyable():
+        #     properties.append("buyable")
+        # else:
+        #     properties.append("not_buyable")
+        # if self.get_is_sellable():
+        #     properties.append("sellable")
+        # else:
+        #     properties.append("not_sellable")
 
         return properties
 
@@ -114,7 +116,7 @@ class Commodity(DataModel):
 
         information = {
             "name": self.get_name(),
-            "wight_scu": self.get_weight_scu(),
+            "wight_scu": self.get_weight_scu() or "unknown",
             "properties": self.get_properties(),
             "buy_sell_options": [],
         }
@@ -126,11 +128,11 @@ class Commodity(DataModel):
         if self.get_is_buyable() or self.get_is_sellable():
             prices = CommodityPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
             for price in prices:
-                information["buy_sell_options"].append(price.get_data_for_ai_minimal())
+                information["buy_sell_options"].append(price.get_data_for_ai_minimal(show_commodity_information=False))
 
             prices_raw = CommodityRawPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
             for price_raw in prices_raw:
-                information["buy_sell_options"].append(price_raw.get_data_for_ai_minimal())
+                information["buy_sell_options"].append(price_raw.get_data_for_ai_minimal(show_commodity_information=False))
 
         return information
 
@@ -144,14 +146,13 @@ class Commodity(DataModel):
 
         information = {
             "name": self.get_name(),
-            "wight_scu": self.get_weight_scu(),
             "properties": self.get_properties(),
             "buy_sell_options": [],
         }
 
-        if self.get_id_parent():
+        if self.get_id_parent() and self.get_id_parent() != self.get_id():
             parent = Commodity(self.get_id_parent(), load=True)
-            information["parent"] = parent.get_data_for_ai_minimal()
+            information["parent"] = str(parent)
 
         if self.get_is_buyable() or self.get_is_sellable():
             prices = CommodityPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()

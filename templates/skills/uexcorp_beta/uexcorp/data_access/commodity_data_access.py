@@ -48,6 +48,10 @@ class CommodityDataAccess(DataAccess):
     def load_by_property(self, property: str, value: any) -> Commodity:
         return super().load_by_property(property, value)
 
+    def add_filter_by_id(self, id: int | list[int]) -> "CommodityDataAccess":
+        self.filter.where("id", id)
+        return self
+
     def add_filter_by_name(self, name: str | list[str]) -> "CommodityDataAccess":
         self.filter.where("name", name)
         return self

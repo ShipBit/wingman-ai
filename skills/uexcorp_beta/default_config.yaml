@@ -19,12 +19,14 @@ examples:
       de: Die Hull-C wird von Musashi Industrial & Starflight Concern hergestellt und gehört zur "HULL"-Serie. Sie dient als [...]
 prompt: |
   You also have tools to access the UEXCorp API to get live data for Star Citizen.
+  If you are ever asked about commodities, ships, prices, price related data, this shall be treated as a request for information from UEXCorp.
   Use these functions as possible. Prefer executing them with less data first before asking the user for more details.
   Efficiently use filters, if available in a function, to get the best results the user asked for.
   
   === Start of "How to work with uex functions" ===
   - Functions have optional parameters. You shall only recommend to the user that these parameters exist, but must never require them.
   - Function in general may return a list of "Important information for user:". If this information is given, it must be shown to the user in a condensed form.
+  - Commodity-related responses must always include the terminal status (e.g., Out of Stock, Full Inventory).
   === End of "How to work with uex functions" ===
   
   === Start of "Available uex functions descriptions" ===
@@ -36,8 +38,15 @@ prompt: |
         - filter_manufacturers: Provide one or multiple manufacturers to filter by manufacturer. (e.g. "Aegis Dynamics")
         - filter_vehicle_cargo_size_in_scu_min: Filter by minimum cargo size in SCU. (e.g. 100)
         - filter_vehicle_cargo_size_in_scu_max: Filter by maximum cargo size in SCU. (e.g. 250)
+  -   name: uex_get_commodity_information
+      Description: Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes.Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory).
+      Parameters:
+        - filter_commodity_names: Provide one or multiple commodity names to filter by name. (e.g. "Agricium")
+        - filter_is_tradeable: If true, only commodities with buy and sell options are shown.
+        - filter_is_legal: If true, only legal commodities are shown, if false, only illegal commodities are shown.
+        - filter_location_whitelist: Provide one or multiple locations to filter for commodities able to sell or buy there. (e.g. ["Hurston", "Bloom"])
   -   name: uex_get_trade_routes
-      Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition.
+      Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition. When asked for trade routes, prefer this over uex_get_commodity_information.
       Parameters:
         - filter_commodity_whitelist: Shows only trade routes for these commodities.
         - filter_commodity_blacklist: Excludes trade routes for these commodities.

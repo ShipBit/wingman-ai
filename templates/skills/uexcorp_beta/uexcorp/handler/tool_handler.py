@@ -4,9 +4,11 @@ from typing import TYPE_CHECKING
 try:
     from skills.uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
     from skills.uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
+    from skills.uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
 except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
     from uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
+    from uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
 
 if TYPE_CHECKING:
     try:
@@ -28,6 +30,7 @@ class ToolHandler:
         self.__functions = {
             "uex_get_vehicle_information": VehicleInformation,
             "uex_get_trade_routes": CommodityRoute,
+            "uex_get_commodity_information": CommodityInformation
         }
         self.__notes = []
 

@@ -27,7 +27,6 @@ class ItemDataAccess(DataAccess):
             "is_exclusive_pledge",
             "is_exclusive_subscriber",
             "is_exclusive_concierge",
-            "screenshot",
             "attributes",
             "notification",
             "date_added",

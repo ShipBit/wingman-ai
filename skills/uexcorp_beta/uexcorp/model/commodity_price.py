@@ -71,28 +71,67 @@ class CommodityPrice(DataModel):
         try:
             from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
             from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+            from skills.uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
         except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.commodity import Commodity
             from uexcorp_beta.uexcorp.model.terminal import Terminal
+            from uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
 
         commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+
+        commodity_status_buy = CommodityStatus(self.get_status_buy(), True, load=True) if self.get_status_buy() else None
+        commodity_status_sell = CommodityStatus(self.get_status_sell(), False, load=True) if self.get_status_sell() else None
 
         return {
             "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
             "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
             "price_buy": self.get_price_buy(),
             "price_sell": self.get_price_sell(),
-            # "status_buy": self.get_status_buy(), # TODO: Import status
-            # "status_sell": self.get_status_sell(), # TODO: Import status
+            "status_buy": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
+            "status_sell": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
             "scu_buy": self.get_scu_buy(),
             "scu_buy_avg": self.get_scu_buy_avg(),
             "scu_sell_stock": self.get_scu_sell_stock(),
             "scu_sell_stock_avg": self.get_scu_sell_stock_avg(),
         }
 
-    def get_data_for_ai_minimal(self) -> dict:
-        return self.get_data_for_ai()
+    def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_commodity_information: bool = True) -> dict:
+        try:
+            from skills.uexcorp_beta.uexcorp.model.commodity import Commodity
+            from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
+            from skills.uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
+        except ModuleNotFoundError:
+            from uexcorp_beta.uexcorp.model.commodity import Commodity
+            from uexcorp_beta.uexcorp.model.terminal import Terminal
+            from uexcorp_beta.uexcorp.model.commodity_status import CommodityStatus
+
+        commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
+        terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+
+        commodity_status_buy = CommodityStatus(self.get_status_buy(), True, load=True) if self.get_status_buy() else None
+        commodity_status_sell = CommodityStatus(self.get_status_sell(), False, load=True) if self.get_status_sell() else None
+
+        information = {}
+
+        if show_commodity_information:
+            information["commodity"] = commodity.get_data_for_ai_minimal() if commodity else None
+
+        if show_terminal_information:
+            information["terminal"] = terminal.get_data_for_ai_minimal() if terminal else None
+
+        information.update({
+            "price_buy": self.get_price_buy(),
+            "price_sell": self.get_price_sell(),
+            "status_buy": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
+            "status_sell": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
+            "scu_buy": self.get_scu_buy(),
+            "scu_buy_avg": self.get_scu_buy_avg(),
+            "scu_sell_stock": self.get_scu_sell_stock(),
+            "scu_sell_stock_avg": self.get_scu_sell_stock_avg(),
+        })
+
+        return information
 
     def get_id(self) -> int:
         return self.data["id"]

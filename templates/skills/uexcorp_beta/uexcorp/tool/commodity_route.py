@@ -34,12 +34,14 @@ class CommodityRoute(Tool):
             from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
+            from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
             from skills.uexcorp_beta.uexcorp.helper import Helper
         except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
             from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
             from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
             from uexcorp_beta.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
+            from uexcorp_beta.uexcorp.model.terminal import Terminal
             from uexcorp_beta.uexcorp.helper import Helper
 
         helper = Helper.get_instance()
@@ -97,7 +99,7 @@ class CommodityRoute(Tool):
         if filter_location_blacklist:
             terminal_data_access = TerminalDataAccess()
             terminal_data_access.add_filter_by_location_name_blacklist(filter_location_blacklist)
-            terminal_data_access.add_filter_by_type("commodity")
+            terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
             terminal_data_access.add_filter_by_is_available(True)
             for terminal in terminal_data_access.load():
                 terminal_ids_exclude.append(terminal.get_id())
@@ -105,7 +107,7 @@ class CommodityRoute(Tool):
         if filter_start_location:
             terminal_data_access = TerminalDataAccess()
             terminal_data_access.add_filter_by_location_name_whitelist(filter_start_location)
-            terminal_data_access.add_filter_by_type("commodity")
+            terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
             terminal_data_access.add_filter_by_is_available(True)
             for terminal in terminal_data_access.load():
                 start_terminal_ids.append(terminal.get_id())
@@ -113,7 +115,7 @@ class CommodityRoute(Tool):
         if filter_destination_location:
             terminal_data_access = TerminalDataAccess()
             terminal_data_access.add_filter_by_location_name_whitelist(filter_destination_location)
-            terminal_data_access.add_filter_by_type("commodity")
+            terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
             terminal_data_access.add_filter_by_is_available(True)
             for terminal in terminal_data_access.load():
                 end_terminals_ids.append(terminal.get_id())
