@@ -38,34 +38,36 @@ class CommodityInformation(Tool):
         commodity_data_access = CommodityDataAccess()
 
         if filter_commodity_names is not None:
+            # if names are given, other filters are no longer needed
             commodity_data_access.add_filter_by_name(filter_commodity_names)
+        else:
+            # only filter for further parameters if no names are given
+            if filter_is_tradeable is not None:
+                commodity_data_access.add_filter_by_is_buyable(filter_is_tradeable).add_filter_by_is_sellable(filter_is_tradeable)
 
-        if filter_is_tradeable is not None:
-            commodity_data_access.add_filter_by_is_buyable(filter_is_tradeable).add_filter_by_is_sellable(filter_is_tradeable)
+            if filter_is_legal is not None:
+                commodity_data_access.add_filter_by_is_illegal(not filter_is_legal)
 
-        if filter_is_legal is not None:
-            commodity_data_access.add_filter_by_is_illegal(not filter_is_legal)
+            if filter_location_whitelist is not None or filter_location_blacklist is not None:
+                terminal_ids = []
+                terminal_data_access = TerminalDataAccess()
+                terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
+                terminal_data_access.add_filter_by_is_available(True)
 
-        if filter_location_whitelist is not None or filter_location_blacklist is not None:
-            terminal_ids = []
-            terminal_data_access = TerminalDataAccess()
-            terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
-            terminal_data_access.add_filter_by_is_available(True)
+                if filter_location_whitelist is not None:
+                    terminal_data_access.add_filter_by_location_name_whitelist(filter_location_whitelist)
 
-            if filter_location_whitelist is not None:
-                terminal_data_access.add_filter_by_location_name_whitelist(filter_location_whitelist)
+                if filter_location_blacklist is not None:
+                    terminal_data_access.add_filter_by_location_name_blacklist(filter_location_blacklist)
 
-            if filter_location_blacklist is not None:
-                terminal_data_access.add_filter_by_location_name_blacklist(filter_location_blacklist)
+                for terminal in terminal_data_access.load():
+                    terminal_ids.append(terminal.get_id())
 
-            for terminal in terminal_data_access.load():
-                terminal_ids.append(terminal.get_id())
-
-            commodity_price_data_access = CommodityPriceDataAccess()
-            commodity_price_data_access.add_filter_by_id_terminal(terminal_ids)
-            commodity_data_access.add_filter_by_id([
-                commodity_price.get_id_commodity() for commodity_price in commodity_price_data_access.load()
-            ])
+                commodity_price_data_access = CommodityPriceDataAccess()
+                commodity_price_data_access.add_filter_by_id_terminal(terminal_ids)
+                commodity_data_access.add_filter_by_id([
+                    commodity_price.get_id_commodity() for commodity_price in commodity_price_data_access.load()
+                ])
 
         commodities = commodity_data_access.load()
 
