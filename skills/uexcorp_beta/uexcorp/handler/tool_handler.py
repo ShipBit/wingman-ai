@@ -5,10 +5,12 @@ try:
     from skills.uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
     from skills.uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
     from skills.uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
+    from skills.uexcorp_beta.uexcorp.tool.location_information import LocationInformation
 except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
     from uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
     from uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
+    from uexcorp_beta.uexcorp.tool.location_information import LocationInformation
 
 if TYPE_CHECKING:
     try:
@@ -30,7 +32,8 @@ class ToolHandler:
         self.__functions = {
             "uex_get_vehicle_information": VehicleInformation,
             "uex_get_trade_routes": CommodityRoute,
-            "uex_get_commodity_information": CommodityInformation
+            "uex_get_commodity_information": CommodityInformation,
+            "uex_get_location_or_terminal_information": LocationInformation,
         }
         self.__notes = []
 
@@ -105,7 +108,7 @@ class ToolHandler:
                 notes = self.get_notes(clear=True)
                 if notes:
                     notes = '\n-'.join(notes)
-                    function_response += f"\n\nImportant information for user:\n-{notes}"
+                    function_response = str(function_response) + f"\n\nImportant information for user:\n-{notes}"
 
                 self.__helper.get_handler_debug().write(
                     f"Execution of '{tool_name}' took {self.__helper.end_timer(tool_name)} ms."

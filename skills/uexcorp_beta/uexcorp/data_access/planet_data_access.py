@@ -1,7 +1,9 @@
 try:
+    from skills.uexcorp_beta.uexcorp.database.filter import Filter
     from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
     from skills.uexcorp_beta.uexcorp.model.planet import Planet
 except ModuleNotFoundError:
+    from uexcorp_beta.uexcorp.database.filter import Filter
     from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
     from uexcorp_beta.uexcorp.model.planet import Planet
 
@@ -39,6 +41,13 @@ class PlanetDataAccess(DataAccess):
 
     def load_by_property(self, property: str, value: any) -> Planet | None:
         return super().load_by_property(property, value)
+
+    def add_filter_by_location_name_whitelist(self, location_names: str | list[str]) -> "PlanetDataAccess":
+        grouped_filter = Filter()
+        grouped_filter.where("star_system_name", location_names, is_or=True)
+        grouped_filter.where("name", location_names, is_or=True)
+        self.filter.apply_filter(grouped_filter)
+        return self
 
     def add_filter_by_id_star_system(self, id_star_system: int | list[int]) -> "PlanetDataAccess":
         self.filter.where("id_star_system", id_star_system)

@@ -27,11 +27,12 @@ prompt: |
   - Functions have optional parameters. You shall only recommend to the user that these parameters exist, but must never require them.
   - Function in general may return a list of "Important information for user:". If this information is given, it must be shown to the user in a condensed form.
   - Commodity-related responses must always include the terminal status (e.g., Out of Stock, Full Inventory).
+  - Keep answers short and focus on necessary information only even if a lot of information is available. Provide summaries and hint or ask that there are more details available.
   === End of "How to work with uex functions" ===
   
   === Start of "Available uex functions descriptions" ===
   -   name: uex_get_vehicle_information
-      Description: Holds all information's about all ships, filterable. (eg incl. rent/buy options, cargo sizes, ...).
+      Description: Holds all information's about all ships, filterable. (eg incl. rent/buy options per ship, cargo sizes, ...).
       Parameters:
         - filter_vehicles: Provide one or multiple ship names (incl. short manufacturer name) to filter by name. (e.g. "RSI Aurora MR")
         - filter_roles: Provide one or multiple roles to filter by role. (e.g. "mining" or "cargo")
@@ -41,10 +42,15 @@ prompt: |
   -   name: uex_get_commodity_information
       Description: Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes.Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory).
       Parameters:
-        - filter_commodity_names: Provide one or multiple commodity names to filter by name. (e.g. "Agricium")
+        - filter_commodities: Provide one or multiple commodity names to filter by name. (e.g. "Agricium")
         - filter_is_tradeable: If true, only commodities with buy and sell options are shown.
         - filter_is_legal: If true, only legal commodities are shown, if false, only illegal commodities are shown.
         - filter_location_whitelist: Provide one or multiple locations to filter for commodities able to sell or buy there. (e.g. ["Hurston", "Bloom"])
+  -   name: uex_get_location_or_terminal_information
+      Description: Get all information's about all locations, filterable. When asked about a specific location or location type, prefer this over uex_get_trade_routes. Terminals/locations may also provide buy/sell/rent prices and options.
+      Parameters:
+        - filter_locations: Provide one or multiple location names to filter by name. (e.g. "Hurston" or "Stanton")
+        - filter_location_types: Provide one or multiple location types to receive. Works with unconnected location names, e.g. filter_locations: ["Hurston"], filter_location_types: ["moon"], to get all moons of Hurston.
   -   name: uex_get_trade_routes
       Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition. When asked for trade routes, prefer this over uex_get_commodity_information.
       Parameters:

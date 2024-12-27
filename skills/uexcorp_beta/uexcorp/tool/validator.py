@@ -39,6 +39,7 @@ class Validator:
     VALIDATE_COMMODITY = "commodity"
     VALIDATE_LOCATION = "location"
     VALIDATE_COMPANY = "company"
+    VALIDATE_ENUM = "enum"
 
     def __init__(
         self,
@@ -56,6 +57,7 @@ class Validator:
             self.VALIDATE_COMMODITY,
             self.VALIDATE_LOCATION,
             self.VALIDATE_COMPANY,
+            self.VALIDATE_ENUM,
         ]:
             raise ValueError("Invalid validation logic")
         self.__method_validate: callable = getattr(self, f"_Validator__validate_{logic}")
@@ -309,3 +311,12 @@ class Validator:
 
     def __definition_company(self, **kwargs) -> dict[str, any]:
         return {"type": "string"}
+
+    def __validate_enum(self, value: str, enum: list[str]) -> str | None:
+        if value in enum:
+            return value
+
+        return None
+
+    def __definition_enum(self, enum: list[str], **kwargs) -> dict[str, any]:
+        return {"type": "string", "enum": enum}

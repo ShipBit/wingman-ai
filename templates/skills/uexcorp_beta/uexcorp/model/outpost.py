@@ -140,9 +140,9 @@ class Outpost(DataModel):
         else:
             properties.append("No Armistice")
         if self.get_is_landable():
-            properties.append("Landable")
+            properties.append("Has landing pad")
         else:
-            properties.append("Not Landable")
+            properties.append("No landing pad")
         if self.get_is_decommissioned():
             properties.append("Decommissioned")
         if self.get_has_quantum_marker():

@@ -18,16 +18,19 @@ class ItemDataAccess(DataAccess):
             "id",
             "id_parent",
             "id_category",
+            "id_company",
             "id_vehicle",
             "name",
             "section",
             "category",
+            "company_name",
+            "vehicle_name",
             "slug",
             "url_store",
             "is_exclusive_pledge",
             "is_exclusive_subscriber",
             "is_exclusive_concierge",
-            "attributes",
+            # "attributes",
             "notification",
             "date_added",
             "date_modified",
@@ -48,6 +51,10 @@ class ItemDataAccess(DataAccess):
         self.filter.where("id_category", id_category, **params)
         return self
 
+    def add_filter_by_id_company(self, id_company: int | list[int], **params) -> "ItemDataAccess":
+        self.filter.where("id_company", id_company, **params)
+        return self
+
     def add_filter_by_id_vehicle(self, id_vehicle: int | list[int], **params) -> "ItemDataAccess":
         self.filter.where("id_vehicle", id_vehicle, **params)
         return self
@@ -62,6 +69,14 @@ class ItemDataAccess(DataAccess):
 
     def add_filter_by_category(self, category: str | list[str], **params) -> "ItemDataAccess":
         self.filter.where("category", category, **params)
+        return self
+
+    def add_filter_by_company_name(self, company_name: str | list[str], **params) -> "ItemDataAccess":
+        self.filter.where("company_name", company_name, **params)
+        return self
+
+    def add_filter_by_vehicle_name(self, vehicle_name: str | list[str], **params) -> "ItemDataAccess":
+        self.filter.where("vehicle_name", vehicle_name, **params)
         return self
 
     def add_filter_by_slug(self, slug: str | list[str], **params) -> "ItemDataAccess":

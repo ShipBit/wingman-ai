@@ -44,27 +44,27 @@ class VehicleInformation(Tool):
 
         if filter_vehicles:
             vehicle_data_access.add_filter_by_name_full(filter_vehicles)
+        else:
+            if filter_vehicle_roles:
+                vehicle_data_access.add_filter_by_role_strings(filter_vehicle_roles)
 
-        if filter_vehicle_roles:
-            vehicle_data_access.add_filter_by_role_strings(filter_vehicle_roles)
+            if filter_vehicle_company:
+                vehicle_data_access.add_filter_by_company_name(filter_vehicle_company)
 
-        if filter_vehicle_company:
-            vehicle_data_access.add_filter_by_company_name(filter_vehicle_company)
+            if filter_vehicle_cargo_size_in_scu_min:
+                vehicle_data_access.add_filter_by_scu(filter_vehicle_cargo_size_in_scu_min, operation=">=")
 
-        if filter_vehicle_cargo_size_in_scu_min:
-            vehicle_data_access.add_filter_by_scu(filter_vehicle_cargo_size_in_scu_min, operation=">=")
+            if filter_vehicle_cargo_size_in_scu_max:
+                vehicle_data_access.add_filter_by_scu(filter_vehicle_cargo_size_in_scu_max, operation="<=")
 
-        if filter_vehicle_cargo_size_in_scu_max:
-            vehicle_data_access.add_filter_by_scu(filter_vehicle_cargo_size_in_scu_max, operation="<=")
+            if limit:
+                vehicle_data_access.limit(limit)
+                helper.get_handler_tool().add_note(
+                    f"You must clearly communicate to the user that a limit of {limit} is used"
+                )
 
-        if limit:
-            vehicle_data_access.limit(limit)
-            helper.get_handler_tool().add_note(
-                f"You must clearly communicate to the user that a limit of {limit} is used"
-            )
-
-        if offset:
-            vehicle_data_access.offset(offset)
+            if offset:
+                vehicle_data_access.offset(offset)
 
         vehicles = vehicle_data_access.load(debug=True) # TODO remove debug=True
         return json.dumps([vehicle.get_data_for_ai() for vehicle in vehicles]), ""

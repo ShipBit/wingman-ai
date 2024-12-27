@@ -48,6 +48,7 @@ class SpaceStation(DataModel):
             star_system_name: str | None = None,  # varchar(255)
             planet_name: str | None = None,  # varchar(255)
             orbit_name: str | None = None,  # varchar(255)
+            moon_name: str | None = None,  # varchar(255)
             city_name: str | None = None,  # varchar(255)
             faction_name: str | None = None,  # varchar(255)
             jurisdiction_name: str | None = None,  # varchar(255)
@@ -94,6 +95,7 @@ class SpaceStation(DataModel):
             "star_system_name": star_system_name,
             "planet_name": planet_name,
             "orbit_name": orbit_name,
+            "moon_name": moon_name,
             "city_name": city_name,
             "faction_name": faction_name,
             "jurisdiction_name": jurisdiction_name,
@@ -143,9 +145,9 @@ class SpaceStation(DataModel):
         else:
             properties.append("No Armistice")
         if self.get_is_landable():
-            properties.append("Landable")
+            properties.append("Has landing pad")
         else:
-            properties.append("Not Landable")
+            properties.append("No landing pad")
         if self.get_is_decommissioned():
             properties.append("Decommissioned")
         if self.get_is_lagrange():
@@ -206,8 +208,10 @@ class SpaceStation(DataModel):
     def get_data_for_ai_minimal(self) -> dict:
         try:
             from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from skills.uexcorp_beta.uexcorp.model.moon import Moon
         except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from uexcorp_beta.uexcorp.model.moon import Moon
 
         terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()
 
@@ -221,7 +225,8 @@ class SpaceStation(DataModel):
         }
 
         if self.get_id_moon():
-            information["parent_moon"] = self.get_moon_name()
+            moon = Moon(self.get_id_moon(), load=True)
+            information["parent_moon"] = str(moon)
         elif self.get_id_planet():
             information["parent_planet"] = self.get_planet_name()
         elif self.get_id_star_system():

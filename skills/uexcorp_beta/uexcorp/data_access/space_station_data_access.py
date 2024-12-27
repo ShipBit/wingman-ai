@@ -1,7 +1,9 @@
 try:
+    from skills.uexcorp_beta.uexcorp.database.filter import Filter
     from skills.uexcorp_beta.uexcorp.data_access.data_access import DataAccess
     from skills.uexcorp_beta.uexcorp.model.space_station import SpaceStation
 except ModuleNotFoundError:
+    from uexcorp_beta.uexcorp.database.filter import Filter
     from uexcorp_beta.uexcorp.data_access.data_access import DataAccess
     from uexcorp_beta.uexcorp.model.space_station import SpaceStation
 
@@ -65,6 +67,15 @@ class SpaceStationDataAccess(DataAccess):
     def load_by_property(self, property: str, value: any) -> SpaceStation | None:
         return super().load_by_property(property, value)
 
+    def add_filter_by_location_name_whitelist(self, location_names: str | list[str]) -> "SpaceStationDataAccess":
+        grouped_filter = Filter()
+        grouped_filter.where("star_system_name", location_names, is_or=True)
+        grouped_filter.where("planet_name", location_names, is_or=True)
+        grouped_filter.where("orbit_name", location_names, is_or=True)
+        grouped_filter.where("name", location_names, is_or=True)
+        self.filter.apply_filter(grouped_filter)
+        return self
+
     def add_filter_by_id_star_system(self, id_star_system: int | list[int]) -> "SpaceStationDataAccess":
         self.filter.where("id_star_system", id_star_system)
         return self
@@ -93,8 +104,8 @@ class SpaceStationDataAccess(DataAccess):
         self.filter.where("id_jurisdiction", id_jurisdiction)
         return self
 
-    def add_filter_by_name(self, name: str | list[str]) -> "SpaceStationDataAccess":
-        self.filter.where("name", name)
+    def add_filter_by_name(self, name: str | list[str], **kwargs) -> "SpaceStationDataAccess":
+        self.filter.where("name", name, **kwargs)
         return self
 
     def add_filter_by_nickname(self, nickname: str | list[str]) -> "SpaceStationDataAccess":

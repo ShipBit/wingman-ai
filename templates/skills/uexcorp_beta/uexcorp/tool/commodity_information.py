@@ -14,7 +14,7 @@ class CommodityInformation(Tool):
 
     def execute(
             self,
-            filter_commodity_names: list[str] | None = None,
+            filter_commodities: list[str] | None = None,
             filter_is_tradeable: bool | None = None,
             filter_is_legal: bool | None = None,
             filter_location_whitelist: list[str] | None = None,
@@ -36,10 +36,12 @@ class CommodityInformation(Tool):
         helper = Helper().get_instance()
 
         commodity_data_access = CommodityDataAccess()
+        commodity_prices = []
+        terminal_ids = []
 
-        if filter_commodity_names is not None:
+        if filter_commodities is not None:
             # if names are given, other filters are no longer needed
-            commodity_data_access.add_filter_by_name(filter_commodity_names)
+            commodity_data_access.add_filter_by_name(filter_commodities)
         else:
             # only filter for further parameters if no names are given
             if filter_is_tradeable is not None:
@@ -49,10 +51,9 @@ class CommodityInformation(Tool):
                 commodity_data_access.add_filter_by_is_illegal(not filter_is_legal)
 
             if filter_location_whitelist is not None or filter_location_blacklist is not None:
-                terminal_ids = []
                 terminal_data_access = TerminalDataAccess()
                 terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)
-                terminal_data_access.add_filter_by_is_available(True)
+                # terminal_data_access.add_filter_by_is_available(True)
 
                 if filter_location_whitelist is not None:
                     terminal_data_access.add_filter_by_location_name_whitelist(filter_location_whitelist)
@@ -65,8 +66,9 @@ class CommodityInformation(Tool):
 
                 commodity_price_data_access = CommodityPriceDataAccess()
                 commodity_price_data_access.add_filter_by_id_terminal(terminal_ids)
+                commodity_prices = commodity_price_data_access.load()
                 commodity_data_access.add_filter_by_id([
-                    commodity_price.get_id_commodity() for commodity_price in commodity_price_data_access.load()
+                    commodity_price.get_id_commodity() for commodity_price in commodity_prices
                 ])
 
         commodities = commodity_data_access.load()
@@ -84,7 +86,28 @@ class CommodityInformation(Tool):
                 f"Found {len(commodities)} matching commodities. Filter criteria are somewhat broad. (max 10 commodities for advanced information)"
             )
         else:
-            commodities = [str(commodity) for commodity in commodities]
+            if filter_location_whitelist is not None or filter_location_blacklist is not None:
+                commodities_temp = []
+                for commodity in commodities:
+                    buy = False
+                    sell = False
+                    for price in commodity_prices:
+                        if price.get_id_commodity() == commodity.get_id() and price.get_id_terminal() in terminal_ids:
+                            if price.get_price_sell() > 0:
+                                sell = True
+                            if price.get_price_buy() > 0:
+                                buy = True
+                    if buy and sell:
+                        commodities_temp.append(f"{str(commodity)} (Buy/Sell)")
+                    elif buy:
+                        commodities_temp.append(f"{str(commodity)} (Buy)")
+                    elif sell:
+                        commodities_temp.append(f"{str(commodity)} (Sell)")
+                    else:
+                        commodities_temp.append(str(commodity))
+                commodities = commodities_temp
+            else:
+                commodities = [str(commodity) for commodity in commodities]
             helper.get_handler_tool().add_note(
                 f"Found {len(commodities)} matching commodities. Filter criteria are too broad. (max 20 commodities for information about each commodity)"
             )
@@ -96,7 +119,7 @@ class CommodityInformation(Tool):
 
     def get_optional_fields(self) -> dict[str, Validator]:
         return {
-            "filter_commodity_names": Validator(Validator.VALIDATE_COMMODITY, multiple=True),
+            "filter_commodities": Validator(Validator.VALIDATE_COMMODITY, multiple=True),
             "filter_is_tradeable": Validator(Validator.VALIDATE_BOOL),
             "filter_is_legal": Validator(Validator.VALIDATE_BOOL),
             "filter_location_whitelist": Validator(Validator.VALIDATE_LOCATION, multiple=True),

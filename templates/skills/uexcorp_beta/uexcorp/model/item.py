@@ -13,16 +13,19 @@ class Item(DataModel):
         id: int,  # int(11) // route ID, may change during website updates
         id_parent: int | None = None,  # int(11)
         id_category: int | None = None,  # int(11) // category
+        id_company: int | None = None,  # int(11) // if item is linked to a company
         id_vehicle: int | None = None,  # int(11) // if item is linked to a vehicle
         name: str | None = None,  # string(255)
         section: str | None = None,  # string(255) // coming from categories
         category: str | None = None,  # string(255) // coming from categories
+        company_name: str | None = None,  # string(255) // if item is linked to a company
+        vehicle_name: str | None = None,  # string(255) // if item is linked to a vehicle
         slug: str | None = None,  # string(255) // used by UEX item URLs
         url_store: str | None = None,  # string(255) // pledge store URL
         is_exclusive_pledge: int | None = None,  # int(1)
         is_exclusive_subscriber: int | None = None,  # int(1)
         is_exclusive_concierge: int | None = None,  # int(1)
-        attributes: dict | None = None,  # json // item specifications (ids) are associated with categories_attributes
+        # attributes: dict | None = None,  # json // item specifications (ids) are associated with categories_attributes
         notification: dict | None = None,  # json // heads up about an item, such as known bugs, etc.
         date_added: int | None = None,  # int(11) // timestamp
         date_modified: int | None = None,  # int(11) // timestamp
@@ -33,16 +36,19 @@ class Item(DataModel):
             "id": id,
             "id_parent": id_parent,
             "id_category": id_category,
+            "id_company": id_company,
             "id_vehicle": id_vehicle,
             "name": name,
             "section": section,
             "category": category,
+            "company_name": company_name,
+            "vehicle_name": vehicle_name,
             "slug": slug,
             "url_store": url_store,
             "is_exclusive_pledge": is_exclusive_pledge,
             "is_exclusive_subscriber": is_exclusive_subscriber,
             "is_exclusive_concierge": is_exclusive_concierge,
-            "attributes": attributes,
+            # "attributes": attributes,
             "notification": notification,
             "date_added": date_added,
             "date_modified": date_modified,
@@ -84,11 +90,11 @@ class Item(DataModel):
             vehicle = Vehicle(self.get_id_vehicle(), load=True)
             information["for_vehicle"] = vehicle.get_data_for_ai_minimal()
 
-        if self.get_attributes():
-            attributes = {}
-            for id_category_attribute, value in self.get_attributes().items():
-                category_attribute = CategoryAttribute(id_category_attribute, load=True)
-                attributes[category_attribute.get_name()] = value
+        # if self.get_attributes():
+        #     attributes = {}
+        #     for id_category_attribute, value in self.get_attributes().items():
+        #         category_attribute = CategoryAttribute(id_category_attribute, load=True)
+        #         attributes[category_attribute.get_name()] = value
 
         prices = ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load()
         offers = []
@@ -120,14 +126,13 @@ class Item(DataModel):
             information["parent"] = parent.get_name()
 
         if self.get_id_vehicle():
-            vehicle = Vehicle(self.get_id_vehicle(), load=True)
-            information["for_vehicle"] = vehicle.get_name()
+            information["for_vehicle"] = self.get_vehicle_name()
 
-        if self.get_attributes():
-            attributes = {}
-            for id_category_attribute, value in self.get_attributes().items():
-                category_attribute = CategoryAttribute(id_category_attribute, load=True)
-                attributes[category_attribute.get_name()] = value
+        # if self.get_attributes():
+        #     attributes = {}
+        #     for id_category_attribute, value in self.get_attributes().items():
+        #         category_attribute = CategoryAttribute(id_category_attribute, load=True)
+        #         attributes[category_attribute.get_name()] = value
 
         prices = ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load()
         offers = []
@@ -147,6 +152,9 @@ class Item(DataModel):
     def get_id_category(self) -> int | None:
         return self.data["id_category"]
 
+    def get_id_company(self) -> int | None:
+        return self.data["id_company"]
+
     def get_id_vehicle(self) -> int | None:
         return self.data["id_vehicle"]
 
@@ -158,6 +166,12 @@ class Item(DataModel):
 
     def get_category(self) -> str | None:
         return self.data["category"]
+
+    def get_company_name(self) -> str | None:
+        return self.data["company_name"]
+
+    def get_vehicle_name(self) -> str | None:
+        return self.data["vehicle_name"]
 
     def get_slug(self) -> str | None:
         return self.data["slug"]

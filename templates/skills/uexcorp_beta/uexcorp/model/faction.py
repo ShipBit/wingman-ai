@@ -91,7 +91,8 @@ class Faction(DataModel):
         if self.get_ids_star_systems():
             for id_star_system in self.get_ids_star_systems().split(","):
                 star_system = StarSystem(int(id_star_system), load=True)
-                information["star_systems"].append(str(star_system))
+                if star_system.get_is_available():
+                    information["star_systems"].append(str(star_system))
 
         if self.get_ids_factions_friendly():
             for id_faction in self.get_ids_factions_friendly().split(","):

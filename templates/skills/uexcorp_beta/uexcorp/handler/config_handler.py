@@ -21,7 +21,7 @@ class ConfigHandler:
         self.__helper = helper
         self.__wingman: "OpenAiWingman" | None = None
         self.__fine_config_path: str = get_writable_dir(os.path.join(self.__helper.get_data_path(), "config"))
-        self.__api_url: str = "https://uexcorp.space/api/2.0"
+        self.__api_url: str = "https://api.uexcorp.space/2.0"
         self.__api_use_key: bool = False
         self.__api_key: str | None = None
         self.__api_timeout: int = 10
