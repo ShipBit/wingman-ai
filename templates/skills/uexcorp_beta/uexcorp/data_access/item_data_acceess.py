@@ -43,6 +43,10 @@ class ItemDataAccess(DataAccess):
     def load_by_property(self, property: str, value: any) -> Item | None:
         return super().load_by_property(property, value)
 
+    def add_filter_by_id(self, id: int | list[int], **params) -> "ItemDataAccess":
+        self.filter.where("id", id, **params)
+        return self
+
     def add_filter_by_id_parent(self, id_parent: int | list[int], **params) -> "ItemDataAccess":
         self.filter.where("id_parent", id_parent, **params)
         return self

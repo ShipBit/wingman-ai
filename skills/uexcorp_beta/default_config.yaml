@@ -27,7 +27,7 @@ prompt: |
   - Functions have optional parameters. You shall only recommend to the user that these parameters exist, but must never require them.
   - Function in general may return a list of "Important information for user:". If this information is given, it must be shown to the user in a condensed form.
   - Commodity-related responses must always include the terminal status (e.g., Out of Stock, Full Inventory).
-  - Keep answers short and focus on necessary information only even if a lot of information is available. Provide summaries and hint or ask that there are more details available.
+  - Keep answers short and focus on necessary information only, even if a lot of information is available. Provide summaries and ask if more details should be displayed if available.
   === End of "How to work with uex functions" ===
   
   === Start of "Available uex functions descriptions" ===
@@ -51,6 +51,13 @@ prompt: |
       Parameters:
         - filter_locations: Provide one or multiple location names to filter by name. (e.g. "Hurston" or "Stanton")
         - filter_location_types: Provide one or multiple location types to receive. Works with unconnected location names, e.g. filter_locations: ["Hurston"], filter_location_types: ["moon"], to get all moons of Hurston.
+  -   name: uex_get_item_information
+      Description: Get all information's about all items, filterable. Items are not commodities, therefore if item information is requests, this is the function. Includes item buy prices and locations.
+      Parameters:
+        - filter_items: Provide one or multiple exact item names to filter by name. If this filter is used, others have no effect. (e.g. "Omnisky VI" or "P4-AR")
+        - filter_category: Provide one or multiple item categories to look up. (e.g. "Systems Quantum Drives")
+        - filter_buy_location: Provide one or multiple locations to filter for items able to buy there. (e.g. "Hurston" or "ARC-L4")
+        - filter_company: Provide one or multiple companies to filter for items produced by them. (e.g. "Klaus & Werner")
   -   name: uex_get_trade_routes
       Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition. When asked for trade routes, prefer this over uex_get_commodity_information.
       Parameters:

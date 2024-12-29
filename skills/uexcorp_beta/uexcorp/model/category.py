@@ -39,9 +39,9 @@ class Category(DataModel):
 
     def get_data_for_ai(self) -> dict:
         return {
-            "name": self.get_name(),
             "type": self.get_type(),
             "section": self.get_section(),
+            "name": self.get_name(),
             "is_game_related": self.get_is_game_related(),
             "is_mining": self.get_is_mining(),
         }
@@ -80,4 +80,4 @@ class Category(DataModel):
         return datetime.fromtimestamp(self.data["date_modified"])
 
     def __str__(self):
-        return str(self.data["name"])
+        return f"{str(self.get_section())} {str(self.get_name())}"

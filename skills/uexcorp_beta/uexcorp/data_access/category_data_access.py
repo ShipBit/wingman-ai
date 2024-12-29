@@ -28,15 +28,19 @@ class CategoryDataAccess(DataAccess):
     def load(self, **params) -> list[Category]:
         return super().load(**params)
 
-    def add_filter_by_type(self, type: str) -> "CategoryDataAccess":
+    def add_filter_by_combined_name(self, combined_name: str | list[str]) -> "CategoryDataAccess":
+        self.filter.where("CONCAT(section, ' ', name)", combined_name)
+        return self
+
+    def add_filter_by_type(self, type: str | list[str]) -> "CategoryDataAccess":
         self.filter.where("type", type)
         return self
 
-    def add_filter_by_section(self, section: str) -> "CategoryDataAccess":
+    def add_filter_by_section(self, section: str | list[str]) -> "CategoryDataAccess":
         self.filter.where("section", section)
         return self
 
-    def add_filter_by_name(self, name: str) -> "CategoryDataAccess":
+    def add_filter_by_name(self, name: str | list[str]) -> "CategoryDataAccess":
         self.filter.where("name", name)
         return self
 

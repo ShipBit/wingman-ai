@@ -91,10 +91,10 @@ class LocationInformation(Tool):
                 f"Found {len(locations)} matching locations. Filter criteria are very broad. (max 20 locations for more than just name information)"
             )
         else:
-            locations = []
             helper.get_handler_tool().add_note(
                 f"Found {len(locations)} matching locations. Filter criteria are too broad. (max 50 locations for names and max 20 for information about each location)"
             )
+            locations = []
 
         return json.dumps(locations), ""
 

@@ -6,11 +6,13 @@ try:
     from skills.uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
     from skills.uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
     from skills.uexcorp_beta.uexcorp.tool.location_information import LocationInformation
+    from skills.uexcorp_beta.uexcorp.tool.item_information import ItemInformation
 except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
     from uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
     from uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
     from uexcorp_beta.uexcorp.tool.location_information import LocationInformation
+    from uexcorp_beta.uexcorp.tool.item_information import ItemInformation
 
 if TYPE_CHECKING:
     try:
@@ -31,9 +33,10 @@ class ToolHandler:
         self.__cache_parameters = {}
         self.__functions = {
             "uex_get_vehicle_information": VehicleInformation,
-            "uex_get_trade_routes": CommodityRoute,
             "uex_get_commodity_information": CommodityInformation,
             "uex_get_location_or_terminal_information": LocationInformation,
+            "uex_get_item_information": ItemInformation,
+            "uex_get_trade_routes": CommodityRoute,
         }
         self.__notes = []
 

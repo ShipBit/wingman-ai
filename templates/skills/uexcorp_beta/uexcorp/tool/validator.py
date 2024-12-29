@@ -12,6 +12,8 @@ try:
     from skills.uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
     from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
     from skills.uexcorp_beta.uexcorp.data_access.company_data_access import CompanyDataAccess
+    from skills.uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
+    from skills.uexcorp_beta.uexcorp.data_access.item_data_acceess import ItemDataAccess
     from skills.uexcorp_beta.uexcorp.helper import Helper
 except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.data_access.city_data_access import CityDataAccess
@@ -26,6 +28,8 @@ except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
     from uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
     from uexcorp_beta.uexcorp.data_access.company_data_access import CompanyDataAccess
+    from uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
+    from uexcorp_beta.uexcorp.data_access.item_data_acceess import ItemDataAccess
     from uexcorp_beta.uexcorp.helper import Helper
 
 class Validator:
@@ -40,6 +44,8 @@ class Validator:
     VALIDATE_LOCATION = "location"
     VALIDATE_COMPANY = "company"
     VALIDATE_ENUM = "enum"
+    VALIDATE_CATEGORY = "category"
+    VALIDATE_ITEM = "item"
 
     def __init__(
         self,
@@ -58,6 +64,8 @@ class Validator:
             self.VALIDATE_LOCATION,
             self.VALIDATE_COMPANY,
             self.VALIDATE_ENUM,
+            self.VALIDATE_CATEGORY,
+            self.VALIDATE_ITEM,
         ]:
             raise ValueError("Invalid validation logic")
         self.__method_validate: callable = getattr(self, f"_Validator__validate_{logic}")
@@ -320,3 +328,49 @@ class Validator:
 
     def __definition_enum(self, enum: list[str], **kwargs) -> dict[str, any]:
         return {"type": "string", "enum": enum}
+
+    async def __validate_category(self, name: str, is_game_related: bool | None = None) -> str | None:
+        category_data_access = CategoryDataAccess()
+        if is_game_related is not None:
+            category_data_access.add_filter_by_is_game_related(is_game_related)
+        categories = category_data_access.load()
+
+        category_names = []
+        for category in categories:
+            category_names.append(str(category))
+
+        closest_match = await self.__helper.get_llm().find_closest_match(name, category_names)
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_category(self, is_game_related: bool | None = None, **kwargs) -> dict[str, any]:
+        category_data_access = CategoryDataAccess()
+        if is_game_related is not None:
+            category_data_access.add_filter_by_is_game_related(is_game_related)
+        categories = category_data_access.load()
+
+        category_names = []
+        for category in categories:
+            category_names.append(str(category))
+
+        return {"type": "string", "enum": category_names}
+
+    async def __validate_item(self, name: str) -> str | None:
+        item_data_access = ItemDataAccess()
+        items = item_data_access.load()
+
+        item_names = []
+        for item in items:
+            item_names.append(str(item))
+
+        closest_match = await self.__helper.get_llm().find_closest_match(name, item_names)
+
+        if closest_match:
+            return closest_match
+
+        return None
+
+    def __definition_item(self, **kwargs) -> dict[str, any]:
+        return {"type": "string"}

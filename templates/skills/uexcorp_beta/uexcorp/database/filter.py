@@ -80,10 +80,10 @@ class Filter:
         def resolve_where_loop(where: list[tuple[str, any, str | None, bool, bool]]) -> str:
             where_str = ""
             for i, (field, value, operation, is_or, value_is_field) in enumerate(where):
-                if "." not in field:
+                if "." not in field and "(" not in field:
                     field = f"{self.__base_table}.{field}"
 
-                if value_is_field and "." not in value:
+                if value_is_field and "." not in value and "(" not in value:
                     value = f"{self.__base_table}.{value}"
 
                 if i > 0:
