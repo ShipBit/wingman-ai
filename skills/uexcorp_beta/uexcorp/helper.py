@@ -200,7 +200,12 @@ class Helper:
         self.get_handler_debug().write(f"Added context: {context}")
 
     def get_context(self) -> str:
-        return "\n" + "\n".join(self.__additional_context)
+        context = ""
+        if self.get_handler_tool().get_tool_help_prompt():
+            context += "\n\n" + self.get_handler_tool().get_tool_help_prompt()
+        if self.__additional_context:
+            context += "\n\n" + "\n".join(self.__additional_context)
+        return context
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         if not self.__threaded_execution:

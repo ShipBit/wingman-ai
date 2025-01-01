@@ -1,6 +1,5 @@
 import os
 import yaml
-import traceback
 from typing import TYPE_CHECKING
 from api.enums import WingmanInitializationErrorType
 from api.interface import WingmanInitializationError
@@ -31,17 +30,54 @@ class ConfigHandler:
         self.__cache_lifetime_mid: int = 24 * 60 * 60 # 24 hours
         self.__cache_lifetime_long: int = 14 * 24 * 60 * 60 # 14 days
 
-        self.__behavior_commodity_route_start_location_mandatory: bool = True
+        self.__behavior_enabled_tools: list[str] = []
         self.__behavior_commodity_route_default_count: int = 1
         self.__behavior_commodity_route_use_estimated_availability: bool = True
         self.__behavior_commodity_route_advanced_info: bool = False
 
     async def validate(self, errors: list[WingmanInitializationError], retrieve_custom_property_value: callable) -> list[WingmanInitializationError]:
         try:
-            api_use_key = retrieve_custom_property_value("api_use_key", errors)
-            self.set_api_use_key(api_use_key)
+            from skills.uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
+            from skills.uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
+            from skills.uexcorp_beta.uexcorp.tool.item_information import ItemInformation
+            from skills.uexcorp_beta.uexcorp.tool.location_information import LocationInformation
+            from skills.uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
+        except ModuleNotFoundError:
+            from uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
+            from uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
+            from uexcorp_beta.uexcorp.tool.item_information import ItemInformation
+            from uexcorp_beta.uexcorp.tool.location_information import LocationInformation
+            from uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
 
-            if self.get_api_use_key():
+        try:
+            needs_authentication = False
+
+            if retrieve_custom_property_value("tool_commodity_information", errors):
+                self.__behavior_enabled_tools.append(CommodityInformation.TOOL_NAME)
+                if CommodityInformation.REQUIRES_AUTHENTICATION:
+                    needs_authentication = True
+
+            if retrieve_custom_property_value("tool_commodity_route", errors):
+                self.__behavior_enabled_tools.append(CommodityRoute.TOOL_NAME)
+                if CommodityRoute.REQUIRES_AUTHENTICATION:
+                    needs_authentication = True
+
+            if retrieve_custom_property_value("tool_item_information", errors):
+                self.__behavior_enabled_tools.append(ItemInformation.TOOL_NAME)
+                if ItemInformation.REQUIRES_AUTHENTICATION:
+                    needs_authentication = True
+
+            if retrieve_custom_property_value("tool_location_information", errors):
+                self.__behavior_enabled_tools.append(LocationInformation.TOOL_NAME)
+                if LocationInformation.REQUIRES_AUTHENTICATION:
+                    needs_authentication = True
+
+            if retrieve_custom_property_value("tool_vehicle_information", errors):
+                self.__behavior_enabled_tools.append(VehicleInformation.TOOL_NAME)
+                if VehicleInformation.REQUIRES_AUTHENTICATION:
+                    needs_authentication = True
+
+            if needs_authentication:
                 api_key = await self.__helper.get_handler_secret().retrieve(
                     requester="UEX config service",
                     key="uex",
@@ -49,10 +85,6 @@ class ConfigHandler:
                 )
                 if api_key:
                     self.set_api_key(api_key)
-
-            self.set_behavior_commodity_route_start_location_mandatory(
-                retrieve_custom_property_value("commodity_route_start_location_mandatory", errors)
-            )
 
             self.set_behavior_commodity_route_default_count(
                 retrieve_custom_property_value("commodity_route_default_count", errors)
@@ -67,7 +99,7 @@ class ConfigHandler:
             )
         except Exception as e:
             self.__helper.get_handler_debug().write(f"Error while validating config: {e}", True)
-            self.__helper.get_handler_error().write("ConfigHandler.validate", [errors], e, traceback.format_exc())
+            self.__helper.get_handler_error().write("ConfigHandler.validate", [errors], e)
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.get_wingman().name,
@@ -110,7 +142,7 @@ class ConfigHandler:
                         commodity_model.persist(index < len(commodity_data) - 1)
             except Exception as e:
                 self.__helper.get_handler_debug().write(f"Error while syncing commodity blacklist: {e}", True)
-                self.__helper.get_handler_error().write("ConfigHandler.__init_commodity_blacklist", [], e, traceback.format_exc())
+                self.__helper.get_handler_error().write("ConfigHandler.__init_commodity_blacklist", [], e)
                 self.__helper.get_handler_debug().write("Commodity blacklist config will be recreated.", True)
 
             # delete file after sync
@@ -162,7 +194,7 @@ class ConfigHandler:
                     terminal_model.persist(index < len(terminal_data) - 1)
             except Exception as e:
                 self.__helper.get_handler_debug().write(f"Error while syncing terminal blacklist: {e}", True)
-                self.__helper.get_handler_error().write("ConfigHandler.__init_terminal_blacklist", [], e, traceback.format_exc())
+                self.__helper.get_handler_error().write("ConfigHandler.__init_terminal_blacklist", [], e)
                 self.__helper.get_handler_debug().write("Terminal blacklist config will be recreated.", True)
 
             # delete file after sync
@@ -190,6 +222,9 @@ class ConfigHandler:
             file.write("\n# This would reset previous set terminal blacklists.\n\n")
             file.write(yaml.dump(terminal_data))
 
+    def is_tool_enabled(self, tool_name: str) -> bool:
+        return tool_name in self.__behavior_enabled_tools
+
     def handle_secret_change(self, api_key: str):
         self.set_api_key(api_key)
 
@@ -198,12 +233,6 @@ class ConfigHandler:
 
     def set_api_url(self, api_url: str):
         self.__api_url = api_url
-
-    def get_api_use_key(self) -> bool:
-        return self.__api_use_key and self.__api_key is not None
-
-    def set_api_use_key(self, api_use_key: bool):
-        self.__api_use_key = api_use_key
 
     def get_api_key(self) -> str | None:
         return self.__api_key
@@ -240,12 +269,6 @@ class ConfigHandler:
 
     def set_cache_lifetime_long(self, cache_timeout_commodities: int):
         self.__cache_lifetime_long = cache_timeout_commodities
-
-    def get_behavior_commodity_route_start_location_mandatory(self) -> bool:
-        return self.__behavior_commodity_route_start_location_mandatory
-
-    def set_behavior_commodity_route_start_location_mandatory(self, mandatory: bool):
-        self.__behavior_commodity_route_start_location_mandatory = mandatory
 
     def get_behavior_commodity_route_default_count(self) -> int:
         return self.__behavior_commodity_route_default_count

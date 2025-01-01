@@ -29,74 +29,36 @@ prompt: |
   - Commodity-related responses must always include the terminal status (e.g., Out of Stock, Full Inventory).
   - Keep answers short and focus on necessary information only, even if a lot of information is available. Provide summaries and ask if more details should be displayed if available.
   === End of "How to work with uex functions" ===
-  
-  === Start of "Available uex functions descriptions" ===
-  -   name: uex_get_vehicle_information
-      Description: Holds all information's about all ships, filterable. (eg incl. rent/buy options per ship, cargo sizes, ...).
-      Parameters:
-        - filter_vehicles: Provide one or multiple ship names (incl. short manufacturer name) to filter by name. (e.g. "RSI Aurora MR")
-        - filter_roles: Provide one or multiple roles to filter by role. (e.g. "mining" or "cargo")
-        - filter_manufacturers: Provide one or multiple manufacturers to filter by manufacturer. (e.g. "Aegis Dynamics")
-        - filter_vehicle_cargo_size_in_scu_min: Filter by minimum cargo size in SCU. (e.g. 100)
-        - filter_vehicle_cargo_size_in_scu_max: Filter by maximum cargo size in SCU. (e.g. 250)
-  -   name: uex_get_commodity_information
-      Description: Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes.Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory).
-      Parameters:
-        - filter_commodities: Provide one or multiple commodity names to filter by name. (e.g. "Agricium")
-        - filter_is_tradeable: If true, only commodities with buy and sell options are shown.
-        - filter_is_legal: If true, only legal commodities are shown, if false, only illegal commodities are shown.
-        - filter_location_whitelist: Provide one or multiple locations to filter for commodities able to sell or buy there. (e.g. ["Hurston", "Bloom"])
-  -   name: uex_get_location_or_terminal_information
-      Description: Get all information's about all locations, filterable. When asked about a specific location or location type, prefer this over uex_get_trade_routes. Terminals/locations may also provide buy/sell/rent prices and options.
-      Parameters:
-        - filter_locations: Provide one or multiple location names to filter by name. (e.g. "Hurston" or "Stanton")
-        - filter_location_types: Provide one or multiple location types to receive. Works with unconnected location names, e.g. filter_locations: ["Hurston"], filter_location_types: ["moon"], to get all moons of Hurston.
-  -   name: uex_get_item_information
-      Description: Get all information's about all items, filterable. Items are not commodities, therefore if item information is requests, this is the function. Includes item buy prices and locations.
-      Parameters:
-        - filter_items: Provide one or multiple exact item names to filter by name. If this filter is used, others have no effect. (e.g. "Omnisky VI" or "P4-AR")
-        - filter_category: Provide one or multiple item categories to look up. (e.g. "Systems Quantum Drives")
-        - filter_buy_location: Provide one or multiple locations to filter for items able to buy there. (e.g. "Hurston" or "ARC-L4")
-        - filter_company: Provide one or multiple companies to filter for items produced by them. (e.g. "Klaus & Werner")
-  -   name: uex_get_trade_routes
-      Description: Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition. When asked for trade routes, prefer this over uex_get_commodity_information.
-      Parameters:
-        - filter_commodity_whitelist: Shows only trade routes for these commodities.
-        - filter_commodity_blacklist: Excludes trade routes for these commodities.
-        - filter_allow_illegal_commodities: If false, routes for illegal commodities are excluded.
-        - limit: Number of trade routes to show.
-        - offset: Number of trade routes to skip. e.g. offset 2, limit 1 will only show the third best trade route
-        - used_ship: The ship name including the short manufacturer name will. If given shows optimized trade routes for this ship.
-        - available_money: Shows trade routes optimized for this amount of money.
-        - available_cargo_space_scu: Shows trade routes optimized for this amount of free cargo space.
-        - filter_allow_star_system_change: If false, only routes within the same star system are shown. eg only in Stanton if route start is in Stanton or only in Pyro if route star is in Pyro.
-        - filter_location_blacklist: Excludes trade routes starting or ending at these locations. eg ["Hurston", "Bloom"]
-        - filter_destination_location: Shows only trade routes ending at this location. eg "Stanton"
-        - filter_start_location: Shows only trade routes starting at this location. eg "Pyro"
-  === End of "Available uex functions descriptions" ===
 
 custom_properties:
-  # If enabled ("true"), this will ask for the uex api key and will offer more possibilities with this skill.
-  # Some functions may be added to the future to utilize this.
-  - id: api_use_key
-    name: Use uex api key
-    hint: If enable, this will ask for the uex api key and will offer more possibilities with this skill.
-    value: false
-    required: true
-    property_type: boolean
-
-  # Set this option to "true" to make the start location for trade route calculation a mandatory information.
-  # Set this option to "false" to make the start location for trade route calculation a optional information.
-  # If "false" and no start location is given, all tradeports are taken into account.
-  - id: commodity_route_start_location_mandatory
-    name: Trade start mandatory
-    hint: Set this option to "true" to make the start location for trade route calculation a mandatory information. If "false" and no start location is given, all tradeports are taken into account.
+  - id: tool_commodity_information
+    name: Provide commodity information
+    hint: If enabled, this skill can provide information about all commodities.
     value: true
     required: true
     property_type: boolean
 
-  # Set this option to the amount of trade routes you want to show at default.
-  # You can always tell Wingman AI to show more or less trade routes for one request, if that number is not given, this setting is used.
+  - id: tool_item_information
+    name: Provide item information (Experimental)
+    hint: If enabled, this skill can provide information about all items, like ship components, weapons and more.
+    value: false
+    required: true
+    property_type: boolean
+
+  - id: tool_location_information
+    name: Provide location information
+    hint: If enabled, this skill can provide information about all locations. This includes everything from a star system to a terminal.
+    value: true
+    required: true
+    property_type: boolean
+
+  - id: tool_vehicle_information
+    name: Provide vehicle information
+    hint: If enabled, this skill can provide information about all vehicles. This includes ships and ground vehicles.
+    value: true
+    required: true
+    property_type: boolean
+
   - id: commodity_route_default_count
     name: Default trade route count
     hint: Set this option to the amount of trade routes you want to show at default.
@@ -104,8 +66,13 @@ custom_properties:
     required: true
     property_type: number
 
-  # Set this option to true to take estimated scu availability into account for trade route calculations.
-  # This will reduce the amount of trade routes shown, but will give you more accurate results.
+  - id: tool_commodity_route
+    name: Provide commodity routes
+    hint: If enabled, this skill can provide UEX trade routes for commodities (Only with legal commodities).
+    value: true
+    required: true
+    property_type: boolean
+
   - id: commodity_route_use_estimated_availability
     name: Use Estimated Availability
     hint: Enable this option to take estimated scu availability into account for trade route calculations.
@@ -113,8 +80,6 @@ custom_properties:
     required: true
     property_type: boolean
 
-  # Set this option to true to show advanced information for trade routes.
-  # This will include additional location data, monitoring flags, UEXCorp scores and more.
   - id: commodity_route_advanced_info
     name: Show advanced trade route info
     hint: Shows additional information as more location data (terminal name is always included), flags if locations are monitored and more like the score by uexcorp.

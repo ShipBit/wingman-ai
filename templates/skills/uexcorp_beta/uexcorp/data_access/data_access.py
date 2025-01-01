@@ -113,7 +113,7 @@ class DataAccess :
 
     def persist(self) -> None:
         if not self.fields:
-            self.helper.get_handler_error().write("DataAccess.persist", self.fields, "No fields to persist!")
+            self.helper.get_handler_error().write("DataAccess.persist", self.fields, "No fields to persist!", False)
             raise Exception("No fields to persist!")
 
     def load_by_property(self, property: str, value: any) -> DataModel | None:

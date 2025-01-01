@@ -8,6 +8,8 @@ except ModuleNotFoundError:
 
 
 class CommodityInformation(Tool):
+    REQUIRES_AUTHENTICATION = False
+    TOOL_NAME = "uex_get_commodity_information"
 
     def __init__(self):
         super().__init__()
@@ -119,10 +121,24 @@ class CommodityInformation(Tool):
 
     def get_optional_fields(self) -> dict[str, Validator]:
         return {
-            "filter_commodities": Validator(Validator.VALIDATE_COMMODITY, multiple=True),
-            "filter_is_tradeable": Validator(Validator.VALIDATE_BOOL),
-            "filter_is_legal": Validator(Validator.VALIDATE_BOOL),
-            "filter_location_whitelist": Validator(Validator.VALIDATE_LOCATION, multiple=True),
+            "filter_commodities": Validator(
+                Validator.VALIDATE_COMMODITY,
+                multiple=True,
+                prompt="Provide one or multiple commodity names to filter by name. (e.g. \"Agricium\")",
+            ),
+            "filter_is_tradeable": Validator(
+                Validator.VALIDATE_BOOL,
+                prompt="If true, only commodities with buy and sell options are shown.",
+            ),
+            "filter_is_legal": Validator(
+                Validator.VALIDATE_BOOL,
+                prompt="If true, only legal commodities are shown, if false, only illegal commodities are shown.",
+            ),
+            "filter_location_whitelist": Validator(
+                Validator.VALIDATE_LOCATION,
+                multiple=True,
+                prompt="Provide one or multiple locations to filter for commodities able to sell or buy there. (e.g. [\"Hurston\", \"Bloom\"])"
+            ),
 
             # Didn't really make sense
             # "filter_location_blacklist": Validator(Validator.VALIDATE_LOCATION, multiple=True),
@@ -130,3 +146,6 @@ class CommodityInformation(Tool):
 
     def get_description(self) -> str:
         return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage."
+
+    def get_prompt(self) -> str:
+        return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes.Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory)."

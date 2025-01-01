@@ -97,7 +97,7 @@ class Uex:
 
         if not self.helper.get_handler_config().get_api_url() or not endpoint:
             self.helper.get_handler_debug().write(f"No API URL or endpoint provided -> {url}", True)
-            self.helper.get_handler_error().write("Api.fetch", [endpoint, params], f"No API URL or endpoint provided -> {url}")
+            self.helper.get_handler_error().write("Api.fetch", [endpoint, params], f"No API URL or endpoint provided -> {url}", False)
             return []
 
         if self.session is None:

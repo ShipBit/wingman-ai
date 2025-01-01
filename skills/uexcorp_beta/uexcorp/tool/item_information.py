@@ -10,6 +10,8 @@ except ModuleNotFoundError:
 
 
 class ItemInformation(Tool):
+    REQUIRES_AUTHENTICATION = False
+    TOOL_NAME = "uex_get_item_information"
 
     def __init__(self):
         super().__init__()
@@ -106,13 +108,33 @@ class ItemInformation(Tool):
 
     def get_optional_fields(self) -> dict[str, Validator]:
         return {
-            "filter_items": Validator(Validator.VALIDATE_ITEM, multiple=True),
-            "filter_category": Validator(Validator.VALIDATE_CATEGORY, multiple=True, config={
-                "is_game_related": True,
-            }),
-            "filter_buy_location": Validator(Validator.VALIDATE_LOCATION, multiple=True),
-            "filter_company": Validator(Validator.VALIDATE_COMPANY, multiple=True),
+            "filter_items": Validator(
+                Validator.VALIDATE_ITEM,
+                multiple=True,
+                prompt="Provide one or multiple exact item names to filter by name. If this filter is used, others have no effect. (e.g. \"Omnisky VI\" or \"P4-AR\")",
+            ),
+            "filter_category": Validator(
+                Validator.VALIDATE_CATEGORY,
+                multiple=True,
+                config={
+                    "is_game_related": True,
+                },
+                prompt="Provide one or multiple item categories to look up. (e.g. \"Systems Quantum Drives\")",
+            ),
+            "filter_buy_location": Validator(
+                Validator.VALIDATE_LOCATION,
+                multiple=True,
+                prompt="Provide one or multiple locations to filter for items able to buy there. (e.g. \"Hurston\" or \"ARC-L4\")"
+            ),
+            "filter_company": Validator(
+                Validator.VALIDATE_COMPANY,
+                multiple=True,
+                prompt="Provide one or multiple companies to filter for items produced by them. (e.g. \"Klaus & Werner\")"
+            ),
         }
 
     def get_description(self) -> str:
         return "Gives back information about a items and their purchase options. Items range from Suits, over vehicle and personal weapons to tools and ship systems. An item is not a commodity."
+
+    def get_prompt(self) -> str:
+        return "Get all information's about all items, filterable. Items are not commodities, therefore if item information is requests, this is the function. Includes item buy prices and locations."

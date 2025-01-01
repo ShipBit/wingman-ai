@@ -7,6 +7,8 @@ except ModuleNotFoundError:
 
 
 class Tool:
+    REQUIRES_AUTHENTICATION = False
+    TOOL_NAME = "UNDEFINED"
 
     def __init__(self):
         self._helper = Helper.get_instance()
@@ -23,3 +25,6 @@ class Tool:
 
     def get_description(self) -> str:
         return ""
+
+    def get_prompt(self) -> str:
+        return self.get_description()

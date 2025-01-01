@@ -1,5 +1,6 @@
 import threading
 import time
+import traceback
 from os import path
 from typing import TYPE_CHECKING
 
@@ -32,12 +33,12 @@ class ErrorHandler:
         header += f"\n======================================\n"
         return header
 
-    def write(self, function: str, arguments: list|dict[str, any], error, traceback: str | None = None):
+    def write(self, function: str, arguments: list|dict[str, any], error, write_traceback: bool = True):
         with open(self.file, 'a') as f:
             f.write(self.__get_error_header(function, arguments))
             f.write(str(error))
             if traceback:
-                f.write(traceback)
+                f.write(traceback.format_exc())
 
     def read(self):
         with open(self.file, 'r') as f:

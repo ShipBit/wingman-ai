@@ -1,5 +1,4 @@
 import inspect
-import traceback
 from typing import TYPE_CHECKING
 try:
     from skills.uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
@@ -32,11 +31,11 @@ class ToolHandler:
         self.__needs_tools_reload = False
         self.__cache_parameters = {}
         self.__functions = {
-            "uex_get_vehicle_information": VehicleInformation,
-            "uex_get_commodity_information": CommodityInformation,
-            "uex_get_location_or_terminal_information": LocationInformation,
-            "uex_get_item_information": ItemInformation,
-            "uex_get_trade_routes": CommodityRoute,
+            VehicleInformation.TOOL_NAME: VehicleInformation,
+            CommodityInformation.TOOL_NAME: CommodityInformation,
+            LocationInformation.TOOL_NAME: LocationInformation,
+            ItemInformation.TOOL_NAME: ItemInformation,
+            CommodityRoute.TOOL_NAME: CommodityRoute,
         }
         self.__notes = []
 
@@ -128,7 +127,7 @@ class ToolHandler:
                 f"Execution of '{tool_name}' resulted in an error: {str(e)}. Feel free to report this to JayMatthew on the ShipBit Discord server.",
                 True,
             )
-            self.__helper.get_handler_error().write(f"tool: {tool_name}", parameters, e, traceback.format_exc())
+            self.__helper.get_handler_error().write(f"tool: {tool_name}", parameters, e)
             function_response = f"Error while executing function '{tool_name}' with parameters: {parameters}."
 
         return str(function_response), str(instant_response)
@@ -137,29 +136,47 @@ class ToolHandler:
         tools = []
 
         for tool_name, tool in self.__functions.items():
-            tool = tool()
-            tools.append((
-                tool_name,
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool_name,
-                        "description": tool.get_description(),
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                **{
-                                    key: validator.get_llm_definition()
-                                    for key, validator in {**tool.get_mandatory_fields(), **tool.get_optional_fields()}.items()
-                                }
+            if self.__helper.get_handler_config().is_tool_enabled(tool_name):
+                tool = tool()
+                tools.append((
+                    tool_name,
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "description": tool.get_description(),
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    **{
+                                        key: validator.get_llm_definition()
+                                        for key, validator in {**tool.get_mandatory_fields(), **tool.get_optional_fields()}.items()
+                                    }
+                                },
+                                "required": list(tool.get_mandatory_fields().keys()),
+                                "optional": list(tool.get_optional_fields().keys()),
                             },
-                            "required": list(tool.get_mandatory_fields().keys()),
-                            "optional": list(tool.get_optional_fields().keys()),
                         },
-                    },
-                }
-            ))
+                    }
+                ))
         return tools
+
+    def get_tool_help_prompt(self) -> str:
+        tool_prompts = []
+        for tool_name, tool in self.__functions.items():
+            tool = tool()
+            if self.__helper.get_handler_config().is_tool_enabled(tool_name):
+                tool_prompts.append(f"- {tool.TOOL_NAME}: {tool.get_prompt()}")
+            else:
+                tool_prompts.append(f"- (DISABLED BY USER) {tool.TOOL_NAME}: {tool.get_prompt()}")
+
+        if not tool_prompts:
+            return ""
+
+        prompt = "=== Start of \"Available uex function descriptions\" ===\n"
+        prompt += "\n".join(tool_prompts)
+        prompt += "\n=== End of \"Available uex function descriptions\" ==="
+        return prompt
 
     def get_notes(self, clear: bool = False) -> list[str]:
         notes = self.__notes

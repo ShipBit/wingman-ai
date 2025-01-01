@@ -40,10 +40,15 @@ class DataModel:
                 value = json.dumps(value)
             clean_data[f"`{key}`"] = value
 
-        self.helper.get_database().get_cursor().execute(
-            f"INSERT OR REPLACE INTO {self.table} ({','.join(clean_data.keys())}) VALUES ({','.join(['?'] * len(clean_data))})",
-            tuple(clean_data.values())
-        )
+        sql = f"INSERT OR REPLACE INTO {self.table} ({','.join(clean_data.keys())}) VALUES ({','.join(['?'] * len(clean_data))})"
+        try:
+            self.helper.get_database().get_cursor().execute(
+                sql,
+                tuple(clean_data.values())
+            )
+        except Exception as e:
+            self.helper.get_handler_error().write("data_model.persist", [sql], e)
+            return False
         if not skip_commit:
             self.helper.get_database().get_connection().commit()
         return True

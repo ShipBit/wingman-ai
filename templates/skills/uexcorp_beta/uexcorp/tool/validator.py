@@ -52,6 +52,7 @@ class Validator:
         logic: str,
         multiple: bool = False,
         config: dict[str, any] | None = None,
+        prompt: str | None = None,
     ):
         if logic not in [
             self.VALIDATE_NUMBER,
@@ -67,12 +68,13 @@ class Validator:
             self.VALIDATE_CATEGORY,
             self.VALIDATE_ITEM,
         ]:
-            raise ValueError("Invalid validation logic")
+            raise ValueError(f"Invalid validation logic: {logic}")
         self.__method_validate: callable = getattr(self, f"_Validator__validate_{logic}")
         self.__method_definition: callable = getattr(self, f"_Validator__definition_{logic}")
         self.__multiple: bool = multiple
         self.__config: dict[str, any] = config if config else {}
         self.__helper: Helper = Helper.get_instance()
+        self.__prompt: str = prompt
 
     async def validate(self, values: any) -> any:
         validated_values = []
@@ -108,6 +110,9 @@ class Validator:
                 "type": "array",
                 "items": definition,
             }
+
+        if self.__prompt:
+            definition["description"] = self.__prompt
 
         return definition
 

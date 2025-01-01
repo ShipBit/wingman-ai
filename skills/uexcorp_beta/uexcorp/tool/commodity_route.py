@@ -8,6 +8,8 @@ except ModuleNotFoundError:
 
 
 class CommodityRoute(Tool):
+    REQUIRES_AUTHENTICATION = False
+    TOOL_NAME = "uex_get_trade_routes"
 
     def __init__(self):
         super().__init__()
@@ -156,50 +158,96 @@ class CommodityRoute(Tool):
         return json.dumps(routes), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
-        try:
-            from skills.uexcorp_beta.uexcorp.helper import Helper
-        except ModuleNotFoundError:
-            from uexcorp_beta.uexcorp.helper import Helper
-
-        helper = Helper.get_instance()
-
-        fields = {}
-
-        if helper.get_handler_config().get_behavior_commodity_route_start_location_mandatory():
-            fields["filter_start_location"] = Validator(Validator.VALIDATE_LOCATION, config={"for_trading": True})
-
-        return fields
+        return {}
 
     def get_optional_fields(self) -> dict[str, Validator]:
-        try:
-            from skills.uexcorp_beta.uexcorp.helper import Helper
-        except ModuleNotFoundError:
-            from uexcorp_beta.uexcorp.helper import Helper
-
-        helper = Helper.get_instance()
-
-        fields = {
-            "filter_commodity_whitelist": Validator(Validator.VALIDATE_COMMODITY, multiple=True, config={"for_trading": True}),
-            "filter_commodity_blacklist": Validator(Validator.VALIDATE_COMMODITY, multiple=True, config={"for_trading": True}),
-            "filter_allow_illegal_commodities": Validator(Validator.VALIDATE_BOOL),
-            "limit": Validator(Validator.VALIDATE_NUMBER, config={"min": 1, "max": 15}),
-            "offset": Validator(Validator.VALIDATE_NUMBER, config={"min": 0}),
-            "used_ship": Validator(Validator.VALIDATE_SHIP),
-            "available_money": Validator(Validator.VALIDATE_NUMBER, config={"min": 1}),
-            "available_cargo_space_scu": Validator(Validator.VALIDATE_NUMBER, config={"min": 1}),
-            "filter_allow_star_system_change": Validator(Validator.VALIDATE_BOOL),
-            "filter_location_blacklist": Validator(Validator.VALIDATE_LOCATION, multiple=True, config={"for_trading": True}),
-            "filter_destination_location": Validator(Validator.VALIDATE_LOCATION, config={"for_trading": True}),
+        return {
+            "filter_commodity_whitelist": Validator(
+                Validator.VALIDATE_COMMODITY,
+                multiple=True,
+                config={
+                    "for_trading": True
+                },
+                prompt="Shows only trade routes for these commodities.",
+            ),
+            "filter_commodity_blacklist": Validator(
+                Validator.VALIDATE_COMMODITY,
+                multiple=True,
+                config={
+                    "for_trading": True
+                },
+                prompt="Excludes trade routes for these commodities.",
+            ),
+            "limit": Validator(
+                Validator.VALIDATE_NUMBER,
+                config={
+                    "min": 1,
+                    "max": 15
+                },
+                prompt="Limits the number of trade routes shown. Range: 1-15.",
+            ),
+            "offset": Validator(
+                Validator.VALIDATE_NUMBER,
+                config={
+                    "min": 0
+                },
+                prompt="Number of trade routes to skip. e.g. offset 2, limit 1 will only show the third best trade route.",
+            ),
+            "used_ship": Validator(
+                Validator.VALIDATE_SHIP,
+                prompt="The ship name including the short manufacturer name will. If given shows optimized trade routes for this ship.",
+            ),
+            "available_money": Validator(
+                Validator.VALIDATE_NUMBER,
+                config={
+                    "min": 1
+                },
+                prompt="Shows trade routes optimized for this given budget.",
+            ),
+            "available_cargo_space_scu": Validator(
+                Validator.VALIDATE_NUMBER,
+                config={
+                    "min": 1
+                },
+                prompt="Shows trade routes optimized for this amount of free cargo space.",
+            ),
+            "filter_allow_star_system_change": Validator(
+                Validator.VALIDATE_BOOL,
+                prompt="If false, only routes within the same star system are shown. eg only in Stanton if route start is in Stanton or only in Pyro if route star is in Pyro.",
+            ),
+            "filter_start_location": Validator(
+                Validator.VALIDATE_LOCATION,
+                config={
+                    "for_trading": True
+                },
+                prompt="Excludes trade routes starting or ending at these locations. eg [\"Hurston\", \"Bloom\"]",
+            ),
+            "filter_destination_location": Validator(
+                Validator.VALIDATE_LOCATION,
+                config={
+                    "for_trading": True
+                },
+                prompt="Shows only trade routes ending at this location. eg \"Stanton\"",
+            ),
+            "filter_location_blacklist": Validator(
+                Validator.VALIDATE_LOCATION,
+                multiple=True,
+                config={
+                    "for_trading": True
+                },
+                prompt="Shows only trade routes starting at this location. eg \"Pyro\" or \"Crusader\". Can be anything from a star system to a terminal.",
+            ),
 
             # Currently used unreliably by AI
             # "filter_star_system_whitelist": Validator(Validator.VALIDATE_STAR_SYSTEM, multiple=True),
             # "filter_star_system_blacklist": Validator(Validator.VALIDATE_STAR_SYSTEM, multiple=True),
+
+            # UEX only has legal routes
+            # "filter_allow_illegal_commodities": Validator(Validator.VALIDATE_BOOL),
         }
-
-        if not helper.get_handler_config().get_behavior_commodity_route_start_location_mandatory():
-            fields["filter_start_location"] = Validator(Validator.VALIDATE_LOCATION, config={"for_trading": True})
-
-        return fields
 
     def get_description(self) -> str:
         return "Gives back trading routes for commodities based on the filters given."
+
+    def get_prompt(self) -> str:
+        return "Get the best trade routes for a specific ship and location and even more filter options as listed in the tool definition. When asked for trade routes, prefer this over uex_get_commodity_information."

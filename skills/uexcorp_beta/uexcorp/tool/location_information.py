@@ -10,6 +10,8 @@ except ModuleNotFoundError:
 
 
 class LocationInformation(Tool):
+    REQUIRES_AUTHENTICATION = False
+    TOOL_NAME: str = "uex_get_location_or_terminal_information"
 
     LOCATION_TYPE_STAR_SYSTEM = "star_system"
     LOCATION_TYPE_SPACE_STATION = "space_station"
@@ -226,20 +228,29 @@ class LocationInformation(Tool):
 
     def get_optional_fields(self) -> dict[str, Validator]:
         return {
-            "filter_locations": Validator(Validator.VALIDATE_LOCATION, multiple=True),
-            "filter_location_types": Validator(Validator.VALIDATE_ENUM, multiple=True, config={
-                "enum": [
-                    self.LOCATION_TYPE_STAR_SYSTEM,
-                    self.LOCATION_TYPE_SPACE_STATION,
-                    self.LOCATION_TYPE_GATEWAY,
-                    self.LOCATION_TYPE_PLANET,
-                    self.LOCATION_TYPE_OUTPOST,
-                    self.LOCATION_TYPE_POI,
-                    self.LOCATION_TYPE_MOON,
-                    self.LOCATION_TYPE_CITY,
-                    self.LOCATION_TYPE_TERMINAL,
-                ],
-            }),
+            "filter_locations": Validator(
+                Validator.VALIDATE_LOCATION,
+                multiple=True,
+                prompt="Provide one or multiple location names to filter by name. (e.g. \"Hurston\" or \"Stanton\")",
+            ),
+            "filter_location_types": Validator(
+                Validator.VALIDATE_ENUM,
+                multiple=True,
+                config={
+                    "enum": [
+                        self.LOCATION_TYPE_STAR_SYSTEM,
+                        self.LOCATION_TYPE_SPACE_STATION,
+                        self.LOCATION_TYPE_GATEWAY,
+                        self.LOCATION_TYPE_PLANET,
+                        self.LOCATION_TYPE_OUTPOST,
+                        self.LOCATION_TYPE_POI,
+                        self.LOCATION_TYPE_MOON,
+                        self.LOCATION_TYPE_CITY,
+                        self.LOCATION_TYPE_TERMINAL,
+                    ],
+                },
+                prompt="Provide one or multiple location types to receive. Works with unconnected location names, e.g. filter_locations: [\"Hurston\"], filter_location_types: [\"moon\"], to get all moons of Hurston."
+            ),
 
             # Will be added later
             # "is_monitored": Validator(Validator.VALIDATE_BOOL),
@@ -248,3 +259,6 @@ class LocationInformation(Tool):
 
     def get_description(self) -> str:
         return "Gives back information about a locations, their related locations and, if available, it's shopping options and other services/properties."
+
+    def get_prompt(self) -> str:
+        return "Get all information's about all locations, filterable. When asked about a specific location or location type, prefer this over uex_get_trade_routes. Terminals/locations may also provide buy/sell/rent prices and options."
