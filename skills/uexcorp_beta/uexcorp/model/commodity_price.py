@@ -120,16 +120,21 @@ class CommodityPrice(DataModel):
         if show_terminal_information:
             information["terminal"] = terminal.get_data_for_ai_minimal() if terminal else None
 
-        information.update({
-            "price_buy": self.get_price_buy(),
-            "price_sell": self.get_price_sell(),
-            "status_buy": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
-            "status_sell": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
-            "scu_buy": self.get_scu_buy(),
-            "scu_buy_avg": self.get_scu_buy_avg(),
-            "scu_sell_stock": self.get_scu_sell_stock(),
-            "scu_sell_stock_avg": self.get_scu_sell_stock_avg(),
-        })
+        if self.get_price_buy():
+            information.update({
+                "buy_price": self.get_price_buy() or "unknown",
+                "buy_status": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else "unknown",
+                "buy_stock_in_scu": self.get_scu_buy() or "unknown",
+                "buy_stock_in_scu_avg": self.get_scu_buy_avg() or "unknown",
+            })
+
+        if self.get_price_sell():
+            information.update({
+                "sell_price": self.get_price_sell() or "unknown",
+                "sell_status": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else "unknown",
+                "sell_demand_in_scu": self.get_scu_sell_stock() or "unknown",
+                "sell_demand_in_scu_avg": self.get_scu_sell_stock_avg() or "unknown",
+            })
 
         return information
 

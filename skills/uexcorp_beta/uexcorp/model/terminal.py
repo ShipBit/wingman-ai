@@ -227,6 +227,7 @@ class Terminal(DataModel):
             "company_name": self.get_company_name(),
             "faction": faction.get_data_for_ai_minimal() if faction else None,
             "offerings": self.get_offerings(),
+            "max_container_size_in_scu": self.get_max_container_size() or "unknown",
         }
 
         if self.get_max_container_size():
@@ -260,7 +261,7 @@ class Terminal(DataModel):
             "parent_location": "",
             "company_name": self.get_company_name(),
             "faction_name": self.get_faction_name(),
-            # "offerings": self.get_offerings(), # TODO: decide if we want to include this in minimal data
+            "max_container_size_in_scu": self.get_max_container_size() or "unknown",
         }
 
         if self.get_id_city():
