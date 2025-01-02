@@ -1,6 +1,7 @@
 from datetime import datetime
 import logging
 import sys
+import inspect
 from logging import Formatter
 from logging.handlers import RotatingFileHandler
 from os import path
@@ -96,6 +97,20 @@ class Printr(WebSocketUser):
                 command=ToastCommand(text=text, toast_type=toast_type)
             )
         else:
+            wingman_name = None
+            current_frame = inspect.currentframe()
+            if current_frame is not None:
+                while current_frame:
+                    # Check if the caller is a method of a class
+                    if 'self' in current_frame.f_locals:
+                        caller_instance = current_frame.f_locals['self']
+                        caller_instance_name = caller_instance.__class__.__name__
+                        if caller_instance_name == "Wingman" or caller_instance_name == "OpenAiWingman":
+                            wingman_name = caller_instance.name
+                            break
+                    # Move to the previous frame in the call stack
+                    current_frame = current_frame.f_back
+
             await self._connection_manager.broadcast(
                 command=LogCommand(
                     text=text,
@@ -105,6 +120,7 @@ class Printr(WebSocketUser):
                     tag=command_tag,
                     skill_name=skill_name,
                     additional_data=additional_data,
+                    wingman_name=wingman_name,
                 )
             )
 
