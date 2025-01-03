@@ -28,6 +28,13 @@ class RecordKeyboardActionsCommand(WebSocketCommandModel):
     command: Literal["record_keyboard_actions"] = "record_keyboard_actions"
     recording_type: KeyboardRecordingType
 
+class RecordMouseActionsCommand(WebSocketCommandModel):
+    command: Literal["record_mouse_actions"] = "record_mouse_actions"
+
+    
+class RecordJoystickActionsCommand(WebSocketCommandModel):
+    command: Literal["record_joystick_actions"] = "record_joystick_actions"
+
 
 class StopRecordingCommand(WebSocketCommandModel):
     command: Literal["stop_recording"] = "stop_recording"
