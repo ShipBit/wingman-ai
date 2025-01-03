@@ -22,6 +22,7 @@ from api.interface import (
     AudioDevice,
     AudioFile,
     AzureSttConfig,
+    Config,
     ConfigWithDirInfo,
     ElevenlabsModel,
     VoiceActivationSettings,
@@ -327,11 +328,20 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
+    def is_mouse_configured(self, config: Config) -> bool:
+        return any(config.wingmen[wingman].record_mouse_button for wingman in config.wingmen)
+
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         await self.unload_tower()
 
+        config = config_dir_info.config
+
+        # Register mouse hook if any wingman is configured to record mouse events
+        if self.is_mouse_configured(config):
+            mouse.hook(self.on_mouse)
+
         self.tower = Tower(
-            config=config_dir_info.config,
+            config=config,
             config_dir=config_dir_info.config_dir,
             config_manager=self.config_manager,
             audio_player=self.audio_player,
