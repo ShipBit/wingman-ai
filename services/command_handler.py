@@ -12,7 +12,7 @@ from api.commands import (
     StopRecordingCommand,
     WebSocketCommandModel,
 )
-from api.enums import KeyboardRecordingType, LogSource, ToastType
+from api.enums import KeyboardRecordingType, LogSource, RecordingDevice, ToastType
 from api.interface import CommandActionConfig, CommandKeyboardConfig
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
@@ -30,7 +30,7 @@ class CommandHandler:
         self.printr: Printr = Printr()
         self.timeout_task = None
         self.recorded_keys = []
-        self.hook_callback = None
+        self.keyboard_hook_callback = None
 
     async def dispatch(self, message, websocket: WebSocket):
         try:
@@ -147,10 +147,16 @@ class CommandHandler:
         # self.timeout_task = WebSocketUser.ensure_async(self._start_timeout(10))
         self.recorded_keys = []
 
+        stop_command = StopRecordingCommand(
+            command="stop_recording",
+            recording_device=RecordingDevice.KEYBOARD,
+            recording_type=command.recording_type
+        )
+
         def _on_key_event(event):
             if event.event_type == "down" and event.name == "esc":
                 WebSocketUser.ensure_async(
-                    self.handle_stop_recording(command, websocket)
+                    self.handle_stop_recording(stop_command, websocket)
                 )
             if (
                 event.scan_code == 58
@@ -169,27 +175,31 @@ class CommandHandler:
                 and self._is_hotkey_recording_finished(self.recorded_keys)
             ):
                 WebSocketUser.ensure_async(
-                    self.handle_stop_recording(command, websocket)
+                    self.handle_stop_recording(stop_command, websocket)
                 )
 
-        self.hook_callback = keyboard.hook(_on_key_event, suppress=True)
+        self.keyboard_hook_callback = keyboard.hook(_on_key_event, suppress=True)
 
     async def handle_stop_recording(
         self,
         command: StopRecordingCommand,
         websocket: WebSocket,
     ):
-        if self.hook_callback:
-            keyboard.unhook(self.hook_callback)
+        if self.keyboard_hook_callback:
+            keyboard.unhook(self.keyboard_hook_callback)
         recorded_keys = self.recorded_keys
         if self.timeout_task:
             self.timeout_task.cancel()
 
-        actions = (
-            self._get_actions_from_recorded_keys(recorded_keys)
-            if command.recording_type == KeyboardRecordingType.MACRO_ADVANCED
-            else self._get_actions_from_recorded_hotkey(recorded_keys)
-        )
+        actions: list[CommandActionConfig] = []
+
+        if command.recording_device == RecordingDevice.KEYBOARD:
+            actions = (
+                self._get_actions_from_recorded_keys(recorded_keys)
+                if command.recording_type == KeyboardRecordingType.MACRO_ADVANCED
+                else self._get_actions_from_recorded_hotkey(recorded_keys)
+            )
+
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)
 
