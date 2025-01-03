@@ -13,7 +13,7 @@ from api.commands import (
     WebSocketCommandModel,
 )
 from api.enums import KeyboardRecordingType, LogSource, RecordingDevice, ToastType
-from api.interface import CommandActionConfig, CommandKeyboardConfig
+from api.interface import CommandActionConfig, CommandJoystickConfig, CommandKeyboardConfig
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -123,14 +123,36 @@ class CommandHandler:
             server_only=True,
         )
 
-        pygame.joystick.init()
+        pygame.init()
         joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
 
-        # Print all names of the all controllers
         for joystick in joysticks:
-            print(joystick.get_name())
+            joystick.init()
 
-        pygame.joystick.quit()
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.JOYBUTTONUP:
+                    # Get guid of joystick with instance id
+                    joystick_origin = pygame.joystick.Joystick(event.joy)
+                    self.recorded_keys.append({
+                        "button": event.button,
+                        "guid": joystick_origin.get_guid(),
+                        "name": joystick_origin.get_name()
+                        })
+                    running = False
+
+        stop_command = StopRecordingCommand(
+            command="stop_recording",
+            recording_device=RecordingDevice.JOYSTICK
+        )
+        WebSocketUser.ensure_async(
+            self.handle_stop_recording(stop_command, None)
+        )
+
+        pygame.quit()
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
@@ -187,6 +209,10 @@ class CommandHandler:
     ):
         if self.keyboard_hook_callback:
             keyboard.unhook(self.keyboard_hook_callback)
+            self.keyboard_hook_callback = None
+        if command.recording_device == RecordingDevice.JOYSTICK:
+            pygame.quit()
+
         recorded_keys = self.recorded_keys
         if self.timeout_task:
             self.timeout_task.cancel()
@@ -199,6 +225,14 @@ class CommandHandler:
                 if command.recording_type == KeyboardRecordingType.MACRO_ADVANCED
                 else self._get_actions_from_recorded_hotkey(recorded_keys)
             )
+        elif command.recording_device == RecordingDevice.JOYSTICK:
+            if len(recorded_keys) > 0:
+                joystick_config = CommandActionConfig()
+                joystick_config.joystick = CommandJoystickConfig()
+                joystick_config.joystick.button = recorded_keys[0]["button"]
+                joystick_config.joystick.name = recorded_keys[0]["name"]
+                joystick_config.joystick.guid = recorded_keys[0]["guid"]
+                actions.append(joystick_config)
 
         command = ActionsRecordedCommand(command="actions_recorded", actions=actions)
         await self.connection_manager.broadcast(command)

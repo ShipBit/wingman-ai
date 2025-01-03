@@ -363,6 +363,7 @@ class ConfigService:
         wingman_config.disabled = basic_config.disabled
         wingman_config.record_key = basic_config.record_key
         wingman_config.record_key_codes = basic_config.record_key_codes
+        wingman_config.record_joystick_button = basic_config.record_joystick_button
         wingman_config.sound = basic_config.sound
         wingman_config.prompts.backstory = basic_config.backstory
         try:

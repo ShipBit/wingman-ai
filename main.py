@@ -146,6 +146,7 @@ def custom_openapi():
             "mouse": {"$ref": "#/components/schemas/CommandMouseConfig"},
             "write": {"type": "string"},
             "audio": {"$ref": "#/components/schemas/AudioFileConfig"},
+            "joystick": {"$ref": "#/components/schemas/CommandJoystickConfig"},
         },
     }
 

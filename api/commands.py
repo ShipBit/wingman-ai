@@ -38,7 +38,7 @@ class RecordJoystickActionsCommand(WebSocketCommandModel):
 
 class StopRecordingCommand(WebSocketCommandModel):
     command: Literal["stop_recording"] = "stop_recording"
-    recording_type: KeyboardRecordingType
+    recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
     recording_device: RecordingDevice = RecordingDevice.KEYBOARD
 
 
