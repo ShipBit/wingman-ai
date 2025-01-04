@@ -152,7 +152,7 @@ class CommandHandler:
             self.handle_stop_recording(stop_command, None)
         )
 
-        pygame.quit()
+        #pygame.quit()
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
@@ -210,8 +210,8 @@ class CommandHandler:
         if self.keyboard_hook_callback:
             keyboard.unhook(self.keyboard_hook_callback)
             self.keyboard_hook_callback = None
-        if command.recording_device == RecordingDevice.JOYSTICK:
-            pygame.quit()
+        #if command.recording_device == RecordingDevice.JOYSTICK:
+            #pygame.quit()
 
         recorded_keys = self.recorded_keys
         if self.timeout_task:

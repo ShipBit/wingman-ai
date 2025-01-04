@@ -363,13 +363,15 @@ class ConfigService:
         wingman_config.disabled = basic_config.disabled
         wingman_config.record_key = basic_config.record_key
         wingman_config.record_key_codes = basic_config.record_key_codes
-        wingman_config.record_joystick_button = basic_config.record_joystick_button
         wingman_config.sound = basic_config.sound
         wingman_config.prompts.backstory = basic_config.backstory
         try:
             wingman_config.openai.tts_voice = OpenAiTtsVoice(basic_config.voice)
         except ValueError:
             wingman_config.azure.tts.voice = basic_config.voice
+
+        joystick_changed = wingman_config.record_joystick_button != basic_config.record_joystick_button
+        wingman_config.record_joystick_button = basic_config.record_joystick_button
 
         updated = await wingman.update_config(config=wingman_config, validate=validate)
 
@@ -388,7 +390,7 @@ class ConfigService:
             wingman_config=wingman_config,
         )
 
-        if renamed:
+        if renamed or joystick_changed:
             await self.load_config(config_dir=config_dir)
 
         message = f"Wingman {wingman_config.name}'s basic config changed."
