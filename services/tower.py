@@ -37,8 +37,6 @@ class Tower:
         self.config = config
         self.config_dir = config_dir
         self.config_manager = config_manager
-        self.mouse_wingman_dict: dict[str, Wingman] = {}
-        self.joystick_wingman_dict: dict[str, Wingman] = {}
         self.wingmen: list[Wingman] = []
         self.disabled_wingmen: list[WingmanConfig] = []
         self.log_source_name = "Tower"
@@ -145,24 +143,6 @@ class Tower:
                 await wingman.prepare()
                 self.wingmen.append(wingman)
 
-            # Mouse
-            button = wingman.get_record_mouse_button()
-            if button:
-                self.mouse_wingman_dict[button] = wingman
-
-            # Joystick
-            joystick_button = wingman.get_record_joystick_button()
-            if joystick_button:
-                self.joystick_wingman_dict[joystick_button] = wingman
-
-        return wingman
-
-    def get_wingman_from_mouse(self, mouse: any) -> Wingman | None:  # type: ignore
-        wingman = self.mouse_wingman_dict.get(mouse, None)
-        return wingman
-    
-    def get_wingman_from_joystick(self, joystick_config: CommandJoystickConfig) -> Wingman | None:  # type: ignore
-        wingman = self.joystick_wingman_dict.get(f"{joystick_config.guid}{joystick_config.button}", None)
         return wingman
 
     def get_wingman_from_text(self, text: str) -> Wingman | None:

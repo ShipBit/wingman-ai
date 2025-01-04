@@ -445,16 +445,22 @@ class WingmanCore(WebSocketUser):
 
         if self.tower and self.active_recording["key"] == "":
             wingman = None
-            if key:
-                for potential_wingman in self.tower.wingmen:
+            for potential_wingman in self.tower.wingmen:
+                if key:
                     if potential_wingman.get_record_key() and self.is_hotkey_pressed(
                         potential_wingman.get_record_key()
                     ):
                         wingman = potential_wingman
-            elif mouse_button:
-                wingman = self.tower.get_wingman_from_mouse(mouse_button)
-            elif joystick_config:
-                wingman = self.tower.get_wingman_from_joystick(joystick_config)
+                        break
+                if mouse_button:
+                    if potential_wingman.get_record_mouse_button() == mouse_button:
+                        wingman = potential_wingman
+                        break
+                if joystick_config:
+                    if potential_wingman.get_record_joystick_button() == f"{joystick_config.guid}{joystick_config.button}":
+                        wingman = potential_wingman
+                        break
+                        
             if wingman:
                 if key:
                     self.active_recording = dict(key=key.name, wingman=wingman)
