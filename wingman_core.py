@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 import re
 import threading
+import pygame
 from typing import Optional
 from fastapi import APIRouter, File, UploadFile
 import requests
@@ -22,6 +23,7 @@ from api.interface import (
     AudioDevice,
     AudioFile,
     AzureSttConfig,
+    CommandJoystickConfig,
     Config,
     ConfigWithDirInfo,
     ElevenlabsModel,
@@ -330,15 +332,60 @@ class WingmanCore(WebSocketUser):
 
     def is_mouse_configured(self, config: Config) -> bool:
         return any(config.wingmen[wingman].record_mouse_button for wingman in config.wingmen)
+    
+    def is_joystick_configured(self, config: Config) -> bool:
+        return any(config.wingmen[wingman].record_joystick_button for wingman in config.wingmen)
+    
+    async def start_joysticks(self, config: Config):
+        pygame.init()
+
+        # Get all joystick configs
+        joystick_configs = [config.wingmen[wingman].record_joystick_button for wingman in config.wingmen if config.wingmen[wingman].record_joystick_button]
+        
+        joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
+        for joystick in joysticks:
+            if any([joystick.get_guid() == joystick_config.guid for joystick_config in joystick_configs]):
+                joystick.init()
+
+        running = True
+        while running:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    joystick_origin = pygame.joystick.Joystick(event.joy)
+                    for joystick_config in joystick_configs:
+                        if joystick_origin.get_guid() == joystick_config.guid:
+                            self.on_press(joystick_config=CommandJoystickConfig(guid=joystick_config.guid, button=event.button))
+                elif event.type == pygame.JOYBUTTONUP:
+                    joystick_origin = pygame.joystick.Joystick(event.joy)
+                    for joystick_config in joystick_configs:
+                        if joystick_origin.get_guid() == joystick_config.guid:
+                            self.on_release(joystick_config=CommandJoystickConfig(guid=joystick_config.guid, button=event.button))
+
+    def init_joystick(self, config: Config):
+
+        def run_async_process():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(self.start_joysticks(config))
+            finally:
+                loop.close()
+
+        play_thread = threading.Thread(target=run_async_process)
+        play_thread.start()
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         await self.unload_tower()
 
         config = config_dir_info.config
 
-        # Register mouse hook if any wingman is configured to record mouse events
+        # Register hooks
         if self.is_mouse_configured(config):
             mouse.hook(self.on_mouse)
+        if self.is_joystick_configured(config):
+            self.init_joystick(config)
 
         self.tower = Tower(
             config=config,
@@ -379,7 +426,7 @@ class WingmanCore(WebSocketUser):
 
         return is_pressed
 
-    def on_press(self, key=None, button=None):
+    def on_press(self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig=None):
         is_mute_hotkey_pressed = self.is_hotkey_pressed(
             self.settings_service.settings.voice_activation.mute_toggle_key_codes
             or self.settings_service.settings.voice_activation.mute_toggle_key
@@ -398,13 +445,17 @@ class WingmanCore(WebSocketUser):
                         potential_wingman.get_record_key()
                     ):
                         wingman = potential_wingman
-            elif button:
-                wingman = self.tower.get_wingman_from_mouse(button)
+            elif mouse_button:
+                wingman = self.tower.get_wingman_from_mouse(mouse_button)
+            elif joystick_config:
+                wingman = self.tower.get_wingman_from_joystick(joystick_config)
             if wingman:
                 if key:
                     self.active_recording = dict(key=key.name, wingman=wingman)
-                elif button:
-                    self.active_recording = dict(key=button, wingman=wingman)
+                elif mouse_button:
+                    self.active_recording = dict(key=mouse_button, wingman=wingman)
+                elif joystick_config:
+                    self.active_recording = dict(key=f"{joystick_config.guid}{joystick_config.button}", wingman=wingman)
 
                 self.was_listening_before_ptt = self.is_listening
                 if (
@@ -415,11 +466,12 @@ class WingmanCore(WebSocketUser):
 
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
-    def on_release(self, key=None, button=None):
+    def on_release(self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig=None):
         if self.tower and (
             key is not None
             and self.active_recording["key"] == key.name
-            or self.active_recording["key"] == button
+            or self.active_recording["key"] == mouse_button
+            or (joystick_config and self.active_recording["key"] == f"{joystick_config.guid}{joystick_config.button}")
         ):
             wingman = self.active_recording["wingman"]
             recorded_audio_wav = self.audio_recorder.stop_recording(
@@ -465,9 +517,9 @@ class WingmanCore(WebSocketUser):
             return
 
         if event.event_type == "down":
-            self.on_press(button=event.button)
+            self.on_press(mouse_button=event.button)
         elif event.event_type == "up":
-            self.on_release(button=event.button)
+            self.on_release(mouse_button=event.button)
 
     # called when AudioRecorder regonized voice
     def on_audio_recorder_speech_recorded(self, recording_file: str):
