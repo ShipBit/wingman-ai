@@ -363,13 +363,19 @@ class WingmanCore(WebSocketUser):
                         if joystick_origin.get_guid() == joystick_config.guid:
                             self.on_release(joystick_config=CommandJoystickConfig(guid=joystick_config.guid, button=event.button))
 
+            # Add a small sleep to prevent the loop from consuming too much CPU
+            await asyncio.sleep(0.01)
+
     def init_joystick(self, config: Config):
 
         def run_async_process():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(self.start_joysticks(config))
+                # Create a task for start_joysticks instead of running it directly
+                loop.create_task(self.start_joysticks(config))
+                # Run the event loop forever instead of running until complete
+                loop.run_forever()
             finally:
                 loop.close()
 
