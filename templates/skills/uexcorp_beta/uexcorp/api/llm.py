@@ -100,9 +100,9 @@ class Llm:
 
     async def find_closest_match(
         self, search: str | None, lst: list[str] | set[str]
-    ) -> str | None:
+    ) -> (str | None, list[str] | set[str]):
         if not search or search == "None":
-            return None
+            return None, None
 
         self.__helper.get_handler_debug().write(f"Searching for closest match for '{search}' in list.")
 
@@ -110,11 +110,11 @@ class Llm:
         if checksum in self.__cache_search:
             match = self.__cache_search[checksum]
             self.__helper.get_handler_debug().write(f"Found closest match for '{search}' in cache: '{match}'")
-            return match
+            return match, None
 
         if search in lst:
             self.__helper.get_handler_debug().write(f"Found exact match for '{search}' in list.")
-            return search
+            return search, None
 
         # make a list of possible matches
         close_matches = difflib.get_close_matches(search, lst, n=10, cutoff=0.4)
@@ -127,7 +127,7 @@ class Llm:
             self.__helper.get_handler_debug().write(
                 f"No close matches found for '{search}' in list. Returning None.", True
             )
-            return None
+            return None, "No approximate matches found, given name too abstract."
 
         messages = MessageHistory()
         messages.add_direct(
@@ -139,6 +139,7 @@ class Llm:
                 For example if "Hercules A2" is given and the list contains of "A2, C2, M2", you will return "A2" as string.
                 Or if "C2" is given and the list contains of "A2 Hercules Star Lifter, C2 Monster Truck, M2 Extreme cool ship", you will return "C2 Monster Truck" as string.
                 On longer search terms, prefer the exact match, if it is in the list.
+                If more than one match is very likely, prefer not to match at all.
                 The response must not contain anything else, than the exact value of the closest match from the list.
                 If you can't find a match, return 'None'. Do never return the given search value.
             """,
@@ -154,21 +155,21 @@ class Llm:
                     f"LLM did not answer for '{search}'. Using dumb match '{dumb_match}'",
                     True,
                 )
-                return dumb_match[0]
+                return dumb_match[0], None
             else:
                 self.__helper.get_handler_debug().write(
                     f"LLM did not answer for '{search}' and dumb match to inaccurate.",
                     True,
                 )
-                return None
+                return None, ', '.join(close_matches[:3])
 
         if answer == "None" or answer not in close_matches:
             self.__helper.get_handler_debug().write(
                 f"LLM said no match possible for '{search}' in list.", True
             )
-            return None
+            return None, ', '.join(close_matches[:3])
 
         self.__helper.get_handler_debug().write(f"LLM said '{answer}' is closest match to '{search}' in list.")
         self.__helper.add_context(f"Note for function parameters: Use '{answer}' instead of '{search}'.")
         self.__cache_search[checksum] = answer
-        return answer
+        return answer, None

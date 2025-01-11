@@ -41,6 +41,7 @@ class ImportHandler:
             "vehicle": self.__import_data_vehicle,
             "commodity_status": self.__import_data_commodity_status,
             "item_price": self.__import_data_item_price,
+            "item_attribute": self.__import_data_item_attribute,
             "refinery_audit": self.__import_data_refinery_audit,
             "fuel_price": self.__import_data_fuel_price,
             "vehicle_purchase_price": self.__import_data_vehicle_purchase_price,
@@ -78,7 +79,8 @@ class ImportHandler:
         self.__helper.start_timer("import_total")
         total_count = self.__import_data()
         self.__helper.get_handler_debug().write(
-            f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s"
+            f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s",
+            total_count > 0
         )
         self.__helper.on_import_completed(total_count)
 
@@ -127,6 +129,8 @@ class ImportHandler:
             for index, data in enumerate(category_data):
                 category = Category(data["id"])
                 category.set_data(data)
+                if category.get_section() == "Armor" and category.get_name() == "Set":
+                    category.data["is_game_related"] = 0
                 category.persist(index < len(category_data) - 1)
 
         category_import.set_date_imported(self.__helper.get_timestamp())
@@ -621,6 +625,49 @@ class ImportHandler:
             f"Item Price data imported: {item_price_import.get_dataset_count()} record(s) in {item_price_import.get_time_taken()}s"
         )
         return len(item_price_data)
+
+    def __import_data_item_attribute(self) -> bool | int:
+        try:
+            from skills.uexcorp_beta.uexcorp.model.import_data import ImportData
+            from skills.uexcorp_beta.uexcorp.model.item_attribute import ItemAttribute
+            from skills.uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
+        except ModuleNotFoundError:
+            from uexcorp_beta.uexcorp.model.import_data import ImportData
+            from uexcorp_beta.uexcorp.model.item_attribute import ItemAttribute
+            from uexcorp_beta.uexcorp.data_access.category_data_access import CategoryDataAccess
+
+        if not self.__helper.get_database().table_exists("item_attribute"):
+            return False
+
+        item_attribute_import = ImportData("item_attribute", load=True)
+        if not item_attribute_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+            return False
+
+        # depends on categories
+        self.__import_data_category()
+
+        self.__helper.start_timer("import")
+
+        category_ids = []
+        categories =  CategoryDataAccess().add_filter_by_is_game_related(True).load()
+        for category in categories:
+            category_ids.append(category.get_id())
+
+        item_attribute_data = self.__api.fetch(self.__api.ITEMS_ATTRIBUTES, {"id_category": category_ids})
+        if item_attribute_data:
+            for index, data in enumerate(item_attribute_data):
+                item_attribute = ItemAttribute(data["id"])
+                item_attribute.set_data(data)
+                item_attribute.persist(index < len(item_attribute_data) - 1)
+
+        item_attribute_import.set_date_imported(self.__helper.get_timestamp())
+        item_attribute_import.set_dataset_count(len(item_attribute_data))
+        item_attribute_import.set_time_taken(self.__helper.end_timer("import"))
+        item_attribute_import.persist()
+        self.__helper.get_handler_debug().write(
+            f"Orbit Distance data imported: {item_attribute_import.get_dataset_count()} record(s) in {item_attribute_import.get_time_taken()}s"
+        )
+        return item_attribute_import.get_dataset_count()
 
     def __import_data_jurisdiction(self) -> bool | int:
         try:

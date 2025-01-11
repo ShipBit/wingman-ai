@@ -19,6 +19,7 @@ class ItemPrice(DataModel):
             date_added: int | None = None, # int(11)
             date_modified: int | None = None, # int(11)
             item_name: str | None = None,  # varchar(255)
+            item_uuid: str | None = None,  # varchar(255)
             terminal_name: str | None = None,  # varchar(255)
             load: bool = False,
     ):
@@ -33,6 +34,7 @@ class ItemPrice(DataModel):
             "date_added": date_added,
             "date_modified": date_modified,
             "item_name": item_name,
+            "item_uuid": item_uuid,
             "terminal_name": terminal_name,
             "last_import_run_id": None,
         }
@@ -99,6 +101,9 @@ class ItemPrice(DataModel):
 
     def get_item_name(self) -> str | None:
         return self.data["item_name"]
+
+    def get_item_uuid(self) -> str | None:
+        return self.data["item_uuid"]
 
     def get_terminal_name(self) -> str | None:
         return self.data["terminal_name"]

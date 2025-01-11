@@ -239,11 +239,11 @@ CREATE TABLE item(
     `vehicle_name` TEXT,
     `company_name` TEXT,
     `slug` TEXT,
+    `uuid` TEXT,
     `url_store` TEXT,
     `is_exclusive_pledge` BIT,
     `is_exclusive_subscriber` BIT,
     `is_exclusive_concierge` BIT,
---    `attributes` TEXT,
     `notification` TEXT,
     `date_added` INTEGER,
     `date_modified` INTEGER,
@@ -260,7 +260,23 @@ CREATE TABLE item_price(
     `date_added` INTEGER,
     `date_modified` INTEGER,
     `item_name` TEXT,
+    `item_uuid` TEXT,
     `terminal_name` TEXT,
+    `last_import_run_id` INTEGER
+);
+
+CREATE TABLE item_attribute(
+    `id` INTEGER PRIMARY KEY,
+    `id_item` INTEGER,
+    `id_category` INTEGER,
+    `id_category_attribute` INTEGER,
+    `category_name` TEXT,
+    `item_name` TEXT,
+    `attribute_name` TEXT,
+    `value` TEXT,
+    `unit` TEXT,
+    `date_added` INTEGER,
+    `date_modified` INTEGER,
     `last_import_run_id` INTEGER
 );
 
@@ -629,6 +645,8 @@ CREATE TABLE vehicle(
     `ids_vehicles_loaners` TEXT,
     `name` TEXT,
     `name_full` TEXT,
+    `slug` TEXT,
+    `uuid` TEXT,
     `scu` INTEGER,
     `crew` TEXT,
     `mass` INTEGER,

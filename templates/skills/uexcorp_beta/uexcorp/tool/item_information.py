@@ -18,10 +18,12 @@ class ItemInformation(Tool):
 
     def execute(
         self,
-        filter_items: list[str] | None = None,
+        filter_exact_items: list[str] | None = None,
+        filter_name_search: list[str] | None = None,
         filter_category: list[str] | None = None,
         filter_buy_location: list[str] | None = None,
         filter_company: list[str] | None = None,
+        filter_attribute: list[dict[str, str, str]] | None = None,
     ) -> (str, str):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.item_data_acceess import ItemDataAccess
@@ -29,6 +31,8 @@ class ItemInformation(Tool):
             from skills.uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
             from skills.uexcorp_beta.uexcorp.data_access.company_data_access import CompanyDataAccess
+            from skills.uexcorp_beta.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
+            from skills.uexcorp_beta.uexcorp.database.filter import Filter
             from skills.uexcorp_beta.uexcorp.model.terminal import Terminal
             from skills.uexcorp_beta.uexcorp.helper import Helper
         except ModuleNotFoundError:
@@ -37,15 +41,26 @@ class ItemInformation(Tool):
             from uexcorp_beta.uexcorp.data_access.terminal_data_access import TerminalDataAccess
             from uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
             from uexcorp_beta.uexcorp.data_access.company_data_access import CompanyDataAccess
+            from uexcorp_beta.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
+            from uexcorp_beta.uexcorp.database.filter import Filter
             from uexcorp_beta.uexcorp.model.terminal import Terminal
             from uexcorp_beta.uexcorp.helper import Helper
 
         helper = Helper().get_instance()
         item_data_access = ItemDataAccess()
 
-        if filter_items:
-            item_data_access.add_filter_by_name(filter_items)
+        if filter_exact_items:
+            item_data_access.add_filter_by_name(filter_exact_items)
         else:
+            if filter_name_search:
+                filter_name = Filter()
+                for name_search in filter_name_search:
+                    for name_part in name_search.split(" "):
+                        for name_part_part in name_part.split("-"):
+                            filter_name.where("LOWER(name)", f"%{name_part_part.lower()}%", operation="LIKE", is_or=True)
+                item_data_access.apply_filter(filter_name)
+
+            categories = []
             if filter_category:
                 category_data_access = CategoryDataAccess()
                 category_data_access.add_filter_by_combined_name(filter_category)
@@ -76,6 +91,64 @@ class ItemInformation(Tool):
                 companies = company_data_access.load(debug=True)
                 item_data_access.add_filter_by_id_company([company.get_id() for company in companies])
 
+            if filter_attribute:
+                attribute_unavailable = False
+                attribute_operator_error = False
+                if filter_category:
+                    # check if attribute filter is compatible
+                    item_attribute_data_access = ItemAttributeDataAccess()
+                    item_attribute_data_access.add_filter_by_id_category([category.get_id() for category in categories])
+                    possible_item_attributes = item_attribute_data_access.load(debug=True)
+                    possible_item_attribute_names = []
+                    for possible_item_attribute in possible_item_attributes:
+                        if possible_item_attribute.get_attribute_name() not in possible_item_attribute_names:
+                            possible_item_attribute_names.append(possible_item_attribute.get_attribute_name())
+
+                    for attribute in filter_attribute:
+                        if attribute["attribute"] not in possible_item_attribute_names:
+                            helper.get_handler_tool().add_note(
+                                f"Attribute {attribute['attribute']} is not available for the selected categories. Returning no results, try again with a different attribute."
+                            )
+                            attribute_unavailable = True
+
+                    if attribute_unavailable:
+                        helper.get_handler_tool().add_note(
+                            f"Possible attributes for selected categories: {', '.join(possible_item_attribute_names)}"
+                        )
+
+                attribute_filters = []
+                for attribute in filter_attribute:
+                    attribute_filter = Filter()
+                    operator = attribute["operator"]
+                    if operator in ["<", ">", "<=", ">="]:
+                        if not attribute["value"].lstrip('-').isdigit():
+                            helper.get_handler_tool().add_note(
+                                f"Operator '{operator}' is only allowed for numerical values (effects value for {attribute['attribute']}). Returning no results, try again with a numerical value for this attribute or a different operator."
+                            )
+                            attribute_operator_error = True
+                            continue
+                        else:
+                            if attribute["value"].lstrip('-') != attribute["value"]:
+                                attribute["value"] = -int(attribute["value"].lstrip('-'))
+                            else:
+                                attribute["value"] = int(attribute["value"])
+                            attribute_filter.where("CAST(item_attribute.value AS INTEGER)", attribute["value"], operation=operator)
+                    else:
+                        attribute_filter.where("value", attribute["value"], operation=operator)
+                    attribute_filter.where("attribute_name", attribute["attribute"])
+                    attribute_filters.append(attribute_filter)
+
+                if not attribute_unavailable and not attribute_operator_error:
+                    item_attribute_data_access = ItemAttributeDataAccess()
+                    for attribute_filter in attribute_filters:
+                        item_attribute_data_access.apply_filter(attribute_filter, is_or=True)
+                    item_attributes = item_attribute_data_access.load(debug=True)
+                    item_ids = []
+                    for item_attribute in item_attributes:
+                        if item_attribute.get_id_item() not in item_ids:
+                            item_ids.append(item_attribute.get_id_item())
+                    item_data_access.add_filter_by_id(item_ids)
+
         items = item_data_access.load(debug=True)
 
         if not items:
@@ -85,19 +158,19 @@ class ItemInformation(Tool):
             return [], ""
         elif len(items) <= 10:
             items = [item.get_data_for_ai() for item in items]
-        elif len(items) <= 20:
+        elif len(items) <= 30:
             items = [item.get_data_for_ai_minimal() for item in items]
             helper.get_handler_tool().add_note(
                 f"Found {len(items)} matching items. Filter criteria are somewhat broad. (max 10 items for advanced information)"
             )
-        elif len(items) <= 50:
-            items = [str(item) for item in items]
+        elif len(items) <= 60:
+            items = [f"{str(item)} ({item.get_section()} {item.get_category()})" for item in items]
             helper.get_handler_tool().add_note(
-                f"Found {len(items)} matching items. Filter criteria are very broad. (max 20 items for more than just name information)"
+                f"Found {len(items)} matching items. Filter criteria are very broad. (max 30 items for more than just name information)"
             )
         else:
             helper.get_handler_tool().add_note(
-                f"Found {len(items)} matching items. Filter criteria are too broad. (max 50 items for names and max 20 for information about each item)"
+                f"Found {len(items)} matching items. Filter criteria are too broad. (max 60 items for names and max 30 for information about each item)"
             )
             items = []
 
@@ -108,10 +181,15 @@ class ItemInformation(Tool):
 
     def get_optional_fields(self) -> dict[str, Validator]:
         return {
-            "filter_items": Validator(
+            "filter_exact_items": Validator(
                 Validator.VALIDATE_ITEM,
                 multiple=True,
-                prompt="Provide one or multiple exact item names to filter by name. If this filter is used, others have no effect. (e.g. \"Omnisky VI\" or \"P4-AR\")",
+                prompt="Provide one or multiple exact item names to filter by name. If this filter is used, others have no effect. (e.g. \"Omnisky VI\" or \"P4-AR\"). May be used if user knows the exact name of an item. Overwrites other filters.",
+            ),
+            "filter_name_search": Validator(
+                Validator.VALIDATE_STRING,
+                multiple=True,
+                prompt="Provide one or multiple partial item names to search for. (e.g. \"Omnisky\" or \"Desert\"). May be used if user is not sure about the exact name of an item or searches for similar items. Only use meaningful keywords, like \"FBL\" instead of \"FBL-8a Arms Imperial Red\" for example to find all parts of the \"FBL\" series.",
             ),
             "filter_category": Validator(
                 Validator.VALIDATE_CATEGORY,
@@ -131,10 +209,15 @@ class ItemInformation(Tool):
                 multiple=True,
                 prompt="Provide one or multiple companies to filter for items produced by them. (e.g. \"Klaus & Werner\")"
             ),
+            "filter_attribute": Validator(
+                Validator.VALIDATE_ITEM_ATTRIBUTE,
+                multiple=True,
+                prompt="Provide a attribute name a value and a comparison operator to filter items by. (e.g. {attribute: \"Rate of Fire\", value: \"200\", operator: \"<\"} to find all items with a rate of fire lower than 200.)",
+            ),
         }
 
     def get_description(self) -> str:
-        return "Gives back information about a items and their purchase options. Items range from Suits, over vehicle and personal weapons to tools and ship systems. An item is not a commodity."
+        return "Gives back information about a items and their purchase options. Items range from suits, over vehicle and personal weapons to tools and ship components. An item is not a commodity."
 
     def get_prompt(self) -> str:
         return "Get all information's about all items, filterable. Items are not commodities, therefore if item information is requests, this is the function. Includes item buy prices and locations."

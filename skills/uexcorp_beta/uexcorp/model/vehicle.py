@@ -45,6 +45,8 @@ class Vehicle(DataModel):
             ids_vehicles_loaners: str | None = None,  # string(40) // vehicles loaned, comma separated
             name: str | None = None,  # string(255)
             name_full: str | None = None,  # string(255)
+            slug: str | None = None,  # string(255)
+            uuid: str | None = None,  # string(255)
             scu: int | None = None,  # int(11)
             crew: str | None = None,  # string(10) // comma separated
             mass: int | None = None,  # int(11)
@@ -109,6 +111,8 @@ class Vehicle(DataModel):
             "ids_vehicles_loaners": ids_vehicles_loaners,
             "name": name,
             "name_full": name_full,
+            "slug": slug,
+            "uuid": uuid,
             "scu": scu,
             "crew": crew,
             "mass": mass,
@@ -290,6 +294,12 @@ class Vehicle(DataModel):
 
     def get_name_full(self) -> str | None:
         return self.data["name_full"]
+
+    def get_slug(self) -> str | None:
+        return self.data["slug"]
+
+    def get_uuid(self) -> str | None:
+        return self.data["uuid"]
 
     def get_scu(self) -> int | None:
         return self.data["scu"]

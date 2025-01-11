@@ -1,8 +1,16 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 try:
     from skills.uexcorp_beta.uexcorp.model.data_model import DataModel
 except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.model.data_model import DataModel
+
+if TYPE_CHECKING:
+    try:
+        from skills.uexcorp_beta.uexcorp.model.item_attribute import ItemAttribute
+    except ModuleNotFoundError:
+        from uexcorp_beta.uexcorp.model.item_attribute import ItemAttribute
+
 
 class Item(DataModel):
 
@@ -21,11 +29,11 @@ class Item(DataModel):
         company_name: str | None = None,  # string(255) // if item is linked to a company
         vehicle_name: str | None = None,  # string(255) // if item is linked to a vehicle
         slug: str | None = None,  # string(255) // used by UEX item URLs
+        uuid: str | None = None,  # string(255) // star citizen uuid
         url_store: str | None = None,  # string(255) // pledge store URL
         is_exclusive_pledge: int | None = None,  # int(1)
         is_exclusive_subscriber: int | None = None,  # int(1)
         is_exclusive_concierge: int | None = None,  # int(1)
-        # attributes: dict | None = None,  # json // item specifications (ids) are associated with categories_attributes
         notification: dict | None = None,  # json // heads up about an item, such as known bugs, etc.
         date_added: int | None = None,  # int(11) // timestamp
         date_modified: int | None = None,  # int(11) // timestamp
@@ -44,11 +52,11 @@ class Item(DataModel):
             "company_name": company_name,
             "vehicle_name": vehicle_name,
             "slug": slug,
+            "uuid": uuid,
             "url_store": url_store,
             "is_exclusive_pledge": is_exclusive_pledge,
             "is_exclusive_subscriber": is_exclusive_subscriber,
             "is_exclusive_concierge": is_exclusive_concierge,
-            # "attributes": attributes,
             "notification": notification,
             "date_added": date_added,
             "date_modified": date_modified,
@@ -65,11 +73,13 @@ class Item(DataModel):
             from skills.uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
             from skills.uexcorp_beta.uexcorp.model.vehicle import Vehicle
             from skills.uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+            from skills.uexcorp_beta.uexcorp.model.item_attribute import ItemAttribute
         except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.model.category import Category
             from uexcorp_beta.uexcorp.model.category_attribute import CategoryAttribute
             from uexcorp_beta.uexcorp.model.vehicle import Vehicle
             from uexcorp_beta.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+            from uexcorp_beta.uexcorp.model.item_attribute import ItemAttribute
 
         category = Category(self.get_id_category(), load=True) if self.get_id_category() else None
 
@@ -90,11 +100,10 @@ class Item(DataModel):
             vehicle = Vehicle(self.get_id_vehicle(), load=True)
             information["for_vehicle"] = vehicle.get_data_for_ai_minimal()
 
-        # if self.get_attributes():
-        #     attributes = {}
-        #     for id_category_attribute, value in self.get_attributes().items():
-        #         category_attribute = CategoryAttribute(id_category_attribute, load=True)
-        #         attributes[category_attribute.get_name()] = value
+        attributes = {}
+        for item_attribute in self.get_attributes():
+            attributes[item_attribute.get_attribute_name()] = f"{str(item_attribute.get_value())}{str(item_attribute.get_unit())}" or "N/A"
+        information["attributes"] = attributes
 
         prices = ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load()
         offers = []
@@ -128,11 +137,12 @@ class Item(DataModel):
         if self.get_id_vehicle():
             information["for_vehicle"] = self.get_vehicle_name()
 
-        # if self.get_attributes():
-        #     attributes = {}
-        #     for id_category_attribute, value in self.get_attributes().items():
-        #         category_attribute = CategoryAttribute(id_category_attribute, load=True)
-        #         attributes[category_attribute.get_name()] = value
+        attributes = {}
+        for item_attribute in self.get_attributes():
+            value = f"{str(item_attribute.get_value())}{str(item_attribute.get_unit())}"
+            if value:
+                attributes[item_attribute.get_attribute_name()] = value
+        information["attributes"] = attributes
 
         prices = ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load()
         offers = []
@@ -142,6 +152,14 @@ class Item(DataModel):
             information["offers"] = offers
 
         return information
+
+    def get_attributes(self) -> list["ItemAttribute"]:
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
+        except ModuleNotFoundError:
+            from uexcorp_beta.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
+
+        return ItemAttributeDataAccess().add_filter_by_id_item(self.get_id()).load()
 
     def get_id(self) -> int:
         return self.data["id"]
@@ -176,6 +194,9 @@ class Item(DataModel):
     def get_slug(self) -> str | None:
         return self.data["slug"]
 
+    def get_uuid(self) -> str | None:
+        return self.data["uuid"]
+
     def get_url_store(self) -> str | None:
         return self.data["url_store"]
 
@@ -187,9 +208,6 @@ class Item(DataModel):
 
     def get_is_exclusive_concierge(self) -> bool | None:
         return bool(self.data["is_exclusive_concierge"])
-
-    def get_attributes(self) -> dict | None:
-        return self.data["attributes"]
 
     def get_notification(self) -> dict | None:
         return self.data["notification"]

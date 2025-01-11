@@ -70,7 +70,7 @@ class Uex:
         results = []
         if get and any(isinstance(value, list) for value in get.values()):
             keys, values = zip(*((k, v if isinstance(v, list) else [v]) for k, v in get.items()))
-            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
                 future_to_combination = {executor.submit(self.__actual_fetch, endpoint, dict(zip(keys, combination)), params): combination for combination in product(*values)}
                 for future in concurrent.futures.as_completed(future_to_combination):
                     result = future.result()
@@ -105,7 +105,7 @@ class Uex:
             self.session = requests.Session()
 
         request_count = 1
-        max_retries = 4
+        max_retries = 2
         timeout_error = False
         requests_error = False
         response_json = {}
@@ -130,7 +130,7 @@ class Uex:
                 response_json = response.json()
                 if "status" not in response_json or response_json["status"] != "ok":
                     self.helper.get_handler_debug().write(
-                        f"Error while retrieving data from {url}. Status is not \"ok\".",
+                        f"Error while retrieving data from {url}. Status: is not \"ok\".",
                         request_count > max_retries
                     )
                     requests_error = True

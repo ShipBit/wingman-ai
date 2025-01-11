@@ -21,6 +21,8 @@ class VehicleDataAccess(DataAccess):
             "ids_vehicles_loaners",
             "name",
             "name_full",
+            "slug",
+            "uuid",
             "scu",
             "crew",
             "mass",
@@ -111,6 +113,14 @@ class VehicleDataAccess(DataAccess):
 
     def add_filter_by_name_full(self, name_full: str | list[str], **kwargs) -> "VehicleDataAccess":
         self.filter.where("name_full", name_full, **kwargs)
+        return self
+
+    def add_filter_by_slug(self, slug: str | list[str], **kwargs) -> "VehicleDataAccess":
+        self.filter.where("slug", slug, **kwargs)
+        return self
+
+    def add_filter_by_uuid(self, uuid: str | list[str], **kwargs) -> "VehicleDataAccess":
+        self.filter.where("uuid", uuid, **kwargs)
         return self
 
     def add_filter_by_scu(self, scu: int | list[int], **kwargs) -> "VehicleDataAccess":

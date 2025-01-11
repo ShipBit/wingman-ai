@@ -24,6 +24,9 @@ class DataAccess :
         self.database = self.helper.get_database()
         self.additional_cols = []
 
+    def apply_filter(self, sub_filter: Filter, is_or: bool = False) -> None:
+        self.filter.apply_filter(sub_filter, is_or)
+
     def get_filter(self) -> Filter:
         return self.filter
 
@@ -120,4 +123,3 @@ class DataAccess :
         data_access = DataAccess(self.table, self.model)
         data_access.filter.where(property, value)
         return data_access.load_one()
-

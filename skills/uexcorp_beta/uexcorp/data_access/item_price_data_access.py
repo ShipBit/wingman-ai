@@ -25,6 +25,7 @@ class ItemPriceDataAccess(DataAccess):
             "date_added",
             "date_modified",
             "item_name",
+            "item_uuid",
             "terminal_name",
         ]
 
@@ -64,6 +65,10 @@ class ItemPriceDataAccess(DataAccess):
 
     def add_filter_by_item_name(self, item_name: str | list[str], **params) -> "ItemPriceDataAccess":
         self.filter.where("item_name", item_name, **params)
+        return self
+
+    def add_filter_by_item_uuid(self, item_uuid: str | list[str], **params) -> "ItemPriceDataAccess":
+        self.filter.where("item_uuid", item_uuid, **params)
         return self
 
     def add_filter_by_terminal_name(self, terminal_name: str | list[str], **params) -> "ItemPriceDataAccess":

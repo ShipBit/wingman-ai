@@ -26,11 +26,11 @@ class ItemDataAccess(DataAccess):
             "company_name",
             "vehicle_name",
             "slug",
+            "uuid",
             "url_store",
             "is_exclusive_pledge",
             "is_exclusive_subscriber",
             "is_exclusive_concierge",
-            # "attributes",
             "notification",
             "date_added",
             "date_modified",
@@ -85,6 +85,10 @@ class ItemDataAccess(DataAccess):
 
     def add_filter_by_slug(self, slug: str | list[str], **params) -> "ItemDataAccess":
         self.filter.where("slug", slug, **params)
+        return self
+
+    def add_filter_by_uuid(self, uuid: str | list[str], **params) -> "ItemDataAccess":
+        self.filter.where("uuid", uuid, **params)
         return self
 
     def add_filter_by_url_store(self, url_store: str | list[str], **params) -> "ItemDataAccess":
