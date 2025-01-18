@@ -471,46 +471,44 @@ class RadioChatter(Skill):
         voice_name = None
         error = False
 
-        try:
-            if voice_provider == TtsProvider.WINGMAN_PRO:
-                if voice_setting.subprovider == WingmanProTtsProvider.OPENAI:
-                    voice_name = voice.value
-                    self.wingman.config.openai.tts_voice = voice
-                elif voice_setting.subprovider == WingmanProTtsProvider.AZURE:
-                    voice_name = voice
-                    self.wingman.config.azure.tts.voice = voice
-            elif voice_provider == TtsProvider.OPENAI:
+        if voice_provider == TtsProvider.WINGMAN_PRO:
+            if voice_setting.subprovider == WingmanProTtsProvider.OPENAI:
                 voice_name = voice.value
                 self.wingman.config.openai.tts_voice = voice
-            elif voice_provider == TtsProvider.ELEVENLABS:
-                if isinstance(voice, str):
-                    # only needed for wingman config restore
-                    voice_name = voice.split("id=")[0].strip().split("=")[1].strip("'")
-                    voice_id = voice.split("id=")[1].strip().strip("'")
-                    self.wingman.config.elevenlabs.voice.id = voice_id
-                    self.wingman.config.elevenlabs.voice.name = voice_name
-                elif isinstance(voice, ElevenlabsVoiceConfig):
-                    self.wingman.config.elevenlabs.voice = voice
-                    voice_name = voice.name
-                self.wingman.config.elevenlabs.output_streaming = elevenlabs_streaming
-            elif voice_provider == TtsProvider.AZURE:
+            elif voice_setting.subprovider == WingmanProTtsProvider.AZURE:
                 voice_name = voice
                 self.wingman.config.azure.tts.voice = voice
-            elif voice_provider == TtsProvider.XVASYNTH:
-                voice_name = voice.voice_name
-                self.wingman.config.xvasynth.voice = voice
-            elif voice_provider == TtsProvider.EDGE_TTS:
-                voice_name = voice
-                self.wingman.config.edge_tts.voice = voice
+        elif voice_provider == TtsProvider.OPENAI:
+            voice_name = voice.value
+            self.wingman.config.openai.tts_voice = voice
+        elif voice_provider == TtsProvider.ELEVENLABS:
+            if isinstance(voice, str):
+                # only needed for wingman config restore
+                voice_id = voice.split("id=")[1].strip().strip("'")
+                voice_name = voice.split("id=")[0].strip().split("=")[1].strip("'") or voice_id
+                self.wingman.config.elevenlabs.voice.id = voice_id
+                self.wingman.config.elevenlabs.voice.name = voice_name
+            elif isinstance(voice, ElevenlabsVoiceConfig):
+                self.wingman.config.elevenlabs.voice = voice
+                voice_name = voice.name or voice.id
             else:
                 error = True
-        except Exception:
-            print("Exception while voice switching.")
+            self.wingman.config.elevenlabs.output_streaming = elevenlabs_streaming
+        elif voice_provider == TtsProvider.AZURE:
+            voice_name = voice
+            self.wingman.config.azure.tts.voice = voice
+        elif voice_provider == TtsProvider.XVASYNTH:
+            voice_name = voice.voice_name
+            self.wingman.config.xvasynth.voice = voice
+        elif voice_provider == TtsProvider.EDGE_TTS:
+            voice_name = voice
+            self.wingman.config.edge_tts.voice = voice
+        else:
             error = True
 
         if error or not voice_name or not voice_provider:
             await self.printr.print_async(
-                "Voice switching failed due to an unknown voice provider/subprovider.",
+                "Voice switching failed due to an unknown voice provider/subprovider or different error.",
                 LogType.ERROR,
             )
             return
