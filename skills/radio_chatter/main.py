@@ -491,7 +491,7 @@ class RadioChatter(Skill):
                     self.wingman.config.elevenlabs.voice.name = voice_name
                 elif isinstance(voice, ElevenlabsVoiceConfig):
                     self.wingman.config.elevenlabs.voice = voice
-                    voice_name = voice.voice_name
+                    voice_name = voice.name
                 self.wingman.config.elevenlabs.output_streaming = elevenlabs_streaming
             elif voice_provider == TtsProvider.AZURE:
                 voice_name = voice
