@@ -130,7 +130,7 @@ class Validator:
             if number.isdigit():
                 number = int(number)
             else:
-                return None
+                return None, f"Number was not convertable to integer: {number}"
 
         if min and number < min:
             return None, f"Number must be greater than or equal to {min}"
@@ -145,7 +145,7 @@ class Validator:
 
     def __validate_bool(self, boolean: str|bool) -> (bool | None, None):
         if isinstance(boolean, bool):
-            return boolean
+            return boolean, None
 
         if boolean.lower() == "true" or "1":
             return True, None
