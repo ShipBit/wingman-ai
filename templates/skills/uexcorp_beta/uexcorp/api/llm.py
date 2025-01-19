@@ -165,7 +165,7 @@ class Llm:
 
         if answer == "None" or answer not in close_matches:
             self.__helper.get_handler_debug().write(
-                f"LLM said no match possible for '{search}' in list.", True
+                f"LLM said no match possible for '{search}' in list.", False
             )
             return None, ', '.join(close_matches[:3])
 
