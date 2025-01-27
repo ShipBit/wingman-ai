@@ -41,6 +41,9 @@ class CommodityPriceDataAccess(DataAccess):
         ]
 
     def load(self, **params) -> list[CommodityPrice]:
+        if not self.filter.get_order_by():
+            self.filter.order_by("price_buy", "ASC")
+            self.filter.order_by("price_sell", "DESC")
         return super().load(**params)
 
     def load_by_property(self, property: str, value: any) -> CommodityPrice | None:
@@ -54,12 +57,20 @@ class CommodityPriceDataAccess(DataAccess):
         self.filter.where("id_terminal", id_terminal, **params)
         return self
 
+    def add_filter_by_is_buyable(self, is_buyable: bool) -> "CommodityPriceDataAccess":
+        self.filter.where("price_buy", 0, ">" if is_buyable else "=")
+        return self
+
     def add_filter_by_price_buy(self, price_buy: float | list[float], **params) -> "CommodityPriceDataAccess":
         self.filter.where("price_buy", price_buy, **params)
         return self
 
     def add_filter_by_price_buy_avg(self, price_buy_avg: float | list[float], **params) -> "CommodityPriceDataAccess":
         self.filter.where("price_buy_avg", price_buy_avg, **params)
+        return self
+
+    def add_filter_by_is_sellable(self, is_sellable: bool) -> "CommodityPriceDataAccess":
+        self.filter.where("price_sell", 0, ">" if is_sellable else "=")
         return self
 
     def add_filter_by_price_sell(self, price_sell: float | list[float], **params) -> "CommodityPriceDataAccess":

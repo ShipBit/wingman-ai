@@ -50,6 +50,9 @@ class Validator:
     VALIDATE_CATEGORY = "category"
     VALIDATE_ITEM = "item"
     VALIDATE_ITEM_ATTRIBUTE = "item_attribute"
+    VALIDATE_OPERATION_INT = "operation_int"
+
+    OPERATORS = ["=", "!=", ">=", "<=", "<", ">"]
 
     def __init__(
         self,
@@ -73,6 +76,7 @@ class Validator:
             self.VALIDATE_CATEGORY,
             self.VALIDATE_ITEM,
             self.VALIDATE_ITEM_ATTRIBUTE,
+            self.VALIDATE_OPERATION_INT,
         ]:
             raise ValueError(f"Invalid validation logic: {logic}")
         self.__method_validate: callable = getattr(self, f"_Validator__validate_{logic}")
@@ -399,7 +403,7 @@ class Validator:
         item_attribute_filter = {
             "attribute": item_attribute_filter["attribute"] if "attribute" in item_attribute_filter and isinstance(item_attribute_filter["attribute"], str) else None,
             "value": item_attribute_filter["value"] if "value" in item_attribute_filter and isinstance(item_attribute_filter["value"], str) else None,
-            "operator": item_attribute_filter["operator"] if "operator" in item_attribute_filter and isinstance(item_attribute_filter["operator"], str) and item_attribute_filter["operator"] in ["=", "!=", ">=", "<=", "<", ">"] else None,
+            "operator": item_attribute_filter["operator"] if "operator" in item_attribute_filter and isinstance(item_attribute_filter["operator"], str) and item_attribute_filter["operator"] in self.OPERATORS else None,
         }
 
         if not item_attribute_filter["attribute"] or not item_attribute_filter["value"] or not item_attribute_filter["operator"]:
@@ -428,6 +432,32 @@ class Validator:
             "properties": {
                 "attribute": {"type": "string"},
                 "value": {"type": "string"},
-                "operator": {"type": "string", "enum": ["=", "!=", ">=", "<=", "<", ">"]},
+                "operator": {"type": "string", "enum": self.OPERATORS},
+            },
+        }
+
+    def __validate_operation_int(self, value) -> ((int | None, str | None), str | None):
+        try:
+            operation = value.get("operation")
+            value = value.get("value")
+        except AttributeError:
+            return (None, None), "Invalid operation_int value. Must have 'operation' and 'value'."
+        if operation not in self.OPERATORS:
+            return None, f"Invalid operation '{operation}', must be one of: {', '.join(self.OPERATORS)}"
+
+        if not isinstance(value, int):
+            if value.isdigit():
+                value = int(value)
+            else:
+                return (None, None), f"Value was not convertable to integer: {value}"
+
+        return (value, operation), None
+
+    def __definition_operation_int(self, **kwargs) -> dict[str, any]:
+        return {
+            "type": "object",
+            "properties": {
+                "operation": {"type": "string", "enum": self.OPERATORS},
+                "value": {"type": "number"},
             },
         }

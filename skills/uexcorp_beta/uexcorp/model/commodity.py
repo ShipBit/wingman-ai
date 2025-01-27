@@ -72,6 +72,12 @@ class Commodity(DataModel):
                 raise Exception("ID is required to load data")
             self.load_by_value("id", self.data["id"])
 
+        self.profit_calculated = False
+        self.profit_absolute_min = None
+        self.profit_absolute_max = None
+        self.profit_relative_min = None
+        self.profit_relative_max = None
+
     def get_properties(self) -> list[str]:
         properties = []
 
@@ -118,6 +124,10 @@ class Commodity(DataModel):
             "name": self.get_name(),
             "wight_scu": self.get_weight_scu() or "unknown",
             "properties": self.get_properties(),
+            "profit_absolute_per_scu_min": self.get_profit_absolute_min() or "unknown",
+            "profit_absolute_per_scu_max": self.get_profit_absolute_max() or "unknown",
+            "profit_relative_min": self.get_profit_percent_min() or "unknown",
+            "profit_relative_max": self.get_profit_percent_max() or "unknown",
             "buy_sell_options": [],
         }
 
@@ -147,6 +157,8 @@ class Commodity(DataModel):
         information = {
             "name": self.get_name(),
             "properties": self.get_properties(),
+            "profit_absolute_per_scu_max": self.get_profit_absolute_max() or "unknown",
+            "profit_relative_max": self.get_profit_percent_max() or "unknown",
             "buy_sell_options": [],
         }
 
@@ -164,6 +176,39 @@ class Commodity(DataModel):
                 information["buy_sell_options"].append(str(price_raw))
 
         return information
+
+    def __calculate_profit(self) -> None:
+        try:
+            from skills.uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        except ModuleNotFoundError:
+            from uexcorp_beta.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+
+        buy_min = None
+        buy_max = None
+        sell_min = None
+        sell_max = None
+        prices = CommodityPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
+        for price in prices:
+            if price.get_price_buy() and (buy_min is None or price.get_price_buy() < buy_min):
+                buy_min = price.get_price_buy()
+            if price.get_price_buy() and (buy_max is None or price.get_price_buy() > buy_max):
+                buy_max = price.get_price_buy()
+            if price.get_price_sell() and (sell_min is None or price.get_price_sell() < sell_min):
+                sell_min = price.get_price_sell()
+            if price.get_price_sell() and (sell_max is None or price.get_price_sell() > sell_max):
+                sell_max = price.get_price_sell()
+
+        self.profit_calculated = True
+        self.profit_relative_max = 0
+        self.profit_relative_min = 0
+        self.profit_absolute_max = 0
+        self.profit_absolute_min = 0
+        if buy_min is not None and buy_min > 0 and sell_max is not None and sell_max > 0:
+            self.profit_absolute_max = sell_max - buy_min
+            self.profit_relative_max = self.profit_absolute_max / buy_min
+        if buy_max is not None and buy_max > 0 and sell_min is not None and sell_min > 0:
+            self.profit_absolute_min = sell_min - buy_max
+            self.profit_relative_min = self.profit_absolute_min / buy_max
 
     def get_id(self) -> int:
         return self.data["id"]
@@ -248,6 +293,26 @@ class Commodity(DataModel):
 
     def set_is_blacklisted(self, is_blacklisted: int):
         self.data["is_blacklisted"] = is_blacklisted
+
+    def get_profit_absolute_min(self) -> float | None:
+        if self.profit_calculated is False:
+            self.__calculate_profit()
+        return self.profit_absolute_min
+
+    def get_profit_absolute_max(self) -> float | None:
+        if self.profit_calculated is False:
+            self.__calculate_profit()
+        return self.profit_absolute_max
+
+    def get_profit_percent_min(self) -> float | None:
+        if self.profit_calculated is False:
+            self.__calculate_profit()
+        return self.profit_relative_min * 100
+
+    def get_profit_percent_max(self) -> float | None:
+        if self.profit_calculated is False:
+            self.__calculate_profit()
+        return self.profit_relative_max * 100
 
     def __str__(self):
         return str(self.data["name"])

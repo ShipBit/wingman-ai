@@ -78,7 +78,7 @@ class ToolHandler:
                     else:
                         validated_value = await optional_fields[key].validate(value)
 
-                    if validated_value is None:
+                    if validated_value is None or validated_value == (None, None):
                         invalid_parameters[key] = f"value '{value}' of parameter '{key}' could not be mapped to a known value, see additional notes."
                     else:
                         valid_parameters[key] = validated_value

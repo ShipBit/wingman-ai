@@ -192,13 +192,13 @@ class ConfigHandler:
                         continue
                     terminal_model.set_is_blacklisted(bool(terminal["is_blacklisted"]))
                     terminal_model.persist(index < len(terminal_data) - 1)
+
+                # delete file after sync
+                os.remove(file_path)
             except Exception as e:
                 self.__helper.get_handler_debug().write(f"Error while syncing terminal blacklist: {e}", True)
                 self.__helper.get_handler_error().write("ConfigHandler.__init_terminal_blacklist", [], e)
                 self.__helper.get_handler_debug().write("Terminal blacklist config will be recreated.", True)
-
-            # delete file after sync
-            os.remove(file_path)
 
         # rewrite file to add possible new terminals
         terminals = TerminalDataAccess().load()
@@ -215,12 +215,16 @@ class ConfigHandler:
                 }
             )
 
-        with open(file_path, "w") as file:
-            file.write("# Only the 'is_blacklisted' value must be changed to 'true' or 'false'.")
-            file.write("\n# Blacklisted terminals ('is_blacklisted: true') will be ignored in trade route calculations and buy/sell recommendations.")
-            file.write("\n# If the yaml-format gets corrupted, the file will be deleted and recreated on the next start.")
-            file.write("\n# This would reset previous set terminal blacklists.\n\n")
-            file.write(yaml.dump(terminal_data))
+        try:
+            with open(file_path, "w") as file:
+                file.write("# Only the 'is_blacklisted' value must be changed to 'true' or 'false'.")
+                file.write("\n# Blacklisted terminals ('is_blacklisted: true') will be ignored in trade route calculations and buy/sell recommendations.")
+                file.write("\n# If the yaml-format gets corrupted, the file will be deleted and recreated on the next start.")
+                file.write("\n# This would reset previous set terminal blacklists.\n\n")
+                file.write(yaml.dump(terminal_data))
+        except Exception as e:
+            self.__helper.get_handler_debug().write(f"Error while writing terminal blacklist: {e}", True)
+            self.__helper.get_handler_error().write("ConfigHandler.__init_terminal_blacklist", [], e)
 
     def is_tool_enabled(self, tool_name: str) -> bool:
         return tool_name in self.__behavior_enabled_tools

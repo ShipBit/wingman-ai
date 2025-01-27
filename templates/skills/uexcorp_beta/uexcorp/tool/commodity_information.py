@@ -1,4 +1,7 @@
 import json
+
+from sympy.strategies.core import switch
+
 try:
     from skills.uexcorp_beta.uexcorp.tool.tool import Tool
     from skills.uexcorp_beta.uexcorp.tool.validator import Validator
@@ -17,10 +20,15 @@ class CommodityInformation(Tool):
     def execute(
             self,
             filter_commodities: list[str] | None = None,
-            filter_is_tradeable: bool | None = None,
+            filter_is_buyable: bool | None = None,
+            filter_is_sellable: bool | None = None,
             filter_is_legal: bool | None = None,
             filter_location_whitelist: list[str] | None = None,
             filter_location_blacklist: list[str] | None = None,
+            filter_buy_price: list[(int, str)] | None = None,
+            filter_sell_price: list[(int, str)] | None = None,
+            filter_profit_margin_percentage: list[(int, str)] | None = None,
+            filter_profit_margin_absolute_per_scu: list[(int, str)] | None = None,
     ) -> (str, str):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
@@ -46,8 +54,11 @@ class CommodityInformation(Tool):
             commodity_data_access.add_filter_by_name(filter_commodities)
         else:
             # only filter for further parameters if no names are given
-            if filter_is_tradeable is not None:
-                commodity_data_access.add_filter_by_is_buyable(filter_is_tradeable).add_filter_by_is_sellable(filter_is_tradeable)
+            if filter_is_buyable is not None:
+                commodity_data_access.add_filter_by_is_buyable(filter_is_buyable)
+
+            if filter_is_sellable is not None:
+                commodity_data_access.add_filter_by_is_sellable(filter_is_sellable)
 
             if filter_is_legal is not None:
                 commodity_data_access.add_filter_by_is_illegal(not filter_is_legal)
@@ -73,7 +84,55 @@ class CommodityInformation(Tool):
                     commodity_price.get_id_commodity() for commodity_price in commodity_prices
                 ])
 
+            if filter_buy_price:
+                commodity_price_data_access = CommodityPriceDataAccess()
+                commodity_price_data_access.add_filter_by_is_buyable(True)
+                for price, operation in filter_buy_price:
+                    commodity_price_data_access.add_filter_by_price_buy(price, operation=operation)
+                commodity_prices = commodity_price_data_access.load(debug=True)
+                commodity_data_access.add_filter_by_id([
+                    commodity_price.get_id_commodity() for commodity_price in commodity_prices
+                ])
+
+            if filter_sell_price:
+                commodity_price_data_access = CommodityPriceDataAccess()
+                commodity_price_data_access.add_filter_by_is_sellable(True)
+                for price, operation in filter_sell_price:
+                    commodity_price_data_access.add_filter_by_price_sell(price, operation=operation)
+                commodity_prices = commodity_price_data_access.load(debug=True)
+                commodity_data_access.add_filter_by_id([
+                    commodity_price.get_id_commodity() for commodity_price in commodity_prices
+                ])
+
         commodities = commodity_data_access.load()
+
+        if commodities and filter_commodities is None:
+            if filter_profit_margin_percentage:
+                temp_commodities = []
+                for percentage, operation in filter_profit_margin_percentage:
+                    for commodity in commodities:
+                        if commodity.get_profit_percent_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
+                            try:
+                                if eval(f"{commodity.get_profit_percent_max()} {operation} {percentage}"):
+                                    temp_commodities.append(commodity)
+                            except Exception:
+                                self._helper.get_handler_debug().write("Unable to evaluate profit margin percentage filter.")
+                                self._helper.get_handler_debug().write(f"eval: {commodity.get_profit_percent_max()} {operation} {percentage}")
+                                pass
+                commodities = temp_commodities
+
+            if filter_profit_margin_absolute_per_scu:
+                temp_commodities = []
+                for absolute_per_scu, operation in filter_profit_margin_absolute_per_scu:
+                    for commodity in commodities:
+                        if commodity.get_profit_absolute_per_scu_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
+                            if eval(f"{commodity.get_profit_absolute_per_scu_max()} {operation} {absolute_per_scu}"):
+                                temp_commodities.append(commodity)
+                commodities = temp_commodities
+
+            if filter_profit_margin_absolute_per_scu or filter_profit_margin_percentage:
+                commodities = sorted(commodities, key=lambda x: x.get_profit_percent_max(), reverse=True)
+                helper.get_handler_tool().add_note("Commodities are sorted by profit margin (percentage) DESC")
 
         if not commodities:
             helper.get_handler_tool().add_note(
@@ -88,26 +147,8 @@ class CommodityInformation(Tool):
                 f"Found {len(commodities)} matching commodities. Filter criteria are somewhat broad. (max 10 commodities for advanced information)"
             )
         else:
-            if filter_location_whitelist is not None or filter_location_blacklist is not None:
-                commodities_temp = []
-                for commodity in commodities:
-                    buy = False
-                    sell = False
-                    for price in commodity_prices:
-                        if price.get_id_commodity() == commodity.get_id() and price.get_id_terminal() in terminal_ids:
-                            if price.get_price_sell() > 0:
-                                sell = True
-                            if price.get_price_buy() > 0:
-                                buy = True
-                    if buy and sell:
-                        commodities_temp.append(f"{str(commodity)} (Buy/Sell)")
-                    elif buy:
-                        commodities_temp.append(f"{str(commodity)} (Buy)")
-                    elif sell:
-                        commodities_temp.append(f"{str(commodity)} (Sell)")
-                    else:
-                        commodities_temp.append(str(commodity))
-                commodities = commodities_temp
+            if filter_profit_margin_absolute_per_scu or filter_profit_margin_percentage:
+                commodities = [f"{str(commodity)} (Max margin: {commodity.get_profit_percent_max()}%)" for commodity in commodities]
             else:
                 commodities = [str(commodity) for commodity in commodities]
             helper.get_handler_tool().add_note(
@@ -126,9 +167,13 @@ class CommodityInformation(Tool):
                 multiple=True,
                 prompt="Provide one or multiple commodity names to filter by name. (e.g. \"Agricium\")",
             ),
-            "filter_is_tradeable": Validator(
+            "filter_is_buyable": Validator(
                 Validator.VALIDATE_BOOL,
-                prompt="If true, only commodities with buy and sell options are shown.",
+                prompt="If true, only commodities with buy options are shown.",
+            ),
+            "filter_is_sellable": Validator(
+                Validator.VALIDATE_BOOL,
+                prompt="If true, only commodities with sell options are shown.",
             ),
             "filter_is_legal": Validator(
                 Validator.VALIDATE_BOOL,
@@ -139,13 +184,30 @@ class CommodityInformation(Tool):
                 multiple=True,
                 prompt="Provide one or multiple locations to filter for commodities able to sell or buy there. (e.g. [\"Hurston\", \"Bloom\"])"
             ),
-
-            # Didn't really make sense
-            # "filter_location_blacklist": Validator(Validator.VALIDATE_LOCATION, multiple=True),
+            "filter_buy_price": Validator(
+                Validator.VALIDATE_OPERATION_INT,
+                multiple=True,
+                prompt="Filter for commodities for buy price. Multiples are combined by AND.",
+            ),
+            "filter_sell_price": Validator(
+                Validator.VALIDATE_OPERATION_INT,
+                multiple=True,
+                prompt="Filter for commodities for sell price. Multiples are combined by AND.",
+            ),
+            "filter_profit_margin_percentage": Validator(
+                Validator.VALIDATE_OPERATION_INT,
+                multiple=True,
+                prompt="Filter for commodities for profit margin percentage. For 50%, use '50' NOT '0.5'. Multiples are combined by AND.",
+            ),
+            "filter_profit_margin_absolute_per_scu": Validator(
+                Validator.VALIDATE_OPERATION_INT,
+                multiple=True,
+                prompt="Filter for commodities for profit margin absolute per SCU. Multiples are combined by AND.",
+            ),
         }
 
     def get_description(self) -> str:
-        return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage."
+        return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage."
 
     def get_prompt(self) -> str:
-        return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes.Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory)."
+        return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory)."
