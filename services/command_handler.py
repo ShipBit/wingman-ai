@@ -155,8 +155,6 @@ class CommandHandler:
                         "name": joystick_origin.get_name()
                         })
                     self.is_joystick_recording = False
-            # Sleep to prevent 100% CPU usage
-            pygame.time.wait(10)
 
         stop_command = StopRecordingCommand(
             command="stop_recording",
