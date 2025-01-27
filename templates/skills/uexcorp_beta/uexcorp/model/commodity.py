@@ -122,12 +122,12 @@ class Commodity(DataModel):
 
         information = {
             "name": self.get_name(),
-            "wight_scu": self.get_weight_scu() or "unknown",
+            "weight_scu": self.get_weight_scu() or "unknown",
             "properties": self.get_properties(),
             "profit_absolute_per_scu_min": self.get_profit_absolute_min() or "unknown",
             "profit_absolute_per_scu_max": self.get_profit_absolute_max() or "unknown",
-            "profit_relative_min": self.get_profit_percent_min() or "unknown",
-            "profit_relative_max": self.get_profit_percent_max() or "unknown",
+            "profit_percent_min": self.get_profit_percent_min() or "unknown",
+            "profit_percent_max": self.get_profit_percent_max() or "unknown",
             "buy_sell_options": [],
         }
 
@@ -307,12 +307,12 @@ class Commodity(DataModel):
     def get_profit_percent_min(self) -> float | None:
         if self.profit_calculated is False:
             self.__calculate_profit()
-        return self.profit_relative_min * 100
+        return round(self.profit_relative_min * 100, 2)
 
     def get_profit_percent_max(self) -> float | None:
         if self.profit_calculated is False:
             self.__calculate_profit()
-        return self.profit_relative_max * 100
+        return round(self.profit_relative_max * 100, 2)
 
     def __str__(self):
         return str(self.data["name"])

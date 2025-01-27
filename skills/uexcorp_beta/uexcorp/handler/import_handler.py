@@ -104,7 +104,8 @@ class ImportHandler:
         self.__imported_percent = 0
         for importer in self.__importers.values():
             total_count += int(importer() or 0)
-            self.__imported_percent = int(min(self.__imported_percent + 100 / len(self.__importers), 100))
+            self.__imported_percent = int(min(self.__imported_percent + (100 / len(self.__importers)), 100))
+        self.__imported_percent = 100
         return total_count
 
     def __import_data_category(self) -> bool | int:

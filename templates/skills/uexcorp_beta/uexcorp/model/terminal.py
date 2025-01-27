@@ -227,7 +227,6 @@ class Terminal(DataModel):
             "company_name": self.get_company_name(),
             "faction": faction.get_data_for_ai_minimal() if faction else None,
             "offerings": self.get_offerings(),
-            "has_loading_dock": self.get_has_loading_dock(),
             "max_container_size_in_scu": self.get_max_container_size() or "unknown",
         }
 
@@ -262,7 +261,6 @@ class Terminal(DataModel):
             "parent_location": "",
             "company_name": self.get_company_name(),
             "faction_name": self.get_faction_name(),
-            "has_loading_dock": self.get_has_loading_dock(),
             "max_container_size_in_scu": self.get_max_container_size() or "unknown",
         }
 

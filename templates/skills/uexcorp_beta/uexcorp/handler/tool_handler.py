@@ -107,16 +107,24 @@ class ToolHandler:
                 else:
                     function_response, instant_response = tool.execute(**valid_parameters)
 
+                function_response_pretty = function_response
+                try:
+                    import json
+                    function_response_pretty = json.dumps(json.loads(function_response), indent=4)
+                except Exception:
+                    pass
+
                 notes = self.get_notes(clear=True)
                 if notes:
                     notes = '\n-'.join(notes)
                     function_response = str(function_response) + f"\n\nImportant information for user:\n-{notes}"
+                    function_response_pretty = str(function_response_pretty) + f"\n\nImportant information for user:\n-{notes}"
 
                 self.__helper.get_handler_debug().write(
                     f"Execution of '{tool_name}' took {self.__helper.end_timer(tool_name)} ms."
                 )
                 self.__helper.get_handler_debug().write(
-                    f"Response of '{tool_name}': {function_response}"
+                    f"Response of '{tool_name}': {function_response_pretty}"
                 )
                 self.__helper.get_handler_debug().write(
                     f"Instant response of '{tool_name}': {instant_response if instant_response else 'None'}"
