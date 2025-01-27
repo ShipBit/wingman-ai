@@ -141,6 +141,7 @@ class CommandHandler:
             server_only=True,
         )
 
+        self.recorded_keys = []
         mouse.hook(self.on_mouse)
 
     async def handle_record_joystick_actions(
@@ -154,6 +155,7 @@ class CommandHandler:
             server_only=True,
         )
 
+        self.recorded_keys = []
         was_init = pygame.get_init()
         pygame.init()
         joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
