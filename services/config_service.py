@@ -370,7 +370,6 @@ class ConfigService:
         except ValueError:
             wingman_config.azure.tts.voice = basic_config.voice
 
-        joystick_changed = wingman_config.record_joystick_button != basic_config.record_joystick_button
         wingman_config.record_joystick_button = basic_config.record_joystick_button
 
         updated = await wingman.update_config(config=wingman_config, validate=validate)
@@ -390,7 +389,7 @@ class ConfigService:
             wingman_config=wingman_config,
         )
 
-        if renamed or joystick_changed:
+        if renamed or basic_config.record_joystick_button:
             await self.load_config(config_dir=config_dir)
 
         message = f"Wingman {wingman_config.name}'s basic config changed."

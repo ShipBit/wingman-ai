@@ -1,5 +1,6 @@
 import json
 import asyncio
+import threading
 from fastapi import WebSocket
 import pygame
 import keyboard.keyboard as keyboard
@@ -31,6 +32,7 @@ class CommandHandler:
         self.timeout_task = None
         self.recorded_keys = []
         self.keyboard_hook_callback = None
+        self.is_joystick_recording = False
 
     async def dispatch(self, message, websocket: WebSocket):
         try:
@@ -50,9 +52,18 @@ class CommandHandler:
                     RecordMouseActionsCommand(**command), websocket
                 )
             elif command_name == "record_joystick_actions":
-                await self.handle_record_joystick_actions(
-                    RecordJoystickActionsCommand(**command), websocket
-                )
+                def run_async_joystick_recording():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(self.handle_record_joystick_actions(
+                            RecordJoystickActionsCommand(**command), websocket
+                        ))
+                    finally:
+                        loop.close()
+                
+                play_thread = threading.Thread(target=run_async_joystick_recording)
+                play_thread.start()
             elif command_name == "stop_recording":
                 await self.handle_stop_recording(
                     StopRecordingCommand(**command), websocket
@@ -123,17 +134,18 @@ class CommandHandler:
             server_only=True,
         )
 
+        was_init = pygame.get_init()
         pygame.init()
         joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
 
         for joystick in joysticks:
             joystick.init()
 
-        running = True
-        while running:
+        self.is_joystick_recording = True
+        while self.is_joystick_recording and pygame.get_init():
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    running = False
+                    self.is_joystick_recording = False
                 elif event.type == pygame.JOYBUTTONUP:
                     # Get guid of joystick with instance id
                     joystick_origin = pygame.joystick.Joystick(event.joy)
@@ -142,17 +154,19 @@ class CommandHandler:
                         "guid": joystick_origin.get_guid(),
                         "name": joystick_origin.get_name()
                         })
-                    running = False
+                    self.is_joystick_recording = False
+            # Sleep to prevent 100% CPU usage
+            pygame.time.wait(10)
 
         stop_command = StopRecordingCommand(
             command="stop_recording",
             recording_device=RecordingDevice.JOYSTICK
         )
-        WebSocketUser.ensure_async(
-            self.handle_stop_recording(stop_command, None)
-        )
+        
+        await self.handle_stop_recording(stop_command, None)
 
-        #pygame.quit()
+        if not was_init:
+            pygame.quit()
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket
@@ -210,8 +224,8 @@ class CommandHandler:
         if self.keyboard_hook_callback:
             keyboard.unhook(self.keyboard_hook_callback)
             self.keyboard_hook_callback = None
-        #if command.recording_device == RecordingDevice.JOYSTICK:
-            #pygame.quit()
+        if command.recording_device == RecordingDevice.JOYSTICK:
+            self.is_joystick_recording = False
 
         recorded_keys = self.recorded_keys
         if self.timeout_task:

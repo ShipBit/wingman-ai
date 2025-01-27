@@ -348,7 +348,7 @@ class WingmanCore(WebSocketUser):
                 joystick.init()
 
         running = True
-        while running:
+        while running and pygame.joystick.get_init():
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
