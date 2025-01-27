@@ -5,7 +5,6 @@ from api.interface import (
     WingmanConfig,
     WingmanInitializationError,
     ConfigDirInfo,
-    CommandJoystickConfig,
 )
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
