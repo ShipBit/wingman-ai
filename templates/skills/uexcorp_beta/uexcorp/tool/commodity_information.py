@@ -25,8 +25,9 @@ class CommodityInformation(Tool):
             filter_location_blacklist: list[str] | None = None,
             filter_buy_price: list[(int, str)] | None = None,
             filter_sell_price: list[(int, str)] | None = None,
-            filter_profit_margin_percentage: list[(int, str)] | None = None,
-            filter_profit_margin_absolute_per_scu: list[(int, str)] | None = None,
+            filter_profit_absolute_per_scu: list[(int, str)] | None = None,
+            filter_profit_margin_percent: list[(int, str)] | None = None,
+            filter_base_profit_percent: list[(int, str)] | None = None,
     ) -> (str, str):
         try:
             from skills.uexcorp_beta.uexcorp.data_access.commodity_data_access import CommodityDataAccess
@@ -105,32 +106,56 @@ class CommodityInformation(Tool):
         commodities = commodity_data_access.load()
 
         if commodities and filter_commodities is None:
-            if filter_profit_margin_percentage:
+            if filter_profit_margin_percent:
                 temp_commodities = []
-                for percentage, operation in filter_profit_margin_percentage:
+                for percentage, operation in filter_profit_margin_percent:
                     for commodity in commodities:
-                        if commodity.get_profit_percent_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
+                        if commodity.get_profit_margin_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
                             try:
-                                if eval(f"{commodity.get_profit_percent_max()} {operation} {percentage}"):
+                                if eval(f"{commodity.get_profit_margin_max()} {operation} {percentage}"):
                                     temp_commodities.append(commodity)
                             except Exception:
                                 self._helper.get_handler_debug().write("Unable to evaluate profit margin percentage filter.")
-                                self._helper.get_handler_debug().write(f"eval: {commodity.get_profit_percent_max()} {operation} {percentage}")
+                                self._helper.get_handler_debug().write(f"eval: {commodity.get_profit_margin_max()} {operation} {percentage}")
                                 pass
                 commodities = temp_commodities
 
-            if filter_profit_margin_absolute_per_scu:
+            if filter_profit_absolute_per_scu:
                 temp_commodities = []
-                for absolute_per_scu, operation in filter_profit_margin_absolute_per_scu:
+                for absolute_per_scu, operation in filter_profit_absolute_per_scu:
                     for commodity in commodities:
-                        if commodity.get_profit_absolute_per_scu_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
-                            if eval(f"{commodity.get_profit_absolute_per_scu_max()} {operation} {absolute_per_scu}"):
-                                temp_commodities.append(commodity)
+                        if commodity.get_profit_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
+                            try:
+                                if eval(f"{commodity.get_profit_max()} {operation} {absolute_per_scu}"):
+                                    temp_commodities.append(commodity)
+                            except Exception:
+                                self._helper.get_handler_debug().write("Unable to evaluate profit absolute per SCU filter.")
+                                self._helper.get_handler_debug().write(f"eval: {commodity.get_profit_max()} {operation} {absolute_per_scu}")
+                                pass
                 commodities = temp_commodities
 
-            if filter_profit_margin_absolute_per_scu or filter_profit_margin_percentage:
-                commodities = sorted(commodities, key=lambda x: x.get_profit_percent_max(), reverse=True)
-                helper.get_handler_tool().add_note("Commodities are sorted by profit margin (percentage) DESC")
+            if filter_base_profit_percent:
+                temp_commodities = []
+                for percentage, operation in filter_base_profit_percent:
+                    for commodity in commodities:
+                        if commodity.get_base_profit_max() is not None and operation in ["=", "!=", ">=", "<=", "<", ">"]:
+                            try:
+                                if eval(f"{commodity.get_base_profit_max()} {operation} {percentage}"):
+                                    temp_commodities.append(commodity)
+                            except Exception:
+                                self._helper.get_handler_debug().write("Unable to evaluate base profit percentage filter.")
+                                self._helper.get_handler_debug().write(f"eval: {commodity.get_base_profit_max()} {operation} {percentage}")
+                                pass
+                commodities = temp_commodities
+
+            if filter_profit_margin_percent or filter_base_profit_percent:
+                commodities = sorted(commodities, key=lambda x: x.get_profit_margin_max(), reverse=True)
+                helper.get_handler_tool().add_note("Commodities are sorted by profit margin percentage DESC")
+            elif filter_profit_absolute_per_scu:
+                commodities = sorted(commodities, key=lambda x: x.get_profit_max(), reverse=True)
+                helper.get_handler_tool().add_note("Commodities are sorted by absolute profit per SCU DESC")
+
+        helper.get_handler_tool().add_note("Even though profit, profit margin and base profit may be given by this function, use uex_calculate_profit afterwards to calculate correct profit with user values.")
 
         if not commodities:
             helper.get_handler_tool().add_note(
@@ -145,10 +170,31 @@ class CommodityInformation(Tool):
                 f"Found {len(commodities)} matching commodities. Filter criteria are somewhat broad. (max 10 commodities for advanced information)"
             )
         else:
-            if filter_profit_margin_absolute_per_scu or filter_profit_margin_percentage:
-                commodities = [f"{str(commodity)} (Max margin: {commodity.get_profit_percent_max()}%)" for commodity in commodities]
-            else:
-                commodities = [str(commodity) for commodity in commodities]
+            output_commodities = []
+            for commodity in commodities:
+                commodity_str = str(commodity)
+                additional_info = []
+
+                if filter_profit_absolute_per_scu:
+                    additional_info.append(
+                        f"Max profit per SCU: {commodity.get_profit_max()} aUEC"
+                    )
+
+                if filter_profit_margin_percent:
+                    additional_info.append(
+                        f"Max profit margin: {commodity.get_profit_margin_max()}%"
+                    )
+
+                if filter_base_profit_percent:
+                    additional_info.append(
+                        f"Max base profit margin: {commodity.get_base_profit_max()}%"
+                    )
+
+                if additional_info:
+                    commodity_str += f" ({' | '.join(additional_info)})"
+
+                output_commodities.append(commodity_str)
+            commodities = output_commodities
             helper.get_handler_tool().add_note(
                 f"Found {len(commodities)} matching commodities. Filter criteria are too broad. (max 20 commodities for information about each commodity)"
             )
@@ -192,12 +238,17 @@ class CommodityInformation(Tool):
                 multiple=True,
                 prompt="Filter for commodities for sell price. Multiples are combined by AND.",
             ),
-            "filter_profit_margin_percentage": Validator(
+            "filter_profit_margin_percent": Validator(
                 Validator.VALIDATE_OPERATION_INT,
                 multiple=True,
                 prompt="Filter for commodities for profit margin percentage. For 50%, use '50' NOT '0.5'. Multiples are combined by AND.",
             ),
-            "filter_profit_margin_absolute_per_scu": Validator(
+            "filter_base_profit_percent": Validator(
+                Validator.VALIDATE_OPERATION_INT,
+                multiple=True,
+                prompt="Filter for commodities for base profit percentage. For 50%, use '50' NOT '0.5'. Multiples are combined by AND.",
+            ),
+            "filter_profit_absolute_per_scu": Validator(
                 Validator.VALIDATE_OPERATION_INT,
                 multiple=True,
                 prompt="Filter for commodities for profit margin absolute per SCU. Multiples are combined by AND.",
@@ -208,4 +259,4 @@ class CommodityInformation(Tool):
         return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage."
 
     def get_prompt(self) -> str:
-        return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory)."
+        return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory). If users gives specific buy or sell price and asks for profit margin, always use uex_calculate_profit function afterwards to calculate correct profit with user values."

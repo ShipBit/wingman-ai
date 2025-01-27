@@ -42,12 +42,14 @@ class ConfigHandler:
             from skills.uexcorp_beta.uexcorp.tool.item_information import ItemInformation
             from skills.uexcorp_beta.uexcorp.tool.location_information import LocationInformation
             from skills.uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
+            from skills.uexcorp_beta.uexcorp.tool.profit_calculation import ProfitCalculation
         except ModuleNotFoundError:
             from uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
             from uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
             from uexcorp_beta.uexcorp.tool.item_information import ItemInformation
             from uexcorp_beta.uexcorp.tool.location_information import LocationInformation
             from uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
+            from uexcorp_beta.uexcorp.tool.profit_calculation import ProfitCalculation
 
         try:
             needs_authentication = False
@@ -55,27 +57,32 @@ class ConfigHandler:
             if retrieve_custom_property_value("tool_commodity_information", errors):
                 self.__behavior_enabled_tools.append(CommodityInformation.TOOL_NAME)
                 if CommodityInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
+                    needs_authentication = False
 
             if retrieve_custom_property_value("tool_commodity_route", errors):
                 self.__behavior_enabled_tools.append(CommodityRoute.TOOL_NAME)
                 if CommodityRoute.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
+                    needs_authentication = False
 
             if retrieve_custom_property_value("tool_item_information", errors):
                 self.__behavior_enabled_tools.append(ItemInformation.TOOL_NAME)
                 if ItemInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
+                    needs_authentication = False
 
             if retrieve_custom_property_value("tool_location_information", errors):
                 self.__behavior_enabled_tools.append(LocationInformation.TOOL_NAME)
                 if LocationInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
+                    needs_authentication = False
 
             if retrieve_custom_property_value("tool_vehicle_information", errors):
                 self.__behavior_enabled_tools.append(VehicleInformation.TOOL_NAME)
                 if VehicleInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
+                    needs_authentication = False
+
+            if retrieve_custom_property_value("tool_profit_calculation", errors):
+                self.__behavior_enabled_tools.append(ProfitCalculation.TOOL_NAME)
+                if ProfitCalculation.REQUIRES_AUTHENTICATION:
+                    needs_authentication = False
 
             if needs_authentication:
                 api_key = await self.__helper.get_handler_secret().retrieve(

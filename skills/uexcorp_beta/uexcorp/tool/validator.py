@@ -131,10 +131,13 @@ class Validator:
 
     def __validate_number(self, number: str | int, min: int | None = None, max: int | None = None) -> (int | None, str | None):
         if not isinstance(number, int):
-            if number.isdigit():
+            if isinstance(number, float):
                 number = int(number)
-            else:
-                return None, f"Number was not convertable to integer: {number}"
+            elif isinstance(number, str):
+                if number.isdigit():
+                    number = int(number)
+                else:
+                    return None, f"Number was not convertable to integer: {number}"
 
         if min and number < min:
             return None, f"Number must be greater than or equal to {min}"
@@ -446,10 +449,13 @@ class Validator:
             return None, f"Invalid operation '{operation}', must be one of: {', '.join(self.OPERATORS)}"
 
         if not isinstance(value, int):
-            if value.isdigit():
+            if isinstance(value, float):
                 value = int(value)
-            else:
-                return (None, None), f"Value was not convertable to integer: {value}"
+            elif isinstance(value, str):
+                if value.isdigit():
+                    value = int(value)
+                else:
+                    return (None, None), f"Value was not convertable to integer: {value}"
 
         return (value, operation), None
 

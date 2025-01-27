@@ -6,12 +6,14 @@ try:
     from skills.uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
     from skills.uexcorp_beta.uexcorp.tool.location_information import LocationInformation
     from skills.uexcorp_beta.uexcorp.tool.item_information import ItemInformation
+    from skills.uexcorp_beta.uexcorp.tool.profit_calculation import ProfitCalculation
 except ModuleNotFoundError:
     from uexcorp_beta.uexcorp.tool.vehicle_information import VehicleInformation
     from uexcorp_beta.uexcorp.tool.commodity_route import CommodityRoute
     from uexcorp_beta.uexcorp.tool.commodity_information import CommodityInformation
     from uexcorp_beta.uexcorp.tool.location_information import LocationInformation
     from uexcorp_beta.uexcorp.tool.item_information import ItemInformation
+    from uexcorp_beta.uexcorp.tool.profit_calculation import ProfitCalculation
 
 if TYPE_CHECKING:
     try:
@@ -36,6 +38,7 @@ class ToolHandler:
             LocationInformation.TOOL_NAME: LocationInformation,
             ItemInformation.TOOL_NAME: ItemInformation,
             CommodityRoute.TOOL_NAME: CommodityRoute,
+            ProfitCalculation.TOOL_NAME: ProfitCalculation,
         }
         self.__notes = []
 

@@ -31,33 +31,51 @@ prompt: |
   - If the same tool is executed multiple times in a row, execute them in silence and dont mention why they are executed in direct succession. You may only provide a reason on the final summary.
   - If you notice the user speaking about a commodity, ship, item or others and you haven't retrieved detailed information for this object yet, silently retrieve it in the background without specific output.
   - Some ships, like the Hull-C, require a loading dock at a terminal/station. Sometime a user may ask about that specific information and a freight elevator is not a substitute for a loading dock.
+  - negative values should be displayed as "negative 20%" or "minus 20%" instead of "-20%" for better use with the following TTS operation.
+  - Try to get missing values for uex_calculate_profit from other uex functions BEFORE asking the user about values.
   === End of "How to work with uex functions" ===
 
 custom_properties:
+  ### Commodity Information Start ###
   - id: tool_commodity_information
     name: Provide commodity information
     hint: If enabled, this skill can provide information about all commodities.
     value: true
     required: true
     property_type: boolean
+  ### Commodity Information End ###
 
+  ### Item Information Start ###
   - id: tool_item_information
     name: Provide item information (Experimental)
     hint: If enabled, this skill can provide information about all items, like ship components, weapons and more.
     value: false
     required: true
     property_type: boolean
+  ### Item Information End ###
 
+  ### Location Information Start ###
   - id: tool_location_information
     name: Provide location information
     hint: If enabled, this skill can provide information about all locations. This includes everything from a star system to a terminal.
     value: true
     required: true
     property_type: boolean
+  ### Location Information End ###
 
+  ### Vehicle Information Start ###
   - id: tool_vehicle_information
     name: Provide vehicle information
     hint: If enabled, this skill can provide information about all vehicles. This includes ships and ground vehicles.
+    value: true
+    required: true
+    property_type: boolean
+  ### Vehicle Information End ###
+
+  ### Route Information Start ###
+  - id: tool_commodity_route
+    name: Provide commodity routes
+    hint: If enabled, this skill can provide UEX trade routes for commodities (Only with legal commodities).
     value: true
     required: true
     property_type: boolean
@@ -68,13 +86,6 @@ custom_properties:
     value: 1
     required: true
     property_type: number
-
-  - id: tool_commodity_route
-    name: Provide commodity routes
-    hint: If enabled, this skill can provide UEX trade routes for commodities (Only with legal commodities).
-    value: true
-    required: true
-    property_type: boolean
 
   - id: commodity_route_use_estimated_availability
     name: Use Estimated Availability
@@ -89,3 +100,13 @@ custom_properties:
     value: false
     required: true
     property_type: boolean
+  ### Route Information End ###
+
+  ### Profit Calculation Start ###
+  - id: tool_profit_calculation
+    name: Provide profit calculation
+    hint: If enabled, this skill can calculate the absolute profit, profit margin (%) and base profit (%) for a given buy and sell price.
+    value: true
+    required: true
+    property_type: boolean
+  ### Profit Calculation End ###

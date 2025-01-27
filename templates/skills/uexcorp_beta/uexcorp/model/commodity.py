@@ -73,10 +73,12 @@ class Commodity(DataModel):
             self.load_by_value("id", self.data["id"])
 
         self.profit_calculated = False
-        self.profit_absolute_min = None
-        self.profit_absolute_max = None
-        self.profit_relative_min = None
-        self.profit_relative_max = None
+        self.profit_min = None
+        self.profit_max = None
+        self.profit_margin_min = None
+        self.profit_margin_max = None
+        self.base_profit_min = None
+        self.base_profit_max = None
 
     def get_properties(self) -> list[str]:
         properties = []
@@ -100,16 +102,6 @@ class Commodity(DataModel):
         if self.get_is_blacklisted():
             properties.append("Blacklisted for trade recommendations through advanced uex skill configuration")
 
-        # this can be interpreted from the price data
-        # if self.get_is_buyable():
-        #     properties.append("buyable")
-        # else:
-        #     properties.append("not_buyable")
-        # if self.get_is_sellable():
-        #     properties.append("sellable")
-        # else:
-        #     properties.append("not_sellable")
-
         return properties
 
     def get_data_for_ai(self) -> dict:
@@ -124,10 +116,12 @@ class Commodity(DataModel):
             "name": self.get_name(),
             "weight_scu": self.get_weight_scu() or "unknown",
             "properties": self.get_properties(),
-            "profit_absolute_per_scu_min": self.get_profit_absolute_min() or "unknown",
-            "profit_absolute_per_scu_max": self.get_profit_absolute_max() or "unknown",
-            "profit_percent_min": self.get_profit_percent_min() or "unknown",
-            "profit_percent_max": self.get_profit_percent_max() or "unknown",
+            "profit_per_scu_min": f"{self.get_profit_min()} aUEC" if self.get_profit_min() else "N/A",
+            "profit_per_scu_max": f"{self.get_profit_max()} aUEC" if self.get_profit_max() else "N/A",
+            "profit_margin_min": f"{self.get_profit_margin_min()}%" if self.get_profit_min() else "N/A",
+            "profit_margin_max": f"{self.get_profit_margin_max()}%" if self.get_profit_max() else "N/A",
+            "base_profit_min": f"{self.get_base_profit_min()}%" if self.get_profit_min() else "N/A",
+            "base_profit_max": f"{self.get_base_profit_max()}%" if self.get_profit_max() else "N/A",
             "buy_sell_options": [],
         }
 
@@ -157,8 +151,9 @@ class Commodity(DataModel):
         information = {
             "name": self.get_name(),
             "properties": self.get_properties(),
-            "profit_absolute_per_scu_max": self.get_profit_absolute_max() or "unknown",
-            "profit_relative_max": self.get_profit_percent_max() or "unknown",
+            "profit_per_scu_max": f"{self.get_profit_max()} aUEC" if self.get_profit_max() else "N/A",
+            "profit_margin_max": f"{self.get_profit_margin_max()}%" if self.get_profit_max() else "N/A",
+            "base_profit_max": f"{self.get_base_profit_max()}%" if self.get_profit_max() else "N/A",
             "buy_sell_options": [],
         }
 
@@ -199,16 +194,21 @@ class Commodity(DataModel):
                 sell_max = price.get_price_sell()
 
         self.profit_calculated = True
-        self.profit_relative_max = 0
-        self.profit_relative_min = 0
-        self.profit_absolute_max = 0
-        self.profit_absolute_min = 0
+        self.profit_margin_max = 0
+        self.profit_margin_min = 0
+        self.profit_max = 0
+        self.profit_min = 0
+        self.base_profit_max = 0
+        self.base_profit_min = 0
+
         if buy_min is not None and buy_min > 0 and sell_max is not None and sell_max > 0:
-            self.profit_absolute_max = sell_max - buy_min
-            self.profit_relative_max = self.profit_absolute_max / buy_min
+            self.profit_max = sell_max - buy_min
+            self.profit_margin_max = self.profit_max / sell_max
+            self.base_profit_max = (sell_max / buy_min) - 1
         if buy_max is not None and buy_max > 0 and sell_min is not None and sell_min > 0:
-            self.profit_absolute_min = sell_min - buy_max
-            self.profit_relative_min = self.profit_absolute_min / buy_max
+            self.profit_min = sell_min - buy_max
+            self.profit_margin_min = self.profit_min / sell_min
+            self.base_profit_min = (sell_min / buy_max) - 1
 
     def get_id(self) -> int:
         return self.data["id"]
@@ -294,25 +294,35 @@ class Commodity(DataModel):
     def set_is_blacklisted(self, is_blacklisted: int):
         self.data["is_blacklisted"] = is_blacklisted
 
-    def get_profit_absolute_min(self) -> float | None:
+    def get_profit_min(self) -> float | None:
         if self.profit_calculated is False:
             self.__calculate_profit()
-        return self.profit_absolute_min
+        return self.profit_min
 
-    def get_profit_absolute_max(self) -> float | None:
+    def get_profit_max(self) -> float | None:
         if self.profit_calculated is False:
             self.__calculate_profit()
-        return self.profit_absolute_max
+        return self.profit_max
 
-    def get_profit_percent_min(self) -> float | None:
+    def get_profit_margin_min(self) -> float | None:
         if self.profit_calculated is False:
             self.__calculate_profit()
-        return round(self.profit_relative_min * 100, 2)
+        return round(self.profit_margin_min * 100, 2)
 
-    def get_profit_percent_max(self) -> float | None:
+    def get_profit_margin_max(self) -> float | None:
         if self.profit_calculated is False:
             self.__calculate_profit()
-        return round(self.profit_relative_max * 100, 2)
+        return round(self.profit_margin_max * 100, 2)
+
+    def get_base_profit_min(self) -> float | None:
+        if self.profit_calculated is False:
+            self.__calculate_profit()
+        return round(self.base_profit_min * 100, 2)
+
+    def get_base_profit_max(self) -> float | None:
+        if self.profit_calculated is False:
+            self.__calculate_profit()
+        return round(self.base_profit_max * 100, 2)
 
     def __str__(self):
         return str(self.data["name"])
