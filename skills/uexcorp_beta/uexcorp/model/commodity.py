@@ -136,7 +136,7 @@ class Commodity(DataModel):
 
             prices_raw = CommodityRawPriceDataAccess().add_filter_by_id_commodity(self.get_id()).load()
             for price_raw in prices_raw:
-                information["buy_sell_options"].append(price_raw.get_data_for_ai_minimal(show_commodity_information=False))
+                information["buy_sell_options"].append(price_raw.get_data_for_ai_minimal())
 
         return information
 
