@@ -92,7 +92,7 @@ class Whispercpp:
                 SERVER_EXE,
             ),
             "--port",
-            self.settings.port,
+            str(self.settings.port),
             "-m",
             path.join(self.models_dir, self.settings.model),
             "-l",
