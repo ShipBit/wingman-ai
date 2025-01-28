@@ -637,6 +637,22 @@ class BasicWingmanConfig(BaseModel):
     voice: str | OpenAiTtsVoice
     backstory: Optional[str] = None
 
+    features: FeaturesConfig
+    openai: OpenAiConfig
+    mistral: MistralConfig
+    groq: GroqConfig
+    cerebras: CerebrasConfig
+    google: GoogleConfig
+    openrouter: OpenRouterConfig
+    local_llm: LocalLlmConfig
+    edge_tts: EdgeTtsConfig
+    elevenlabs: ElevenlabsConfig
+    azure: AzureConfig
+    xvasynth: XVASynthTtsConfig
+    whispercpp: WhispercppSttConfig
+    wingman_pro: WingmanProConfig
+    perplexity: PerplexityConfig
+
 
 class WingmanConfig(NestedConfig):
     def __getitem__(self, item):

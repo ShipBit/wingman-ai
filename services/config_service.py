@@ -377,6 +377,22 @@ class ConfigService:
         wingman_config.record_joystick_button = basic_config.record_joystick_button
         wingman_config.record_mouse_button = basic_config.record_mouse_button
 
+        wingman_config.features = basic_config.features
+        wingman_config.openai = basic_config.openai
+        wingman_config.mistral = basic_config.mistral
+        wingman_config.groq = basic_config.groq
+        wingman_config.cerebras = basic_config.cerebras
+        wingman_config.google = basic_config.google
+        wingman_config.openrouter = basic_config.openrouter
+        wingman_config.local_llm = basic_config.local_llm
+        wingman_config.edge_tts = basic_config.edge_tts
+        wingman_config.elevenlabs = basic_config.elevenlabs
+        wingman_config.azure = basic_config.azure
+        wingman_config.xvasynth = basic_config.xvasynth
+        wingman_config.whispercpp = basic_config.whispercpp
+        wingman_config.wingman_pro = basic_config.wingman_pro
+        wingman_config.perplexity = basic_config.perplexity
+
         updated = await wingman.update_config(config=wingman_config, validate=validate)
 
         if not updated:
