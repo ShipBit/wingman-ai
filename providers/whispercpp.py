@@ -10,7 +10,7 @@ from services.printr import Printr
 STANDARD_DIR = "whispercpp"
 CUDA_DIR = "whispercpp-cuda"
 MODELS_DIR = "whispercpp-models"
-SERVER_EXE = "server.exe"
+SERVER_EXE = "whisper-server.exe"
 
 
 class Whispercpp:
@@ -79,6 +79,11 @@ class Whispercpp:
 
     def start_server(self):
         if self.__is_server_running() or not self.is_windows:
+            self.printr.print(
+                f"whispercpp connected on {self.settings.host}:{self.settings.port}. Using model '{self.settings.model}' and language '{self.settings.language}'.",
+                server_only=True,
+                color=LogType.HIGHLIGHT,
+            )
             return True
 
         args = [
@@ -86,6 +91,8 @@ class Whispercpp:
                 self.cuda_dir if self.settings.use_cuda else self.standard_dir,
                 SERVER_EXE,
             ),
+            "--port",
+            self.settings.port,
             "-m",
             path.join(self.models_dir, self.settings.model),
             "-l",
@@ -167,6 +174,12 @@ class Whispercpp:
                     server_only=True,
                 )
                 return False
+            else:
+                self.printr.print(
+                    text=f"whispercpp connected on {self.settings.host}:{self.settings.port} (manually started on non-Windows OS).",
+                    color=LogType.HIGHLIGHT,
+                    server_only=True,
+                )
             return True
 
         # On Windows:

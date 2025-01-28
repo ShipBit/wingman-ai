@@ -269,7 +269,7 @@ class RedisCluster(AbstractRedis, AbstractRedisCluster, AsyncRedisClusterCommand
         ssl_min_version: Optional[ssl.TLSVersion] = None,
         ssl_ciphers: Optional[str] = None,
         protocol: Optional[int] = 2,
-        address_remap: Optional[Callable[[str, int], Tuple[str, int]]] = None,
+        address_remap: Optional[Callable[[Tuple[str, int]], Tuple[str, int]]] = None,
     ) -> None:
         if db:
             raise RedisClusterException(
@@ -383,10 +383,10 @@ class RedisCluster(AbstractRedis, AbstractRedisCluster, AsyncRedisClusterCommand
         self.command_flags = self.__class__.COMMAND_FLAGS.copy()
         self.response_callbacks = kwargs["response_callbacks"]
         self.result_callbacks = self.__class__.RESULT_CALLBACKS.copy()
-        self.result_callbacks[
-            "CLUSTER SLOTS"
-        ] = lambda cmd, res, **kwargs: parse_cluster_slots(
-            list(res.values())[0], **kwargs
+        self.result_callbacks["CLUSTER SLOTS"] = (
+            lambda cmd, res, **kwargs: parse_cluster_slots(
+                list(res.values())[0], **kwargs
+            )
         )
 
         self._initialize = True
@@ -1034,6 +1034,9 @@ class ClusterNode:
         if EMPTY_RESPONSE in kwargs:
             kwargs.pop(EMPTY_RESPONSE)
 
+        # Remove keys entry, it needs only for cache.
+        kwargs.pop("keys", None)
+
         # Return response
         if command in self.response_callbacks:
             return self.response_callbacks[command](response, **kwargs)
@@ -1098,7 +1101,7 @@ class NodesManager:
         startup_nodes: List["ClusterNode"],
         require_full_coverage: bool,
         connection_kwargs: Dict[str, Any],
-        address_remap: Optional[Callable[[str, int], Tuple[str, int]]] = None,
+        address_remap: Optional[Callable[[Tuple[str, int]], Tuple[str, int]]] = None,
     ) -> None:
         self.startup_nodes = {node.name: node for node in startup_nodes}
         self.require_full_coverage = require_full_coverage
@@ -1226,13 +1229,12 @@ class NodesManager:
         for startup_node in self.startup_nodes.values():
             try:
                 # Make sure cluster mode is enabled on this node
-                if not (await startup_node.execute_command("INFO")).get(
-                    "cluster_enabled"
-                ):
+                try:
+                    cluster_slots = await startup_node.execute_command("CLUSTER SLOTS")
+                except ResponseError:
                     raise RedisClusterException(
                         "Cluster mode is not enabled on this node"
                     )
-                cluster_slots = await startup_node.execute_command("CLUSTER SLOTS")
                 startup_nodes_reachable = True
             except Exception as e:
                 # Try the next startup node.
@@ -1264,6 +1266,8 @@ class NodesManager:
                 port = int(primary_node[1])
                 host, port = self.remap_host_port(host, port)
 
+                nodes_for_slot = []
+
                 target_node = tmp_nodes_cache.get(get_node_name(host, port))
                 if not target_node:
                     target_node = ClusterNode(
@@ -1271,30 +1275,26 @@ class NodesManager:
                     )
                 # add this node to the nodes cache
                 tmp_nodes_cache[target_node.name] = target_node
+                nodes_for_slot.append(target_node)
+
+                replica_nodes = slot[3:]
+                for replica_node in replica_nodes:
+                    host = replica_node[0]
+                    port = replica_node[1]
+                    host, port = self.remap_host_port(host, port)
+
+                    target_replica_node = tmp_nodes_cache.get(get_node_name(host, port))
+                    if not target_replica_node:
+                        target_replica_node = ClusterNode(
+                            host, port, REPLICA, **self.connection_kwargs
+                        )
+                    # add this node to the nodes cache
+                    tmp_nodes_cache[target_replica_node.name] = target_replica_node
+                    nodes_for_slot.append(target_replica_node)
 
                 for i in range(int(slot[0]), int(slot[1]) + 1):
                     if i not in tmp_slots:
-                        tmp_slots[i] = []
-                        tmp_slots[i].append(target_node)
-                        replica_nodes = [slot[j] for j in range(3, len(slot))]
-
-                        for replica_node in replica_nodes:
-                            host = replica_node[0]
-                            port = replica_node[1]
-                            host, port = self.remap_host_port(host, port)
-
-                            target_replica_node = tmp_nodes_cache.get(
-                                get_node_name(host, port)
-                            )
-                            if not target_replica_node:
-                                target_replica_node = ClusterNode(
-                                    host, port, REPLICA, **self.connection_kwargs
-                                )
-                            tmp_slots[i].append(target_replica_node)
-                            # add this node to the nodes cache
-                            tmp_nodes_cache[
-                                target_replica_node.name
-                            ] = target_replica_node
+                        tmp_slots[i] = nodes_for_slot
                     else:
                         # Validate that 2 nodes want to use the same slot cache
                         # setup
@@ -1433,7 +1433,8 @@ class ClusterPipeline(AbstractRedis, AbstractRedisCluster, AsyncRedisClusterComm
         self._command_stack = []
 
     def __bool__(self) -> bool:
-        return bool(self._command_stack)
+        "Pipeline instances should  always evaluate to True on Python 3+"
+        return True
 
     def __len__(self) -> int:
         return len(self._command_stack)
