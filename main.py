@@ -14,7 +14,6 @@ from fastapi.openapi.utils import get_openapi
 from api.commands import WebSocketCommandModel
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 import keyboard.keyboard as keyboard
-import mouse.mouse as mouse
 from services.command_handler import CommandHandler
 from services.config_manager import ConfigManager
 from services.connection_manager import ConnectionManager
@@ -71,10 +70,6 @@ core = WingmanCore(
 core.set_connection_manager(connection_manager)
 
 keyboard.hook(core.on_key)
-
-# TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
-mouse.hook(core.on_mouse)
-
 
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
@@ -151,6 +146,7 @@ def custom_openapi():
             "mouse": {"$ref": "#/components/schemas/CommandMouseConfig"},
             "write": {"type": "string"},
             "audio": {"$ref": "#/components/schemas/AudioFileConfig"},
+            "joystick": {"$ref": "#/components/schemas/CommandJoystickConfig"},
         },
     }
 

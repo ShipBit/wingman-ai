@@ -457,6 +457,16 @@ class CommandMouseConfig(BaseModel):
     """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
 
 
+class CommandJoystickConfig(BaseModel):
+    button: Optional[int] = None
+    """The joystick button to press. Optional."""
+
+    name: Optional[str] = None
+    """The joystick name to use. Optional."""
+
+    guid: Optional[str] = None
+    """The joystick GUID to use. Optional."""
+
 class CommandActionConfig(BaseModel):
     keyboard: Optional[CommandKeyboardConfig] = None
     """The keyboard configuration for this action. Optional."""
@@ -472,6 +482,9 @@ class CommandActionConfig(BaseModel):
 
     audio: Optional[AudioFileConfig] = None
     """The audio file to play. Optional."""
+
+    joystick: Optional[CommandJoystickConfig] = None
+    """The joystick configuration for this action. Optional."""
 
 
 class CommandConfig(BaseModel):
@@ -615,6 +628,8 @@ class BasicWingmanConfig(BaseModel):
     disabled: Optional[bool] = False
     record_key: Optional[str] = None
     record_key_codes: Optional[list[int]] = None
+    record_mouse_button: Optional[str] = None
+    record_joystick_button: Optional[CommandJoystickConfig] = None
     sound: SoundConfig
     voice: str | OpenAiTtsVoice
     backstory: Optional[str] = None
@@ -644,6 +659,8 @@ class WingmanConfig(NestedConfig):
     """The "push-to-talk" key code for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
     record_mouse_button: Optional[str] = None
     """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
+    record_joystick_button: Optional[CommandJoystickConfig] = None
+    """The "push-to-talk" joystick config for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
     is_voice_activation_default: Optional[bool] = None
     """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
 

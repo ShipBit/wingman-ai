@@ -1,6 +1,6 @@
 from typing import Literal, Optional
 from pydantic import BaseModel
-from api.enums import CommandTag, KeyboardRecordingType, LogSource, LogType, ToastType
+from api.enums import CommandTag, KeyboardRecordingType, LogSource, LogType, RecordingDevice, ToastType
 from api.interface import CommandActionConfig
 
 
@@ -28,10 +28,18 @@ class RecordKeyboardActionsCommand(WebSocketCommandModel):
     command: Literal["record_keyboard_actions"] = "record_keyboard_actions"
     recording_type: KeyboardRecordingType
 
+class RecordMouseActionsCommand(WebSocketCommandModel):
+    command: Literal["record_mouse_actions"] = "record_mouse_actions"
+
+    
+class RecordJoystickActionsCommand(WebSocketCommandModel):
+    command: Literal["record_joystick_actions"] = "record_joystick_actions"
+
 
 class StopRecordingCommand(WebSocketCommandModel):
     command: Literal["stop_recording"] = "stop_recording"
-    recording_type: KeyboardRecordingType
+    recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
+    recording_device: RecordingDevice = RecordingDevice.KEYBOARD
 
 
 # SENT TO CLIENT

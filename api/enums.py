@@ -170,6 +170,11 @@ class KeyboardRecordingType(Enum):
     MACRO_ADVANCED = "macro_advanced"
 
 
+class RecordingDevice(Enum):
+    KEYBOARD = "keyboard"
+    MOUSE = "mouse"
+    JOYSTICK = "joystick"
+
 class WingmanProRegion(Enum):
     EUROPE = "europe"
     USA = "usa"
@@ -284,6 +289,10 @@ class KeyboardRecordingTypeModel(BaseEnumModel):
     recording_type: KeyboardRecordingType
 
 
+class RecordingDeviceModel(BaseEnumModel):
+    recording_device: RecordingDevice
+
+
 class WingmanProRegionModel(BaseEnumModel):
     region: WingmanProRegion
 
@@ -329,6 +338,7 @@ ENUM_TYPES = {
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
     "SkillCategory": SkillCategoryModel,
     "PerplexityModel": PerplexityModelEnumModel,
+    "RecordingDevice": RecordingDeviceModel,
     # Add new enums here as key-value pairs
 }
 

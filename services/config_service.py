@@ -370,6 +370,13 @@ class ConfigService:
         except ValueError:
             wingman_config.azure.tts.voice = basic_config.voice
 
+        reload_config = (wingman_config.record_joystick_button != basic_config.record_joystick_button
+                        or wingman_config.record_mouse_button != basic_config.record_mouse_button
+                        or wingman_file.name != wingman_config.name)
+
+        wingman_config.record_joystick_button = basic_config.record_joystick_button
+        wingman_config.record_mouse_button = basic_config.record_mouse_button
+
         updated = await wingman.update_config(config=wingman_config, validate=validate)
 
         if not updated:
@@ -378,8 +385,6 @@ class ConfigService:
             )
             return
 
-        renamed = wingman_file.name != wingman_config.name
-
         # save the config file
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
@@ -387,7 +392,7 @@ class ConfigService:
             wingman_config=wingman_config,
         )
 
-        if renamed:
+        if reload_config:
             await self.load_config(config_dir=config_dir)
 
         message = f"Wingman {wingman_config.name}'s basic config changed."
