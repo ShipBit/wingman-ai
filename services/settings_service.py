@@ -43,12 +43,6 @@ class SettingsService:
             endpoint=self.save_settings,
             tags=tags,
         )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/default-provider",
-            endpoint=self.set_default_provider,
-            tags=tags,
-        )
 
     def initialize(self, whispercpp: Whispercpp, xvasynth: XVASynth):
         self.whispercpp = whispercpp
@@ -164,21 +158,6 @@ class SettingsService:
             "audio_devices_changed", (input_device, output_device)
         )
         self.printr.print("Audio devices changed.", server_only=True)
-
-    # POST /settings/default-provider
-    async def set_default_provider(self, provider: str, patch_existing_wingmen: bool):
-        if provider != "wingman_pro" and provider != "openai":
-            self.printr.toast_error(
-                "Only 'wingman_pro' and 'openai' are valid default providers for summarization, conversation, TTS and STT.",
-            )
-            return
-
-        config = deepcopy(self.config_manager.default_config)
-        config.features.conversation_provider = provider
-        config.features.tts_provider = provider
-        config.features.stt_provider = provider
-
-        await self.config_service.save_defaults_config(config=config, validate=True)
 
     def _get_audio_settings_indexed(self, write: bool = True) -> AudioSettings:
         input_device = None
