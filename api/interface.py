@@ -1,6 +1,6 @@
 from typing import Optional
 from typing_extensions import Annotated, TypedDict
-from pydantic import Base64Str, BaseModel, Field, model_validator
+from pydantic import Base64Str, BaseModel, ConfigDict, Field, model_validator
 from api.enums import (
     AzureApiVersion,
     AzureRegion,
@@ -179,6 +179,7 @@ class ElevenlabsLanguage(BaseModel):
 
 
 class ElevenlabsModelMetadata(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     model_id: str
     name: str
     can_be_finetuned: bool
@@ -196,6 +197,7 @@ class ElevenlabsModelMetadata(BaseModel):
 
 
 class ElevenlabsModel(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     name: str
     model_id: str
     description: str
@@ -258,6 +260,7 @@ class EdgeTtsConfig(BaseModel):
 
 
 class XVASynthVoiceConfig(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     model_directory: str
     """The model (or game) directory in which your downloaded voice resides. The model directories are located in [xva-install-dir]/resources/app/models/."""
     voice_name: str
