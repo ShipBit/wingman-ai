@@ -1,3 +1,4 @@
+import json
 import time
 import copy
 from os import path
@@ -7,7 +8,7 @@ from api.interface import (
     SettingsConfig,
     SkillConfig,
     VoiceSelection,
-    WingmanInitializationError,
+    WingmanInitializationError, ElevenlabsVoiceConfig,
 )
 from api.enums import (
     LogType,
@@ -333,18 +334,27 @@ class RadioChatter(Skill):
             {
                 "role": "system",
                 "content": f"""
-                    ## Must follow these rules
+                    ## Must follow these rules ##
                     - There are {count_participants} participant(s) in the conversation/monolog
                     - The conversation/monolog must contain exactly {count_message} messages between the participants or in the monolog
-                    - Each new line in your answer represents a new message
-                    - Use matching call signs for the participants
+                    - You may always and only return a valid json string without formatting in the following format:
 
-                    ## Sample response
-                    Name1: Message Content
-                    Name2: Message Content
-                    Name3: Message Content
-                    Name2: Message Content
-                    ...
+                    ## JSON format ##
+                    [
+                        {{
+                            "user": "Participant1 Name",
+                            "content": "Message Content"
+                        }},
+                        {{
+                            "user": "Participant2 Name",
+                            "content": "Message Content"
+                        }},
+                        {{
+                            "user": "Participant1 Name",
+                            "content": "Message Content"
+                        }},
+                        ...
+                    ]
                 """,
             },
             {
@@ -364,22 +374,29 @@ class RadioChatter(Skill):
 
         clean_messages = []
         voice_participant_mapping = {}
-        for message in messages.split("\n"):
+        try:
+            messages = messages.strip()
+            messages = json.loads(messages)
+        except json.JSONDecodeError as e:
+            await self.printr.print_async(
+                f"Radio chatter message generation failed due to invalid JSON: {str(e)}", LogType.ERROR
+            )
+            return
+
+        for message in messages:
             if not message:
                 continue
 
-            if ":" not in message:
-                name = "Unknown"
-                text = message.strip()
-            else:
-                # get name before first ":"
-                name = message.split(":")[0].strip()
-                text = message.split(":", 1)[1].strip()
+            if "user" not in message or "content" not in message:
+                await self.printr.print_async(
+                    f"Radio chatter message generation failed due to invalid JSON format: {messages}", LogType.ERROR
+                )
+                return
 
-            if name not in voice_participant_mapping:
-                voice_participant_mapping[name] = None
+            if message["user"] not in voice_participant_mapping:
+                voice_participant_mapping[message["user"]] = None
 
-            clean_messages.append((name, text))
+            clean_messages.append(message)
 
         original_voice_setting = await self._get_original_voice_setting()
         elevenlabs_streaming = self.wingman.config.elevenlabs.output_streaming
@@ -404,11 +421,14 @@ class RadioChatter(Skill):
 
             voice_participant_mapping[name] = (voice_index[i], sound_config)
 
-        for name, text in clean_messages:
+        for message in clean_messages:
+            name = message["user"]
+            text = message["content"]
+
             if not self.is_active():
                 return
 
-            # wait for audio_player idleing
+            # wait for audio_player idling
             while self.wingman.audio_player.is_playing:
                 time.sleep(2)
 
@@ -430,8 +450,10 @@ class RadioChatter(Skill):
                 await self.wingman.add_assistant_message(
                     f"Background radio chatter: {text}"
                 )
-            while not self.wingman.audio_player.is_playing:
+            max_wait = 10
+            while not self.wingman.audio_player.is_playing or max_wait < 0:
                 time.sleep(0.1)
+                max_wait -= 0.1
             await self._switch_voice(original_voice_setting, elevenlabs_streaming)
 
         while self.wingman.audio_player.is_playing:
@@ -480,8 +502,16 @@ class RadioChatter(Skill):
             voice_name = voice.value
             self.wingman.config.openai.tts_voice = voice
         elif voice_provider == TtsProvider.ELEVENLABS:
-            voice_name = voice.name or voice.id
-            self.wingman.config.elevenlabs.voice = voice
+            if isinstance(voice, str):
+                # only needed for wingman config restore
+                voice_id = voice.split("id=")[1].strip().strip("'")
+                voice_name = voice.split("id=")[0].strip().split("=")[1].strip("'") or voice_id
+                voice = ElevenlabsVoiceConfig(id=voice_id, name=voice_name)
+            if isinstance(voice, ElevenlabsVoiceConfig):
+                self.wingman.config.elevenlabs.voice = voice
+                voice_name = voice.name or voice.id
+            else:
+                error = True
             self.wingman.config.elevenlabs.output_streaming = elevenlabs_streaming
         elif voice_provider == TtsProvider.AZURE:
             voice_name = voice
@@ -497,7 +527,7 @@ class RadioChatter(Skill):
 
         if error or not voice_name or not voice_provider:
             await self.printr.print_async(
-                "Voice switching failed due to an unknown voice provider/subprovider.",
+                "Voice switching failed due to an unknown voice provider/subprovider or different error.",
                 LogType.ERROR,
             )
             return
