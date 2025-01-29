@@ -272,7 +272,9 @@ We would like to thank their creators for their great work and contributions to 
 - [scipy](https://github.com/scipy/scipy) - BSD 3, © 2001-2002 Enthought, Inc. 2003-2023, SciPy Developers
 - [sounddevice](https://github.com/spatialaudio/python-sounddevice/) - MIT, © 2015-2023 Matthias Geier
 - [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
-- [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-presen, Encode OSS Ltd. All rights reserved.
+- [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-present, Encode OSS Ltd. All rights reserved.
+- [whispercpp](https://github.com/ggerganov/whisper.cpp) - MIT, © 2023-2024 The ggml authors
+- [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) - MIT, © 2023 SYSTRAN
 
 ### Individual persons
 
