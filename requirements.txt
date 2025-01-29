@@ -4,7 +4,7 @@ elevenlabslib==0.31.3
 fastapi==0.115.7
 faster_whisper==1.1.1
 google-generativeai==0.8.4
-httptools==0.6.1
+httptools==0.6.4
 markdown==3.7
 numpy==1.26.4
 openai==1.60.2
@@ -20,6 +20,7 @@ python-multipart==0.0.20
 PyYAML==6.0.2
 requests==2.32.3
 scipy==1.15.1
+setuptools==75.8.0
 show-in-file-manager==1.1.5
 sounddevice==0.5.1
 soundfile==0.13.1
