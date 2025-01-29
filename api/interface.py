@@ -111,12 +111,19 @@ class AudioSettings(BaseModel):
 
 
 class WhispercppSettings(BaseModel):
+    enable: bool
     host: str
     port: int
-    model: str
-    language: str
-    translate_to_english: bool
-    use_cuda: bool
+
+
+class FasterWhisperSettings(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+    """tiny, tiny.en, base, base.en, small, small.en, distil-small.en, medium, medium.en, distil-medium.en, large-v1, large-v2, large-v3, large, distil-large-v2, distil-large-v3, large-v3-turbo, or turbo"""
+    model_size: str
+    """default (model original), auto (fastest available on device), int8, int8_float16 etc. - see https://opennmt.net/CTranslate2/quantization.html#quantize-on-model-conversion"""
+    compute_type: str
+    """cpu, cuda, auto"""
+    device: str
 
 
 class XVASynthSettings(BaseModel):
@@ -133,9 +140,25 @@ class WhispercppSttConfig(BaseModel):
     temperature: float
 
 
+class FasterWhisperSttConfig(BaseModel):
+    beam_size: int
+    language: Optional[str] = None
+    hotwords: Optional[str] = None
+    best_of: int
+    temperature: float
+    no_speech_threshold: float
+    multilingual: bool
+    language_detection_threshold: float
+
+
 class WhispercppTranscript(BaseModel):
     text: str
+
+
+class FasterWhisperTranscript(BaseModel):
+    text: str
     language: str
+    language_probability: float
 
 
 class AzureInstanceConfig(BaseModel):
@@ -387,7 +410,9 @@ class VoiceActivationSettings(BaseModel):
 
     azure: AzureSttConfig
     whispercpp: WhispercppSettings
+    fasterwhisper: FasterWhisperSettings
     whispercpp_config: WhispercppSttConfig
+    fasterwhisper_config: FasterWhisperSttConfig
 
 
 class FeaturesConfig(BaseModel):
@@ -469,6 +494,7 @@ class CommandJoystickConfig(BaseModel):
 
     guid: Optional[str] = None
     """The joystick GUID to use. Optional."""
+
 
 class CommandActionConfig(BaseModel):
     keyboard: Optional[CommandKeyboardConfig] = None
@@ -618,6 +644,7 @@ class NestedConfig(BaseModel):
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
+    fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
     commands: Optional[list[CommandConfig]] = None
@@ -650,6 +677,7 @@ class BasicWingmanConfig(BaseModel):
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
+    fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
 

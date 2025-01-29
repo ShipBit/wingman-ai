@@ -3,7 +3,6 @@ import time
 import asyncio
 import random
 import traceback
-from idlelib.pyparse import trans
 from typing import Mapping, Optional
 from openai.types.chat import ChatCompletion
 from api.interface import (
@@ -19,7 +18,8 @@ from api.enums import (
     SttProvider,
     ConversationProvider,
     WingmanProSttProvider,
-    WingmanProTtsProvider, WingmanInitializationErrorType,
+    WingmanProTtsProvider,
+    WingmanInitializationErrorType,
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
@@ -84,6 +84,11 @@ class OpenAiWingman(Wingman):
         errors = await super().validate()
 
         try:
+            if self.uses_provider("whispercpp"):
+                self.whispercpp.validate(self.name, errors)
+            if self.uses_provider("fasterwhisper"):
+                self.fasterwhisper.validate(errors)
+
             if self.uses_provider("openai"):
                 await self.validate_and_set_openai(errors)
 
@@ -116,6 +121,7 @@ class OpenAiWingman(Wingman):
 
             if self.uses_provider("perplexity"):
                 await self.validate_and_set_perplexity(errors)
+
         except Exception as e:
             errors.append(
                 WingmanInitializationError(
@@ -124,7 +130,11 @@ class OpenAiWingman(Wingman):
                     error_type=WingmanInitializationErrorType.UNKNOWN,
                 )
             )
-            printr.print(f"Error during provider validation: {str(e)}", color=LogType.ERROR, server_only=True)
+            printr.print(
+                f"Error during provider validation: {str(e)}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
         return errors
@@ -199,6 +209,8 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.XVASYNTH
         elif provider_type == "whispercpp":
             return self.config.features.stt_provider == SttProvider.WHISPERCPP
+        elif provider_type == "fasterwhisper":
+            return self.config.features.stt_provider == SttProvider.FASTER_WHISPER
         elif provider_type == "wingman_pro":
             return any(
                 [
@@ -227,7 +239,10 @@ class OpenAiWingman(Wingman):
                 )
                 self.threaded_execution(self._generate_instant_responses)
         except Exception as e:
-            await printr.print_async(f"Error while preparing wingman '{self.name}': {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error while preparing wingman '{self.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     async def unload_skills(self):
@@ -242,7 +257,10 @@ class OpenAiWingman(Wingman):
                 self.tool_skills[tool_name] = skill
                 self.skill_tools.append(tool)
         except Exception as e:
-            await printr.print_async(f"Error while preparing skill '{skill.name}': {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error while preparing skill '{skill.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
         # init skill methods
@@ -335,7 +353,9 @@ class OpenAiWingman(Wingman):
             wingman_name=self.name, settings=self.settings.wingman_pro
         )
 
-    async def validate_and_set_perplexity(self, errors: list[WingmanInitializationError]):
+    async def validate_and_set_perplexity(
+        self, errors: list[WingmanInitializationError]
+    ):
         api_key = await self.retrieve_secret("perplexity", errors)
         if api_key:
             self.perplexity = OpenAi(
@@ -361,7 +381,10 @@ class OpenAiWingman(Wingman):
                     server_only=True,
                 )
         except Exception as e:
-            await printr.print_async(f"Error while updating settings for wingman '{self.name}': {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error while updating settings for wingman '{self.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     async def _generate_instant_responses(self) -> None:
@@ -423,7 +446,10 @@ class OpenAiWingman(Wingman):
                             completion = await self.actual_llm_call(messages)
                         retry_count += 1
         except Exception as e:
-            await printr.print_async(f"Error while generating instant responses: {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error while generating instant responses: {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     async def _transcribe(self, audio_input_wav: str) -> str | None:
@@ -454,8 +480,17 @@ class OpenAiWingman(Wingman):
                 transcript = self.whispercpp.transcribe(
                     filename=audio_input_wav, config=self.config.whispercpp
                 )
+            elif self.config.features.stt_provider == SttProvider.FASTER_WHISPER:
+                transcript = self.fasterwhisper.transcribe(
+                    filename=audio_input_wav,
+                    config=self.config.fasterwhisper,
+                    wingman_name=self.name,
+                )
             elif self.config.features.stt_provider == SttProvider.WINGMAN_PRO:
-                if self.config.wingman_pro.stt_provider == WingmanProSttProvider.WHISPER:
+                if (
+                    self.config.wingman_pro.stt_provider
+                    == WingmanProSttProvider.WHISPER
+                ):
                     transcript = self.wingman_pro.transcribe_whisper(
                         filename=audio_input_wav
                     )
@@ -469,7 +504,10 @@ class OpenAiWingman(Wingman):
             elif self.config.features.stt_provider == SttProvider.OPENAI:
                 transcript = self.openai.transcribe(filename=audio_input_wav)
         except Exception as e:
-            await printr.print_async(f"Error during transcription using '{self.config.features.stt_provider}': {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error during transcription using '{self.config.features.stt_provider}': {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
         if not transcript:
@@ -896,8 +934,12 @@ class OpenAiWingman(Wingman):
             try:
                 return await self.wingman_pro.generate_image(text)
             except Exception as e:
-                await printr.print_async(f"Error during image generation: {str(e)}", color=LogType.ERROR)
-                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+                await printr.print_async(
+                    f"Error during image generation: {str(e)}", color=LogType.ERROR
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
 
         return ""
 
@@ -914,33 +956,45 @@ class OpenAiWingman(Wingman):
                     config=self.config.azure.conversation,
                     tools=tools,
                 )
-            elif self.config.features.conversation_provider == ConversationProvider.OPENAI:
+            elif (
+                self.config.features.conversation_provider
+                == ConversationProvider.OPENAI
+            ):
                 completion = self.openai.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.openai.conversation_model,
                 )
-            elif self.config.features.conversation_provider == ConversationProvider.MISTRAL:
+            elif (
+                self.config.features.conversation_provider
+                == ConversationProvider.MISTRAL
+            ):
                 completion = self.mistral.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.mistral.conversation_model.value,
                 )
-            elif self.config.features.conversation_provider == ConversationProvider.GROQ:
+            elif (
+                self.config.features.conversation_provider == ConversationProvider.GROQ
+            ):
                 completion = self.groq.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.groq.conversation_model,
                 )
             elif (
-                self.config.features.conversation_provider == ConversationProvider.CEREBRAS
+                self.config.features.conversation_provider
+                == ConversationProvider.CEREBRAS
             ):
                 completion = self.cerebras.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.cerebras.conversation_model,
                 )
-            elif self.config.features.conversation_provider == ConversationProvider.GOOGLE:
+            elif (
+                self.config.features.conversation_provider
+                == ConversationProvider.GOOGLE
+            ):
                 completion = self.google.ask(
                     messages=messages,
                     tools=tools,
@@ -956,7 +1010,8 @@ class OpenAiWingman(Wingman):
                     model=self.config.openrouter.conversation_model,
                 )
             elif (
-                self.config.features.conversation_provider == ConversationProvider.LOCAL_LLM
+                self.config.features.conversation_provider
+                == ConversationProvider.LOCAL_LLM
             ):
                 completion = self.local_llm.ask(
                     messages=messages,
@@ -973,7 +1028,8 @@ class OpenAiWingman(Wingman):
                     tools=tools,
                 )
             elif (
-                self.config.features.conversation_provider == ConversationProvider.PERPLEXITY
+                self.config.features.conversation_provider
+                == ConversationProvider.PERPLEXITY
             ):
                 completion = self.perplexity.ask(
                     messages=messages,
@@ -981,7 +1037,9 @@ class OpenAiWingman(Wingman):
                     model=self.config.perplexity.conversation_model.value,
                 )
         except Exception as e:
-            await printr.print_async(f"Error during LLM call: {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error during LLM call: {str(e)}", color=LogType.ERROR
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
 
@@ -1087,8 +1145,12 @@ class OpenAiWingman(Wingman):
                     self._add_tool_response(tool_call, function_response)
             except Exception as e:
                 self._add_tool_response(tool_call, "Error")
-                await printr.print_async(f"Error while processing tool call: {str(e)}", color=LogType.ERROR)
-                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+                await printr.print_async(
+                    f"Error while processing tool call: {str(e)}", color=LogType.ERROR
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
 
         return instant_response, skill
 
@@ -1136,9 +1198,16 @@ class OpenAiWingman(Wingman):
                 if instant_response:
                     await self.play_to_user(instant_response)
             except Exception as e:
-                await printr.print_async(f"Error while processing skill '{skill.name}': {str(e)}", color=LogType.ERROR)
-                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-                function_response = "ERROR DURING PROCESSING" # hints to AI that there was an Error
+                await printr.print_async(
+                    f"Error while processing skill '{skill.name}': {str(e)}",
+                    color=LogType.ERROR,
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
+                function_response = (
+                    "ERROR DURING PROCESSING"  # hints to AI that there was an Error
+                )
                 instant_response = None
 
         return function_response, instant_response, used_skill
@@ -1230,7 +1299,9 @@ class OpenAiWingman(Wingman):
                         audio_player=self.audio_player,
                         wingman_name=self.name,
                     )
-                elif self.config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+                elif (
+                    self.config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE
+                ):
                     await self.wingman_pro.generate_azure_speech(
                         text=text,
                         config=self.config.azure.tts,
@@ -1243,7 +1314,9 @@ class OpenAiWingman(Wingman):
                     f"Unsupported TTS provider: {self.config.features.tts_provider}"
                 )
         except Exception as e:
-            await printr.print_async(f"Error during TTS playback: {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error during TTS playback: {str(e)}", color=LogType.ERROR
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     async def _execute_command(self, command: dict) -> str:
