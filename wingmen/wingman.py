@@ -23,6 +23,7 @@ from api.enums import (
     LogType,
     WingmanInitializationErrorType,
 )
+from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
@@ -52,6 +53,7 @@ class Wingman:
         audio_player: AudioPlayer,
         audio_library: AudioLibrary,
         whispercpp: Whispercpp,
+        fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
         tower: "Tower",
     ):
@@ -87,6 +89,9 @@ class Wingman:
         self.whispercpp = whispercpp
         """A class that handles the communication with the Whispercpp server for transcription."""
 
+        self.fasterwhisper = fasterwhisper
+        """A class that handles local transcriptions using FasterWhisper."""
+
         self.xvasynth = xvasynth
         """A class that handles the communication with the XVASynth server for TTS."""
 
@@ -102,7 +107,7 @@ class Wingman:
     def get_record_mouse_button(self) -> str:
         """Returns the activation or "push-to-talk" mouse button for this Wingman."""
         return self.config.record_mouse_button
-    
+
     def get_record_joystick_button(self) -> str:
         """Returns the activation or "push-to-talk" joystick button for this Wingman."""
         if not self.config.record_joystick_button:
@@ -160,7 +165,11 @@ class Wingman:
                     )
                 )
         except Exception as e:
-            printr.print(f"Error retrieving secret ''{secret_name}: {e}", color=LogType.ERROR, server_only=True)
+            printr.print(
+                f"Error retrieving secret ''{secret_name}: {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             errors.append(
                 WingmanInitializationError(
@@ -190,8 +199,13 @@ class Wingman:
             try:
                 await skill.unload()
             except Exception as e:
-                await printr.print_async(f"Error unloading skill '{skill.name}': {str(e)}", color=LogType.ERROR)
-                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+                await printr.print_async(
+                    f"Error unloading skill '{skill.name}': {str(e)}",
+                    color=LogType.ERROR,
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
 
     async def init_skills(self) -> list[WingmanInitializationError]:
         """This method is called when the Wingman is instantiated by Tower or when a skill's config changes.
@@ -246,8 +260,13 @@ class Wingman:
                             color=LogType.ERROR,
                         )
             except Exception as e:
-                await printr.print_async(f"Error loading skill '{skill_config.name}': {str(e)}", color=LogType.ERROR)
-                printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+                await printr.print_async(
+                    f"Error loading skill '{skill_config.name}': {str(e)}",
+                    color=LogType.ERROR,
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
 
         return errors
 
@@ -287,7 +306,9 @@ class Wingman:
             process_result = None
 
             if self.settings.debug_mode and not transcript:
-                await printr.print_async("Starting transcription...", color=LogType.INFO)
+                await printr.print_async(
+                    "Starting transcription...", color=LogType.INFO
+                )
 
             if not transcript:
                 # transcribe the audio.
@@ -332,7 +353,10 @@ class Wingman:
             if process_result:
                 await self.play_to_user(str(process_result), not interrupt)
         except Exception as e:
-            await printr.print_async(f"Error during processing of wingmann ''{self.name}: {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error during processing of wingmann ''{self.name}: {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     # ───────────────── virtual methods / hooks ───────────────── #
@@ -432,13 +456,18 @@ class Wingman:
                 if command.instant_activation:
                     for phrase in command.instant_activation:
                         if phrase.lower() in commands_by_instant_activation:
-                            commands_by_instant_activation[phrase.lower()].append(command)
+                            commands_by_instant_activation[phrase.lower()].append(
+                                command
+                            )
                         else:
                             commands_by_instant_activation[phrase.lower()] = [command]
 
             # find best matching phrase
             phrase = difflib.get_close_matches(
-                transcript.lower(), commands_by_instant_activation.keys(), n=1, cutoff=0.8
+                transcript.lower(),
+                commands_by_instant_activation.keys(),
+                n=1,
+                cutoff=0.8,
             )
 
             # if no phrase found, return None
@@ -453,7 +482,10 @@ class Wingman:
             # return the executed command
             return commands
         except Exception as e:
-            await printr.print_async(f"Error during instant activation in wingmann '{self.name}': {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error during instant activation in wingmann '{self.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
 
@@ -482,7 +514,8 @@ class Wingman:
 
             if len(command.actions or []) == 0:
                 await printr.print_async(
-                    f"No actions found for command: {command.name}", color=LogType.WARNING
+                    f"No actions found for command: {command.name}",
+                    color=LogType.WARNING,
                 )
 
             # handle the global special commands:
@@ -491,9 +524,12 @@ class Wingman:
 
             return self._select_command_response(command) or "Ok"
         except Exception as e:
-            await printr.print_async(f"Error executing command '{command.name}' for wingman '{self.name}': {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error executing command '{command.name}' for wingman '{self.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-            return "ERROR DURING PROCESSING" # hints to AI that there was an Error
+            return "ERROR DURING PROCESSING"  # hints to AI that there was an Error
 
     async def execute_action(self, command: CommandConfig):
         """Executes the actions defined in the command (in order).
@@ -580,12 +616,16 @@ class Wingman:
                         action.audio, self.config.sound.volume
                     )
         except Exception as e:
-            await printr.print_async(f"Error executing actions of command '{command.name}' for wingman '{self.name}': {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error executing actions of command '{command.name}' for wingman '{self.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     def threaded_execution(self, function, *args) -> threading.Thread | None:
         """Execute a function in a separate thread."""
         try:
+
             def start_thread(function, *args):
                 if asyncio.iscoroutinefunction(function):
                     new_loop = asyncio.new_event_loop()
@@ -599,7 +639,9 @@ class Wingman:
             thread.start()
             return thread
         except Exception as e:
-            printr.print(f"Error starting threaded execution: {str(e)}", color=LogType.ERROR)
+            printr.print(
+                f"Error starting threaded execution: {str(e)}", color=LogType.ERROR
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
 
@@ -620,13 +662,19 @@ class Wingman:
                 errors = await self.validate()
 
                 for error in errors:
-                    if error.error_type != WingmanInitializationErrorType.MISSING_SECRET:
+                    if (
+                        error.error_type
+                        != WingmanInitializationErrorType.MISSING_SECRET
+                    ):
                         self.config = old_config
                         return False
 
             return True
         except Exception as e:
-            await printr.print_async(f"Error updating config for wingman '{self.name}': {str(e)}", color=LogType.ERROR)
+            await printr.print_async(
+                f"Error updating config for wingman '{self.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return False
 

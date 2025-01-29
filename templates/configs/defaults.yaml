@@ -103,6 +103,13 @@ azure:
       - de-DE
 whispercpp:
   temperature: 0.0
+fasterwhisper:
+  beam_size: 1
+  best_of: 2
+  temperature: 0
+  no_speech_threshold: 0.7
+  language_detection_threshold: 0.5
+  multilingual: false
 xvasynth:
   voice:
     model_directory: ""

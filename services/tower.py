@@ -6,6 +6,7 @@ from api.interface import (
     WingmanInitializationError,
     ConfigDirInfo,
 )
+from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
@@ -29,6 +30,7 @@ class Tower:
         audio_player: AudioPlayer,
         audio_library: AudioLibrary,
         whispercpp: Whispercpp,
+        fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
     ):
         self.audio_player = audio_player
@@ -40,6 +42,7 @@ class Tower:
         self.disabled_wingmen: list[WingmanConfig] = []
         self.log_source_name = "Tower"
         self.whispercpp = whispercpp
+        self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
 
     async def instantiate_wingmen(self, settings: SettingsConfig):
@@ -94,6 +97,7 @@ class Tower:
                     audio_player=self.audio_player,
                     audio_library=self.audio_library,
                     whispercpp=self.whispercpp,
+                    fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
                     tower=self,
                 )
@@ -105,6 +109,7 @@ class Tower:
                     audio_player=self.audio_player,
                     audio_library=self.audio_library,
                     whispercpp=self.whispercpp,
+                    fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
                     tower=self,
                 )
@@ -215,7 +220,9 @@ class Tower:
     def save_wingman(self, wingman_name: str):
         for wingman in self.wingmen:
             if wingman.name == wingman_name:
-                for wingman_file in self.config_manager.get_wingmen_configs(self.config_dir):
+                for wingman_file in self.config_manager.get_wingmen_configs(
+                    self.config_dir
+                ):
                     if wingman_file.name == wingman_name:
                         self.config_manager.save_wingman_config(
                             config_dir=self.config_dir,

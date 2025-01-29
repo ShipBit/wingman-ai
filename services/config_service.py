@@ -370,9 +370,11 @@ class ConfigService:
         except ValueError:
             wingman_config.azure.tts.voice = basic_config.voice
 
-        reload_config = (wingman_config.record_joystick_button != basic_config.record_joystick_button
-                        or wingman_config.record_mouse_button != basic_config.record_mouse_button
-                        or wingman_file.name != wingman_config.name)
+        reload_config = (
+            wingman_config.record_joystick_button != basic_config.record_joystick_button
+            or wingman_config.record_mouse_button != basic_config.record_mouse_button
+            or wingman_file.name != wingman_config.name
+        )
 
         wingman_config.record_joystick_button = basic_config.record_joystick_button
         wingman_config.record_mouse_button = basic_config.record_mouse_button
@@ -390,6 +392,7 @@ class ConfigService:
         wingman_config.azure = basic_config.azure
         wingman_config.xvasynth = basic_config.xvasynth
         wingman_config.whispercpp = basic_config.whispercpp
+        wingman_config.fasterwhisper = basic_config.fasterwhisper
         wingman_config.wingman_pro = basic_config.wingman_pro
         wingman_config.perplexity = basic_config.perplexity
 

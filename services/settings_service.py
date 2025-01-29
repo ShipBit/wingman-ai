@@ -8,6 +8,7 @@ from api.interface import (
     AudioDeviceSettings,
     SettingsConfig,
 )
+from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.config_manager import ConfigManager
@@ -25,6 +26,7 @@ class SettingsService:
         self.settings = self.get_settings()
         self.settings_events = PubSub()
         self.whispercpp: Whispercpp = None
+        self.fasterwhisper: FasterWhisper = None
         self.xvasynth: XVASynth = None
 
         self.router = APIRouter()
@@ -44,8 +46,11 @@ class SettingsService:
             tags=tags,
         )
 
-    def initialize(self, whispercpp: Whispercpp, xvasynth: XVASynth):
+    def initialize(
+        self, whispercpp: Whispercpp, fasterwhisper: FasterWhisper, xvasynth: XVASynth
+    ):
         self.whispercpp = whispercpp
+        self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
 
     # GET /settings
@@ -83,6 +88,16 @@ class SettingsService:
             )
             return
         self.whispercpp.update_settings(settings=settings.voice_activation.whispercpp)
+
+        # FasterWhisper
+        if not self.fasterwhisper:
+            self.printr.toast_error(
+                "FasterWhisper is not initialized. Please run SettingsService.initialize()",
+            )
+            return
+        self.fasterwhisper.update_settings(
+            settings=settings.voice_activation.fasterwhisper
+        )
 
         # XVASynth
         if not self.xvasynth:

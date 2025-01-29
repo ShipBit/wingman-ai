@@ -348,9 +348,18 @@ class ConfigMigrationService:
 
     def migrate_162_to_170(self):
         def migrate_settings(old: dict, new: dict) -> dict:
+            old["voice_activation"]["fasterwhisper"] = new["voice_activation"][
+                "fasterwhisper"
+            ]
+            old["voice_activation"]["fasterwhisper_config"] = new["voice_activation"][
+                "fasterwhisper_config"
+            ]
+            self.log("- adding new fasterwhisper settings and config")
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:
+            old["fasterwhisper"] = new["fasterwhisper"]
+            self.log("- added new properties: fasterwhisper")
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
