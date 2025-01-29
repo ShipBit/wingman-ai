@@ -306,6 +306,8 @@ class WingmanCore(WebSocketUser):
         )
         self.fasterwhisper = FasterWhisper(
             settings=self.settings_service.settings.voice_activation.fasterwhisper,
+            app_root_path=app_root_path,
+            app_is_bundled=app_is_bundled,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.settings_service.initialize(
@@ -1157,5 +1159,6 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
 
     async def shutdown(self):
-        await self.stop_xvasynth()
+        if self.settings_service.settings.xvasynth.enable:
+            await self.stop_xvasynth()
         await self.unload_tower()

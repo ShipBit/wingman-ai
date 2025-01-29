@@ -1,4 +1,7 @@
+from os import path
+import platform
 from faster_whisper import WhisperModel
+from api.enums import LogType
 from api.interface import (
     FasterWhisperSettings,
     FasterWhisperTranscript,
@@ -7,20 +10,50 @@ from api.interface import (
 )
 from services.printr import Printr
 
+MODELS_DIR = "faster-whisper-models"
+
 
 class FasterWhisper:
     def __init__(
         self,
         settings: FasterWhisperSettings,
+        app_root_path: str,
+        app_is_bundled: bool,
     ):
-        self.settings = settings
-        self.current_model = None
         self.printr = Printr()
-        self.model = WhisperModel(
-            settings.model_size,
-            device=settings.device,
-            compute_type=settings.compute_type,
-        )
+        self.settings = settings
+
+        self.is_windows = platform.system() == "Windows"
+        if self.is_windows:
+            # move one dir up, out of _internal (if bundled)
+            app_dir = path.dirname(app_root_path) if app_is_bundled else app_root_path
+            self.models_dir = path.join(app_dir, MODELS_DIR)
+
+        self.__update_model()
+
+    def __update_model(self):
+        if self.is_windows:
+            model_file = path.join(self.models_dir, (self.settings.model_size))
+            model = model_file if path.exists(model_file) else self.settings.model_size
+        else:
+            model_file = self.settings.model_size
+            model = self.settings.model_size
+
+        try:
+            self.model = WhisperModel(
+                model,
+                device=self.settings.device,
+                compute_type=self.settings.compute_type,
+            )
+            self.printr.print(
+                f"FasterWhisper initialized with model '{model}'.",
+                server_only=True,
+                color=LogType.POSITIVE,
+            )
+        except Exception as e:
+            self.printr.toast_error(
+                f"Failed to initialize FasterWhisper with model {model_file}. Error: {e}"
+            )
 
     def transcribe(
         self,
@@ -65,12 +98,7 @@ class FasterWhisper:
 
     def update_settings(self, settings: FasterWhisperSettings):
         self.settings = settings
-        self.model = WhisperModel(
-            settings.model_size,
-            device=settings.device,
-            compute_type=settings.compute_type,
-        )
-        self.printr.print("FasterWhisper settings updated.", server_only=True)
+        self.__update_model()
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass

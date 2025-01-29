@@ -251,7 +251,7 @@ class Wingman:
                         await skill.prepare()
                         printr.print(
                             f"Skill '{skill_config.name}' loaded successfully.",
-                            color=LogType.INFO,
+                            color=LogType.POSITIVE,
                             server_only=True,
                         )
                     else:

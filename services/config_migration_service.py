@@ -47,7 +47,7 @@ class ConfigMigrationService:
 
         if path.exists(migration_file):
             self.log(
-                f"Found {self.latest_version} configs. No migrations needed.", True
+                f"Found {self.latest_version} configs. No migrations needed.", False
             )
             return
 

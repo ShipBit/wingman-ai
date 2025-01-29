@@ -72,7 +72,7 @@ class Tower:
 
         printr.print(
             f"Instantiated wingmen: {', '.join([w.name for w in self.wingmen])}.",
-            color=LogType.INFO,
+            color=LogType.POSITIVE,
             server_only=True,
             source_name=self.log_source_name,
             source=LogSource.SYSTEM,
