@@ -138,7 +138,7 @@ class ConfigMigrationService:
             self.log("- applied new split whispercpp settings/config structure")
 
             old["xvasynth"] = new["xvasynth"]
-            self.log("- adding new XVASynth settings")
+            self.log("- added new XVASynth settings")
 
             old.pop("audio", None)
             self.log("- removed audio device settings because DirectSound was removed")
@@ -348,21 +348,36 @@ class ConfigMigrationService:
 
     def migrate_162_to_170(self):
         def migrate_settings(old: dict, new: dict) -> dict:
+            old["voice_activation"]["whispercpp"].pop("use_cuda", None)
+            old["voice_activation"]["whispercpp"].pop("language", None)
+            old["voice_activation"]["whispercpp"].pop("translate_to_english", None)
+            self.log("- removed old whispercpp settings (if there were any)")
+
+            old["voice_activation"]["whispercpp"]["enable"] = False
+            self.log("- disabled whispercpp by default")
+
             old["voice_activation"]["fasterwhisper"] = new["voice_activation"][
                 "fasterwhisper"
             ]
             old["voice_activation"]["fasterwhisper_config"] = new["voice_activation"][
                 "fasterwhisper_config"
             ]
-            self.log("- adding new fasterwhisper settings and config")
+            self.log("- added new fasterwhisper settings and config")
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:
             old["fasterwhisper"] = new["fasterwhisper"]
             self.log("- added new properties: fasterwhisper")
+
+            old["features"]["stt_provider"] = "fasterwhisper"
+            self.log("- made fasterwhisper new default STT provider")
+
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            if old.get("features", {}).get("stt_provider") == "whispercpp":
+                old["features"]["stt_provider"] = "fasterwhisper"
+                self.log("- changed STT provider from whispercpp to fasterwhisper")
             return old
 
         self.migrate(

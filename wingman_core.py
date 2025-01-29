@@ -118,25 +118,6 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
-            methods=["POST"],
-            path="/whispercpp/start",
-            endpoint=self.start_whispercpp,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/whispercpp/stop",
-            endpoint=self.stop_whispercpp,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/whispercpp/models",
-            response_model=list[str],
-            endpoint=self.get_whispercpp_models,
-            tags=tags,
-        )
-        self.router.add_api_route(
             methods=["GET"],
             path="/fasterwhisper/modelsizes",
             response_model=list[str],
@@ -322,8 +303,6 @@ class WingmanCore(WebSocketUser):
 
         self.whispercpp = Whispercpp(
             settings=self.settings_service.settings.voice_activation.whispercpp,
-            app_root_path=app_root_path,
-            app_is_bundled=app_is_bundled,
         )
         self.fasterwhisper = FasterWhisper(
             settings=self.settings_service.settings.voice_activation.fasterwhisper,
@@ -914,35 +893,6 @@ class WingmanCore(WebSocketUser):
             )
         return True
 
-    # POST /whispercpp/start
-    def start_whispercpp(self):
-        self.whispercpp.start_server()
-
-    # POST /whispercpp/stop
-    def stop_whispercpp(self):
-        try:
-            self.whispercpp.stop_server()
-        except Exception:
-            pass
-
-    # GET /whispercpp/models
-    def get_whispercpp_models(self):
-        model_files = []
-        try:
-            model_files = [
-                f
-                for f in os.listdir(self.whispercpp.models_dir)
-                if os.path.isfile(os.path.join(self.whispercpp.models_dir, f))
-                and f.endswith(".bin")
-            ]
-        except Exception:
-            # this can fail:
-            # - on MacOS (always)
-            # - in Dev mode if the dev hasn't copied the whispercpp-models dir to the repository
-            # in these cases, we return an empty list and the client will lock the controls and show a warning.
-            pass
-        return model_files
-
     # GET /fasterwhisper/modelsizes
     def get_fasterwhisper_modelsizes(self):
         model_sizes = [
@@ -1207,6 +1157,5 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
 
     async def shutdown(self):
-        await self.stop_whispercpp()
         await self.stop_xvasynth()
         await self.unload_tower()

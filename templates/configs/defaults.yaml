@@ -39,7 +39,7 @@ prompts:
     (END of "skills")
 features:
   tts_provider: wingman_pro
-  stt_provider: whispercpp
+  stt_provider: fasterwhisper
   conversation_provider: wingman_pro
   image_generation_provider: wingman_pro
   use_generic_instant_responses: false

@@ -111,12 +111,9 @@ class AudioSettings(BaseModel):
 
 
 class WhispercppSettings(BaseModel):
+    enable: bool
     host: str
     port: int
-    model: str
-    language: str
-    translate_to_english: bool
-    use_cuda: bool
 
 
 class FasterWhisperSettings(BaseModel):
@@ -156,7 +153,6 @@ class FasterWhisperSttConfig(BaseModel):
 
 class WhispercppTranscript(BaseModel):
     text: str
-    language: str
 
 
 class FasterWhisperTranscript(BaseModel):

@@ -3,6 +3,7 @@ from api.interface import (
     FasterWhisperSettings,
     FasterWhisperTranscript,
     FasterWhisperSttConfig,
+    WingmanInitializationError,
 )
 from services.printr import Printr
 
@@ -24,6 +25,7 @@ class FasterWhisper:
     def transcribe(
         self,
         config: FasterWhisperSttConfig,
+        wingman_name: str,
         filename: str,
     ):
         try:
@@ -33,11 +35,17 @@ class FasterWhisper:
                 beam_size=config.beam_size,
                 best_of=config.best_of,
                 temperature=config.temperature,
-                hotwords=config.hotwords,
-                language=config.language,
+                hotwords=(
+                    wingman_name
+                    if not config.hotwords
+                    else ",".join([wingman_name, config.hotwords])
+                ),
                 no_speech_threshold=config.no_speech_threshold,
-                multilingual=config.multilingual,
-                language_detection_threshold=config.language_detection_threshold,
+                language=config.language,
+                multilingual=False if config.language else config.multilingual,
+                language_detection_threshold=(
+                    None if config.language else config.language_detection_threshold
+                ),
             )
             segments = list(segments)
             text = ""
@@ -56,14 +64,13 @@ class FasterWhisper:
             )
 
     def update_settings(self, settings: FasterWhisperSettings):
-        if self.__validate():
-            self.settings = settings
-            self.model = WhisperModel(
-                settings.model_size,
-                device=settings.device,
-                compute_type=settings.compute_type,
-            )
-            self.printr.print("FasterWhisper settings updated.", server_only=True)
+        self.settings = settings
+        self.model = WhisperModel(
+            settings.model_size,
+            device=settings.device,
+            compute_type=settings.compute_type,
+        )
+        self.printr.print("FasterWhisper settings updated.", server_only=True)
 
-    def __validate(self):
-        return True
+    def validate(self, errors: list[WingmanInitializationError]):
+        pass

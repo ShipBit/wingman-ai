@@ -3,7 +3,6 @@ import time
 import asyncio
 import random
 import traceback
-from idlelib.pyparse import trans
 from typing import Mapping, Optional
 from openai.types.chat import ChatCompletion
 from api.interface import (
@@ -85,6 +84,11 @@ class OpenAiWingman(Wingman):
         errors = await super().validate()
 
         try:
+            if self.uses_provider("whispercpp"):
+                self.whispercpp.validate(self.name, errors)
+            if self.uses_provider("fasterwhisper"):
+                self.fasterwhisper.validate(errors)
+
             if self.uses_provider("openai"):
                 await self.validate_and_set_openai(errors)
 
@@ -117,6 +121,7 @@ class OpenAiWingman(Wingman):
 
             if self.uses_provider("perplexity"):
                 await self.validate_and_set_perplexity(errors)
+
         except Exception as e:
             errors.append(
                 WingmanInitializationError(
@@ -204,6 +209,8 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.XVASYNTH
         elif provider_type == "whispercpp":
             return self.config.features.stt_provider == SttProvider.WHISPERCPP
+        elif provider_type == "fasterwhisper":
+            return self.config.features.stt_provider == SttProvider.FASTER_WHISPER
         elif provider_type == "wingman_pro":
             return any(
                 [
@@ -475,7 +482,9 @@ class OpenAiWingman(Wingman):
                 )
             elif self.config.features.stt_provider == SttProvider.FASTER_WHISPER:
                 transcript = self.fasterwhisper.transcribe(
-                    filename=audio_input_wav, config=self.config.fasterwhisper
+                    filename=audio_input_wav,
+                    config=self.config.fasterwhisper,
+                    wingman_name=self.name,
                 )
             elif self.config.features.stt_provider == SttProvider.WINGMAN_PRO:
                 if (
