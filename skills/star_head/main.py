@@ -8,6 +8,7 @@ from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
+    from skills.vision_ai.main import VisionAI
 
 
 class StarHead(Skill):
@@ -119,6 +120,19 @@ class StarHead(Skill):
         """Formats name by combining model and name, avoiding repetition"""
         return vehicle["name"]
 
+    async def _ask_vision_ai(self, prompt: str) -> str:
+        function_response = ""
+
+        vision_ai_skill: Optional[VisionAI] = next(
+            (skill for skill in self.wingman.skills if skill.name == "VisionAI"),
+            None,
+        )
+
+        if vision_ai_skill:
+            function_response = await vision_ai_skill.analyse_screen(prompt, desired_image_width=1800)
+
+        return function_response
+
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any]
     ) -> tuple[str, str]:
@@ -139,6 +153,11 @@ class StarHead(Skill):
                     **parameters
                 )
             )
+        if tool_name == "capture_and_verify_trading_terminal_data":
+            print(f"capture_and_verify_trading_terminal_data {parameters}")
+            function_response = await self._ask_vision_ai(self._get_vision_ai_prompt())
+        if tool_name == "submit_verified_data_to_starhead":
+            print(f"submit_verified_data_to_starhead {parameters}")
 
         return function_response, instant_response
 
@@ -223,9 +242,89 @@ class StarHead(Skill):
                     },
                 },
             ),
+            (
+                "capture_and_verify_trading_terminal_data",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "capture_and_verify_trading_terminal_data",
+                        "description": "Captures a screenshot of a Star Citizen commodity terminal and extracts the data and verfiy it by the user. Always ask for the shop name.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "shop": {"type": "string", "enum": self.shop_names},
+                            },
+                            "required": ["shop"],
+                        },
+                    },
+                },
+            ),
+            (
+                "submit_verified_data_to_starhead",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "submit_verified_data_to_starhead",
+                        "description": "Submits the verified data from a Star Citizen commodity terminal to StarHead. Always verify the data before submitting it.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "commodities": {
+                                    "description": "Data extracted from the commodity terminal.",
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "shop": {"type": "string", "enum": self.shop_names},
+                                            "name": {"type": "string"},
+                                            "buy_price": {"type": "number"},
+                                            "sell_price": {"type": "number"},
+                                            "buy_quantity": {"type": "number"},
+                                            "sell_quantity": {"type": "number"},
+                                        },
+                                    }
+                                },
+                            },
+                            "required": ["commodities"],
+                        },
+                    },
+                },
+            ),
         ]
 
         return tools
+    
+    def _get_vision_ai_prompt(self) -> str:
+        return """
+        Analyze this Star Citizen commodity terminal screenshot and extract the following information in a structured format:
+        - List of commodities with their buy or sell information but just list them if they have either a buy or sell price.
+
+        For each commodity, provide:
+        - Commodity name (exactly as shown)
+        - Buy price (if available), is formatted as 'x/SCU', located below the quantity
+        - Sell price (if available), is formatted as 'x/SCU', located below the quantity
+        - Buy quantity/SCU (if available), is formatted as 'x SCU', located above the price
+        - Sell quantity/SCU (if available), is formatted as 'x SCU', located above the price
+
+        Output the data in the following JSON structure:
+        {
+            "commodities": [
+                {
+                    "name": string,
+                    "buy_price": float,
+                    "sell_price": float,
+                    "buy_quantity": int,
+                    "sell_quantity": int,
+                },
+                ...
+            ]
+        }
+
+        The goal is to submit this data to StarHead, but it should always be verified and maybe modified by the user first.
+        Always ask the user to verify the data before submitting it. If the user has corrected any part of the data, ask again for verification.
+
+        If you call 'capture_trading_terminal_data' always ask for the shop name if it's not clear.
+        """
 
     async def _get_trading_shop_information_for_celestial_objects(
         self, celestial_object: str
