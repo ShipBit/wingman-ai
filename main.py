@@ -1,7 +1,9 @@
 import argparse
 import asyncio
+import atexit
 from enum import Enum
 from os import path
+import signal
 import sys
 import traceback
 from typing import Any, Literal, get_args, get_origin
@@ -71,6 +73,7 @@ core.set_connection_manager(connection_manager)
 
 keyboard.hook(core.on_key)
 
+
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
 
@@ -91,6 +94,19 @@ def modify_openapi():
     app.openapi_schema = openapi_schema
 
 
+async def shutdown():
+    await connection_manager.shutdown()
+    await core.shutdown()
+    keyboard.unhook_all()
+
+
+def exit_handler():
+    printr.print(
+        "atexit handler shutting down...", color=LogType.SUBTLE, server_only=True
+    )
+    asyncio.run(shutdown())
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # executed before the application starts
@@ -99,8 +115,10 @@ async def lifespan(_app: FastAPI):
     yield
 
     # executed after the application has finished
-    await connection_manager.shutdown()
-    keyboard.unhook_all()
+    printr.print(
+        "Lifespan end - shutting down...", color=LogType.SUBTLE, server_only=True
+    )
+    await shutdown()
 
 
 app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_unique_id)
@@ -278,6 +296,7 @@ async def async_main(host: str, port: int, sidecar: bool):
         printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
         return
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the FastAPI server.")
     parser.add_argument(
@@ -309,5 +328,24 @@ if __name__ == "__main__":
     except RuntimeError:  # No running event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    finally:
+
+    atexit.register(exit_handler)
+
+    def signal_handler(sig, frame):
+        printr.print(
+            "SIGINT/SIGTERM received! Initiating shutdown...",
+            color=LogType.SUBTLE,
+            server_only=True,
+        )
+        # Schedule the shutdown asynchronously
+        asyncio.create_task(shutdown())
+        loop.stop()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
         loop.run_until_complete(async_main(host=host, port=port, sidecar=args.sidecar))
+    except Exception as e:
+        printr.print(f"Error starting application: {str(e)}", color=LogType.ERROR)
+        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)

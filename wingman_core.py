@@ -1162,3 +1162,9 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.xvasynth.enable:
             await self.stop_xvasynth()
         await self.unload_tower()
+
+        self.printr.print(
+            "Core shutdown.",
+            server_only=True,
+            color=LogType.SUBTLE,
+        )
