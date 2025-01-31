@@ -46,7 +46,7 @@ class FasterWhisper:
                 compute_type=self.settings.compute_type,
             )
             self.printr.print(
-                f"FasterWhisper initialized with model '{model}'.",
+                f"FasterWhisper initialized with model '{model}' (device: '{self.settings.device}').",
                 server_only=True,
                 color=LogType.POSITIVE,
             )
@@ -93,8 +93,12 @@ class FasterWhisper:
 
         except FileNotFoundError:
             self.printr.toast_error(
-                f"FasterWhisper file to transcript'{filename}' not found."
+                f"FasterWhisper file to transcribe '{filename}' not found."
             )
+        except Exception as e:
+            self.printr.toast_error(f"FasterWhisper failed to transcribe. Error: {e}")
+
+        return None
 
     def update_settings(self, settings: FasterWhisperSettings):
         self.settings = settings
