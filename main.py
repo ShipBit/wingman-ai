@@ -253,7 +253,7 @@ async def start_secrets(secrets: dict[str, Any]):
 
 @app.get("/ping", tags=["main"])
 async def ping():
-    return "Ok"
+    return "Ok" if core.is_started else "Starting"
 
 
 async def async_main(host: str, port: int, sidecar: bool):
