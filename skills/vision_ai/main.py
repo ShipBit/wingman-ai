@@ -5,6 +5,7 @@ from mss import mss
 from PIL import Image
 from api.enums import LogSource, LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -60,12 +61,19 @@ class VisionAI(Skill):
         return tools
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = ""
         instant_response = ""
 
         if tool_name == "analyse_what_you_or_user_sees":
+            benchmark.start_snapshot(f"Vision AI: {tool_name}")
+
+            if self.settings.debug_mode:
+                message = f"Vision AI: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(text=message, color=LogType.INFO)
 
             question = parameters.get("question", "What's in this image?")
             answer = await self.analyse_screen(question)
@@ -76,6 +84,8 @@ class VisionAI(Skill):
                         f"Vision analysis: {answer}.", color=LogType.INFO
                     )
                 function_response = answer
+
+            benchmark.finish_snapshot()
 
         return function_response, instant_response
 

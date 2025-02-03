@@ -1,12 +1,12 @@
 import threading
-import time
 from typing import TYPE_CHECKING
-from api.enums import LogType, WingmanInitializationErrorType
+from api.enums import WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
     WingmanInitializationError,
 )
+from services.benchmark import Benchmark
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
@@ -61,7 +61,7 @@ class Skill:
         return self.config.prompt or None
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         """Execute a tool by name with parameters."""
         pass
@@ -131,21 +131,6 @@ class Skill:
             )
             return None
         return p.value
-
-    async def print_execution_time(self, reset_timer=False):
-        """Prints the current time since the execution started (in seconds)."""
-        if self.execution_start:
-            execution_stop = time.perf_counter()
-            elapsed_seconds = execution_stop - self.execution_start
-            await self.printr.print_async(
-                f"...took {elapsed_seconds:.2f}s", color=LogType.INFO
-            )
-        if reset_timer:
-            self.start_execution_benchmark()
-
-    def start_execution_benchmark(self):
-        """Starts the execution benchmark timer."""
-        self.execution_start = time.perf_counter()
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""

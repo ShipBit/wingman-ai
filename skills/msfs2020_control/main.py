@@ -9,6 +9,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from api.enums import LogType
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -17,13 +18,15 @@ if TYPE_CHECKING:
 
 class Msfs2020Control(Skill):
 
-    def __init__(self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman") -> None:
+    def __init__(
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
+    ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.already_initialized_simconnect = False
         self.loaded = False
-        self.sm = None # Needs to be set once MSFS2020 is actually connected
-        self.aq = None # Same
-        self.ae = None # Same
+        self.sm = None  # Needs to be set once MSFS2020 is actually connected
+        self.aq = None  # Same
+        self.ae = None  # Same
         self.data_monitoring_loop_running = False
         self.autostart_data_monitoring_loop_mode = False
         self.data_monitoring_backstory = ""
@@ -39,9 +42,13 @@ class Msfs2020Control(Skill):
             "data_monitoring_backstory", errors
         )
         # If not available or not set, use default wingman's backstory
-        if not self.data_monitoring_backstory or self.data_monitoring_backstory == "" or self.data_monitoring_backstory == " ":
+        if (
+            not self.data_monitoring_backstory
+            or self.data_monitoring_backstory == ""
+            or self.data_monitoring_backstory == " "
+        ):
             self.data_monitoring_backstory = self.wingman.config.prompts.backstory
-        
+
         self.min_data_monitoring_seconds = self.retrieve_custom_property_value(
             "min_data_monitoring_seconds", errors
         )
@@ -132,115 +139,102 @@ class Msfs2020Control(Skill):
 
     # Using sample methods found here; allow AI to determine the appropriate variables and arguments, if any:
     # https://pypi.org/project/SimConnect/
-    async def execute_tool(self, tool_name: str, parameters: dict[str, any]) -> tuple[str, str]:
+    async def execute_tool(
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
+    ) -> tuple[str, str]:
         function_response = "Error in execution. Can you please try your command again?"
         instant_response = ""
 
-        if self.settings.debug_mode:
-            self.start_execution_benchmark()
-            await self.printr.print_async(
-                f"Executing {tool_name} function with parameters: {parameters}",
-                color=LogType.INFO,
-            )
+        if tool_name in [
+            "get_data_from_sim",
+            "set_data_or_perform_action_in_sim",
+            "start_or_activate_data_monitoring_loop",
+            "end_or_stop_data_monitoring_loop",
+            "get_information_about_current_location",
+        ]:
+            benchmark.start_snapshot(f"MSFS2020 Control: {tool_name}")
+            if self.settings.debug_mode:
+                message = f"MSFS2020: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(message, color=LogType.INFO)
 
-        if tool_name == "get_data_from_sim":
-            data_point = parameters.get("data_point")
-            value = self.aq.get(data_point)
-            function_response = f"{data_point} value is: {value}"
+            if tool_name == "get_data_from_sim":
+                data_point = parameters.get("data_point")
+                value = self.aq.get(data_point)
+                function_response = f"{data_point} value is: {value}"
 
-        elif tool_name == "set_data_or_perform_action_in_sim":
-            action = parameters.get("action")
-            argument = parameters.get("argument", None)
-            
-            try:
-                if argument is not None:
-                    self.aq.set(action, argument)
-                else:
-                    event_to_trigger = self.ae.find(action)
-                    event_to_trigger()
-            except:
-                if self.settings.debug_mode:
+            elif tool_name == "set_data_or_perform_action_in_sim":
+                action = parameters.get("action")
+                argument = parameters.get("argument", None)
+                try:
+                    if argument is not None:
+                        self.aq.set(action, argument)
+                    else:
+                        event_to_trigger = self.ae.find(action)
+                        event_to_trigger()
+                except Exception:
                     await self.printr.print_async(
                         f"Tried to perform action {action} with argument {argument} using aq.set, now going to try ae.event_to_trigger.",
                         color=LogType.INFO,
                     )
-            
-            try:
-                if argument is not None:
-                    event_to_trigger = self.ae.find(action)
-                    event_to_trigger(argument)
-            except:
-                if self.settings.debug_mode:
-                    await self.print_execution_time()
+
+                try:
+                    if argument is not None:
+                        event_to_trigger = self.ae.find(action)
+                        event_to_trigger(argument)
+                except Exception:
                     await self.printr.print_async(
                         f"Neither aq.set nor ae.event_to_trigger worked with {action} and {argument}.  Command failed.",
                         color=LogType.INFO,
                     )
-                return function_response, instant_response
-            
-            function_response = f"Action '{action}' executed with argument '{argument}'"
+                    benchmark.finish_snapshot()
+                    return function_response, instant_response
 
-        elif tool_name == "start_or_activate_data_monitoring_loop":
-            if self.data_monitoring_loop_running:
-                function_response = "Data monitoring loop is already running."
-                return function_response, instant_response
+                function_response = (
+                    f"Action '{action}' executed with argument '{argument}'"
+                )
 
-            self.start_execution_benchmark()
-            await self.printr.print_async(
-                f"Executing start_or_activate_data_monitoring_loop",
-                color=LogType.INFO,
-            )
+            elif tool_name == "start_or_activate_data_monitoring_loop":
+                if self.data_monitoring_loop_running:
+                    function_response = "Data monitoring loop is already running."
+                    benchmark.finish_snapshot()
+                    return function_response, instant_response
 
-            if not self.already_initialized_simconnect:
-                function_response = "Cannot start data monitoring / tour guide mode because simconnect is not connected yet.  Check to make sure the game is running."
-                return function_response, instant_response
+                if not self.already_initialized_simconnect:
+                    function_response = "Cannot start data monitoring / tour guide mode because simconnect is not connected yet.  Check to make sure the game is running."
+                    benchmark.finish_snapshot()
+                    return function_response, instant_response
 
-            if not self.data_monitoring_loop_running:
-                await self.initialize_data_monitoring_loop()
+                if not self.data_monitoring_loop_running:
+                    await self.initialize_data_monitoring_loop()
 
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+                function_response = "Started data monitoring loop/tour guide mode."
 
-            function_response = "Started data monitoring loop/tour guide mode."
+            elif tool_name == "end_or_stop_data_monitoring_loop":
+                await self.stop_data_monitoring_loop()
+                function_response = "Closed data monitoring / tour guide mode."
 
-        elif tool_name == "end_or_stop_data_monitoring_loop":
-            self.start_execution_benchmark()
-            await self.printr.print_async(
-                f"Executing end_or_stop_data_monitoring_loop",
-                color=LogType.INFO,
-            )
-
-            await self.stop_data_monitoring_loop()
-
-            if self.settings.debug_mode:
-                await self.print_execution_time()
-
-            function_response = "Closed data monitoring / tour guide mode."
-
-        elif tool_name == "get_information_about_current_location":
-            place_info = await self.convert_lat_long_data_into_place_data()
+            elif tool_name == "get_information_about_current_location":
+                place_info = await self.convert_lat_long_data_into_place_data()
+                if place_info:
+                    on_ground = self.aq.get("SIM_ON_GROUND")
+                    on_ground_statement = "The plane is currently in the air."
+                    if not on_ground:
+                        on_ground_statement = "The plane is currently on the ground."
+                    function_response = f"{on_ground_statement}  Detailed information regarding the location we are currently at or flying over: {place_info}"
+                else:
+                    function_response = "Unable to get more detailed information regarding the place based on the current latitude and longitude."
 
             if self.settings.debug_mode:
-                await self.print_execution_time()
+                await self.printr.print_async(
+                    f"MSFS2020: function_response: '{function_response}'",
+                    color=LogType.INFO,
+                )
 
-            if place_info:
-                on_ground = self.aq.get("SIM_ON_GROUND")
-                on_ground_statement = "The plane is currently in the air."
-                if on_ground == False:
-                    on_ground_statement = "The plane is currently on the ground."
-                function_response = f"{on_ground_statement}  Detailed information regarding the location we are currently at or flying over: {place_info}"
-            else:
-                function_response = "Unable to get more detailed information regarding the place based on the current latitude and longitude."
-
-        if self.settings.debug_mode:
-            await self.print_execution_time()
-            await self.printr.print_async(
-                f"{function_response}",
-                color=LogType.INFO,
-            )
+            benchmark.finish_snapshot()
 
         return function_response, instant_response
-
 
     # Search for MSFS2020 sim running and then connect
     async def start_simconnect(self):
@@ -248,7 +242,7 @@ class Msfs2020Control(Skill):
             try:
                 if self.settings.debug_mode:
                     await self.printr.print_async(
-                        f"Attempting to find MSFS2020....",
+                        "Attempting to find MSFS2020....",
                         color=LogType.INFO,
                     )
                 self.sm = SimConnect()
@@ -257,12 +251,12 @@ class Msfs2020Control(Skill):
                 self.already_initialized_simconnect = True
                 if self.settings.debug_mode:
                     await self.printr.print_async(
-                        f"Initialized SimConnect with MSFS2020.",
+                        "Initialized SimConnect with MSFS2020.",
                         color=LogType.INFO,
                     )
                 if self.autostart_data_monitoring_loop_mode:
                     await self.initialize_data_monitoring_loop()
-            except:
+            except Exception:
                 # Wait 30 seconds between connect attempts
                 time.sleep(30)
 
@@ -272,7 +266,7 @@ class Msfs2020Control(Skill):
 
         if self.settings.debug_mode:
             await self.printr.print_async(
-                "Starting data monitoring loop",
+                "Starting threaded data monitoring loop",
                 color=LogType.INFO,
             )
 
@@ -283,7 +277,13 @@ class Msfs2020Control(Skill):
             self.data_monitoring_loop_running = True
 
             while self.data_monitoring_loop_running:
-                random_time = random.choice(range(self.min_data_monitoring_seconds, self.max_data_monitoring_seconds, 15)) #Gets random number from min to max in increments of 15
+                random_time = random.choice(
+                    range(
+                        self.min_data_monitoring_seconds,
+                        self.max_data_monitoring_seconds,
+                        15,
+                    )
+                )  # Gets random number from min to max in increments of 15
                 if self.settings.debug_mode:
                     await self.printr.print_async(
                         "Attempting looped monitoring check.",
@@ -310,7 +310,9 @@ class Msfs2020Control(Skill):
                 color=LogType.INFO,
             )
 
-    async def convert_lat_long_data_into_place_data(self, latitude=None, longitude=None, altitude=None):
+    async def convert_lat_long_data_into_place_data(
+        self, latitude=None, longitude=None, altitude=None
+    ):
         if not self.already_initialized_simconnect or not self.sm or not self.aq:
             return None
         ground_altitude = 0
@@ -356,17 +358,18 @@ class Msfs2020Control(Skill):
 
         # Request data from openstreetmap nominatum api for reverse geocoding
         url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={latitude}&lon={longitude}&zoom={zoom}&accept-language=en&extratags=1"
-        headers = {
-            'User-Agent': f'msfs2020control_skill wingmanai {self.wingman.name}'
-        }
-        response = requests.get(url, headers=headers)
+        headers = {"User-Agent": f"msfs2020control_skill wingmanai {self.wingman.name}"}
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
             if self.settings.debug_mode:
-                await self.printr.print_async(f"API request failed to {url}, status code: {response.status_code}.", color=LogType.INFO)
+                await self.printr.print_async(
+                    f"API request failed to {url}, status code: {response.status_code}.",
+                    color=LogType.INFO,
+                )
             return None
-        
+
     # Get LLM to provide a verbal response to the user, without requiring the user to initiate a communication with the LLM
     async def initiate_llm_call_with_plane_data(self, data):
         on_ground = self.aq.get("SIM_ON_GROUND")
@@ -376,37 +379,41 @@ class Msfs2020Control(Skill):
         user_content = f"{on_ground_statement}  Information about the location: {data}"
         messages = [
             {
-                'role': 'system',
-                'content': f"""
+                "role": "system",
+                "content": f"""
                     {self.data_monitoring_backstory}
                 """,
             },
             {
-                'role': 'user',
-                'content': user_content,
+                "role": "user",
+                "content": user_content,
             },
         ]
         if self.settings.debug_mode:
             await self.printr.print_async(
-                f"Attempting llm call with parameters: {self.data_monitoring_backstory}, {user_content}.",
+                f"Attempting LLM call with parameters: {self.data_monitoring_backstory}, {user_content}.",
                 color=LogType.INFO,
             )
         completion = await self.llm_call(messages)
-        response = completion.choices[0].message.content if completion and completion.choices else ""
+        response = (
+            completion.choices[0].message.content
+            if completion and completion.choices
+            else ""
+        )
 
         if not response:
             if self.settings.debug_mode:
                 await self.printr.print_async(
-                    f"Llm call returned no response.",
+                    "LLM call returned no response.",
                     color=LogType.INFO,
                 )
             return
 
         await self.printr.print_async(
-                text=f"Data monitoring response: {response}",
-                color=LogType.INFO,
-                source_name=self.wingman.name
-            )
+            text=f"Data monitoring response: {response}",
+            color=LogType.INFO,
+            source_name=self.wingman.name,
+        )
 
         self.threaded_execution(self.wingman.play_to_user, response, True)
         await self.wingman.add_assistant_message(response)

@@ -27,6 +27,7 @@ from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
+from services.benchmark import Benchmark
 from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
@@ -113,21 +114,6 @@ class Wingman:
         if not self.config.record_joystick_button:
             return None
         return f"{self.config.record_joystick_button.guid}{self.config.record_joystick_button.button}"
-
-    def start_execution_benchmark(self):
-        """Starts the execution benchmark timer."""
-        self.execution_start = time.perf_counter()
-
-    async def print_execution_time(self, reset_timer=False):
-        """Prints the current time since the execution started (in seconds)."""
-        if self.execution_start:
-            execution_stop = time.perf_counter()
-            elapsed_seconds = execution_stop - self.execution_start
-            await printr.print_async(
-                f"...took {elapsed_seconds:.2f}s", color=LogType.INFO
-            )
-        if reset_timer:
-            self.start_execution_benchmark()
 
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
@@ -301,21 +287,13 @@ class Wingman:
         """
 
         try:
-            self.start_execution_benchmark()
-
             process_result = None
 
-            if self.settings.debug_mode and not transcript:
-                await printr.print_async(
-                    "Starting transcription...", color=LogType.INFO
-                )
-
+            benchmark_transcribe = None
             if not transcript:
                 # transcribe the audio.
+                benchmark_transcribe = Benchmark(label="Voice transcription")
                 transcript = await self._transcribe(audio_input_wav)
-
-            if self.settings.debug_mode and not transcript:
-                await self.print_execution_time(reset_timer=True)
 
             interrupt = None
             if transcript:
@@ -324,22 +302,23 @@ class Wingman:
                     color=LogType.PURPLE,
                     source_name="User",
                     source=LogSource.USER,
+                    benchmark_result=(
+                        benchmark_transcribe.finish() if benchmark_transcribe else None
+                    ),
                 )
 
-                if self.settings.debug_mode:
-                    await printr.print_async(
-                        "Getting response for transcript...", color=LogType.INFO
-                    )
+                # Further process the transcript.
+                # Return a string that is the "answer" to your passed transcript.
 
-                # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
+                benchmark_llm = Benchmark(label="Command/AI Processing")
                 process_result, instant_response, skill, interrupt = (
-                    await self._get_response_for_transcript(transcript)
+                    await self._get_response_for_transcript(
+                        transcript=transcript, benchmark=benchmark_llm
+                    )
                 )
-
-                if self.settings.debug_mode:
-                    await self.print_execution_time(reset_timer=True)
 
                 actual_response = instant_response or process_result
+
                 if actual_response:
                     await printr.print_async(
                         f"{actual_response}",
@@ -347,6 +326,7 @@ class Wingman:
                         source=LogSource.WINGMAN,
                         source_name=self.name,
                         skill_name=skill.name if skill else "",
+                        benchmark_result=benchmark_llm.finish(),
                     )
 
             # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
@@ -354,7 +334,7 @@ class Wingman:
                 await self.play_to_user(str(process_result), not interrupt)
         except Exception as e:
             await printr.print_async(
-                f"Error during processing of wingmann ''{self.name}: {str(e)}",
+                f"Error during processing of Wingman ''{self.name}: {str(e)}",
                 color=LogType.ERROR,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
@@ -373,7 +353,7 @@ class Wingman:
         return None
 
     async def _get_response_for_transcript(
-        self, transcript: str
+        self, transcript: str, benchmark: Benchmark
     ) -> tuple[str, str, Skill | None, bool | None]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
@@ -477,19 +457,19 @@ class Wingman:
             # execute all commands for the phrase
             commands = commands_by_instant_activation[phrase[0]]
             for command in commands:
-                await self._execute_command(command)
+                await self._execute_command(command, True)
 
             # return the executed command
             return commands
         except Exception as e:
             await printr.print_async(
-                f"Error during instant activation in wingmann '{self.name}': {str(e)}",
+                f"Error during instant activation in Wingman '{self.name}': {str(e)}",
                 color=LogType.ERROR,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
 
-    async def _execute_command(self, command: CommandConfig) -> str:
+    async def _execute_command(self, command: CommandConfig, is_instant=False) -> str:
         """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
 
         Args:
@@ -503,29 +483,29 @@ class Wingman:
             return "Command not found"
 
         try:
-            if len(command.actions or []) > 0:
-                await printr.print_async(
-                    f"Executing command: {command.name}", color=LogType.INFO
-                )
-                if not self.settings.debug_mode:
-                    # in debug mode we already printed the separate execution times
-                    await self.print_execution_time()
-                await self.execute_action(command)
-
             if len(command.actions or []) == 0:
                 await printr.print_async(
                     f"No actions found for command: {command.name}",
                     color=LogType.WARNING,
                 )
+            else:
+                await self.execute_action(command)
+                await printr.print_async(
+                    f"Executed {'instant' if is_instant else 'AI'} command: {command.name}",
+                    color=LogType.INFO,
+                )
 
             # handle the global special commands:
             if command.name == "ResetConversationHistory":
                 self.reset_conversation_history()
+                await printr.print_async(
+                    f"Executed command: {command.name}", color=LogType.INFO
+                )
 
             return self._select_command_response(command) or "Ok"
         except Exception as e:
             await printr.print_async(
-                f"Error executing command '{command.name}' for wingman '{self.name}': {str(e)}",
+                f"Error executing command '{command.name}' for Wingman '{self.name}': {str(e)}",
                 color=LogType.ERROR,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)

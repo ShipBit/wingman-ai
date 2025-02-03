@@ -742,3 +742,13 @@ class SettingsConfig(BaseModel):
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
     debug_mode: bool = False
+
+
+class BenchmarkResult(BaseModel):
+    label: str
+    execution_time_ms: float
+    formatted_execution_time: str
+    snapshots: Optional[list["BenchmarkResult"]] = None
+
+
+BenchmarkResult.model_rebuild()

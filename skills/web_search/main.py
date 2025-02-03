@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from copy import deepcopy
 from typing import TYPE_CHECKING
 from duckduckgo_search import DDGS
+from services.benchmark import Benchmark
 from trafilatura import fetch_url, extract
 from trafilatura.settings import DEFAULT_CONFIG
 from api.interface import SettingsConfig, SkillConfig
@@ -82,18 +83,19 @@ class WebSearch(Skill):
         return True
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = "No search results found or search failed."
         instant_response = ""
 
         if tool_name == "web_search_function":
+            benchmark.start_snapshot(f"WebSearch: {tool_name}")
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
-                await self.printr.print_async(
-                    f"Executing web_search_function with parameters: {parameters}",
-                    color=LogType.INFO,
-                )
+                message = f"WebSearch: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(text=message, color=LogType.INFO)
+
             final_results = ""
             search_query = parameters.get("search_query")
             search_type = parameters.get("search_type")
@@ -192,15 +194,14 @@ class WebSearch(Skill):
                 time.sleep(0.1)
 
             final_results = "\n\n".join(processed_results)
+
             if final_results:
                 if self.settings.debug_mode:
                     await self.printr.print_async(
-                        f"Final web_search skill results used as context for AI response: \n\n {final_results}",
+                        f"WebSearch: final results used as context for AI response: \n\n {final_results}",
                         color=LogType.INFO,
                     )
                 function_response = final_results
-
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            benchmark.finish_snapshot()
 
         return function_response, instant_response

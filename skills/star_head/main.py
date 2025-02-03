@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -100,7 +101,6 @@ class StarHead(Skill):
         url = f"{self.starhead_url}/{endpoint}"
 
         if self.settings.debug_mode:
-            self.start_execution_benchmark()
             await self.printr.print_async(
                 f"Retrieving {url}",
                 color=LogType.INFO,
@@ -110,9 +110,6 @@ class StarHead(Skill):
             url, params=params, timeout=self.timeout, headers=self.headers
         )
         response.raise_for_status()
-        if self.settings.debug_mode:
-            await self.print_execution_time()
-
         return response.json()
 
     def _format_ship_name(self, vehicle: dict[str, any]) -> str:
@@ -120,25 +117,34 @@ class StarHead(Skill):
         return vehicle["name"]
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         instant_response = ""
         function_response = ""
 
-        if tool_name == "get_best_trading_route":
-            function_response = await self._get_best_trading_route(**parameters)
-        if tool_name == "get_ship_information":
-            function_response = await self._get_ship_information(**parameters)
-        if tool_name == "get_trading_information_of_specific_shop":
-            function_response = await self._get_trading_information_of_specific_shop(
-                **parameters
-            )
-        if tool_name == "get_trading_shop_information_for_celestial_objects":
-            function_response = (
-                await self._get_trading_shop_information_for_celestial_objects(
-                    **parameters
+        if tool_name in [
+            "get_best_trading_route",
+            "get_ship_information",
+            "get_trading_information_of_specific_shop",
+            "get_trading_shop_information_for_celestial_objects",
+        ]:
+            benchmark.start_snapshot(f"StarHead: {tool_name}")
+
+            if tool_name == "get_best_trading_route":
+                function_response = await self._get_best_trading_route(**parameters)
+            if tool_name == "get_ship_information":
+                function_response = await self._get_ship_information(**parameters)
+            if tool_name == "get_trading_information_of_specific_shop":
+                function_response = (
+                    await self._get_trading_information_of_specific_shop(**parameters)
                 )
-            )
+            if tool_name == "get_trading_shop_information_for_celestial_objects":
+                function_response = (
+                    await self._get_trading_shop_information_for_celestial_objects(
+                        **parameters
+                    )
+                )
+            benchmark.finish_snapshot()
 
         return function_response, instant_response
 

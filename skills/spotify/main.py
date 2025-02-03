@@ -1,5 +1,6 @@
 from os import path
 from typing import TYPE_CHECKING
+from services.benchmark import Benchmark
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from api.enums import LogType
@@ -194,33 +195,31 @@ class Spotify(Skill):
         return tools
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         instant_response = ""  # not used here
         function_response = "Unable to control Spotify."
 
-        if tool_name not in [
+        if tool_name in [
             "control_spotify_device",
             "control_spotify_playback",
             "play_song_with_spotify",
             "interact_with_spotify_playlists",
         ]:
-            return function_response, instant_response
+            benchmark.start_snapshot(f"Spotify: {tool_name}")
 
-        if self.settings.debug_mode:
-            self.start_execution_benchmark()
-            await self.printr.print_async(
-                f"Spotify: Executing {tool_name} with parameters: {parameters}",
-                color=LogType.INFO,
-            )
+            if self.settings.debug_mode:
+                message = f"Spotify: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(text=message, color=LogType.INFO)
 
-        action = parameters.get("action", None)
-        parameters.pop("action", None)
-        function = getattr(self, action if action else tool_name)
-        function_response = function(**parameters)
+            action = parameters.get("action", None)
+            parameters.pop("action", None)
+            function = getattr(self, action if action else tool_name)
+            function_response = function(**parameters)
 
-        if self.settings.debug_mode:
-            await self.print_execution_time()
+            benchmark.finish_snapshot()
 
         return function_response, instant_response
 

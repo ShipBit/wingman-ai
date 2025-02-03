@@ -13,6 +13,7 @@ from datetime import datetime
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from services.benchmark import Benchmark
 from services.file import get_writable_dir
 from skills.skill_base import Skill
 
@@ -1219,7 +1220,7 @@ class UEXCorp(Skill):
         return tools
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = ""
         instant_response = ""
@@ -1237,8 +1238,9 @@ class UEXCorp(Skill):
             "show_cached_function_values": "show_cached_function_values",
         }
 
-        try:
-            if tool_name in functions:
+        if tool_name in functions:
+            benchmark.start_snapshot(f"UEXCorp: {tool_name}")
+            try:
                 if not self.skill_loaded:
                     self.skill_loaded_asked = True
                     await self._print(
@@ -1249,40 +1251,42 @@ class UEXCorp(Skill):
                     function_response = (
                         "Data is still beeing loaded. Please wait a moment."
                     )
+                    benchmark.finish_snapshot()
                     return function_response, instant_response
 
-                self.start_execution_benchmark()
-                await self._print(f"Executing function: {tool_name}")
+                await self._print(f"UEXCorp: Executing function '{tool_name}'")
                 function = getattr(self, "_gpt_call_" + functions[tool_name])
                 function_response = await function(**parameters)
-                if self.settings.debug_mode:
-                    await self.print_execution_time()
+
                 if self.DEV_MODE:
                     await self._print(
                         f"_gpt_call_{functions[tool_name]} response: {function_response}",
                         True,
                     )
-        except Exception:
-            file_object = open(self.logfileerror, "a", encoding="UTF-8")
-            file_object.write(traceback.format_exc())
-            file_object.write(
-                "========================================================================================\n"
-            )
-            file_object.write(
-                f"Above error while executing custom function: _gpt_call_{tool_name}\n"
-            )
-            file_object.write(f"With parameters: {parameters}\n")
-            file_object.write(f"On date: {datetime.now()}\n")
-            file_object.write(f"Version: {self.VERSION}\n")
-            file_object.write(
-                "========================================================================================\n"
-            )
-            file_object.close()
-            await self._print(
-                f"Error while executing custom function: {tool_name}\nCheck log file for more details."
-            )
-            function_response = f"Error while executing custom function: {tool_name}"
-            function_response += "\nTell user there seems to be an error. And you must say that it should be report to the 'uexcorp skill developer (JayMatthew on Discord)'."
+            except Exception:
+                file_object = open(self.logfileerror, "a", encoding="UTF-8")
+                file_object.write(traceback.format_exc())
+                file_object.write(
+                    "========================================================================================\n"
+                )
+                file_object.write(
+                    f"Above error while executing custom function: _gpt_call_{tool_name}\n"
+                )
+                file_object.write(f"With parameters: {parameters}\n")
+                file_object.write(f"On date: {datetime.now()}\n")
+                file_object.write(f"Version: {self.VERSION}\n")
+                file_object.write(
+                    "========================================================================================\n"
+                )
+                file_object.close()
+                await self._print(
+                    f"Error while executing custom function: {tool_name}\nCheck log file for more details."
+                )
+                function_response = (
+                    f"Error while executing custom function: {tool_name}"
+                )
+                function_response += "\nTell user there seems to be an error. And you must say that it should be report to the 'uexcorp skill developer (JayMatthew on Discord)'."
+            benchmark.finish_snapshot()
 
         return function_response, instant_response
 
@@ -1538,7 +1542,10 @@ class UEXCorp(Skill):
                 ship_name = closest_match
                 ships_resolved.append(self._get_ship_by_name(ship_name))
 
-        self._log(f"Interpreted Parameters: Ships: {', '.join(self._format_ship_name(ship) for ship in ships_resolved)}", True)
+        self._log(
+            f"Interpreted Parameters: Ships: {', '.join(self._format_ship_name(ship) for ship in ships_resolved)}",
+            True,
+        )
 
         if misunderstood:
             self._log(

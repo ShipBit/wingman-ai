@@ -14,6 +14,7 @@ from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from api.commands import WebSocketCommandModel
+from api.interface import BenchmarkResult
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 import keyboard.keyboard as keyboard
 from services.command_handler import CommandHandler
@@ -254,6 +255,23 @@ async def start_secrets(secrets: dict[str, Any]):
 @app.get("/ping", tags=["main"])
 async def ping():
     return "Ok" if core.is_started else "Starting"
+
+
+# required to generate API specs for class BenchmarkResult that is only used internally
+@app.get("/dummy-benchmark", tags=["main"], response_model=BenchmarkResult)
+async def get_dummy_benchmark():
+    return BenchmarkResult(
+        label="Sample Benchmark",
+        execution_time_ms=150.0,
+        formatted_execution_time=0.15,
+        snapshots=[
+            BenchmarkResult(
+                label="Sub Benchmark",
+                execution_time_ms=75.0,
+                formatted_execution_time=0.075,
+            )
+        ],
+    )
 
 
 async def async_main(host: str, port: int, sidecar: bool):
