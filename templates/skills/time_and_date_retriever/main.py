@@ -2,6 +2,7 @@ import datetime
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig
 from api.enums import LogType
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -27,30 +28,30 @@ class TimeAndDateRetriever(Skill):
                     "function": {
                         "name": "get_current_time_and_date",
                         "description": "Retrieves the current date and time for the user.",
-                        "parameters": {}
-                    }
-                }
+                        "parameters": {},
+                    },
+                },
             )
         ]
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = ""
         instant_response = ""
-        
+
         if tool_name == "get_current_time_and_date":
+            benchmark.start_snapshot(f"DateTime Retriever: {tool_name}")
+
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
-                await self.printr.print_async(
-                    f"Executing get_current_time_and_date function.",
-                    color=LogType.INFO,
-                )
+                message = f"DateTime Retriever: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(text=message, color=LogType.INFO)
 
             now = datetime.datetime.now()
             function_response = now.strftime("%Y-%m-%d %H:%M:%S")
 
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            benchmark.finish_snapshot()
 
         return function_response, instant_response

@@ -8,7 +8,8 @@ from api.interface import (
     SettingsConfig,
     SkillConfig,
     VoiceSelection,
-    WingmanInitializationError, ElevenlabsVoiceConfig,
+    WingmanInitializationError,
+    ElevenlabsVoiceConfig,
 )
 from api.enums import (
     LogType,
@@ -17,11 +18,13 @@ from api.enums import (
     WingmanProTtsProvider,
     SoundEffect,
 )
+from services.benchmark import Benchmark
 from services.file import get_writable_dir
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
+
 
 class RadioChatter(Skill):
 
@@ -275,14 +278,19 @@ class RadioChatter(Skill):
         return tools
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = ""
         instant_response = ""
 
         if tool_name in ["turn_on_radio", "turn_off_radio", "radio_status"]:
+            benchmark.start_snapshot(f"Radio Chatter: {tool_name}")
+
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
+                message = f"RadioChatter: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(text=message, color=LogType.INFO)
 
             if tool_name == "turn_on_radio":
                 if self.radio_status:
@@ -302,9 +310,7 @@ class RadioChatter(Skill):
                 else:
                     function_response = "Radio is off."
 
-            if self.settings.debug_mode:
-                await self.print_execution_time()
-
+            benchmark.finish_snapshot()
         return function_response, instant_response
 
     async def _init_chatter(self) -> None:
@@ -379,7 +385,8 @@ class RadioChatter(Skill):
             messages = json.loads(messages)
         except json.JSONDecodeError as e:
             await self.printr.print_async(
-                f"Radio chatter message generation failed due to invalid JSON: {str(e)}", LogType.ERROR
+                f"Radio chatter message generation failed due to invalid JSON: {str(e)}",
+                LogType.ERROR,
             )
             return
 
@@ -389,7 +396,8 @@ class RadioChatter(Skill):
 
             if "user" not in message or "content" not in message:
                 await self.printr.print_async(
-                    f"Radio chatter message generation failed due to invalid JSON format: {messages}", LogType.ERROR
+                    f"Radio chatter message generation failed due to invalid JSON format: {messages}",
+                    LogType.ERROR,
                 )
                 return
 
@@ -505,7 +513,9 @@ class RadioChatter(Skill):
             if isinstance(voice, str):
                 # only needed for wingman config restore
                 voice_id = voice.split("id=")[1].strip().strip("'")
-                voice_name = voice.split("id=")[0].strip().split("=")[1].strip("'") or voice_id
+                voice_name = (
+                    voice.split("id=")[0].strip().split("=")[1].strip("'") or voice_id
+                )
                 voice = ElevenlabsVoiceConfig(id=voice_id, name=voice_name)
             if isinstance(voice, ElevenlabsVoiceConfig):
                 self.wingman.config.elevenlabs.voice = voice

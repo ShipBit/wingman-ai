@@ -26,6 +26,7 @@ from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
+from services.benchmark import Benchmark
 from services.markdown import cleanup_text
 from services.printr import Printr
 from skills.skill_base import Skill
@@ -520,7 +521,7 @@ class OpenAiWingman(Wingman):
         return transcript.text
 
     async def _get_response_for_transcript(
-        self, transcript: str
+        self, transcript: str, benchmark: Benchmark
     ) -> tuple[str, str, Skill | None]:
         """Gets the response for a given transcript.
 
@@ -535,18 +536,24 @@ class OpenAiWingman(Wingman):
         """
         await self.add_user_message(transcript)
 
+        benchmark.start_snapshot("Instant activation commands")
         instant_response, instant_command_executed = await self._try_instant_activation(
-            transcript
+            transcript=transcript
         )
         if instant_response:
             await self.add_assistant_message(instant_response)
+            benchmark.finish_snapshot()
             return instant_response, instant_response, None, True
+        benchmark.finish_snapshot()
 
         # make a GPT call with the conversation history
         # if an instant command got executed, prevent tool calls to avoid duplicate executions
+        benchmark.start_snapshot("LLM Processing")
+
         completion = await self._llm_call(instant_command_executed is False)
 
         if completion is None:
+            benchmark.finish_snapshot()
             return None, None, None, True
 
         response_message, tool_calls = await self._process_completion(completion)
@@ -580,13 +587,18 @@ class OpenAiWingman(Wingman):
             else:
                 is_summarize_needed = True
 
+            benchmark.finish_snapshot()
+
+            benchmark.start_snapshot("AI Commands & Skills")
             instant_response, skill = await self._handle_tool_calls(tool_calls)
             if instant_response:
+                benchmark.finish_snapshot()
                 return None, instant_response, None, interrupt
 
             if is_summarize_needed:
                 completion = await self._llm_call(True)
                 if completion is None:
+                    benchmark.finish_snapshot()
                     return None, None, None, True
 
                 response_message, tool_calls = await self._process_completion(
@@ -598,8 +610,10 @@ class OpenAiWingman(Wingman):
                 if tool_calls:
                     interrupt = False
             elif is_waiting_response_needed:
+                benchmark.finish_snapshot()
                 return None, None, None, interrupt
 
+        benchmark.finish_snapshot()
         return response_message.content, response_message.content, None, interrupt
 
     def _get_random_filler(self):
@@ -895,6 +909,7 @@ class OpenAiWingman(Wingman):
             for command in commands:
                 if command.responses:
                     responses.append(self._select_command_response(command))
+
             if len(responses) == len(commands):
                 # clear duplicates
                 responses = list(dict.fromkeys(responses))
@@ -903,7 +918,9 @@ class OpenAiWingman(Wingman):
                     for response in responses
                 ]
                 return " ".join(responses), True
+
             return None, True
+
         return None, False
 
     async def get_context(self):
@@ -1060,7 +1077,6 @@ class OpenAiWingman(Wingman):
         tools = self.build_tools() if allow_tool_calls else None
 
         if self.settings.debug_mode:
-            self.start_execution_benchmark()
             await printr.print_async(
                 f"Calling LLM with {(len(self.messages))} messages (excluding context) and {len(tools) if tools else 0} tools.",
                 color=LogType.INFO,
@@ -1069,9 +1085,6 @@ class OpenAiWingman(Wingman):
         messages = self.messages.copy()
         await self.add_context(messages)
         completion = await self.actual_llm_call(messages, tools)
-
-        if self.settings.debug_mode:
-            await self.print_execution_time(reset_timer=True)
 
         # if request isnt most recent, ignore the response
         if self.last_gpt_call != thiscall:
@@ -1119,6 +1132,7 @@ class OpenAiWingman(Wingman):
         function_response = ""
 
         skill = None
+
         for tool_call in tool_calls:
             try:
                 function_name = tool_call.function.name
@@ -1151,7 +1165,6 @@ class OpenAiWingman(Wingman):
                 printr.print(
                     traceback.format_exc(), color=LogType.ERROR, server_only=True
                 )
-
         return instant_response, skill
 
     async def execute_command_by_function_call(
@@ -1186,20 +1199,25 @@ class OpenAiWingman(Wingman):
         if function_name in self.tool_skills:
             skill = self.tool_skills[function_name]
 
+            benchmark = Benchmark(f"Processing Skill '{skill.name}'")
             await printr.print_async(
-                f"Skill processing: {skill.name} ...", LogType.SUBTLE
+                f"Processing Skill '{skill.name}'",
+                color=LogType.INFO,
+                skill_name=skill.name,
             )
 
             try:
                 function_response, instant_response = await skill.execute_tool(
-                    function_name, function_args
+                    tool_name=function_name,
+                    parameters=function_args,
+                    benchmark=benchmark,
                 )
                 used_skill = skill
                 if instant_response:
                     await self.play_to_user(instant_response)
             except Exception as e:
                 await printr.print_async(
-                    f"Error while processing skill '{skill.name}': {str(e)}",
+                    f"Error while processing Skill '{skill.name}': {str(e)}",
                     color=LogType.ERROR,
                 )
                 printr.print(
@@ -1209,6 +1227,13 @@ class OpenAiWingman(Wingman):
                     "ERROR DURING PROCESSING"  # hints to AI that there was an Error
                 )
                 instant_response = None
+            finally:
+                await printr.print_async(
+                    f"Finished processing Skill '{skill.name}'",
+                    color=LogType.INFO,
+                    benchmark_result=benchmark.finish(),
+                    skill_name=skill.name,
+                )
 
         return function_response, instant_response, used_skill
 
@@ -1319,11 +1344,11 @@ class OpenAiWingman(Wingman):
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
-    async def _execute_command(self, command: dict) -> str:
+    async def _execute_command(self, command: dict, is_instant=False) -> str:
         """Does what Wingman base does, but always returns "Ok" instead of a command response.
         Otherwise the AI will try to respond to the command and generate a "duplicate" response for instant_activation commands.
         """
-        await super()._execute_command(command)
+        await super()._execute_command(command, is_instant)
         return "Ok"
 
     def build_tools(self) -> list[dict]:

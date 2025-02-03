@@ -7,6 +7,7 @@ from api.interface import (
     SkillConfig,
     WingmanInitializationError,
 )
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 import asyncio
 
@@ -14,6 +15,7 @@ if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
 
 API_BASE_URL = "https://api.nmsassistant.com"
+
 
 class NMSAssistant(Skill):
     def __init__(
@@ -218,33 +220,39 @@ class NMSAssistant(Skill):
         return tools
 
     async def request_api(self, endpoint: str) -> dict:
-        response = requests.get(f"{API_BASE_URL}{endpoint}")
+        response = requests.get(f"{API_BASE_URL}{endpoint}", timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
             if self.settings.debug_mode:
-                await self.printr.print_async(f"API request failed to {API_BASE_URL}{endpoint}, status code: {response.status_code}.", color=LogType.INFO)
+                await self.printr.print_async(
+                    f"API request failed to {API_BASE_URL}{endpoint}, status code: {response.status_code}.",
+                    color=LogType.INFO,
+                )
             return {}
 
     async def parse_nms_assistant_api_response(self, api_response) -> dict:
         def extract_app_ids(data):
             app_ids = []
             # Parse the JSON string into Python objects
-            #data = json.loads(json_data)
+            # data = json.loads(json_data)
             for entry in data:
                 # Extract the appId from the main entry
-                app_ids.append(entry['appId'])
+                app_ids.append(entry["appId"])
                 # Extract the appIds from the inputs
-                for input_item in entry['inputs']:
-                    app_ids.append(input_item['appId'])
+                for input_item in entry["inputs"]:
+                    app_ids.append(input_item["appId"])
                 # Extract the appId from the output
-                app_ids.append(entry['output']['appId'])
+                app_ids.append(entry["output"]["appId"])
             return app_ids
+
         # Extract appIds
         app_ids = extract_app_ids(api_response)
+
         async def fetch_item_name(app_id: str) -> str:
             data = await self.request_api(f"/ItemInfo/{app_id}/en")
-            return data.get('name', 'Unknown')
+            return data.get("name", "Unknown")
+
         # Get names for each appId as a key for the LLM
         tasks = [fetch_item_name(item) for item in app_ids]
         results = await asyncio.gather(*tasks)
@@ -252,7 +260,10 @@ class NMSAssistant(Skill):
 
     async def check_if_appId_is_valid(self, appId, languageCode) -> bool:
         if self.settings.debug_mode:
-            await self.printr.print_async(f"Checking if appID {appId} is valid before proceeding.", color=LogType.INFO)
+            await self.printr.print_async(
+                f"Checking if appID {appId} is valid before proceeding.",
+                color=LogType.INFO,
+            )
         check_response = await self.request_api(f"/ItemInfo/{appId}/{languageCode}")
         if check_response and check_response != {}:
             return True
@@ -262,141 +273,165 @@ class NMSAssistant(Skill):
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return True
 
-    async def execute_tool(self, tool_name: str, parameters: dict[str, any]) -> tuple[str, str]:
+    async def execute_tool(
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
+    ) -> tuple[str, str]:
         function_response = "Operation failed."
         instant_response = ""
 
-        if tool_name == "get_release_info":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            data = await self.request_api("/HelloGames/Release")
-            function_response = data if data else function_response
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+        if tool_name in [
+            "get_release_info",
+            "get_news",
+            "get_community_mission_info",
+            "get_latest_expedition_info",
+            "get_item_info_by_name",
+            "get_extra_item_info",
+            "get_refiner_recipes_by_input",
+            "get_refiner_recipes_by_output",
+            "get_cooking_recipes_by_input",
+            "get_cooking_recipes_by_output",
+        ]:
+            benchmark.start_snapshot(f"NMS Assistant: {tool_name}")
 
-        elif tool_name == "get_news":
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            data = await self.request_api("/HelloGames/News")
-            function_response = data if data else function_response
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+                message = f"NMS Assistant: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(message, color=LogType.INFO)
 
-        elif tool_name == "get_community_mission_info":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            data = await self.request_api("/HelloGames/CommunityMission")
-            function_response = data if data else function_response
-            if self.settings.debug_mode:
-                await self.print_execution_time()
-
-        elif tool_name == "get_latest_expedition_info":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            data = await self.request_api("/HelloGames/Expedition")
-            function_response = data if data else function_response
-            if self.settings.debug_mode:
-                await self.print_execution_time()
-
-        elif tool_name == "get_item_info_by_name":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            name = parameters.get("name")
-            language_code = parameters.get("languageCode")
-            data = await self.request_api(f"/ItemInfo/Name/{name}/{language_code}")
-            function_response = data if data else function_response
-            if self.settings.debug_mode:
-                await self.print_execution_time()
-
-        elif tool_name == "get_extra_item_info":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            app_id = parameters.get("appId")
-            language_code = parameters.get("languageCode")
-            if app_id and language_code:
-                appId_found = await self.check_if_appId_is_valid(app_id, language_code)
-                if not appId_found:
-                    # Assume maybe the appId is actually the plain text item name, so get appId from that
-                    name_check = await self.request_api(f"/ItemInfo/Name/{app_id}/{language_code}")
-                    app_id = name_check.get('appId') if name_check else app_id
-                data = await self.request_api(f"/ItemInfo/ExtraProperties/{app_id}/{language_code}")
+            if tool_name == "get_release_info":
+                data = await self.request_api("/HelloGames/Release")
                 function_response = data if data else function_response
-            if self.settings.debug_mode:
-                await self.print_execution_time()
 
-        elif tool_name == "get_refiner_recipes_by_input":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            app_id = parameters.get("appId")
-            language_code = parameters.get("languageCode")
-            if app_id and language_code:
-                appId_found = await self.check_if_appId_is_valid(app_id, language_code)
-                if not appId_found:
-                    # Assume maybe the appId is actually the plain text item name, so get appId from that
-                    name_check = await self.request_api(f"/ItemInfo/Name/{app_id}/{language_code}")
-                    app_id = name_check.get('appId') if name_check else app_id
-            data = await self.request_api(f"/ItemInfo/RefinerByInput/{app_id}/{language_code}")
-            if data:
-                parsed_data = await self.parse_nms_assistant_api_response(data)
-                function_response = f"{data}; key for item names used in above data: {parsed_data}"
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            elif tool_name == "get_news":
+                data = await self.request_api("/HelloGames/News")
+                function_response = data if data else function_response
 
-        elif tool_name == "get_refiner_recipes_by_output":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            app_id = parameters.get("appId")
-            language_code = parameters.get("languageCode")
-            if app_id and language_code:
-                appId_found = await self.check_if_appId_is_valid(app_id, language_code)
-                if not appId_found:
-                    # Assume maybe the appId is actually the plain text item name, so get appId from that
-                    name_check = await self.request_api(f"/ItemInfo/Name/{app_id}/{language_code}")
-                    app_id = name_check.get('appId') if name_check else app_id
-            data = await self.request_api(f"/ItemInfo/RefinerByOutut/{app_id}/{language_code}")
-            if data:
-                parsed_data = await self.parse_nms_assistant_api_response(data)
-                function_response = f"{data}; key for item names used in above data: {parsed_data}"
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            elif tool_name == "get_community_mission_info":
+                data = await self.request_api("/HelloGames/CommunityMission")
+                function_response = data if data else function_response
 
-        elif tool_name == "get_cooking_recipes_by_input":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            app_id = parameters.get("appId")
-            language_code = parameters.get("languageCode")
-            if app_id and language_code:
-                appId_found = await self.check_if_appId_is_valid(app_id, language_code)
-                if not appId_found:
-                    # Assume maybe the appId is actually the plain text item name, so get appId from that
-                    name_check = await self.request_api(f"/ItemInfo/Name/{app_id}/{language_code}")
-                    app_id = name_check.get('appId') if name_check else app_id
-            data = await self.request_api(f"/ItemInfo/CookingByInput/{app_id}/{language_code}")
-            if data:
-                parsed_data = await self.parse_nms_assistant_api_response(data)
-                function_response = f"{data}; key for item names used in above data: {parsed_data}"
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            elif tool_name == "get_latest_expedition_info":
+                data = await self.request_api("/HelloGames/Expedition")
+                function_response = data if data else function_response
 
-        elif tool_name == "get_cooking_recipes_by_output":
-            if self.settings.debug_mode:
-                self.start_execution_benchmark()
-            app_id = parameters.get("appId")
-            language_code = parameters.get("languageCode")
-            if app_id and language_code:
-                appId_found = await self.check_if_appId_is_valid(app_id, language_code)
-                if not appId_found:
-                    # Assume maybe the appId is actually the plain text item name, so get appId from that
-                    name_check = await self.request_api(f"/ItemInfo/Name/{app_id}/{language_code}")
-                    app_id = name_check.get('appId') if name_check else app_id
-            data = await self.request_api(f"/ItemInfo/CookingByOutut/{app_id}/{language_code}")
-            if data:
-                parsed_data = await self.parse_nms_assistant_api_response(data)
-                function_response = f"{data}; key for item names used in above data: {parsed_data}"
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            elif tool_name == "get_item_info_by_name":
+                name = parameters.get("name")
+                language_code = parameters.get("languageCode")
+                data = await self.request_api(f"/ItemInfo/Name/{name}/{language_code}")
+                function_response = data if data else function_response
 
-        if self.settings.debug_mode:
-            await self.printr.print_async(f"Executed {tool_name} with parameters {parameters}. Result: {function_response}", color=LogType.INFO)
+            elif tool_name == "get_extra_item_info":
+                app_id = parameters.get("appId")
+                language_code = parameters.get("languageCode")
+                if app_id and language_code:
+                    app_id_found = await self.check_if_appId_is_valid(
+                        app_id, language_code
+                    )
+                    if not app_id_found:
+                        # Assume maybe the appId is actually the plain text item name, so get appId from that
+                        name_check = await self.request_api(
+                            f"/ItemInfo/Name/{app_id}/{language_code}"
+                        )
+                        app_id = name_check.get("appId") if name_check else app_id
+                    data = await self.request_api(
+                        f"/ItemInfo/ExtraProperties/{app_id}/{language_code}"
+                    )
+                    function_response = data if data else function_response
+
+            elif tool_name == "get_refiner_recipes_by_input":
+                app_id = parameters.get("appId")
+                language_code = parameters.get("languageCode")
+                if app_id and language_code:
+                    app_id_found = await self.check_if_appId_is_valid(
+                        app_id, language_code
+                    )
+                    if not app_id_found:
+                        # Assume maybe the appId is actually the plain text item name, so get appId from that
+                        name_check = await self.request_api(
+                            f"/ItemInfo/Name/{app_id}/{language_code}"
+                        )
+                        app_id = name_check.get("appId") if name_check else app_id
+                data = await self.request_api(
+                    f"/ItemInfo/RefinerByInput/{app_id}/{language_code}"
+                )
+                if data:
+                    parsed_data = await self.parse_nms_assistant_api_response(data)
+                    function_response = (
+                        f"{data}; key for item names used in above data: {parsed_data}"
+                    )
+
+            elif tool_name == "get_refiner_recipes_by_output":
+                app_id = parameters.get("appId")
+                language_code = parameters.get("languageCode")
+                if app_id and language_code:
+                    app_id_found = await self.check_if_appId_is_valid(
+                        app_id, language_code
+                    )
+                    if not app_id_found:
+                        # Assume maybe the appId is actually the plain text item name, so get appId from that
+                        name_check = await self.request_api(
+                            f"/ItemInfo/Name/{app_id}/{language_code}"
+                        )
+                        app_id = name_check.get("appId") if name_check else app_id
+                data = await self.request_api(
+                    f"/ItemInfo/RefinerByOutut/{app_id}/{language_code}"
+                )
+                if data:
+                    parsed_data = await self.parse_nms_assistant_api_response(data)
+                    function_response = (
+                        f"{data}; key for item names used in above data: {parsed_data}"
+                    )
+
+            elif tool_name == "get_cooking_recipes_by_input":
+                app_id = parameters.get("appId")
+                language_code = parameters.get("languageCode")
+                if app_id and language_code:
+                    app_id_found = await self.check_if_appId_is_valid(
+                        app_id, language_code
+                    )
+                    if not app_id_found:
+                        # Assume maybe the appId is actually the plain text item name, so get appId from that
+                        name_check = await self.request_api(
+                            f"/ItemInfo/Name/{app_id}/{language_code}"
+                        )
+                        app_id = name_check.get("appId") if name_check else app_id
+                data = await self.request_api(
+                    f"/ItemInfo/CookingByInput/{app_id}/{language_code}"
+                )
+                if data:
+                    parsed_data = await self.parse_nms_assistant_api_response(data)
+                    function_response = (
+                        f"{data}; key for item names used in above data: {parsed_data}"
+                    )
+
+            elif tool_name == "get_cooking_recipes_by_output":
+                app_id = parameters.get("appId")
+                language_code = parameters.get("languageCode")
+                if app_id and language_code:
+                    app_id_found = await self.check_if_appId_is_valid(
+                        app_id, language_code
+                    )
+                    if not app_id_found:
+                        # Assume maybe the appId is actually the plain text item name, so get appId from that
+                        name_check = await self.request_api(
+                            f"/ItemInfo/Name/{app_id}/{language_code}"
+                        )
+                        app_id = name_check.get("appId") if name_check else app_id
+                data = await self.request_api(
+                    f"/ItemInfo/CookingByOutut/{app_id}/{language_code}"
+                )
+                if data:
+                    parsed_data = await self.parse_nms_assistant_api_response(data)
+                    function_response = (
+                        f"{data}; key for item names used in above data: {parsed_data}"
+                    )
+
+            if self.settings.debug_mode:
+                await self.printr.print_async(
+                    f"NMS Assistant: executed {tool_name} with params {parameters}. Response: {function_response}",
+                    color=LogType.INFO,
+                )
+            benchmark.finish_snapshot()
 
         return function_response, instant_response
