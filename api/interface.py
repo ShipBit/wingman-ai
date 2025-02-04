@@ -326,7 +326,7 @@ class OpenAiConfig(BaseModel):
 
 class PromptConfig(BaseModel):
     system_prompt: str
-    """The read-only "context template" for the Wingman. Contains variables that will be replaced by the user (backstory) and/or skills."""
+    """The "context template" for the Wingman. Contains variables that will be replaced by the user (backstory) and/or skills."""
 
     backstory: Optional[str] = None
     """The backstory of the Wingman. Edit this to control how your Wingman should behave."""
@@ -662,7 +662,7 @@ class BasicWingmanConfig(BaseModel):
     record_joystick_button: Optional[CommandJoystickConfig] = None
     sound: SoundConfig
     voice: str | OpenAiTtsVoice
-    backstory: Optional[str] = None
+    prompts: PromptConfig
 
     features: FeaturesConfig
     openai: OpenAiConfig

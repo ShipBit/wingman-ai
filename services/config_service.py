@@ -364,7 +364,7 @@ class ConfigService:
         wingman_config.record_key = basic_config.record_key
         wingman_config.record_key_codes = basic_config.record_key_codes
         wingman_config.sound = basic_config.sound
-        wingman_config.prompts.backstory = basic_config.backstory
+        wingman_config.prompts = basic_config.prompts
         try:
             wingman_config.openai.tts_voice = OpenAiTtsVoice(basic_config.voice)
         except ValueError:
