@@ -5,7 +5,7 @@
     Reading and writing of files in the ``gettext`` PO (portable object)
     format.
 
-    :copyright: (c) 2013-2024 by the Babel Team.
+    :copyright: (c) 2013-2025 by the Babel Team.
     :license: BSD, see LICENSE for more details.
 """
 from __future__ import annotations
@@ -13,17 +13,16 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from babel.core import Locale
 from babel.messages.catalog import Catalog, Message
-from babel.util import _cmp, wraptext
+from babel.util import TextWrapper, _cmp
 
 if TYPE_CHECKING:
     from typing import IO, AnyStr
 
     from _typeshed import SupportsWrite
-    from typing_extensions import Literal
 
 
 def unescape(string: str) -> str:
@@ -78,6 +77,50 @@ def denormalize(string: str) -> str:
         return ''.join(lines)
     else:
         return unescape(string)
+
+
+def _extract_locations(line: str) -> list[str]:
+    """Extract locations from location comments.
+
+    Locations are extracted while properly handling First Strong
+    Isolate (U+2068) and Pop Directional Isolate (U+2069), used by
+    gettext to enclose filenames with spaces and tabs in their names.
+    """
+    if "\u2068" not in line and "\u2069" not in line:
+        return line.lstrip().split()
+
+    locations = []
+    location = ""
+    in_filename = False
+    for c in line:
+        if c == "\u2068":
+            if in_filename:
+                raise ValueError("location comment contains more First Strong Isolate "
+                                 "characters, than Pop Directional Isolate characters")
+            in_filename = True
+            continue
+        elif c == "\u2069":
+            if not in_filename:
+                raise ValueError("location comment contains more Pop Directional Isolate "
+                                 "characters, than First Strong Isolate characters")
+            in_filename = False
+            continue
+        elif c == " ":
+            if in_filename:
+                location += c
+            elif location:
+                locations.append(location)
+                location = ""
+        else:
+            location += c
+    else:
+        if location:
+            if in_filename:
+                raise ValueError("location comment contains more First Strong Isolate "
+                                 "characters, than Pop Directional Isolate characters")
+            locations.append(location)
+
+    return locations
 
 
 class PoFileError(Exception):
@@ -195,7 +238,7 @@ class PoFileParser:
                           context=msgctxt)
         if self.obsolete:
             if not self.ignore_obsolete:
-                self.catalog.obsolete[msgid] = message
+                self.catalog.obsolete[self.catalog._key_for(msgid, msgctxt)] = message
         else:
             self.catalog[msgid] = message
         self.counter += 1
@@ -203,6 +246,9 @@ class PoFileParser:
 
     def _finish_current_message(self) -> None:
         if self.messages:
+            if not self.translations:
+                self._invalid_pofile("", self.offset, f"missing msgstr for msgid '{self.messages[0].denormalize()}'")
+                self.translations.append([0, _NormalizedString("")])
             self._add_message()
 
     def _process_message_line(self, lineno, line, obsolete=False) -> None:
@@ -269,7 +315,7 @@ class PoFileParser:
         self._finish_current_message()
 
         if line[1:].startswith(':'):
-            for location in line[2:].lstrip().split():
+            for location in _extract_locations(line[2:]):
                 pos = location.rfind(':')
                 if pos >= 0:
                     try:
@@ -307,7 +353,10 @@ class PoFileParser:
                 if line[1:].startswith('~'):
                     self._process_message_line(lineno, line[2:].lstrip(), obsolete=True)
                 else:
-                    self._process_comment(line)
+                    try:
+                        self._process_comment(line)
+                    except ValueError as exc:
+                        self._invalid_pofile(line, lineno, str(exc))
             else:
                 self._process_message_line(lineno, line)
 
@@ -330,7 +379,7 @@ class PoFileParser:
 
 def read_po(
     fileobj: IO[AnyStr] | Iterable[AnyStr],
-    locale: str | Locale | None = None,
+    locale: Locale | str | None = None,
     domain: str | None = None,
     ignore_obsolete: bool = False,
     charset: str | None = None,
@@ -474,6 +523,23 @@ def normalize(string: str, prefix: str = '', width: int = 76) -> str:
     return '""\n' + '\n'.join([(prefix + escape(line)) for line in lines])
 
 
+def _enclose_filename_if_necessary(filename: str) -> str:
+    """Enclose filenames which include white spaces or tabs.
+
+    Do the same as gettext and enclose filenames which contain white
+    spaces or tabs with First Strong Isolate (U+2068) and Pop
+    Directional Isolate (U+2069).
+    """
+    if " " not in filename and "\t" not in filename:
+        return filename
+
+    if not filename.startswith("\u2068"):
+        filename = "\u2068" + filename
+    if not filename.endswith("\u2069"):
+        filename += "\u2069"
+    return filename
+
+
 def write_po(
     fileobj: SupportsWrite[bytes],
     catalog: Catalog,
@@ -570,8 +636,11 @@ def generate_po(
     # provide the same behaviour
     comment_width = width if width and width > 0 else 76
 
+    comment_wrapper = TextWrapper(width=comment_width, break_long_words=False)
+    header_wrapper = TextWrapper(width=width, subsequent_indent="# ", break_long_words=False)
+
     def _format_comment(comment, prefix=''):
-        for line in wraptext(comment, comment_width):
+        for line in comment_wrapper.wrap(comment):
             yield f"#{prefix} {line.strip()}\n"
 
     def _format_message(message, prefix=''):
@@ -601,8 +670,7 @@ def generate_po(
             if width and width > 0:
                 lines = []
                 for line in comment_header.splitlines():
-                    lines += wraptext(line, width=width,
-                                      subsequent_indent='# ')
+                    lines += header_wrapper.wrap(line)
                 comment_header = '\n'.join(lines)
             yield f"{comment_header}\n"
 
@@ -626,6 +694,7 @@ def generate_po(
 
             for filename, lineno in locations:
                 location = filename.replace(os.sep, '/')
+                location = _enclose_filename_if_necessary(location)
                 if lineno and include_lineno:
                     location = f"{location}:{lineno:d}"
                 if location not in locs:

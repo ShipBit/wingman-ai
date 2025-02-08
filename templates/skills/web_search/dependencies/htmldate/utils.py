@@ -21,7 +21,7 @@ from charset_normalizer import from_bytes
 
 from lxml.html import HtmlElement, HTMLParser, fromstring
 
-from .settings import MAX_FILE_SIZE, MIN_FILE_SIZE
+from .settings import MAX_FILE_SIZE
 
 
 LOGGER = logging.getLogger(__name__)
@@ -64,6 +64,13 @@ class Extractor:
         self.original: bool = original_date
 
 
+def is_wrong_document(data: Any) -> bool:
+    "Check if the input object is suitable to be processed."
+    if not data or len(data) > MAX_FILE_SIZE:
+        return True
+    return False
+
+
 def isutf8(data: bytes) -> bool:
     """Simple heuristic to determine if a bytestring uses standard unicode encoding"""
     try:
@@ -79,18 +86,19 @@ def detect_encoding(bytesobject: bytes) -> List[str]:
     # unicode-test
     if isutf8(bytesobject):
         return ["utf-8"]
+
     guesses = []
     # additional module
     if cchardet_detect is not None:
         cchardet_guess = cchardet_detect(bytesobject)["encoding"]
         if cchardet_guess is not None:
             guesses.append(cchardet_guess.lower())
+
     # try charset_normalizer on first part, fallback on full document
     detection_results = from_bytes(bytesobject[:15000]) or from_bytes(bytesobject)
-    # return alternatives
-    if len(detection_results) > 0:
-        guesses.extend([r.encoding for r in detection_results])
-    # it cannot be utf-8 (tested above)
+    guesses.extend([r.encoding for r in detection_results])
+
+    # return alternatives, it cannot be utf-8 (tested above)
     return [g for g in guesses if g not in UNICODE_ALIASES]
 
 
@@ -147,11 +155,7 @@ def fetch_url(url: str) -> Optional[str]:
         # safety checks
         if response.status != 200:
             LOGGER.error("not a 200 response: %s for URL %s", response.status, url)
-        elif (
-            response.data is None
-            or len(response.data) < MIN_FILE_SIZE
-            or len(response.data) > MAX_FILE_SIZE
-        ):
+        elif is_wrong_document(response.data):
             LOGGER.error("incorrect input data for URL %s", url)
         else:
             return decode_response(response.data)
@@ -200,15 +204,15 @@ def load_html(htmlobject: Union[bytes, str, HtmlElement]) -> Optional[HtmlElemen
     if not isinstance(htmlobject, (bytes, str)):
         raise TypeError("incompatible input type: %s", type(htmlobject))
     # the string is a URL, download it
-    if isinstance(htmlobject, str) and htmlobject.startswith("http"):
-        htmltext = None
-        if re.match(r"https?://[^ ]+$", htmlobject):
-            LOGGER.info("URL detected, downloading: %s", htmlobject)
-            htmltext = fetch_url(htmlobject)
-            if htmltext is not None:
-                htmlobject = htmltext
+    if (
+        isinstance(htmlobject, str)
+        and htmlobject.startswith("http")
+        and " " not in htmlobject
+    ):
+        LOGGER.debug("URL detected, downloading: %s", htmlobject)
+        htmlobject = fetch_url(htmlobject)  # type: ignore[assignment]
         # log the error and quit
-        if htmltext is None:
+        if htmlobject is None:
             raise ValueError("URL couldn't be processed: %s", htmlobject)
     # start processing
     tree = None
@@ -216,7 +220,6 @@ def load_html(htmlobject: Union[bytes, str, HtmlElement]) -> Optional[HtmlElemen
     htmlobject = decode_file(htmlobject)
     # sanity checks
     beginning = htmlobject[:50].lower()
-    check_flag = is_dubious_html(beginning)
     # repair first
     htmlobject = repair_faulty_html(htmlobject, beginning)
     # first pass: use Unicode string
@@ -234,7 +237,7 @@ def load_html(htmlobject: Union[bytes, str, HtmlElement]) -> Optional[HtmlElemen
         tree = fromstring_bytes(htmlobject)
     # rejection test: is it (well-formed) HTML at all?
     # log parsing errors
-    if tree is not None and check_flag is True and len(tree) < 2:
+    if tree is not None and is_dubious_html(beginning) and len(tree) < 2:
         LOGGER.error(
             "parsed tree length: %s, wrong data type or not valid HTML", len(tree)
         )
@@ -245,10 +248,9 @@ def load_html(htmlobject: Union[bytes, str, HtmlElement]) -> Optional[HtmlElemen
 def clean_html(tree: HtmlElement, elemlist: List[str]) -> HtmlElement:
     "Delete selected elements."
     for element in tree.iter(elemlist):  # type: ignore[call-overload]
-        try:
-            element.drop_tree()
-        except AttributeError:  # pragma: no cover
-            element.getparent().remove(element)
+        parent = element.getparent()
+        if parent is not None:
+            parent.remove(element)
     return tree
 
 

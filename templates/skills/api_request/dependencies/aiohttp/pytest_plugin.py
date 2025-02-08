@@ -1,12 +1,21 @@
 import asyncio
 import contextlib
+import inspect
 import warnings
-from typing import Any, Awaitable, Callable, Dict, Iterator, Optional, Type, Union
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterator,
+    Optional,
+    Protocol,
+    Type,
+    Union,
+    overload,
+)
 
 import pytest
-
-from aiohttp.helpers import isasyncgenfunction
-from aiohttp.web import Application
 
 from .test_utils import (
     BaseTestServer,
@@ -18,15 +27,44 @@ from .test_utils import (
     teardown_test_loop,
     unused_port as _unused_port,
 )
+from .web import Application, BaseRequest, Request
+from .web_protocol import _RequestHandler
 
 try:
     import uvloop
 except ImportError:  # pragma: no cover
     uvloop = None  # type: ignore[assignment]
 
-AiohttpClient = Callable[[Union[Application, BaseTestServer]], Awaitable[TestClient]]
-AiohttpRawServer = Callable[[Application], Awaitable[RawTestServer]]
-AiohttpServer = Callable[[Application], Awaitable[TestServer]]
+
+class AiohttpClient(Protocol):
+    @overload
+    async def __call__(
+        self,
+        __param: Application,
+        *,
+        server_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> TestClient[Request, Application]: ...
+    @overload
+    async def __call__(
+        self,
+        __param: BaseTestServer,
+        *,
+        server_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> TestClient[BaseRequest, None]: ...
+
+
+class AiohttpServer(Protocol):
+    def __call__(
+        self, app: Application, *, port: Optional[int] = None, **kwargs: Any
+    ) -> Awaitable[TestServer]: ...
+
+
+class AiohttpRawServer(Protocol):
+    def __call__(
+        self, handler: _RequestHandler, *, port: Optional[int] = None, **kwargs: Any
+    ) -> Awaitable[RawTestServer]: ...
 
 
 def pytest_addoption(parser):  # type: ignore[no-untyped-def]
@@ -57,7 +95,7 @@ def pytest_fixture_setup(fixturedef):  # type: ignore[no-untyped-def]
     """
     func = fixturedef.func
 
-    if isasyncgenfunction(func):
+    if inspect.isasyncgenfunction(func):
         # async generator fixture
         is_async_gen = True
     elif asyncio.iscoroutinefunction(func):
@@ -262,7 +300,9 @@ def aiohttp_server(loop: asyncio.AbstractEventLoop) -> Iterator[AiohttpServer]:
     """
     servers = []
 
-    async def go(app, *, port=None, **kwargs):  # type: ignore[no-untyped-def]
+    async def go(
+        app: Application, *, port: Optional[int] = None, **kwargs: Any
+    ) -> TestServer:
         server = TestServer(app, port=port)
         await server.start_server(loop=loop, **kwargs)
         servers.append(server)
@@ -295,7 +335,9 @@ def aiohttp_raw_server(loop: asyncio.AbstractEventLoop) -> Iterator[AiohttpRawSe
     """
     servers = []
 
-    async def go(handler, *, port=None, **kwargs):  # type: ignore[no-untyped-def]
+    async def go(
+        handler: _RequestHandler, *, port: Optional[int] = None, **kwargs: Any
+    ) -> RawTestServer:
         server = RawTestServer(handler, port=port)
         await server.start_server(loop=loop, **kwargs)
         servers.append(server)
@@ -323,9 +365,7 @@ def raw_test_server(  # type: ignore[no-untyped-def]  # pragma: no cover
 
 
 @pytest.fixture
-def aiohttp_client(
-    loop: asyncio.AbstractEventLoop,
-) -> Iterator[AiohttpClient]:
+def aiohttp_client(loop: asyncio.AbstractEventLoop) -> Iterator[AiohttpClient]:
     """Factory to create a TestClient instance.
 
     aiohttp_client(app, **kwargs)
@@ -334,13 +374,28 @@ def aiohttp_client(
     """
     clients = []
 
+    @overload
+    async def go(
+        __param: Application,
+        *,
+        server_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> TestClient[Request, Application]: ...
+
+    @overload
+    async def go(
+        __param: BaseTestServer,
+        *,
+        server_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
+    ) -> TestClient[BaseRequest, None]: ...
+
     async def go(
         __param: Union[Application, BaseTestServer],
         *args: Any,
         server_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs: Any
-    ) -> TestClient:
-
+        **kwargs: Any,
+    ) -> TestClient[Any, Any]:
         if isinstance(__param, Callable) and not isinstance(  # type: ignore[arg-type]
             __param, (Application, BaseTestServer)
         ):

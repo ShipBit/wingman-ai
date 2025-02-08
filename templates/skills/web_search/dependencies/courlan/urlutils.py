@@ -57,7 +57,7 @@ def extract_domain(
 
     return (
         full_domain
-        if full_domain and not domain in blacklist and not full_domain in blacklist
+        if full_domain and domain not in blacklist and full_domain not in blacklist
         else None
     )
 
@@ -111,12 +111,15 @@ def fix_relative_urls(baseurl: str, url: str) -> str:
     "Prepend protocol and host information to relative links."
     if url.startswith("{"):
         return url
+
     base_netloc = urlsplit(baseurl).netloc
     split_url = urlsplit(url)
+
     if split_url.netloc not in (base_netloc, ""):
         if split_url.scheme:
             return url
         return urlunsplit(split_url._replace(scheme="http"))
+
     return urljoin(baseurl, url)
 
 
@@ -150,20 +153,21 @@ def is_known_link(link: str, known_links: Set[str]) -> bool:
         return True
 
     # check link and variants with trailing slashes
-    test_links = [link.rstrip("/"), link.rstrip("/") + "/"]
-    if any(test_link in known_links for test_link in test_links):
+    slash_test = link.rstrip("/") if link[-1] == "/" else link + "/"
+    if slash_test in known_links:
         return True
 
     # check link and variants with modified protocol
     if link.startswith("http"):
-        if link.startswith("https"):
-            testlink = link[:4] + link[5:]
-        else:
-            testlink = "".join([link[:4], "s", link[4:]])
-        if any(
-            test in known_links
-            for test in [testlink, testlink.rstrip("/"), testlink.rstrip("/") + "/"]
-        ):
+        protocol_test = (
+            "http" + link[:5] if link.startswith("https") else "https" + link[4:]
+        )
+        slash_test = (
+            protocol_test.rstrip("/")
+            if protocol_test[-1] == "/"
+            else protocol_test + "/"
+        )
+        if protocol_test in known_links or slash_test in known_links:
             return True
 
     return False
