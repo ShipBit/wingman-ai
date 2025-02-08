@@ -1,7 +1,14 @@
 from typing import Literal, Optional
 from pydantic import BaseModel
-from api.enums import CommandTag, KeyboardRecordingType, LogSource, LogType, ToastType
-from api.interface import CommandActionConfig
+from api.enums import (
+    CommandTag,
+    KeyboardRecordingType,
+    LogSource,
+    LogType,
+    RecordingDevice,
+    ToastType,
+)
+from api.interface import CommandActionConfig, BenchmarkResult
 
 
 # We use this Marker base class for reflection to "iterate all commands"
@@ -29,9 +36,18 @@ class RecordKeyboardActionsCommand(WebSocketCommandModel):
     recording_type: KeyboardRecordingType
 
 
+class RecordMouseActionsCommand(WebSocketCommandModel):
+    command: Literal["record_mouse_actions"] = "record_mouse_actions"
+
+
+class RecordJoystickActionsCommand(WebSocketCommandModel):
+    command: Literal["record_joystick_actions"] = "record_joystick_actions"
+
+
 class StopRecordingCommand(WebSocketCommandModel):
     command: Literal["stop_recording"] = "stop_recording"
-    recording_type: KeyboardRecordingType
+    recording_type: KeyboardRecordingType = KeyboardRecordingType.SINGLE
+    recording_device: RecordingDevice = RecordingDevice.KEYBOARD
 
 
 # SENT TO CLIENT
@@ -42,10 +58,12 @@ class LogCommand(WebSocketCommandModel):
     text: str
     log_type: LogType
     source_name: Optional[str] = None
+    wingman_name: Optional[str] = None
     source: LogSource = "system"
     tag: Optional[CommandTag] = None
     skill_name: Optional[str] = None
     additional_data: Optional[dict] = None
+    benchmark_result: Optional[BenchmarkResult] = None
 
 
 class PromptSecretCommand(WebSocketCommandModel):

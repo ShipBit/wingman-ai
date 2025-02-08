@@ -47,7 +47,7 @@ class ConfigMigrationService:
 
         if path.exists(migration_file):
             self.log(
-                f"Found {self.latest_version} configs. No migrations needed.", True
+                f"Found {self.latest_version} configs. No migrations needed.", False
             )
             return
 
@@ -138,7 +138,7 @@ class ConfigMigrationService:
             self.log("- applied new split whispercpp settings/config structure")
 
             old["xvasynth"] = new["xvasynth"]
-            self.log("- adding new XVASynth settings")
+            self.log("- added new XVASynth settings")
 
             old.pop("audio", None)
             self.log("- removed audio device settings because DirectSound was removed")
@@ -346,6 +346,48 @@ class ConfigMigrationService:
             migrate_wingman=migrate_wingman,
         )
 
+    def migrate_162_to_170(self):
+        def migrate_settings(old: dict, new: dict) -> dict:
+            old["voice_activation"]["whispercpp"].pop("use_cuda", None)
+            old["voice_activation"]["whispercpp"].pop("language", None)
+            old["voice_activation"]["whispercpp"].pop("translate_to_english", None)
+            self.log("- removed old whispercpp settings (if there were any)")
+
+            old["voice_activation"]["whispercpp"]["enable"] = False
+            self.log("- disabled whispercpp by default")
+
+            old["voice_activation"]["fasterwhisper"] = new["voice_activation"][
+                "fasterwhisper"
+            ]
+            old["voice_activation"]["fasterwhisper_config"] = new["voice_activation"][
+                "fasterwhisper_config"
+            ]
+            self.log("- added new fasterwhisper settings and config")
+            return old
+
+        def migrate_defaults(old: dict, new: dict) -> dict:
+            old["fasterwhisper"] = new["fasterwhisper"]
+            self.log("- added new properties: fasterwhisper")
+
+            old["features"]["stt_provider"] = "fasterwhisper"
+            self.log("- made fasterwhisper new default STT provider")
+
+            return old
+
+        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            if old.get("features", {}).get("stt_provider") == "whispercpp":
+                old["features"]["stt_provider"] = "fasterwhisper"
+                self.log("- changed STT provider from whispercpp to fasterwhisper")
+            return old
+
+        self.migrate(
+            old_version="1_6_2",
+            new_version="1_7_0",
+            migrate_settings=migrate_settings,
+            migrate_defaults=migrate_defaults,
+            migrate_wingman=migrate_wingman,
+        )
+
     # INTERNAL
 
     def log(self, message: str, highlight: bool = False):
@@ -537,5 +579,6 @@ MIGRATIONS = [
     ("1_5_0", "1_6_0", ConfigMigrationService.migrate_150_to_160),
     ("1_6_0", "1_6_1", ConfigMigrationService.migrate_160_to_161),
     ("1_6_1", "1_6_2", ConfigMigrationService.migrate_161_to_162),
+    ("1_6_2", "1_7_0", ConfigMigrationService.migrate_162_to_170),
     # Add new migrations here in order
 ]

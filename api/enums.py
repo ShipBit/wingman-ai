@@ -79,6 +79,7 @@ class MistralModel(Enum):
     MISTRAL_MEDIUM = "mistral-medium-latest"
     MISTRAL_LARGE = "mistral-large-latest"
 
+
 class PerplexityModel(Enum):
     """https://docs.perplexity.ai/guides/model-cards"""
 
@@ -89,6 +90,7 @@ class PerplexityModel(Enum):
     CHAT_LARGE = "llama-3.1-sonar-large-128k-chat"
     LLAMA3_8B = "llama-3.1-8b-instruct"
     LLAMA3_70B = "llama-3.1-70b-instruct"
+
 
 class GoogleAiModel(Enum):
     GEMINI_1_5_FLASH = "gemini-1.5-flash"
@@ -136,6 +138,7 @@ class SttProvider(Enum):
     AZURE = "azure"
     AZURE_SPEECH = "azure_speech"
     WHISPERCPP = "whispercpp"
+    FASTER_WHISPER = "fasterwhisper"
     WINGMAN_PRO = "wingman_pro"
 
 
@@ -143,6 +146,7 @@ class VoiceActivationSttProvider(Enum):
     OPENAI = "openai"
     AZURE = "azure"
     WHISPERCPP = "whispercpp"
+    FASTER_WHISPER = "fasterwhisper"
     WINGMAN_PRO = "wingman_pro"
 
 
@@ -168,6 +172,12 @@ class KeyboardRecordingType(Enum):
     SINGLE = "single"
     MACRO = "macro"
     MACRO_ADVANCED = "macro_advanced"
+
+
+class RecordingDevice(Enum):
+    KEYBOARD = "keyboard"
+    MOUSE = "mouse"
+    JOYSTICK = "joystick"
 
 
 class WingmanProRegion(Enum):
@@ -241,8 +251,10 @@ class TtsVoiceGenderEnumModel(BaseEnumModel):
 class MistralModelEnumModel(BaseEnumModel):
     model: MistralModel
 
+
 class PerplexityModelEnumModel(BaseEnumModel):
     model: PerplexityModel
+
 
 class GoogleAiModelEnumModel(BaseEnumModel):
     model: GoogleAiModel
@@ -282,6 +294,10 @@ class ImageGenerationProviderEnumModel(BaseEnumModel):
 
 class KeyboardRecordingTypeModel(BaseEnumModel):
     recording_type: KeyboardRecordingType
+
+
+class RecordingDeviceModel(BaseEnumModel):
+    recording_device: RecordingDevice
 
 
 class WingmanProRegionModel(BaseEnumModel):
@@ -329,6 +345,7 @@ ENUM_TYPES = {
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
     "SkillCategory": SkillCategoryModel,
     "PerplexityModel": PerplexityModelEnumModel,
+    "RecordingDevice": RecordingDeviceModel,
     # Add new enums here as key-value pairs
 }
 

@@ -952,6 +952,7 @@ class ConfigManager:
             "elevenlabs",
             "azure",
             "whispercpp",
+            "fasterwhisper",
             "xvasynth",
             "wingman_pro",
             "perplexity",

@@ -7,6 +7,7 @@ import pygetwindow as gw
 from PIL import Image
 from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 from services.file import get_writable_dir
 
@@ -31,14 +32,17 @@ class AutoScreenshot(Skill):
         self.default_directory = self.retrieve_custom_property_value(
             "default_directory", errors
         )
-        if not self.default_directory or self.default_directory == "" or not os.path.isdir(self.default_directory):
+        if (
+            not self.default_directory
+            or self.default_directory == ""
+            or not os.path.isdir(self.default_directory)
+        ):
             self.default_directory = self.get_default_directory()
             if self.settings.debug_mode:
                 await self.printr.print_async(
                     "User either did not enter default directory or entered directory is invalid.  Defaulting to wingman config directory / screenshots",
                     color=LogType.INFO,
                 )
-
 
         self.display = self.retrieve_custom_property_value("display", errors)
 
@@ -56,14 +60,14 @@ class AutoScreenshot(Skill):
                     f"Taking screenshot because: {reason}. Focused window: {focused_window}",
                     color=LogType.INFO,
                 )
-            
+
             window_bbox = {
                 "top": focused_window.top,
                 "left": focused_window.left,
                 "width": focused_window.width,
                 "height": focused_window.height,
             }
-            
+
             if self.settings.debug_mode:
                 await self.printr.print_async(
                     f"{focused_window} bbox detected as: {window_bbox}",
@@ -90,7 +94,9 @@ class AutoScreenshot(Skill):
             )
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            screenshot_file = os.path.join(self.default_directory, f'{self.wingman.name}_{timestamp}.png')
+            screenshot_file = os.path.join(
+                self.default_directory, f"{self.wingman.name}_{timestamp}.png"
+            )
             image.save(screenshot_file)
 
             if self.settings.debug_mode:
@@ -124,22 +130,22 @@ class AutoScreenshot(Skill):
         ]
         return tools
 
-
-
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = ""
         instant_response = ""
 
         if tool_name == "take_screenshot":
+            benchmark.start_snapshot("Auto Screenshot: take_screenshot")
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
+                message = f"AutoScreenshot: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(message, color=LogType.INFO)
             reason = parameters.get("reason", "unspecified reason")
             await self.take_screenshot(reason)
             function_response = "Screenshot taken successfully."
-            
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            benchmark.finish_snapshot()
 
         return function_response, instant_response

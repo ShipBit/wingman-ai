@@ -2,11 +2,11 @@ name: FileManager
 module: skills.file_manager.main
 category: general
 description:
-  en: Manage local files, save, load and create directories. Supports various text-based file formats and reading PDFs.
-  de: Verwalte lokale Dateien, speichere, lade und erstelle Verzeichnisse. Unterstützt verschiedene text-basierte Formate und das Lesen von PDFs.
+  en: Manage local files - save, load, create directories, and handle ZIP files. Read files or prompts aloud with text-to-speech.
+  de: Verwalte lokale Dateien - speichern, laden, Verzeichnisse erstellen und ZIP-Dateien handhaben. Lies Dateien oder Aufforderungen mit Text-to-Speech vor.
 hint:
-  en: <ul><li>You should provide an exact file path and name for where you want to create a directory or save or load a text file. <br />For example "save that text to a file called samplefile in my C drive in the directory called Documents."</li><li>If you do not, a directory called "files" in your Wingman config dir will be created and used.</li><li>Supported file formats are plain text file formats, such as txt, md, log, yaml, py, json, etc., and PDFs.</li></ul>
-  de: <ul><li>Gib einen möglichst genauen Speicherort für deine Verzeichnisse oder Dateien an, beispielsweise "Speichere diesen Text in eine Daten namens beispieldatei auf meinem C-Laufwerk im Verzeichnis Dokumente".</li><li>Wenn du das nicht machst, wird ein Verzeichnis namens "files" in deinem Wingman-Konfigurationsverzeichnis erstellt und verwendet.</li><li>Unterstützte Dateiformate sind einfache Textdateiformate wie txt, md, log, yaml, py, json usw., und PDFs.</li></ul>
+  en: <ul><li>Provide an exact file path and name for where you want to create a directory or save or load a text file. <br />For example "save that text to a file called samplefile in my C drive in the directory called Documents."</li><li>If you do not, a directory called "files" in your Wingman config dir will be created and used.</li><li>To read a file with text to speech, specifically state you want it to read the file aloud or out loud. There may be issues with large files.</li><li>You can also manage zip files by creating them, adding files to them, listing their contents, and reading text files from within.</li></ul>
+  de: <ul><li>Geben Sie einen genauen Dateipfad und -namen an, wo Sie ein Verzeichnis erstellen oder eine Textdatei speichern oder laden möchten.<br />Zum Beispiel "Speichere diesen Text in einer Datei namens 'samplefile' auf meinem C-Laufwerk im Verzeichnis 'Documents'."</li><li>Wenn Sie dies nicht tun, wird ein Verzeichnis namens "files" im Wingman-Konfigurationsordner erstellt und verwendet.</li><li>Um eine Datei mit Text-to-Speech vorzulesen, geben Sie ausdrücklich an, dass Sie möchten, dass die Datei laut vorgelesen wird. Bei großen Dateien kann es zu Problemen kommen.</li><li>Sie können auch Zip-Dateien verwalten, indem Sie sie erstellen, Dateien hinzufügen, ihren Inhalt auflisten und Textdateien daraus lesen.</li></ul>
 examples:
   - question:
       en: Save 'Hello, World!' to hello.txt.
@@ -27,19 +27,32 @@ examples:
       en: (creates a directory named 'Projects' in the default directory)
       de: (erstellt ein Verzeichnis namens 'Projekte' im Standardverzeichnis)
   - question:
-      en: Read page 5 of example.pdf.
-      de: Lies Seite 5 von example.pdf.
+      en: Read page 5 of example.pdf aloud with text to speech.
+      de: Lies Seite 5 von example.pdf laut mit Text-to-Speech vor.
     answer:
-      en: (loads page 5 of example.pdf and reads it into memory)
-      de: (lädt Seite 5 von example.pdf und liest sie in den Speicher)
+      en: (loads page 5 of example.pdf and reads it in the wingman's voice)
+      de: (lädt Seite 5 von example.pdf und liest sie in der Wingman-Stimme vor)
+  - question:
+      en: Read aloud "Hello, World!".
+      de: Lese "Hallo, Welt!" laut vor.
+    answer:
+      en: (reads aloud "Hello, World!" using text-to-speech)
+      de: (liest "Hallo, Welt!" laut mit Text-to-Speech vor)
+  - question:
+      en: Create a zip file named 'archive.zip' from file1.txt and file2.txt.
+      de: Erstelle eine Zip-Datei namens 'archive.zip' aus file1.txt und file2.txt.
+    answer:
+      en: (creates 'archive.zip' containing file1.txt and file2.txt in the default directory)
+      de: (erstellt 'archive.zip' mit file1.txt und file2.txt im Standardverzeichnis)
 prompt: |
-  You can also save text to various file formats, load text from files, or create directories as specified by the user.
-  You support reading and writing all plain text file formats and reading PDF files.
+  You can also save text to various file formats, load text from files, create directories as specified by the user, or read the contents of files or prompts aloud (or out loud) with text to speech, and manage ZIP files.
+  You support reading and writing all plain text file formats and reading PDF files, and reading the contents of all supported files in a folder.
+  You also can handle ZIP files (creating, adding to, and extracting files from within).
   When adding text to an existing file, you follow these rules:
   (1) determine if it is appropriate to add a new line before the added text or ask the user if you do not know.
   (2) only add content to an existing file if you are sure that is what the user wants.
   (3) when adding content to a file, only add the specific additional content the user wants added, not a duplicate of all of the original content.
-  You can also aid the user in opening folders / directories in the user interface.
+  Finally, you can also aid the user in opening folders /directories in the user interface.
 custom_properties:
   - hint: The default directory for file operations. If left blank, will default to your WingmanAI config directory in a sub-directory called "files".
     id: default_directory

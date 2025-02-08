@@ -41,7 +41,8 @@ Since version 2.0, Wingman AI Core acts as a "backend" API (using FastAPI and Py
   - OpenAI Whisper
   - Azure Whisper
   - Azure Speech
-  - whispercpp (local, bundled with Wingman AI)
+  - whispercpp (local, needs to be installed separately)
+  - FasterWhisper (local, default)
   - Wingman Pro (Azure Speech or Azure Whisper)
 - **Text-to-speech** (TTS) providers:
   - OpenAI TTS
@@ -138,9 +139,9 @@ You can use any LLM offering an OpenAI-compatible API and connect it to Wingman 
 ### Windows
 
 - Download the installer of the latest version from [wingman-ai.com](https://www.wingman-ai.com).
+- If you have an NVIDIA RTX GPU, install the latest [CUDA driver](https://developer.nvidia.com/cuda-downloads) from NVIDIA to speed up the transcription process significantly.
 - Install it to a directory of your choice and start the client `Wingman AI.exe`.
   - The client will will auto-start `Wingman AI Core.exe` in the background
-  - The client will auto-start `whispercpp` in the background. If you have an NVIDIA RTX GPU, install the latest CUDA driver from NVIDIA and enable GPU acceleration in the Settings view.
 
 If that doesn't work for some reason, try starting `Wingman AI Core.exe` manually and check the terminal or your **logs** directory for errors.
 
@@ -271,7 +272,9 @@ We would like to thank their creators for their great work and contributions to 
 - [scipy](https://github.com/scipy/scipy) - BSD 3, © 2001-2002 Enthought, Inc. 2003-2023, SciPy Developers
 - [sounddevice](https://github.com/spatialaudio/python-sounddevice/) - MIT, © 2015-2023 Matthias Geier
 - [soundfile](https://github.com/bastibe/python-soundfile) - BSD 3, © 2013 Bastian Bechtold
-- [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-presen, Encode OSS Ltd. All rights reserved.
+- [uvicorn](https://github.com/encode/uvicorn) - BSD 3, © 2017-present, Encode OSS Ltd. All rights reserved.
+- [whispercpp](https://github.com/ggerganov/whisper.cpp) - MIT, © 2023-2024 The ggml authors
+- [FasterWhisper](https://github.com/SYSTRAN/faster-whisper) - MIT, © 2023 SYSTRAN
 
 ### Individual persons
 
