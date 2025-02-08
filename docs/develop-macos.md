@@ -7,8 +7,8 @@ You need Python 3.11.7 and some dependencies to run Wingman. We recommend using 
 ```bash
 brew update && brew upgrade                             # upgrade all packages
 brew install pyenv portaudio pyobjc-framework-Quartz    # install dependencies
-pyenv install 3.11.7                                   # install Python with pyenv
-pyenv global 3.11.7                                    # set your global Python version
+pyenv install 3.11.7                                    # install Python with pyenv
+pyenv global 3.11.7                                     # set your global Python version
 ```
 
 Then add `eval "$(pyenv init --path)"` to your `~/.zshrc` or `~/.bashrc` so that you can just run `python` instead of `python3` in your terminal.

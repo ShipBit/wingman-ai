@@ -31,7 +31,7 @@ Checkout the repository and start a terminal in the root folder.
 
 ```bash
 python -m venv venv                 # create a virtual environment
-.\venv\scripts\activate             # activate the virtual environment
+.\venv\scripts\activate              # activate the virtual environment
 pip install -r requirements.txt     # install dependencies
 ```
 
