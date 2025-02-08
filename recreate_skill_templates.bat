@@ -3,7 +3,7 @@ echo ######################################
 echo ## Copying skill to template folder ##
 echo ######################################
 echo.
-set SKILL_FOLDER=uexcorp_beta
+set SKILL_FOLDER=uexcorp
 rmdir /S /Q templates\skills\%SKILL_FOLDER%
 echo Deleted old skill template.
 echo.
