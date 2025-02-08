@@ -2,13 +2,13 @@
 
 ## Pre-requisites
 
-You need Python 3.11.11 and some dependencies to run Wingman. We recommend using a virtual environment to keep your system clean. If you don't know what that is, don't worry, we'll guide you through the process. If you don't want to use a virtual environment, you can skip the `pyenv` parts and just run `pip install -r requirements.txt` in the repository root once you have Python installed.
+You need Python 3.11.7 and some dependencies to run Wingman. We recommend using a virtual environment to keep your system clean. If you don't know what that is, don't worry, we'll guide you through the process. If you don't want to use a virtual environment, you can skip the `pyenv` parts and just run `pip install -r requirements.txt` in the repository root once you have Python installed.
 
 ```bash
 brew update && brew upgrade                             # upgrade all packages
 brew install pyenv portaudio pyobjc-framework-Quartz    # install dependencies
-pyenv install 3.11.11                                   # install Python with pyenv
-pyenv global 3.11.11                                    # set your global Python version
+pyenv install 3.11.7                                   # install Python with pyenv
+pyenv global 3.11.7                                    # set your global Python version
 ```
 
 Then add `eval "$(pyenv init --path)"` to your `~/.zshrc` or `~/.bashrc` so that you can just run `python` instead of `python3` in your terminal.
