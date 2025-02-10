@@ -1076,8 +1076,8 @@ class WingmanCore(WebSocketUser):
             },
         )
         response.raise_for_status()
-        content = response.json()
-        return content.get("data", [])
+        model_list = response.json()
+        return model_list
 
     # GET /models/elevenlabs
     async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:
