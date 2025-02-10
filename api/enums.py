@@ -97,14 +97,6 @@ class GoogleAiModel(Enum):
     GEMINI_1_5_PRO = "gemini-1.5-pro"
 
 
-class WingmanProAzureDeployment(Enum):
-    GPT_4O = "gpt-4o"
-    GPT_4O_MINI = "gpt-4o-mini"
-    MISTRAL_LARGE = "mistral-large-latest"
-    LLAMA3_8B = "llama3-8b"
-    LLAMA3_70B = "llama3-70b"
-
-
 class OpenAiTtsVoice(Enum):
     NOVA = "nova"
     ALLOY = "alloy"
@@ -260,10 +252,6 @@ class GoogleAiModelEnumModel(BaseEnumModel):
     model: GoogleAiModel
 
 
-class WingmanProAzureDeploymentEnumModel(BaseEnumModel):
-    deployment_name: WingmanProAzureDeployment
-
-
 class OpenAiTtsVoiceEnumModel(BaseEnumModel):
     voice: OpenAiTtsVoice
 
@@ -332,7 +320,6 @@ ENUM_TYPES = {
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "MistralModel": MistralModelEnumModel,
     "GoogleAiModel": GoogleAiModelEnumModel,
-    "WingmanProAzureDeployment": WingmanProAzureDeploymentEnumModel,
     "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
