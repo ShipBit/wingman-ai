@@ -1069,6 +1069,7 @@ class WingmanCore(WebSocketUser):
         )
         response = requests.get(
             url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-models",
+            params={"region": self.settings_service.settings.wingman_pro.region.value},
             timeout=10,
             headers={
                 "Authorization": f"Bearer {wingman_pro_token}",
