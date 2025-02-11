@@ -378,6 +378,49 @@ class ConfigMigrationService:
             if old.get("features", {}).get("stt_provider") == "whispercpp":
                 old["features"]["stt_provider"] = "fasterwhisper"
                 self.log("- changed STT provider from whispercpp to fasterwhisper")
+
+            # migrate uexcorp skill
+            if old.get("skills", None):
+                uexcorp_skill = next(
+                    (skill for skill in old["skills"] if skill.get("module", "") == "skills.uexcorp.main"),
+                    None,
+                )
+                if uexcorp_skill:
+                    uexcorp_skill["custom_properties"] = [
+                        {"id": "commodity_route_default_count"},
+                        {"id": "tool_commodity_information"},
+                        {"id": "tool_item_information"},
+                        {"id": "tool_location_information"},
+                        {"id": "tool_vehicle_information"},
+                        {"id": "tool_commodity_route"},
+                        {"id": "commodity_route_use_estimated_availability"},
+                        {"id": "commodity_route_advanced_info"},
+                        {"id": "tool_profit_calculation"},
+                    ]
+                    uexcorp_skill["examples"] = [
+                        {
+                            "answer": {
+                                "de": "Du hast zwei profitable Handelsrouten zur Verfügung. Auf der ersten Route transportierst du [...]",
+                                "en": "You have two highly profitable trading routes available. The first route involves [...]",
+                            },
+                            "question": {
+                                "de": "Bitte gib mir die zwei besten Handelsrouten für meine Caterpillar, ich bin gerade bei Hurston.",
+                                "en": "Please provide me a the best two trading routes for my Caterpillar, Im currently at Hurston.",
+                            },
+                        },
+                        {
+                            "answer": {
+                                "de": "Die Hull-C wird von Musashi Industrial & Starflight Concern hergestellt und gehört zur \"HULL\"-Serie. Sie dient als [...]",
+                                "en": "The Hull-C is manufactured by Musashi Industrial & Starflight Concern and falls under the 'HULL' series. It [...]",
+                            },
+                            "question": {
+                                "de": "Was kannst du mir über die Hull-C erzählen?",
+                                "en": "What can you tell me about the Hull-C?",
+                            },
+                        },
+                    ]
+                    uexcorp_skill.pop("prompt", None)
+                    self.log("- migrated UEXCorp skill to v2")
             return old
 
         self.migrate(

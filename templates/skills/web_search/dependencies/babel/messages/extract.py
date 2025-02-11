@@ -12,7 +12,7 @@
     The main entry points into the extraction functionality are the functions
     `extract_from_dir` and `extract_from_file`.
 
-    :copyright: (c) 2013-2024 by the Babel Team.
+    :copyright: (c) 2013-2025 by the Babel Team.
     :license: BSD, see LICENSE for more details.
 """
 from __future__ import annotations
@@ -30,18 +30,20 @@ from collections.abc import (
     Mapping,
     MutableSequence,
 )
+from functools import lru_cache
 from os.path import relpath
 from textwrap import dedent
-from tokenize import COMMENT, NAME, OP, STRING, generate_tokens
-from typing import TYPE_CHECKING, Any
+from tokenize import COMMENT, NAME, NL, OP, STRING, generate_tokens
+from typing import TYPE_CHECKING, Any, TypedDict
 
+from babel.messages._compat import find_entrypoints
 from babel.util import parse_encoding, parse_future_flags, pathmatch
 
 if TYPE_CHECKING:
     from typing import IO, Final, Protocol
 
     from _typeshed import SupportsItems, SupportsRead, SupportsReadline
-    from typing_extensions import TypeAlias, TypedDict
+    from typing_extensions import TypeAlias
 
     class _PyOptions(TypedDict, total=False):
         encoding: str
@@ -274,6 +276,7 @@ def check_and_call_extract_file(
         for opattern, odict in options_map.items():
             if pathmatch(opattern, filename):
                 options = odict
+                break
         if callback:
             callback(filename, method, options)
         for message_tuple in extract_from_file(
@@ -322,15 +325,20 @@ def extract_from_file(
                             options, strip_comment_tags))
 
 
-def _match_messages_against_spec(lineno: int, messages: list[str|None], comments: list[str],
-                                 fileobj: _FileObj, spec: tuple[int|tuple[int, str], ...]):
+def _match_messages_against_spec(
+    lineno: int,
+    messages: list[str | None],
+    comments: list[str],
+    fileobj: _FileObj,
+    spec: tuple[int | tuple[int, str], ...],
+):
     translatable = []
     context = None
 
     # last_index is 1 based like the keyword spec
     last_index = len(messages)
     for index in spec:
-        if isinstance(index, tuple): # (n, 'c')
+        if isinstance(index, tuple):  # (n, 'c')
             context = messages[index[0] - 1]
             continue
         if last_index < index:
@@ -361,6 +369,14 @@ def _match_messages_against_spec(lineno: int, messages: list[str|None], comments
         translatable = translatable[0]
 
     return lineno, translatable, comments, context
+
+
+@lru_cache(maxsize=None)
+def _find_extractor(name: str):
+    for ep_name, load in find_entrypoints(GROUP_NAME):
+        if ep_name == name:
+            return load()
+    return None
 
 
 def extract(
@@ -410,7 +426,6 @@ def extract(
     :returns: iterable of tuples of the form ``(lineno, message, comments, context)``
     :rtype: Iterable[tuple[int, str|tuple[str], list[str], str|None]
     """
-    func = None
     if callable(method):
         func = method
     elif ':' in method or '.' in method:
@@ -421,25 +436,11 @@ def extract(
             module, attrname = method.split(':', 1)
         func = getattr(__import__(module, {}, {}, [attrname]), attrname)
     else:
-        try:
-            from pkg_resources import working_set
-        except ImportError:
-            pass
-        else:
-            for entry_point in working_set.iter_entry_points(GROUP_NAME,
-                                                             method):
-                func = entry_point.load(require=True)
-                break
+        func = _find_extractor(method)
         if func is None:
-            # if pkg_resources is not available or no usable egg-info was found
-            # (see #230), we resort to looking up the builtin extractors
-            # directly
-            builtin = {
-                'ignore': extract_nothing,
-                'python': extract_python,
-                'javascript': extract_javascript,
-            }
-            func = builtin.get(method)
+            # if no named entry point was found,
+            # we resort to looking up a builtin extractor
+            func = _BUILTIN_EXTRACTORS.get(method)
 
     if func is None:
         raise ValueError(f"Unknown extraction method {method!r}")
@@ -534,7 +535,6 @@ def extract_python(
                 in_def = False
                 continue
             if funcname:
-                message_lineno = lineno
                 call_stack += 1
         elif in_def and tok == OP and value == ':':
             # End of a class definition without parens
@@ -584,11 +584,15 @@ def extract_python(
             elif tok == STRING:
                 val = _parse_python_string(value, encoding, future_flags)
                 if val is not None:
+                    if not message_lineno:
+                        message_lineno = lineno
                     buf.append(val)
 
             # Python 3.12+, see https://peps.python.org/pep-0701/#new-tokens
             elif tok == FSTRING_START:
                 current_fstring_start = value
+                if not message_lineno:
+                    message_lineno = lineno
             elif tok == FSTRING_MIDDLE:
                 if current_fstring_start is not None:
                     current_fstring_start += value
@@ -612,6 +616,9 @@ def extract_python(
                     # for the comment to still be a valid one
                     old_lineno, old_comment = translator_comments.pop()
                     translator_comments.append((old_lineno + 1, old_comment))
+
+            elif tok != NL and not message_lineno:
+                message_lineno = lineno
         elif call_stack > 0 and tok == OP and value == ')':
             call_stack -= 1
         elif funcname and call_stack == -1:
@@ -619,9 +626,7 @@ def extract_python(
         elif tok == NAME and value in keywords:
             funcname = value
 
-        if (current_fstring_start is not None
-            and tok not in {FSTRING_START, FSTRING_MIDDLE}
-        ):
+        if current_fstring_start is not None and tok not in {FSTRING_START, FSTRING_MIDDLE}:
             # In Python 3.12, tokens other than FSTRING_* mean the
             # f-string is dynamic, so we don't wan't to extract it.
             # And if it's FSTRING_END, we've already handled it above.
@@ -640,13 +645,11 @@ def _parse_python_string(value: str, encoding: str, future_flags: int) -> str | 
     )
     if isinstance(code, ast.Expression):
         body = code.body
-        if isinstance(body, ast.Str):
-            return body.s
+        if isinstance(body, ast.Constant):
+            return body.value
         if isinstance(body, ast.JoinedStr):  # f-string
-            if all(isinstance(node, ast.Str) for node in body.values):
-                return ''.join(node.s for node in body.values)
             if all(isinstance(node, ast.Constant) for node in body.values):
-                return ''.join(str(node.value) for node in body.values)
+                return ''.join(node.value for node in body.values)
             # TODO: we could raise an error or warning when not all nodes are constants
     return None
 
@@ -840,3 +843,10 @@ def parse_template_string(
                     lineno += len(line_re.findall(expression_contents))
                     expression_contents = ''
         prev_character = character
+
+
+_BUILTIN_EXTRACTORS = {
+    'ignore': extract_nothing,
+    'python': extract_python,
+    'javascript': extract_javascript,
+}

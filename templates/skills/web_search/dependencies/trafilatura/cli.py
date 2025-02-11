@@ -5,32 +5,26 @@ Implementing a basic command-line interface.
 import argparse
 import logging
 import sys
-import warnings
-from platform import python_version
 
-from . import __version__
+from importlib.metadata import version
+from platform import python_version
+from typing import Any
+
 from .cli_utils import (cli_crawler, cli_discovery, examine,
                         file_processing_pipeline, load_blacklist,
                         load_input_dict, probe_homepage,
                         url_processing_pipeline, write_result)
-from .settings import PARALLEL_CORES
+from .settings import PARALLEL_CORES, SUPPORTED_FMT_CLI
+
 
 # fix output encoding on some systems
-try:
-    # > Python 3.7
-    if sys.stdout.encoding != 'UTF-8':
-        sys.stdout.reconfigure(encoding='utf-8')
-    if sys.stderr.encoding != 'UTF-8':
-        sys.stderr.reconfigure(encoding='utf-8')
-except AttributeError:
-    import codecs
-    if sys.stdout.encoding != 'UTF-8':
-        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
-    if sys.stderr.encoding != 'UTF-8':
-        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+if sys.stdout.encoding != 'UTF-8' and hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if sys.stderr.encoding != 'UTF-8' and hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
 
 
-def add_args(parser):
+def add_args(parser: Any) -> Any:
     "Add argument groups and arguments to parser."
 
     group1 = parser.add_argument_group('Input', 'URLs, files or directories to process')
@@ -45,15 +39,9 @@ def add_args(parser):
     group1_ex.add_argument("-i", "--input-file",
                         help="name of input file for batch processing",
                         type=str)
-    group1_ex.add_argument("--inputfile",
-                        help=argparse.SUPPRESS,
-                        type=str)   # will be deprecated
     group1_ex.add_argument("--input-dir",
                         help="read files from a specified directory (relative path)",
                         type=str)
-    group1_ex.add_argument("--inputdir",
-                        help=argparse.SUPPRESS,
-                        type=str)   # will be deprecated
     group1_ex.add_argument("-u", "--URL",
                         help="custom URL download",
                         type=str)
@@ -71,18 +59,12 @@ def add_args(parser):
     group2.add_argument("-o", "--output-dir",
                         help="write results in a specified directory (relative path)",
                         type=str)
-    group2.add_argument("--outputdir",
-                        help=argparse.SUPPRESS,
-                        type=str)   # will be deprecated
     group2.add_argument('--backup-dir',
                         help="preserve a copy of downloaded files in a backup directory",
                         type=str)
     group2.add_argument('--keep-dirs',
                         help="keep input directory structure and file names",
                         action="store_true")
-    group2.add_argument('--hash-as-name',
-                        help=argparse.SUPPRESS,
-                        action="store_true")   # will be deprecated
 
     group3_ex.add_argument("--feed",
                         help="look for feeds and/or pass a feed URL as input",
@@ -121,12 +103,6 @@ def add_args(parser):
     group4.add_argument("--images",
                         help="include image sources in output (experimental)",
                         action="store_true")
-    group4.add_argument("--nocomments",
-                        help=argparse.SUPPRESS,
-                        action="store_false")  # will be deprecated
-    group4.add_argument("--notables",
-                        help=argparse.SUPPRESS,
-                        action="store_false")  # will be deprecated
     group4.add_argument("--no-comments",
                         help="don't output any comments",
                         action="store_false")  # false = no comments
@@ -134,11 +110,11 @@ def add_args(parser):
                         help="don't output any table elements",
                         action="store_false")  # false = no tables
     group4.add_argument("--only-with-metadata",
-                        help="only output those documents with title, URL and date (for formats supporting metadata)",
+                        help="only output those documents with title, URL and date",
                         action="store_true")
     group4.add_argument("--with-metadata",
-                        help=argparse.SUPPRESS,
-                        action="store_true")   # will be deprecated
+                        help="extract and add metadata to the output",
+                        action="store_true")
     group4.add_argument("--target-language",
                         help="select a target language (ISO 639-1 codes)",
                         type=str)
@@ -156,12 +132,15 @@ def add_args(parser):
                         action="store_true")
 
     # https://docs.python.org/3/library/argparse.html#argparse.ArgumentParser.add_mutually_exclusive_group
-    group5_ex.add_argument('-out', '--output-format',
+    group5_ex.add_argument('--output-format',
                         help="determine output format",
-                        choices=['txt', 'csv', 'json', 'markdown', 'xml', 'xmltei'],
+                        choices=SUPPORTED_FMT_CLI,
                         default='txt')
     group5_ex.add_argument("--csv",
                         help="shorthand for CSV output",
+                        action="store_true")
+    group5_ex.add_argument("--html",
+                        help="shorthand for HTML output",
                         action="store_true")
     group5_ex.add_argument("--json",
                         help="shorthand for JSON output",
@@ -186,13 +165,13 @@ def add_args(parser):
         "--version",
         help="show version information and exit",
         action="version",
-        version=f"Trafilatura {__version__} - Python {python_version()}",
+        version=f"Trafilatura {version('trafilatura')} - Python {python_version()}",
     )
 
     return parser
 
 
-def parse_args(args):
+def parse_args(args: Any) -> Any:
     """Define parser for command-line arguments"""
     parser = argparse.ArgumentParser(description='Command-line interface for Trafilatura')
     parser = add_args(parser)
@@ -200,98 +179,39 @@ def parse_args(args):
     return map_args(parser.parse_args())
 
 
-def map_args(args):
+def map_args(args: Any) -> Any:
     '''Map existing options to format and output choices.'''
     # formats
-    if args.csv:
-        args.output_format = 'csv'
-    elif args.json:
-        args.output_format = 'json'
-    elif args.markdown:
-        args.output_format = 'markdown'
-    elif args.xml:
-        args.output_format = 'xml'
-    elif args.xmltei:
-        args.output_format = 'xmltei'
-    # output configuration
-    if args.nocomments is False:
-        args.no_comments = False
-        warnings.warn(
-            """--nocomments will be deprecated in a future version,
-               use --no-comments instead""",
-             PendingDeprecationWarning
-        )
-    if args.notables is False:
-        args.no_tables = False
-        warnings.warn(
-            """--notables will be deprecated in a future version,
-               use --no-tables instead""",
-             PendingDeprecationWarning
-        )
-    if args.with_metadata is True:
-        args.only_with_metadata = True
-        warnings.warn(
-            """--with-metadata will be deprecated in a future version,
-               use --only-with-metadata instead""",
-             PendingDeprecationWarning
-        )
-    if args.inputfile:
-        args.input_file = args.inputfile
-        warnings.warn(
-            """--inputfile will be deprecated in a future version,
-               use --input-file instead""",
-             PendingDeprecationWarning
-        )
-    if args.inputdir:
-        args.input_dir = args.inputdir
-        warnings.warn(
-            """--inputdir will be deprecated in a future version,
-               use --input-dir instead""",
-             PendingDeprecationWarning
-        )
-    if args.outputdir:
-        args.output_dir = args.outputdir
-        warnings.warn(
-            """--outputdir will be deprecated in a future version,
-               use --output-dir instead""",
-             PendingDeprecationWarning
-        )
-    if args.hash_as_name:
-        warnings.warn(
-            """--hash-as-name will be deprecated in a future version,
-               hashes are now used by default.""",
-             PendingDeprecationWarning
-        )
+    for otype in ("csv", "html", "json", "markdown", "xml", "xmltei"):
+        if getattr(args, otype):
+            args.output_format = otype
+            break
     return args
 
 
-def main():
+def main() -> None:
     """ Run as a command-line utility. """
     args = parse_args(sys.argv[1:])
     process_args(args)
 
 
-def process_args(args):
+def process_args(args: Any) -> None:
     """Perform the actual processing according to the arguments"""
-    # init
-    error_caught = False
-    # verbosity
+    exit_code = 0
+
     if args.verbose == 1:
         logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
     elif args.verbose >= 2:
         logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+
     if args.blacklist:
         args.blacklist = load_blacklist(args.blacklist)
 
     # processing according to mutually exclusive options
-    # read url list from input file
-    if args.input_file and all([not args.crawl, not args.explore, not args.feed, not args.probe, not args.sitemap]):
-        url_store = load_input_dict(args)
-        error_caught = url_processing_pipeline(args, url_store)
 
     # fetch urls from a feed or a sitemap
-    elif args.explore or args.feed or args.sitemap:
-        cli_discovery(args)
+    if args.explore or args.feed or args.sitemap:
+        exit_code = cli_discovery(args)
 
     # activate crawler/spider
     elif args.crawl:
@@ -305,25 +225,19 @@ def process_args(args):
     elif args.input_dir:
         file_processing_pipeline(args)
 
-    # process input URL
-    elif args.URL:
+    # read url list from input file or process input URL
+    elif args.input_file or args.URL:
         url_store = load_input_dict(args)
-        error_caught = url_processing_pipeline(args, url_store)  # process single url
+        exit_code = url_processing_pipeline(args, url_store)
 
     # read input on STDIN directly
     else:
-        # file type and unicode check
-        try:
-            htmlstring = sys.stdin.read()
-        except UnicodeDecodeError:
-            sys.exit('ERROR: system, file type or buffer encoding')
-        # process
-        result = examine(htmlstring, args, url=args.URL)
+        result = examine(sys.stdin.buffer.read(), args, url=args.URL)
         write_result(result, args)
 
     # change exit code if there are errors
-    if error_caught is True:
-        sys.exit(1)
+    if exit_code != 0:
+        sys.exit(exit_code)
 
 
 if __name__ == '__main__':

@@ -4,19 +4,19 @@
 
     Data structures for message catalogs.
 
-    :copyright: (c) 2013-2024 by the Babel Team.
+    :copyright: (c) 2013-2025 by the Babel Team.
     :license: BSD, see LICENSE for more details.
 """
 from __future__ import annotations
 
 import datetime
 import re
-from collections import OrderedDict
 from collections.abc import Iterable, Iterator
 from copy import copy
 from difflib import SequenceMatcher
 from email import message_from_string
 from heapq import nlargest
+from string import Formatter
 from typing import TYPE_CHECKING
 
 from babel import __version__ as VERSION
@@ -30,7 +30,14 @@ if TYPE_CHECKING:
 
     _MessageID: TypeAlias = str | tuple[str, ...] | list[str]
 
-__all__ = ['Message', 'Catalog', 'TranslationError']
+__all__ = [
+    'DEFAULT_HEADER',
+    'PYTHON_FORMAT',
+    'Catalog',
+    'Message',
+    'TranslationError',
+]
+
 
 def get_close_matches(word, possibilities, n=3, cutoff=0.6):
     """A modified version of ``difflib.get_close_matches``.
@@ -43,7 +50,7 @@ def get_close_matches(word, possibilities, n=3, cutoff=0.6):
     if not 0.0 <= cutoff <= 1.0:  # pragma: no cover
         raise ValueError(f"cutoff must be in [0.0, 1.0]: {cutoff!r}")
     result = []
-    s = SequenceMatcher(autojunk=False) # only line changed from difflib.py
+    s = SequenceMatcher(autojunk=False)  # only line changed from difflib.py
     s.set_seq2(word)
     for x in possibilities:
         s.set_seq1(x)
@@ -68,6 +75,25 @@ PYTHON_FORMAT = re.compile(r'''
         )
         ([diouxXeEfFgGcrs%])
 ''', re.VERBOSE)
+
+
+def _has_python_brace_format(string: str) -> bool:
+    if "{" not in string:
+        return False
+    fmt = Formatter()
+    try:
+        # `fmt.parse` returns 3-or-4-tuples of the form
+        # `(literal_text, field_name, format_spec, conversion)`;
+        # if `field_name` is set, this smells like brace format
+        field_name_seen = False
+        for t in fmt.parse(string):
+            if t[1] is not None:
+                field_name_seen = True
+                # We cannot break here, as we need to consume the whole string
+                # to ensure that it is a valid format string.
+    except ValueError:
+        return False
+    return field_name_seen
 
 
 def _parse_datetime_header(value: str) -> datetime.datetime:
@@ -141,6 +167,10 @@ class Message:
             self.flags.add('python-format')
         else:
             self.flags.discard('python-format')
+        if id and self.python_brace_format:
+            self.flags.add('python-brace-format')
+        else:
+            self.flags.discard('python-brace-format')
         self.auto_comments = list(distinct(auto_comments))
         self.user_comments = list(distinct(user_comments))
         if isinstance(previous_id, str):
@@ -253,6 +283,21 @@ class Message:
             ids = [ids]
         return any(PYTHON_FORMAT.search(id) for id in ids)
 
+    @property
+    def python_brace_format(self) -> bool:
+        """Whether the message contains Python f-string parameters.
+
+        >>> Message('Hello, {name}!').python_brace_format
+        True
+        >>> Message(('One apple', '{count} apples')).python_brace_format
+        True
+
+        :type:  `bool`"""
+        ids = self.id
+        if not isinstance(ids, (list, tuple)):
+            ids = [ids]
+        return any(_has_python_brace_format(id) for id in ids)
+
 
 class TranslationError(Exception):
     """Exception thrown by translation checkers when invalid message
@@ -275,12 +320,20 @@ def parse_separated_header(value: str) -> dict[str, str]:
     return dict(m.get_params())
 
 
+def _force_text(s: str | bytes, encoding: str = 'utf-8', errors: str = 'strict') -> str:
+    if isinstance(s, str):
+        return s
+    if isinstance(s, bytes):
+        return s.decode(encoding, errors)
+    return str(s)
+
+
 class Catalog:
     """Representation of a message catalog."""
 
     def __init__(
         self,
-        locale: str | Locale | None = None,
+        locale: Locale | str | None = None,
         domain: str | None = None,
         header_comment: str | None = DEFAULT_HEADER,
         project: str | None = None,
@@ -317,7 +370,7 @@ class Catalog:
         self.domain = domain
         self.locale = locale
         self._header_comment = header_comment
-        self._messages: OrderedDict[str | tuple[str, str], Message] = OrderedDict()
+        self._messages: dict[str | tuple[str, str], Message] = {}
 
         self.project = project or 'PROJECT'
         self.version = version or 'VERSION'
@@ -344,7 +397,7 @@ class Catalog:
         self.fuzzy = fuzzy
 
         # Dictionary of obsolete messages
-        self.obsolete: OrderedDict[str | tuple[str, str], Message] = OrderedDict()
+        self.obsolete: dict[str | tuple[str, str], Message] = {}
         self._num_plurals = None
         self._plural_expr = None
 
@@ -429,46 +482,39 @@ class Catalog:
     """)
 
     def _get_mime_headers(self) -> list[tuple[str, str]]:
-        headers: list[tuple[str, str]] = []
-        headers.append(("Project-Id-Version", f"{self.project} {self.version}"))
-        headers.append(('Report-Msgid-Bugs-To', self.msgid_bugs_address))
-        headers.append(('POT-Creation-Date',
-                        format_datetime(self.creation_date, 'yyyy-MM-dd HH:mmZ',
-                                        locale='en')))
         if isinstance(self.revision_date, (datetime.datetime, datetime.time, int, float)):
-            headers.append(('PO-Revision-Date',
-                            format_datetime(self.revision_date,
-                                            'yyyy-MM-dd HH:mmZ', locale='en')))
+            revision_date = format_datetime(self.revision_date, 'yyyy-MM-dd HH:mmZ', locale='en')
         else:
-            headers.append(('PO-Revision-Date', self.revision_date))
-        headers.append(('Last-Translator', self.last_translator))
+            revision_date = self.revision_date
+
+        language_team = self.language_team
+        if self.locale_identifier and 'LANGUAGE' in language_team:
+            language_team = language_team.replace('LANGUAGE', str(self.locale_identifier))
+
+        headers: list[tuple[str, str]] = [
+            ("Project-Id-Version", f"{self.project} {self.version}"),
+            ('Report-Msgid-Bugs-To', self.msgid_bugs_address),
+            ('POT-Creation-Date', format_datetime(self.creation_date, 'yyyy-MM-dd HH:mmZ', locale='en')),
+            ('PO-Revision-Date', revision_date),
+            ('Last-Translator', self.last_translator),
+        ]
         if self.locale_identifier:
             headers.append(('Language', str(self.locale_identifier)))
-        if self.locale_identifier and ('LANGUAGE' in self.language_team):
-            headers.append(('Language-Team',
-                            self.language_team.replace('LANGUAGE',
-                                                       str(self.locale_identifier))))
-        else:
-            headers.append(('Language-Team', self.language_team))
+        headers.append(('Language-Team', language_team))
         if self.locale is not None:
             headers.append(('Plural-Forms', self.plural_forms))
-        headers.append(('MIME-Version', '1.0'))
-        headers.append(("Content-Type", f"text/plain; charset={self.charset}"))
-        headers.append(('Content-Transfer-Encoding', '8bit'))
-        headers.append(("Generated-By", f"Babel {VERSION}\n"))
+        headers += [
+            ('MIME-Version', '1.0'),
+            ("Content-Type", f"text/plain; charset={self.charset}"),
+            ('Content-Transfer-Encoding', '8bit'),
+            ("Generated-By", f"Babel {VERSION}\n"),
+        ]
         return headers
-
-    def _force_text(self, s: str | bytes, encoding: str = 'utf-8', errors: str = 'strict') -> str:
-        if isinstance(s, str):
-            return s
-        if isinstance(s, bytes):
-            return s.decode(encoding, errors)
-        return str(s)
 
     def _set_mime_headers(self, headers: Iterable[tuple[str, str]]) -> None:
         for name, value in headers:
-            name = self._force_text(name.lower(), encoding=self.charset)
-            value = self._force_text(value, encoding=self.charset)
+            name = _force_text(name.lower(), encoding=self.charset)
+            value = _force_text(value, encoding=self.charset)
             if name == 'project-id-version':
                 parts = value.split(' ')
                 self.project = ' '.join(parts[:-1])
@@ -479,7 +525,11 @@ class Catalog:
                 self.last_translator = value
             elif name == 'language':
                 value = value.replace('-', '_')
-                self._set_locale(value)
+                # The `or None` makes sure that the locale is set to None
+                # if the header's value is an empty string, which is what
+                # some tools generate (instead of eliding the empty Language
+                # header altogether).
+                self._set_locale(value or None)
             elif name == 'language-team':
                 self.language_team = value
             elif name == 'content-type':
@@ -676,7 +726,6 @@ class Catalog:
             current.user_comments = list(distinct(current.user_comments +
                                                   message.user_comments))
             current.flags |= message.flags
-            message = current
         elif id == '':
             # special treatment for the header message
             self.mime_headers = message_from_string(message.string).items()
@@ -822,10 +871,13 @@ class Catalog:
 
         :param template: the reference catalog, usually read from a POT file
         :param no_fuzzy_matching: whether to use fuzzy matching of message IDs
+        :param update_header_comment: whether to copy the header comment from the template
+        :param keep_user_comments: whether to keep user comments from the old catalog
+        :param update_creation_date: whether to copy the creation date from the template
         """
         messages = self._messages
         remaining = messages.copy()
-        self._messages = OrderedDict()
+        self._messages = {}
 
         # Prepare for fuzzy matching
         fuzzy_candidates = {}

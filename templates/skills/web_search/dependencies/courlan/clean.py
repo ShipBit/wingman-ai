@@ -31,7 +31,7 @@ PATH2 = re.compile(r"^(?:/\.\.(?![^/]))+")
 # scrub
 REMAINING_MARKUP = re.compile(r"</?[a-z]{,4}?>|{.+?}")
 TRAILING_AMP = re.compile(r"/\&$")
-TRAILING_PARTS = re.compile(r'(.*?)[<>"\'\s]')
+TRAILING_PARTS = re.compile(r'(.*?)[<>"\s]')
 
 # https://github.com/AdguardTeam/AdguardFilters/blob/master/TrackParamFilter/sections/general_url.txt
 # https://gitlab.com/ClearURLs/rules/-/blob/master/data.min.json
@@ -70,12 +70,11 @@ def scrub_url(url: str) -> str:
     url = REMAINING_MARKUP.sub("", url)
 
     # & and &amp;
-    if "&amp;" in url:
-        url = url.replace("&amp;", "&")
-    url = TRAILING_AMP.sub("", url)
+    url = TRAILING_AMP.sub("", url.replace("&amp;", "&"))
 
     # if '"' in link:
     #    link = link.split('"')[0]
+
     # double/faulty URLs
     protocols = PROTOCOLS.findall(url)
     if len(protocols) > 1 and "web.archive.org" not in url:
@@ -158,8 +157,7 @@ def decode_punycode(string: str) -> str:
 def normalize_part(url_part: str) -> str:
     """Normalize URLs parts (specifically path and fragment) while
     accounting for certain characters."""
-    # "~" for compatibility with Python 3.6
-    return quote(url_part, safe="/%!=:,-~")
+    return quote(url_part, safe="/%!=:,-")
 
 
 def normalize_fragment(fragment: str, language: Optional[str] = None) -> str:
@@ -182,21 +180,19 @@ def normalize_url(
     parsed_url = _parse(parsed_url)
     # lowercase + remove fragments + normalize punycode
     scheme = parsed_url.scheme.lower()
-    netloc = parsed_url.netloc.lower()
+    netloc = decode_punycode(parsed_url.netloc.lower())
     # port
     try:
-        if parsed_url.port and parsed_url.port in (80, 443):
+        if parsed_url.port in (80, 443):
             netloc = NETLOC_RE.sub("", netloc)
     except ValueError:
         pass  # Port could not be cast to integer value
-    # lowercase + remove fragments + normalize punycode
-    netloc = decode_punycode(netloc)
     # path: https://github.com/saintamh/alcazar/blob/master/alcazar/utils/urls.py
     # leading /../'s in the path are removed
     newpath = normalize_part(PATH2.sub("", PATH1.sub("/", parsed_url.path)))
     # strip unwanted query elements
     newquery = clean_query(parsed_url.query, strict, language) or ""
-    if newquery and newpath == "":
+    if newquery and not newpath:
         newpath = "/"
     elif (
         not trailing_slash

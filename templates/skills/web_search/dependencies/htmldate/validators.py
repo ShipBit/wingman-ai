@@ -57,6 +57,22 @@ def is_valid_date(
     return False
 
 
+def validate_and_convert(
+    date_input: Optional[Union[datetime, str]],
+    outputformat: str,
+    earliest: datetime,
+    latest: datetime,
+) -> Optional[str]:
+    "Robust validation and conversion for plausible dates."
+    if is_valid_date(date_input, outputformat, earliest, latest):
+        try:
+            LOGGER.debug("custom parse result: %s", date_input)
+            return date_input.strftime(outputformat)  # type: ignore
+        except ValueError as err:  # pragma: no cover
+            LOGGER.error("value error during conversion: %s %s", date_input, err)
+    return None
+
+
 @lru_cache(maxsize=16)
 def is_valid_format(outputformat: str) -> bool:
     """Validate the output format in the settings"""
@@ -64,11 +80,10 @@ def is_valid_format(outputformat: str) -> bool:
     dateobject = datetime(2017, 9, 1, 0, 0)
     try:
         dateobject.strftime(outputformat)
-    # other than ValueError: Python < 3.7 only
-    except (NameError, TypeError, ValueError) as err:
+    except (TypeError, ValueError) as err:
         LOGGER.error("wrong output format or type: %s %s", outputformat, err)
         return False
-    # test in abstracto
+    # test in abstracto (could be the only test)
     if not isinstance(outputformat, str) or "%" not in outputformat:
         LOGGER.error("malformed output format: %s", outputformat)
         return False
@@ -87,7 +102,7 @@ def plausible_year_filter(
     """Filter the date patterns to find plausible years only"""
     occurrences = Counter(pattern.findall(htmlstring))  # slow!
 
-    for item in list(occurrences):
+    for item in list(occurrences):  # prevent RuntimeError
         year_match = yearpat.search(item)
         if year_match is None:
             LOGGER.debug("not a year pattern: %s", item)
@@ -115,10 +130,10 @@ def compare_values(reference: int, attempt: str, options: Extractor) -> int:
     except Exception as err:
         LOGGER.debug("datetime.strptime exception: %s for string %s", err, attempt)
         return reference
-    if options.original and (reference == 0 or timestamp < reference):
-        reference = timestamp
-    elif not options.original and timestamp > reference:
-        reference = timestamp
+    if options.original:
+        reference = min(reference, timestamp) if reference else timestamp
+    else:
+        reference = max(reference, timestamp)
     return reference
 
 
