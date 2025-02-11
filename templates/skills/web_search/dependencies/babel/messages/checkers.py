@@ -6,7 +6,7 @@
 
     :since: version 0.9
 
-    :copyright: (c) 2013-2024 by the Babel Team.
+    :copyright: (c) 2013-2025 by the Babel Team.
     :license: BSD, see LICENSE for more details.
 """
 from __future__ import annotations
@@ -65,9 +65,6 @@ def _validate_format(format: str, alternative: str) -> None:
     arguments are not interchangeable as `alternative` may contain less
     placeholders if `format` uses named placeholders.
 
-    The behavior of this function is undefined if the string does not use
-    string formatting.
-
     If the string formatting of `alternative` is compatible to `format` the
     function returns `None`, otherwise a `TranslationError` is raised.
 
@@ -121,6 +118,9 @@ def _validate_format(format: str, alternative: str) -> None:
 
     a, b = map(_parse, (format, alternative))
 
+    if not a:
+        return
+
     # now check if both strings are positional or named
     a_positional, b_positional = map(_check_positional, (a, b))
     if a_positional and not b_positional and not b:
@@ -155,16 +155,11 @@ def _validate_format(format: str, alternative: str) -> None:
 
 
 def _find_checkers() -> list[Callable[[Catalog | None, Message], object]]:
+    from babel.messages._compat import find_entrypoints
     checkers: list[Callable[[Catalog | None, Message], object]] = []
-    try:
-        from pkg_resources import working_set
-    except ImportError:
-        pass
-    else:
-        for entry_point in working_set.iter_entry_points('babel.checkers'):
-            checkers.append(entry_point.load())
+    checkers.extend(load() for (name, load) in find_entrypoints('babel.checkers'))
     if len(checkers) == 0:
-        # if pkg_resources is not available or no usable egg-info was found
+        # if entrypoints are not available or no usable egg-info was found
         # (see #230), just resort to hard-coded checkers
         return [num_plurals, python_format]
     return checkers

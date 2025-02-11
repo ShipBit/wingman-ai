@@ -10,25 +10,36 @@
      * ``LC_ALL``, and
      * ``LANG``
 
-    :copyright: (c) 2015-2024 by the Babel Team.
+    :copyright: (c) 2015-2025 by the Babel Team.
     :license: BSD, see LICENSE for more details.
 """
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
-from typing import TYPE_CHECKING
+from typing import Literal
 
 from babel.core import Locale, default_locale
 
-if TYPE_CHECKING:
-    from typing_extensions import Literal
-
-DEFAULT_LOCALE = default_locale()
+_DEFAULT_LOCALE = default_locale()  # TODO(3.0): Remove this.
 
 
-def format_list(lst: Sequence[str],
-                style: Literal['standard', 'standard-short', 'or', 'or-short', 'unit', 'unit-short', 'unit-narrow'] = 'standard',
-                locale: Locale | str | None = DEFAULT_LOCALE) -> str:
+def __getattr__(name):
+    if name == "DEFAULT_LOCALE":
+        warnings.warn(
+            "The babel.lists.DEFAULT_LOCALE constant is deprecated and will be removed.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return _DEFAULT_LOCALE
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def format_list(
+    lst: Sequence[str],
+    style: Literal['standard', 'standard-short', 'or', 'or-short', 'unit', 'unit-short', 'unit-narrow'] = 'standard',
+    locale: Locale | str | None = None,
+) -> str:
     """
     Format the items in `lst` as a list.
 
@@ -39,7 +50,11 @@ def format_list(lst: Sequence[str],
     >>> format_list(['omena', 'peruna', 'aplari'], style='or', locale='fi')
     u'omena, peruna tai aplari'
 
-    These styles are defined, but not all are necessarily available in all locales.
+    Not all styles are necessarily available in all locales.
+    The function will attempt to fall back to replacement styles according to the rules
+    set forth in the CLDR root XML file, and raise a ValueError if no suitable replacement
+    can be found.
+
     The following text is verbatim from the Unicode TR35-49 spec [1].
 
     * standard:
@@ -68,22 +83,17 @@ def format_list(lst: Sequence[str],
 
     :param lst: a sequence of items to format in to a list
     :param style: the style to format the list with. See above for description.
-    :param locale: the locale
+    :param locale: the locale. Defaults to the system locale.
     """
-    locale = Locale.parse(locale)
+    locale = Locale.parse(locale or _DEFAULT_LOCALE)
     if not lst:
         return ''
     if len(lst) == 1:
         return lst[0]
 
-    if style not in locale.list_patterns:
-        raise ValueError(
-            f'Locale {locale} does not support list formatting style {style!r} '
-            f'(supported are {sorted(locale.list_patterns)})',
-        )
-    patterns = locale.list_patterns[style]
+    patterns = _resolve_list_style(locale, style)
 
-    if len(lst) == 2:
+    if len(lst) == 2 and '2' in patterns:
         return patterns['2'].format(*lst)
 
     result = patterns['start'].format(lst[0], lst[1])
@@ -92,3 +102,31 @@ def format_list(lst: Sequence[str],
     result = patterns['end'].format(result, lst[-1])
 
     return result
+
+
+# Based on CLDR 45's root.xml file's `<alias>`es.
+# The root file defines both `standard` and `or`,
+# so they're always available.
+# TODO: It would likely be better to use the
+#       babel.localedata.Alias mechanism for this,
+#       but I'm not quite sure how it's supposed to
+#       work with inheritance and data in the root.
+_style_fallbacks = {
+    "or-narrow": ["or-short", "or"],
+    "or-short": ["or"],
+    "standard-narrow": ["standard-short", "standard"],
+    "standard-short": ["standard"],
+    "unit": ["unit-short", "standard"],
+    "unit-narrow": ["unit-short", "unit", "standard"],
+    "unit-short": ["standard"],
+}
+
+
+def _resolve_list_style(locale: Locale, style: str):
+    for style in (style, *(_style_fallbacks.get(style, []))):  # noqa: B020
+        if style in locale.list_patterns:
+            return locale.list_patterns[style]
+    raise ValueError(
+        f"Locale {locale} does not support list formatting style {style!r} "
+        f"(supported are {sorted(locale.list_patterns)})",
+    )
