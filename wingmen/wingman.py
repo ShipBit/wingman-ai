@@ -616,6 +616,7 @@ class Wingman:
                     function(*args)
 
             thread = threading.Thread(target=start_thread, args=(function, *args))
+            thread.name = function.__name__
             thread.start()
             return thread
         except Exception as e:
