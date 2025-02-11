@@ -256,6 +256,13 @@ class WingmanCore(WebSocketUser):
             endpoint=self.shutdown,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro",
+            response_model=list,
+            endpoint=self.get_wingman_pro_models,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_service = ConfigService(config_manager=config_manager)
@@ -1055,6 +1062,23 @@ class WingmanCore(WebSocketUser):
         response.raise_for_status()
         content = response.json()
         return content.get("data", [])
+    
+    async def get_wingman_pro_models(self):
+        wingman_pro_token = await self.secret_keeper.retrieve(
+            key="wingman_pro", requester="WingmanPro"
+        )
+        response = requests.get(
+            url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-models",
+            params={"region": self.settings_service.settings.wingman_pro.region.value},
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {wingman_pro_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        model_list = response.json()
+        return model_list
 
     # GET /models/elevenlabs
     async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:
