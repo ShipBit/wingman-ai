@@ -334,7 +334,7 @@ class Wingman:
                 await self.play_to_user(str(process_result), not interrupt)
         except Exception as e:
             await printr.print_async(
-                f"Error during processing of Wingman ''{self.name}: {str(e)}",
+                f"Error during processing of Wingman '{self.name}': {str(e)}",
                 color=LogType.ERROR,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)

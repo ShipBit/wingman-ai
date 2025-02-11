@@ -16,13 +16,16 @@ class StreamToLogger:
     def __init__(self, logger, log_level=logging.INFO, stream=sys.stdout):
         self.logger = logger
         self.log_level = log_level
-        self.linebuf = ""
         self.stream = stream
 
     def write(self, buf):
-        for line in buf.rstrip().splitlines():
-            self.logger.log(self.log_level, line.rstrip())
-            self.stream.write(line + "\n")
+        try:
+            for line in buf.rstrip().splitlines():
+                self.logger.log(self.log_level, line.rstrip())
+                self.stream.write(line + "\n")
+        except Exception as e:
+            original_stderr = getattr(sys, '__stderr__', sys.stderr)
+            original_stderr.write(f"Error in StreamToLogger: {str(e)} - Buffer: {buf}\n")
 
     def flush(self):
         self.stream.flush()
@@ -53,12 +56,13 @@ class Printr(WebSocketUser):
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Printr, cls).__new__(cls)
+
+            # file logger
             cls._instance.logger = logging.getLogger("file_logger")
             cls._instance.logger.setLevel(logging.INFO)
-
+            cls._instance.logger.propagate = False  # Prevent duplicate logging
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-            # Info file handler with timestamp
+            # log file with timestamp
             fh = RotatingFileHandler(
                 path.join(get_writable_dir("logs"), f"wingman-core.{timestamp}.log")
             )
@@ -69,9 +73,10 @@ class Printr(WebSocketUser):
             fh.setFormatter(file_formatter)
             cls._instance.logger.addHandler(fh)
 
-            # Console logger with color
+            # console logger with color
             cls._instance.console_logger = logging.getLogger("console_logger")
             cls._instance.console_logger.setLevel(logging.INFO)
+            cls._instance.console_logger.propagate = False  # Prevent duplicate logging
             ch = logging.StreamHandler()
             ch.setLevel(logging.INFO)
             console_formatter = Formatter("%(message)s")
