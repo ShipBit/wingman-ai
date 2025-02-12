@@ -110,3 +110,12 @@ custom_properties:
     required: true
     property_type: boolean
   ### Profit Calculation End ###
+
+  ### FasterWhisper Start ###
+  - id: add_fasterwhisper_hotwords
+    name: Update Hotwords (FasterWhisper only)
+    hint: If enabled, this skill will update the FasterWhisper hotwords using common names in the Star Citizen universe. Voice detection might be improved, but bias towards Star Citizen content is possible.
+    value: false
+    required: true
+    property_type: boolean
+  ### FasterWhisper End ###

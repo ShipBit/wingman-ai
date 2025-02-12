@@ -99,6 +99,70 @@ class Helper:
         self.get_handler_config().sync_blacklists()
         self.__version_uex = self.get_handler_import().get_version_uex()
         self.set_ready(True)
+        self.sync_fasterwhisper_hotwords()
+
+    def sync_fasterwhisper_hotwords(self):
+        if not self.get_handler_config().get_behavior_use_fasterwhisper_hotwords():
+            return
+
+        self.__handler_debug.write("Syncing UEX data with FasterWhisper hotwords ...")
+        try:
+            from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
+            from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+            from skills.uexcorp.uexcorp.data_access.company_data_access import CompanyDataAccess
+            from skills.uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
+            from skills.uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
+            from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+            from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
+            from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
+            from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from skills.uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+            from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+        except ModuleNotFoundError:
+            from uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
+            from uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+            from uexcorp.uexcorp.data_access.company_data_access import CompanyDataAccess
+            from uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
+            from uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
+            from uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+            from uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
+            from uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
+            from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+            from uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+            from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+            from uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+
+        data_access_instances = [
+            CityDataAccess(),
+            CommodityDataAccess(),
+            CompanyDataAccess(),
+            ItemDataAccess(),
+            MoonDataAccess(),
+            OutpostDataAccess(),
+            PlanetDataAccess(),
+            PoiDataAccess(),
+            SpaceStationDataAccess(),
+            StarSystemDataAccess(),
+            TerminalDataAccess(),
+            VehicleDataAccess(),
+        ]
+
+        hotwordlist = self.get_wingmen().config.fasterwhisper.hotwords or ""
+        hotwords = hotwordlist.split(",")
+        if "UEX" not in hotwords:
+            hotwords.append("UEX")
+        count = len(hotwords)
+        for data_access in data_access_instances:
+            data = data_access.load()
+            for item in data:
+                chunks = str(item).split(" ")
+                for chunk in chunks:
+                    if chunk not in hotwords:
+                        hotwords.append(chunk)
+        count = len(hotwords) - count
+        self.get_wingmen().config.fasterwhisper.hotwords = ",".join(hotwords)
+        self.__handler_debug.write(f"Synced {count} new hotwords with FasterWhisper.")
 
     def wait(self, seconds: int):
         time.sleep(seconds)
