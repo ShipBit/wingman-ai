@@ -5,7 +5,9 @@ import random
 import traceback
 from typing import Mapping, Optional
 from openai.types.chat import ChatCompletion
+import requests
 from api.interface import (
+    OpenRouterEndpointResult,
     SettingsConfig,
     SoundConfig,
     WingmanInitializationError,
@@ -58,6 +60,7 @@ class OpenAiWingman(Wingman):
         self.groq: OpenAi = None
         self.cerebras: OpenAi = None
         self.openrouter: OpenAi = None
+        self.openrouter_model_supports_tools = False
         self.local_llm: OpenAi = None
         self.openai_azure: OpenAiAzure = None
         self.elevenlabs: ElevenLabs = None
@@ -313,10 +316,42 @@ class OpenAiWingman(Wingman):
         self, errors: list[WingmanInitializationError]
     ):
         api_key = await self.retrieve_secret("openrouter", errors)
+
+        async def does_openrouter_model_support_tools(model_id: str):
+            if not model_id:
+                return False
+            response = requests.get(
+                url=f"https://openrouter.ai/api/v1/models/{model_id}/endpoints",
+                timeout=10,
+            )
+            response.raise_for_status()
+            content = response.json()
+            result = OpenRouterEndpointResult(**content.get("data", {}))
+            supports_tools = any(
+                all(
+                    p in endpoint.supported_parameters for p in ["tools", "tool_choice"]
+                )
+                for endpoint in result.endpoints
+            )
+            if not supports_tools:
+                printr.print(
+                    f"{self.name}: OpenRouter model {model_id} does not support tools, so they'll be omitted from calls.",
+                    source=LogSource.WINGMAN,
+                    source_name=self.name,
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+            return supports_tools
+
         if api_key:
             self.openrouter = OpenAi(
                 api_key=api_key,
                 base_url=self.config.openrouter.endpoint,
+            )
+            self.openrouter_model_supports_tools = (
+                await does_openrouter_model_support_tools(
+                    self.config.openrouter.conversation_model
+                )
             )
 
     async def validate_and_set_local_llm(
@@ -1021,11 +1056,18 @@ class OpenAiWingman(Wingman):
                 self.config.features.conversation_provider
                 == ConversationProvider.OPENROUTER
             ):
-                completion = self.openrouter.ask(
-                    messages=messages,
-                    tools=tools,
-                    model=self.config.openrouter.conversation_model,
-                )
+                # OpenRouter throws an error if the model doesn't support tools but we send some
+                if self.openrouter_model_supports_tools:
+                    completion = self.openrouter.ask(
+                        messages=messages,
+                        tools=tools,
+                        model=self.config.openrouter.conversation_model,
+                    )
+                else:
+                    completion = self.openrouter.ask(
+                        messages=messages,
+                        model=self.config.openrouter.conversation_model,
+                    )
             elif (
                 self.config.features.conversation_provider
                 == ConversationProvider.LOCAL_LLM

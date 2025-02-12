@@ -360,6 +360,36 @@ class OpenRouterConfig(BaseModel):
     endpoint: str
 
 
+class OpenRouterArchitecture(BaseModel):
+    tokenizer: str
+    instruct_type: Optional[str]
+    modality: str
+
+
+class OpenRouterEndpointPricing(BaseModel):
+    request: str
+    image: str
+    prompt: str
+    completion: str
+
+
+class OpenRouterEndpoint(BaseModel):
+    name: str
+    context_length: float
+    pricing: OpenRouterEndpointPricing
+    provider_name: str
+    supported_parameters: list[str]
+
+
+class OpenRouterEndpointResult(BaseModel):
+    id: str
+    name: str
+    created: float
+    description: str
+    architecture: OpenRouterArchitecture
+    endpoints: list[OpenRouterEndpoint]
+
+
 class LocalLlmConfig(BaseModel):
     conversation_model: Optional[str] = None
     endpoint: str

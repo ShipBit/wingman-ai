@@ -27,6 +27,7 @@ from api.interface import (
     Config,
     ConfigWithDirInfo,
     ElevenlabsModel,
+    OpenRouterEndpointResult,
     VoiceActivationSettings,
     WingmanInitializationError,
 )
@@ -193,6 +194,13 @@ class WingmanCore(WebSocketUser):
             path="/models/openrouter",
             response_model=list,
             endpoint=self.get_openrouter_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/openrouter/endpoints",
+            response_model=Optional[OpenRouterEndpointResult],
+            endpoint=self.get_openrouter_model_endpoints,
             tags=tags,
         )
         self.router.add_api_route(
@@ -1011,10 +1019,23 @@ class WingmanCore(WebSocketUser):
 
     # GET /models/openrouter
     async def get_openrouter_models(self):
-        response = requests.get(url=f"https://openrouter.ai/api/v1/models", timeout=10)
+        response = requests.get(url="https://openrouter.ai/api/v1/models", timeout=10)
         response.raise_for_status()
         content = response.json()
         return content.get("data", [])
+
+    # GET /models/openrouter/endpoints
+    async def get_openrouter_model_endpoints(self, model_id: str):
+        if not model_id:
+            return None
+        response = requests.get(
+            url=f"https://openrouter.ai/api/v1/models/{model_id}/endpoints",
+            timeout=10,
+        )
+        response.raise_for_status()
+        content = response.json()
+        result = OpenRouterEndpointResult(**content.get("data", {}))
+        return result
 
     # GET /models/groq
     async def get_groq_models(self):
@@ -1062,7 +1083,7 @@ class WingmanCore(WebSocketUser):
         response.raise_for_status()
         content = response.json()
         return content.get("data", [])
-    
+
     async def get_wingman_pro_models(self):
         wingman_pro_token = await self.secret_keeper.retrieve(
             key="wingman_pro", requester="WingmanPro"
