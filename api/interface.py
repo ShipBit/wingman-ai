@@ -476,6 +476,12 @@ class AudioFileConfig(BaseModel):
     wait: bool
     """Whether to wait for the audio file to finish playing before continuing."""
 
+    stop: Optional[bool] = None
+    """Whether to stop instead of play the audio file. (Only stop or resume can be true)"""
+
+    resume: Optional[bool] = None
+    """Whether to resume instead of play from the last stopped audio file. (Only stop or resume can be true)"""
+
 
 class CommandKeyboardConfig(BaseModel):
     hotkey: str
