@@ -34,6 +34,7 @@ class ConfigHandler:
         self.__behavior_commodity_route_default_count: int = 1
         self.__behavior_commodity_route_use_estimated_availability: bool = True
         self.__behavior_commodity_route_advanced_info: bool = False
+        self.__behavior_use_fasterwhisper_hotwords: bool = False
 
     async def validate(self, errors: list[WingmanInitializationError], retrieve_custom_property_value: callable) -> list[WingmanInitializationError]:
         try:
@@ -57,32 +58,32 @@ class ConfigHandler:
             if retrieve_custom_property_value("tool_commodity_information", errors):
                 self.__behavior_enabled_tools.append(CommodityInformation.TOOL_NAME)
                 if CommodityInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = False
+                    needs_authentication = True
 
             if retrieve_custom_property_value("tool_commodity_route", errors):
                 self.__behavior_enabled_tools.append(CommodityRoute.TOOL_NAME)
                 if CommodityRoute.REQUIRES_AUTHENTICATION:
-                    needs_authentication = False
+                    needs_authentication = True
 
             if retrieve_custom_property_value("tool_item_information", errors):
                 self.__behavior_enabled_tools.append(ItemInformation.TOOL_NAME)
                 if ItemInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = False
+                    needs_authentication = True
 
             if retrieve_custom_property_value("tool_location_information", errors):
                 self.__behavior_enabled_tools.append(LocationInformation.TOOL_NAME)
                 if LocationInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = False
+                    needs_authentication = True
 
             if retrieve_custom_property_value("tool_vehicle_information", errors):
                 self.__behavior_enabled_tools.append(VehicleInformation.TOOL_NAME)
                 if VehicleInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = False
+                    needs_authentication = True
 
             if retrieve_custom_property_value("tool_profit_calculation", errors):
                 self.__behavior_enabled_tools.append(ProfitCalculation.TOOL_NAME)
                 if ProfitCalculation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = False
+                    needs_authentication = True
 
             if needs_authentication:
                 api_key = await self.__helper.get_handler_secret().retrieve(
@@ -92,6 +93,10 @@ class ConfigHandler:
                 )
                 if api_key:
                     self.set_api_key(api_key)
+
+            self.set_behavior_update_fasterwhisper_hotwords(
+                retrieve_custom_property_value("add_fasterwhisper_hotwords", errors)
+            )
 
             self.set_behavior_commodity_route_default_count(
                 retrieve_custom_property_value("commodity_route_default_count", errors)
@@ -298,6 +303,12 @@ class ConfigHandler:
 
     def set_behavior_commodity_route_advanced_info(self, advanced_info: bool):
         self.__behavior_commodity_route_advanced_info = advanced_info
+
+    def get_behavior_use_fasterwhisper_hotwords(self) -> bool:
+        return self.__behavior_use_fasterwhisper_hotwords
+
+    def set_behavior_update_fasterwhisper_hotwords(self, update: bool):
+        self.__behavior_use_fasterwhisper_hotwords = update
 
     def set_wingman(self, wingman: "OpenAiWingman"):
         self.__wingman = wingman
