@@ -384,7 +384,7 @@ class Wingman:
 
     # ───────────────────────────────── Commands ─────────────────────────────── #
 
-    def get_command(self, command_name: str):
+    def get_command(self, command_name: str) -> CommandConfig | None:
         """Extracts the command with the given name
 
         Args:
