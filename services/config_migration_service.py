@@ -363,6 +363,9 @@ class ConfigMigrationService:
                 "fasterwhisper_config"
             ]
             self.log("- added new fasterwhisper settings and config")
+
+            old["voice_activation"]["stt_provider"] = "fasterwhisper"
+            self.log("- set FasterWhisper as new default VA STT provider.")
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:
@@ -382,7 +385,11 @@ class ConfigMigrationService:
             # migrate uexcorp skill
             if old.get("skills", None):
                 uexcorp_skill = next(
-                    (skill for skill in old["skills"] if skill.get("module", "") == "skills.uexcorp.main"),
+                    (
+                        skill
+                        for skill in old["skills"]
+                        if skill.get("module", "") == "skills.uexcorp.main"
+                    ),
                     None,
                 )
                 if uexcorp_skill:
@@ -410,7 +417,7 @@ class ConfigMigrationService:
                         },
                         {
                             "answer": {
-                                "de": "Die Hull-C wird von Musashi Industrial & Starflight Concern hergestellt und gehört zur \"HULL\"-Serie. Sie dient als [...]",
+                                "de": 'Die Hull-C wird von Musashi Industrial & Starflight Concern hergestellt und gehört zur "HULL"-Serie. Sie dient als [...]',
                                 "en": "The Hull-C is manufactured by Musashi Industrial & Starflight Concern and falls under the 'HULL' series. It [...]",
                             },
                             "question": {
