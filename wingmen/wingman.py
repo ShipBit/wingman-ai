@@ -354,7 +354,7 @@ class Wingman:
 
     async def _get_response_for_transcript(
         self, transcript: str, benchmark: Benchmark
-    ) -> tuple[str, str, Skill | None, bool | None]:
+    ) -> tuple[str | None, str | None, Skill | None, bool | None]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
