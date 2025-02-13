@@ -1,9 +1,9 @@
 from os import path
 from typing import TYPE_CHECKING
-from services.benchmark import Benchmark
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from api.enums import LogType
+from services.benchmark import Benchmark
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from services.file import get_writable_dir
 from skills.skill_base import Skill
@@ -37,11 +37,13 @@ class Spotify(Skill):
         errors = await super().validate()
 
         self.secret = await self.retrieve_secret("spotify_client_secret", errors)
-        client_id = self.retrieve_custom_property_value("spotify_client_id", errors)
-        redirect_url = self.retrieve_custom_property_value(
+        client_id: str = self.retrieve_custom_property_value(
+            "spotify_client_id", errors
+        ).strip()
+        redirect_url: str = self.retrieve_custom_property_value(
             "spotify_redirect_url", errors
-        )
-        if self.secret and client_id and redirect_url:
+        ).strip()
+        if self.secret and client_id != "enter-your-client-id-here" and redirect_url:
             # now that we have everything, initialize the Spotify client
             cache_handler = spotipy.cache_handler.CacheFileHandler(
                 cache_path=f"{self.data_path}/.cache"
@@ -67,6 +69,7 @@ class Spotify(Skill):
                     cache_handler=cache_handler,
                 )
             )
+
         return errors
 
     def get_tools(self) -> list[tuple[str, dict]]:
