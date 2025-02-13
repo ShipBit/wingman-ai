@@ -166,6 +166,9 @@ class QuickCommands(Skill):
             if not command:
                 # AI probably hallucinated
                 return
+            if command.instant_activation and phrase in command.instant_activation:
+                # phrase is already learned
+                return
 
         # add / increase count of the phrase
         if phrase in self.learning_data:
