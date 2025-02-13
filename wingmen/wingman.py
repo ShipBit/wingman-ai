@@ -592,7 +592,7 @@ class Wingman:
                     time.sleep(action.wait)
 
                 if action.audio:
-                    await self.audio_library.start_playback(
+                    await self.audio_library.handle_action(
                         action.audio, self.config.sound.volume
                     )
         except Exception as e:
