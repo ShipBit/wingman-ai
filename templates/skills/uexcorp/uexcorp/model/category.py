@@ -18,6 +18,7 @@ class Category(DataModel):
             is_mining: int | None = None, # tinyint(1)
             date_added: int | None = None, # int(11)
             date_modified: int | None = None, # int(11)
+            combined_name: str | None = None, # varchar(255) | Workaround for sqlite without CONCAT
             load: bool = False,
     ):
         super().__init__("category")
@@ -31,6 +32,7 @@ class Category(DataModel):
             "date_added": date_added,
             "date_modified": date_modified,
             "last_import_run_id": None,
+            "combined_name": combined_name,
         }
         if load:
             if not self.data["id"]:
@@ -78,6 +80,9 @@ class Category(DataModel):
 
     def get_date_modified_readable(self) -> datetime | None:
         return datetime.fromtimestamp(self.data["date_modified"])
+
+    def get_combined_name(self) -> str | None:
+        return self.data["combined_name"]
 
     def __str__(self):
         return f"{str(self.get_section())} {str(self.get_name())}"
