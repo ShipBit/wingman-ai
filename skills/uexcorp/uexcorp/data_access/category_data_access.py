@@ -1,7 +1,6 @@
 try:
     from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
     from skills.uexcorp.uexcorp.model.category import Category
-    from skills.uexcorp.uexcorp.database.filter import Filter
 except ModuleNotFoundError:
     from uexcorp.uexcorp.data_access.data_access import DataAccess
     from uexcorp.uexcorp.model.category import Category
