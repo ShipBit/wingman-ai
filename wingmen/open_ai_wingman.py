@@ -66,17 +66,17 @@ class OpenAiWingman(Wingman):
 
         # validate will set these:
         self.openai: OpenAi | None = None
-        self.mistral: OpenAi | None  = None
-        self.groq: OpenAi | None  = None
-        self.cerebras: OpenAi | None  = None
-        self.openrouter: OpenAi | None  = None
+        self.mistral: OpenAi | None = None
+        self.groq: OpenAi | None = None
+        self.cerebras: OpenAi | None = None
+        self.openrouter: OpenAi | None = None
         self.openrouter_model_supports_tools = False
-        self.local_llm: OpenAi | None  = None
-        self.openai_azure: OpenAiAzure | None  = None
-        self.elevenlabs: ElevenLabs | None  = None
-        self.wingman_pro: WingmanPro | None  = None
-        self.google: GoogleGenAI | None  = None
-        self.perplexity: OpenAi | None  = None
+        self.local_llm: OpenAi | None = None
+        self.openai_azure: OpenAiAzure | None = None
+        self.elevenlabs: ElevenLabs | None = None
+        self.wingman_pro: WingmanPro | None = None
+        self.google: GoogleGenAI | None = None
+        self.perplexity: OpenAi | None = None
 
         # tool queue
         self.pending_tool_calls = []
@@ -556,14 +556,16 @@ class OpenAiWingman(Wingman):
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
-        if not transcript:
-            return None
+        result = None
+        if transcript:
+            # Wingman Pro might returns a serialized dict instead of a real Azure Speech transcription object
+            result = (
+                transcript.get("_text")
+                if isinstance(transcript, dict)
+                else transcript.text
+            )
 
-        # Wingman Pro might returns a serialized dict instead of a real Azure Speech transcription object
-        if isinstance(transcript, dict):
-            return transcript.get("_text")
-
-        return transcript.text
+        return result
 
     async def _get_response_for_transcript(
         self, transcript: str, benchmark: Benchmark
@@ -588,7 +590,9 @@ class OpenAiWingman(Wingman):
         if instant_response:
             await self.add_assistant_message(instant_response)
             benchmark.finish_snapshot()
-            if instant_response == '.': # thats for the "The UI should not give a response" option in commands
+            if (
+                instant_response == "."
+            ):  # thats for the "The UI should not give a response" option in commands
                 instant_response = None
             return instant_response, instant_response, None, True
         benchmark.finish_snapshot()
@@ -896,7 +900,8 @@ class OpenAiWingman(Wingman):
         if (
             self.config.features.conversation_provider == ConversationProvider.OPENAI
         ) or (
-            self.config.features.conversation_provider == ConversationProvider.WINGMAN_PRO
+            self.config.features.conversation_provider
+            == ConversationProvider.WINGMAN_PRO
             and "gpt" in self.config.wingman_pro.conversation_deployment.lower()
         ):
             # generate tool calls in openai style
@@ -1312,7 +1317,7 @@ class OpenAiWingman(Wingman):
                     traceback.format_exc(), color=LogType.ERROR, server_only=True
                 )
                 function_response = (
-                    "ERROR DURING PROCESSING" # hints to AI that there was an error
+                    "ERROR DURING PROCESSING"  # hints to AI that there was an error
                 )
                 instant_response = None
             finally:

@@ -1,5 +1,6 @@
 debug_mode: false
 audio: {}
+streamer_mode: false
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"

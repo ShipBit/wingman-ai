@@ -365,7 +365,11 @@ class ConfigMigrationService:
             self.log("- added new fasterwhisper settings and config")
 
             old["voice_activation"]["stt_provider"] = "fasterwhisper"
-            self.log("- set FasterWhisper as new default VA STT provider.")
+            self.log("- set FasterWhisper as new default VA STT provider")
+
+            old["streamer_mode"] = False
+            self.log("- added new property streamer_mode")
+
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:

@@ -246,3 +246,17 @@ class Tower:
             source=LogSource.SYSTEM,
         )
         return False
+
+    def save_last_message(self, wingman_name: str, last_message: str):
+        for wingman in self.wingmen:
+            if wingman.name == wingman_name:
+                for wingman_file in self.config_manager.get_wingmen_configs(
+                    self.config_dir
+                ):
+                    if wingman_file.name == wingman_name:
+                        return self.config_manager.save_last_wingman_message(
+                            config_dir=self.config_dir,
+                            wingman_file=wingman_file,
+                            last_message=last_message,
+                        )
+        return False

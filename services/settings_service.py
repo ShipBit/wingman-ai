@@ -134,6 +134,7 @@ class SettingsService:
         # rest
         self.config_manager.settings_config.wingman_pro = settings.wingman_pro
         self.config_manager.settings_config.debug_mode = settings.debug_mode
+        self.config_manager.settings_config.streamer_mode = settings.streamer_mode
 
         # save the config file
         self.config_manager.save_settings_config()

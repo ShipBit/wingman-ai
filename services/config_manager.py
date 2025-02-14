@@ -508,6 +508,24 @@ class ConfigManager:
                     wingmen.append(wingman_file)
         return wingmen
 
+    def save_last_wingman_message(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        last_message: str,
+    ):
+        message_file = wingman_file.file.replace(".yaml", ".last-message.txt")
+        message_path = path.join(self.config_dir, config_dir.directory, message_file)
+        try:
+            with open(message_path, "w", encoding="utf-8") as file:
+                file.write(last_message)
+                return True
+        except:
+            self.printr.toast_error(
+                f"Unable to save last message for Wingman '{wingman_file.name}'."
+            )
+        return False
+
     def save_wingman_config(
         self,
         config_dir: ConfigDirInfo,

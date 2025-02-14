@@ -776,7 +776,8 @@ class SettingsConfig(BaseModel):
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
-    debug_mode: bool = False
+    debug_mode: bool
+    streamer_mode: bool
 
 
 class BenchmarkResult(BaseModel):

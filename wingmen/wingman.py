@@ -329,8 +329,11 @@ class Wingman:
                         benchmark_result=benchmark_llm.finish(),
                     )
 
-            # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
             if process_result:
+                if self.settings.streamer_mode:
+                    self.tower.save_last_message(self.name, process_result)
+
+                # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
                 await self.play_to_user(str(process_result), not interrupt)
         except Exception as e:
             await printr.print_async(
