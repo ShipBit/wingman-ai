@@ -22,7 +22,8 @@ CREATE TABLE category(
     `is_mining` BIT,
     `date_added` INTEGER,
     `date_modified` INTEGER,
-    `last_import_run_id` INTEGER
+    `last_import_run_id` INTEGER,
+    `combined_name` TEXT
 );
 
 CREATE TABLE category_attribute(

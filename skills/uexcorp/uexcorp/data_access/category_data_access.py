@@ -29,8 +29,11 @@ class CategoryDataAccess(DataAccess):
         return super().load(**params)
 
     def add_filter_by_combined_name(self, combined_name: str | list[str]) -> "CategoryDataAccess":
-        self.filter.where("CONCAT(section, ' ', name)", combined_name)
-        return self
+        # CONCAT might be supported in a future version of sqlite
+        # self.filter.where("CONCAT(section, ' ', name)", combined_name)
+
+        # For now, we will use a custom column thats filled on import
+        self.filter.where("combined_name", combined_name)
 
     def add_filter_by_type(self, type: str | list[str]) -> "CategoryDataAccess":
         self.filter.where("type", type)

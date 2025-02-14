@@ -129,6 +129,11 @@ class ImportHandler:
         if category_data:
             for index, data in enumerate(category_data):
                 category = Category(data["id"])
+
+                # workaround for missing sqlite CONCAT function
+                if "name" in data and "section" in data:
+                    data["combined_name"] = f"{data['section']} {data['name']}"
+
                 category.set_data(data)
                 if category.get_section() == "Armor" and category.get_name() == "Set":
                     category.data["is_game_related"] = 0
