@@ -4,7 +4,7 @@ voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
   energy_threshold: 0.01
-  stt_provider: whispercpp # azure, whispercpp, openai
+  stt_provider: fasterwhisper
   azure:
     region: westeurope
     languages:
