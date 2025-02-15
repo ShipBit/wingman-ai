@@ -74,7 +74,7 @@ class FasterWhisper:
                 beam_size=config.beam_size,
                 best_of=config.best_of,
                 temperature=config.temperature,
-                hotwords=",".join(hotwords) if len(hotwords) > 0 else None,
+                hotwords=", ".join(hotwords) if len(hotwords) > 0 else None,
                 no_speech_threshold=config.no_speech_threshold,
                 language=config.language,
                 multilingual=False if config.language else config.multilingual,

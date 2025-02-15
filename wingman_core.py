@@ -666,7 +666,7 @@ class WingmanCore(WebSocketUser):
                 config=self.settings_service.settings.voice_activation.fasterwhisper_config,
                 filename=recording_file,
                 initial_hotwords=(
-                    ",".join(combined_hotwords) if len(combined_hotwords) > 0 else None
+                    ", ".join(combined_hotwords) if len(combined_hotwords) > 0 else None
                 ),
             )
             text = transcription.text

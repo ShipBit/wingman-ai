@@ -165,7 +165,7 @@ class Helper:
                     if chunk not in hotwords:
                         hotwords.append(chunk)
         count = len(hotwords) - count
-        self.get_wingmen().config.fasterwhisper.hotwords = ",".join(hotwords)
+        self.get_wingmen().config.fasterwhisper.hotwords = ", ".join(hotwords)
         self.__handler_debug.write(f"Synced {count} new hotwords with FasterWhisper.")
 
     def wait(self, seconds: int):
