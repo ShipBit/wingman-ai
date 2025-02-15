@@ -31,9 +31,12 @@ Checkout the repository and start a terminal in the root folder.
 
 ```bash
 python -m venv venv                 # create a virtual environment
-.\venv\scripts\activate              # activate the virtual environment
+.\venv\scripts\activate             # activate the virtual environment
 pip install -r requirements.txt     # install dependencies
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu124 # only if you have a NVIDIA RTX GPU and want to use CUDA for FasterWhisper
 ```
+
+Copy `C:\Program Files\Wingman AI\faster-whisper-models` into your root source dir. You can skip this but if you do, it will auto-download the model from huggingface which currently takes too long and will crash Wingman AI on first launch. You can also just wait a minute and then restart Wingman AI Core.
 
 ## Create your config
 

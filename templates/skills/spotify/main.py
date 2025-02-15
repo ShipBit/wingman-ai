@@ -2,7 +2,8 @@ from os import path
 from typing import TYPE_CHECKING
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from api.enums import LogType
+from services.benchmark import Benchmark
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from services.file import get_writable_dir
 from skills.skill_base import Skill
@@ -36,11 +37,13 @@ class Spotify(Skill):
         errors = await super().validate()
 
         self.secret = await self.retrieve_secret("spotify_client_secret", errors)
-        client_id = self.retrieve_custom_property_value("spotify_client_id", errors)
-        redirect_url = self.retrieve_custom_property_value(
+        client_id: str = self.retrieve_custom_property_value(
+            "spotify_client_id", errors
+        ).strip()
+        redirect_url: str = self.retrieve_custom_property_value(
             "spotify_redirect_url", errors
-        )
-        if self.secret and client_id and redirect_url:
+        ).strip()
+        if self.secret and client_id != "enter-your-client-id-here" and redirect_url:
             # now that we have everything, initialize the Spotify client
             cache_handler = spotipy.cache_handler.CacheFileHandler(
                 cache_path=f"{self.data_path}/.cache"
@@ -66,6 +69,7 @@ class Spotify(Skill):
                     cache_handler=cache_handler,
                 )
             )
+
         return errors
 
     def get_tools(self) -> list[tuple[str, dict]]:
@@ -194,33 +198,31 @@ class Spotify(Skill):
         return tools
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         instant_response = ""  # not used here
         function_response = "Unable to control Spotify."
 
-        if tool_name not in [
+        if tool_name in [
             "control_spotify_device",
             "control_spotify_playback",
             "play_song_with_spotify",
             "interact_with_spotify_playlists",
         ]:
-            return function_response, instant_response
+            benchmark.start_snapshot(f"Spotify: {tool_name}")
 
-        if self.settings.debug_mode:
-            self.start_execution_benchmark()
-            await self.printr.print_async(
-                f"Spotify: Executing {tool_name} with parameters: {parameters}",
-                color=LogType.INFO,
-            )
+            if self.settings.debug_mode:
+                message = f"Spotify: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(text=message, color=LogType.INFO)
 
-        action = parameters.get("action", None)
-        parameters.pop("action", None)
-        function = getattr(self, action if action else tool_name)
-        function_response = function(**parameters)
+            action = parameters.get("action", None)
+            parameters.pop("action", None)
+            function = getattr(self, action if action else tool_name)
+            function_response = function(**parameters)
 
-        if self.settings.debug_mode:
-            await self.print_execution_time()
+            benchmark.finish_snapshot()
 
         return function_response, instant_response
 

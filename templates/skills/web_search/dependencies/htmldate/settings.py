@@ -10,7 +10,6 @@ CACHE_SIZE: int = 8192
 
 # Download
 MAX_FILE_SIZE: int = 20000000
-MIN_FILE_SIZE: int = 10
 
 # Plausible dates
 # earliest possible date to take into account (inclusive)

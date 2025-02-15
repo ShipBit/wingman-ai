@@ -1,6 +1,6 @@
 from typing import Optional
 from typing_extensions import Annotated, TypedDict
-from pydantic import Base64Str, BaseModel, Field, model_validator
+from pydantic import Base64Str, BaseModel, ConfigDict, Field, model_validator
 from api.enums import (
     AzureApiVersion,
     AzureRegion,
@@ -17,7 +17,6 @@ from api.enums import (
     TtsProvider,
     VoiceActivationSttProvider,
     WingmanInitializationErrorType,
-    WingmanProAzureDeployment,
     WingmanProRegion,
     WingmanProSttProvider,
     WingmanProTtsProvider,
@@ -111,12 +110,19 @@ class AudioSettings(BaseModel):
 
 
 class WhispercppSettings(BaseModel):
+    enable: bool
     host: str
     port: int
-    model: str
-    language: str
-    translate_to_english: bool
-    use_cuda: bool
+
+
+class FasterWhisperSettings(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+    """tiny, tiny.en, base, base.en, small, small.en, distil-small.en, medium, medium.en, distil-medium.en, large-v1, large-v2, large-v3, large, distil-large-v2, distil-large-v3, large-v3-turbo, or turbo"""
+    model_size: str
+    """default (model original), auto (fastest available on device), int8, int8_float16 etc. - see https://opennmt.net/CTranslate2/quantization.html#quantize-on-model-conversion"""
+    compute_type: str
+    """cpu, cuda, auto"""
+    device: str
 
 
 class XVASynthSettings(BaseModel):
@@ -133,9 +139,25 @@ class WhispercppSttConfig(BaseModel):
     temperature: float
 
 
+class FasterWhisperSttConfig(BaseModel):
+    beam_size: int
+    language: Optional[str] = None
+    hotwords: Optional[str] = None
+    best_of: int
+    temperature: float
+    no_speech_threshold: float
+    multilingual: bool
+    language_detection_threshold: float
+
+
 class WhispercppTranscript(BaseModel):
     text: str
+
+
+class FasterWhisperTranscript(BaseModel):
+    text: str
     language: str
+    language_probability: float
 
 
 class AzureInstanceConfig(BaseModel):
@@ -179,6 +201,7 @@ class ElevenlabsLanguage(BaseModel):
 
 
 class ElevenlabsModelMetadata(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     model_id: str
     name: str
     can_be_finetuned: bool
@@ -196,6 +219,7 @@ class ElevenlabsModelMetadata(BaseModel):
 
 
 class ElevenlabsModel(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     name: str
     model_id: str
     description: str
@@ -258,6 +282,7 @@ class EdgeTtsConfig(BaseModel):
 
 
 class XVASynthVoiceConfig(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     model_directory: str
     """The model (or game) directory in which your downloaded voice resides. The model directories are located in [xva-install-dir]/resources/app/models/."""
     voice_name: str
@@ -300,7 +325,7 @@ class OpenAiConfig(BaseModel):
 
 class PromptConfig(BaseModel):
     system_prompt: str
-    """The read-only "context template" for the Wingman. Contains variables that will be replaced by the user (backstory) and/or skills."""
+    """The "context template" for the Wingman. Contains variables that will be replaced by the user (backstory) and/or skills."""
 
     backstory: Optional[str] = None
     """The backstory of the Wingman. Edit this to control how your Wingman should behave."""
@@ -335,6 +360,36 @@ class OpenRouterConfig(BaseModel):
     endpoint: str
 
 
+class OpenRouterArchitecture(BaseModel):
+    tokenizer: str
+    instruct_type: Optional[str]
+    modality: str
+
+
+class OpenRouterEndpointPricing(BaseModel):
+    request: str
+    image: str
+    prompt: str
+    completion: str
+
+
+class OpenRouterEndpoint(BaseModel):
+    name: str
+    context_length: float
+    pricing: OpenRouterEndpointPricing
+    provider_name: str
+    supported_parameters: list[str]
+
+
+class OpenRouterEndpointResult(BaseModel):
+    id: str
+    name: str
+    created: float
+    description: str
+    architecture: OpenRouterArchitecture
+    endpoints: list[OpenRouterEndpoint]
+
+
 class LocalLlmConfig(BaseModel):
     conversation_model: Optional[str] = None
     endpoint: str
@@ -343,7 +398,7 @@ class LocalLlmConfig(BaseModel):
 class WingmanProConfig(BaseModel):
     stt_provider: WingmanProSttProvider
     tts_provider: WingmanProTtsProvider
-    conversation_deployment: WingmanProAzureDeployment
+    conversation_deployment: str
     # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
 
 
@@ -384,7 +439,9 @@ class VoiceActivationSettings(BaseModel):
 
     azure: AzureSttConfig
     whispercpp: WhispercppSettings
+    fasterwhisper: FasterWhisperSettings
     whispercpp_config: WhispercppSttConfig
+    fasterwhisper_config: FasterWhisperSttConfig
 
 
 class FeaturesConfig(BaseModel):
@@ -418,6 +475,12 @@ class AudioFileConfig(BaseModel):
 
     wait: bool
     """Whether to wait for the audio file to finish playing before continuing."""
+
+    stop: Optional[bool] = None
+    """Whether to stop instead of play the audio file. (Only stop or resume can be true)"""
+
+    resume: Optional[bool] = None
+    """Whether to resume instead of play from the last stopped audio file. (Only stop or resume can be true)"""
 
 
 class CommandKeyboardConfig(BaseModel):
@@ -457,6 +520,17 @@ class CommandMouseConfig(BaseModel):
     """The x, y coordinates to move the mouse to on the screen, expected [x,y] format in yaml.  Must have associated button press to work."""
 
 
+class CommandJoystickConfig(BaseModel):
+    button: Optional[int] = None
+    """The joystick button to press. Optional."""
+
+    name: Optional[str] = None
+    """The joystick name to use. Optional."""
+
+    guid: Optional[str] = None
+    """The joystick GUID to use. Optional."""
+
+
 class CommandActionConfig(BaseModel):
     keyboard: Optional[CommandKeyboardConfig] = None
     """The keyboard configuration for this action. Optional."""
@@ -472,6 +546,9 @@ class CommandActionConfig(BaseModel):
 
     audio: Optional[AudioFileConfig] = None
     """The audio file to play. Optional."""
+
+    joystick: Optional[CommandJoystickConfig] = None
+    """The joystick configuration for this action. Optional."""
 
 
 class CommandConfig(BaseModel):
@@ -602,6 +679,7 @@ class NestedConfig(BaseModel):
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
+    fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
     commands: Optional[list[CommandConfig]] = None
@@ -615,9 +693,28 @@ class BasicWingmanConfig(BaseModel):
     disabled: Optional[bool] = False
     record_key: Optional[str] = None
     record_key_codes: Optional[list[int]] = None
+    record_mouse_button: Optional[str] = None
+    record_joystick_button: Optional[CommandJoystickConfig] = None
     sound: SoundConfig
     voice: str | OpenAiTtsVoice
-    backstory: Optional[str] = None
+    prompts: PromptConfig
+
+    features: FeaturesConfig
+    openai: OpenAiConfig
+    mistral: MistralConfig
+    groq: GroqConfig
+    cerebras: CerebrasConfig
+    google: GoogleConfig
+    openrouter: OpenRouterConfig
+    local_llm: LocalLlmConfig
+    edge_tts: EdgeTtsConfig
+    elevenlabs: ElevenlabsConfig
+    azure: AzureConfig
+    xvasynth: XVASynthTtsConfig
+    whispercpp: WhispercppSttConfig
+    fasterwhisper: FasterWhisperSttConfig
+    wingman_pro: WingmanProConfig
+    perplexity: PerplexityConfig
 
 
 class WingmanConfig(NestedConfig):
@@ -644,6 +741,8 @@ class WingmanConfig(NestedConfig):
     """The "push-to-talk" key code for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""
     record_mouse_button: Optional[str] = None
     """The "push-to-talk" mouse button for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
+    record_joystick_button: Optional[CommandJoystickConfig] = None
+    """The "push-to-talk" joystick config for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
     is_voice_activation_default: Optional[bool] = None
     """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
 
@@ -677,4 +776,15 @@ class SettingsConfig(BaseModel):
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
-    debug_mode: bool = False
+    debug_mode: bool
+    streamer_mode: bool
+
+
+class BenchmarkResult(BaseModel):
+    label: str
+    execution_time_ms: float
+    formatted_execution_time: str
+    snapshots: Optional[list["BenchmarkResult"]] = None
+
+
+BenchmarkResult.model_rebuild()

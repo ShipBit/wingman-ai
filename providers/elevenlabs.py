@@ -1,6 +1,6 @@
 import asyncio
 from typing import Optional
-from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXGenerationOptions
+from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXOptions
 from api.enums import SoundEffect, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
@@ -53,7 +53,9 @@ class ElevenLabs:
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
             if contains_high_end_radio:
-                audio_player.play_wav_sample("Radio_Static_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample(
+                    "Radio_Static_Beep.wav", sound_config.volume
+                )
 
             if sound_config.play_beep:
                 audio_player.play_wav_sample("beep.wav", sound_config.volume)
@@ -72,7 +74,9 @@ class ElevenLabs:
 
             contains_high_end_radio = SoundEffect.HIGH_END_RADIO in sound_config.effects
             if contains_high_end_radio:
-                audio_player.play_wav_sample("Radio_Static_Beep.wav", sound_config.volume)
+                audio_player.play_wav_sample(
+                    "Radio_Static_Beep.wav", sound_config.volume
+                )
 
             WebSocketUser.ensure_async(
                 audio_player.notify_playback_started(wingman_name)
@@ -147,7 +151,7 @@ class ElevenLabs:
         prompt_influence: Optional[float] = None,
     ):
         user = User(self.api_key)
-        options = SFXGenerationOptions(
+        options = SFXOptions(
             duration_seconds=duration_seconds, prompt_influence=prompt_influence
         )
         req, _ = user.generate_sfx(prompt, options)

@@ -6,6 +6,7 @@ import pygetwindow as gw
 from clipboard import Clipboard
 from api.interface import SettingsConfig, SkillConfig
 from api.enums import LogType
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 import mouse.mouse as mouse
 
@@ -271,18 +272,18 @@ class ControlWindows(Skill):
         return tools
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = "Error: Application not found."
         instant_response = ""
 
         if tool_name == "control_windows_functions":
+            benchmark.start_snapshot("Control Windows: control_windows_functions")
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
-                await self.printr.print_async(
-                    f"Executing control_windows_functions with parameters: {parameters}",
-                    color=LogType.INFO,
-                )
+                message = f"Control Windows: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(message, color=LogType.INFO)
 
             parameter = parameters.get("parameter")
 
@@ -335,7 +336,6 @@ class ControlWindows(Skill):
                 if app_minimize:
                     function_response = f"Application {command}."
 
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            benchmark.finish_snapshot()
 
         return function_response, instant_response

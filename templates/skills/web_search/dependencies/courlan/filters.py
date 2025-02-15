@@ -10,7 +10,7 @@ from ipaddress import ip_address
 from typing import Any, Optional, Tuple
 from urllib.parse import urlsplit
 
-from babel import Locale, UnknownLocaleError  # type: ignore
+from babel import Locale, UnknownLocaleError
 
 
 LOGGER = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ IP_SET = {
 }
 
 # https://github.com/python-validators/validators/blob/master/src/validators/domain.py
-VALID_DOMAIN = re.compile(
+VALID_DOMAIN_PORT = re.compile(
     # First character of the domain
     r"^(?:[a-zA-Z0-9]"
     # Sub domain + hostname
@@ -49,7 +49,10 @@ VALID_DOMAIN = re.compile(
     # First 61 characters of the gTLD
     + r"+[A-Za-z0-9][A-Za-z0-9-_]{0,61}"
     # Last character of the gTLD
-    + r"[A-Za-z]$",
+    + r"[A-Za-z]"
+    # Port number
+    + r"(\:(6553[0-5]|655[0-2][0-9]|65[0-4][0-9]{2}|"
+    + r"6[0-4][0-9]{3}|[1-5][0-9]{4}|[1-9][0-9]{0,3}))?$",
     re.IGNORECASE,
 )
 
@@ -151,9 +154,9 @@ def domain_filter(domain: str) -> bool:
         return True
 
     # malformed domains
-    if not VALID_DOMAIN.match(domain):
+    if not VALID_DOMAIN_PORT.match(domain):
         try:
-            if not VALID_DOMAIN.match(domain.encode("idna").decode("utf-8")):
+            if not VALID_DOMAIN_PORT.match(domain.encode("idna").decode("utf-8")):
                 return False
         except UnicodeError:
             return False
@@ -217,11 +220,7 @@ def lang_filter(
     if strict:
         match = HOST_LANG_FILTER.match(url)
         if match:
-            candidate = match[1].lower()
-            if candidate == language:
-                score += 1
-            else:
-                score -= 1
+            score += 1 if match[1].lower() == language else -1
     # determine test result
     return score >= 0
 
@@ -236,17 +235,16 @@ def path_filter(urlpath: str, query: str) -> bool:
 def type_filter(url: str, strict: bool = False, with_nav: bool = False) -> bool:
     """Make sure the target URL is from a suitable type (HTML page with primarily text).
     Strict: Try to filter out other document types, spam, video and adult websites."""
-    try:
+    if (
         # feeds + blogspot
-        if url.endswith(("/feed", "/rss", "_archive.html")):
-            raise ValueError
+        url.endswith(("/feed", "/rss", "_archive.html"))
+        or
         # website structure
-        if SITE_STRUCTURE.search(url) and (not with_nav or not is_navigation_page(url)):
-            raise ValueError
+        (SITE_STRUCTURE.search(url) and (not with_nav or not is_navigation_page(url)))
+        or
         # type (also hidden in parameters), videos, adult content
-        if strict and (FILE_TYPE.search(url) or ADULT_AND_VIDEOS.search(url)):
-            raise ValueError
-    except ValueError:
+        (strict and (FILE_TYPE.search(url) or ADULT_AND_VIDEOS.search(url)))
+    ):
         return False
     # default
     return True
@@ -259,7 +257,7 @@ def validate_url(url: Optional[str]) -> Tuple[bool, Any]:
     except ValueError:
         return False, None
 
-    if not bool(parsed_url.scheme) or parsed_url.scheme not in PROTOCOLS:
+    if not parsed_url.scheme or parsed_url.scheme not in PROTOCOLS:
         return False, None
 
     if len(parsed_url.netloc) < 5 or (

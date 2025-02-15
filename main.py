@@ -1,7 +1,9 @@
 import argparse
 import asyncio
+import atexit
 from enum import Enum
 from os import path
+import signal
 import sys
 import traceback
 from typing import Any, Literal, get_args, get_origin
@@ -12,9 +14,9 @@ from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from api.commands import WebSocketCommandModel
+from api.interface import BenchmarkResult
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
 import keyboard.keyboard as keyboard
-import mouse.mouse as mouse
 from services.command_handler import CommandHandler
 from services.config_manager import ConfigManager
 from services.connection_manager import ConnectionManager
@@ -72,9 +74,6 @@ core.set_connection_manager(connection_manager)
 
 keyboard.hook(core.on_key)
 
-# TODO: Just hook the mouse event if one config has mouse configured. Because this could have performance implications.
-mouse.hook(core.on_mouse)
-
 
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
@@ -96,6 +95,19 @@ def modify_openapi():
     app.openapi_schema = openapi_schema
 
 
+async def shutdown():
+    await connection_manager.shutdown()
+    await core.shutdown()
+    keyboard.unhook_all()
+
+
+def exit_handler():
+    printr.print(
+        "atexit handler shutting down...", color=LogType.SUBTLE, server_only=True
+    )
+    asyncio.run(shutdown())
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     # executed before the application starts
@@ -104,8 +116,10 @@ async def lifespan(_app: FastAPI):
     yield
 
     # executed after the application has finished
-    await connection_manager.shutdown()
-    keyboard.unhook_all()
+    printr.print(
+        "Lifespan end - shutting down...", color=LogType.SUBTLE, server_only=True
+    )
+    await shutdown()
 
 
 app = FastAPI(lifespan=lifespan, generate_unique_id_function=custom_generate_unique_id)
@@ -151,6 +165,7 @@ def custom_openapi():
             "mouse": {"$ref": "#/components/schemas/CommandMouseConfig"},
             "write": {"type": "string"},
             "audio": {"$ref": "#/components/schemas/AudioFileConfig"},
+            "joystick": {"$ref": "#/components/schemas/CommandJoystickConfig"},
         },
     }
 
@@ -239,7 +254,24 @@ async def start_secrets(secrets: dict[str, Any]):
 
 @app.get("/ping", tags=["main"])
 async def ping():
-    return "Ok"
+    return "Ok" if core.is_started else "Starting"
+
+
+# required to generate API specs for class BenchmarkResult that is only used internally
+@app.get("/dummy-benchmark", tags=["main"], response_model=BenchmarkResult)
+async def get_dummy_benchmark():
+    return BenchmarkResult(
+        label="Sample Benchmark",
+        execution_time_ms=150.0,
+        formatted_execution_time=0.15,
+        snapshots=[
+            BenchmarkResult(
+                label="Sub Benchmark",
+                execution_time_ms=75.0,
+                formatted_execution_time=0.075,
+            )
+        ],
+    )
 
 
 async def async_main(host: str, port: int, sidecar: bool):
@@ -262,15 +294,25 @@ async def async_main(host: str, port: int, sidecar: bool):
         else:
             core.startup_errors.append(error)
 
-    await core.startup()
-    event_loop = asyncio.get_running_loop()
-    core.audio_player.set_event_loop(event_loop)
-    asyncio.create_task(core.process_events())
-    core.is_started = True
+    try:
+        await core.startup()
+        event_loop = asyncio.get_running_loop()
+        core.audio_player.set_event_loop(event_loop)
+        asyncio.create_task(core.process_events())
+        core.is_started = True
+    except Exception as e:
+        printr.print(f"Error starting Wingman AI Core: {str(e)}", color=LogType.ERROR)
+        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        return
 
-    config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
-    server = uvicorn.Server(config)
-    await server.serve()
+    try:
+        config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
+        server = uvicorn.Server(config)
+        await server.serve()
+    except Exception as e:
+        printr.print(f"Error starting uvicorn server: {str(e)}", color=LogType.ERROR)
+        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        return
 
 
 if __name__ == "__main__":
@@ -286,7 +328,7 @@ if __name__ == "__main__":
         "-p",
         "--port",
         type=str,
-        default="8000",
+        default="49111",
         help="Port for the FastAPI server to listen on.",
     )
     parser.add_argument(
@@ -304,5 +346,24 @@ if __name__ == "__main__":
     except RuntimeError:  # No running event loop
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-    finally:
+
+    atexit.register(exit_handler)
+
+    def signal_handler(sig, frame):
+        printr.print(
+            "SIGINT/SIGTERM received! Initiating shutdown...",
+            color=LogType.SUBTLE,
+            server_only=True,
+        )
+        # Schedule the shutdown asynchronously
+        asyncio.create_task(shutdown())
+        loop.stop()
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    try:
         loop.run_until_complete(async_main(host=host, port=port, sidecar=args.sidecar))
+    except Exception as e:
+        printr.print(f"Error starting application: {str(e)}", color=LogType.ERROR)
+        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)

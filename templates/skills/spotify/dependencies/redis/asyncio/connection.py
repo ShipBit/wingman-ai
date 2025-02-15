@@ -17,13 +17,17 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Protocol,
     Set,
     Tuple,
     Type,
+    TypedDict,
     TypeVar,
     Union,
 )
 from urllib.parse import ParseResult, parse_qs, unquote, urlparse
+
+from ..utils import format_error_message
 
 # the functionality is available in 3.11.x but has a major issue before
 # 3.11.3. See https://github.com/redis/redis-py/issues/2633
@@ -34,7 +38,6 @@ else:
 
 from redis.asyncio.retry import Retry
 from redis.backoff import NoBackoff
-from redis.compat import Protocol, TypedDict
 from redis.connection import DEFAULT_RESP_VERSION
 from redis.credentials import CredentialProvider, UsernamePasswordCredentialProvider
 from redis.exceptions import (
@@ -79,13 +82,11 @@ else:
 
 
 class ConnectCallbackProtocol(Protocol):
-    def __call__(self, connection: "AbstractConnection"):
-        ...
+    def __call__(self, connection: "AbstractConnection"): ...
 
 
 class AsyncConnectCallbackProtocol(Protocol):
-    async def __call__(self, connection: "AbstractConnection"):
-        ...
+    async def __call__(self, connection: "AbstractConnection"): ...
 
 
 ConnectCallbackT = Union[ConnectCallbackProtocol, AsyncConnectCallbackProtocol]
@@ -213,7 +214,13 @@ class AbstractConnection:
             _warnings.warn(
                 f"unclosed Connection {self!r}", ResourceWarning, source=self
             )
-            self._close()
+
+            try:
+                asyncio.get_running_loop()
+                self._close()
+            except RuntimeError:
+                # No actions been taken if pool already closed.
+                pass
 
     def _close(self):
         """
@@ -225,7 +232,7 @@ class AbstractConnection:
 
     def __repr__(self):
         repr_args = ",".join((f"{k}={v}" for k, v in self.repr_pieces()))
-        return f"{self.__class__.__name__}<{repr_args}>"
+        return f"<{self.__class__.__module__}.{self.__class__.__name__}({repr_args})>"
 
     @abstractmethod
     def repr_pieces(self):
@@ -289,9 +296,11 @@ class AbstractConnection:
                 await self.on_connect()
             else:
                 # Use the passed function redis_connect_func
-                await self.redis_connect_func(self) if asyncio.iscoroutinefunction(
-                    self.redis_connect_func
-                ) else self.redis_connect_func(self)
+                (
+                    await self.redis_connect_func(self)
+                    if asyncio.iscoroutinefunction(self.redis_connect_func)
+                    else self.redis_connect_func(self)
+                )
         except RedisError:
             # clean up after any error in on_connect
             await self.disconnect()
@@ -315,9 +324,8 @@ class AbstractConnection:
     def _host_error(self) -> str:
         pass
 
-    @abstractmethod
     def _error_message(self, exception: BaseException) -> str:
-        pass
+        return format_error_message(self._host_error(), exception)
 
     async def on_connect(self) -> None:
         """Initialize the connection, authenticate and select a database"""
@@ -645,6 +653,14 @@ class AbstractConnection:
             output.append(SYM_EMPTY.join(pieces))
         return output
 
+    def _socket_is_empty(self):
+        """Check if the socket is empty"""
+        return len(self._reader._buffer) == 0
+
+    async def process_invalidation_messages(self):
+        while not self._socket_is_empty():
+            await self.read_response(push_request=True)
+
 
 class Connection(AbstractConnection):
     "Manages TCP communication to and from a Redis server"
@@ -701,27 +717,6 @@ class Connection(AbstractConnection):
 
     def _host_error(self) -> str:
         return f"{self.host}:{self.port}"
-
-    def _error_message(self, exception: BaseException) -> str:
-        # args for socket.error can either be (errno, "message")
-        # or just "message"
-
-        host_error = self._host_error()
-
-        if not exception.args:
-            # asyncio has a bug where on Connection reset by peer, the
-            # exception is not instanciated, so args is empty. This is the
-            # workaround.
-            # See: https://github.com/redis/redis-py/issues/2237
-            # See: https://github.com/python/cpython/issues/94061
-            return f"Error connecting to {host_error}. Connection reset by peer"
-        elif len(exception.args) == 1:
-            return f"Error connecting to {host_error}. {exception.args[0]}."
-        else:
-            return (
-                f"Error {exception.args[0]} connecting to {host_error}. "
-                f"{exception.args[0]}."
-            )
 
 
 class SSLConnection(Connection):
@@ -874,20 +869,6 @@ class UnixDomainSocketConnection(AbstractConnection):
     def _host_error(self) -> str:
         return self.path
 
-    def _error_message(self, exception: BaseException) -> str:
-        # args for socket.error can either be (errno, "message")
-        # or just "message"
-        host_error = self._host_error()
-        if len(exception.args) == 1:
-            return (
-                f"Error connecting to unix socket: {host_error}. {exception.args[0]}."
-            )
-        else:
-            return (
-                f"Error {exception.args[0]} connecting to unix socket: "
-                f"{host_error}. {exception.args[1]}."
-            )
-
 
 FALSE_STRINGS = ("0", "F", "FALSE", "N", "NO")
 
@@ -937,7 +918,7 @@ def parse_url(url: str) -> ConnectKwargs:
                 try:
                     kwargs[name] = parser(value)
                 except (TypeError, ValueError):
-                    raise ValueError(f"Invalid value for `{name}` in connection URL.")
+                    raise ValueError(f"Invalid value for '{name}' in connection URL.")
             else:
                 kwargs[name] = value
 
@@ -1061,8 +1042,8 @@ class ConnectionPool:
 
     def __repr__(self):
         return (
-            f"{self.__class__.__name__}"
-            f"<{self.connection_class(**self.connection_kwargs)!r}>"
+            f"<{self.__class__.__module__}.{self.__class__.__name__}"
+            f"({self.connection_class(**self.connection_kwargs)!r})>"
         )
 
     def reset(self):

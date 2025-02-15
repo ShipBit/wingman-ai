@@ -5,6 +5,7 @@ from api.interface import (
     SkillConfig,
 )
 from api.enums import LogType
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 import keyboard.keyboard as keyboard
 
@@ -52,18 +53,18 @@ class TypingAssistant(Skill):
         return tools
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = "Error in typing. Can you please try your command again?"
         instant_response = ""
 
         if tool_name == "assist_with_typing":
+            benchmark.start_snapshot(f"TypingAssistant: {tool_name}")
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
-                await self.printr.print_async(
-                    f"Executing assist_with_typing function with parameters: {parameters}",
-                    color=LogType.INFO,
-                )
+                message = f"TypingAssistant: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(text=message, color=LogType.INFO)
 
             content_to_type = parameters.get("content_to_type")
             press_enter = parameters.get("end_by_pressing_enter")
@@ -76,8 +77,6 @@ class TypingAssistant(Skill):
                 keyboard.release("enter")
 
             function_response = "Typed user request at active mouse cursor position."
-
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            benchmark.finish_snapshot()
 
         return function_response, instant_response

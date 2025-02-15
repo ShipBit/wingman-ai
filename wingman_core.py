@@ -4,6 +4,7 @@ import os
 import re
 import threading
 from typing import Optional
+import pygame
 from fastapi import APIRouter, File, UploadFile
 import requests
 import sounddevice as sd
@@ -22,12 +23,16 @@ from api.interface import (
     AudioDevice,
     AudioFile,
     AzureSttConfig,
+    CommandJoystickConfig,
+    Config,
     ConfigWithDirInfo,
     ElevenlabsModel,
+    OpenRouterEndpointResult,
     VoiceActivationSettings,
     WingmanInitializationError,
 )
 from providers.elevenlabs import ElevenLabs
+from providers.faster_whisper import FasterWhisper
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
@@ -114,22 +119,24 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
-            methods=["POST"],
-            path="/whispercpp/start",
-            endpoint=self.start_whispercpp,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/whispercpp/stop",
-            endpoint=self.stop_whispercpp,
+            methods=["GET"],
+            path="/fasterwhisper/modelsizes",
+            response_model=list[str],
+            endpoint=self.get_fasterwhisper_modelsizes,
             tags=tags,
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/whispercpp/models",
+            path="/fasterwhisper/computetypes",
             response_model=list[str],
-            endpoint=self.get_whispercpp_models,
+            endpoint=self.get_fasterwhisper_computetypes,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/fasterwhisper/devices",
+            response_model=list[str],
+            endpoint=self.get_fasterwhisper_devices,
             tags=tags,
         )
         self.router.add_api_route(
@@ -187,6 +194,13 @@ class WingmanCore(WebSocketUser):
             path="/models/openrouter",
             response_model=list,
             endpoint=self.get_openrouter_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/openrouter/endpoints",
+            response_model=Optional[OpenRouterEndpointResult],
+            endpoint=self.get_openrouter_model_endpoints,
             tags=tags,
         )
         self.router.add_api_route(
@@ -250,6 +264,13 @@ class WingmanCore(WebSocketUser):
             endpoint=self.shutdown,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/wingman-pro",
+            response_model=list,
+            endpoint=self.get_wingman_pro_models,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_service = ConfigService(config_manager=config_manager)
@@ -297,12 +318,17 @@ class WingmanCore(WebSocketUser):
 
         self.whispercpp = Whispercpp(
             settings=self.settings_service.settings.voice_activation.whispercpp,
+        )
+        self.fasterwhisper = FasterWhisper(
+            settings=self.settings_service.settings.voice_activation.fasterwhisper,
             app_root_path=app_root_path,
             app_is_bundled=app_is_bundled,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.settings_service.initialize(
-            whispercpp=self.whispercpp, xvasynth=self.xvasynth
+            whispercpp=self.whispercpp,
+            fasterwhisper=self.fasterwhisper,
+            xvasynth=self.xvasynth,
         )
 
         self.voice_service = VoiceService(
@@ -327,14 +353,100 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
+    def is_mouse_configured(self, config: Config) -> bool:
+        return any(
+            config.wingmen[wingman].record_mouse_button for wingman in config.wingmen
+        )
+
+    def is_joystick_configured(self, config: Config) -> bool:
+        return any(
+            config.wingmen[wingman].record_joystick_button for wingman in config.wingmen
+        )
+
+    async def start_joysticks(self, config: Config):
+        pygame.init()
+
+        # Get all joystick configs
+        joystick_configs = [
+            config.wingmen[wingman].record_joystick_button
+            for wingman in config.wingmen
+            if config.wingmen[wingman].record_joystick_button
+        ]
+
+        joysticks = [
+            pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())
+        ]
+        for joystick in joysticks:
+            if any(
+                [
+                    joystick.get_guid() == joystick_config.guid
+                    for joystick_config in joystick_configs
+                ]
+            ):
+                joystick.init()
+
+        running = True
+        while running and pygame.joystick.get_init():
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.JOYBUTTONDOWN:
+                    joystick_origin = pygame.joystick.Joystick(event.joy)
+                    for joystick_config in joystick_configs:
+                        if joystick_origin.get_guid() == joystick_config.guid:
+                            self.on_press(
+                                joystick_config=CommandJoystickConfig(
+                                    guid=joystick_config.guid, button=event.button
+                                )
+                            )
+                elif event.type == pygame.JOYBUTTONUP:
+                    joystick_origin = pygame.joystick.Joystick(event.joy)
+                    for joystick_config in joystick_configs:
+                        if joystick_origin.get_guid() == joystick_config.guid:
+                            self.on_release(
+                                joystick_config=CommandJoystickConfig(
+                                    guid=joystick_config.guid, button=event.button
+                                )
+                            )
+
+            # Add a small sleep to prevent the loop from consuming too much CPU
+            await asyncio.sleep(0.01)
+
+    def init_joystick(self, config: Config):
+
+        def run_async_process():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                # Create a task for start_joysticks instead of running it directly
+                loop.create_task(self.start_joysticks(config))
+                # Run the event loop forever instead of running until complete
+                loop.run_forever()
+            finally:
+                loop.close()
+
+        play_thread = threading.Thread(target=run_async_process)
+        play_thread.start()
+
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         await self.unload_tower()
 
+        config = config_dir_info.config
+
+        # Register hooks
+        if self.is_mouse_configured(config):
+            mouse.hook(self.on_mouse)
+        if self.is_joystick_configured(config):
+            self.init_joystick(config)
+
         self.tower = Tower(
-            config=config_dir_info.config,
+            config=config,
+            config_dir=config_dir_info.config_dir,
+            config_manager=self.config_manager,
             audio_player=self.audio_player,
             audio_library=self.audio_library,
             whispercpp=self.whispercpp,
+            fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
@@ -367,7 +479,9 @@ class WingmanCore(WebSocketUser):
 
         return is_pressed
 
-    def on_press(self, key=None, button=None):
+    def on_press(
+        self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
+    ):
         is_mute_hotkey_pressed = self.is_hotkey_pressed(
             self.settings_service.settings.voice_activation.mute_toggle_key_codes
             or self.settings_service.settings.voice_activation.mute_toggle_key
@@ -380,19 +494,35 @@ class WingmanCore(WebSocketUser):
 
         if self.tower and self.active_recording["key"] == "":
             wingman = None
-            if key:
-                for potential_wingman in self.tower.wingmen:
+            for potential_wingman in self.tower.wingmen:
+                if key:
                     if potential_wingman.get_record_key() and self.is_hotkey_pressed(
                         potential_wingman.get_record_key()
                     ):
                         wingman = potential_wingman
-            elif button:
-                wingman = self.tower.get_wingman_from_mouse(button)
+                        break
+                if mouse_button:
+                    if potential_wingman.get_record_mouse_button() == mouse_button:
+                        wingman = potential_wingman
+                        break
+                if joystick_config:
+                    if (
+                        potential_wingman.get_record_joystick_button()
+                        == f"{joystick_config.guid}{joystick_config.button}"
+                    ):
+                        wingman = potential_wingman
+                        break
+
             if wingman:
                 if key:
                     self.active_recording = dict(key=key.name, wingman=wingman)
-                elif button:
-                    self.active_recording = dict(key=button, wingman=wingman)
+                elif mouse_button:
+                    self.active_recording = dict(key=mouse_button, wingman=wingman)
+                elif joystick_config:
+                    self.active_recording = dict(
+                        key=f"{joystick_config.guid}{joystick_config.button}",
+                        wingman=wingman,
+                    )
 
                 self.was_listening_before_ptt = self.is_listening
                 if (
@@ -403,11 +533,18 @@ class WingmanCore(WebSocketUser):
 
                 self.audio_recorder.start_recording(wingman_name=wingman.name)
 
-    def on_release(self, key=None, button=None):
+    def on_release(
+        self, key=None, mouse_button=None, joystick_config: CommandJoystickConfig = None
+    ):
         if self.tower and (
             key is not None
             and self.active_recording["key"] == key.name
-            or self.active_recording["key"] == button
+            or self.active_recording["key"] == mouse_button
+            or (
+                joystick_config
+                and self.active_recording["key"]
+                == f"{joystick_config.guid}{joystick_config.button}"
+            )
         ):
             wingman = self.active_recording["wingman"]
             recorded_audio_wav = self.audio_recorder.stop_recording(
@@ -453,9 +590,9 @@ class WingmanCore(WebSocketUser):
             return
 
         if event.event_type == "down":
-            self.on_press(button=event.button)
+            self.on_press(mouse_button=event.button)
         elif event.event_type == "up":
-            self.on_release(button=event.button)
+            self.on_release(mouse_button=event.button)
 
     # called when AudioRecorder regonized voice
     def on_audio_recorder_speech_recorded(self, recording_file: str):
@@ -517,6 +654,21 @@ class WingmanCore(WebSocketUser):
             # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
             openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
             transcription = openai.transcribe(filename=recording_file)
+            text = transcription.text
+        elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
+            combined_hotwords = []
+            for wingman in self.tower.wingmen:
+                combined_hotwords.append(wingman.name)
+                if wingman.config.fasterwhisper.hotwords:
+                    combined_hotwords.append(wingman.config.fasterwhisper.hotwords)
+
+            transcription = self.fasterwhisper.transcribe(
+                config=self.settings_service.settings.voice_activation.fasterwhisper_config,
+                filename=recording_file,
+                initial_hotwords=(
+                    ", ".join(combined_hotwords) if len(combined_hotwords) > 0 else None
+                ),
+            )
             text = transcription.text
 
         if text:
@@ -773,34 +925,52 @@ class WingmanCore(WebSocketUser):
             )
         return True
 
-    # POST /whispercpp/start
-    def start_whispercpp(self):
-        self.whispercpp.start_server()
+    # GET /fasterwhisper/modelsizes
+    def get_fasterwhisper_modelsizes(self):
+        model_sizes = [
+            "tiny",
+            "tiny.en",
+            "base",
+            "base.en",
+            "small",
+            "small.en",
+            "distil-small.en",
+            "medium",
+            "medium.en",
+            "distil-medium.en",
+            "large-v1",
+            "large-v2",
+            "large-v3",
+            "large",
+            "distil-large-v2",
+            "distil-large-v3",
+            "large-v3-turbo",
+            "turbo",
+        ]
+        return model_sizes
 
-    # POST /whispercpp/stop
-    def stop_whispercpp(self):
-        try:
-            self.whispercpp.stop_server()
-        except Exception:
-            pass
+    # GET /fasterwhisper/computetypes
+    def get_fasterwhisper_computetypes(self):
+        compute_types = [
+            "default",
+            "auto",
+            "int8",
+            "int16",
+            "int8_float16",
+            "int8_float32",
+            "float16",
+            "float32",
+        ]
+        return compute_types
 
-    # GET /whispercpp/models
-    def get_whispercpp_models(self):
-        model_files = []
-        try:
-            model_files = [
-                f
-                for f in os.listdir(self.whispercpp.models_dir)
-                if os.path.isfile(os.path.join(self.whispercpp.models_dir, f))
-                and f.endswith(".bin")
-            ]
-        except Exception:
-            # this can fail:
-            # - on MacOS (always)
-            # - in Dev mode if the dev hasn't copied the whispercpp-models dir to the repository
-            # in these cases, we return an empty list and the client will lock the controls and show a warning.
-            pass
-        return model_files
+    # GET /fasterwhisper/devices
+    def get_fasterwhisper_devices(self):
+        devices = [
+            "auto",
+            "cpu",
+            "cuda",
+        ]
+        return devices
 
     # POST /xvasynth/start
     def start_xvasynth(self):
@@ -864,10 +1034,23 @@ class WingmanCore(WebSocketUser):
 
     # GET /models/openrouter
     async def get_openrouter_models(self):
-        response = requests.get(url=f"https://openrouter.ai/api/v1/models", timeout=10)
+        response = requests.get(url="https://openrouter.ai/api/v1/models", timeout=10)
         response.raise_for_status()
         content = response.json()
         return content.get("data", [])
+
+    # GET /models/openrouter/endpoints
+    async def get_openrouter_model_endpoints(self, model_id: str):
+        if not model_id:
+            return None
+        response = requests.get(
+            url=f"https://openrouter.ai/api/v1/models/{model_id}/endpoints",
+            timeout=10,
+        )
+        response.raise_for_status()
+        content = response.json()
+        result = OpenRouterEndpointResult(**content.get("data", {}))
+        return result
 
     # GET /models/groq
     async def get_groq_models(self):
@@ -916,6 +1099,23 @@ class WingmanCore(WebSocketUser):
         content = response.json()
         return content.get("data", [])
 
+    async def get_wingman_pro_models(self):
+        wingman_pro_token = await self.secret_keeper.retrieve(
+            key="wingman_pro", requester="WingmanPro"
+        )
+        response = requests.get(
+            url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-models",
+            params={"region": self.settings_service.settings.wingman_pro.region.value},
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {wingman_pro_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        model_list = response.json()
+        return model_list
+
     # GET /models/elevenlabs
     async def get_elevenlabs_models(self) -> list[ElevenlabsModel]:
         elevenlabs_api_key = await self.secret_keeper.retrieve(
@@ -948,7 +1148,7 @@ class WingmanCore(WebSocketUser):
     async def play_from_audio_library(
         self, name: str, path: str, volume: Optional[float] = 1.0
     ):
-        await self.audio_library.start_playback(
+        await self.audio_library.audio_library_toggle_play(
             audio_file=AudioFile(name=name, path=path), volume_modifier=volume
         )
 
@@ -1019,6 +1219,12 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
 
     async def shutdown(self):
-        await self.stop_whispercpp()
-        await self.stop_xvasynth()
+        if self.settings_service.settings.xvasynth.enable:
+            await self.stop_xvasynth()
         await self.unload_tower()
+
+        self.printr.print(
+            "Core shutdown.",
+            server_only=True,
+            color=LogType.SUBTLE,
+        )

@@ -135,8 +135,8 @@ def check_url(
 def extract_links(
     pagecontent: str,
     url: Optional[str] = None,
-    base_url: Optional[str] = None,
     external_bool: bool = False,
+    *,
     no_filter: bool = False,
     language: Optional[str] = None,
     strict: bool = True,
@@ -144,12 +144,12 @@ def extract_links(
     with_nav: bool = False,
     redirects: bool = False,
     reference: Optional[str] = None,
+    base_url: Optional[str] = None,
 ) -> Set[str]:
     """Filter links in a HTML document using a series of heuristics
     Args:
         pagecontent: whole page in binary format
         url: full URL of the original page
-        base_url: deprecated, legacy only
         external_bool: set to True for external links only, False for
                   internal links only
         no_filter: override settings and bypass checks to return all possible URLs
@@ -157,7 +157,7 @@ def extract_links(
         strict: set to True for stricter filtering
         trailing_slash: set to False to trim trailing slashes
         with_nav: set to True to include navigation pages instead of discarding them
-        with_redirects: set to True for redirection test (per HTTP HEAD request)
+        redirects: set to True for redirection test (per HTTP HEAD request)
         reference: provide a host reference for external/internal evaluation
 
     Returns:
@@ -166,13 +166,18 @@ def extract_links(
     Raises:
         Nothing.
     """
-    base_url = base_url or get_base_url(url)
+    if base_url:
+        raise ValueError("'base_url' is deprecated, use 'url' instead.")
+
+    base_url = get_base_url(url)
     url = url or base_url
     candidates, validlinks = set(), set()  # type: Set[str], Set[str]
     if not pagecontent:
         return validlinks
+
     # define host reference
     reference = reference or base_url
+
     # extract links
     for link in (m[0] for m in FIND_LINKS_REGEX.finditer(pagecontent)):
         if "rel" in link and "nofollow" in link:
@@ -191,6 +196,7 @@ def extract_links(
             linkmatch = LINK_REGEX.search(link)
             if linkmatch:
                 candidates.add(linkmatch[1])
+
     # filter candidates
     for link in candidates:
         # repair using base
@@ -217,7 +223,7 @@ def extract_links(
         if is_known_link(link, validlinks):
             continue
         validlinks.add(link)
-    # return
+
     LOGGER.info("%s links found – %s valid links", len(candidates), len(validlinks))
     return validlinks
 
@@ -225,16 +231,21 @@ def extract_links(
 def filter_links(
     htmlstring: str,
     url: Optional[str],
-    base_url: Optional[str] = None,
+    *,
     lang: Optional[str] = None,
     rules: Optional[RobotFileParser] = None,
     external: bool = False,
     strict: bool = False,
     with_nav: bool = True,
+    base_url: Optional[str] = None,
 ) -> Tuple[List[str], List[str]]:
-    "Find links in a HTML document, filter them and add them to the data store."
+    "Find links in a HTML document, filter and prioritize them for crawling purposes."
+
+    if base_url:
+        raise ValueError("'base_url' is deprecated, use 'url' instead.")
+
     links, links_priority = [], []
-    url = url or base_url
+
     for link in extract_links(
         pagecontent=htmlstring,
         url=url,
@@ -253,4 +264,5 @@ def filter_links(
             links_priority.append(link)
         else:
             links.append(link)
+
     return links, links_priority

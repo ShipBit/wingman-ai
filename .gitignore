@@ -173,3 +173,4 @@ skills/**/dependencies
 whispercpp/
 whispercpp-cuda/
 whispercpp-models/
+faster-whisper-models/

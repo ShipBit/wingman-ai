@@ -17,16 +17,17 @@ https://github.com/buriy/python-readability
 License of forked code: Apache-2.0.
 """
 
-
 import logging
 import re
 
+from math import sqrt
 from operator import attrgetter
+from typing import Any, Dict, Optional, Set
 
 from lxml.etree import tostring
-from lxml.html import fragment_fromstring
+from lxml.html import HtmlElement, fragment_fromstring
 
-from .utils import trim
+from .utils import load_html, trim
 
 LOGGER = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ LOGGER = logging.getLogger(__name__)
 DOT_SPACE = re.compile(r"\.( |$)")
 
 
-def _tostring(string):
+def _tostring(string: HtmlElement) -> str:
     return tostring(string, encoding=str, method="xml")
 
 
@@ -83,18 +84,19 @@ LIST_TAGS = {"ol", "ul"}
 # DIV_TO_P_ELEMS = {'a', 'blockquote', 'dl', 'div', 'img', 'ol', 'p', 'pre', 'table', 'ul'}
 
 
-def text_length(elem):
+def text_length(elem: HtmlElement) -> int:
     "Return the length of the element with all its contents."
     return len(trim(elem.text_content()))
 
 
 class Candidate:
     "Defines a class to score candidate elements."
+
     __slots__ = ["score", "elem"]
 
-    def __init__(self, score, elem):
-        self.score = score
-        self.elem = elem
+    def __init__(self, score: float, elem: HtmlElement) -> None:
+        self.score: float = score
+        self.elem: HtmlElement = elem
 
 
 class Document:
@@ -102,7 +104,7 @@ class Document:
 
     __slots__ = ["doc", "min_text_length", "retry_length"]
 
-    def __init__(self, doc, min_text_length=25, retry_length=250):
+    def __init__(self, doc: HtmlElement, min_text_length: int = 25, retry_length: int = 250) -> None:
         """Generate the document
 
         :param doc: string of the html content.
@@ -119,7 +121,7 @@ class Document:
         self.min_text_length = min_text_length
         self.retry_length = retry_length
 
-    def summary(self):
+    def summary(self) -> str:
         """
         Given a HTML file, extracts the text of the article.
 
@@ -152,9 +154,8 @@ class Document:
                 LOGGER.debug(
                     "Ruthless and lenient parsing did not work. Returning raw html"
                 )
-                article = self.doc.find("body")
-                if article is None:
-                    article = self.doc
+                body = self.doc.find("body")
+                article = body if body is not None else self.doc
 
             cleaned_article = self.sanitize(article, candidates)
             article_length = len(cleaned_article or "")
@@ -164,7 +165,7 @@ class Document:
                 continue
             return cleaned_article
 
-    def get_article(self, candidates, best_candidate):
+    def get_article(self, candidates: Dict[HtmlElement, Candidate], best_candidate: Candidate) -> HtmlElement:
         # Now that we have the top candidate, look through its siblings for
         # content that might also be related.
         # Things like preambles, content split by ads that we removed, etc.
@@ -172,7 +173,7 @@ class Document:
         # create a new html document with a div
         output = fragment_fromstring("<div/>")
         parent = best_candidate.elem.getparent()
-        siblings = parent.getchildren() if parent is not None else [best_candidate.elem]
+        siblings = list(parent) if parent is not None else [best_candidate.elem]
         for sibling in siblings:
             # in lxml there no concept of simple text
             # if isinstance(sibling, NavigableString): continue
@@ -205,7 +206,7 @@ class Document:
         #    output.append(best_candidate.elem)
         return output
 
-    def select_best_candidate(self, candidates):
+    def select_best_candidate(self, candidates: Dict[HtmlElement, Candidate]) -> Optional[Candidate]:
         if not candidates:
             return None
         sorted_candidates = sorted(
@@ -216,12 +217,12 @@ class Document:
                 LOGGER.debug("Top 5: %s %s", candidate.elem.tag, candidate.score)
         return next(iter(sorted_candidates))
 
-    def get_link_density(self, elem):
+    def get_link_density(self, elem: HtmlElement) -> float:
         total_length = text_length(elem) or 1
         link_length = sum(text_length(link) for link in elem.findall(".//a"))
         return link_length / total_length
 
-    def score_paragraphs(self):
+    def score_paragraphs(self) -> Dict[HtmlElement, Candidate]:
         candidates = {}
 
         for elem in self.doc.iter("p", "pre", "td"):
@@ -257,7 +258,7 @@ class Document:
 
         return candidates
 
-    def class_weight(self, elem):
+    def class_weight(self, elem: HtmlElement) -> float:
         weight = 0
         for attribute in filter(None, (elem.get("class"), elem.get("id"))):
             if REGEXES["negativeRe"].search(attribute):
@@ -266,9 +267,10 @@ class Document:
                 weight += 25
         return weight
 
-    def score_node(self, elem):
+    def score_node(self, elem: HtmlElement) -> Candidate:
         score = self.class_weight(elem)
-        name = elem.tag.lower()
+        tag = str(elem.tag)
+        name = tag.lower()
         if name in DIV_SCORES:
             score += 5
         elif name in BLOCK_SCORES:
@@ -279,7 +281,7 @@ class Document:
             score -= 5
         return Candidate(score, elem)
 
-    def remove_unlikely_candidates(self):
+    def remove_unlikely_candidates(self) -> None:
         for elem in self.doc.findall(".//*"):
             attrs = " ".join(filter(None, (elem.get("class"), elem.get("id"))))
             if len(attrs) < 2:
@@ -292,7 +294,7 @@ class Document:
                 # LOGGER.debug("Removing unlikely candidate: %s", elem.tag)
                 elem.drop_tree()
 
-    def transform_misused_divs_into_paragraphs(self):
+    def transform_misused_divs_into_paragraphs(self) -> None:
         for elem in self.doc.findall(".//div"):
             # transform <div>s that do not contain other block elements into
             # <p>s
@@ -321,7 +323,7 @@ class Document:
                 if child.tag == "br":
                     child.drop_tree()
 
-    def sanitize(self, node, candidates):
+    def sanitize(self, node: HtmlElement, candidates: Dict[HtmlElement, Candidate]) -> str:
         for header in node.iter("h1", "h2", "h3", "h4", "h5", "h6"):
             if self.class_weight(header) < 0 or self.get_link_density(header) > 0.33:
                 header.drop_tree()
@@ -335,9 +337,11 @@ class Document:
             else:
                 elem.drop_tree()
 
-        allowed = set()
+        allowed: Set[HtmlElement] = set()
         # Conditionally clean <table>s, <ul>s, and <div>s
-        for elem in reversed(node.xpath("//table|//ul|//div|//aside|//header|//footer|//section")):
+        for elem in reversed(
+            node.xpath("//table|//ul|//div|//aside|//header|//footer|//section")
+        ):
             if elem in allowed:
                 continue
             weight = self.class_weight(elem)
@@ -351,7 +355,7 @@ class Document:
                 )
                 elem.drop_tree()
             elif elem.text_content().count(",") < 10:
-                to_remove = False
+                to_remove = True
                 counts = {
                     kind: len(elem.findall(f".//{kind}")) for kind in TEXT_CLEAN_ELEMS
                 }
@@ -372,41 +376,32 @@ class Document:
                 #    continue
                 if counts["p"] and counts["img"] > 1 + counts["p"] * 1.3:
                     reason = f'too many images ({counts["img"]})'
-                    to_remove = True
                 elif counts["li"] > counts["p"] and elem.tag not in LIST_TAGS:
                     reason = "more <li>s than <p>s"
-                    to_remove = True
                 elif counts["input"] > (counts["p"] / 3):
                     reason = "less than 3x <p>s than <input>s"
-                    to_remove = True
                 elif content_length < self.min_text_length and counts["img"] == 0:
                     reason = f"too short content length {content_length} without a single image"
-                    to_remove = True
                 elif content_length < self.min_text_length and counts["img"] > 2:
                     reason = (
                         f"too short content length {content_length} and too many images"
                     )
-                    to_remove = True
                 elif weight < 25 and link_density > 0.2:
                     reason = (
                         f"too many links {link_density:.3f} for its weight {weight}"
                     )
-                    to_remove = True
                 elif weight >= 25 and link_density > 0.5:
                     reason = (
                         f"too many links {link_density:.3f} for its weight {weight}"
                     )
-                    to_remove = True
                 elif (counts["embed"] == 1 and content_length < 75) or counts[
                     "embed"
                 ] > 1:
                     reason = (
                         "<embed>s with too short content length, or too many <embed>s"
                     )
-                    to_remove = True
                 elif not content_length:
                     reason = "no content"
-                    to_remove = True
 
                     # find x non empty preceding and succeeding siblings
                     siblings = []
@@ -426,17 +421,92 @@ class Document:
                     if siblings and sum(siblings) > 1000:
                         to_remove = False
                         allowed.update(elem.iter("table", "ul", "div", "section"))
+                else:
+                    to_remove = False
 
                 if to_remove:
                     elem.drop_tree()
-                    if LOGGER.isEnabledFor(logging.DEBUG):
-                        LOGGER.debug(
-                            "Removed %6.3f %s with weight %s cause it has %s.",
-                            score,
-                            elem.tag,
-                            weight,
-                            reason or "",
-                        )
+                    LOGGER.debug(
+                        "Removed %6.3f %s with weight %s cause it has %s.",
+                        score,
+                        elem.tag,
+                        weight,
+                        reason or "",
+                    )
 
         self.doc = node
         return _tostring(self.doc)
+
+
+
+# Port of isProbablyReaderable from mozilla/readability.js to Python.
+# https://github.com/mozilla/readability
+# License of forked code: Apache-2.0.
+
+REGEXPS = {
+    "unlikelyCandidates": re.compile(
+        r"-ad-|ai2html|banner|breadcrumbs|combx|comment|community|cover-wrap|disqus|extra|footer|gdpr|header|legends|menu|related|remark|replies|rss|shoutbox|sidebar|skyscraper|social|sponsor|supplemental|ad-break|agegate|pagination|pager|popup|yom-remote",
+        re.I,
+    ),
+    "okMaybeItsACandidate": re.compile(
+        r"and|article|body|column|content|main|shadow", re.I
+    ),
+}
+
+DISPLAY_NONE = re.compile(r"display:\s*none", re.I)
+
+
+def is_node_visible(node: HtmlElement) -> bool:
+    """
+    Checks if the node is visible by considering style, attributes, and class.
+    """
+
+    if "style" in node.attrib and DISPLAY_NONE.search(node.get("style", "")):
+        return False
+    if "hidden" in node.attrib:
+        return False
+    if node.get("aria-hidden") == "true" and "fallback-image" not in node.get(
+        "class", ""
+    ):
+        return False
+    return True
+
+
+def is_probably_readerable(html: HtmlElement, options: Any={}) -> bool:
+    """
+    Decides whether or not the document is reader-able without parsing the whole thing.
+    """
+    doc = load_html(html)
+    if doc is None:
+        return False
+
+    min_content_length = options.get("min_content_length", 140)
+    min_score = options.get("min_score", 20)
+    visibility_checker = options.get("visibility_checker", is_node_visible)
+
+    nodes = set(doc.xpath(".//p | .//pre | .//article"))
+    nodes.update(node.getparent() for node in doc.xpath(".//div/br"))
+
+    score = 0.0
+    for node in nodes:
+        if not visibility_checker(node):
+            continue
+
+        class_and_id = f"{node.get('class', '')} {node.get('id', '')}"
+        if REGEXPS["unlikelyCandidates"].search(class_and_id) and not REGEXPS[
+            "okMaybeItsACandidate"
+        ].search(class_and_id):
+            continue
+
+        if node.xpath("./parent::li/p"):
+            continue
+
+        text_content_length = len(node.text_content().strip())
+        if text_content_length < min_content_length:
+            continue
+
+        score += sqrt(text_content_length - min_content_length)
+        if score > min_score:
+            return True
+
+    return False

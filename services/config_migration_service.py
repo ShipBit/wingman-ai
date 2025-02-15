@@ -47,7 +47,7 @@ class ConfigMigrationService:
 
         if path.exists(migration_file):
             self.log(
-                f"Found {self.latest_version} configs. No migrations needed.", True
+                f"Found {self.latest_version} configs. No migrations needed.", False
             )
             return
 
@@ -138,7 +138,7 @@ class ConfigMigrationService:
             self.log("- applied new split whispercpp settings/config structure")
 
             old["xvasynth"] = new["xvasynth"]
-            self.log("- adding new XVASynth settings")
+            self.log("- added new XVASynth settings")
 
             old.pop("audio", None)
             self.log("- removed audio device settings because DirectSound was removed")
@@ -346,6 +346,102 @@ class ConfigMigrationService:
             migrate_wingman=migrate_wingman,
         )
 
+    def migrate_162_to_170(self):
+        def migrate_settings(old: dict, new: dict) -> dict:
+            old["voice_activation"]["whispercpp"].pop("use_cuda", None)
+            old["voice_activation"]["whispercpp"].pop("language", None)
+            old["voice_activation"]["whispercpp"].pop("translate_to_english", None)
+            self.log("- removed old whispercpp settings (if there were any)")
+
+            old["voice_activation"]["whispercpp"]["enable"] = False
+            self.log("- disabled whispercpp by default")
+
+            old["voice_activation"]["fasterwhisper"] = new["voice_activation"][
+                "fasterwhisper"
+            ]
+            old["voice_activation"]["fasterwhisper_config"] = new["voice_activation"][
+                "fasterwhisper_config"
+            ]
+            self.log("- added new fasterwhisper settings and config")
+
+            old["voice_activation"]["stt_provider"] = "fasterwhisper"
+            self.log("- set FasterWhisper as new default VA STT provider")
+
+            old["streamer_mode"] = False
+            self.log("- added new property streamer_mode")
+
+            return old
+
+        def migrate_defaults(old: dict, new: dict) -> dict:
+            old["fasterwhisper"] = new["fasterwhisper"]
+            self.log("- added new properties: fasterwhisper")
+
+            old["features"]["stt_provider"] = "fasterwhisper"
+            self.log("- made fasterwhisper new default STT provider")
+
+            return old
+
+        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            if old.get("features", {}).get("stt_provider") == "whispercpp":
+                old["features"]["stt_provider"] = "fasterwhisper"
+                self.log("- changed STT provider from whispercpp to fasterwhisper")
+
+            # migrate uexcorp skill
+            if old.get("skills", None):
+                uexcorp_skill = next(
+                    (
+                        skill
+                        for skill in old["skills"]
+                        if skill.get("module", "") == "skills.uexcorp.main"
+                    ),
+                    None,
+                )
+                if uexcorp_skill:
+                    uexcorp_skill["custom_properties"] = [
+                        {"id": "commodity_route_default_count"},
+                        {"id": "tool_commodity_information"},
+                        {"id": "tool_item_information"},
+                        {"id": "tool_location_information"},
+                        {"id": "tool_vehicle_information"},
+                        {"id": "tool_commodity_route"},
+                        {"id": "commodity_route_use_estimated_availability"},
+                        {"id": "commodity_route_advanced_info"},
+                        {"id": "tool_profit_calculation"},
+                    ]
+                    uexcorp_skill["examples"] = [
+                        {
+                            "answer": {
+                                "de": "Du hast zwei profitable Handelsrouten zur Verfügung. Auf der ersten Route transportierst du [...]",
+                                "en": "You have two highly profitable trading routes available. The first route involves [...]",
+                            },
+                            "question": {
+                                "de": "Bitte gib mir die zwei besten Handelsrouten für meine Caterpillar, ich bin gerade bei Hurston.",
+                                "en": "Please provide me a the best two trading routes for my Caterpillar, Im currently at Hurston.",
+                            },
+                        },
+                        {
+                            "answer": {
+                                "de": 'Die Hull-C wird von Musashi Industrial & Starflight Concern hergestellt und gehört zur "HULL"-Serie. Sie dient als [...]',
+                                "en": "The Hull-C is manufactured by Musashi Industrial & Starflight Concern and falls under the 'HULL' series. It [...]",
+                            },
+                            "question": {
+                                "de": "Was kannst du mir über die Hull-C erzählen?",
+                                "en": "What can you tell me about the Hull-C?",
+                            },
+                        },
+                    ]
+                    uexcorp_skill.pop("prompt", None)
+                    self.log("- migrated UEXCorp skill to v2")
+            return old
+
+        self.migrate(
+            old_version="1_6_2",
+            new_version="1_7_0",
+            migrate_settings=migrate_settings,
+            migrate_defaults=migrate_defaults,
+            migrate_wingman=migrate_wingman,
+        )
+
     # INTERNAL
 
     def log(self, message: str, highlight: bool = False):
@@ -537,5 +633,6 @@ MIGRATIONS = [
     ("1_5_0", "1_6_0", ConfigMigrationService.migrate_150_to_160),
     ("1_6_0", "1_6_1", ConfigMigrationService.migrate_160_to_161),
     ("1_6_1", "1_6_2", ConfigMigrationService.migrate_161_to_162),
+    ("1_6_2", "1_7_0", ConfigMigrationService.migrate_162_to_170),
     # Add new migrations here in order
 ]

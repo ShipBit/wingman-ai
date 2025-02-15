@@ -9,6 +9,7 @@ from api.enums import (
     LogSource,
     LogType,
 )
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -175,7 +176,7 @@ class Timer(Skill):
         return tool_names
 
     async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any]
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
         function_response = ""
         instant_response = ""
@@ -187,8 +188,12 @@ class Timer(Skill):
             "change_timer_settings",
             "remind_me",
         ]:
+            benchmark.start_snapshot(f"Timer: {tool_name}")
             if self.settings.debug_mode:
-                self.start_execution_benchmark()
+                message = f"Timer: executing tool '{tool_name}'"
+                if parameters:
+                    message += f" with params: {parameters}"
+                await self.printr.print_async(text=message, color=LogType.INFO)
 
             if tool_name == "set_timer":
                 function_response = await self.set_timer(
@@ -216,8 +221,7 @@ class Timer(Skill):
                     message=parameters.get("message", None)
                 )
 
-            if self.settings.debug_mode:
-                await self.print_execution_time()
+            benchmark.finish_snapshot()
 
         return function_response, instant_response
 
@@ -252,11 +256,7 @@ class Timer(Skill):
                     continue  # skip timers marked for deletion
 
                 if time.time() - start_time >= delay:
-                    if self.settings.debug_mode:
-                        self.start_execution_benchmark()
                     await self.execute_timer(timer_id)
-                    if self.settings.debug_mode:
-                        await self.print_execution_time(True)
 
             # delete timers marked for deletion
             for timer_id in timers_to_delete:

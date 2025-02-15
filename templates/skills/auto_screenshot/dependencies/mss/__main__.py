@@ -1,20 +1,19 @@
+"""This is part of the MSS Python's module.
+Source: https://github.com/BoboTiG/python-mss.
 """
-This is part of the MSS Python's module.
-Source: https://github.com/BoboTiG/python-mss
-"""
+
 import os.path
 import sys
 from argparse import ArgumentParser
 
-from . import __version__
-from .exception import ScreenShotError
-from .factory import mss
-from .tools import to_png
+from mss import __version__
+from mss.exception import ScreenShotError
+from mss.factory import mss
+from mss.tools import to_png
 
 
 def main(*args: str) -> int:
     """Main logic."""
-
     cli_args = ArgumentParser(prog="mss")
     cli_args.add_argument(
         "-c",
@@ -31,7 +30,7 @@ def main(*args: str) -> int:
         choices=list(range(10)),
         help="the PNG compression level",
     )
-    cli_args.add_argument("-m", "--monitor", default=0, type=int, help="the monitor to screen shot")
+    cli_args.add_argument("-m", "--monitor", default=0, type=int, help="the monitor to screenshot")
     cli_args.add_argument("-o", "--output", default="monitor-{mon}.png", help="the output file name")
     cli_args.add_argument("--with-cursor", default=False, action="store_true", help="include the cursor")
     cli_args.add_argument(

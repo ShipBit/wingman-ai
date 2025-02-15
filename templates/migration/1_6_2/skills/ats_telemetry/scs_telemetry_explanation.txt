@@ -1,0 +1,248 @@
+- **SCS_TELEMETRY_trailers_count**: Maximum number of trailers supported by the telemetry SDK.
+- **SCS_TELEMETRY_CONFIG_substances**: Configuration of the substances, indexed by substance.
+    - **id**: Internal identifier for the substance.
+- **SCS_TELEMETRY_CONFIG_controls**: Static configuration of the controls.
+    - **shifter_type**: Type of the shifter (e.g., manual, automatic).
+- **SCS_TELEMETRY_CONFIG_hshifter**: Configuration of the h-shifter.
+    - **selector_count**: Number of selectors (e.g., range, splitter toggles).
+    - **slot_gear**: Gear selected when requirements for this slot are met.
+    - **slot_handle_position**: Position of the h-shifter handle.
+    - **slot_selectors**: Bitmask of required on/off state of selectors.
+- **SCS_TELEMETRY_CONFIG_truck**: Static configuration of the truck.
+    - **brand_id**: Internal identifier for the truck brand.
+    - **brand**: Localized brand name for display purposes.
+    - **id**: Internal identifier for the truck.
+    - **name**: Localized name for display purposes.
+    - **fuel_capacity**: Fuel tank capacity in liters.
+    - **fuel_warning_factor**: Fraction of fuel capacity that triggers a warning.
+    - **adblue_capacity**: AdBlue tank capacity in liters.
+    - **adblue_warning_factor**: Fraction of AdBlue capacity that triggers a warning.
+    - **air_pressure_warning**: Air pressure below which the warning activates.
+    - **air_pressure_emergency**: Air pressure below which the emergency brakes activate.
+    - **oil_pressure_warning**: Oil pressure below which the warning activates.
+    - **water_temperature_warning**: Water temperature above which the warning activates.
+    - **battery_voltage_warning**: Battery voltage below which the warning activates.
+    - **rpm_limit**: Maximum RPM value.
+    - **forward_gear_count**: Number of forward gears on the truck.
+    - **reverse_gear_count**: Number of reverse gears on the truck.
+    - **retarder_step_count**: Number of steps in the retarder.
+    - **cabin_position**: Position of the cabin in the vehicle space.
+    - **head_position**: Default head position in the cabin space.
+    - **hook_position**: Position of the trailer connection hook.
+    - **license_plate**: Vehicle license plate.
+    - **license_plate_country**: Name of the country for the license plate.
+    - **license_plate_country_id**: Internal identifier for the license plate country.
+    - **wheel_count**: Number of wheels on the truck.
+    - **wheel_position**: Positions of each wheel.
+- **SCS_TELEMETRY_CONFIG_trailer**: Static configuration of the trailer.
+    - **id**: Internal identifier for the trailer.
+    - **cargo_accessory_id**: Internal identifier for the cargo accessory.
+    - **hook_position**: Position of the trailer hook.
+    - **brand_id**: Internal identifier for the trailer brand.
+    - **brand**: Localized brand name for display purposes.
+    - **name**: Localized name for display purposes.
+    - **chain_type**: Chain type description for the first trailer.
+    - **body_type**: Body type description for the first trailer.
+    - **license_plate**: Trailer license plate.
+    - **license_plate_country**: Name of the country for the license plate.
+    - **license_plate_country_id**: Internal identifier for the license plate country.
+    - **wheel_count**: Number of wheels on the trailer.
+    - **wheel_position**: Positions of each wheel on the trailer.
+- **SCS_TELEMETRY_CONFIG_job**: Static configuration of the job.
+    - **cargo_id**: Internal identifier for the cargo.
+    - **cargo**: Localized cargo name for display purposes.
+    - **cargo_mass**: Mass of the cargo in kilograms.
+    - **destination_city_id**: Internal identifier for the destination city.
+    - **destination_city**: Localized name for the destination city.
+    - **source_city_id**: Internal identifier for the source city.
+    - **source_city**: Localized name for the source city.
+    - **destination_company_id**: Internal identifier for the destination company.
+    - **destination_company**: Localized name for the destination company.
+    - **source_company_id**: Internal identifier for the source company.
+    - **source_company**: Localized name for the source company.
+    - **income**: Expected income for the job without penalties.
+    - **delivery_time**: In-game time for job delivery.
+    - **is_cargo_loaded**: Boolean indicating if the cargo is loaded.
+    - **job_market**: Type of job market (e.g., cargo_market, quick_job).
+    - **special_job**: Flag indicating whether the job is a special transport job.
+    - **planned_distance_km**: Planned job distance in simulated kilometers.- **SCS_TELEMETRY_trailers_count**: Maximum number of trailers supported by the telemetry SDK.
+- **SCS_TELEMETRY_CONFIG_substances**: Configuration of the substances, indexed by substance.
+    - **id**: Internal identifier for the substance.
+- **SCS_TELEMETRY_CONFIG_controls**: Static configuration of the controls.
+    - **shifter_type**: Type of the shifter (e.g., manual, automatic).
+- **SCS_TELEMETRY_CONFIG_hshifter**: Configuration of the h-shifter.
+    - **selector_count**: Number of selectors (e.g., range, splitter toggles).
+    - **slot_gear**: Gear selected when requirements for this slot are met.
+    - **slot_handle_position**: Position of the h-shifter handle.
+    - **slot_selectors**: Bitmask of required on/off state of selectors.
+- **SCS_TELEMETRY_CONFIG_truck**: Static configuration of the truck.
+    - **brand_id**: Internal identifier for the truck brand.
+    - **brand**: Localized brand name for display purposes.
+    - **id**: Internal identifier for the truck.
+    - **name**: Localized name for display purposes.
+    - **fuel_capacity**: Fuel tank capacity in liters.
+    - **fuel_warning_factor**: Fraction of fuel capacity that triggers a warning.
+    - **adblue_capacity**: AdBlue tank capacity in liters.
+    - **adblue_warning_factor**: Fraction of AdBlue capacity that triggers a warning.
+    - **air_pressure_warning**: Air pressure below which the warning activates.
+    - **air_pressure_emergency**: Air pressure below which the emergency brakes activate.
+    - **oil_pressure_warning**: Oil pressure below which the warning activates.
+    - **water_temperature_warning**: Water temperature above which the warning activates.
+    - **battery_voltage_warning**: Battery voltage below which the warning activates.
+    - **rpm_limit**: Maximum RPM value.
+    - **forward_gear_count**: Number of forward gears on the truck.
+    - **reverse_gear_count**: Number of reverse gears on the truck.
+    - **retarder_step_count**: Number of steps in the retarder.
+    - **cabin_position**: Position of the cabin in the vehicle space.
+    - **head_position**: Default head position in the cabin space.
+    - **hook_position**: Position of the trailer connection hook.
+    - **license_plate**: Vehicle license plate.
+    - **license_plate_country**: Name of the country for the license plate.
+    - **license_plate_country_id**: Internal identifier for the license plate country.
+    - **wheel_count**: Number of wheels on the truck.
+    - **wheel_position**: Positions of each wheel.
+- **SCS_TELEMETRY_CONFIG_trailer**: Static configuration of the trailer.
+    - **id**: Internal identifier for the trailer.
+    - **cargo_accessory_id**: Internal identifier for the cargo accessory.
+    - **hook_position**: Position of the trailer hook.
+    - **brand_id**: Internal identifier for the trailer brand.
+    - **brand**: Localized brand name for display purposes.
+    - **name**: Localized name for display purposes.
+    - **chain_type**: Chain type description for the first trailer.
+    - **body_type**: Body type description for the first trailer.
+    - **license_plate**: Trailer license plate.
+    - **license_plate_country**: Name of the country for the license plate.
+    - **license_plate_country_id**: Internal identifier for the license plate country.
+    - **wheel_count**: Number of wheels on the trailer.
+    - **wheel_position**: Positions of each wheel on the trailer.
+- **SCS_TELEMETRY_CONFIG_job**: Static configuration of the job.
+    - **cargo_id**: Internal identifier for the cargo.
+    - **cargo**: Localized cargo name for display purposes.
+    - **cargo_mass**: Mass of the cargo in kilograms.
+    - **destination_city_id**: Internal identifier for the destination city.
+    - **destination_city**: Localized name for the destination city.
+    - **source_city_id**: Internal identifier for the source city.
+    - **source_city**: Localized name for the source city.
+    - **destination_company_id**: Internal identifier for the destination company.
+    - **destination_company**: Localized name for the destination company.
+    - **source_company_id**: Internal identifier for the source company.
+    - **source_company**: Localized name for the source company.
+    - **income**: Expected income for the job without penalties.
+    - **delivery_time**: In-game time for job delivery.
+    - **is_cargo_loaded**: Boolean indicating if the cargo is loaded.
+    - **job_market**: Type of job market (e.g., cargo_market, quick_job).
+    - **special_job**: Flag indicating whether the job is a special transport job.
+    - **planned_distance_km**: Planned job distance in simulated kilometers.
+- **truck.world.placement**: Represents world space position and orientation of the truck. (Type: dplacement)
+- **truck.local.velocity.linear**: Vehicle space linear velocity in meters per second. (Type: fvector)
+- **truck.local.velocity.angular**: Vehicle space angular velocity in rotations per second. (Type: fvector)
+- **truck.local.acceleration.linear**: Vehicle space linear acceleration in meters per second². (Type: fvector)
+- **truck.local.acceleration.angular**: Vehicle space angular acceleration in rotations per second². (Type: fvector)
+- **truck.cabin.offset**: Vehicle space position and orientation delta of the cabin from its default position. (Type: fplacement)
+- **truck.cabin.velocity.angular**: Cabin space angular velocity in rotations per second. (Type: fvector)
+- **truck.cabin.acceleration.angular**: Cabin space angular acceleration in rotations per second². (Type: fvector)
+- **truck.head.offset**: Cabin space position and orientation delta of the driver’s head from its default position. (Type: fplacement)
+- **truck.speed**: Speedometer speed in meters per second. Uses negative value for reverse movement. (Type: float)
+- **truck.engine.rpm**: RPM of the engine. (Type: float)
+- **truck.engine.gear**: Gear currently selected in the engine; >0 for forward, 0 for neutral, <0 for reverse. (Type: s32)
+- **truck.displayed.gear**: Gear currently displayed on the dashboard; >0 for forward, 0 for neutral, <0 for reverse. (Type: s32)
+- **truck.input.steering**: Steering received from input, ranged from -1 to 1, counterclockwise. (Type: float)
+- **truck.input.throttle**: Throttle received from input, ranged from 0 to 1. (Type: float)
+- **truck.input.brake**: Brake received from input, ranged from 0 to 1. (Type: float)
+- **truck.input.clutch**: Clutch received from input, ranged from 0 to 1. (Type: float)
+- **truck.effective.steering**: Steering as used by the simulation, ranged from -1 to 1, counterclockwise. (Type: float)
+- **truck.effective.throttle**: Throttle pedal input as used by the simulation, ranged from 0 to 1. (Type: float)
+- **truck.effective.brake**: Brake pedal input as used by the simulation, ranged from 0 to 1. (Type: float)
+- **truck.effective.clutch**: Clutch pedal input as used by the simulation, ranged from 0 to 1. (Type: float)
+- **truck.cruise_control**: Speed selected for cruise control in meters per second; 0 if disabled. (Type: float)
+- **truck.hshifter.slot**: Gearbox slot the h-shifter handle is currently in; 0 means no slot is selected. (Type: u32)
+- **truck.hshifter.select**: Enabled state of range/splitter selector toggles. (Type: indexed bool)
+- **truck.brake.parking**: Whether the parking brake is enabled. (Type: bool)
+- **truck.brake.motor**: Whether the engine brake is enabled. (Type: bool)
+- **truck.brake.retarder**: Current level of the retarder; ranged from 0 to max. (Type: u32)
+- **truck.brake.air.pressure**: Pressure in the brake air tank in psi. (Type: float)
+- **truck.brake.air.pressure.warning**: Whether air pressure warning is active. (Type: bool)
+- **truck.brake.air.pressure.emergency**: Whether emergency brakes are active due to low air pressure. (Type: bool)
+- **truck.brake.temperature**: Temperature of the brakes in degrees Celsius. (Type: float)
+- **truck.fuel.amount**: Amount of fuel in liters. (Type: float)
+- **truck.fuel.warning**: Whether low fuel warning is active. (Type: bool)
+- **truck.fuel.consumption.average**: Average fuel consumption in liters/km. (Type: float)
+- **truck.fuel.range**: Estimated range with current amount of fuel in km. (Type: float)
+- **truck.adblue**: Amount of AdBlue in liters. (Type: float)
+- **truck.adblue.warning**: Whether low AdBlue warning is active. (Type: bool)
+- **truck.adblue.consumption.average**: Average AdBlue consumption in liters/km. (Type: float)
+- **truck.oil.pressure**: Pressure of the oil in psi. (Type: float)
+- **truck.oil.pressure.warning**: Whether oil pressure warning is active. (Type: bool)
+- **truck.oil.temperature**: Temperature of the oil in degrees Celsius. (Type: float)
+- **truck.water.temperature**: Temperature of the water in degrees Celsius. (Type: float)
+- **truck.water.temperature.warning**: Whether water temperature warning is active. (Type: bool)
+- **truck.battery.voltage**: Voltage of the battery in volts. (Type: float)
+- **truck.battery.voltage.warning**: Whether battery voltage warning is active. (Type: bool)
+- **truck.electric.enabled**: Whether electric is enabled. (Type: bool)
+- **truck.engine.enabled**: Whether engine is enabled. (Type: bool)
+- **truck.lblinker**: Whether the left blinker is enabled. (Type: bool)
+- **truck.rblinker**: Whether the right blinker is enabled. (Type: bool)
+- **truck.hazard.warning**: Whether the hazard warning light is enabled. (Type: bool)
+- **truck.light.lblinker**: Whether the left blinker light is on. (Type: bool)
+- **truck.light.rblinker**: Whether the right blinker light is on. (Type: bool)
+- **truck.light.parking**: Whether the parking lights are enabled. (Type: bool)
+- **truck.light.beam.low**: Whether the low beam lights are enabled. (Type: bool)
+- **truck.light.beam.high**: Whether the high beam lights are enabled. (Type: bool)
+- **truck.light.aux.front**: Intensity of the auxiliary front lights; 1 for dimmed, 2 for full. (Type: u32)
+- **truck.light.aux.roof**: Intensity of the auxiliary roof lights; 1 for dimmed, 2 for full. (Type: u32)
+- **truck.light.beacon**: Whether the beacon lights are enabled. (Type: bool)
+- **truck.light.brake**: Whether the brake light is active. (Type: bool)
+- **truck.light.reverse**: Whether the reverse light is active. (Type: bool)
+- **truck.wipers**: Whether the wipers are enabled. (Type: bool)
+- **truck.dashboard.backlight**: Intensity of the dashboard backlight as a factor (0;1). (Type: float)
+- **truck.differential_lock**: Whether the differential lock is enabled. (Type: bool)
+- **truck.lift_axle**: Whether the lift axle control is set to the lifted state. (Type: bool)
+- **truck.lift_axle.indicator**: Whether the lift axle indicator is lit. (Type: bool)
+- **truck.trailer.lift_axle**: Whether the trailer lift axle control is set to the lifted state. (Type: bool)
+- **truck.trailer.lift_axle.indicator**: Whether the trailer lift axle indicator is lit. (Type: bool)
+- **truck.wear.engine**: Wear of the engine accessory as a factor (0;1). (Type: float)
+- **truck.wear.transmission**: Wear of the transmission accessory as a factor (0;1). (Type: float)
+- **truck.wear.cabin**: Wear of the cabin accessory as a factor (0;1). (Type: float)
+- **truck.wear.chassis**: Wear of the chassis accessory as a factor (0;1). (Type: float)
+- **truck.wear.wheels**: Average wear of the wheel accessories as a factor (0;1). (Type: float)
+- **truck.odometer**: Value of the odometer in kilometers. (Type: float)
+- **truck.navigation.distance**: Truck’s navigation distance in meters, used by the advisor. (Type: float)
+- **truck.navigation.time**: Truck’s navigation estimated time of arrival in seconds, used by the advisor. (Type: float)
+- **truck.navigation.speed.limit**: Truck’s navigation speed limit in meters per second, used by the advisor. (Type: float)
+- **truck.wheel.suspension.deflection**: Vertical displacement of the wheel from its axle in meters. (Type: indexed float)
+- **truck.wheel.on_ground**: Whether the wheel is in contact with the ground. (Type: indexed bool)
+- **truck.wheel.substance**: Substance below the wheel, indexed by substance ID. (Type: indexed u32)
+- **truck.wheel.angular_velocity**: Angular velocity of the wheel in rotations per second. (Type: indexed float)
+- **truck.wheel.steering**: Steering rotation of the wheel in rotations, from -0.25 to 0.25. (Type: indexed float)
+- **truck.wheel.rotation**: Rolling rotation of the wheel in rotations, from 0.0 to 1.0. (Type: indexed float)
+- **truck.wheel.lift**: Lift state of the wheel, from 0 to 1. (Type: indexed float)
+- **truck.wheel.lift.offset**: Vertical displacement of the wheel axle due to lifting, in meters. (Type: indexed float)
+
+
+- **job.cancelled**: Event triggered when a job is cancelled.
+    - **cancel.penalty**: Penalty for cancelling the job in game currency (Type: s64).
+- **job.delivered**: Event triggered when a job is delivered.
+    - **revenue**: Job revenue in game currency (Type: s64).
+    - **earned_xp**: XP received for the job (Type: s32).
+    - **cargo_damage**: Total cargo damage ranging from 0.0 to 1.0 (Type: float).
+    - **distance_km**: Real distance covered on the job in kilometers (Type: float).
+    - **delivery_time**: Total time spent on the job in game minutes (Type: u32).
+    - **auto_park_used**: Boolean indicating if auto parking was used (Type: bool).
+    - **auto_load_used**: Boolean indicating if auto loading was used (always true for non-cargo market jobs) (Type: bool).
+- **player.fined**: Event triggered when the player gets fined.
+    - **fine_offence**: Type of offence resulting in the fine (e.g., crash, speeding, no lights) (Type: string).
+    - **fine_amount**: Fine amount in game currency (Type: s64).
+- **player.tollgate.paid**: Event triggered when the player pays a tollgate fee.
+    - **pay_amount**: Amount paid for the tollgate in game currency (Type: s64).
+- **player.use.ferry**: Event triggered when the player uses a ferry.
+    - **pay_amount**: Amount paid for the ferry in game currency (Type: s64).
+    - **source_name**: Name of the ferry departure location (Type: string).
+    - **target_name**: Name of the ferry destination location (Type: string).
+    - **source_id**: ID of the ferry departure location (Type: string).
+    - **target_id**: ID of the ferry destination location (Type: string).
+- **player.use.train**: Event triggered when the player uses a train.
+    - **pay_amount**: Amount paid for the train in game currency (Type: s64).
+    - **source_name**: Name of the train departure location (Type: string).
+    - **target_name**: Name of the train destination location (Type: string).
+    - **source_id**: ID of the train departure location (Type: string).
+    - **target_id**: ID of the train destination location (Type: string).

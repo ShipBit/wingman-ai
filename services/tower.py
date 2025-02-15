@@ -4,11 +4,14 @@ from api.interface import (
     SettingsConfig,
     WingmanConfig,
     WingmanInitializationError,
+    ConfigDirInfo,
 )
+from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
+from services.config_manager import ConfigManager
 from services.module_manager import ModuleManager
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -22,19 +25,24 @@ class Tower:
     def __init__(
         self,
         config: Config,
+        config_dir: ConfigDirInfo,
+        config_manager: ConfigManager,
         audio_player: AudioPlayer,
         audio_library: AudioLibrary,
         whispercpp: Whispercpp,
+        fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
     ):
         self.audio_player = audio_player
         self.audio_library = audio_library
         self.config = config
-        self.mouse_wingman_dict: dict[str, Wingman] = {}
+        self.config_dir = config_dir
+        self.config_manager = config_manager
         self.wingmen: list[Wingman] = []
         self.disabled_wingmen: list[WingmanConfig] = []
         self.log_source_name = "Tower"
         self.whispercpp = whispercpp
+        self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
 
     async def instantiate_wingmen(self, settings: SettingsConfig):
@@ -64,7 +72,7 @@ class Tower:
 
         printr.print(
             f"Instantiated wingmen: {', '.join([w.name for w in self.wingmen])}.",
-            color=LogType.INFO,
+            color=LogType.POSITIVE,
             server_only=True,
             source_name=self.log_source_name,
             source=LogSource.SYSTEM,
@@ -89,7 +97,9 @@ class Tower:
                     audio_player=self.audio_player,
                     audio_library=self.audio_library,
                     whispercpp=self.whispercpp,
+                    fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
+                    tower=self,
                 )
             else:
                 wingman = OpenAiWingman(
@@ -99,7 +109,9 @@ class Tower:
                     audio_player=self.audio_player,
                     audio_library=self.audio_library,
                     whispercpp=self.whispercpp,
+                    fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
+                    tower=self,
                 )
         except FileNotFoundError as e:  # pylint: disable=broad-except
             wingman_config.disabled = True
@@ -135,15 +147,6 @@ class Tower:
                 await wingman.prepare()
                 self.wingmen.append(wingman)
 
-            # Mouse
-            button = wingman.get_record_button()
-            if button:
-                self.mouse_wingman_dict[button] = wingman
-
-        return wingman
-
-    def get_wingman_from_mouse(self, mouse: any) -> Wingman | None:  # type: ignore
-        wingman = self.mouse_wingman_dict.get(mouse, None)
         return wingman
 
     def get_wingman_from_text(self, text: str) -> Wingman | None:
@@ -212,4 +215,48 @@ class Tower:
                     source=LogSource.SYSTEM,
                 )
                 return True
+        return False
+
+    def save_wingman(self, wingman_name: str):
+        for wingman in self.wingmen:
+            if wingman.name == wingman_name:
+                for wingman_file in self.config_manager.get_wingmen_configs(
+                    self.config_dir
+                ):
+                    if wingman_file.name == wingman_name:
+                        self.config_manager.save_wingman_config(
+                            config_dir=self.config_dir,
+                            wingman_file=wingman_file,
+                            wingman_config=wingman.config,
+                        )
+                        printr.print(
+                            f"Saved wingman {wingman_name}.",
+                            color=LogType.INFO,
+                            server_only=True,
+                            source_name=self.log_source_name,
+                            source=LogSource.SYSTEM,
+                        )
+                        return True
+
+        printr.print(
+            f"Unable to save wingman {wingman_name}.",
+            color=LogType.WARNING,
+            server_only=True,
+            source_name=self.log_source_name,
+            source=LogSource.SYSTEM,
+        )
+        return False
+
+    def save_last_message(self, wingman_name: str, last_message: str):
+        for wingman in self.wingmen:
+            if wingman.name == wingman_name:
+                for wingman_file in self.config_manager.get_wingmen_configs(
+                    self.config_dir
+                ):
+                    if wingman_file.name == wingman_name:
+                        return self.config_manager.save_last_wingman_message(
+                            config_dir=self.config_dir,
+                            wingman_file=wingman_file,
+                            last_message=last_message,
+                        )
         return False

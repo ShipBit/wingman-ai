@@ -364,11 +364,37 @@ class ConfigService:
         wingman_config.record_key = basic_config.record_key
         wingman_config.record_key_codes = basic_config.record_key_codes
         wingman_config.sound = basic_config.sound
-        wingman_config.prompts.backstory = basic_config.backstory
+        wingman_config.prompts = basic_config.prompts
         try:
             wingman_config.openai.tts_voice = OpenAiTtsVoice(basic_config.voice)
         except ValueError:
             wingman_config.azure.tts.voice = basic_config.voice
+
+        reload_config = (
+            wingman_config.record_joystick_button != basic_config.record_joystick_button
+            or wingman_config.record_mouse_button != basic_config.record_mouse_button
+            or wingman_file.name != wingman_config.name
+        )
+
+        wingman_config.record_joystick_button = basic_config.record_joystick_button
+        wingman_config.record_mouse_button = basic_config.record_mouse_button
+
+        wingman_config.features = basic_config.features
+        wingman_config.openai = basic_config.openai
+        wingman_config.mistral = basic_config.mistral
+        wingman_config.groq = basic_config.groq
+        wingman_config.cerebras = basic_config.cerebras
+        wingman_config.google = basic_config.google
+        wingman_config.openrouter = basic_config.openrouter
+        wingman_config.local_llm = basic_config.local_llm
+        wingman_config.edge_tts = basic_config.edge_tts
+        wingman_config.elevenlabs = basic_config.elevenlabs
+        wingman_config.azure = basic_config.azure
+        wingman_config.xvasynth = basic_config.xvasynth
+        wingman_config.whispercpp = basic_config.whispercpp
+        wingman_config.fasterwhisper = basic_config.fasterwhisper
+        wingman_config.wingman_pro = basic_config.wingman_pro
+        wingman_config.perplexity = basic_config.perplexity
 
         updated = await wingman.update_config(config=wingman_config, validate=validate)
 
@@ -378,8 +404,6 @@ class ConfigService:
             )
             return
 
-        renamed = wingman_file.name != wingman_config.name
-
         # save the config file
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
@@ -387,7 +411,7 @@ class ConfigService:
             wingman_config=wingman_config,
         )
 
-        if renamed:
+        if reload_config:
             await self.load_config(config_dir=config_dir)
 
         message = f"Wingman {wingman_config.name}'s basic config changed."

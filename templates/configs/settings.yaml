@@ -1,10 +1,11 @@
 debug_mode: false
 audio: {}
+streamer_mode: false
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
   energy_threshold: 0.01
-  stt_provider: whispercpp # azure, whispercpp, openai
+  stt_provider: fasterwhisper
   azure:
     region: westeurope
     languages:
@@ -13,12 +14,20 @@ voice_activation:
   whispercpp:
     host: http://127.0.0.1
     port: 8080
-    model: ggml-base.bin
-    language: auto
-    translate_to_english: false
-    use_cuda: false
+    enable: false
   whispercpp_config:
     temperature: 0.0
+  fasterwhisper:
+    model_size: base
+    device: cpu
+    compute_type: auto
+  fasterwhisper_config:
+    beam_size: 1
+    best_of: 2
+    temperature: 0
+    no_speech_threshold: 0.7
+    language_detection_threshold: 0.5
+    multilingual: false
 wingman_pro:
   base_url: https://wingman-ai.azurewebsites.net
   region: europe

@@ -4,12 +4,18 @@ from importlib import import_module, util
 from os import path
 import os
 import sys
-
 from typing import TYPE_CHECKING
 import yaml
-from api.interface import SettingsConfig, SkillBase, SkillConfig, WingmanConfig
+from api.interface import (
+    SettingsConfig,
+    SkillBase,
+    SkillConfig,
+    WingmanConfig,
+)
+from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
+from services.audio_library import AudioLibrary
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -17,6 +23,7 @@ from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
+    from services.tower import Tower
 
 SKILLS_DIR = "skills"
 
@@ -46,8 +53,11 @@ class ModuleManager:
         config: WingmanConfig,
         settings: SettingsConfig,
         audio_player: AudioPlayer,
+        audio_library: AudioLibrary,
         whispercpp: Whispercpp,
+        fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
+        tower: "Tower",
     ):
         """Dynamically creates a Wingman instance from a module path and class name
 
@@ -56,6 +66,11 @@ class ModuleManager:
             config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
             settings (SettingsConfig): The general user settings.
             audio_player (AudioPlayer): The audio player handling the playback of audio files.
+            audio_library (AudioLibrary): The audio library handling the storage and retrieval of audio files.
+            whispercpp (Whispercpp): The Whispercpp provider for speech-to-text.
+            fasterwhisper (FasterWhisper): The FasterWhisper provider for speech-to-text.
+            xvasynth (XVASynth): The XVASynth provider for text-to-speech.
+            tower (Tower): The Tower instance, that manages loaded Wingmen.
         """
 
         try:
@@ -77,8 +92,11 @@ class ModuleManager:
             config=config,
             settings=settings,
             audio_player=audio_player,
+            audio_library=audio_library,
             whispercpp=whispercpp,
+            fasterwhisper=fasterwhisper,
             xvasynth=xvasynth,
+            tower=tower,
         )
         return instance
 
@@ -137,28 +155,33 @@ class ModuleManager:
 
     @staticmethod
     def read_available_skill_configs() -> list[tuple[str, str]]:
+        skill_dirs = [get_writable_dir(SKILLS_DIR)]
+
         if os.path.isdir(SKILLS_DIR):
-            skills_dir = SKILLS_DIR
-        else:
-            skills_dir = get_writable_dir(SKILLS_DIR)
+            skill_dirs.append(SKILLS_DIR)
 
-        skills_default_configs = []
-        # Traverse the skills directory
-        for skill_name in os.listdir(skills_dir):
-            # Construct the path to the skill's directory
-            skill_path = os.path.join(skills_dir, skill_name)
+        skills_default_configs = {}
+        for skills_dir in skill_dirs:
+            # Traverse the skills directory
+            for skill_name in os.listdir(skills_dir):
+                # Construct the path to the skill's directory
+                skill_path = os.path.join(skills_dir, skill_name)
 
-            # Check if the path is a directory (to avoid non-folder files)
-            if os.path.isdir(skill_path):
-                # Construct the path to the default_config.yaml file
-                default_config_path = os.path.join(skill_path, "default_config.yaml")
+                # Check if the path is a directory (to avoid non-folder files)
+                if os.path.isdir(skill_path):
+                    # Construct the path to the default_config.yaml file
+                    default_config_path = os.path.join(
+                        skill_path, "default_config.yaml"
+                    )
 
-                # Check if the default_config.yaml file exists
-                if os.path.isfile(default_config_path):
-                    # Add the skill name and the default_config.yaml file path to the list
-                    skills_default_configs.append((skill_name, default_config_path))
+                    # Check if the default_config.yaml file exists
+                    if os.path.isfile(default_config_path):
+                        # Add the skill name and the default_config.yaml file path to the list
+                        skills_default_configs.update(
+                            {skill_name: (skill_name, default_config_path)}
+                        )
 
-        return skills_default_configs
+        return list(skills_default_configs.values())
 
     @staticmethod
     def read_available_skills() -> list[SkillBase]:

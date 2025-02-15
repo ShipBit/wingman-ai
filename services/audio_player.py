@@ -138,6 +138,20 @@ class AudioPlayer:
         self.is_playing = False
         await self.notify_playback_finished(self.wingman_name)
 
+    async def pause_playback(self):
+        if self.stream is not None:
+            self.stream.stop()
+        if self.raw_stream is not None:
+            self.raw_stream.stop()
+        self.is_playing = False
+
+    async def resume_playback(self):
+        if self.stream is not None:
+            self.stream.start()
+        if self.raw_stream is not None:
+            self.raw_stream.start()
+        self.is_playing = True
+
     async def play_with_effects(
         self,
         input_data: bytes | tuple,

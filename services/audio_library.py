@@ -28,30 +28,94 @@ class AudioLibrary:
         self.audio_library_path = get_writable_dir(DIR_AUDIO_LIBRARY)
         self.current_playbacks = {}
 
+    async def handle_action(self, audio_file: AudioFile | AudioFileConfig, volume_modifier: float = 1.0):
+        audio_config = self.__get_audio_file_config(audio_file)
+
+        if audio_config.stop:
+            # setting `remove_playback` to false combines stop and pause in one action
+            await self.stop_playback(audio_config, remove_playback=False)
+        else:
+            if audio_config.wait:
+                await self.start_playback(audio_config, volume_modifier)
+            else:
+                self.__threaded_execution(self.start_playback, audio_config, volume_modifier)
+
+    async def audio_library_toggle_play(self, audio_file: AudioFile | AudioFileConfig, volume_modifier: float = 1.0):
+        audio_config = self.__get_audio_file_config(audio_file)
+
+        # Check if any of the configured files are currently playing
+        current_playbacks = [
+            file
+            for file in audio_config.files
+            if self.get_playback_status(file)[1] and self.get_playback_status(file)[0]  # has player & is playing
+        ]
+
+        if current_playbacks:
+            return await self.stop_playback(audio_config, 0.1, remove_playback=True)
+
+        await self.start_playback(audio_config, volume_modifier)
+
     ##########################
     ### Playback functions ###
     ##########################
 
     async def start_playback(
-        self, audio_file: AudioFile | AudioFileConfig, volume_modifier: float = 1.0
+        self,
+        audio_file: AudioFile | AudioFileConfig,
+        volume_modifier: float = 1.0,
     ):
         audio_file = self.__get_audio_file_config(audio_file)
-        audio_player = AudioPlayer(
-            asyncio.get_event_loop(), self.on_playback_started, self.on_playback_finish
-        )
+
+        if audio_file.resume:
+            current_playbacks = [
+                True
+                for file in audio_file.files
+                if self.get_playback_status(file)[1] and self.get_playback_status(file)[0] # audio player & playing
+            ]
+            if current_playbacks:
+                # still playing, nothing to do
+                return
+
+            paused_playbacks = [
+                self.get_playback_status(file)
+                for file in audio_file.files
+                if self.get_playback_status(file)[1]
+            ]
+            if paused_playbacks:
+                # resume random playback
+                size = len(paused_playbacks)
+                if size > 1:
+                    index = randint(0, size - 1)
+                else:
+                    index = 0
+                selected_file = paused_playbacks[index]
+                audio_player = selected_file[1]
+                await audio_player.resume_playback()
+                self.__threaded_execution(
+                    self.fade_in,
+                    audio_player,
+                    selected_file[2],
+                    (audio_file.volume or 1.0) * volume_modifier,
+                    0.5,
+                    20,
+                )
+                return
 
         selected_file = self.__get_random_audio_file_from_config(audio_file)
-        playback_key = self.__get_playback_key(selected_file)
-
         # skip if file does not exist
         if not path.exists(path.join(self.audio_library_path, selected_file.path, selected_file.name)):
             printr.toast_error(
-                f"Skipping playback of {selected_file.name} as it does not exist in the audio library."
+                f"Skipping playback of {selected_file.name} as it does not exist (anymore) in the audio library."
             )
             return
 
         # stop running playbacks of configured files
-        await self.stop_playback(audio_file, 0.1)
+        await self.stop_playback(audio_file, 0.1, remove_playback=True)
+
+        playback_key = self.__get_playback_key(selected_file)
+        audio_player = AudioPlayer(
+            asyncio.get_event_loop(), self.on_playback_started, self.on_playback_finish
+        )
 
         async def actual_start_playback(
             audio_file: AudioFile,
@@ -89,21 +153,8 @@ class AudioLibrary:
         audio_file: AudioFile | AudioFileConfig,
         fade_out_time: float = 0.5,
         fade_out_resolution: int = 20,
+        remove_playback: bool = True,
     ):
-        async def fade_out(
-            audio_player: AudioPlayer,
-            volume: list[float],
-            fade_out_time: int,
-            fade_out_resolution: int,
-        ):
-            original_volume = volume[0]
-            step_size = original_volume / fade_out_resolution
-            step_duration = fade_out_time / fade_out_resolution
-            while audio_player.is_playing and volume[0] > 0.0001:
-                volume[0] -= step_size
-                await asyncio.sleep(step_duration)
-            await asyncio.sleep(0.05)  # 50ms grace period
-            await audio_player.stop_playback()
 
         for file in self.__get_audio_file_config(audio_file).files:
             status = self.get_playback_status(file)
@@ -112,16 +163,21 @@ class AudioLibrary:
             if audio_player:
                 if fade_out_time > 0:
                     self.__threaded_execution(
-                        fade_out,
+                        self.fade_out,
                         audio_player,
                         volume,
                         fade_out_time,
                         fade_out_resolution,
+                        not remove_playback,
                     )
                 else:
+                    audio_player.on_playback_finished = None
                     await audio_player.stop_playback()
 
-                self.current_playbacks.pop(self.__get_playback_key(file), None)
+                self.notify_playback_finished(self.__get_playback_key(file))
+
+                if remove_playback:
+                    self.current_playbacks.pop(self.__get_playback_key(file), None)
 
     def get_playback_status(
         self, audio_file: AudioFile
@@ -193,6 +249,43 @@ class AudioLibrary:
     ### Helper functions ###
     ########################
 
+    async def fade_out(
+        self,
+        audio_player: AudioPlayer,
+        volume: list[float],
+        fade_out_time: int,
+        fade_out_resolution: int,
+        pause: bool = False,
+    ):
+        original_volume = volume[0]
+        step_size = original_volume / fade_out_resolution
+        step_duration = fade_out_time / fade_out_resolution
+        while audio_player.is_playing and volume[0] > 0.0001:
+            volume[0] -= step_size
+            await asyncio.sleep(step_duration)
+        await asyncio.sleep(0.05)  # 50ms grace period
+        audio_player.on_playback_finished = None
+        if pause:
+            await audio_player.pause_playback()
+        else:
+            await audio_player.stop_playback()
+
+    async def fade_in(
+        self,
+        audio_player: AudioPlayer,
+        volume: list[float],
+        new_volume: float,
+        fade_in_time: int,
+        fade_in_resolution: int,
+    ):
+        new_volume = min(new_volume, 1.0)
+        original_volume = volume[0]
+        step_size = (new_volume - original_volume) / fade_in_resolution
+        step_duration = fade_in_time / fade_in_resolution
+        while audio_player.is_playing and volume[0] < new_volume:
+            volume[0] += step_size
+            await asyncio.sleep(step_duration)
+
     def __threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
 
@@ -213,7 +306,13 @@ class AudioLibrary:
         self, audio_file: AudioFile | AudioFileConfig
     ) -> AudioFileConfig:
         if isinstance(audio_file, AudioFile):
-            return AudioFileConfig(files=[audio_file], volume=1, wait=False)
+            return AudioFileConfig(
+                files=[audio_file],
+                volume=1,
+                wait=False,
+                stop=False,
+                resume=False,
+            )
         return audio_file
 
     def __get_random_audio_file_from_config(
