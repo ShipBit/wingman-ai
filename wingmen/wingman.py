@@ -231,7 +231,7 @@ class Wingman:
 
                     errors.extend(validation_errors)
 
-                    if len(errors) == 0:
+                    if len(validation_errors) == 0:
                         self.skills.append(skill)
                         await self.prepare_skill(skill)
                         await skill.prepare()

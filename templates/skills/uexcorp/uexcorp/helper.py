@@ -36,6 +36,10 @@ class Helper:
             cls._instance = cls()
         return cls._instance
 
+    @classmethod
+    def destroy_instance(cls):
+        cls._instance = None
+
     def __init__(self):
         self.__is_loaded = None
         self.__data_path: str = get_writable_dir(path.join("skills", "uexcorp", "data"))
