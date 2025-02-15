@@ -1,5 +1,6 @@
 import sys
 import os
+from api.enums import WingmanInitializationErrorType
 from services.benchmark import Benchmark
 
 # add skill to sys path
@@ -27,18 +28,32 @@ class UEXCorp(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.__helper = Helper.get_instance()
+        self.__invalid_session = False
+
+        if self.__helper.get_wingmen() is not None and self.__helper.get_wingmen() != self.wingman:
+            self.__helper.get_handler_debug().write(
+                "Please ensure that only one instance of UEXCorp skill is initialized at a time, that's a current limitation.",
+                True
+            )
+            self.__invalid_session = True
+            return
         self.__helper.prepare(self.threaded_execution, self.wingman)
         self.__helper.get_handler_config().set_wingman(wingman)
 
     async def prepare(self) -> None:
         await super().prepare()
+        if self.__invalid_session:
+            return
         self.__helper.set_loaded()
         self.threaded_execution(self.threaded_prepare)
         self.threaded_execution(self.loop_master)
 
     async def unload(self) -> None:
         await super().unload()
+        if self.__invalid_session:
+            return
         self.__helper.set_loaded(False)
+        Helper.destroy_instance()
 
     def loop_master(self):
         cycle = 600
@@ -57,6 +72,17 @@ class UEXCorp(Skill):
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
+
+        if self.__invalid_session:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message=f"The UEXCorp skill is already initialized with '{self.__helper.get_wingmen().name}'.",
+                    error_type=WingmanInitializationErrorType.UNKNOWN,
+                )
+            )
+            return errors
+
         errors = await self.__helper.get_handler_config().validate(errors, self.retrieve_custom_property_value)
         return errors
 

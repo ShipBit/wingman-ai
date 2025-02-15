@@ -100,6 +100,7 @@ class OpenAiWingman(Wingman):
         try:
             if self.uses_provider("whispercpp"):
                 self.whispercpp.validate(self.name, errors)
+
             if self.uses_provider("fasterwhisper"):
                 self.fasterwhisper.validate(errors)
 
