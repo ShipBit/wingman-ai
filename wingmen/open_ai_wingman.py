@@ -531,7 +531,7 @@ class OpenAiWingman(Wingman):
                 transcript = self.fasterwhisper.transcribe(
                     filename=audio_input_wav,
                     config=self.config.fasterwhisper,
-                    wingman_name=self.name,
+                    initial_hotwords=self.name,
                 )
             elif self.config.features.stt_provider == SttProvider.WINGMAN_PRO:
                 if (

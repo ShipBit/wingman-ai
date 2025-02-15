@@ -58,7 +58,7 @@ class FasterWhisper:
     def transcribe(
         self,
         config: FasterWhisperSttConfig,
-        wingman_name: str,
+        initial_hotwords: str,
         filename: str,
     ):
         try:
@@ -69,9 +69,9 @@ class FasterWhisper:
                 best_of=config.best_of,
                 temperature=config.temperature,
                 hotwords=(
-                    wingman_name
+                    initial_hotwords
                     if not config.hotwords
-                    else ",".join([wingman_name, config.hotwords])
+                    else ",".join([initial_hotwords, config.hotwords])
                 ),
                 no_speech_threshold=config.no_speech_threshold,
                 language=config.language,
