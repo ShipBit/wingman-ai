@@ -1,0 +1,20 @@
+name: SRSControl
+module: skills.SRSControl.main
+category: general
+description:
+  en: Control DCS-SRS
+hint:
+  en: this skill changes radio memory channels and numbers in DCS-SRS.
+examples:
+  - question:
+      en: select radio 5
+    answer:
+      en: (selects radio number 5)
+prompt: |
+
+You can control the radio program known as DCS-SRS or simply SRS
+
+If I tell you to select a certain radio number, send a UDP request to port 9040 with the message "{Command:1, Radioid: X}" where X is the number of the radio I say, up to 10
+If  I say  to increase channel send the message "{Command:3, Radioid: X}"
+decrease channel is "{Command:4, Radioid: X}"  
+In all the above scenarios DO NOT  send the quotes just what is between them. however, always  include a comma after the command number
