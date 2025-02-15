@@ -1,0 +1,41 @@
+name: UEXCorpDataSubmission
+module: skills.uexcorp_data_submission.main
+category: star_citizen
+description:
+  en: Submit commodity data to UEX Corp from Star Citizen terminals
+  de: Übermittle Warenterminaldaten aus Star Citizen an UEX Corp
+examples:
+  - question:
+      en: Can you submit the data for this commodity terminal?
+      de: Kannst du die Daten für dieses Warenterminal übermitteln?
+    answer:
+      en: Certainly! I'll capture a screenshot of the terminal, extract the commodity data, and submit it to UEX Corp. Please ensure you're at a commodity terminal before proceeding.
+      de: Natürlich! Ich werde einen Screenshot des Terminals aufnehmen, die Warendaten extrahieren und an UEX Corp übermitteln. Bitte stellen Sie sicher, dass Sie sich an einem Warenterminal befinden, bevor wir fortfahren.
+prompt: |
+  You can use the UEXCorpDataSubmission skill to capture screenshots of Star Citizen commodity terminals, extract the data, and submit it to UEX Corp. This helps keep the trading database up-to-date for all players.
+
+  Here are some examples of when to use the capture_and_submit_terminal_data function:
+  - "Submit commodity data": Indicates the user wants to submit data from a commodity terminal.
+  - "Update UEX Corp with current prices": Suggests the user wants to update the UEX Corp database with current market data.
+  - "Capture terminal data": Implies the user wants to capture and submit data from a terminal.
+
+  Always confirm with the user that they are at a commodity terminal and the location of the terminal before proceeding with data capture and submission.
+custom_properties:
+  - id: api_url
+    name: UEX Corp API URL
+    hint: The URL for the UEX Corp data submission API
+    value: https://uexcorp.space/api/2.0
+    required: true
+    property_type: string
+  - id: max_retries
+    name: Max Retries
+    hint: Maximum number of retry attempts for API submission
+    value: 3
+    required: true
+    property_type: number
+  - id: retry_delay
+    name: Retry Delay
+    hint: Delay in seconds between retry attempts (uses exponential backoff)
+    value: 2
+    required: true
+    property_type: number
