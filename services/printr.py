@@ -22,7 +22,10 @@ class StreamToLogger:
         try:
             for line in buf.rstrip().splitlines():
                 self.logger.log(self.log_level, line.rstrip())
-                self.stream.write(line + "\n")
+                if isinstance(line, str):
+                    self.stream.write(line.encode('utf-8', errors='replace').decode('utf-8') + "\n")
+                else:
+                    self.stream.write(line + "\n")
         except Exception as e:
             original_stderr = getattr(sys, '__stderr__', sys.stderr)
             original_stderr.write(f"Error in StreamToLogger: {str(e)} - Buffer: {buf}\n")
@@ -64,7 +67,8 @@ class Printr(WebSocketUser):
             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             # log file with timestamp
             fh = RotatingFileHandler(
-                path.join(get_writable_dir("logs"), f"wingman-core.{timestamp}.log")
+                path.join(get_writable_dir("logs"), f"wingman-core.{timestamp}.log"),
+                encoding='utf-8'
             )
             fh.setLevel(logging.DEBUG)
             file_formatter = Formatter(
