@@ -1,5 +1,6 @@
 from os import path
 import platform
+from typing import Optional
 from faster_whisper import WhisperModel
 from api.enums import LogType
 from api.interface import (
@@ -58,9 +59,14 @@ class FasterWhisper:
     def transcribe(
         self,
         config: FasterWhisperSttConfig,
-        initial_hotwords: str,
         filename: str,
+        initial_hotwords: Optional[str],
     ):
+        hotwords = []
+        if initial_hotwords:
+            hotwords.append(initial_hotwords)
+        if config.hotwords:
+            hotwords.append(config.hotwords)
         try:
             segments, info = self.model.transcribe(
                 filename,
@@ -68,11 +74,7 @@ class FasterWhisper:
                 beam_size=config.beam_size,
                 best_of=config.best_of,
                 temperature=config.temperature,
-                hotwords=(
-                    initial_hotwords
-                    if not config.hotwords
-                    else ",".join([initial_hotwords, config.hotwords])
-                ),
+                hotwords=",".join(hotwords) if len(hotwords) > 0 else None,
                 no_speech_threshold=config.no_speech_threshold,
                 language=config.language,
                 multilingual=False if config.language else config.multilingual,

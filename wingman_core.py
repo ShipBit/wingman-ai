@@ -659,12 +659,15 @@ class WingmanCore(WebSocketUser):
             combined_hotwords = []
             for wingman in self.tower.wingmen:
                 combined_hotwords.append(wingman.name)
-                combined_hotwords.append(wingman.config.fasterwhisper.hotwords)
+                if wingman.config.fasterwhisper.hotwords:
+                    combined_hotwords.append(wingman.config.fasterwhisper.hotwords)
 
             transcription = self.fasterwhisper.transcribe(
                 config=self.settings_service.settings.voice_activation.fasterwhisper_config,
                 filename=recording_file,
-                initial_hotwords=",".join(combined_hotwords),
+                initial_hotwords=(
+                    ",".join(combined_hotwords) if len(combined_hotwords) > 0 else None
+                ),
             )
             text = transcription.text
 
