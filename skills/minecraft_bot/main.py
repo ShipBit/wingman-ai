@@ -5,6 +5,7 @@ from api.interface import (
     SkillConfig,
     WingmanInitializationError,
 )
+from services.benchmark import Benchmark
 from skills.skill_base import Skill
 
 from javascript import require, On
@@ -90,11 +91,13 @@ class MinecraftBot(Skill):
         player = self.bot.players[self.player_name]
         move = pathfinder.Movements(self.bot)
         self.bot.pathfinder.setMovements(move);
-        self.bot.pathfinder.setGoal(pathfinder.goals.GoalFollow(player, 4), True);
+        self.bot.pathfinder.setGoal(pathfinder.goals.GoalFollow(player.entity, 3), True);
 
-    async def execute_tool(self, tool_name: str, parameters: dict[str, any]) -> tuple[str, str]:
+    async def execute_tool(self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark) -> tuple[str, str]:
         function_response = ""
         instant_response = ""
+
+        benchmark.start_snapshot(f"MinecraftBot: {tool_name}")
 
         if tool_name == "join_spawn_game":
             await self.init_mineflayer()
@@ -107,6 +110,8 @@ class MinecraftBot(Skill):
         if tool_name == "follow_the_player":
             await self.follow_the_player()
             function_response = "Ok I'll follow you."
+
+        benchmark.finish_snapshot()
 
         if self.settings.debug_mode:
             await self.printr.print_async(f"Executed {tool_name} with parameters {parameters}. Result: {function_response}", color=LogType.INFO)
