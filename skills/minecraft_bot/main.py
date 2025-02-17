@@ -8,7 +8,7 @@ from api.interface import (
 from services.benchmark import Benchmark
 from skills.skill_base import Skill
 
-from javascript import require, On
+from javascript import require
 mineflayer = require('mineflayer')
 pathfinder = require('mineflayer-pathfinder')
 
@@ -67,16 +67,21 @@ class MinecraftBot(Skill):
         ]
         return tools
     
+    def on_spawn(self, _):
+        movements = pathfinder.Movements(self.bot)
+        self.bot.pathfinder.setMovements(movements)
+    
     async def init_mineflayer(self):
         self.bot = mineflayer.createBot({
             'host': '127.0.0.1',
             'port': 57440,
-            'username': 'Steve'
+            'username': self.wingman.name,
         })
         self.bot.loadPlugin(pathfinder.pathfinder)
 
+        self.bot.once('spawn', self.on_spawn)
+
     async def go_to_player(self):
-        movements = pathfinder.Movements(self.bot)
         player = self.bot.players[self.player_name]
         target = player.entity
         if not target:
@@ -84,13 +89,10 @@ class MinecraftBot(Skill):
             return
 
         pos = target.position
-        self.bot.pathfinder.setMovements(movements)
         self.bot.pathfinder.setGoal(pathfinder.goals.GoalNear(pos.x, pos.y, pos.z, 1))
 
     async def follow_the_player(self):
         player = self.bot.players[self.player_name]
-        move = pathfinder.Movements(self.bot)
-        self.bot.pathfinder.setMovements(move);
         self.bot.pathfinder.setGoal(pathfinder.goals.GoalFollow(player.entity, 3), True);
 
     async def execute_tool(self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark) -> tuple[str, str]:
