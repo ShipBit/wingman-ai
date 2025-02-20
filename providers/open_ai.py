@@ -3,10 +3,8 @@ import re
 from typing import Literal
 from openai import OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
-from api.enums import (
-    AzureRegion,
-    OpenAiTtsVoice,
-)
+from api.enums import AzureRegion
+
 from api.interface import (
     AzureInstanceConfig,
     AzureSttConfig,
@@ -147,18 +145,18 @@ class OpenAi(BaseOpenAi):
     async def play_audio(
         self,
         text: str,
-        voice: OpenAiTtsVoice,
+        voice: str,
+        model: str,
+        speed: float,
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
         try:
-            if not voice:
-                voice = OpenAiTtsVoice.NOVA
-
             response = self.client.audio.speech.create(
-                model="tts-1",
-                voice=voice.value,
+                model=model,
+                voice=voice,
+                speed=speed,
                 input=text,
             )
             if response is not None:

@@ -1,6 +1,6 @@
 import openai
 import requests
-from api.enums import CommandTag, LogType, OpenAiTtsVoice
+from api.enums import CommandTag, LogType
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
@@ -204,14 +204,18 @@ class WingmanPro:
     async def generate_openai_speech(
         self,
         text: str,
-        voice: OpenAiTtsVoice,
+        voice: str,
+        model: str,
+        speed: float,
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
         data = {
             "text": text,
-            "voice_name": voice.value,
+            "voice_name": voice,
+            "model": model,
+            "speed": speed,
             "stream": False,
         }
         response = requests.post(

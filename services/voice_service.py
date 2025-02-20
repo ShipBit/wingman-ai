@@ -1,7 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter
-from api.enums import AzureRegion, OpenAiTtsVoice
+from api.enums import AzureRegion
 from api.interface import (
     AzureTtsConfig,
     EdgeTtsConfig,
@@ -157,12 +157,20 @@ class VoiceService:
 
     # POST /play/openai
     async def play_openai_tts(
-        self, text: str, api_key: str, voice: OpenAiTtsVoice, sound_config: SoundConfig
+        self,
+        text: str,
+        api_key: str,
+        voice: str,
+        model: str,
+        speed: float,
+        sound_config: SoundConfig,
     ):
         openai = OpenAi(api_key=api_key)
         await openai.play_audio(
             text=text,
             voice=voice,
+            model=model,
+            speed=speed,
             sound_config=sound_config,
             audio_player=self.audio_player,
             wingman_name="system",
@@ -243,7 +251,7 @@ class VoiceService:
 
     # POST /play/wingman-pro/azure
     async def play_wingman_pro_openai(
-        self, text: str, voice: OpenAiTtsVoice, sound_config: SoundConfig
+        self, text: str, voice: str, model: str, speed: float, sound_config: SoundConfig
     ):
         wingman_pro = WingmanPro(
             wingman_name="system",
@@ -252,6 +260,8 @@ class VoiceService:
         await wingman_pro.generate_openai_speech(
             text=text,
             voice=voice,
+            model=model,
+            speed=speed,
             sound_config=sound_config,
             audio_player=self.audio_player,
             wingman_name="system",

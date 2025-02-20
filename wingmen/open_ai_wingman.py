@@ -1405,6 +1405,8 @@ class OpenAiWingman(Wingman):
                 await self.openai.play_audio(
                     text=text,
                     voice=self.config.openai.tts_voice,
+                    model=self.config.openai.tts_model,
+                    speed=self.config.openai.tts_speed,
                     sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,
@@ -1414,6 +1416,8 @@ class OpenAiWingman(Wingman):
                     await self.wingman_pro.generate_openai_speech(
                         text=text,
                         voice=self.config.openai.tts_voice,
+                        model=self.config.openai.tts_model,
+                        speed=self.config.openai.tts_speed,
                         sound_config=sound_config,
                         audio_player=self.audio_player,
                         wingman_name=self.name,

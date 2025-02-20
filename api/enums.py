@@ -97,15 +97,6 @@ class GoogleAiModel(Enum):
     GEMINI_1_5_PRO = "gemini-1.5-pro"
 
 
-class OpenAiTtsVoice(Enum):
-    NOVA = "nova"
-    ALLOY = "alloy"
-    ECHO = "echo"
-    FABLE = "fable"
-    ONYX = "onyx"
-    SHIMMER = "shimmer"
-
-
 class SoundEffect(Enum):
     AI = "AI"
     LOW_QUALITY_RADIO = "LOW_QUALITY_RADIO"
@@ -252,10 +243,6 @@ class GoogleAiModelEnumModel(BaseEnumModel):
     model: GoogleAiModel
 
 
-class OpenAiTtsVoiceEnumModel(BaseEnumModel):
-    voice: OpenAiTtsVoice
-
-
 class SoundEffectEnumModel(BaseEnumModel):
     sound_effect: SoundEffect
 
@@ -320,7 +307,6 @@ ENUM_TYPES = {
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "MistralModel": MistralModelEnumModel,
     "GoogleAiModel": GoogleAiModelEnumModel,
-    "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
     "SttProvider": SttProviderEnumModel,
