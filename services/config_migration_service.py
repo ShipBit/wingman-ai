@@ -442,6 +442,27 @@ class ConfigMigrationService:
             migrate_wingman=migrate_wingman,
         )
 
+    def migrate_170_to_171(self):
+        def migrate_settings(old: dict, new: dict) -> dict:
+            return old
+
+        def migrate_defaults(old: dict, new: dict) -> dict:
+            old["openai"]["tts_model"] = "tts-1"
+            old["openai"]["tts_speed"] = 1.0
+            self.log("- added new properties: openai.tts_model, openai.tts_speed")
+            return old
+
+        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            return old
+
+        self.migrate(
+            old_version="1_7_0",
+            new_version="1_7_1",
+            migrate_settings=migrate_settings,
+            migrate_defaults=migrate_defaults,
+            migrate_wingman=migrate_wingman,
+        )
+
     # INTERNAL
 
     def log(self, message: str, highlight: bool = False):
@@ -634,5 +655,6 @@ MIGRATIONS = [
     ("1_6_0", "1_6_1", ConfigMigrationService.migrate_160_to_161),
     ("1_6_1", "1_6_2", ConfigMigrationService.migrate_161_to_162),
     ("1_6_2", "1_7_0", ConfigMigrationService.migrate_162_to_170),
+    ("1_7_0", "1_7_1", ConfigMigrationService.migrate_170_to_171),
     # Add new migrations here in order
 ]

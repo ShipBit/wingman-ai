@@ -11,7 +11,6 @@ from api.enums import (
     CustomPropertyType,
     SkillCategory,
     TtsVoiceGender,
-    OpenAiTtsVoice,
     SoundEffect,
     SttProvider,
     TtsProvider,
@@ -307,10 +306,14 @@ class OpenAiConfig(BaseModel):
     """ The model to use for conversations aka "chit-chat" and for function calls.
     """
 
-    tts_voice: OpenAiTtsVoice
-    """ The voice to use for OpenAI text-to-speech.
-    Only used if features > tts_provider is set to 'openai'.
-    """
+    tts_voice: str
+    """The voice to use when generating the audio. Supported voices are alloy, ash, coral, echo, fable, onyx, nova, sage and shimmer."""
+
+    tts_model: str
+    """One of the available TTS models: tts-1 or tts-1-hd"""
+
+    tts_speed: float
+    """The speed of the generated audio. Select a value from 0.25 to 4.0. 1.0 is the default."""
 
     base_url: Optional[str] = None
     """ If you want to use a different API endpoint, uncomment this and configure it here.
@@ -586,7 +589,7 @@ class LabelValuePair(BaseModel):
 class VoiceSelection(BaseModel):
     provider: TtsProvider
     subprovider: Optional[WingmanProTtsProvider] = None
-    voice: str | ElevenlabsVoiceConfig | OpenAiTtsVoice | XVASynthVoiceConfig
+    voice: str | ElevenlabsVoiceConfig | XVASynthVoiceConfig
 
     @model_validator(mode="before")
     def check_voice_config(cls, values):
@@ -594,8 +597,6 @@ class VoiceSelection(BaseModel):
         def __parse_voice(provider: any, voice: any):
             if provider == "elevenlabs":
                 return ElevenlabsVoiceConfig.model_validate(voice)
-            if provider == "openai":
-                return OpenAiTtsVoice(voice)
             if provider == "xvasynth":
                 return XVASynthVoiceConfig.model_validate(voice)
             return str(voice)
@@ -696,7 +697,7 @@ class BasicWingmanConfig(BaseModel):
     record_mouse_button: Optional[str] = None
     record_joystick_button: Optional[CommandJoystickConfig] = None
     sound: SoundConfig
-    voice: str | OpenAiTtsVoice
+    voice: str
     prompts: PromptConfig
 
     features: FeaturesConfig
