@@ -1,22 +1,19 @@
-name: AskPerplexity
 module: skills.ask_perplexity.main
-category: general
+name: AskPerplexity
+display_name: Asp Perplexity
+author: JayMatthew
+tags:
+  - API
+  - Utility
+  - Internet
 description:
   en: Uses the Perplexity API to get up-to-date information on a wide range of topics. Perplexity is a paid service, you will need a funded account with an active API key, see https://www.perplexity.ai/settings/api
   de: Verwendet die Perplexity-API, um aktuelle Informationen zu einer Vielzahl von Themen zu erhalten. Perplexity ist ein kostenpflichtiger Dienst, ein Konto mit Guthaben und aktiven API key ist notwendig, siehe https://www.perplexity.ai/settings/api
 examples:
-  - question:
-      en: How is the weather today in Berlin?
-      de: Wie ist das Wetter heute?
-    answer:
-      en: Today, the weather in Berlin is cloudy with a high of 20°C and a ... (more details)
-      de: Heute ist das Wetter in Berlin bewölkt, mit einer Höchsttemperatur von 20°C und ... (mehr Details)
-  - question:
-      en: In Star Citizen mining, what is currently the best way to find quantanium?
-      de: Beim Mining in Star Citizen, wie finde ich aktuell am besten Quantanium?
-    answer:
-      en: To find Quantanium for mining in Star Citizen, your best bet is Lyria, as it offers ... (more details)
-      de: Um Quantanium im Star Citizen Universum zu finden, ist Lyria der beste Ort, da dort ... (mehr Details)
+  - en: How is the weather today in Berlin?
+    de: Wie ist das Wetter heute?
+  - en: In Star Citizen mining, what is currently the best way to find quantanium?
+    de: Beim Mining in Star Citizen, wie finde ich aktuell am besten Quantanium?
 prompt: |
   There is a new function: 'ask_perplexity'
   Perplexity is a powerful tool that can provide you with up-to-date information on a wide range of topics.

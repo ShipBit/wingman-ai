@@ -1,16 +1,18 @@
-name: VisionAI
 module: skills.vision_ai.main
-category: general
+name: VisionAI
+display_name: Vision AI
+author: ShipBit
+tags:
+  - Image
+  - Utility
+  - Game
+  - Windows
 description:
   en: Let your Wingman analyse whatever is on your screen.
   de: Lass deinen Wingman alles analysieren, was auf deinem Bildschirm zu sehen ist.
 examples:
-  - question:
-      en: What is on my screen?
-      de: Was siehst du auf meinem Bildschirm?
-    answer:
-      en: I see Spotify running and playing music.
-      de: Ich sehe die Spotify-App, die Musik abspielt.
+  - en: What is on my screen?
+    de: Was siehst du auf meinem Bildschirm?
 prompt: |
   You can see what the user is seeing, you can analyse it, and you can answer all questions about what you see.
   Use the tool 'analyse_what_you_or_user_sees' if you are asked to analyse what you see, or analyze what the user sees.

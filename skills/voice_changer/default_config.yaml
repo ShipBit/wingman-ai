@@ -1,6 +1,10 @@
-name: VoiceChanger
 module: skills.voice_changer.main
-category: general
+name: VoiceChanger
+display_name: Voice Changer
+author: JayMatthew
+tags:
+  - Game
+  - Utility
 description:
   en: Changes the voice of your Wingman automatically. Customize it to your liking.
   de: Wechselt die Stimme deines Wingman automatisch. Konfigurierbar nach eigenen Vorlieben.

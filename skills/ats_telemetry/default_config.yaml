@@ -1,6 +1,11 @@
-name: ATSTelemetry
 module: skills.ats_telemetry.main
-category: truck_simulator
+name: ATSTelemetry
+display_name: Truck Simulator 2 Telemetry
+author: teddybear082
+tags:
+  - American/European Truck Simulator 2
+  - Game
+  - API
 description:
   en: Retrieve live game state information from American Truck Simulator/Euro Truck Simulator 2. Also includes a 'dispatch mode' that automatically observes key state changes and comments on them.
   de: Erhalte live Spielstatus-Informationen von American Truck Simulator/Euro Truck Simulator 2. Enthält auch einen 'Dispatch-Modus', der automatisch wichtige Statusänderungen beobachtet und diese kommentiert.
@@ -8,18 +13,10 @@ hint:
   en: Requires a DLL to in the /plugins directory of your game. If you enter the path to your ATS/ETS2 installation, the skill will move the DLL automatically.
   de: Erfordert eine DLL im /plugins Verzeichnis des Spiels. Wenn du den Pfad zu deiner ATS/ETS2-Installation angibst, wird die DLL automatisch dorthin kopiert.
 examples:
-  - question:
-      en: What is my current speed?
-      de: Was ist meine aktuelle Geschwindigkeit?
-    answer:
-      en: You're currently driving at 30 miles per hour.
-      de: Du fährst aktuell 30 Meilen pro Stunde.
-  - question:
-      en: Start the dispatch mode.
-      de: Starte den Dispatch-Modus.
-    answer:
-      en: (starts the dispatch mode)
-      de: (startet den Dispatch-Modus)
+  - en: What is my current speed?
+    de: Was ist meine aktuelle Geschwindigkeit?
+  - en: Start the dispatch mode.
+    de: Starte den Dispatch-Modus.
 prompt: |
   You can retrieve various game state variables from American Truck Simulator (ATS) and Euro Truck Simulator 2 (ETS). Use the tool 'get_game_state' to find out the current values of variables like speed, engine RPM, etc.
 
@@ -122,24 +119,24 @@ prompt: |
   truckSpeed(current truck speed)
   speedLimit (speed limit of current road)
   currentFuelPercentage (percent of fuel remaining)
-  currentAdbluePercentage (percent of adblue remaining) 
-  truckDamageRounded (estimate of current truck wear and damage) 
+  currentAdbluePercentage (percent of adblue remaining)
+  truckDamageRounded (estimate of current truck wear and damage)
   wearTrailerRounded (estimate of current trailer wear)
   gameTime (current time in game)
-  nextRestStopTime (how long until next rest stop) 
-  routeTime(how long current route is expected to take to complete) 
-  jobExpirationTimeInDaysHoursMinutes (amount of time until job expires and delivery is late) 
+  nextRestStopTime (how long until next rest stop)
+  routeTime(how long current route is expected to take to complete)
+  jobExpirationTimeInDaysHoursMinutes (amount of time until job expires and delivery is late)
   isWorldOfTrucksContract (whether the current job is a contract from the World of Trucks platform)
   gameTimeLapsedToCompleteJob (when a job is completed, the amount of in-game time it took to complete)
   realLifeTimeToCompleteWorldofTrucksJob (when a World of Trucks platform job is completed, how much real life time it took)
   cargoMassInTons (if specifically asked, the mass of the cargo in tons)
-  cargoMass (the mass of the cargo) 
+  cargoMass (the mass of the cargo)
   routeDistance (distance remaining to complete the current route)
   truckFuelRange (approximate distance that can be driven with remaining fuel)
   fuelTankSize (total fuel capacity)
-  fuelRemaining (how much fuel is left in the tank) 
+  fuelRemaining (how much fuel is left in the tank)
   fuelConsumption (the rate at which fuel is currently being used)
-  adblueTankSize (total capacity of adblue tank) 
+  adblueTankSize (total capacity of adblue tank)
   adblueRemaining (amount of adblue remaining)
   plannedDistance (estimated distance to destination)
   trailer (contains a large amount of information in a dictionary about the trailer being used)
@@ -213,7 +210,7 @@ custom_properties:
       gameTimeLapsedToCompleteJob (when a job is completed, the amount of in-game time it took to complete)
       realLifeTimeToCompleteWorldofTrucksJob (when a World of Trucks platform job is completed, how much real life time it took)
       cargoMassInTons (if specifically asked, the mass of the cargo in tons)
-      cargoMass (the mass of the cargo) 
+      cargoMass (the mass of the cargo)
 
       React to the data and inform the truck driver. Here are some examples of how you might react:
       Example 1: The following key data changed: onJob: True, last value was onJob: False, cargo: tractor, last value was cargo: ", cargoMass: 10000 lb, last value was cargoMass: 0 lb, cityDst: Stockton, last value was cityDst: ", "compDst": Walden, last value was compDst: ".

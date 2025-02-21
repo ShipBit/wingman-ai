@@ -453,6 +453,15 @@ class ConfigMigrationService:
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            if old.get("skills", None):
+                for skill in old["skills"]:
+                    skill.pop("description", None)
+                    skill.pop("examples", None)
+                    skill.pop("category", None)
+                    skill.pop("hint", None)
+                    self.log(
+                        "- removed Skill property overrides: description, examples, category, hint"
+                    )
             return old
 
         self.migrate(

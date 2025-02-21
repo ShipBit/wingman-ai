@@ -178,14 +178,6 @@ class WingmanProTtsProvider(Enum):
     OPENAI = "openai"
 
 
-class SkillCategory(Enum):
-    GENERAL = "general"
-    STAR_CITIZEN = "star_citizen"
-    TRUCK_SIMULATOR = "truck_simulator"
-    NO_MANS_SKY = "no_mans_sky"
-    FLIGHT_SIMULATOR = "flight_simulator"
-
-
 # Pydantic models for enums
 class BaseEnumModel(BaseModel):
     class Config:
@@ -287,10 +279,6 @@ class WingmanProTtsProviderModel(BaseEnumModel):
     tts_provider: WingmanProTtsProvider
 
 
-class SkillCategoryModel(BaseEnumModel):
-    category: SkillCategory
-
-
 # Add all additional Pydantic models for enums as needed
 
 
@@ -316,7 +304,6 @@ ENUM_TYPES = {
     "WingmanProRegion": WingmanProRegionModel,
     "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
-    "SkillCategory": SkillCategoryModel,
     "PerplexityModel": PerplexityModelEnumModel,
     "RecordingDevice": RecordingDeviceModel,
     # Add new enums here as key-value pairs

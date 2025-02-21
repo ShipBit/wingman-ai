@@ -1,6 +1,10 @@
-name: QuickCommands
 module: skills.quick_commands.main
-category: general
+name: QuickCommands
+display_name: Quick Commands
+author: JayMatthew
+tags:
+  - Utility
+  - Commands
 description:
   en: Automatically learns instant activation phrases for commands you use regularly, speeding up their execution time.
   de: Lernt automatisch Aktivierungsphrasen für Sofort-Befehle, die du regelmäßig verwendest und beschleunigt so die Ausführungszeit.
