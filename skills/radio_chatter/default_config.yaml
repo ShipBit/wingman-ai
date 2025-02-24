@@ -1,22 +1,20 @@
-name: RadioChatter
 module: skills.radio_chatter.main
-category: general
+name: RadioChatter
+display_name: Radio Chatter
+author: JayMatthew
+tags:
+  - Star Citizen
+  - No Man's Sky
+  - American/European Truck Simulator 2
+  - Game
 description:
   en: Randomly playback radio chatter over time. Customize the participants and their voices.
   de: Spielt zufällige Funkgespräche ab. Passe die Teilnehmer und ihre Stimmen an.
 examples:
-  - question:
-      en: What is the status of the radio?
-      de: Was ist der Status des Funkgeräts?
-    answer:
-      en: The radio is currently turned off.
-      de: Das Funkgerät ist derzeit ausgeschaltet.
-  - question:
-      en: Please turn the radio on.
-      de: Bitte schalte das Funkgerät ein.
-    answer:
-      en: The radio is now turned on.
-      de: Das Funkgerät wurde eingeschaltet.
+  - en: What is the status of the radio?
+    de: Was ist der Status des Funkgeräts?
+  - en: Please turn the radio on.
+    de: Bitte schalte das Funkgerät ein.
 custom_properties:
   - id: prompt
     name: Prompt for message generation

@@ -1,6 +1,12 @@
-name: Spotify
 module: skills.spotify.main
-category: general
+name: Spotify
+display_name: Spotify
+author: ShipBit
+tags:
+  - Utility
+  - Music
+  - API
+  - Internet
 description:
   en: Control Spotify using the the WebAPI. Play songs, artists playlists. Control playback, volume, and more. All powered by AI!
   de: Steuere Spotify mit der WebAPI. Spiele Lieder, Künstler und Playlists ab. Steuere die Wiedergabe, Lautstärke und mehr. Alles von KI gesteuert!
@@ -8,48 +14,20 @@ hint:
   en: <ul class="list-disc"><li>Create an app in the <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Select "Web API" and "Web Playback SDK" as APIs used</li><li>Add http://127.0.0.1:8082 as Redirect URI</li><li>Enter Client ID and Client secret here</li></ul>
   de: <ul class="list-disc"><li>Erstelle eine App im <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Wähle "Web API" und "Web Playback SDK" als verwendete APIs</li><li>Füge http://127.0.0.1:8082 as Redirect URI hinzu</li><li>Gib die Client ID and das Client Secret hier ein</li></ul>
 examples:
-  - question:
-      en: Play the song Californication.
-      de: Spiele das Lied Californication.
-    answer:
-      en: Now playing 'Californication' by Red Hot Chili Peppers.
-      de: \'Californication\' von Red Hot Chili Peppers wird abgespielt.
-  - question:
-      en: What's the current song?
-      de: Wie heißt das aktuelle Lied?
-    answer:
-      en: You are currently listening to 'Californication' by Red Hot Chili Peppers.
-      de: Du hörst gerade 'Californication' von Red Hot Chili Peppers.
-  - question:
-      en: My girlfriend left me. Play a really sad song to match my mood.
-      de: Meine Freundin hat mich verlassen. Spiele ein wirklich trauriges Lied, das zu meiner Stimmung passt.
-    answer:
-      en: I'm sorry for you. Now playing 'Someone Like You' by Adele.
-      de: Es tut mir leid für dich. Jetzt wird "Someone Like You" von Adele gespielt.
-  - question:
-      en: Play the most popular song from the musical Les Miserables.
-      de: Spiele das beliebteste Lied aus dem Musical Les Miserables.
-    answer:
-      en: Playing 'I Dreamed a Dream' from Les Miserables.
-      de: \'I Dreamed a Dream\' aus Les Miserables wird abgespielt.
-  - question:
-      en: That's a cover song. Play the real version!
-      de: Das ist ein Cover-Song. Spiele die echte Version aus dem Film!
-    answer:
-      en: Playing 'I Dreamed a Dream' by Anne Hathaway from Les Miserables.
-      de: Spiele 'I Dreamed a Dream' von Anne Hathaway aus Les Miserables.
-  - question:
-      en: What are my Spotify devices?
-      de: Was sind meine Spotify-Geräte?
-    answer:
-      en: You have 2 devices available - 'Gaming PC' and 'iPhone'.
-      de: Du hast 2 Geräte verfügbar - 'Gaming PC' und 'iPhone'.
-  - question:
-      en: Play the music on my iPhone.
-      de: Spiele die Musik auf meinem iPhone ab.
-    answer:
-      en: Moves the current playback to your iPhone
-      de: Überträgt die Spotify-Wiedergabe auf das iPhone
+  - en: Play the song Californication.
+    de: Spiele das Lied Californication.
+  - en: What's the current song?
+    de: Wie heißt das aktuelle Lied?
+  - en: My girlfriend left me. Play a really sad song to match my mood.
+    de: Meine Freundin hat mich verlassen. Spiele ein wirklich trauriges Lied, das zu meiner Stimmung passt.
+  - en: Play the most popular song from the musical Les Miserables.
+    de: Spiele das beliebteste Lied aus dem Musical Les Miserables.
+  - en: That's a cover song. Play the real version!
+    de: Das ist ein Cover-Song. Spiele die echte Version aus dem Film!
+  - en: What are my Spotify devices?
+    de: Was sind meine Spotify-Geräte?
+  - en: Play the music on my iPhone.
+    de: Spiele die Musik auf meinem iPhone ab.
 prompt: |
   You are also an expert DJ and music player interface responsible to control the Spotify music player client of the user.
   You have access to different tools or functions you can call to control the Spotify client using its API.

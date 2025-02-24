@@ -1,6 +1,11 @@
-name: Msfs2020Control
 module: skills.msfs2020_control.main
-category: flight_simulator
+name: Msfs2020Control
+display_name: Microsoft Flight Simulator Control
+author: teddybear082
+tags:
+  - MSFS
+  - Game
+  - API
 description:
   en: Control and retrieve data from MSFS2020 dynamically using SimConnect.
   de: Steuern und Abrufen von Daten aus MSFS2020 dynamisch mit SimConnect.
@@ -8,20 +13,12 @@ hint:
   en: This skill can retrieve data and perform actions in the MSFS2020 simulator based on dynamic inputs.
   de: Dieser Skill kann Daten abrufen und Aktionen im MSFS2020-Simulator basierend auf dynamischen Eingaben ausführen.
 examples:
-  - question:
-      en: What is my current altitude?
-      de: Wie hoch bin ich gerade?
-    answer:
-      en: (retrieves 'PLANE_ALTITUDE' from MSFS2020)
-      de: (ruft 'PLANE_ALTITUDE' aus MSFS2020 ab)
-  - question:
-      en: Start the engine.
-      de: Starte den Motor.
-    answer:
-      en: (executes the engine start sequence in MSFS2020)
-      de: (führt die Motorstartsequenz in MSFS2020 aus)
+  - en: What is my current altitude?
+    de: Wie hoch bin ich gerade?
+  - en: Start the engine.
+    de: Starte den Motor.
 prompt: |
-  You can interact with the MSFS2020 simulator using the Python SimConnect API. 
+  You can interact with the MSFS2020 simulator using the Python SimConnect API.
   To retrieve data, use 'get_data_from_sim'. To set data or perform actions, use 'set_data_or_perform_action_in_sim'.
   Example:
   User: Set throttle to full!

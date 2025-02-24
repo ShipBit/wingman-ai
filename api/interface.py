@@ -9,7 +9,6 @@ from api.enums import (
     ImageGenerationProvider,
     MistralModel,
     CustomPropertyType,
-    SkillCategory,
     TtsVoiceGender,
     SoundEffect,
     SttProvider,
@@ -640,22 +639,21 @@ class CustomProperty(BaseModel):
 class LocalizedMetadata(BaseModel):
     en: str
     de: Optional[str] = None
-
-
-class SkillExample(BaseModel):
-    question: LocalizedMetadata
-    answer: LocalizedMetadata
+    es: Optional[str] = None
+    fr: Optional[str] = None
 
 
 class SkillConfig(CustomClassConfig):
+    display_name: str
+    author: Optional[str] = None
+    tags: Optional[list[str]] = None
     description: LocalizedMetadata
     prompt: Optional[str] = None
     """An additional prompt that extends the system prompt of the Wingman."""
     custom_properties: Optional[list[CustomProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
     hint: Optional[LocalizedMetadata] = None
-    examples: Optional[list[SkillExample]] = None
-    category: Optional[SkillCategory] = None
+    examples: Optional[list[LocalizedMetadata]] = None
 
 
 class SkillBase(BaseModel):
