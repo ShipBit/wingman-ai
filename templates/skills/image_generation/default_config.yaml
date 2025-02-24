@@ -1,6 +1,6 @@
 module: skills.image_generation.main
 name: ImageGeneration
-display_name: ImageGeneration
+display_name: Image Generation
 author: ShipBit
 tags:
   - Image
