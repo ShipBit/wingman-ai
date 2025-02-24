@@ -401,6 +401,7 @@ class WingmanProConfig(BaseModel):
     tts_provider: WingmanProTtsProvider
     conversation_deployment: str
     # we'll reuse the Azure STT config and OpenAI TTS config here for voice etc.
+    use_assistant_api: Optional[bool] = False
     assistant_deployment: Optional[str] = None
 
 
