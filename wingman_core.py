@@ -281,6 +281,13 @@ class WingmanCore(WebSocketUser):
             endpoint=self.get_wingman_pro_regions,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/assistants/wingman-pro",
+            response_model=list,
+            endpoint=self.get_wingman_pro_assistant_models,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_service = ConfigService(config_manager=config_manager)
@@ -1150,6 +1157,23 @@ class WingmanCore(WebSocketUser):
         response = requests.get(
             url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-regions",
             params={"region": self.settings_service.settings.wingman_pro.region},
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {wingman_pro_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        model_list = response.json()
+        return model_list
+    
+    async def get_wingman_pro_assistant_models(self):
+        wingman_pro_token = await self.secret_keeper.retrieve(
+            key="wingman_pro", requester="WingmanPro"
+        )
+        response = requests.get(
+            url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-assistant-models",
+            params={"region": self.settings_service.settings.wingman_pro.region.value},
             timeout=10,
             headers={
                 "Authorization": f"Bearer {wingman_pro_token}",
