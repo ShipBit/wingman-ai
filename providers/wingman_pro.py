@@ -1,15 +1,15 @@
-from typing import List
+import time
 import openai
 import requests
 from api.enums import CommandTag, LogType
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
-    LlmResponse,
     SoundConfig,
-    ToolCall,
     WingmanProSettings,
 )
+from openai.types.chat.chat_completion import Choice
+from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -79,7 +79,7 @@ class WingmanPro:
         deployment: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
-    ) -> LlmResponse | None:
+    ):
         serialized_messages = []
         for message in messages:
             if isinstance(message, openai.types.chat.ChatCompletionMessage):
@@ -109,31 +109,52 @@ class WingmanPro:
 
         json_response = response.json()
         completion = openai.types.chat.ChatCompletion.model_validate(json_response)
+        return completion
+    
+    def ask_assistant(
+        self,
+        message: str,
+        assistant_id: str,
+        thread_id: str = None,
+        tools: list[dict[str, any]] = None,
+    ):
+        data = {
+            "assistant_id": assistant_id,
+            "thread_id": thread_id,
+            "message": message,
+        }
+        response = requests.post(
+            url=f"{self.settings.base_url}/assistant/message",
+            params={"region": self.settings.region.value},
+            headers=self._get_headers(),
+            json=data,
+            timeout=self.timeout,
+        )
+        if response.status_code == 401 or response.status_code == 403:
+            self.send_unauthorized_error()
+            return None
+        else:
+            response.raise_for_status()
 
-        tool_calls: List[ToolCall] = []
-        original_tool_calls = completion.choices[0].message.tool_calls
-        if original_tool_calls:
-            for call in original_tool_calls:
-                tool_calls.append(
-                    {
-                        "id": call.id,
-                        "function": {
-                            "name": call.function.name,
-                            "arguments": call.function.arguments,
-                        },
-                    }
-                )
+        json_response = response.json()
 
-        llm_response = LlmResponse(
-                content=(
-                    completion.choices[0].message.content
-                    if completion.choices
-                    else None
-                ),
-                tool_calls=tool_calls if tool_calls and len(tool_calls) > 0 else None,
+        timestamp = int(time.time())
+        choices = [
+            Choice(
+                finish_reason="stop",
+                index=0,
+                message=ChatCompletionMessage(content=json_response["response"], role="assistant"),
             )
-        
-        return llm_response
+        ]
+        completion = ChatCompletion(
+            id=json_response["thread_id"],
+            object="chat.completion",
+            created=timestamp,
+            model=assistant_id,
+            choices=choices,
+        )
+
+        return completion
 
     async def generate_azure_speech(
         self,
