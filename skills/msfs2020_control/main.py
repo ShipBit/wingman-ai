@@ -394,10 +394,10 @@ class Msfs2020Control(Skill):
                 f"Attempting LLM call with parameters: {self.data_monitoring_backstory}, {user_content}.",
                 color=LogType.INFO,
             )
-        llm_response = await self.llm_call(messages)
+        completion = await self.llm_call(messages)
         response = (
-            llm_response.content
-            if llm_response
+            completion.choices[0].message.content
+            if completion and completion.choices
             else ""
         )
 

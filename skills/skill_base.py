@@ -2,7 +2,6 @@ import threading
 from typing import TYPE_CHECKING
 from api.enums import WingmanInitializationErrorType
 from api.interface import (
-    LlmResponse,
     SettingsConfig,
     SkillConfig,
     WingmanInitializationError,
@@ -83,7 +82,7 @@ class Skill:
         """Returns whether a tool probably takes long and a message should be printet in between."""
         return False
 
-    async def llm_call(self, messages, tools: list[dict] = None) -> LlmResponse | None:
+    async def llm_call(self, messages, tools: list[dict] = None) -> any:
         return any
 
     async def retrieve_secret(

@@ -72,12 +72,12 @@ class AskPerplexity(Skill):
     def ask_perplexity(self, question: str) -> str:
         """Uses the Perplexity API to answer a question."""
 
-        llm_response = self.wingman.perplexity.ask(
+        completion = self.wingman.perplexity.ask(
             messages=[{"role": "user", "content": question}],
             model=self.wingman.config.perplexity.conversation_model.value,
         )
 
-        if llm_response.content:
-            return llm_response.content
+        if completion and completion.choices:
+            return completion.choices[0].message.content
         else:
             return "Error: Unable to retrieve a response from Perplexity API."

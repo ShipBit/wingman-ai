@@ -879,9 +879,9 @@ class WingmanCore(WebSocketUser):
             if isinstance(wingman, OpenAiWingman):
                 messages = [{"role": "user", "content": text}]
 
-                llm_response = await wingman.actual_llm_call(messages=messages)
+                completion = await wingman.actual_llm_call(messages=messages)
 
-                return llm_response.content
+                return completion.choices[0].message.content
 
         return None
 

@@ -56,14 +56,14 @@ class Llm:
         self.__cache_search = {}
 
     async def call(self, message_history: MessageHistory, expect_json: bool = False) -> str | dict[str, any] | list | None:
-        llm_response = await self.__helper.get_handler_config().get_wingman().actual_llm_call(message_history.get_messages())
+        completion = await self.__helper.get_handler_config().get_wingman().actual_llm_call(message_history.get_messages())
         answer = None
         request_count = 0
 
         while answer is None and request_count < Llm.MAX_RETRIES:
             request_count += 1
             try:
-                answer = llm_response.content
+                answer = completion.choices[0].message.content
             except Exception as e:
                 self.__helper.get_handler_debug().write(
                     f"Error while parsing OpenAI response: {e}", True

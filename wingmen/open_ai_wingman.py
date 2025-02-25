@@ -9,12 +9,13 @@ from typing import (
     Optional,
 )
 from openai.types.chat import (
+    ChatCompletion,
+    ChatCompletionMessage,
     ChatCompletionMessageToolCall,
     ParsedFunction,
 )
 import requests
 from api.interface import (
-    LlmResponse,
     OpenRouterEndpointResult,
     SettingsConfig,
     SoundConfig,
@@ -461,28 +462,22 @@ class OpenAiWingman(Wingman):
             {"role": "user", "content": context},
         ]
         try:
-            llm_response = await self.actual_llm_call(messages)
-            if llm_response is None:
+            completion = await self.actual_llm_call(messages)
+            if completion is None:
                 return
-            if llm_response.content:
+            if completion.choices[0].message.content:
                 retry_limit = 3
                 retry_count = 1
                 valid = False
                 while not valid and retry_count <= retry_limit:
                     try:
-                        responses = json.loads(llm_response.content)
+                        responses = json.loads(completion.choices[0].message.content)
                         valid = True
                         for response in responses:
                             if response not in self.instant_responses:
                                 self.instant_responses.append(str(response))
                     except json.JSONDecodeError:
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "content": llm_response.content,
-                                "tool_calls": llm_response.tool_calls,
-                            }
-                        )
+                        messages.append(completion.choices[0].message)
                         messages.append(
                             {
                                 "role": "user",
@@ -490,7 +485,7 @@ class OpenAiWingman(Wingman):
                             }
                         )
                         if retry_count <= retry_limit:
-                            llm_response = await self.actual_llm_call(messages)
+                            completion = await self.actual_llm_call(messages)
                         retry_count += 1
         except Exception as e:
             await printr.print_async(
@@ -602,13 +597,13 @@ class OpenAiWingman(Wingman):
         # if an instant command got executed, prevent tool calls to avoid duplicate executions
         benchmark.start_snapshot("LLM Processing")
 
-        llm_response = await self._llm_call(instant_command_executed is False)
+        completion = await self._llm_call(instant_command_executed is False)
 
-        if llm_response is None:
+        if completion is None:
             benchmark.finish_snapshot()
             return None, None, None, True
 
-        response_message, tool_calls = await self._process_completion(llm_response)
+        response_message, tool_calls = await self._process_completion(completion)
 
         # add message and dummy tool responses to conversation history
         is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
@@ -619,8 +614,8 @@ class OpenAiWingman(Wingman):
         while tool_calls:
             if is_waiting_response_needed:
                 message = None
-                if response_message["content"]:
-                    message = response_message["content"]
+                if response_message.content:
+                    message = response_message.content
                 elif self.instant_responses:
                     message = self._get_random_filler()
                     is_summarize_needed = True
@@ -648,13 +643,13 @@ class OpenAiWingman(Wingman):
                 return None, instant_response, None, interrupt
 
             if is_summarize_needed:
-                llm_response = await self._llm_call(True)
-                if llm_response is None:
+                completion = await self._llm_call(True)
+                if completion is None:
                     benchmark.finish_snapshot()
                     return None, None, None, True
 
                 response_message, tool_calls = await self._process_completion(
-                    llm_response
+                    completion
                 )
                 is_waiting_response_needed, is_summarize_needed = (
                     await self._add_gpt_response(response_message, tool_calls)
@@ -666,7 +661,7 @@ class OpenAiWingman(Wingman):
                 return None, None, None, interrupt
 
         benchmark.finish_snapshot()
-        return response_message["content"], response_message["content"], None, interrupt
+        return response_message.content, response_message.content, None, interrupt
 
     def _get_random_filler(self):
         # get last two used instant responses
@@ -732,7 +727,7 @@ class OpenAiWingman(Wingman):
         """
         # call skill hooks
         for skill in self.skills:
-            await skill.on_add_assistant_message(message["content"], message["tool_calls"])
+            await skill.on_add_assistant_message(message.content, message.tool_calls)
 
         # do not tamper with this message as it will lead to 400 errors!
         self.messages.append(message)
@@ -819,7 +814,7 @@ class OpenAiWingman(Wingman):
 
         # check if all tool calls are completed
         completed = True
-        for tool_call in self.messages[index]["tool_calls"]:
+        for tool_call in self.messages[index].tool_calls:
             if tool_call.id in self.pending_tool_calls:
                 completed = False
                 break
@@ -829,7 +824,7 @@ class OpenAiWingman(Wingman):
         # find the first user message(s) that triggered this assistant message
         index -= 1  # skip the assistant message
         for message in reversed(self.messages[:index]):
-            index -= 1n
+            index -= 1
             if self.__get_message_role(message) != "user":
                 index += 1
                 break
@@ -906,11 +901,11 @@ class OpenAiWingman(Wingman):
             and "gpt" in self.config.wingman_pro.conversation_deployment.lower()
         ):
             # generate tool calls in openai style
-            message = {
-                "content": "",
-                "role": "assistant",
-                "tool_calls": [],
-            }
+            message = ChatCompletionMessage(
+                content="",
+                role="assistant",
+                tool_calls=[],
+            )
             for command in commands:
                 tool_call = ChatCompletionMessageToolCall(
                     id=f"call_{str(uuid.uuid4()).replace('-', '')}",
@@ -920,11 +915,11 @@ class OpenAiWingman(Wingman):
                     ),
                     type="function",
                 )
-                message["tool_calls"].append(tool_call)
+                message.tool_calls.append(tool_call)
 
             # add tool calls to the conversation history
-            await self._add_gpt_response(message, message["tool_calls"])
-            for tool_call in message["tool_calls"]:
+            await self._add_gpt_response(message, message.tool_calls)
+            for tool_call in message.tool_calls:
                 await self._update_tool_response(tool_call.id, "OK")
 
     async def _cleanup_conversation_history(self):
@@ -1046,15 +1041,15 @@ class OpenAiWingman(Wingman):
 
         return ""
 
-    async def actual_llm_call(self, messages, tools: list[dict] = None) -> LlmResponse | None:
+    async def actual_llm_call(self, messages, tools: list[dict] = None):
         """
         Perform the actual LLM call with the messages provided.
         """
 
         try:
-            llm_response = None
+            completion = None
             if self.config.features.conversation_provider == ConversationProvider.AZURE:
-                llm_response = self.openai_azure.ask(
+                completion = self.openai_azure.ask(
                     messages=messages,
                     api_key=self.azure_api_keys["conversation"],
                     config=self.config.azure.conversation,
@@ -1064,7 +1059,7 @@ class OpenAiWingman(Wingman):
                 self.config.features.conversation_provider
                 == ConversationProvider.OPENAI
             ):
-                llm_response = self.openai.ask(
+                completion = self.openai.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.openai.conversation_model,
@@ -1073,7 +1068,7 @@ class OpenAiWingman(Wingman):
                 self.config.features.conversation_provider
                 == ConversationProvider.MISTRAL
             ):
-                llm_response = self.mistral.ask(
+                completion = self.mistral.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.mistral.conversation_model.value,
@@ -1081,7 +1076,7 @@ class OpenAiWingman(Wingman):
             elif (
                 self.config.features.conversation_provider == ConversationProvider.GROQ
             ):
-                llm_response = self.groq.ask(
+                completion = self.groq.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.groq.conversation_model,
@@ -1090,7 +1085,7 @@ class OpenAiWingman(Wingman):
                 self.config.features.conversation_provider
                 == ConversationProvider.CEREBRAS
             ):
-                llm_response = self.cerebras.ask(
+                completion = self.cerebras.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.cerebras.conversation_model,
@@ -1099,7 +1094,7 @@ class OpenAiWingman(Wingman):
                 self.config.features.conversation_provider
                 == ConversationProvider.GOOGLE
             ):
-                llm_response = self.google.ask(
+                completion = self.google.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.google.conversation_model.value,
@@ -1110,13 +1105,13 @@ class OpenAiWingman(Wingman):
             ):
                 # OpenRouter throws an error if the model doesn't support tools but we send some
                 if self.openrouter_model_supports_tools:
-                    llm_response = self.openrouter.ask(
+                    completion = self.openrouter.ask(
                         messages=messages,
                         tools=tools,
                         model=self.config.openrouter.conversation_model,
                     )
                 else:
-                    llm_response = self.openrouter.ask(
+                    completion = self.openrouter.ask(
                         messages=messages,
                         model=self.config.openrouter.conversation_model,
                     )
@@ -1124,7 +1119,7 @@ class OpenAiWingman(Wingman):
                 self.config.features.conversation_provider
                 == ConversationProvider.LOCAL_LLM
             ):
-                llm_response = self.local_llm.ask(
+                completion = self.local_llm.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.local_llm.conversation_model,
@@ -1133,16 +1128,23 @@ class OpenAiWingman(Wingman):
                 self.config.features.conversation_provider
                 == ConversationProvider.WINGMAN_PRO
             ):
-                llm_response = self.wingman_pro.ask(
-                    messages=messages,
-                    deployment=self.config.wingman_pro.conversation_deployment,
-                    tools=tools,
-                )
+                if self.config.wingman_pro.use_assistant_api:
+                    assistant_id = self.config.wingman_pro.assistant_deployment
+                    message = messages[-1]["content"]
+                    completion = self.wingman_pro.ask_assistant(
+                        assistant_id=assistant_id, message=message
+                    )
+                else:
+                    completion = self.wingman_pro.ask(
+                        messages=messages,
+                        deployment=self.config.wingman_pro.conversation_deployment,
+                        tools=tools,
+                    )
             elif (
                 self.config.features.conversation_provider
                 == ConversationProvider.PERPLEXITY
             ):
-                llm_response = self.perplexity.ask(
+                completion = self.perplexity.ask(
                     messages=messages,
                     tools=tools,
                     model=self.config.perplexity.conversation_model.value,
@@ -1154,9 +1156,9 @@ class OpenAiWingman(Wingman):
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
 
-        return llm_response
+        return completion
 
-    async def _llm_call(self, allow_tool_calls: bool = True) -> LlmResponse | None:
+    async def _llm_call(self, allow_tool_calls: bool = True):
         """Makes the primary LLM call with the conversation history and tools enabled.
 
         Returns:
@@ -1178,7 +1180,7 @@ class OpenAiWingman(Wingman):
 
         messages = self.messages.copy()
         await self.add_context(messages)
-        llm_response = await self.actual_llm_call(messages, tools)
+        completion = await self.actual_llm_call(messages, tools)
 
         # if request isnt most recent, ignore the response
         if self.last_gpt_call != thiscall:
@@ -1187,9 +1189,9 @@ class OpenAiWingman(Wingman):
             )
             return None
 
-        return llm_response
+        return completion
 
-    async def _process_completion(self, llm_response: LlmResponse):
+    async def _process_completion(self, completion: ChatCompletion):
         """Processes the completion returned by the LLM call.
 
         Args:
@@ -1199,23 +1201,19 @@ class OpenAiWingman(Wingman):
             A tuple containing the message response and tool calls from the completion.
         """
 
-        content = llm_response.content
+        response_message = completion.choices[0].message
+
+        content = response_message.content
         if content is None:
-            llm_response.content = ""
+            response_message.content = ""
 
         # temporary fix for tool calls that have a command name as function name
-        if llm_response.tool_calls:
-            llm_response.tool_calls = await self._fix_tool_calls(
-                llm_response.tool_calls
+        if response_message.tool_calls:
+            response_message.tool_calls = await self._fix_tool_calls(
+                response_message.tool_calls
             )
 
-        response_message = {
-            "content": content,
-            "role": "assistant",
-            "tool_calls": llm_response.tool_calls,
-        }
-
-        return response_message, llm_response.tool_calls
+        return response_message, response_message.tool_calls
 
     async def _handle_tool_calls(self, tool_calls):
         """Processes all the tool calls identified in the response message.
