@@ -368,10 +368,10 @@ class RadioChatter(Skill):
                 "content": str(self.prompt),
             },
         ]
-        completion = await self.llm_call(messages)
+        llm_response = await self.llm_call(messages)
         messages = (
-            completion.choices[0].message.content
-            if completion and completion.choices
+            llm_response.content
+            if llm_response
             else ""
         )
 

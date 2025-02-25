@@ -252,10 +252,10 @@ class VoiceChanger(Skill):
                 "content": self.context_prompt,
             },
         ]
-        completion = await self.llm_call(messages)
+        llm_response = await self.llm_call(messages)
         generated_context = (
-            completion.choices[0].message.content
-            if completion and completion.choices
+            llm_response.content
+            if llm_response
             else ""
         )
 

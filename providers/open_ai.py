@@ -9,6 +9,7 @@ from api.interface import (
     AzureInstanceConfig,
     AzureSttConfig,
     AzureTtsConfig,
+    LlmResponse,
     SoundConfig,
 )
 from services.audio_player import AudioPlayer
@@ -69,7 +70,7 @@ class BaseOpenAi(ABC):
         stream: bool,
         tools: list[dict[str, any]],
         model: str = None,
-    ):
+    ) -> LlmResponse | None:
         try:
             if not tools:
                 completion = client.chat.completions.create(
@@ -85,7 +86,20 @@ class BaseOpenAi(ABC):
                     tools=tools,
                     tool_choice="auto",
                 )
-            return completion
+
+            llm_response = LlmResponse(
+                content=(
+                    completion.choices[0].message.content
+                    if completion.choices
+                    else None
+                ),
+                tool_calls=(
+                    completion.choices[0].message.tool_calls
+                    if completion.choices
+                    else None
+                ),
+            )
+            return llm_response
         except APIStatusError as e:
             self._handle_api_error(e)
             return None
@@ -133,7 +147,7 @@ class OpenAi(BaseOpenAi):
         model: str = None,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
-    ):
+    ) -> LlmResponse | None:
         return self._perform_ask(
             client=self.client,
             messages=messages,
@@ -231,7 +245,7 @@ class OpenAiAzure(BaseOpenAi):
         config: AzureInstanceConfig,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
-    ):
+    ) -> LlmResponse | None:
         azure_client = self._create_client(api_key=api_key, config=config)
         return self._perform_ask(
             client=azure_client,

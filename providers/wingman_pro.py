@@ -1,10 +1,13 @@
+from typing import List
 import openai
 import requests
 from api.enums import CommandTag, LogType
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
+    LlmResponse,
     SoundConfig,
+    ToolCall,
     WingmanProSettings,
 )
 from services.audio_player import AudioPlayer
@@ -76,7 +79,7 @@ class WingmanPro:
         deployment: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
-    ):
+    ) -> LlmResponse | None:
         serialized_messages = []
         for message in messages:
             if isinstance(message, openai.types.chat.ChatCompletionMessage):
@@ -106,7 +109,31 @@ class WingmanPro:
 
         json_response = response.json()
         completion = openai.types.chat.ChatCompletion.model_validate(json_response)
-        return completion
+
+        tool_calls: List[ToolCall] = []
+        original_tool_calls = completion.choices[0].message.tool_calls
+        if original_tool_calls:
+            for call in original_tool_calls:
+                tool_calls.append(
+                    {
+                        "id": call.id,
+                        "function": {
+                            "name": call.function.name,
+                            "arguments": call.function.arguments,
+                        },
+                    }
+                )
+
+        llm_response = LlmResponse(
+                content=(
+                    completion.choices[0].message.content
+                    if completion.choices
+                    else None
+                ),
+                tool_calls=tool_calls if tool_calls and len(tool_calls) > 0 else None,
+            )
+        
+        return llm_response
 
     async def generate_azure_speech(
         self,

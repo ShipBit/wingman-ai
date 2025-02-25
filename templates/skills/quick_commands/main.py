@@ -221,8 +221,8 @@ class QuickCommands(Skill):
                 "content": f"Phrase: '{phrase}' Commands: '{', '.join(commands)}'",
             },
         ]
-        completion = await self.llm_call(messages)
-        answer = completion.choices[0].message.content or ""
+        llm_response = await self.llm_call(messages)
+        answer = llm_response.content or ""
         if answer.lower() == "yes":
             await self.printr.print_async(
                 f"Instant activation phrase for '{', '.join(commands)}' learned.",

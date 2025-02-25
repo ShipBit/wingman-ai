@@ -1,9 +1,8 @@
-import time
 import google.generativeai as genai
 from google.generativeai.types import generation_types
-from openai.types.chat import ChatCompletion, ChatCompletionMessage
-from openai.types.chat.chat_completion import Choice
 from pydantic import BaseModel
+
+from api.interface import LlmResponse
 
 
 class GoogleGenAI:
@@ -16,7 +15,7 @@ class GoogleGenAI:
         model: str,
         stream: bool = False,
         tools: list[dict[str, any]] = None,
-    ):
+    ) -> LlmResponse | None:
         aimodel = genai.GenerativeModel(model_name=model)
 
         contents = self.convert_messages(messages)
@@ -51,9 +50,9 @@ class GoogleGenAI:
             # tools=google_tools,
             safety_settings=safety_settings,
         )
-        completion = self.convert_response(response=response, model=model)
+        llm_response = self.convert_response(response=response, model=model)
 
-        return completion
+        return llm_response
 
     def convert_messages(self, openai_messages: list[dict[str, str]]):
         google_messages = []
@@ -81,27 +80,13 @@ class GoogleGenAI:
 
     def convert_response(
         self, response: generation_types.GenerateContentResponse, model: str
-    ):
+    ) -> LlmResponse | None:
         text = response.candidates[0].content.parts[0].text
-        # if len(response.candidates[0].content.parts) > 1:
-        #     function_call = response.candidates[0].content.parts[0].function_call
 
-        timestamp = int(time.time())
-        choices = [
-            Choice(
-                finish_reason="stop",
-                index=0,
-                message=ChatCompletionMessage(content=text, role="assistant"),
+        response = LlmResponse(
+                content=text,
             )
-        ]
-        completion = ChatCompletion(
-            id=str(timestamp),
-            object="chat.completion",
-            created=timestamp,
-            model=model,
-            choices=choices,
-        )
-        return completion
+        return response
 
     def convert_tools(self, openai_tools: list[dict[str, any]]):
         gemini_tools = {"function_declarations": []}

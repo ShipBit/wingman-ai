@@ -140,10 +140,10 @@ class VisionAI(Skill):
                     ],
                 },
             ]
-            completion = await self.llm_call(messages)
+            llm_response = await self.llm_call(messages)
             function_response = (
-                completion.choices[0].message.content
-                if completion and completion.choices
+                llm_response.content
+                if llm_response
                 else ""
             )
 

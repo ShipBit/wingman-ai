@@ -552,8 +552,8 @@ class Timer(Skill):
                 max_json_retries = 1
                 valid_json = False
                 while not valid_json and json_retry < max_json_retries:
-                    completion = await self.llm_call(messages)
-                    data = completion.choices[0].message.content
+                    llm_response = await self.llm_call(messages)
+                    data = llm_response.content
                     messages.append(
                         {
                             "role": "assistant",
@@ -624,10 +624,10 @@ class Timer(Skill):
             },
         )
         try:
-            completion = await self.llm_call(messages)
+            llm_response = await self.llm_call(messages)
             answer = (
-                completion.choices[0].message.content
-                if completion and completion.choices
+                llm_response.content
+                if llm_response
                 else ""
             )
             return answer
