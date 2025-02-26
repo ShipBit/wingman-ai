@@ -1130,10 +1130,21 @@ class OpenAiWingman(Wingman):
             ):
                 if self.config.wingman_pro.use_assistant_api:
                     assistant_id = self.config.wingman_pro.assistant_deployment
-                    message = messages[-1]["content"]
-                    completion = self.wingman_pro.ask_assistant(
-                        assistant_id=assistant_id, message=message
+                    message = messages[-1]
+                    completion, run_id = self.wingman_pro.ask_assistant(
+                        assistant_id=assistant_id,
+                        message=message["content"],
+                        thread_id=self.config.wingman_pro.assistant_thread_id,
+                        tools=tools,
+                        tool_call_id=message.get("tool_call_id", None),
+                        run_id=self.config.wingman_pro.assistant_run_id or None,
                     )
+                    # save thread id for future calls
+                    if not self.config.wingman_pro.assistant_thread_id:
+                        self.config.wingman_pro.assistant_thread_id = completion.id
+                        self.config.wingman_pro.assistant_run_id = run_id # TODO
+                        # updated = await self.update_config(self.config, False)
+                        self.save_config()
                 else:
                     completion = self.wingman_pro.ask(
                         messages=messages,

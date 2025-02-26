@@ -117,11 +117,16 @@ class WingmanPro:
         assistant_id: str,
         thread_id: str = None,
         tools: list[dict[str, any]] = None,
+        tool_call_id: str = None,
+        run_id: str = None,
     ):
         data = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
             "message": message,
+            "tools": tools,
+            "tool_call_id": tool_call_id,
+            "run_id": run_id,
         }
         response = requests.post(
             url=f"{self.settings.base_url}/assistant/message",
@@ -139,13 +144,21 @@ class WingmanPro:
         json_response = response.json()
 
         timestamp = int(time.time())
+        tools = None
+
+        tool_calls = json_response.get("tool_calls", None)
+        if tool_calls:
+            tools = tool_calls
+
+        response = json_response.get("response", None)
         choices = [
             Choice(
                 finish_reason="stop",
                 index=0,
-                message=ChatCompletionMessage(content=json_response["response"], role="assistant"),
+                message=ChatCompletionMessage(content=response if response else "", role="assistant", tool_calls=tools if tools else None),
             )
         ]
+
         completion = ChatCompletion(
             id=json_response["thread_id"],
             object="chat.completion",
@@ -154,7 +167,7 @@ class WingmanPro:
             choices=choices,
         )
 
-        return completion
+        return completion, json_response["run_id"]
 
     async def generate_azure_speech(
         self,
