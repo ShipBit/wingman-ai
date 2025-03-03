@@ -6,12 +6,14 @@ from api.interface import (
     AzureTtsConfig,
     EdgeTtsConfig,
     ElevenlabsConfig,
+    HumeConfig,
     SoundConfig,
     VoiceInfo,
     XVASynthTtsConfig,
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
+from providers.hume import Hume
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
@@ -38,6 +40,13 @@ class VoiceService:
             methods=["GET"],
             path="/voices/elevenlabs",
             endpoint=self.get_elevenlabs_voices,
+            response_model=list[VoiceInfo],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voices/hume",
+            endpoint=self.get_hume_voices,
             response_model=list[VoiceInfo],
             tags=tags,
         )
@@ -72,6 +81,12 @@ class VoiceService:
             methods=["POST"],
             path="/voices/preview/elevenlabs",
             endpoint=self.play_elevenlabs_tts,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preview/hume",
+            endpoint=self.play_hume,
             tags=tags,
         )
         self.router.add_api_route(
@@ -134,6 +149,10 @@ class VoiceService:
         except ValueError as e:
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
             return []
+
+    # GET /voices/elevenlabs
+    async def get_hume_voices(self, api_key: str) -> list[VoiceInfo]:
+        hume = Hume(api_key=api_key, wingman_name="")
 
     # GET /voices/azure
     def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
@@ -214,6 +233,19 @@ class VoiceService:
     ):
         edge = Edge()
         await edge.play_audio(
+            text=text,
+            config=config,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+        )
+
+    # POST /play/hume
+    async def play_hume(
+        self, text: str, api_key: str, config: HumeConfig, sound_config: SoundConfig
+    ):
+        hume = Hume(api_key=api_key, wingman_name="")
+        await hume.play_audio(
             text=text,
             config=config,
             sound_config=sound_config,

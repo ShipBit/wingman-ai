@@ -1440,13 +1440,25 @@ class OpenAiWingman(Wingman):
                     stream=self.config.elevenlabs.output_streaming,
                 )
             elif self.config.features.tts_provider == TtsProvider.HUME:
-                await self.hume.play_audio(
-                    text=text,
-                    config=self.config.hume,
-                    sound_config=sound_config,
-                    audio_player=self.audio_player,
-                    wingman_name=self.name,
-                )
+                try:
+                    await self.hume.play_audio(
+                        text=text,
+                        config=self.config.hume,
+                        sound_config=sound_config,
+                        audio_player=self.audio_player,
+                        wingman_name=self.name,
+                    )
+                except RuntimeError as e:
+                    if "Event loop is closed" in str(e):
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        await self.hume.play_audio(
+                            text=text,
+                            config=self.config.hume,
+                            sound_config=sound_config,
+                            audio_player=self.audio_player,
+                            wingman_name=self.name,
+                        )
             elif self.config.features.tts_provider == TtsProvider.AZURE:
                 await self.openai_azure.play_audio(
                     text=text,

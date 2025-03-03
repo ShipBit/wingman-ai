@@ -26,6 +26,9 @@ class Hume:
         # needed for continuity in the TTS voice output
         self.generation_id = ""
 
+    async def __aenter__(self):
+        return self
+
     def validate_config(
         self, config: HumeConfig, errors: list[WingmanInitializationError]
     ):
@@ -56,7 +59,6 @@ class Hume:
         self.generation_id = speech.generations[0].generation_id
 
         output_file = await self.__write_result_to_file(speech.generations[0].audio)
-
         audio, sample_rate = audio_player.get_audio_from_file(output_file)
 
         await audio_player.play_with_effects(
@@ -64,6 +66,9 @@ class Hume:
             config=sound_config,
             wingman_name=wingman_name,
         )
+
+    def get_available_voices(self):
+        return self.hume.tts.voices
 
     async def __write_result_to_file(self, base64_encoded_audio: str):
         file_path = path.join(get_writable_dir(RECORDING_PATH), OUTPUT_FILE)
