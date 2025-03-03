@@ -1,3 +1,4 @@
+aiofiles==24.1.0
 azure-cognitiveservices-speech==1.42.0
 edge-tts==7.0.2
 elevenlabslib==0.32.1
@@ -5,6 +6,7 @@ fastapi==0.115.7
 faster_whisper==1.1.1
 google-genai==1.19.0
 httptools==0.6.4
+hume==0.7.8
 markdown==3.7
 numpy==1.26.4
 openai==1.60.2

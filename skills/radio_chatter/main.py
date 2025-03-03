@@ -532,6 +532,9 @@ class RadioChatter(Skill):
         elif voice_provider == TtsProvider.EDGE_TTS:
             voice_name = voice
             self.wingman.config.edge_tts.voice = voice
+        elif voice_provider == TtsProvider.HUME:
+            voice_name = voice
+            self.wingman.config.hume.voice = voice
         else:
             error = True
 

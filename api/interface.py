@@ -268,6 +268,11 @@ class ElevenlabsConfig(BaseModel):
     output_streaming: bool
 
 
+class HumeConfig(BaseModel):
+    description: Optional[str] = None
+    voice: str
+
+
 class EdgeTtsConfig(BaseModel):
     voice: str
     """
@@ -684,6 +689,7 @@ class NestedConfig(BaseModel):
     edge_tts: EdgeTtsConfig
     openai_compatible_tts: OpenAiCompatibleTtsConfig
     elevenlabs: ElevenlabsConfig
+    hume: HumeConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
@@ -717,6 +723,7 @@ class BasicWingmanConfig(BaseModel):
     local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
+    hume: HumeConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig

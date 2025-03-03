@@ -451,6 +451,9 @@ class ConfigMigrationService:
             old["openai"]["tts_model"] = "tts-1"
             old["openai"]["tts_speed"] = 1.0
             self.log("- added new properties: openai.tts_model, openai.tts_speed")
+            
+            old["hume"] = new["hume"]
+            self.log("- added new properties: hume")
 
             # openai-compatible tts
             old["openai_compatible_tts"] = new["openai_compatible_tts"]
