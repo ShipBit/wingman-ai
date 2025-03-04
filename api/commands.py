@@ -50,6 +50,10 @@ class StopRecordingCommand(WebSocketCommandModel):
     recording_device: RecordingDevice = RecordingDevice.KEYBOARD
 
 
+class ClientLoggedInCommand(WebSocketCommandModel):
+    command: Literal["client_logged_in"] = "client_logged_in"
+
+
 # SENT TO CLIENT
 
 

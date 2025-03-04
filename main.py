@@ -252,7 +252,7 @@ async def start_secrets(secrets: dict[str, Any]):
     await core.config_service.load_config()
 
 
-@app.get("/ping", tags=["main"])
+@app.get("/ping", tags=["main"], response_model=str)
 async def ping():
     return "Ok" if core.is_started else "Starting"
 
