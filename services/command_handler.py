@@ -6,6 +6,7 @@ import pygame
 import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
+    ClientLoggedOutCommand,
     RecordJoystickActionsCommand,
     RecordKeyboardActionsCommand,
     RecordMouseActionsCommand,
@@ -307,8 +308,11 @@ class CommandHandler:
         self, command: ClientLoggedInCommand, websocket: WebSocket
     ):
         self.core.is_client_logged_in = True
+        self.core.is_client_pro = command.is_pro
+        self.core.client_account_name = command.account_name
+
         self.printr.print(
-            "Client logged in",
+            f"User {command.account_name} logged in ({'Pro' if command.is_pro else 'Free'})",
             toast=ToastType.NORMAL,
             source=LogSource.SYSTEM,
             source_name=self.source_name,
@@ -320,6 +324,21 @@ class CommandHandler:
             config_dir=self.core.config_service.current_config_dir,
         )
         await self.core.initialize_tower(config_dir_info)
+
+    async def handle_client_logged_out(
+        self, command: ClientLoggedOutCommand, websocket: WebSocket
+    ):
+        self.core.is_client_logged_in = False
+        self.core.is_client_pro = False
+        self.core.client_account_name = ""
+
+        self.printr.print(
+            "User {command.account_name} logged out",
+            toast=ToastType.NORMAL,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+            server_only=True,
+        )
 
     async def _start_timeout(self, timeout):
         await asyncio.sleep(timeout)

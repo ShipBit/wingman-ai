@@ -59,7 +59,9 @@ class WingmanCore(WebSocketUser):
     ):
         self.printr = Printr()
         self.app_root_path = app_root_path
-        self.is_client_logged_in = False
+        self.is_client_logged_in: bool = False
+        self.is_client_pro: bool = False
+        self.client_account_name: str = ""
 
         self.router = APIRouter()
         tags = ["core"]

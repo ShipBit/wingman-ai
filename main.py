@@ -242,7 +242,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await printr.print_async("Client disconnected", server_only=True)
 
 
-# Websocket for other clients to stream audio to and from (like M5Atom Echo ESP32 devices)
+# Websocket for ESP32 clients to stream audio to and from
 @app.websocket("/")
 async def oi_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -256,6 +256,48 @@ async def oi_websocket_endpoint(websocket: WebSocket):
         print(f"Connection lost. Error: {e}")
 
 
+# Websocket for browser clients to stream audio from
+@app.websocket("/ws/audio")
+async def websocket_global_audio_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    printr.print(
+        f"Audio client ${websocket.client.host} connected",
+        server_only=True,
+        color=LogType.SUBTLE,
+    )
+
+    async def on_audio_chunk(data: bytes):
+        try:
+            # Forward the audio chunk to the browser client
+            await websocket.send_bytes(data)
+        except Exception:
+            # Client might have disconnected
+            pass
+
+    unsubscribe = await core.audio_player.stream_event.subscribe(
+        "audio", on_audio_chunk
+    )
+
+    try:
+        # Keep connection open until client disconnects
+        while True:
+            # This will throw WebSocketDisconnect when client disconnects
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        printr.print(
+            f"Audio client ${websocket.client.host} disconnected",
+            server_only=True,
+            color=LogType.SUBTLE,
+        )
+    except Exception as e:
+        printr.print(
+            f"Audio streaming error: {str(e)}", server_only=True, color=LogType.ERROR
+        )
+    finally:
+        # Always clean up subscription when client disconnects
+        await unsubscribe()
+
+
 @app.post("/start-secrets", tags=["main"])
 async def start_secrets(secrets: dict[str, Any]):
     await secret_keeper.post_secrets(secrets)
@@ -266,6 +308,16 @@ async def start_secrets(secrets: dict[str, Any]):
 @app.get("/ping", tags=["main"], response_model=str)
 async def ping():
     return "Ok" if core.is_started else "Starting"
+
+
+@app.get("/client/is-pro", tags=["main"], response_model=bool)
+async def is_client_pro():
+    return core.is_client_pro
+
+
+@app.get("/client/account-name", tags=["main"], response_model=str)
+async def get_client_account_name():
+    return core.client_account_name
 
 
 # required to generate API specs for class BenchmarkResult that is only used internally
