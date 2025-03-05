@@ -256,36 +256,74 @@ async def oi_websocket_endpoint(websocket: WebSocket):
         print(f"Connection lost. Error: {e}")
 
 
-# Websocket for browser clients to stream audio from
 @app.websocket("/ws/audio")
 async def websocket_global_audio_endpoint(websocket: WebSocket):
     await websocket.accept()
     printr.print(
-        f"Audio client ${websocket.client.host} connected",
+        f"Audio client {websocket.client.host} connected",
         server_only=True,
         color=LogType.SUBTLE,
     )
 
-    async def on_audio_chunk(data: bytes):
-        try:
-            # Forward the audio chunk to the browser client
-            await websocket.send_bytes(data)
-        except Exception:
-            # Client might have disconnected
-            pass
-
-    unsubscribe = await core.audio_player.stream_event.subscribe(
-        "audio", on_audio_chunk
-    )
-
+    unsubscribe = None
     try:
+        # Wait for the audio player to be ready with timeout
+        retry_count = 0
+        max_retries = 5
+
+        while retry_count < max_retries:
+            # Check if audio_player is ready
+            if (
+                core.audio_player
+                and hasattr(core.audio_player, "stream_event")
+                and core.audio_player.stream_event is not None
+            ):
+                # Try to subscribe safely
+                try:
+
+                    async def on_audio_chunk(data: bytes):
+                        try:
+                            # Forward the audio chunk to the browser client
+                            await websocket.send_bytes(data)
+                        except Exception:
+                            # Client might have disconnected
+                            pass
+
+                    unsubscribe = await core.audio_player.stream_event.subscribe(
+                        "audio", on_audio_chunk
+                    )
+
+                    # If we're here, subscription was successful
+                    break
+                except AttributeError:
+                    # stream_event became None during subscription attempt
+                    printr.print(
+                        "Audio player not ready during subscription attempt, retrying...",
+                        server_only=True,
+                        color=LogType.WARNING,
+                    )
+
+            # Not ready or subscription failed, wait and retry
+            retry_count += 1
+            if retry_count < max_retries:
+                await asyncio.sleep(1)  # Wait 1 second before retry
+            else:
+                printr.print(
+                    "Audio player not ready after multiple attempts - rejecting connection",
+                    server_only=True,
+                    color=LogType.WARNING,
+                )
+                await websocket.close(code=1013)  # 1013: Try again later
+                return
+
         # Keep connection open until client disconnects
         while True:
             # This will throw WebSocketDisconnect when client disconnects
             await websocket.receive_text()
+
     except WebSocketDisconnect:
         printr.print(
-            f"Audio client ${websocket.client.host} disconnected",
+            f"Audio client {websocket.client.host} disconnected",
             server_only=True,
             color=LogType.SUBTLE,
         )
@@ -295,7 +333,15 @@ async def websocket_global_audio_endpoint(websocket: WebSocket):
         )
     finally:
         # Always clean up subscription when client disconnects
-        await unsubscribe()
+        if unsubscribe is not None:
+            try:
+                await unsubscribe()
+            except Exception as e:
+                printr.print(
+                    f"Error unsubscribing audio client: {str(e)}",
+                    server_only=True,
+                    color=LogType.ERROR,
+                )
 
 
 @app.post("/start-secrets", tags=["main"])
