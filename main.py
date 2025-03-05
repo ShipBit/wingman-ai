@@ -5,6 +5,7 @@ from enum import Enum
 from os import path
 import signal
 import sys
+import socket
 import traceback
 from typing import Any, Literal, get_args, get_origin
 import uvicorn
@@ -13,6 +14,8 @@ from fastapi.concurrency import asynccontextmanager
 from fastapi.routing import APIRoute
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+from zeroconf import ServiceInfo
+from zeroconf.asyncio import AsyncZeroconf
 from api.commands import WebSocketCommandModel
 from api.interface import BenchmarkResult
 from api.enums import ENUM_TYPES, LogType, WingmanInitializationErrorType
@@ -96,6 +99,14 @@ def modify_openapi():
 
 
 async def shutdown():
+    # Unregister mDNS service if it exists
+    if hasattr(app.state, "zeroconf") and hasattr(app.state, "service_info"):
+        await app.state.zeroconf.async_unregister_service(app.state.service_info)
+        await app.state.zeroconf.async_close()
+        printr.print(
+            "Unregistered mDNS service", color=LogType.SUBTLE, server_only=True
+        )
+
     await connection_manager.shutdown()
     await core.shutdown()
     keyboard.unhook_all()
@@ -274,7 +285,47 @@ async def get_dummy_benchmark():
     )
 
 
+def get_local_ip():
+    """Get the local IP address of the machine"""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # doesn't need to be reachable
+        s.connect(("10.255.255.255", 1))
+        IP = s.getsockname()[0]
+    except Exception:
+        IP = "127.0.0.1"
+    finally:
+        s.close()
+    return IP
+
+
 async def async_main(host: str, port: int, sidecar: bool):
+    # Register mDNS service
+    local_ip = get_local_ip() if host == "0.0.0.0" else host
+
+    # Create AsyncZeroconf instance
+    aiozc = AsyncZeroconf()
+    service_name = "wingman-ai-core._http._tcp.local."
+    service_info = ServiceInfo(
+        "_http._tcp.local.",
+        service_name,
+        addresses=[socket.inet_aton(local_ip)],
+        port=port,
+        properties={"path": "/", "version": str(system_manager.local_version)},
+    )
+
+    # Use async register method
+    await aiozc.async_register_service(service_info)
+    printr.print(
+        f"Registered mDNS service at {local_ip}:{port}",
+        color=LogType.HIGHLIGHT,
+        server_only=True,
+    )
+
+    # Store zeroconf instance for later cleanup
+    app.state.zeroconf = aiozc
+    app.state.service_info = service_info
+
     await core.config_service.migrate_configs(system_manager)
     await core.config_service.load_config()
     saved_secrets: list[str] = []

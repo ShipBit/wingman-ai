@@ -27,3 +27,4 @@ soundfile==0.13.1
 SpeechRecognition==3.14.1
 typing_extensions==4.12.2
 uvicorn==0.34.0
+zeroconf==0.146.1
