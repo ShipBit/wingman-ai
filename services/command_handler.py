@@ -6,15 +6,23 @@ import pygame
 import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
+    ClientLoggedOutCommand,
     RecordJoystickActionsCommand,
     RecordKeyboardActionsCommand,
     RecordMouseActionsCommand,
     SaveSecretCommand,
     StopRecordingCommand,
     WebSocketCommandModel,
+    ClientLoggedInCommand,
 )
 from api.enums import KeyboardRecordingType, LogSource, RecordingDevice, ToastType
-from api.interface import CommandActionConfig, CommandJoystickConfig, CommandKeyboardConfig, CommandMouseConfig
+from api.interface import (
+    CommandActionConfig,
+    CommandJoystickConfig,
+    CommandKeyboardConfig,
+    CommandMouseConfig,
+    ConfigWithDirInfo,
+)
 from mouse import mouse
 from services.connection_manager import ConnectionManager
 from services.printr import Printr
@@ -53,21 +61,28 @@ class CommandHandler:
                     RecordMouseActionsCommand(**command), websocket
                 )
             elif command_name == "record_joystick_actions":
+
                 def run_async_joystick_recording():
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
-                        loop.run_until_complete(self.handle_record_joystick_actions(
-                            RecordJoystickActionsCommand(**command), websocket
-                        ))
+                        loop.run_until_complete(
+                            self.handle_record_joystick_actions(
+                                RecordJoystickActionsCommand(**command), websocket
+                            )
+                        )
                     finally:
                         loop.close()
-                
+
                 play_thread = threading.Thread(target=run_async_joystick_recording)
                 play_thread.start()
             elif command_name == "stop_recording":
                 await self.handle_stop_recording(
                     StopRecordingCommand(**command), websocket
+                )
+            elif command_name == "client_logged_in":
+                await self.handle_client_logged_in(
+                    ClientLoggedInCommand(**command), websocket
                 )
             else:
                 raise ValueError("Unknown command")
@@ -112,24 +127,21 @@ class CommandHandler:
                 if not key_up_event:
                     return False
         return True
-    
+
     def on_mouse(self, event):
         # Check if event is of type ButtonEvent
         if not isinstance(event, mouse.ButtonEvent):
             return
-        
+
         if event.event_type == "up":
             self.recorded_keys.append(event)
 
             stop_command = StopRecordingCommand(
-                command="stop_recording",
-                recording_device=RecordingDevice.MOUSE
+                command="stop_recording", recording_device=RecordingDevice.MOUSE
             )
-            
-            WebSocketUser.ensure_async(
-                self.handle_stop_recording(stop_command, None)
-            )
-    
+
+            WebSocketUser.ensure_async(self.handle_stop_recording(stop_command, None))
+
     async def handle_record_mouse_actions(
         self, command: RecordMouseActionsCommand, websocket: WebSocket
     ):
@@ -158,7 +170,9 @@ class CommandHandler:
         self.recorded_keys = []
         was_init = pygame.get_init()
         pygame.init()
-        joysticks = [pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())]
+        joysticks = [
+            pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())
+        ]
 
         for joystick in joysticks:
             joystick.init()
@@ -171,18 +185,19 @@ class CommandHandler:
                 elif event.type == pygame.JOYBUTTONUP:
                     # Get guid of joystick with instance id
                     joystick_origin = pygame.joystick.Joystick(event.joy)
-                    self.recorded_keys.append({
-                        "button": event.button,
-                        "guid": joystick_origin.get_guid(),
-                        "name": joystick_origin.get_name()
-                        })
+                    self.recorded_keys.append(
+                        {
+                            "button": event.button,
+                            "guid": joystick_origin.get_guid(),
+                            "name": joystick_origin.get_name(),
+                        }
+                    )
                     self.is_joystick_recording = False
 
         stop_command = StopRecordingCommand(
-            command="stop_recording",
-            recording_device=RecordingDevice.JOYSTICK
+            command="stop_recording", recording_device=RecordingDevice.JOYSTICK
         )
-        
+
         await self.handle_stop_recording(stop_command, None)
 
         if not was_init:
@@ -206,7 +221,7 @@ class CommandHandler:
         stop_command = StopRecordingCommand(
             command="stop_recording",
             recording_device=RecordingDevice.KEYBOARD,
-            recording_type=command.recording_type
+            recording_type=command.recording_type,
         )
 
         def _on_key_event(event):
@@ -283,6 +298,42 @@ class CommandHandler:
 
         await self.printr.print_async(
             "Stopped recording actions.",
+            toast=ToastType.NORMAL,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+            server_only=True,
+        )
+
+    async def handle_client_logged_in(
+        self, command: ClientLoggedInCommand, websocket: WebSocket
+    ):
+        self.core.is_client_logged_in = True
+        self.core.is_client_pro = command.is_pro
+        self.core.client_account_name = command.account_name
+
+        self.printr.print(
+            f"User {command.account_name} logged in ({'Pro' if command.is_pro else 'Free'})",
+            toast=ToastType.NORMAL,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
+            server_only=True,
+        )
+
+        config_dir_info = ConfigWithDirInfo(
+            config=self.core.config_service.current_config,
+            config_dir=self.core.config_service.current_config_dir,
+        )
+        await self.core.initialize_tower(config_dir_info)
+
+    async def handle_client_logged_out(
+        self, command: ClientLoggedOutCommand, websocket: WebSocket
+    ):
+        self.core.is_client_logged_in = False
+        self.core.is_client_pro = False
+        self.core.client_account_name = ""
+
+        self.printr.print(
+            "User {command.account_name} logged out",
             toast=ToastType.NORMAL,
             source=LogSource.SYSTEM,
             source_name=self.source_name,
@@ -423,7 +474,7 @@ class CommandHandler:
     def _get_actions_from_recorded_hotkey(self, recorded):
         # legacy function used for single key recording
         actions: list[CommandActionConfig] = []
-        extended: None|bool = None
+        extended: None | bool = None
 
         key_down_time = {}  # Track initial down times for keys
         last_up_time = None  # Track the last up time to measure durations of inactivity

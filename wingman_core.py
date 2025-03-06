@@ -59,6 +59,9 @@ class WingmanCore(WebSocketUser):
     ):
         self.printr = Printr()
         self.app_root_path = app_root_path
+        self.is_client_logged_in: bool = False
+        self.is_client_pro: bool = False
+        self.client_account_name: str = ""
 
         self.router = APIRouter()
         tags = ["core"]
@@ -429,6 +432,14 @@ class WingmanCore(WebSocketUser):
         play_thread.start()
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
+        if not self.is_client_logged_in:
+            self.printr.print(
+                "Client not logged in yet - skipping Tower initialization.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return
+
         await self.unload_tower()
 
         config = config_dir_info.config
@@ -456,6 +467,11 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(error.message)
 
         self.config_service.set_tower(self.tower)
+        self.printr.print(
+            "Tower initializated.",
+            color=LogType.POSITIVE,
+            server_only=True,
+        )
 
     async def unload_tower(self):
         if self.tower:
@@ -463,6 +479,10 @@ class WingmanCore(WebSocketUser):
                 await wingman.unload()
             self.tower = None
             self.config_service.set_tower(None)
+            self.printr.print(
+                "Tower unloaded.",
+                server_only=True,
+            )
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []
