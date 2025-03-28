@@ -390,8 +390,8 @@ class UEXApi2():
             data, age = self._fetch_from_file_or_api(TRADE_ROUTES_REPORTS, **additional_category_filters)
             self.data[category_key] = {"data": data, "age": age}
 
-        # In diesem Fall ist 'data' ein Dict mit Keys=IDs => values() => list
-        # TODO values könnte leer sein
+        if not self.data.get(category_key) or not self.data[category_key].get("data"):
+            return []
         data = list(self.data[category_key].get("data").values())
         print_debug(f"uex community trades: {json.dumps(data, indent=2)[0:100]}...")
         # Filter out entries with negative score or negative profit
@@ -1457,6 +1457,8 @@ class UEXApi2():
         
         print_debug(f"Error deleting job from {url}: with response: {json.dumps(response.json(), indent=2)}")
         return response.json(), False  # error reason
+
+
 if __name__ == "__main__":
     api = UEXApi2.init(uex_api_key="****", user_secret_key="****")
     import sys

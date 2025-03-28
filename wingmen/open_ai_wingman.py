@@ -209,7 +209,7 @@ class OpenAiWingman(Wingman):
                     model=model_name,
                     # ...any extra params...
                 )
-            return (result.text, None)
+            return result.text if result else None, None
 
         azure_config = None
         if self.stt_provider == "azure":
