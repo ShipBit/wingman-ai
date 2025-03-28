@@ -5,7 +5,6 @@ from openai import OpenAI
 
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
-from services.audio_player import AudioPlayer
 
 from wingmen.star_citizen_services.function_manager import FunctionManager
 from wingmen.star_citizen_services.ai_context_enum import AIContext
@@ -69,35 +68,24 @@ class UexDataRunnerManager(FunctionManager):
             user_secret_key=self.uex2_secret_key
         )
         self.overlay = StarCitizenOverlay()
-        self.audio_player = AudioPlayer()
         self.current_timestamp = None
 
         if not os.path.exists(self.screenshots_path):
             os.makedirs(self.screenshots_path)
 
-        with open(f'{self.data_dir_path}/templates/response_structure_commodity_prices.json', 'r', encoding="UTF-8") as file:
-            file_content = file.read()
+        with open(f'{self.data_dir_path}/templates/response_structure_commodity_prices.prompt', 'r', encoding="UTF-8") as file:
+            ocr_commodity_prices_prompt = file.read()
 
         # JSON-String direkt verwenden
-        json_string = file_content   
+        prompt = ocr_commodity_prices_prompt   
 
         self.commodity_prices_ocr = OCR(
             open_ai_model=f'{self.config["open-ai-vision-model"]}',
             openai_api_key=self.openai_api_key, 
             data_dir=self.data_dir_path,
-            extraction_instructions=f"Give me the commodity price information within this image. Give me the response in a plain json object structured as defined in this example: {json_string}. Provide the json within markdown ```json ... ```.If you are unable to process the image, just return 'error' as response.",
+            extraction_instructions=prompt,
             overlay=self.overlay)
         
-        with open(f'{self.data_dir_path}/templates/response_structure_location_name.json', 'r', encoding="UTF-8") as file:
-            location_name_structure = file.read()
-        
-        self.location_name_ocr = OCR(
-            open_ai_model=f'{self.config["open-ai-vision-model"]}',
-            openai_api_key=self.openai_api_key, 
-            data_dir=self.data_dir_path,
-            extraction_instructions=f"Give me the location name in this image. Give me the response in a plain json object structured as defined in this example: {location_name_structure}. Provide the json within markdown ```json ... ```.If you are unable to process the image, just return 'error' as response.",
-            overlay=self.overlay)
-
     # @abstractmethod
     def get_context_mapping(self) -> AIContext:
         """  
@@ -321,23 +309,6 @@ class UexDataRunnerManager(FunctionManager):
                     }, None
     
         location_name_crop = screenshots.crop_screenshot(data_dir_path=f"{self.data_dir_path}/location_name_area", screenshot_file=screenshot_path, areas_and_corners_and_cropstrat=[("UPPER_LEFT", "LOWER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")], cash_key=f"uex_locationname_{validated_tradeport['code']}")
-        # retrieved_json, success = self.location_name_ocr.get_screenshot_texts(location_name_crop, "location_name_area")
-        
-        # if not success:
-        #     self.overlay.display_overlay_text("Couldn't retrieve location name ...")
-        #     return {
-        #             "success": False, "instructions": "Tell the user, that you are not able to validate the provided location name. Bright spots might make recognition inpossible.", 
-        #             }, None
-        # location_name = retrieved_json['location_name']
-        # print_debug(f"got raw location name: {location_name}")
-
-        # success = LocationNameMatching.validate_associated_location_name(location_name, validated_tradeport, min_similarity=50)
-
-        # if not success:
-        #     self.overlay.display_overlay_text("Error: Cannot validate location name!")
-        #     return {"success": False, 
-        #             "instructions": "You cannot validate the given tradeport against the location in the screenshot. The user must select the current location in 'Your Inventories' drop-down. Or, if he did, he might need to transmit prices as single spoken commands without screenshot analysis.", 
-        #             }, None
         
         print_debug(f'location name: {validated_tradeport["nickname"]}')            
         self.overlay.display_overlay_text(f'Cora: Screenshot taken, selected tradeport: {validated_tradeport["nickname"]}')

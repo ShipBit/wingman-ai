@@ -1,0 +1,36 @@
+Give me the commodity price information within this image. Give me the response in a plain json object structured as defined in this example
+
+{
+    "commodity_prices": [
+        {
+            "commodity_name": "DIAMOND",
+            "available_SCU_quantity": 293,
+            "inventory_state": "MEDIUM INVENTORY",
+            "price_per_unit": 3.984999989,
+            "multiplier": "K",
+        },
+        {
+            "commodity_name": "CHLORINE",
+            "available_SCU_quantity": 5000,
+            "inventory_state": "MAX INVENTORY",
+            "price_per_unit": 130,
+            "multiplier": null,
+        },
+        {
+            "commodity_name": "CHLORINE",
+            "available_SCU_quantity": 5000,
+            "inventory_state": "VERY HIGH INVENTORY",
+            "price_per_unit": 1.54224230,
+            "multiplier": "M",
+        }
+    ]
+}
+
+Additionally, do not nest the commodity name as a key. Provide an array of objects under "commodity_prices", each with:
+- "commodity_name": string
+- "available_SCU_quantity": integer (use 0 if unknown)
+- "inventory_state": one of ["MAX INVENTORY", "VERY HIGH INVENTORY", "HIGH INVENTORY", "MEDIUM INVENTORY", "LOW INVENTORY", "VERY LOW INVENTORY", "OUT OF STOCK"]
+- "price_per_unit": floating number (use 0 if unknown)
+- "multiplier": "K", "M", or null if unknown
+
+Provide the json within markdown ```json ... ```. If you are unable to process the image, just return 'error' as response.
