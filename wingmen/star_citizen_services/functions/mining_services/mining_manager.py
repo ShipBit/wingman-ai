@@ -1,10 +1,7 @@
 import json
 import time
 
-from apscheduler.schedulers.background import BackgroundScheduler
-
 from services.printr import Printr
-from services.audio_player import AudioPlayer
 
 from wingmen.star_citizen_services.function_manager import FunctionManager
 from wingmen.star_citizen_services.ai_context_enum import AIContext
@@ -76,8 +73,6 @@ class MiningManager(FunctionManager):
         self.regolith = RegolithAPI(config=config, x_api_key=regolith_api_key)
 
         self.overlay = StarCitizenOverlay()
-        self.audio_player = AudioPlayer()
-        self.scheduler = BackgroundScheduler()
 
         self.refineries = self.uex2_service.get_refineries()
         self.refinery_methods = self.uex2_service.get_data(uex_api_module.CATEGORY_REFINERY_METHODS)

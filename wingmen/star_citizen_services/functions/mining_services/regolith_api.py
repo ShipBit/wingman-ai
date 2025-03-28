@@ -15,6 +15,39 @@ from wingmen.star_citizen_services.helper import time_string_converter
 
 DEBUG = True
 TEST = False
+SHIP_CLUSTER_TYPES = [
+    'CTYPE',
+    'ETYPE',
+    'ITYPE',
+    'MTYPE',
+    'PTYPE',
+    'QTYPE',
+    'STYPE'
+    'ATACAMITE',
+    'FELSIC',
+    'GNEISS',
+    'GRANITE',
+    'IGNEOUS',
+    'OBSIDIAN',
+    'QUARTZITE',
+    'SHALE',
+]
+
+VEHICLE_CLUSTER_TYPES = [
+    'FEYNMALINE',
+    'BERADOM',
+    'GLACOSITE',
+]
+
+FPS_CLUSTER_TYPES = [
+    'JANALITE',
+    'HADANITE',
+    'APHORITE',
+    'DOLIVINE',
+    'CARINITE',
+    'JACLIUM',
+    'SALDYNIUM'
+]
 
 
 def print_debug(to_print):
@@ -164,23 +197,7 @@ class RegolithAPI:
             return
     
     def get_cluster_types(self):
-        return [
-            'CTYPE',
-            'ETYPE',
-            'ITYPE',
-            'MTYPE',
-            'PTYPE',
-            'QTYPE',
-            'STYPE'
-            'ATACAMITE',
-            'FELSIC',
-            'GNEISS',
-            'GRANITE',
-            'IGNEOUS',
-            'OBSIDIAN',
-            'QUARTZITE',
-            'SHALE'
-        ]
+        return SHIP_CLUSTER_TYPES + VEHICLE_CLUSTER_TYPES + FPS_CLUSTER_TYPES
     
     def get_refinery_names(self):
         if self.refineries is not None:
@@ -355,7 +372,6 @@ class RegolithAPI:
                     mySessions(nextToken: $nextToken) {
                     items {
                         ...SessionListFragment
-                        ...SessionSummaryFragment
                     }
                     nextToken
                     }
@@ -371,15 +387,6 @@ class RegolithAPI:
                 sessionSettings {
                         ...SessionSettingFragment
                     }
-                }
-
-                fragment SessionSummaryFragment on Session {
-                summary {
-                    aUEC
-                    oreSCU
-                    allPaid
-                    refineries
-                }
                 }
 
                 fragment SessionSettingFragment on SessionSettings {
@@ -458,12 +465,6 @@ class RegolithAPI:
                 state
                 sessionSettings {
                 gravityWell
-                }
-                summary {
-                aUEC
-                oreSCU
-                allPaid
-                refineries
                 }
             }
         }
@@ -602,31 +603,43 @@ class RegolithAPI:
                     f"Work orders retrieved. {json.dumps(work_order_data, indent=2)}"
                 )
 
-                if work_order_data["total_finished_refinery_orders"] > 0:
-                    return {
-                        "success": True,
-                        "instructions": (
-                            "Give a summary to the player in his language of his work orders ready for pickup and those that are still being processed. "
-                            "The first refinery mentioned contains the most processed orders to be picked up. Tell him the refinery and the number of orders ready. "
-                            "Ask the player, if he wants to open this session in the browser. "
-                        ),
-                        "data": work_order_data,
-                    }
+                instructions = "Give a narrative summary (that can be read out) focussing on: "
+                result = {
+                    "success": False,
+                    "data": None,
+                    "response_instructions": None
+                }
 
-                if work_order_data["total_refinery_orders_in_processing"] > 0:
-                    return {
-                        "success": True,
-                        "instructions": (
-                            "Respond in the players language. Tell him when the next refinery order is going to be finished. "
-                        ),
-                        "data": work_order_data,
-                    }
+                if work_order_data is None:
+                    result["message"] = "No work orders available."
+                    return result
+
+                if "total_finished_refinery_orders" in work_order_data and work_order_data["total_finished_refinery_orders"] > 0:
+                    result["success"] = True
+                    result["data"] = work_order_data
+                    instructions += (
+                        "total refinery work orders finished and where they can be picked up. "
+                    )
+
+                if "total_refinery_orders_in_processing" in work_order_data and work_order_data["total_refinery_orders_in_processing"] > 0:
+                    result["success"] = True
+                    result["data"] = work_order_data
+                    instructions += (
+                        "total refinery work orders in processing and when the next one will be finished. "
+                    )
+                   
+                if result["success"]:
+                    instructions += (
+                        " Also ask if he wants to open the session in the browser. "
+                    ) 
+                    result["response_instructions"] = instructions
+                    return result
                 
                 return None
 
         except Exception as e:
             print(
-                f"Error during work order retrieval {str(e)}: \n{traceback.print_stack()}"
+                f"Error during work order retrieval {str(e)}: \n{traceback.print_stack() if traceback else ''}"
             )
             return {
                 "success": False,
@@ -757,61 +770,131 @@ class RegolithAPI:
             return False
 
     def create_scouting_cluster(self, session_id, cluster_count=0, cluster_type=None):
-        mutation = gql(
-            """mutation addScoutingFind($sessionId: ID!, $scoutingFind: ScoutingFindInput!, $shipRocks: [ShipRockInput!]) {
-                addScoutingFind(
-                    sessionId: $sessionId
-                    scoutingFind: $scoutingFind
-                    shipRocks: $shipRocks
-                ) {
-                    ...ScoutingFindFragment
-                }
-                }
+        
+        mutation = ""
+        variables = {}
+        if cluster_type and cluster_type in SHIP_CLUSTER_TYPES:
+            mutation = gql(
+                """mutation addScoutingFind($sessionId: ID!, $scoutingFind: ScoutingFindInput!, $shipRocks: [ShipRockInput!]) {
+                    addScoutingFind(
+                        sessionId: $sessionId
+                        scoutingFind: $scoutingFind
+                        shipRocks: $shipRocks
+                    ) {
+                        ...ScoutingFindFragment
+                    }
+                    }
 
-                fragment ScoutingFindFragment on ScoutingFindInterface {
-                ...ScoutingFindBaseFragment
-                state
-                }
+                    fragment ScoutingFindFragment on ScoutingFindInterface {
+                    ...ScoutingFindBaseFragment
+                    state
+                    }
 
-                fragment ScoutingFindBaseFragment on ScoutingFindInterface {
-                scoutingFindId
-                createdAt
-                clusterType
-                clusterCount
-                gravityWell
-                note
-                ... on ShipClusterFind {
-                    shipRocks {
-                    ...ShipRockFragment
+                    fragment ScoutingFindBaseFragment on ScoutingFindInterface {
+                    scoutingFindId
+                    createdAt
+                    clusterType
+                    clusterCount
+                    gravityWell
+                    includeInSurvey
+                    note
+                    ... on ShipClusterFind {
+                        shipRocks {
+                        ...ShipRockFragment
+                        }
+                    }
+                    }
+
+                    fragment ShipRockFragment on ShipRock {
+                    mass
+                    inst
+                    res
+                    state
+                    ores {
+                        ore
+                        percent
+                    }
+                    }  
+            """
+            )
+
+            variables = {
+                "sessionId": session_id,
+                "scoutingFind": {
+                    "state": "DISCOVERED",
+                    "clusterCount": cluster_count,
+                    "gravityWell": self.active_session["sessionSettings"]["gravityWell"],
+                    "includeInSurvey": True,
+                    "note": "{'info': 'This cluster has been discovered by Cora - your AI Compagnion.'"
+                    + (f", 'cluster_type': '{cluster_type}'" if cluster_type else "")
+                    + "}",
+                },
+                "shipRocks": [],
+            }
+        else:
+            mutation = gql(
+                """mutation addScoutingFind($sessionId: ID!, $scoutingFind: ScoutingFindInput!, $vehicleRocks: [VehicleRockInput!]) {
+                    addScoutingFind(
+                        sessionId: $sessionId
+                        scoutingFind: $scoutingFind
+                        vehicleRocks: $vehicleRocks
+                    ) {
+                        ...ScoutingFindFragment
+                    }
+                    }
+
+                    fragment ScoutingFindFragment on ScoutingFindInterface {
+                    ...ScoutingFindBaseFragment
+                    state
+                    }
+
+                    fragment ScoutingFindBaseFragment on ScoutingFindInterface {
+                    scoutingFindId
+                    createdAt
+                    clusterType
+                    clusterCount
+                    gravityWell
+                    includeInSurvey
+                    note
+                    ... on VehicleClusterFind {
+                        vehicleRocks {
+                        mass
+                        inst
+                        res
+                        ores {
+                            ore
+                            percent
+                        }
+                        }
                     }
                 }
-                }
+            """
+            )
 
-                fragment ShipRockFragment on ShipRock {
-                mass
-                inst
-                res
-                state
-                ores {
-                    ore
-                    percent
-                }
-                }  
-        """
-        )
-
-        variables = {
-            "sessionId": session_id,
-            "scoutingFind": {
-                "state": "DISCOVERED",
-                "clusterCount": cluster_count,
-                "gravityWell": self.active_session["sessionSettings"]["gravityWell"],
-                "note": "{'info': 'This cluster has been discovered by Cora - your AI Compagnion.'"
-                + (f", 'cluster_type': '{cluster_type}'" if cluster_type else "")
-                + "}",
-            },
-            "shipRocks": [],
-        }
+            variables = {
+                "sessionId": session_id,
+                "scoutingFind": {
+                    "state": "DISCOVERED",
+                    "clusterCount": cluster_count,
+                    "gravityWell": self.active_session["sessionSettings"]["gravityWell"],
+                    "includeInSurvey": True,
+                    "note": "{'info': 'This cluster has been discovered by Cora - your AI Compagnion.'"
+                            + (f", 'cluster_type': '{cluster_type}'" if cluster_type else "")
+                            + "}",
+                },
+                "vehicleRocks": [
+                    {
+                        "mass": 0.15,
+                        "ores": [
+                            {
+                                "percent": 1,
+                                "ore": cluster_type
+                            }
+                        ]
+                    }
+                    for _ in range(cluster_count)
+                ],
+            }
 
         try:
             response = self.client.execute(mutation, variable_values=variables)
@@ -877,6 +960,13 @@ class RegolithAPI:
             """
         )
 
+        if not ship_rock_scan_result or not ship_rock_scan_result.get("ores"):
+            print_debug("No valid scan data in 'captureShipRockScan'.")
+            return {
+                "success": False,
+                "response_instructions": "Tell user there's no valid scan data.",
+                "result": "The scan result is empty or invalid."
+            }
         ores = ship_rock_scan_result["ores"]
         cleaned_ores = [
             {key: value for key, value in ore.items() if key != "__typename"}
@@ -1219,7 +1309,7 @@ class RegolithAPI:
             }
         """
         )
-        return self._get_image_infos(query, base64_jpg_url_string, "work_order")
+        return self._get_image_infos(query, base64_jpg_url_string, "captureRefineryOrder")
 
     def get_rock_scan_image_infos(self, base64_jpg_url_string):
         query = gql(
@@ -1238,7 +1328,7 @@ class RegolithAPI:
                 }
             """
         )
-        return self._get_image_infos(query, base64_jpg_url_string, "rock_scan")
+        return self._get_image_infos(query, base64_jpg_url_string, "captureShipRockScan")
 
     def _get_image_infos(self, query_str, base64_jpg_url_string, image_type=None ):
         variables = {"imgUrl": base64_jpg_url_string}
@@ -1246,7 +1336,7 @@ class RegolithAPI:
         try:
             response = self.client.execute(query_str, variable_values=variables)
 
-            if "errors" in response:
+            if not response or "errors" in response or not response.get(image_type):
                 print("Fehler bei der GraphQL-Anfrage:")
                 for error in response["errors"]:
                     print(error["message"])
@@ -1262,7 +1352,7 @@ class RegolithAPI:
                 return response
         except Exception as e:
             print(
-                f"Error during work order creation {str(e)}: \n{traceback.print_stack()}"
+                f"Error during {image_type} creation {str(e)}: \n{traceback.print_stack()}"
             )
             self._save_debug_data(image_type=image_type, image_data=base64_jpg_url_string, error_message=str(e))
             return {
