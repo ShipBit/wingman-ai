@@ -8,19 +8,28 @@ from services.sound_effects import get_sound_effects_from_config
 
 
 class AudioPlayer:
+    def __init__(self, sound_config: dict):
+        self.sound_config = sound_config
+
     def play_file(self, filename: str):
         with open(filename, "rb") as f:
             audio_data = f.read()
+        volume = self.sound_config.get("volume", 0.8)
+        audio_data = audio_data * volume
         self.play(audio_data)
 
     def play(self, stream: bytes):
         audio, sample_rate = self._get_audio_from_stream(stream)
         sd.sleep(50)  # Add a short delay before playing
+        volume = self.sound_config.get("volume", 0.8)
+        audio = audio * volume
         sd.play(audio, sample_rate)
         sd.wait()
 
     def stream(self, stream: bytes):
         audio, sample_rate = self._get_audio_from_stream(stream)
+        volume = self.sound_config.get("volume", 0.8)
+        audio = audio * volume
         sd.play(audio, sample_rate)
         sd.wait()
     
@@ -50,6 +59,8 @@ class AudioPlayer:
 
         audio = self.prepend_silence(audio, sample_rate, ms=200)
 
+        volume = config.get("sound", {}).get("volume", 0.8)
+        audio = audio * volume
         sd.play(audio, sample_rate)
 
         if wait:

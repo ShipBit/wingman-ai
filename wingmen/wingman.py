@@ -56,7 +56,7 @@ class Wingman(FileCreator):
         self.name = name
         """The name of the wingman. This is the key you gave it in the config, e.g. "atc"."""
 
-        self.audio_player = AudioPlayer()
+        self.audio_player = AudioPlayer(sound_config=config.get("sound", {}))
         """A service that allows you to play audio files and add sound effects to them."""
 
         self.execution_start: None | float = None
