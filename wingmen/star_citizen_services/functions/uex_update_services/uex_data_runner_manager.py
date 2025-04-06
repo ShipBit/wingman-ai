@@ -1,5 +1,6 @@
 import os
 import json
+import datetime
 
 from openai import OpenAI
 
@@ -347,7 +348,7 @@ class UexDataRunnerManager(FunctionManager):
                     "instructions": "You couldn't identify the commodities and prices. Instruct the user to analyse the log files.", 
                     }
         
-        manually_confirmed_data = OverlayPopup.show_data_validation_popup(terminal_prices, operation, screenshot_prices, commodity_area_crop, cropped_screenshot_location)
+        manually_confirmed_data, new_operation, new_terminal_id = OverlayPopup.show_data_validation_popup(terminal_prices, operation, screenshot_prices, commodity_area_crop, cropped_screenshot_location)
         
         if manually_confirmed_data == "aborted":
             return {
@@ -366,8 +367,16 @@ class UexDataRunnerManager(FunctionManager):
                     "message": "Could not identify commodity names or prices are not within 40% of allowed tollerance to current prices"
                     }
         
+        validated_tradeport = self.uex2_service.get_data("terminals").get(str(new_terminal_id))
+        operation = new_operation
+        now = datetime.datetime.now()
+        self.current_timestamp = now.strftime("%Y%m%d_%H%M%S_%f")
+
         # Write JSON data to a file
         json_file_name = f'{self.data_dir_path}/debug_data/verified_price_information_{operation}_{validated_tradeport["code"]}_{self.current_timestamp}.json'
+        json_dir = os.path.dirname(json_file_name)
+        if not os.path.exists(json_dir):
+            os.makedirs(json_dir)
         with open(json_file_name, 'w') as file:
             json.dump(manually_confirmed_data, file, indent=4)
         
@@ -393,4 +402,4 @@ class UexDataRunnerManager(FunctionManager):
         
         self.overlay.display_overlay_text(f'UEX Corp: acknowledged the data transmittion. ', display_duration=1500)
         
-        return "Ok"  # we don't want cora to repeat what we see on screen, if everything was fine
+        return "Ok", "Ok"  # we don't want cora to repeat what we see on screen, if everything was fine

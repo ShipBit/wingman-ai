@@ -215,7 +215,7 @@ class OverlayPopup(tk.Toplevel):
     
     def get_updated_data(self):
         # Method to retrieve the updated data after the window is closed
-        return self.user_updated_data
+        return self.user_updated_data, self.operation, self.terminal_prices[0]['id_terminal']
     
     def get_primary_monitor_resolution(self):
         monitors = get_monitors()
