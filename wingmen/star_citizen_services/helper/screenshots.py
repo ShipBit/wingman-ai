@@ -144,10 +144,13 @@ def __get_best_template_matching_coordinates(data_dir_path, screenshot, image_ar
         if os.path.exists(cache_file):
             with open(cache_file, "r") as f:
                 for line in f:
-                    key, x, y = line.strip().split(",")
-                    if key == cash_key:
-                        print_debug(f"Cache hit for key: {cash_key}: {x}, {y}")
-                        return (int(x), int(y))
+                    parts = line.strip().split(",")
+                    if parts[0] == cash_key:
+                        if len(parts) >= 4:
+                            print_debug(f"Cache hit for key: {cash_key}: {parts[1]}, {parts[2]}, template: {parts[3]}")
+                        else:
+                            print_debug(f"Cache hit for key: {cash_key}: {parts[1]}, {parts[2]}")
+                        return (int(parts[1]), int(parts[2]))
 
     while True:
         filename = None
@@ -160,7 +163,6 @@ def __get_best_template_matching_coordinates(data_dir_path, screenshot, image_ar
             filename = filename2
 
         if not filename:
-            # print_debug(f"Filename does not exist: {filename1} or {filename2}")
             break  # No more templates available
 
         template = cv2.imread(filename, cv2.IMREAD_COLOR)
@@ -201,11 +203,11 @@ def __get_best_template_matching_coordinates(data_dir_path, screenshot, image_ar
 
     print_debug(f"best template found: {best_template} with score {highest_score} and coordinates {matching_coordinates}")
 
-    # Save the result to the cache file
+    # Save the result to the cache file (including the winning template)
     if cash_key and matching_coordinates:
         with open(cache_file, "a") as f:
-            print_debug(f"Writing cache entry for key: {cash_key}: {matching_coordinates}")
-            f.write(f"{cash_key},{matching_coordinates[0]},{matching_coordinates[1]}\n")
+            print_debug(f"Writing cache entry for key: {cash_key}: {matching_coordinates}, template: {best_template}")
+            f.write(f"{cash_key},{matching_coordinates[0]},{matching_coordinates[1]},{best_template}\n")
 
     # --- Debug Drawing Part ---
     # If you want to visually confirm the final best match:
