@@ -22,7 +22,7 @@ SHIP_CLUSTER_TYPES = [
     'MTYPE',
     'PTYPE',
     'QTYPE',
-    'STYPE'
+    'STYPE',
     'ATACAMITE',
     'FELSIC',
     'GNEISS',
@@ -500,8 +500,8 @@ class RegolithAPI:
                 "isRefined": True,
             }
 
-        if refinery:
-            variables["workOrderDefaults"]["refinery"] = refinery
+            if refinery:
+                variables["workOrderDefaults"]["refinery"] = refinery
 
         try:
             response = self.client.execute(mutation, variable_values=variables)
