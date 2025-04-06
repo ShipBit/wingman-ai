@@ -162,6 +162,7 @@ class StarCitizenWingman(OpenAiWingman):
             commodity_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_COMMODITIES)
             cities_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_CITIES)
             terminal_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_TERMINALS)
+            station_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_STATIONS)
 
             context_prompt += (
                 " Whenever you need to provide or reference the name of a location it must be one of the available tradeport-, planet-, satellite / moon or city names that matches best the player request. "
@@ -172,6 +173,7 @@ class StarCitizenWingman(OpenAiWingman):
                 f"Available city names: {cities_names}. "
                 f"Available commodity names: {commodity_names}. "
                 f"Available terminal names: {terminal_names}. "
+                f"Available station names: {station_names}. "
             )
 
             functions_prompt = " "

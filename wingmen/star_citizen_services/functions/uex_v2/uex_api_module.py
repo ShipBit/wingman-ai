@@ -36,6 +36,7 @@ CATEGORY_TERMINALS = "terminals"
 CATEGORY_OUTPOSTS = "outposts"
 CATEGORY_ORBITS = "orbits"
 CATEGORY_MOONS = "moons"
+CATEGORY_STATIONS = "space_stations"
 CATEGORY_SYSTEMS = "star_systems"
 CATEGORY_ITEMS = "items"
 PRICES_COMMODITIES = "commodities_prices"
@@ -104,6 +105,7 @@ class UEXApi2():
                 CATEGORY_ORBITS: self.orbits_max_age,
                 CATEGORY_MOONS: self.moons_max_age,
                 CATEGORY_SYSTEMS: self.systems_max_age,
+                CATEGORY_STATIONS: self.systems_max_age,
                 CATEGORY_ITEMS: self.item_prices_max_age,
                 CATEGORY_OUTPOSTS: self.outposts_max_age,
                 PRICES_COMMODITIES: self.commodities_prices_max_age,
@@ -149,7 +151,8 @@ class UEXApi2():
             CATEGORY_ORBITS: f"{CATEGORY_ORBITS}/id_star_system/{system_id}/",
             CATEGORY_MOONS: f"{CATEGORY_MOONS}/id_star_system/{system_id}/",
             CATEGORY_SYSTEMS: f"{CATEGORY_SYSTEMS}/",
-            CATEGORY_ITEMS: f"{CATEGORY_ITEMS}/",
+            CATEGORY_STATIONS: f"{CATEGORY_STATIONS}/id_star_system/{system_id}/",
+            CATEGORY_ITEMS: f"{CATEGORY_ITEMS}",
             CATEGORY_OUTPOSTS: f"{CATEGORY_OUTPOSTS}/id_star_system/{system_id}/",
             PRICES_COMMODITIES: f"{PRICES_COMMODITIES}/",
             PRICES_ITEMS: f"{PRICES_ITEMS}/",  # filter applied later
@@ -218,7 +221,7 @@ class UEXApi2():
         :param additional_category_filters: only relevant, if the category is provided (usually a price category request that should be filtered to something)
         :return: Data either from the file or the API
         """
-        categories = [CATEGORY_SYSTEMS, CATEGORY_CITIES, CATEGORY_COMMODITIES, CATEGORY_MOONS, CATEGORY_ORBITS, CATEGORY_OUTPOSTS, CATEGORY_TERMINALS, CATEGORY_VEHICLES, CATEGORY_REFINERY_METHODS]
+        categories = [CATEGORY_SYSTEMS, CATEGORY_CITIES, CATEGORY_COMMODITIES, CATEGORY_MOONS, CATEGORY_ORBITS, CATEGORY_OUTPOSTS, CATEGORY_TERMINALS, CATEGORY_STATIONS, CATEGORY_VEHICLES, CATEGORY_REFINERY_METHODS]
         
         for check_category in categories:
             if self._needs_refresh(check_category):
@@ -447,7 +450,8 @@ class UEXApi2():
             CATEGORY_MOONS:   "id_moon",
             CATEGORY_CITIES:  "id_city",
             CATEGORY_OUTPOSTS: "id_outpost",
-            CATEGORY_TERMINALS: "id_terminal"
+            CATEGORY_TERMINALS: "id_terminal",
+            CATEGORY_STATIONS: "id_space_station",
         }
         base = param_map.get(location_category)
         if not base:
@@ -523,10 +527,11 @@ class UEXApi2():
         # Id-Feld (z. B. 'id_orbit') ermitteln:
         id_field_name = {
             CATEGORY_SYSTEMS: "id_star_system",
-            CATEGORY_ORBITS:  "id_orbit",
-            CATEGORY_MOONS:   "id_moon",
-            CATEGORY_CITIES:  "id_city",
-            CATEGORY_OUTPOSTS:"id_outpost"
+            CATEGORY_ORBITS: "id_orbit",
+            CATEGORY_MOONS: "id_moon",
+            CATEGORY_CITIES: "id_city",
+            CATEGORY_OUTPOSTS: "id_outpost",
+            CATEGORY_STATIONS: "id_space_station",
         }.get(location_category, "")
 
         # Start-Terminals = alle Commodity-Typ-Terminals, deren {id_field_name} = location_id
@@ -728,7 +733,8 @@ class UEXApi2():
             CATEGORY_ORBITS:   "id_orbit",
             CATEGORY_MOONS:    "id_moon",
             CATEGORY_CITIES:   "id_city",
-            CATEGORY_OUTPOSTS: "id_outpost"
+            CATEGORY_OUTPOSTS: "id_outpost",
+            CATEGORY_STATIONS: "id_space_station"
         }
         id_key1 = key_map.get(location_category1, "")
         id_key2 = key_map.get(location_category2, "")
@@ -1036,10 +1042,11 @@ class UEXApi2():
         # Lokaler Teil
         id_field_name = {
             CATEGORY_SYSTEMS: "id_star_system",
-            CATEGORY_ORBITS:  "id_orbit",
-            CATEGORY_MOONS:   "id_moon",
-            CATEGORY_CITIES:  "id_city",
-            CATEGORY_OUTPOSTS:"id_outpost"
+            CATEGORY_ORBITS: "id_orbit",
+            CATEGORY_MOONS:  "id_moon",
+            CATEGORY_CITIES: "id_city",
+            CATEGORY_OUTPOSTS: "id_outpost",
+            CATEGORY_STATIONS: "id_space_station"
         }.get(location_category, "")
 
         tradeports = [
@@ -1282,7 +1289,7 @@ class UEXApi2():
     
     def get_location(self, location_mapping_name):
         self._refresh_data()
-        location_categories = [CATEGORY_SYSTEMS, CATEGORY_ORBITS, CATEGORY_MOONS, CATEGORY_CITIES, CATEGORY_OUTPOSTS, CATEGORY_TERMINALS]
+        location_categories = [CATEGORY_SYSTEMS, CATEGORY_ORBITS, CATEGORY_MOONS, CATEGORY_CITIES, CATEGORY_OUTPOSTS, CATEGORY_STATIONS, CATEGORY_TERMINALS]
         
         for category in location_categories:
             location_mapping, success = find_best_match.find_best_match(
