@@ -34,7 +34,7 @@ class WingmanPro:
             files = {"audio_file": (filename, audio_input)}
             response = requests.post(
                 url=f"{self.settings.base_url}/transcribe-whisper",
-                params={"region": self.settings.region.value},
+                params={"region": self.settings.region},
                 files=files,
                 headers=self._get_headers(),
                 timeout=self.timeout,
@@ -52,7 +52,7 @@ class WingmanPro:
         with open(filename, "rb") as audio_input:
             files = {"file": (filename, audio_input)}
             params = {
-                "region": self.settings.region.value,
+                "region": self.settings.region,
                 "languages": config.languages,
             }
             response = requests.post(
@@ -93,7 +93,7 @@ class WingmanPro:
         }
         response = requests.post(
             url=f"{self.settings.base_url}/ask",
-            params={"region": self.settings.region.value},
+            params={"region": self.settings.region},
             headers=self._get_headers(),
             json=data,
             timeout=self.timeout,
@@ -126,7 +126,7 @@ class WingmanPro:
             def buffer_generator():
                 with requests.post(
                     url=f"{self.settings.base_url}/generate-azure-speech",
-                    params={"region": self.settings.region.value},
+                    params={"region": self.settings.region},
                     json=data,
                     headers=self._get_headers(),
                     timeout=self.timeout,
@@ -183,7 +183,7 @@ class WingmanPro:
         else:  # non-streaming
             response = requests.post(
                 url=f"{self.settings.base_url}/generate-azure-speech",
-                params={"region": self.settings.region.value},
+                params={"region": self.settings.region},
                 headers=self._get_headers(),
                 json=data,
                 timeout=self.timeout,
@@ -221,7 +221,7 @@ class WingmanPro:
         response = requests.post(
             url=f"{self.settings.base_url}/generate-openai-speech",
             params={
-                "region": self.settings.region.value,
+                "region": self.settings.region,
             },
             headers=self._get_headers(),
             json=data,
@@ -249,7 +249,7 @@ class WingmanPro:
         response = requests.post(
             url=f"{self.settings.base_url}/generate-image",
             params={
-                "region": self.settings.region.value,
+                "region": self.settings.region,
             },
             headers=self._get_headers(),
             json=data,
@@ -266,7 +266,7 @@ class WingmanPro:
     def get_available_voices(self, locale: str = ""):
         response = requests.get(
             url=f"{self.settings.base_url}/azure-voices",
-            params={"region": self.settings.region.value, "locale": locale},
+            params={"region": self.settings.region, "locale": locale},
             timeout=self.timeout,
             headers=self._get_headers(),
         )
