@@ -130,7 +130,7 @@ class WingmanPro:
         }
         response = requests.post(
             url=f"{self.settings.base_url}/assistant/message",
-            params={"region": self.settings.region.value},
+            params={"region": self.settings.region},
             headers=self._get_headers(),
             json=data,
             timeout=self.timeout,
