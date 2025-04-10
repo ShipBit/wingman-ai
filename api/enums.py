@@ -163,11 +163,6 @@ class RecordingDevice(Enum):
     JOYSTICK = "joystick"
 
 
-class WingmanProRegion(Enum):
-    EUROPE = "europe"
-    USA = "usa"
-
-
 class WingmanProSttProvider(Enum):
     WHISPER = "whisper"
     AZURE_SPEECH = "azure_speech"
@@ -267,10 +262,6 @@ class RecordingDeviceModel(BaseEnumModel):
     recording_device: RecordingDevice
 
 
-class WingmanProRegionModel(BaseEnumModel):
-    region: WingmanProRegion
-
-
 class WingmanProSttProviderModel(BaseEnumModel):
     stt_provider: WingmanProSttProvider
 
@@ -301,7 +292,6 @@ ENUM_TYPES = {
     "VoiceActivationSttProvider": VoiceActivationSttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
-    "WingmanProRegion": WingmanProRegionModel,
     "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
     "PerplexityModel": PerplexityModelEnumModel,

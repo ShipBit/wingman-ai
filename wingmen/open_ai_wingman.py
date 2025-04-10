@@ -414,14 +414,9 @@ class OpenAiWingman(Wingman):
     async def update_settings(self, settings: SettingsConfig):
         """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
         try:
-            wingman_pro_changed = (
-                self.settings.wingman_pro.base_url != settings.wingman_pro.base_url
-                or self.settings.wingman_pro.region != settings.wingman_pro.region
-            )
-
             await super().update_settings(settings)
 
-            if wingman_pro_changed and self.uses_provider("wingman_pro"):
+            if self.uses_provider("wingman_pro"):
                 await self.validate_and_set_wingman_pro()
                 printr.print(
                     f"Wingman {self.name}: reinitialized Wingman Pro with new settings",

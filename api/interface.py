@@ -15,7 +15,6 @@ from api.enums import (
     TtsProvider,
     VoiceActivationSttProvider,
     WingmanInitializationErrorType,
-    WingmanProRegion,
     WingmanProSttProvider,
     WingmanProTtsProvider,
     PerplexityModel,
@@ -406,7 +405,7 @@ class WingmanProConfig(BaseModel):
 
 class WingmanProSettings(BaseModel):
     base_url: str
-    region: WingmanProRegion
+    region: str
 
 
 class SoundConfig(BaseModel):
