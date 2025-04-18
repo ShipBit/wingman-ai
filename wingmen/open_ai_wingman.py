@@ -2,7 +2,7 @@ import json
 from typing import Mapping
 import azure.cognitiveservices.speech as speechsdk
 from openai import AzureOpenAI
-from services.open_ai import AzureConfig, OpenAi
+from services.open_ai import AzureConfig, OpenAi, STTConfig
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 from wingmen.wingman import Wingman
@@ -45,11 +45,19 @@ class OpenAiWingman(Wingman):
         self.elevenlabs_api_key = None
         self.azure_keys = {
             "tts": None,
-            "whisper": None,
+            "stt_model": None,
             "conversation": None,
             "summarize": None,
         }
+        self.groq_keys = {
+            "stt_model": None,
+        }
+        self.openai_api_key = None  
+
+        ## STT Provider
         self.stt_provider = self.config["features"].get("stt_provider", None)
+        self.stt_model = self.config[self.stt_provider].get("stt_model", None)
+                
         self.conversation_provider = self.config["features"].get(
             "conversation_provider", None
         )
@@ -59,37 +67,73 @@ class OpenAiWingman(Wingman):
 
     def validate(self):
         errors = super().validate()
-        openai_api_key = self.secret_keeper.retrieve(
+        self.openai_api_key = self.secret_keeper.retrieve(
             requester=self.name,
             key="openai",
             friendly_key_name="OpenAI API key",
             prompt_if_missing=True,
         )
-        if not openai_api_key:
+        if not self.openai_api_key:
             errors.append(
                 "Missing 'openai' API key. Please provide a valid key in the settings."
             )
-        else:
-            openai_organization = self.config["openai"].get("organization")
-            openai_base_url = self.config["openai"].get("base_url")
-            self.openai = OpenAi(openai_api_key, openai_organization, openai_base_url)
+            return errors
 
+        openai_organization = self.config["openai"].get("organization")
+        openai_base_url = self.config["openai"].get("base_url")
+            
+        self.__validate_elevenlabs_config(errors)
+
+        self.__validate_azure_config(errors)
+
+        self.__validate_groq_config(errors)
+
+        if len(errors) > 0:
+            return errors
+
+        self.openai = OpenAi(
+            organization=openai_organization,
+            api_key=self.openai_api_key,
+            base_url=openai_base_url,
+            stt_config=self.__build_stt_config())
+
+        return errors
+
+    def __build_stt_config(self):
+        """Builds the STT configuration based on the provider specified in the config.
+
+        Returns:
+            STTConfig: The configuration object for the selected STT provider.
+        """
+        stt_config = STTConfig(
+            stt_provider=self.stt_provider,
+            stt_model=self.stt_model,
+        )
+        if self.stt_provider == "openai":
+            pass  # keine weiteren informationen nötig
+        elif self.stt_provider == "azure":
+            stt_config.azure_config = self._get_azure_config("stt_model")
+        elif self.stt_provider == "groq":
+            stt_config.api_key = self.groq_keys["stt_model"]
+            stt_config.base_url = self.config["groq"].get("base_url", None)
+        elif self.stt_provider == "local":
+            stt_config.local = True
+        else:
+            raise ValueError(f"Unsupported STT provider: {self.stt_provider}")
+        
+        return stt_config
+        
+    def __validate_groq_config(self, errors):
         if self.stt_provider == "groq":
-            self.groq_key = self.secret_keeper.retrieve(
+            self.groq_keys["stt_model"] = self.secret_keeper.retrieve(
                 requester=self.name,
                 key="groq_stt",
                 friendly_key_name="Groq STT API key",
                 prompt_if_missing=True,
             )
-            if not self.groq_key:
+            if not self.groq_keys["stt_model"]:
                 errors.append("Missing 'groq_stt' key.")
-
-        self.__validate_elevenlabs_config(errors)
-
-        self.__validate_azure_config(errors)
-
-        return errors
-
+    
     def __validate_elevenlabs_config(self, errors):
         if self.tts_provider == "elevenlabs":
             self.elevenlabs_api_key = self.secret_keeper.retrieve(
@@ -151,13 +195,13 @@ class OpenAiWingman(Wingman):
                 return
 
         if self.stt_provider == "azure":
-            self.azure_keys["whisper"] = self.secret_keeper.retrieve(
+            self.azure_keys["stt_model"] = self.secret_keeper.retrieve(
                 requester=self.name,
                 key="azure_whisper",
                 friendly_key_name="Azure Whisper API key",
                 prompt_if_missing=True,
             )
-            if not self.azure_keys["whisper"]:
+            if not self.azure_keys["stt_model"]:
                 errors.append(
                     "Missing 'azure' whisper API key. Please provide a valid key in the settings."
                 )
@@ -199,28 +243,9 @@ class OpenAiWingman(Wingman):
             str | None: The transcript of the audio file or None if the transcription failed.
         """
         response_format = "json"
-
-        if self.stt_provider == "groq":
-            model_name = self.config.get("groq", {}).get("whisper_model", "whisper-large-v3-turbo")
-            client = Groq(api_key=self.groq_key)
-            with open(audio_input_wav, "rb") as file:
-                result = client.audio.transcriptions.create(
-                    file=(audio_input_wav, file.read()),
-                    model=model_name,
-                    # ...any extra params...
-                )
-            return result.text if result else None, None
-
-        azure_config = None
-        stt_model = None
-        if self.stt_provider == "azure":
-            azure_config = self._get_azure_config("whisper")
-
-        if self.stt_provider == "openai":
-            stt_model = self.config["openai"].get("stt_model")
-
+            
         transcript = self.openai.transcribe(
-            audio_input_wav, model=stt_model, response_format=response_format, azure_config=azure_config
+            audio_input_wav, response_format=response_format
         )
 
         return transcript.text if transcript else None, None
@@ -313,7 +338,7 @@ class OpenAiWingman(Wingman):
         cutoff_index = len(self.messages) - 1
         user_message_count = 0
         for message in reversed(self.messages):
-            if self.__get_message_role(message) == "user":
+            if self._get_message_role(message) == "user":
                 user_message_count += 1
                 if user_message_count == remember_messages:
                     break  # Found the cutoff point.

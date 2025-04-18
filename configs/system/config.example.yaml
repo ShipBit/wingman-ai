@@ -23,7 +23,7 @@ features:
   # ─────────────────────── Speech to text Provider ─────────────────────────
   # You can override the speech to text provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  stt_provider: openai # available: openai, azure, groq
+  stt_provider: groq # available: openai, azure, groq, local (local = whisper + cuda)
 
   # ─────────────────────── Conversation Provider ─────────────────────────
   # You can override the conversation provider to use a different one than the default.
@@ -59,6 +59,10 @@ sound:
 
   volume: 0.5 # 0.0 - 1.0
 
+# ────────────────────────────────── Local AI ────────────────────────────────────
+local:
+  stt_model: turbo # available: large, turbo
+
 # ────────────────────────────────── OPEN AI ────────────────────────────────────
 openai:
   # The model to use for conversations aka "chit-chat" and for function calls.
@@ -88,7 +92,7 @@ openai:
 # If you configured some providers above to use Azure, you need to provide your Azure settings here.
 # Please also provide your Azure API keys in the secrets.yaml.
 azure:
-  whisper:
+  stt_model:
     api_base_url: https://cora-ai.openai.azure.com/ # https://xxx.openai.azure.com/
     api_version: 2024-06-01 # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
     deployment_name: whisper # The deployment name e.g. 'whisper'
@@ -109,7 +113,9 @@ azure:
 
 # ────────────────────────────────── GROQ ────────────────────────────────────
 groq:
-  whisper_model: whisper-large-v3-turbo
+  base_url: https://api.groq.com/openai/v1
+  stt_model: whisper-large-v3-turbo
+  
 
 # ────────────────────────────────── Global commands ───────────────────────────────────────
 # These are available to all wingmen. You can override them per wingman if necessary.
