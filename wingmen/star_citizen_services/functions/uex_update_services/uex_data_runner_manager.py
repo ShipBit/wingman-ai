@@ -317,7 +317,7 @@ class UexDataRunnerManager(FunctionManager):
 
         print_debug(buy_result)
         if "success" not in buy_result:
-            return buy_result, None
+            return buy_result, "Ok"
     
         return buy_result
          
@@ -354,7 +354,7 @@ class UexDataRunnerManager(FunctionManager):
             return {
                 "instructions": "Tell the user, that transmission has been aborted. "
             }
-        print(f"user-validated: {json.dumps(manually_confirmed_data, indent=2)}")
+        print(f"user-validated {new_operation}@{new_terminal_id}: {json.dumps(manually_confirmed_data, indent=2)}")
         
         number_of_validated_prices = len(manually_confirmed_data)
 
@@ -402,4 +402,4 @@ class UexDataRunnerManager(FunctionManager):
         
         self.overlay.display_overlay_text(f'UEX Corp: acknowledged the data transmittion. ', display_duration=1500)
         
-        return "Ok", "Ok"  # we don't want cora to repeat what we see on screen, if everything was fine
+        return "Ok"  # we don't want cora to repeat what we see on screen, if everything was fine
