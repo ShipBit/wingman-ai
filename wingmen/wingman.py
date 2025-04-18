@@ -382,7 +382,7 @@ class Wingman(FileCreator):
             command (dict): The command object from the config to execute
         """
 
-        modifier_order = ["alt", "ctrl", "shift", "altleft", "ctrlleft", "shiftleft", "altright", "ctrlrigth", "shiftright"]
+        modifier_order = ["alt", "ctrl", "shift", "altleft", "ctrlleft", "shiftleft", "altright", "ctrlright", "shiftright"]
         keys = command.get("keys", [])
         
         active_modifiers = []

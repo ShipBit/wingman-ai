@@ -26,6 +26,7 @@ def print_debug(to_print):
 printr = Printr()
 try:
     import pydirectinput as key_module
+    print_debug("pydirectinput imported")
 except AttributeError:
     # TODO: Instead of creating a banner make this an icon in the header
     # printr.print_warn(
@@ -33,6 +34,7 @@ except AttributeError:
     #     wait_for_gui=True
     # )
     import pyautogui as key_module
+    print_debug("pyautogui imported")
 
 
 class StarCitizenWingman(OpenAiWingman):
@@ -460,17 +462,17 @@ class StarCitizenWingman(OpenAiWingman):
         command = self.sc_keybinding_service.get_command(command_name)
 
         if not command:
-            print_debug(f"Command not found {command_name}")
-            return {"success": False, "error": f"Command not found {command_name}"}, f"Command not found {command_name}"
+            print_debug(f"Command not found '{command_name}'")
+            return {"success": False, "error": f"Command not found '{command_name}'"}, f"Command not found '{command_name}'"
 
         avoid_filter_names = self.config.get("avoid-commands", [])
         avoid_filter_names_set = set(avoid_filter_names)
         if command_name in avoid_filter_names_set:
             print_debug(f"Command not allowed {command_name}")
-            return {"success": False, "error": f"Command not allowed {command_name}"}, f"Command not allowed {command_name}"
+            return {"success": False, "error": f"Command not allowed '{command_name}'"}, f"Command not allowed '{command_name}'"
 
         # Definiere eine Reihenfolge für die Modifiertasten
-        order = ["alt", "ctrl", "shift", "altleft", "ctrlleft", "shiftleft", "altright", "ctrlrigth", "shiftright"]
+        order = ["alt", "ctrl", "shift", "altleft", "ctrlleft", "shiftleft", "altright", "ctrlright", "shiftright"]
         modifiers = set(order)
         keys = command.get("keyboard-mapping").split("+")
         
