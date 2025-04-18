@@ -212,11 +212,15 @@ class OpenAiWingman(Wingman):
             return result.text if result else None, None
 
         azure_config = None
+        stt_model = None
         if self.stt_provider == "azure":
             azure_config = self._get_azure_config("whisper")
 
+        if self.stt_provider == "openai":
+            stt_model = self.config["openai"].get("stt_model")
+
         transcript = self.openai.transcribe(
-            audio_input_wav, response_format=response_format, azure_config=azure_config
+            audio_input_wav, model=stt_model, response_format=response_format, azure_config=azure_config
         )
 
         return transcript.text if transcript else None, None
@@ -509,7 +513,7 @@ class OpenAiWingman(Wingman):
             self._play_with_openai(text)
 
     def _play_with_openai(self, text):
-        response = self.openai.speak(text, self.config["openai"].get("tts_voice"))
+        response = self.openai.speak(text, self.config["openai"].get("tts_model"), self.config["openai"].get("tts_voice"))
         if response is not None:
             self.audio_player.stream_with_effects(response.content, self.config)
 

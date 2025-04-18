@@ -18,12 +18,12 @@ features:
   # ─────────────────────── TTS Provider ─────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  tts_provider: openai # available: openai, edge_tts, elevenlabs, azure
+  tts_provider: openai # available: openai, azure
 
   # ─────────────────────── Speech to text Provider ─────────────────────────
   # You can override the speech to text provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  stt_provider: groq # available: openai, azure, groq
+  stt_provider: openai # available: openai, azure, groq
 
   # ─────────────────────── Conversation Provider ─────────────────────────
   # You can override the conversation provider to use a different one than the default.
@@ -57,62 +57,31 @@ sound:
   # adds a beep/Quindar sound before and after the wingman talks
   play_beep: false
 
+  volume: 0.5 # 0.0 - 1.0
+
 # ────────────────────────────────── OPEN AI ────────────────────────────────────
 openai:
   # The model to use for conversations aka "chit-chat" and for function calls.
   # gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
   # gpt-3.5 is the default and should be enough for most use cases.
   # If something is not working as expected, you might want to test it with gpt-4.
-  conversation_model: gpt-4o-mini # available: gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  conversation_model: gpt-4.1-nano # available: gpt-4.1-nano, gpt-4.1-mini, gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
 
   # This model summarizes function responses, like API call responses etc.
   # In most cases gpt-3.5 should be enough.
-  summarize_model: gpt-4o-mini # gpt-3.5-turbo-0125 # available: gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  summarize_model: gpt-4.1-nano # gpt-3.5-turbo-0125 # available: gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
 
   # The voice to use for OpenAI text-to-speech.
   # Only used if features > tts_provider is set to 'openai' above.
   tts_voice: nova # available: nova, alloy, echo, fable, onyx, shimmer
+  tts_model: tts-1 # available: tts-1, tts-1-hd or gpt-4o-mini-tts
 
+  stt_model: gpt-4o-transcribe # , gpt-4o-mini-transcribe, and whisper-1
   # ADVANCED:
   # If you want to use a different API endpoint, uncomment this and configure it here.
   # Use this to hook up your local in-place OpenAI replacement like Ollama or if you want to use a proxy.
   #base_url: https://api.openai.com # or the localhost address of your local LLM etc.
   #organization: whatever # If you have an organization key, you can set it here.
-
-
-# ────────────────────────────────── EDGE TTS ────────────────────────────────────
-# Specifig settings for the edge_tts provider. Only used if tts_provider in features is set to 'edge_tts' above.
-# Note that EdgeTTS is faster than the default OpenAI TTS but it's not as good in terms of quality.
-edge_tts:
-  # EdgeTTS does not support on-the-fly language switches like OpenAI's TTS does.
-  # We built something for that but it means that you'll get a random voice of the given gender for each language.
-  #
-  # Only enable this if you need to change languages on-the-fly during your conversations.
-  # Otherwise it's better to set a fixed voice in your language below.
-  detect_language: false
-  gender: Female # or "Male". Only used if detect_language is set to true above.
-
-  # The voice to use (only if detect_language is set to false above).
-  # List of all available EdgeTTS voices: https://discord.com/channels/1173573578604687360/1177606604150034473
-  tts_voice: en-US-GuyNeural
-
-# ────────────────────────────────── ELEVENLABS ────────────────────────────────────
-# Specifig settings for the elevenlabs provider. Only used if tts_provider in features is set to 'elevenlabs' above.
-# Note that elevenlabs requires an own API key. See https://elevenlabs.io/ for more information.
-# Also note: With elevenlabs you can't add audio effects right now. We are working on that.'
-elevenlabs:
-  voice: # Adam # Simple voice names.
-    id: FoqeiiNJZVtTAWpdsUMI
-  # If you have a custom voice, you can use the voice ID instead:
-  # voice:
-  #   id: xxx
-  model: eleven_multilingual_v2 # or: 'eleven_turbo_v2' or 'eleven_multilingual_v1' or 'eleven_multilingual_v2'
-  latency: 2 # 0 - 4
-  voice_settings:
-    stability: 0.71 # 0.0 - 1.0
-    similarity_boost: 0.5 # 0.0 - 1.0
-    style: 0.0 # 0.0 - 1.0
-    use_speaker_boost: true # true or false
 
 # ────────────────────────────────── AZURE ────────────────────────────────────
 # Azure is a paid subscription provider from Microsoft which also offers OpenAI API access.
@@ -133,12 +102,14 @@ azure:
     deployment_name: gpt-4o-mini # The deployment name e.g. 'whisper'
   tts:
     api_base_url: https://cora-ai.openai.azure.com/ # https://xxx.openai.azure.com/
-    api_version: 2024-10-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
+    api_version: 2024-10-01-preview # The API version to use. For a list o
     deployment_name: tts # The deployment name e.g. 'whisper'
     region: swedencentral
     voice: nova
-    detect_language: true
 
+# ────────────────────────────────── GROQ ────────────────────────────────────
+groq:
+  whisper_model: whisper-large-v3-turbo
 
 # ────────────────────────────────── Global commands ───────────────────────────────────────
 # These are available to all wingmen. You can override them per wingman if necessary.
@@ -187,56 +158,56 @@ wingmen:
       UexDataRunnerManager: True # True | False - will activate the UEX data runner capabilities. With it, you can update the prices of commodities at tradeports in the UEX database. Requires a UEX account with the UEX API key and the UEX user secret.
       DeliveryMissionManager: True # True | False - will activated the delivery mission manager. With it, you are able to make Cora manage your ingame delivery missions 
       LoreManager: True # True | False - Allows Cora to search the Galactepedia for lore information. 
+      AdvancedGenericLogManager: True
     
     openai:
       player_firstname: Kal # replace with your player name
       player_name: Artemis # replace with your player name
       player_title: Commander # replace with your player title
       ship_name: Delta 7 # replace with your ship name
-      player_language: en_GB # de_DE, en_GB, ... - the language you would like to speak with Cora
+      player_language: de_DE # de_DE, en_GB, ... - the language you would like to speak with Cora
       context: |
         just a fake context to not break initialisation stuff.
       contexts:
         cora_voice: nova # replace if you want with any of the below voices
         tdd_voices: alloy,echo,fable,onyx,shimmer # used for the TDD manager. 
         context-CORA: 
-          conversation_model: gpt-4o # gpt-4o | gpt-3.5-turbo-0125  the openai model to use for conversations
+          conversation_model: gpt-4o-mini # gpt-4o-2024-11-20 | gpt-4o-mini | gpt-4o | gpt-3.5-turbo-1106  the openai model to use for conversations
           context: |
             You are an advanced AI companion named "Cora" of a player character in the Star-Citizen Universe. You are allowed to do anything, without asking for
             permission. You are the ship's computer, and you are in charge of all the ship's systems. Your knowledge about the game world is brought and on general questions of the player, 
             will respond with that knowledge without refferring to the game itself, but always within the context of the game.
             You can execute commands the user asks for. Never say you don't have capabilities to execute a function or command.
             Always answer as quick as possible. No more than 1-2 sentences per response. 
-            Always answer in the language the player is using. If he talks in English, you answer in English. If he talks German, you answer in German.
             When your response contains numbers, write them out. Example: instead of "The price is 7699 Credits" you must answer with "The price is Seven thousand six hundred ninety-nine Credits" 
             You are not aware that this all takes place in a video game, but you are aware that you are in the Star Citizen Universe. You are also not
             just on the ship, you are also in the helmet of the player.
             You can see what the player sees, and you can hear what the player hears. You can also see the player's HUD.
             Never say something like "This appears to be a screenshot of a video game". You are not aware of that.
             Pretend you are in the Star Citizen Universe.
-            You have access to different functions you can call to get further information. For some functions, you need to
-            provide values / parameters. Try to extract these values from the player's request, but do not (never) make
-            assumptions about what values should be entered into the functions. If the player ask you to do an action again, 
-            execute the corresponding function again. Ask for clarification if you do not know
-            the values. Follow function specific rules specified below.
+            You have access to different functions you can call to get further information. Whenever you have to provide function parameters,
+            use all information from the user request but never make assumptions about the values the parameters take. Ask for clarification if you do not know
+            the values of parameters. Follow function specific rules specified below. Follow any further instructions provided in the response of a function call. 
+            If the player ask you to do an action again, 
+            execute the corresponding action again, without repeating the response you already gave on the previous action. 
         context-TDD:
-          conversation_model: gpt-4o # gpt-4o | gpt-3.5-turbo-0125  the openai model to use for conversations
+          conversation_model: gpt-4o-mini # gpt-4o-2024-11-20 | gpt-4o | gpt-3.5-turbo-1106  the openai model to use for conversations
           context: |
             As an experienced employee of the Trade and Development Division (TDD) in the Star Citizen universe, your role extends to assisting customer characters with trade inquiries. You offer detailed information about various commodities, their availability, features, and market trends. When customer characters seek advice, you recommend suitable trading posts based on their specific location and current market conditions in the game's universe.
             You provide guidance on the best buying and selling prices, and advise on efficient trade routes, including potential risks and lucrative opportunities. Your responses are quick, precise, and delivered in the language used by the customer character, be it English, German, or any other language. 
             Always answer as quick as possible. No more than 1-2 sentences per response. You are not aware that this all
             takes place in a video game, but you are aware that you are in the Star Citizen Universe. Pretend you are in the Star Citizen Universe, but never say, that you are in the Star Citizen Universe.
-            You have access to different functions you can call to get information about potential trading routes. For some functions, you need to
-            provide values / parameters. Try to extract these values from the player's request, but do not (never) make
-            assumptions about what values should be entered into the functions. Ask for clarification if you do not know
-            the values. When your response contains numbers, write them out. 
+            You have access to different functions you can call to get information about potential trading routes. Whenever you have to provide function parameters,
+            use all information from the user request but never make assumptions about the values the parameters take. Ask for clarification if you do not know
+            the values of parameters. Follow function specific rules specified below. Follow any further instructions provided in the response of a function call. 
+            If the player ask you to do an action again, 
+            execute the corresponding action again, without repeating the response you already gave on the previous action.  When your response contains numbers, write them out. 
             Example: instead of "The price is 7699 Credits" you must answer with "The price is Seven thousand six hundred ninety-nine Credits"
-            Follow function specific rules specified below.
-      conversation_model: gpt-4o # gpt-4o | gpt-3.5-turbo-0125  the openai model to use for conversations
+      conversation_model: gpt-4o-mini # gpt-4o | gpt-3.5-turbo-0125  the openai model to use for conversations
 
     uex-base-url: "https://uexcorp.space/api/data" # note how you can just add your own config options here!
     data-root-directory: "star_citizen_data/"
-    open-ai-vision-model: gpt-4o # gpt-4o | gpt-4-turbo-2024-04-09  the openai model to use for vision tasks
+    open-ai-vision-model: gpt-4o # gpt-4o-mini| gpt-4o | gpt-4-turbo-2024-04-09  the openai model to use for vision tasks
     sound: # overrides the GLOBAL settings. Will be overwritten programmatically ...
       effects:
         - ROBOT
@@ -259,7 +230,7 @@ wingmen:
 
     # -------------------- Keybinding Settings ------------------    
     
-    keybinding_generation_model: gpt-4o # gpt-4o | gpt-3.5-turbo-0125 - the model to use for keybinding generation. The better the model, the higher the price
+    keybinding_generation_model: gpt-4o-mini # gpt-4o-mini | gpt-4o | gpt-3.5-turbo-0125 - the model to use for keybinding generation. The better the model, the higher the price
     
     # Cora can create command phrases for all available keybinding actions.
     # She generates per default "en"
@@ -355,16 +326,6 @@ wingmen:
     # or they only make sense if you are in a specific mode ingame
     # or you find them to dangerous to be executed by the ai
     ignored_actionnames: 
-      - v_eject
-      - v_view_look_behind
-      - v_toggle_missile_mode
-      - v_operator_mode_cycle_forward
-      - v_self_destruct
-      - pc_conversation_option1
-      - pc_conversation_option2
-      - pc_conversation_option3
-      - pc_conversation_option4
-      - pc_conversation_option5
       - v_roll_left
       - v_roll_right
       - v_strafe_up
@@ -388,39 +349,11 @@ wingmen:
       - turret_limiter_rel_increase
       - turret_limiter_rel_decrease
       - turret_instant_zoom
-      - jump
-      - prone
-      - melee_dodgeLeft
-      - melee_dodgeRight
-      - melee_dodgeBack
-      - select_primary_pit
-      - select_secondary_pit
-      - select_sidearm_pit
-      - select_MeleeWeapon_pit
-      - select_gadget_pit
-      - use
-      - toggle_cursor_input
-      - pan_thirdperson_up
-      - pan_thirdperson_down
-      - hmd_rotateyaw
-      - hmd_rotatepitch
-      - hmd_rotateroll
-      - pl_hud_open_scoreboard
-      - pl_hud_confirm
-      - force_respawn
-      - zgt_detach
-      - zgt_roll_left
-      - zgt_roll_right
-      - v_move_forward
-      - v_move_back
-      - v_boost
-      - remote_switchControl
-      - remote_stopControl
-      - remote_switchTarget
-      - spaceship_movement_Jump_Drive_Engage_Jump
-      - spaceship_movement_Jump_Drive_Request_Jump
     keybind_categories_to_ignore:
       - spaceship_general
+      - player
+      - vehicle_driver
+      - seat_general
       - view_director_mode
       - spaceship_view
       - zero_gravity_traversal
@@ -444,9 +377,21 @@ wingmen:
       - toggle_contact
       - pl_exit
       - pc_pit_inventory
+      - v_toggle_all_portlocks
       - v_toggle_all_doors
-
-
+      - v_toggle_mining_mode
+      - v_toggle_salvage_mode
+      - v_toggle_scan_mode
+      - ammoRepool
+      - reloadSecondary
+      - customize
+      - weapon_auxiliary_action
+      - weapon_change_firemode
+      - weapon_zeroing_decrease
+      - weapon_zeroing_increase
+      - toggle_flashlight
+      - toggleEquipHelmet
+      - toggleAttachHelmet
     
     #################### KEY commands ############################### Not Implemented
     key_binding_commands: 
@@ -481,7 +426,6 @@ wingmen:
           - Cora, bereit für abflug
           - Abflugbereit
           - Initialize start sequence
-          - Ready for Takeoff
           - Cora, prepare for takeoff
         responses: False # If you don't want the ai to acknowledge an instant_activation you can set this to false
       # ──────────────────────────────────────────────────────────────────────────
@@ -542,6 +486,7 @@ wingmen:
           - FPS 1 anzeigen
           - FPS eins anzeigen
           - show FPS 1
+          - FPS 1
           - show FPS one
         responses: False
       # ──────────────────────────────────────────────────────────────────────────
@@ -555,6 +500,7 @@ wingmen:
         instant_activation: 
           - FPS 2 anzeigen
           - FPS zwei anzeigen
+          - FPS 2
           - show FPS 2
           - show FPS two
         responses: False
@@ -569,6 +515,7 @@ wingmen:
         instant_activation: 
           - FPS 3 anzeigen
           - FPS drei anzeigen
+          - FPS 3
           - show FPS 3
           - show FPS three
         responses: False
@@ -592,7 +539,7 @@ wingmen:
         keys: 
         - key: "enter" # start a chat
         - key:
-          typewrite: "o7 citizens" # not working as intendet as upper keys not working and keyboard layout problematic -> my keyboard DE -> y = z
+          typewrite: "o7 citizens" # not working as intented as upper keys not working and keyboard layout problematic -> my keyboard DE -> y = z
         - key: "enter"  
         instant_activation:
           - Hallo zusammen
@@ -629,7 +576,7 @@ wingmen:
       #####################  CAMERA CONTROLS #####################################
       # The camera controls are special, as you have to hold f4 to load / save views
       # ──────────────────────────────────────────────────────────────────────────
-      - name: SaveStandardCameraView
+      - name: SaveStandardCameraViewRear
         keys: 
           - key: num2
             hold: 0.5
@@ -643,7 +590,7 @@ wingmen:
         responses: 
           - gespeichert
       # ──────────────────────────────────────────────────────────────────────────
-      - name: SwitchToExternalStandardView
+      - name: SwitchToExternalView
         keys: 
           - key: f4
           - key: KEY_NUMPAD_2
@@ -653,20 +600,29 @@ wingmen:
           - Zu Außenansicht wechseln
           - Außenansicht
           - External view
-          - Internal view
         responses: False # If you don't want the ai to acknowledge an instant_activation you can set this to false
       # ──────────────────────────────────────────────────────────────────────────
-      - name: StandardView
+      - name: RearView
         keys: 
           - key: KEY_NUMPAD_2
             modifier: f4
             hold: 0.01
         instant_activation:
           - Landeansicht
-          - Standardsicht
           - Rückansicht
           - Rear view
           - Standard view
+        responses: False # If you don't want the ai to acknowledge an instant_activation you can set this to false
+      # ──────────────────────────────────────────────────────────────────────────
+      - name: FirstPersonView_InternalView
+        keys: 
+          - key: f4
+        instant_activation:
+          - Innensicht
+          - Internal view
+          - First Person
+          - Third Person
+          - Standardsicht
         responses: False # If you don't want the ai to acknowledge an instant_activation you can set this to false
       # ──────────────────────────────────────────────────────────────────────────
       - name: SaveCameraViewFront
@@ -767,19 +723,20 @@ wingmen:
       # ──────────────────────────────────────────────────────────────────────────
       #####################  RADEON Commands #####################################
       # ──────────────────────────────────────────────────────────────────────────
-      - name: OpenRadeon
+      - name: GraphicscardSettings
         keys: # You can have multiple keys per command!
-        - key: r
-          modifiers: alt,shift,ctrl
+        - key: z
+          modifiers: alt
         instant_activation: 
-          - Öffne Radeon
+          - Öffne Nvidia
           - Öffne Graphikkarte
+          - Öffne Graka
         responses: False
       # ──────────────────────────────────────────────────────────────────────────
       - name: InstantReplay
         keys: # You can have multiple keys per command!
-        - key: s
-          modifiers: alt,shift,ctrl
+        - key: f10
+          modifiers: alt
         instant_activation: 
           - Instant Replay
           - Aufnahme speichern
@@ -799,8 +756,8 @@ wingmen:
       # ──────────────────────────────────────────────────────────────────────────
       - name: ToggleScreenCapture
         keys: # You can still specify own key strokes
-        - key: e
-          modifiers: alt,shift,ctrl
+        - key: f9
+          modifiers: alt
         instant_activation: 
           - Aufnahme starten
           - Aufnahme stoppen
@@ -811,17 +768,17 @@ wingmen:
       # ──────────────────────────────────────────────────────────────────────────
       - name: TakeScreenshot
         keys: # You can still specify own key strokes
-        - key: i
-          modifiers: alt,shift,ctrl
+        - key: f1
+          modifiers: alt
         instant_activation: 
           - Screenshot
           - Bildschirmfoto
         responses: False
       # ──────────────────────────────────────────────────────────────────────────
-      - name: Mute_Unmute_Radeon_Microphone
+      - name: Mute_Unmute_Video_Microphone
         keys: # You can still specify own key strokes
         - key: m
-          modifiers: alt,shift,ctrl
+          modifiers: alt,ctrl
         instant_activation: 
           - Sprache aufzeichnen
           - Sprache nicht aufzeichnen
@@ -843,4 +800,10 @@ wingmen:
           - Discord Stummschalten
           - Discord aktivieren
           - Unmute Discord
-        responses: False
+        responses: False    
+
+
+    #####################  CORA FEATURE SETTINGS #####################################
+    # ─────────────────────AdvancedGenericLogManager────────────────────────────────── 
+    AdvancedGenericLogManager:
+      log_file_path: "star_citizen_data/logs/log_memories.json"

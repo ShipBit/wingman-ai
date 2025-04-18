@@ -106,12 +106,12 @@ class OpenAi:
             self._handle_key_error()
             return None
 
-    def speak(self, text: str, voice: str = "nova"):
+    def speak(self, text: str, model: str = "tts-1", voice: str = "nova"):
         try:
             if not voice:
                 voice = "nova"
             response = self.client.audio.speech.create(
-                model="tts-1",
+                model=model,
                 voice=voice,
                 input=text,
             )
