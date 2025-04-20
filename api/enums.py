@@ -81,15 +81,14 @@ class MistralModel(Enum):
 
 
 class PerplexityModel(Enum):
-    """https://docs.perplexity.ai/guides/model-cards"""
+    """https://docs.perplexity.ai/models/model-cards"""
 
-    SONAR_SMALL = "llama-3.1-sonar-small-128k-online"
-    SONAR_MEDIUM = "llama-3.1-sonar-large-128k-online"
-    SONAR_LARGE = "llama-3.1-sonar-huge-128k-online"
-    CHAT_SMALL = "llama-3.1-sonar-small-128k-chat"
-    CHAT_LARGE = "llama-3.1-sonar-large-128k-chat"
-    LLAMA3_8B = "llama-3.1-8b-instruct"
-    LLAMA3_70B = "llama-3.1-70b-instruct"
+    SONAR_DEEP_SEARCH = "sonar-deep-research"
+    SONAR_REASON_PRO = "sonar-reasoning-pro"
+    SONAR_REASON = "sonar-reasoning"
+    SONAR_PRO = "sonar-pro"
+    SONAR = "sonar"
+    R1_1776 = "r1-1776"
 
 
 class GoogleAiModel(Enum):

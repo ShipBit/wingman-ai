@@ -447,12 +447,18 @@ class ConfigMigrationService:
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:
+            # openai tts
             old["openai"]["tts_model"] = "tts-1"
             old["openai"]["tts_speed"] = 1.0
             self.log("- added new properties: openai.tts_model, openai.tts_speed")
+
+            # perplexity model
+            old["perplexity"]["conversation_model"] = "sonar"
+            self.log("- migrated perplexity model to new default (sonar), previous models don't exist anymore")
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            # skill overrides
             if old.get("skills", None):
                 for skill in old["skills"]:
                     skill.pop("description", None)
@@ -462,6 +468,15 @@ class ConfigMigrationService:
                     self.log(
                         "- removed Skill property overrides: description, examples, category, hint"
                     )
+
+            # perplexity model
+            if old.get("perplexity", {}).get("conversation_model", None):
+                # models got replaced
+                old["perplexity"]["conversation_model"] = "sonar"
+                self.log(
+                    "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
+                )
+
             return old
 
         self.migrate(
