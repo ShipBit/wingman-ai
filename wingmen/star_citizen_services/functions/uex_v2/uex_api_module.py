@@ -930,8 +930,7 @@ class UEXApi2():
             "uex_community_trade_routes": uex_community_trade_routes,  # UEX Top 5
             "number_of_alternatives": len(best_trade_routes) + len(uex_community_trade_routes)
         }
-
-    
+  
     # ---------------------------------------------------------
     #   ÜBERARBEITET: _find_best_selling_location_for_commodity
     # ---------------------------------------------------------
@@ -942,8 +941,9 @@ class UEXApi2():
         commodities_data = self.data[CATEGORY_COMMODITIES].get("data", {})
         no_route = {"success": False, "message": f"No selling location found for commodity {commodity_id}."}
 
-        allowedCommodities = self._filter_available_commodities(commodities_data, include_restricted_illegal, isOnlySellable=True)
-        if commodity_id not in allowedCommodities:
+        allowed_commodities = self._filter_available_commodities(commodities_data, include_restricted_illegal, isOnlySellable=True)
+        if commodity_id not in allowed_commodities:
+            no_route["message"] = f"Commodity {commodity_id} is not sellable."
             return no_route
 
         # community routes:
@@ -1198,7 +1198,8 @@ class UEXApi2():
                 "success": False,
                 "result_interpretation_instructions": "Ask the player the commodity that he wants to sell."
             }
-        return self._find_best_selling_location_for_commodity(commodity[ID_FIELD_NAME])
+        print_debug(f"Commodity found for '{commodity_name}: {commodity['name']}")
+        return self._find_best_selling_location_for_commodity(commodity[ID_FIELD_NAME], include_restricted_illegal=True)
     
     def find_best_sell_price_at_location_codes(self, commodity_name, location_name):
         if __name__ != "__main__":
@@ -1317,7 +1318,7 @@ class UEXApi2():
             return None
         
         commodity = commodity_mapping["root_object"]
-        print_debug(f"found commodity '{commodity_mapping_name}':\n {json.dumps(commodity, indent=2)}")
+        print_debug(f"found matching commodity for '{commodity_mapping_name}':\n {json.dumps(commodity, indent=2)}")
         return commodity
 
     def get_commodity_for_tradeport(self, commodity_mapping_name, tradeport):

@@ -368,6 +368,15 @@ class UexDataRunnerManager(FunctionManager):
                     }
         
         validated_tradeport = self.uex2_service.get_data("terminals").get(str(new_terminal_id))
+        if not validated_tradeport:
+            self.overlay.display_overlay_text(f"Error: No tradeport with id {new_terminal_id} found.")
+            print(f"terminal with id {new_terminal_id} not found.")
+            terminals = self.uex2_service.get_data("terminals")
+            first_terminal = terminals[next(iter(terminals))]
+            print(json.dumps(first_terminal, indent=2))
+            return {"success": False, 
+                    "instructions": "You couldn't identify the tradeport. Instruct the user to analyse the log files.", 
+                    }
         operation = new_operation
         now = datetime.datetime.now()
         self.current_timestamp = now.strftime("%Y%m%d_%H%M%S_%f")

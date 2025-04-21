@@ -82,18 +82,8 @@ class TddManager(FunctionManager):
                             "include_illegal_commodities": {
                                 "type": "boolean",
                                 "description": "Indicates if illegal or restricted commodities should be searched as well. Only True, if the user explicitely requests it."
-                            },
-                            "request_type": {
-                                "type": "string",
-                                "description": (
-                                    "The possible request_types the user can ask for. This defines what other parameters are required for this request to be fulfillable. "
-                                ),
-                                "enum": ["find_best_trade_route_starting_at_location", 
-                                         "find_best_trade_route_for_commodity_between_locations", "find_any_locations_to_sell_commodity", 
-                                         "find_best_trade_route_between, find_tradeports_at_given_location_for_commodity, find_best_trade_routes_around_location"]
-                            },
-                        },
-                        "required": ["request_type"]
+                            }
+                        }
                     }
                 }
             },
@@ -118,13 +108,6 @@ class TddManager(FunctionManager):
                 "find the best request_type for the trade inquiry of the player and make sure to follow the given instructions: "
                 "All locations can be planets, moons / satellites or tradeports. "
                 "For any of the parameters, make sure to only use one of the allowed values. If there is none that matches, ask for clarification. "
-                "The request_type should be one of the following: "
-                "- find_best_trade_route_starting_at_location: used, if the player beginns a trade route at a specific trade port. Requires only the user to provide the parameter 'location_name_from' "
-                "- find_best_trade_route_between: used, if the player wants to trade between locations. Requires both 'location_name_from' and 'location_name_to' "
-                "- find_tradeports_at_given_location_for_commodity: used if the player wants to sell a specific commodity at a given location, a given moon, planet or system. Requires 'commodity_name' and 'location_name_to' "
-                "- find_best_trade_route_for_commodity_between_locations: used if the player wants to trade a given commodity without specifying any buying location or selling location. Requires only 'commodity_name' "
-                "- find_any_locations_to_sell_commodity: used if the player wants to know where he can sell a given commodity independent of any location. Requires only 'commodity_name' "
-                "- find_best_trade_routes_around_location: used, if the player wants to trade around at a specific area like a planetary system or moon. Requires only 'location_name_to' "
         )
 
     def get_trade_information_from_tdd_employee(self, function_args):
@@ -135,27 +118,28 @@ class TddManager(FunctionManager):
         location_from = function_args.get("location_name_from")
         location_to = function_args.get("location_name_to")
         commodity_name = function_args.get("commodity_name")
-        include_illegal = function_args.get("include_illegal_commodities", False)
+        not_found_message = ""
         
         # Determine which function to call based on provided parameters.
         if location_from and not location_to and not commodity_name:
             # Only location_from is provided -> find best trade route starting at location
             function_response = self.uex_service.find_best_trade_from_location_code(location_name_from=location_from)
+            not_found_message = f"No trade found @'{location_from}'->."
         elif location_from and location_to:
             # Both locations provided -> find best trade route between locations
             function_response = self.uex_service.find_best_trade_between_locations_code(location_name_from=location_from, location_name_to=location_to)
+            not_found_message = f"No trade found @'{location_from}'->{location_to}."
         elif commodity_name and location_to and not location_from:
             # Commodity and destination provided -> find tradeports at given location for commodity
             function_response = self.uex_service.find_best_sell_price_at_location_codes(location_name=location_to, commodity_name=commodity_name)
+            not_found_message = f"No trade found @'{location_to}' for {commodity_name}."
         elif commodity_name and not location_from and not location_to:
-            # Only commodity provided -> choose method based on include_illegal flag
-            if include_illegal:
-                function_response = self.uex_service.find_best_selling_location_for_commodity_code(commodity_name=commodity_name)
-            else:
-                function_response = self.uex_service.find_best_trade_for_commodity_code(commodity_name=commodity_name)
+            function_response = self.uex_service.find_best_selling_location_for_commodity_code(commodity_name=commodity_name)
+            not_found_message = f"No trade found for {commodity_name}."
         elif location_to and not location_from and not commodity_name:
             # Only location_to provided -> find best trade routes around the location
             function_response = self.uex_service.find_best_trade_between_locations_code(location_name_from=location_to, location_name_to=location_to)
+            not_found_message = f"No trade for destination '{location_to}'."
         else:
             # In case the provided parameters are insufficient or ambiguous, ask the player for clarification.
             return {"instructions": "Bitte geben Sie genauere Angaben an. Zum Beispiel: Von welchem Ort starten Sie? Welcher Handel soll durchgeführt werden?"}
@@ -167,7 +151,7 @@ class TddManager(FunctionManager):
             # Safely retrieve keys with fallback values
             moon_or_planet_buy = trade_route.get("buy_moon", "") or trade_route.get("buy_orbit", "")
             moon_or_planet_sell = trade_route.get("sell_moon", "") or trade_route.get("sell_orbit", "")
-            if commodity_name and location_to and not location_from:
+            if commodity_name and moon_or_planet_sell and not moon_or_planet_buy:
                 self.overlay.display_overlay_text(
                     f'Sell {trade_route["commodity"]} at {trade_route["sell_at_tradeport_name"]} ({moon_or_planet_sell}) for {trade_route["sell_price"]} aUEC.'
                 )
@@ -181,7 +165,7 @@ class TddManager(FunctionManager):
                             f'Sell at {trade_route["sell_at_tradeport_name"]} ({moon_or_planet_sell}).')
         else:
             # If not successful, display the error message if available.
-            message = function_response.get("message", "Keine passende Handelsroute gefunden.")
+            message = function_response.get("message", not_found_message)
             self.overlay.display_overlay_text(message)
             print_debug(message)
             
