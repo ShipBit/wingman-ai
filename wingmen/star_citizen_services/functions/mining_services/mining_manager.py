@@ -347,7 +347,7 @@ class MiningManager(FunctionManager):
             if scout_finding_id is None:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
                 return {"success": False, "message": "Couldn't create a new cluster."}
-            function_response = {"success": True, "instructions": "Respond with variation of 'aye captain'. Keep it short!"}
+            function_response = {"success": True, "instructions": "Give a very short confirmation message to the player. "}
             self.overlay.display_overlay_text("Cora: Done", vertical_position_ratio=3, display_duration=5000)
        
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
