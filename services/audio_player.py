@@ -14,15 +14,14 @@ class AudioPlayer:
     def play_file(self, filename: str):
         with open(filename, "rb") as f:
             audio_data = f.read()
-        volume = self.sound_config.get("volume", 0.8)
-        audio_data = audio_data * volume
         self.play(audio_data)
 
     def play(self, stream: bytes):
         audio, sample_rate = self._get_audio_from_stream(stream)
-        sd.sleep(50)  # Add a short delay before playing
         volume = self.sound_config.get("volume", 0.8)
         audio = audio * volume
+        audio = np.clip(audio, -1.0, 1.0)  # Prevent clipping
+        audio = self.prepend_silence(audio, sample_rate, ms=50)  # 50ms Stille am Anfang
         sd.play(audio, sample_rate)
         sd.wait()
 
@@ -30,6 +29,8 @@ class AudioPlayer:
         audio, sample_rate = self._get_audio_from_stream(stream)
         volume = self.sound_config.get("volume", 0.8)
         audio = audio * volume
+        audio = np.clip(audio, -1.0, 1.0)  # Prevent clipping
+        audio = self.prepend_silence(audio, sample_rate, ms=50)  # 50ms Stille am Anfang
         sd.play(audio, sample_rate)
         sd.wait()
     
@@ -61,6 +62,7 @@ class AudioPlayer:
 
         volume = config.get("sound", {}).get("volume", 0.8)
         audio = audio * volume
+        audio = np.clip(audio, -1.0, 1.0)  # Prevent clipping
         sd.play(audio, sample_rate)
 
         if wait:

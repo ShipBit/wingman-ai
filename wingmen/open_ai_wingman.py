@@ -11,6 +11,76 @@ import os
 
 printr = Printr()
 
+DEBUG = False
+
+DEBUG_LOG_PATH = os.path.join("debug_data", "openai", "debug.log")
+
+
+def print_debug(message: str):
+    """Prints debug messages if DEBUG is enabled."""
+    if DEBUG:
+        print(message)
+
+
+def _ensure_debug_log():
+    """Ensure debug log file exists and is empty (truncate)."""
+    log_dir = os.path.dirname(DEBUG_LOG_PATH)
+    os.makedirs(log_dir, exist_ok=True)
+    with open(DEBUG_LOG_PATH, "w", encoding="utf-8") as f:
+        pass  # Truncate file
+
+
+def _default_json(obj):
+    # Try Pydantic/BaseModel
+    if hasattr(obj, "model_dump"):
+        return obj.model_dump()
+    # Try __dict__
+    if hasattr(obj, "__dict__"):
+        return obj.__dict__
+    # Try as string fallback
+    return str(obj)
+
+
+def _log_debug_entry(entry: dict):
+    """Append a formatted entry to the debug log file for better readability."""
+    with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
+        entry_type = entry.get("type", "")
+        f.write("\n" + "="*30 + f" {entry_type.upper()} " + "="*30 + "\n")
+        if entry_type == "request":
+            # Pretty print messages and tools
+            f.write("MESSAGES:\n")
+            messages = entry.get("messages", [])
+            for i, msg in enumerate(messages):
+                try:
+                    msg_str = json.dumps(msg, ensure_ascii=False, indent=4, default=_default_json)
+                except Exception:
+                    msg_str = str(msg)
+                f.write(f"  [{i}] {msg_str}\n")
+            f.write("\nTOOLS:\n")
+            tools = entry.get("tools", [])
+            for tool in tools:
+                try:
+                    tool_str = json.dumps(tool, ensure_ascii=False, indent=4, default=_default_json)
+                except Exception:
+                    tool_str = str(tool)
+                f.write(f"  {tool_str}\n")
+            f.write(f"\nMODEL: {entry.get('model')}\n")
+            f.write(f"AZURE_CONFIG: {entry.get('azure_config')}\n")
+        elif entry_type == "response":
+            resp = entry.get("response")
+            # Try to pretty print JSON string if possible
+            try:
+                resp_obj = json.loads(resp)
+                resp_str = json.dumps(resp_obj, ensure_ascii=False, indent=4)
+            except Exception:
+                resp_str = str(resp)
+            f.write("RESPONSE:\n")
+            f.write(resp_str + "\n")
+        else:
+            # Fallback: pretty print the whole entry
+            f.write(json.dumps(entry, ensure_ascii=False, indent=4, default=_default_json) + "\n")
+        f.write("="*70 + "\n")
+
 
 class OpenAiWingman(Wingman):
     """Our OpenAI Wingman base gives you everything you need to interact with OpenAI's various APIs.
@@ -64,6 +134,9 @@ class OpenAiWingman(Wingman):
         self.summarize_provider = self.config["features"].get(
             "summarize_provider", None
         )
+
+        if DEBUG:
+            _ensure_debug_log()
 
     def validate(self):
         errors = super().validate()
@@ -397,12 +470,41 @@ class OpenAiWingman(Wingman):
         if self.conversation_provider == "azure":
             azure_config = self._get_azure_config("conversation")
 
-        return self.openai.ask(
+        # --- Debug logging: log request ---
+        if DEBUG:
+            _log_debug_entry({
+                "type": "request",
+                "messages": self.messages,
+                "tools": self._build_tools(),
+                "model": self.config["openai"].get("conversation_model"),
+                "azure_config": bool(azure_config),
+            })
+
+        result = self.openai.ask(
             messages=self.messages,
             tools=self._build_tools(),
             model=self.config["openai"].get("conversation_model"),
             azure_config=azure_config,
         )
+
+        # --- Debug logging: log response ---
+        if DEBUG and result is not None:
+            try:
+                # Try to serialize the result (may need to convert to dict)
+                if hasattr(result, "model_dump_json"):
+                    response_json = result.model_dump_json()
+                elif hasattr(result, "__dict__"):
+                    response_json = json.dumps(result.__dict__, ensure_ascii=False, default=str)
+                else:
+                    response_json = str(result)
+            except Exception:
+                response_json = str(result)
+            _log_debug_entry({
+                "type": "response",
+                "response": response_json,
+            })
+
+        return result
 
     def _process_completion(self, completion):
         """Processes the completion returned by the GPT call.
@@ -461,12 +563,15 @@ class OpenAiWingman(Wingman):
             The content of the GPT response to the function call summaries.
         """
         azure_config = None
+        # Do not modify the original messages list
+        messages = list(self.messages)
+
         if self.summarize_provider == "azure":
             azure_config = self._get_azure_config("summarize")
 
         summarize_model = self.config["openai"].get("summarize_model")
         summarize_response = self.openai.ask(
-            messages=self.messages,
+            messages=messages,
             model=summarize_model,
             azure_config=azure_config,
         )
@@ -538,7 +643,11 @@ class OpenAiWingman(Wingman):
             self._play_with_openai(text)
 
     def _play_with_openai(self, text):
-        response = self.openai.speak(text, self.config["openai"].get("tts_model"), self.config["openai"].get("tts_voice"))
+        response = self.openai.speak(text, 
+                                     self.config["openai"].get("tts_model"), 
+                                     self.config["openai"].get("tts_voice"),
+                                     self.config["openai"].get("tts_voice_instructions"),
+                                     self.config["openai"].get("player_language"))
         if response is not None:
             self.audio_player.stream_with_effects(response.content, self.config)
 

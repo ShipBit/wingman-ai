@@ -19,35 +19,12 @@ from pedalboard import (
 class SoundEffects(Enum):
     ROBOT = Pedalboard(
         [
-            PitchShift(semitones=-2),  # weniger extreme Tonhöhenänderung
-            Delay(delay_seconds=0.01, feedback=0.3, mix=0.3),  # reduzierter Mix-Wert,
-            Chorus(rate_hz=0.5, depth=0.5, mix=0.4, centre_delay_ms=2, feedback=0.2),
-            Reverb(room_size=0.05, dry_level=0.7, wet_level=0.3, freeze_mode=0.5, width=0.3),
-            Gain(gain_db=6)  # reduzierter Gain-Wert
-            
-            # OLD robot: very robotic
-            # PitchShift(semitones=-3),
-            # Delay(delay_seconds=0.01, feedback=0.5, mix=0.5),
-            # Chorus(
-            #     rate_hz=0.5, depth=0.8, mix=0.7, centre_delay_ms=2, feedback=0.3
-            # ),
-            # Reverb(
-            #     room_size=0.05,
-            #     dry_level=0.5,
-            #     wet_level=0.2,
-            #     freeze_mode=0.5,
-            #     width=0.5,
-            # ),
-            # Gain(gain_db=9),
-            
-            # NEW from main:
-            # PitchShift(semitones=-1),
-            # Delay(delay_seconds=0.01, feedback=0.5, mix=0.2),
-            # Chorus(rate_hz=0.5, depth=0.8, mix=0.5, centre_delay_ms=2, feedback=0.3),
-            # Reverb(
-            #     room_size=0.05, dry_level=0.5, wet_level=0.5, freeze_mode=0.5, width=0.3
-            # ),
-            # Gain(gain_db=8),
+            PitchShift(semitones=-1),  # nur leicht tiefer, damit weibliche Stimme erhalten bleibt
+            Delay(delay_seconds=0.01, feedback=0.1, mix=0.1),  # noch dezenteres Echo
+            Chorus(rate_hz=0.5, depth=0.5, mix=0.45, centre_delay_ms=2, feedback=0.2),  # mehr metallischer Charakter
+            Reverb(room_size=0.01, dry_level=0.7, wet_level=0.2, freeze_mode=0.28, width=0.3),  # etwas mehr "metallisch"
+            Distortion(drive_db=1),  # nur ganz leicht verzerren
+            Gain(gain_db=-1),  # etwas lauter
         ]
     )
     RADIO = Pedalboard(
@@ -57,15 +34,8 @@ class SoundEffects(Enum):
             Resample(6000),  # oder ein anderer Wert
             Gain(gain_db=12),  # Erhöhe für mehr Gesamtlautstärke und Rauschen
             Compressor(threshold_db=-40, ratio=6, attack_ms=1, release_ms=50),
-            Distortion(drive_db=0.3)  # Wert anpassen nach Bedarf
-
-            # New from main: few radio effect
-            # HighpassFilter(1000),
-            # LowpassFilter(5000),
-            # Resample(10000),
-            # Gain(gain_db=3),
-            # Compressor(threshold_db=-21, ratio=3.5, attack_ms=1, release_ms=50),
-            # Gain(gain_db=6),
+            Distortion(drive_db=0.3),  # Wert anpassen nach Bedarf
+            Gain(gain_db=8),  # <--- Add extra gain after compression/distortion
         ]
     )
     INTERIOR_HELMET = Pedalboard(

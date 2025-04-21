@@ -15,7 +15,7 @@ from wingmen.star_citizen_services.functions.uex_v2 import uex_api_module
 from wingmen.star_citizen_services.overlay import StarCitizenOverlay
 from wingmen.star_citizen_services.function_manager import StarCitizensAiFunctionsManager, FunctionManager
 
-DEBUG = True
+DEBUG = False
 
 
 def print_debug(to_print):
@@ -214,11 +214,6 @@ class StarCitizenWingman(OpenAiWingman):
             self.messages = [{"role": "system", "content": f'{context_prompt}. On a request of the Player you will identify the context of his request. The current context is: {new_context.value}. Follow these rules to switch context: {context_switch_prompt}'}]
 
             if len(initial_user_message) > 0:
-                # on startup of Cora, we want to retrieve information that are relevant to the player (like if he has active delivery missions or refinery jobs)
-                # add all additional function prompts of implemented managers for the given context.
-                # initial user message to start-up the conversation.
-                asyncio.run(self._play_to_user("Initialising Cora. Please wait a moment."))
-
                 print(f"Initial user message: {initial_user_message}")
                 initial_user_message = "Follow these instructions: 1. welcome me. 2. summarize in a natural conversational way suitable for a tts engine the following information: " + initial_user_message
                 self._add_user_message(initial_user_message)
@@ -416,6 +411,10 @@ class StarCitizenWingman(OpenAiWingman):
             function_to_call = self.ai_functions_manager.get_function(function_name)
             if callable(function_to_call):
                 function_response = function_to_call(function_args)
+
+        instructions = self.config["openai"].get("summarize_instructions")
+        if instructions and isinstance(function_response, dict):
+            function_response["summarize_instructions"] = instructions
 
         return json.dumps(function_response), instant_reponse
 
