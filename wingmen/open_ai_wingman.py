@@ -646,7 +646,7 @@ class OpenAiWingman(Wingman):
         response = self.openai.speak(text, 
                                      self.config["openai"].get("tts_model"), 
                                      self.config["openai"].get("tts_voice"),
-                                     self.config["openai"].get("tts_voice_instructions"),
+                                     self.config["openai"].get("tts_voice_instructions", ""),
                                      self.config["openai"].get("player_language"))
         if response is not None:
             self.audio_player.stream_with_effects(response.content, self.config)

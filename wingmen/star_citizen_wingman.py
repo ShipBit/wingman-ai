@@ -93,7 +93,7 @@ class StarCitizenWingman(OpenAiWingman):
         self.config["openai"]["contexts"]["tdd_voice"] = self.tdd_voice
         self.config["openai"]["tts_voice"] = self.config["openai"]["contexts"]["cora_voice"]
         self.config["sound"]["play_beep"] = False
-        self.config["sound"]["effects"] = ["INTERIOR_HELMET", "ROBOT"]
+        self.config["sound"]["effects"] = ["ROBOT"]
         self.config["openai"]["conversation_model"] = self.config["openai"]["contexts"][f"context-{AIContext.CORA.name}"]["conversation_model"]
         self.overlay = None # init in validate
         self.ai_functions = {} # init in validate
@@ -441,7 +441,7 @@ class StarCitizenWingman(OpenAiWingman):
         if self.current_context == AIContext.CORA:
             self.config["openai"]["tts_voice"] = self.config["openai"]["contexts"]["cora_voice"]
             self.config["sound"]["play_beep"] = False
-            self.config["sound"]["effects"] = ["INTERIOR_HELMET", "ROBOT"]
+            self.config["sound"]["effects"] = ["ROBOT"]
             self.config["openai"]["conversation_model"] = self.config["openai"]["contexts"][f"context-{AIContext.CORA.name}"]["conversation_model"]
         elif self.current_context == AIContext.TDD:
             self.config["openai"]["tts_voice"] = self.tdd_voice
@@ -452,7 +452,7 @@ class StarCitizenWingman(OpenAiWingman):
         # self._add_user_message(self.current_user_request) # we readd the user message to the new context to make the same user request in the new context
         # context has been switched, so we can return the contexts swtich request
         # self.switch_context_executed = True
-        function_response = f"switched to context {context_name_to_switch_to}, reevaluate the user request, keep the users language"
+        function_response = f"switched to context {context_name_to_switch_to}, reevaluate the previous user request in the new context. "
         instant_reponse = None
         return function_response, instant_reponse
 
@@ -688,6 +688,17 @@ class StarCitizenWingman(OpenAiWingman):
                 }
             }
         return tools
+    
+    def _play_with_openai(self, text):
+
+        voice_instructions = self.config["openai"].get("tts_voice_instructions") if self.current_context == AIContext.CORA else ""
+        response = self.openai.speak(text, 
+                                     self.config["openai"].get("tts_model"), 
+                                     self.config["openai"].get("tts_voice"),
+                                     voice_instructions,
+                                     self.config["openai"].get("player_language"))
+        if response is not None:
+            self.audio_player.stream_with_effects(response.content, self.config)
         
     def _get_cora_tools(self) -> list[dict]:
         tools = []

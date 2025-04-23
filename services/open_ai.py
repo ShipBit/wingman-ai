@@ -265,6 +265,10 @@ class OpenAi:
 
             client_to_use = self.client
 
+            # Ensure voice_instruction is a string
+            if voice_instruction is None:
+                voice_instruction = ""
+
             if model == "gpt-4o-mini-tts":
                 voice_instruction += f" Please speak in {player_language}."
                 response = client_to_use.audio.speech.create(
