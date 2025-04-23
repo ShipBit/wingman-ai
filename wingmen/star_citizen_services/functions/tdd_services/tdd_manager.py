@@ -11,7 +11,7 @@ from wingmen.star_citizen_services.ai_context_enum import AIContext
 from wingmen.star_citizen_services.helper import transform_numbers_in_words
 
 
-DEBUG = True
+DEBUG = False
 # TEST = True
 
 printr = Printr()
@@ -58,25 +58,30 @@ class TddManager(FunctionManager):
                 {
                     "name": self.get_trade_information_from_tdd_employee.__name__,
                     "description": (
-                        "Whenever the user wants to get trading related information, call this function with appropriate parameters. "
-                        "If none matches to the context of the player request, respond with general knowledge of a tdd employee."
+                        "When asked for trading information,  "
+                        "select the appropriate parameters to met the players request and make sure to follow the given instructions: "
+                        "All locations can be planets, moons / satellites or a specific tradeport or even a terminal. "
+                        "The player can ask for a specific location or a general area. "
+                        "When he asks where he can sell something, use the location_name_end_or_sell parameter. "
+                        "When he asks where he can buy something, use the location_name_start_or_buy parameter. "
+                        "For any of the parameters, make sure to only use one of the allowed values. If there is none that matches, ask for clarification. "
                     ),
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "location_name_from": {
+                            "location_name_start_or_buy": {
                                 "type": "string",
-                                "description": "The location, where the player wants buy a commodity or start a trade route from. Can be the name of a planet, a moon / satellite, system or a specific tradeport. Can be empty.",
+                                "description": "The location area, where the player wants buy a commodity or start a trade route from. Can be the name of a planet, a moon / satellite, system or a specific tradeport / terminal. Can be empty.",
                                 # "enum": combined_locations_names
                             },
-                            "location_name_to": {
+                            "location_name_end_or_sell": {
                                 "type": "string",
-                                "description": "The location, where the player wants sell a commodity or end a trade route. Can be the name of a planet, a moon / satellite, system or a specific tradeport. Can be empty.",
+                                "description": "The location area, where the player wants to sell a commodity or end a trade route. Can be the name of a planet, a moon / satellite, system or a specific tradeport / terminal. Can be empty.",
                                 # "enum": combined_locations_names
                             },
                             "commodity_name": {
                                 "type": "string",
-                                "description": "The commodity that the user wants to sell or buy. Can be empty.",
+                                "description": "One of the known commodities that the user wants to sell or buy. Can be empty.",
                                 # "enum": commodity_names
                             },
                             "include_illegal_commodities": {
@@ -103,11 +108,14 @@ class TddManager(FunctionManager):
 
     # @abstractmethod
     def get_function_prompt(self):
-        return (
-                "When asked for trading information,  "
-                "find the best request_type for the trade inquiry of the player and make sure to follow the given instructions: "
-                "All locations can be planets, moons / satellites or tradeports. "
-                "For any of the parameters, make sure to only use one of the allowed values. If there is none that matches, ask for clarification. "
+        return (""
+                # "When asked for trading information,  "
+                # "select that appropriate parameters to met the players request and make sure to follow the given instructions: "
+                # "All locations can be planets, moons / satellites or a specific tradeport or even a terminal. "
+                # "The player can ask for a specific location or a general area. "
+                # "When he asks where he can sell something, use the location_name_end_or_sell parameter. "
+                # "When he asks where he can buy something, use the location_name_start_or_buy parameter. "
+                # "For any of the parameters, make sure to only use one of the allowed values. If there is none that matches, ask for clarification. "
         )
 
     def get_trade_information_from_tdd_employee(self, function_args):
@@ -115,8 +123,8 @@ class TddManager(FunctionManager):
         printr.print(f'Executing function call {self.get_trade_information_from_tdd_employee.__name__} with args {function_args}', tags="info")
         
         # Extract parameters
-        location_from = function_args.get("location_name_from")
-        location_to = function_args.get("location_name_to")
+        location_from = function_args.get("location_name_start_or_buy")
+        location_to = function_args.get("location_name_end_or_sell")
         commodity_name = function_args.get("commodity_name")
         not_found_message = ""
         
@@ -127,7 +135,9 @@ class TddManager(FunctionManager):
             not_found_message = f"No trade found @'{location_from}'->."
         elif location_from and location_to:
             # Both locations provided -> find best trade route between locations
-            function_response = self.uex_service.find_best_trade_between_locations_code(location_name_from=location_from, location_name_to=location_to)
+            function_response = self.uex_service.find_best_trade_between_locations_code(
+                location_name_from=location_from,
+                location_name_to=location_to)
             not_found_message = f"No trade found @'{location_from}'->{location_to}."
         elif commodity_name and location_to and not location_from:
             # Commodity and destination provided -> find tradeports at given location for commodity
@@ -142,7 +152,7 @@ class TddManager(FunctionManager):
             not_found_message = f"No trade for destination '{location_to}'."
         else:
             # In case the provided parameters are insufficient or ambiguous, ask the player for clarification.
-            return {"instructions": "Bitte geben Sie genauere Angaben an. Zum Beispiel: Von welchem Ort starten Sie? Welcher Handel soll durchgeführt werden?"}
+            return {"instructions": "Could not identify the trade request. Please provide more details."}
         
         # Process response
         success = function_response.get("success", False)

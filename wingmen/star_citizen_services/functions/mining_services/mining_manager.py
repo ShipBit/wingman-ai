@@ -14,7 +14,7 @@ from wingmen.star_citizen_services.functions.uex_v2.uex_api_module import UEXApi
 from wingmen.star_citizen_services.functions.uex_v2 import uex_api_module
 
 
-DEBUG = True
+DEBUG = False
 TEST = False
 REGOLITH_TEST = False
 printr = Printr()
@@ -326,7 +326,18 @@ class MiningManager(FunctionManager):
                 return {"success": False, "instructions": "Could not take screenshot. Explain the player, that you only take screenshots, if the active window is Star Citizen. "}
             self.overlay.display_overlay_text("Screenshot taken", vertical_position_ratio=3, display_duration=5000)
             
-            cropped_image = screenshots.crop_screenshot(f"{self.mining_data_path}/templates/scans", image_path, [("UPPER_LEFT", "UPPER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")])
+            area_image = screenshots.crop_screenshot_coordinates(
+                data_dir_path=f"{self.mining_data_path}/templates/scans)",
+                screenshot=image_path,
+                instructions=[{'strategy': 'AREA', 'coords': ((1500, 400), (2300, 1200))}],
+                cash_key="rock_scan"
+            )
+            cropped_image = screenshots.crop_screenshot(
+                data_dir_path=f"{self.mining_data_path}/templates/scans",
+                screenshot=area_image,
+                areas_and_corners_and_cropstrat=[
+                    ("UPPER_LEFT", "UPPER_LEFT", "AREA"), 
+                    ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")])
             base64_jpg_image = screenshots.convert_cv2_image_to_base64_jpeg(cropped_image)
             scan_result = self.regolith.get_rock_scan_image_infos(base64_jpg_image)
 
@@ -347,8 +358,8 @@ class MiningManager(FunctionManager):
             if scout_finding_id is None:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
                 return {"success": False, "message": "Couldn't create a new cluster."}
-            function_response = {"success": True, "instructions": "Give a very short confirmation message to the player. "}
-            self.overlay.display_overlay_text("Cora: Done", vertical_position_ratio=3, display_duration=5000)
+            function_response = {"success": True, "instructions": f"Just say 'Saved {cluster_count} {cluster_type} deposit'. "}
+            self.overlay.display_overlay_text("Cora: Saved", vertical_position_ratio=3, display_duration=5000)
        
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
 
@@ -363,7 +374,13 @@ class MiningManager(FunctionManager):
             
             self.overlay.display_overlay_text("Screenshot taken", vertical_position_ratio=3, display_duration=5000)
 
-            cropped_image = screenshots.crop_screenshot(data_dir_path=f"{self.mining_data_path}/templates/refineries", screenshot_file=image_path, areas_and_corners_and_cropstrat=[("UPPER_LEFT", "LOWER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")], cash_key="workorder")
+            cropped_image = screenshots.crop_screenshot(
+                data_dir_path=f"{self.mining_data_path}/templates/refineries",
+                screenshot=image_path,
+                areas_and_corners_and_cropstrat=[
+                    ("UPPER_LEFT", "LOWER_LEFT", "AREA"), 
+                    ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")],
+                cash_key="workorder")
             
             # open ai image recognition
             # retrieved_json, success = self.ocr.get_screenshot_texts(cropped_image, "workorder", refinery="{refinery}", test=TEST)

@@ -405,7 +405,13 @@ class DeliveryMissionManager(FunctionManager):
         image_path = screenshots.take_screenshot(self.mission_data_path, "delivery_missions", test=TEST)
         if not image_path:
             return {"success": False, "instructions": "Could not take screenshot. Explain the player, that you only take screenshots, if the active window is Star Citizen. "}
-        cropped_image = screenshots.crop_screenshot(data_dir_path=self.mission_data_path, screenshot_file=image_path, areas_and_corners_and_cropstrat=[("UPPER_LEFT", "LOWER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")], cash_key="delivery_missions")
+        cropped_image = screenshots.crop_screenshot(
+            data_dir_path=self.mission_data_path, 
+            screenshot=image_path, 
+            areas_and_corners_and_cropstrat=[
+                ("UPPER_LEFT", "LOWER_LEFT", "AREA"),
+                ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")],
+            cash_key="delivery_missions")
         retrieved_json, success = self.ocr.get_screenshot_texts(cropped_image, "delivery_missions", test=TEST)
         if not success:
             return {"success": False, "error": retrieved_json, "instructions": "Explain the player the reason for the delivery mission not beeing able to be extracted. "}

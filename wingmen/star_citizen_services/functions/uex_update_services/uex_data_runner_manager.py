@@ -20,7 +20,7 @@ from wingmen.star_citizen_services.functions.uex_update_services.commodity_price
 from wingmen.star_citizen_services.functions.uex_v2.uex_api_module import UEXApi2
 
 
-DEBUG = True
+DEBUG = False
 TEST = False
 
 
@@ -309,8 +309,18 @@ class UexDataRunnerManager(FunctionManager):
                     "error": "Could not make screenshot. Maybe, during screenshot taking, the active window displayed was NOT Star Citizen. In that case, I don't make any screenshots! "
                     }, None
     
-        location_name_crop = screenshots.crop_screenshot(data_dir_path=f"{self.data_dir_path}/location_name_area", screenshot_file=screenshot_path, areas_and_corners_and_cropstrat=[("UPPER_LEFT", "LOWER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")], cash_key=f"uex_locationname_{validated_tradeport['code']}")
-        
+        location_name_crop = screenshots.crop_screenshot_coordinates(
+            data_dir_path=f"{self.data_dir_path}/location_name_area",
+            screenshot_file=screenshot_path,
+            instructions=[
+                {
+                    "strategy": "AREA",
+                    "coords": ((350, 330), (900, 385))
+                }
+            ],
+            cash_key=f"uex_locationname_{validated_tradeport['code']}"
+        )
+                
         print_debug(f'location name: {validated_tradeport["nickname"]}')            
         self.overlay.display_overlay_text(f'Cora: Screenshot taken, selected tradeport: {validated_tradeport["nickname"]}')
         buy_result = self._analyse_prices_at_tradeport(screenshot_path, location_name_crop, validated_tradeport, operation)
@@ -324,7 +334,19 @@ class UexDataRunnerManager(FunctionManager):
     def _analyse_prices_at_tradeport(self, screenshot_path, cropped_screenshot_location, validated_tradeport, operation):
         
         # commodity_area_crop = screenshots.crop_screenshot(f"{self.data_dir_path}/commodity_info_area", screenshot_path, [("UPPER_LEFT", "LOWER_LEFT", "HORIZONTAL"), ("UPPER_LEFT", "LOWER_LEFT", "VERTICAL")], ["BOTTOM", "RIGHT"])
-        commodity_area_crop = screenshots.crop_screenshot(data_dir_path=f"{self.data_dir_path}/commodity_info_area", screenshot_file=screenshot_path, cash_key=f"uex_{operation}_{validated_tradeport['code']}", areas_and_corners_and_cropstrat=[("UPPER_LEFT", "LOWER_LEFT", "HORIZONTAL"), ("UPPER_LEFT", "LOWER_LEFT", "VERTICAL"), ("UPPER_RIGHT", "LOWER_RIGHT", "VERTICAL")], select_sides=["BOTTOM", "RIGHT"])
+        commodity_area_crop = screenshots.crop_screenshot_coordinates(
+            data_dir_path=f"{self.data_dir_path}/commodity_info_area",
+            screenshot=screenshot_path,
+            instructions=[
+                # aus uex_sell_STAHN_UPPER_LEFT_LOWER_LEFT => (x=1640,y=383) → HORIZONTAL: y
+                { "strategy": "HORIZONTAL", "coords": [380] },
+                # aus uex_sell_STAHN_UPPER_LEFT_LOWER_LEFT und
+                #     uex_sell_STAHN_UPPER_RIGHT_LOWER_RIGHT ⇒ x1=1640, x2=2404 → VERTICAL zwischen diesen beiden x
+                { "strategy": "VERTICAL",   "coords": [1640, 2400] },
+            ],
+            cash_key=f"uex_{operation}_{validated_tradeport['code']}",
+            select_sides=["BOTTOM", "RIGHT"]
+        )
         # commodity_area_crop = screenshots.crop_screenshot(f"{self.data_dir_path}/commodity_info_area", screenshot_path, [("UPPER_LEFT", "LOWER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")])
         prices_raw, success = self.commodity_prices_ocr.get_screenshot_texts(commodity_area_crop, "commodity_info_area", operation, operation=operation, tradeport=validated_tradeport['code'])
         

@@ -6,6 +6,9 @@ import cv2
 import pygetwindow
 import pyautogui
 import base64
+from typing import List, Optional, Dict, Any, Tuple, Union
+import numpy as np
+import json
 
 DEBUG = False
 TEST = False
@@ -226,7 +229,159 @@ def __get_best_template_matching_coordinates(data_dir_path, screenshot, image_ar
     return matching_coordinates
 
 
-def crop_screenshot(data_dir_path, screenshot_file, areas_and_corners_and_cropstrat, cash_key=None, select_sides=None):
+def crop_screenshot_coordinates(
+    data_dir_path: str,
+    screenshot: Union[str, np.ndarray],
+    instructions: List[Dict[str, Any]],
+    cash_key: Optional[str] = None,
+    select_sides: Optional[List[str]] = None
+) -> Optional[np.ndarray]:
+    """
+    Crop an image based on explicit coordinates and cache the resulting rectangle.
+
+    If `cash_key` is provided and an entry exists in
+    data_dir_path/coords_cache.txt, the stored coords are used.
+    Otherwise we compute the crop from `instructions` and append it to the cache.
+
+    Args:
+        data_dir_path: Root folder for cache file.
+        screenshot_file: Path to the image to crop.
+        instructions: List of dicts, each with:
+            - 'strategy': 'AREA'|'VERTICAL'|'HORIZONTAL'
+            - 'coords': 
+                * AREA: ((x1,y1),(x2,y2))
+                * VERTICAL: [x] or [x1,x2]
+                * HORIZONTAL: [y] or [y1,y2]
+        cash_key: Optional key under dem diese Instruktion geloggt wird.
+        select_sides: For single‐line cuts, wähle welche Hälfte:
+            VERTICAL → ['LEFT'] oder ['RIGHT']
+            HORIZONTAL → ['TOP'] oder ['BOTTOM']
+
+    Returns:
+        Das gecroppte BGR‐Image als numpy.ndarray oder None.
+
+    This function allows you to crop a screenshot using a sequence of instructions that define the cropping strategy and coordinates. Optionally, it can cache the computed crop rectangle for faster repeated access.
+    If `cash_key` is provided and a matching entry exists in the cache file (`coords_cache.txt`), the cached coordinates are used to crop the image. Otherwise, the crop is computed from the given instructions and appended to the cache.
+
+    Examples:
+        # Crop a rectangular area from (100, 200) to (400, 600)
+        crop_screenshot_coordinates(
+            data_dir_path="cache",
+            screenshot_file="screen.png",
+            instructions=[{'strategy': 'AREA', 'coords': ((100, 200), (400, 600))}]
+        )
+        # Crop the left half of the image at vertical line x=500
+        crop_screenshot_coordinates(
+            data_dir_path="cache",
+            screenshot_file="screen.png",
+            instructions=[{'strategy': 'VERTICAL', 'coords': [500]}],
+            select_sides=['LEFT']
+        )
+        # Crop the bottom half of the image at horizontal line y=300, with caching
+        crop_screenshot_coordinates(
+            data_dir_path="cache",
+            screenshot_file="screen.png",
+            instructions=[{'strategy': 'HORIZONTAL', 'coords': [300]}],
+            select_sides=['BOTTOM'],
+            cash_key="screen_bottom_half"
+        )
+    """
+    cache_file = os.path.join(data_dir_path, "coords_cache.txt")
+
+    # 1) Cache‐Lookup
+    if cash_key and os.path.exists(cache_file):
+        with open(cache_file, 'r') as f:
+            for line in f:
+                key, instr_json, x_min, x_max, y_min, y_max = line.strip().split(';')
+                if key == cash_key:
+                    if isinstance(screenshot, str):
+                        img = cv2.imread(screenshot, cv2.IMREAD_COLOR)
+                    else:
+                        img = screenshot
+                    if img is None:
+                        print_debug(f"Could not open screenshot '{screenshot}'")
+                        return None
+                    return img[int(y_min):int(y_max), int(x_min):int(x_max)]
+
+    # 2) Bild laden
+    if isinstance(screenshot, str):
+        if not os.path.exists(screenshot):
+            print_debug(f"File not existing '{screenshot}'")
+            return None
+        img = cv2.imread(screenshot, cv2.IMREAD_COLOR)
+        if img is None:
+            print_debug(f"Could not open screenshot '{screenshot}'")
+            return None
+    else:
+        img = screenshot
+
+    h, w = img.shape[:2]
+    x_min, x_max = 0, w
+    y_min, y_max = 0, h
+
+    # 3) Koordinaten aus Anweisungen berechnen
+    for instr in instructions:
+        strat = instr.get('strategy')
+        coords = instr.get('coords')
+
+        if strat == 'AREA':
+            (x1, y1), (x2, y2) = coords  # type: ignore
+            x_min, x_max = sorted((x1, x2))
+            y_min, y_max = sorted((y1, y2))
+
+        elif strat == 'VERTICAL':
+            xs = coords  # type: ignore
+            if len(xs) == 1:
+                cut = xs[0]
+                if select_sides and 'LEFT' in select_sides:
+                    x_min, x_max = 0, cut
+                else:
+                    x_min, x_max = cut, w
+            elif len(xs) == 2:
+                x_min, x_max = sorted(xs)
+
+        elif strat == 'HORIZONTAL':
+            ys = coords  # type: ignore
+            if len(ys) == 1:
+                cut = ys[0]
+                if select_sides and 'TOP' in select_sides:
+                    y_min, y_max = 0, cut
+                else:
+                    y_min, y_max = cut, h
+            elif len(ys) == 2:
+                y_min, y_max = sorted(ys)
+
+        else:
+            print_debug(f"Unknown strategy: {strat}")
+            return None
+
+    # 4) Validierung
+    if x_max <= x_min or y_max <= y_min:
+        print_debug("Invalid crop dimensions.")
+        return None
+
+    # 5) Cache schreiben
+    if cash_key:
+        os.makedirs(data_dir_path, exist_ok=True)
+        entry = ';'.join([
+            cash_key,
+            json.dumps(instructions, separators=(',',':')),
+            str(x_min), str(x_max), str(y_min), str(y_max)
+        ])
+        with open(cache_file, 'a') as f:
+            f.write(entry + '\n')
+
+    # 6) Ausgeben wie die Original‐Methode
+    return img[y_min:y_max, x_min:x_max]
+
+
+def crop_screenshot(
+    data_dir_path: str,
+    screenshot: Union[str, np.ndarray],
+    areas_and_corners_and_cropstrat: List[Tuple[str, str, str]],
+    cash_key: Optional[str] = None,
+    select_sides: Optional[List[str]] = None
+) -> Optional[np.ndarray]:
     """
     Crops a screenshot based on template matching against specified areas of the screenshot. This method supports 
     flexible cropping strategies, allowing for area-based, vertical, or horizontal cropping.
@@ -239,7 +394,8 @@ def crop_screenshot(data_dir_path, screenshot_file, areas_and_corners_and_cropst
         If "UPPER_LEFT" is demanded, the method will only select files of the pattern "template_upper_left_{index}.png". 
         It will try to match this template in the screenshot, if matched fine, if not, it will try with the next availabl index.
 
-    - screenshot_file (str): The file path of the screenshot image to be cropped.
+    - `screenshot` as a file path (str) or
+        as an OpenCV image array (np.ndarray)
 
     - areas_and_corners_and_cropstrat (list of tuples): A list where each tuple contains:
         - area (str): The area name that corresponds to a template image ("UPPER_LEFT" or "LOWER_RIGHT").
@@ -276,56 +432,58 @@ def crop_screenshot(data_dir_path, screenshot_file, areas_and_corners_and_cropst
     coordinates and returns the cropped image. If no valid crop dimensions are found, or if a matching template is not 
     detected, it logs an error and returns None.
     """
-    if not os.path.exists(screenshot_file):
-        print_debug(f"File not existing '{screenshot_file}'")
+    # --- 1) Load or validate image input ---
+    if isinstance(screenshot, str):
+        # Input is a filesystem path: verify existence and load
+        if not os.path.isfile(screenshot):
+            print_debug(f"File not existing '{screenshot}'")
+            return None
+        img = cv2.imread(screenshot, cv2.IMREAD_COLOR)
+        if img is None:
+            print_debug(f"Could not open screenshot '{screenshot}'")
+            return None
+        source_path = screenshot  # remember for debug-saving
+    elif isinstance(screenshot, np.ndarray):
+        # Input is already an image array: just use it
+        img = screenshot
+        source_path = None
+    else:
+        # Type guard: unsupported type
+        print_debug(f"Unsupported type for screenshot: {type(screenshot)}")
         return None
 
-    screenshot = cv2.imread(screenshot_file, cv2.IMREAD_COLOR)
-    if screenshot is None:
-        print_debug(f"Could not open screenshot '{screenshot_file}'")
-        return None
-
-    # Prüfen wir, ob wir 'AREA' in den Instruktionen haben
+    # --- 2) Determine if AREA-based or slices ---
     area_entries = [t for t in areas_and_corners_and_cropstrat if t[2] == "AREA"]
-
     if len(area_entries) == 2:
-        # => Wir machen den AREA-Cut
-        x_min, x_max, y_min, y_max = _crop_area(screenshot, data_dir_path, areas_and_corners_and_cropstrat, cash_key)
-        if x_min is None or x_max is None or y_min is None or y_max is None:
+        # AREA crop
+        x_min, x_max, y_min, y_max = _crop_area(img, data_dir_path, areas_and_corners_and_cropstrat, cash_key)
+        if None in (x_min, x_max, y_min, y_max):
             print_debug("AREA cropping not possible => returning None")
             return None
-        # Keine horizontal/vertical Auswahl
-        vertical_applied = False
-        horizontal_applied = False
-
+        vertical_applied = horizontal_applied = False
     else:
-        # => Wir gehen davon aus, wir haben VERTICAL/HORIZONTAL
+        # VERTICAL/HORIZONTAL slices
         x_min, x_max, y_min, y_max, vertical_applied, horizontal_applied = _crop_slices(
-            screenshot,
-            data_dir_path,
-            areas_and_corners_and_cropstrat,
-            cash_key
+            img, data_dir_path, areas_and_corners_and_cropstrat, cash_key
         )
 
-    # Rufe apply_quadrant_selection auf
-    cropped_screenshot = _apply_quadrant_selection(
-        screenshot, x_min, x_max, y_min, y_max,
+    # --- 3) Apply quadrant or side selection ---
+    cropped = _apply_quadrant_selection(
+        img, x_min, x_max, y_min, y_max,
         vertical_applied, horizontal_applied,
         select_sides
     )
 
-    if cropped_screenshot is not None and DEBUG:
-        # Speichere das gecroppte Bild mal ab
-        filename = os.path.basename(screenshot_file)
-        directory_path = os.path.dirname(screenshot_file)
-        filename = f"cropped_{filename}"
-        full_path = os.path.normpath(os.path.join(directory_path, filename))
-        cv2.imwrite(full_path, cropped_screenshot)
+    # --- 4) Optional debug save (only when original was a file) ---
+    if cropped is not None and DEBUG and source_path:
+        # build debug filename from original
+        directory = os.path.dirname(source_path)
+        base = os.path.basename(source_path)
+        debug_name = os.path.join(directory, f"cropped_{base}")
+        cv2.imwrite(debug_name, cropped)
+        debug_show_screenshot(cropped, SHOW_SCREENSHOTS)
 
-        # Debug-Anzeige
-        debug_show_screenshot(cropped_screenshot, SHOW_SCREENSHOTS)
-    
-    return cropped_screenshot
+    return cropped
 
 
 def convert_cv2_image_to_base64_jpeg(cv2_image):
