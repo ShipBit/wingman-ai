@@ -343,7 +343,7 @@ class MiningManager(FunctionManager):
 
             if "success" in scan_result and scan_result["success"] is False:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                return scan_result
+                return {"success": False, "message": "Couldn't read scan data. Reposition or try have a darker background. "}
            
             session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=None)
             cluster = self.regolith.get_or_create_scouting_cluster(session_id)
@@ -358,7 +358,7 @@ class MiningManager(FunctionManager):
             if scout_finding_id is None:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
                 return {"success": False, "message": "Couldn't create a new cluster."}
-            function_response = {"success": True, "instructions": f"Just say 'Saved {cluster_count} {cluster_type} deposit'. "}
+            function_response = {"success": True, "instructions": f"Saved {cluster_count}x{cluster_type}'. "}
             self.overlay.display_overlay_text("Cora: Saved", vertical_position_ratio=3, display_duration=5000)
        
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
