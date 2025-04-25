@@ -281,7 +281,7 @@ class MiningManager(FunctionManager):
             success = self.regolith.open_session_in_browser(session_id)
             if not success:
                 return {"success": False, "message": f"I couldn't open the browser{' as there is no active session. ' if self.regolith.active_session_id is None else '. '}"}
-            return {"success": True}
+            return {"success": True, "message": "You should see the browser now. "}
         
         return {"success": False, "message": "I couldn't identify the action to be taken. Please repeat. "}
         

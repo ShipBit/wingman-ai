@@ -311,7 +311,7 @@ class UexDataRunnerManager(FunctionManager):
     
         location_name_crop = screenshots.crop_screenshot_coordinates(
             data_dir_path=f"{self.data_dir_path}/location_name_area",
-            screenshot_file=screenshot_path,
+            screenshot=screenshot_path,
             instructions=[
                 {
                     "strategy": "AREA",
