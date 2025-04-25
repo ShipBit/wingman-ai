@@ -384,7 +384,11 @@ class StarCitizenWingman(OpenAiWingman):
             - function_response (str): The text response or result obtained after executing the function.
             - instant_response (str): An immediate response or action to be taken, if any (e.g., play audio).
         """
-        
+        if self.debug or DEBUG:
+            printr.print(
+                f"Executing function call: {function_name} with arguments: {function_args}",
+                tags="debug",
+            )
         function_response = ""
         instant_reponse = ""
         # our context switcher. If this is called by GPT, we switch to this context (with its own memory).

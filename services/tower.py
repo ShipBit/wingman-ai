@@ -1,5 +1,8 @@
+# --- START OF FILE tower.py ---
+
 import traceback
 import copy
+from typing import Optional, Any # Import Optional and Any
 from exceptions import MissingApiKeyException
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -15,137 +18,186 @@ class Tower:
         self.config = config
         self.app_root_dir = app_root_dir
         self.secret_keeper = secret_keeper
+        self.wingmen: list[Wingman] = [] # Initialize wingmen list
         self.key_wingman_dict: dict[str, Wingman] = {}
-        self.broken_wingmen = []
+        self.broken_wingmen: list[dict[str, str]] = [] # Initialize broken_wingmen list
 
         self.wingmen = self.__instantiate_wingmen()
-        self.key_wingman_dict: dict[str, Wingman] = {}
+        # Rebuild key_wingman_dict after instantiation
+        self.key_wingman_dict = {}
         for wingman in self.wingmen:
-            self.key_wingman_dict[wingman.get_record_key()] = wingman
+            record_key = wingman.get_record_key()
+            if record_key: # Ensure key exists
+                 self.key_wingman_dict[record_key] = wingman
+            else:
+                 printr.print_warn(f"Wingman '{wingman.name}' has no record_key configured.")
+
 
     def __instantiate_wingmen(self) -> list[Wingman]:
         wingmen = []
+        if "wingmen" not in self.config or not isinstance(self.config["wingmen"], dict):
+             printr.print_err("Configuration missing 'wingmen' section or it's not a dictionary.")
+             return [] # Return empty list if config is wrong
+
         for wingman_name, wingman_config in self.config["wingmen"].items():
+            if not isinstance(wingman_config, dict):
+                 printr.print_warn(f"Skipping invalid wingman configuration for '{wingman_name}'. Expected a dictionary.")
+                 continue
+
             if wingman_config.get("disabled") is True:
+                printr.print(f"Wingman '{wingman_name}' is disabled in config.", tags="info")
                 continue
 
+            # Prepare global config sections safely
             global_config = {
-                "sound": self.config.get("sound", {}),
-                "openai": self.config.get("openai", {}),
-                "local": self.config.get("local", {}),
-                "groq": self.config.get("groq", {}),
-                "features": self.config.get("features", {}), 
-                "commands": self.config.get("commands", {}),
-                "azure": self.config.get("azure", {}),
+                key: self.config.get(key, {}) for key in [
+                    "sound", "openai", "local", "groq", "features",
+                    "commands", "azure", "elevenlabs", "edge_tts", # Added missing tts/other configs
+                    "sc-keybind-mappings" # Add SC specific global config if needed by wingmen
+                ]
             }
+            # Ensure commands is a list
+            global_config["commands"] = self.config.get("commands", [])
+            if not isinstance(global_config["commands"], list):
+                 printr.print_warn("'commands' section in general config is not a list. Using empty list.")
+                 global_config["commands"] = []
+
+
             merged_config = self.__merge_configs(global_config, wingman_config)
             class_config = merged_config.get("class")
 
             wingman = None
-            # it's a custom Wingman
             try:
-                if class_config:
+                if class_config and isinstance(class_config, dict):
+                    module_path = class_config.get("module")
+                    class_name = class_config.get("name")
+                    if not module_path or not class_name:
+                         raise ValueError("Custom wingman class config missing 'module' or 'name'.")
+
                     kwargs = class_config.get("args", {})
+                    if not isinstance(kwargs, dict): kwargs = {} # Ensure kwargs is a dict
+
                     wingman = Wingman.create_dynamically(
                         name=wingman_name,
                         config=merged_config,
                         secret_keeper=self.secret_keeper,
-                        module_path=class_config.get("module"),
-                        class_name=class_config.get("name"),
+                        module_path=module_path,
+                        class_name=class_name,
                         app_root_dir=self.app_root_dir,
                         **kwargs
                     )
                 else:
+                    # Default to OpenAiWingman if no valid class config
                     wingman = OpenAiWingman(
                         name=wingman_name,
                         config=merged_config,
                         secret_keeper=self.secret_keeper,
                         app_root_dir=self.app_root_dir,
                     )
-            except MissingApiKeyException:
-                self.broken_wingmen.append(
-                    {
-                        "name": wingman_name,
-                        "error": "Missing API key. Please check your key config.",
-                    }
-                )
-            except Exception as e:  # pylint: disable=broad-except
-                traceback.print_exc()
-                # just in case we missed something
-                msg = str(e).strip()
-                if not msg:
-                    msg = type(e).__name__
-                self.broken_wingmen.append({"name": wingman_name, "error": msg})
-            else:
-                # additional validation check if no exception was raised
+
+                # Validate the instantiated wingman
                 errors = wingman.validate()
-                if not errors or len(errors) == 0:
+                if not errors:
                     wingman.prepare()
                     wingmen.append(wingman)
+                    printr.print(f"Successfully initialized Wingman: {wingman_name} ({type(wingman).__name__})", tags="success")
                 else:
-                    self.broken_wingmen.append(
-                        {"name": wingman_name, "error": ", ".join(errors)}
-                    )
+                    error_str = ", ".join(errors)
+                    self.broken_wingmen.append({"name": wingman_name, "error": error_str})
+                    printr.print_err(f"Validation failed for Wingman '{wingman_name}': {error_str}")
+
+            except MissingApiKeyException as e:
+                 error_msg = f"Missing API key ({e}). Please check your key config."
+                 self.broken_wingmen.append({"name": wingman_name, "error": error_msg})
+                 printr.print_err(f"Initialization failed for Wingman '{wingman_name}': {error_msg}")
+            except ImportError as e:
+                 error_msg = f"Could not import wingman module/class: {e}"
+                 self.broken_wingmen.append({"name": wingman_name, "error": error_msg})
+                 printr.print_err(f"Initialization failed for Wingman '{wingman_name}': {error_msg}")
+                 traceback.print_exc()
+            except Exception as e:
+                 error_msg = f"Unexpected error: {str(e) or type(e).__name__}"
+                 self.broken_wingmen.append({"name": wingman_name, "error": error_msg})
+                 printr.print_err(f"Initialization failed for Wingman '{wingman_name}': {error_msg}")
+                 traceback.print_exc()
+
 
         return wingmen
 
-    def get_wingman_from_key(self, key: any) -> Wingman | None:  # type: ignore
-        if hasattr(key, "char"):
-            wingman = self.key_wingman_dict.get(key.char, None)
-        else:
-            wingman = self.key_wingman_dict.get(key.name, None)
+    def get_wingman_from_key(self, key_identifier: str) -> Optional[Wingman]:
+        """
+        Retrieves a wingman based on its configured record key (string).
+
+        Args:
+            key_identifier (str): The character or name of the key (e.g., 'v', 'x1').
+
+        Returns:
+            Optional[Wingman]: The corresponding Wingman instance or None if not found.
+        """
+        # The key_identifier is already the string we need for the dictionary lookup
+        wingman = self.key_wingman_dict.get(key_identifier, None)
+        # printr.print(f"Lookup Wingman for key '{key_identifier}': {'Found ' + wingman.name if wingman else 'Not Found'}", tags="debug")
         return wingman
 
-    def get_wingmen(self):
+    def get_wingmen(self) -> list[Wingman]:
+        """Returns the list of successfully initialized wingmen."""
         return self.wingmen
 
-    def get_broken_wingmen(self):
+    def get_broken_wingmen(self) -> list[dict[str, str]]:
+        """Returns the list of wingmen that failed to initialize."""
         return self.broken_wingmen
 
-    def get_config(self):
+    def get_config(self) -> dict[str, any]:
+        """Returns the loaded configuration dictionary."""
         return self.config
 
-    def __deep_merge(self, source, updates):
-        """Recursively merges updates into source."""
+    def __deep_merge(self, source: dict, updates: dict) -> dict:
+        """Recursively merges updates into source dictionary."""
+        # Create a copy to avoid modifying the original source dict directly
+        # especially important if source comes from a shared config object.
+        merged = source.copy()
         for key, value in updates.items():
             if isinstance(value, dict):
-                node = source.setdefault(key, {})
-                self.__deep_merge(node, value)
+                # Get node or create one if doesn't exist
+                node = merged.get(key, {})
+                if isinstance(node, dict): # Ensure node is a dict before merging
+                     merged[key] = self.__deep_merge(node, value)
+                else: # If key exists in source but is not a dict, overwrite with update's dict
+                     merged[key] = value.copy() # Copy the update dict
             else:
-                source[key] = value
-        return source
+                # If value is not a dict, simply overwrite/add
+                merged[key] = value
+        return merged
 
-    def __merge_command_lists(self, general_commands, wingman_commands):
-        """Merge two lists of commands, where wingman-specific commands override or get added based on the 'name' key."""
-        # Use a dictionary to ensure unique names and allow easy overrides
-        merged_commands = {cmd["name"]: cmd for cmd in general_commands}
+
+    def __merge_command_lists(self, general_commands: list, wingman_commands: list) -> list:
+        """Merge two lists of commands based on the 'name' key."""
+        # Ensure inputs are lists
+        if not isinstance(general_commands, list): general_commands = []
+        if not isinstance(wingman_commands, list): wingman_commands = []
+
+        merged_commands_dict = {cmd["name"]: cmd for cmd in general_commands if isinstance(cmd, dict) and "name" in cmd}
         for cmd in wingman_commands:
-            merged_commands[
-                cmd["name"]
-            ] = cmd  # Will override or add the wingman-specific command
-        # Convert merged commands back to a list since that's the expected format
-        return list(merged_commands.values())
+             if isinstance(cmd, dict) and "name" in cmd:
+                  merged_commands_dict[cmd["name"]] = cmd # Override or add
 
-    def __merge_configs(self, general, wingman):
-        """Merge general settings with a specific wingman's overrides, including commands."""
-        # Start with a copy of the wingman's specific config to keep it intact.
-        merged = wingman.copy()
-        # Update 'openai', 'features', and 'edge_tts' sections from general config into wingman's config.
-        for key in ["sound", "openai", "local", "groq", "features", "edge_tts", "elevenlabs", "azure"]:
-            if key in general:
-                # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.
-                merged[key] = self.__deep_merge(
-                    copy.deepcopy(general[key]), wingman.get(key, {})
-                )
+        return list(merged_commands_dict.values())
 
-        # Special handling for merging the commands lists
-        if "commands" in general and "commands" in wingman:
-            merged["commands"] = self.__merge_command_lists(
-                general["commands"], wingman["commands"]
-            )
-        elif "commands" in general:
-            # If the wingman config does not have commands, use the general ones
-            merged["commands"] = general["commands"]
-        # No else needed; if 'commands' is not in general, we simply don't set it
+    def __merge_configs(self, general: dict, wingman: dict) -> dict:
+        """Merge general settings with wingman overrides."""
+        # Start with a deep copy of the general config as the base
+        merged = copy.deepcopy(general)
+
+        # Iterate through wingman-specific config items
+        for key, wingman_value in wingman.items():
+            if key == "commands" and isinstance(wingman_value, list):
+                # Special handling for commands list merge
+                merged[key] = self.__merge_command_lists(general.get(key, []), wingman_value)
+            elif isinstance(wingman_value, dict) and key in merged and isinstance(merged[key], dict):
+                # If both general and wingman have a dict for the same key, deep merge them
+                merged[key] = self.__deep_merge(merged[key], wingman_value)
+            else:
+                # Otherwise, the wingman value overrides the general value completely
+                merged[key] = wingman_value
 
         return merged

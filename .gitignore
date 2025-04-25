@@ -177,3 +177,4 @@ api_keys.yaml
 
 configs/system/secrets.yaml
 debug_data/
+cache_data/

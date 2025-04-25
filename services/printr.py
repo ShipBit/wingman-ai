@@ -4,6 +4,7 @@ import customtkinter as ctk
 
 class Printr(object):
     _instance = None
+    global_console_only = False
 
     LILA = "\033[95m"
     BLUE = "\033[94m"
@@ -29,36 +30,31 @@ class Printr(object):
         {"tagName": "info", "foreground": "#6699ff"},
         {"tagName": "warn", "foreground": "orange"},
         {"tagName": "err", "foreground": "red"},
-
         {"tagName": "green", "foreground": "#33cc33"},
         {"tagName": "blue", "foreground": "#6699ff"},
         {"tagName": "violet", "foreground": "#aa33dd"},
-        {"tagName": "grey", "foreground": "grey"}
+        {"tagName": "grey", "foreground": "grey"},
     ]
 
     CHANNEL = Literal["main", "error", "warning", "info"]
     OUTPUT_TYPES = None | ctk.StringVar | ctk.CTkTextbox
 
-    _message_stacks: dict[CHANNEL, list] = dict(
-        main=[],
-        error=[],
-        warning=[],
-        info=[]
-    )
+    _message_stacks: dict[CHANNEL, list] = dict(main=[], error=[], warning=[], info=[])
 
     # NOTE this is a singleton class
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(Printr, cls).__new__(cls)
 
-            cls.out: dict[Printr.CHANNEL, Printr.OUTPUT_TYPES ] = dict(
-                main=None,
-                error=None,
-                warning=None,
-                info=None
+            cls.out: dict[Printr.CHANNEL, Printr.OUTPUT_TYPES] = dict(
+                main=None, error=None, warning=None, info=None
             )
         return cls._instance
 
+    @classmethod
+    def set_global_console(cls, console_only: bool = True):
+        """Set the global console_only flag for all Printr instances."""
+        cls.global_console_only = console_only
 
     def set_output(self, output_channel: CHANNEL, output_element: OUTPUT_TYPES):
         if isinstance(output_element, ctk.CTkTextbox):
@@ -75,11 +71,16 @@ class Printr(object):
             for _ in range(len(msg_stack)):
                 msg_stack.pop()
 
-
-
-    def print(self, text, output_channel: CHANNEL = "main", tags=None, wait_for_gui=False, console_only=False):
+    def print(
+        self,
+        text,
+        output_channel: CHANNEL = "main",
+        tags=None,
+        wait_for_gui=False,
+        console_only=False,
+    ):
         channel = self.out.get(output_channel, None)
-        if channel and not console_only:
+        if channel and not (console_only or self.global_console_only):
             if isinstance(channel, ctk.CTkTextbox):
                 channel.configure(state="normal")
                 channel.insert("end", f"{text}\n", tags=tags)
@@ -88,24 +89,22 @@ class Printr(object):
             else:
                 # output type -> StringVar
                 channel.set(text)
-        elif wait_for_gui and not console_only:
+        elif wait_for_gui and not (console_only or self.global_console_only):
             # message should only be shown in GUI
             # so add it to the queue to wait for GUI initialization
             self._message_stacks.get(output_channel, []).append(text)
-        else:
-            # no special output type -> terminal output
-            print(text)
 
+        # we always print to console, even if GUI is not available
+        print(text)
 
-    def print_err(self, text, wait_for_gui=True):
-        self.print(text, output_channel="error", wait_for_gui=wait_for_gui)
+    def print_err(self, text, wait_for_gui=True, console_only=False):
+        self.print(text, output_channel="error", wait_for_gui=wait_for_gui, console_only=console_only)
 
-    def print_warn(self, text, wait_for_gui=True):
-        self.print(text, output_channel="warning", wait_for_gui=wait_for_gui)
+    def print_warn(self, text, wait_for_gui=True, console_only=False):
+        self.print(text, output_channel="warning", wait_for_gui=wait_for_gui, console_only=console_only)
 
-    def print_info(self, text, wait_for_gui=True):
-        self.print(text, output_channel="info", wait_for_gui=wait_for_gui)
-
+    def print_info(self, text, wait_for_gui=True, console_only=False):
+        self.print(text, output_channel="info", wait_for_gui=wait_for_gui, console_only=console_only)
 
     @staticmethod
     def clr(text, color_format):

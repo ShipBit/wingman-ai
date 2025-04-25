@@ -1,3 +1,9 @@
+import json
+import os
+import io # Keep for potential future use, though not directly needed for new cache
+# import base64 # No longer needed for TTS cache
+import hashlib # Added for hashing cache keys
+import time # Added time for sort keys in hashing if needed and fallback keys
 import random
 import time
 import pyperclip
@@ -8,6 +14,9 @@ from services.audio_player import AudioPlayer
 from services.file_creator import FileCreator
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+
+# >>> ADDED IMPORT FOR CacheManager <<<
+from services.cache_manager import CacheManager # Import CacheManager
 
 # see execute_keypress() method
 printr = Printr()
@@ -22,6 +31,8 @@ except AttributeError:
     import pyautogui as key_module
 
 DEBUG = True
+# >>> ADDED CACHE_DIR CONSTANT <<<
+CACHE_DIR = os.path.join("cache_data") # Define cache directory
 
 
 class Wingman(FileCreator):
@@ -75,6 +86,95 @@ class Wingman(FileCreator):
 
         self.instant_activation_commands = []
 
+        # --- >>> ADDED: Cache Initialization <<< ---
+        self.cache_base_path = os.path.join(
+            app_root_dir, CACHE_DIR, self.name
+        )  # Wingman-specific cache dir
+        self.enable_instant_command_cache = self.config["features"].get(
+            "cache_instant_commands", False
+        )
+        self.enable_tts_cache = self.config["features"].get(
+            "cache_tts_responses", False
+        )
+        self.instant_command_cache_max_size = self.config["features"].get(
+            "instant_command_cache_max_size", 100
+        )
+        self.tts_cache_max_size = self.config["features"].get("tts_cache_max_size", 50)
+
+        # Instant Command Cache (remains the same, stores command data directly)
+        self.instant_command_cache_manager = None
+        if self.enable_instant_command_cache:
+            cmd_cache_path = os.path.join(self.cache_base_path, "instant_commands.json")
+            # Using default data_subdir="data" which is fine for this simple cache
+            self.instant_command_cache_manager = CacheManager(
+                cmd_cache_path, self.instant_command_cache_max_size
+            )
+            printr.print(
+                f"Instant command cache enabled (max memory: {self.instant_command_cache_max_size}, path: {cmd_cache_path})",
+                tags="info",
+            )
+
+        # TTS Cache (uses separate audio files)
+        self.tts_cache_manager = None
+        if self.enable_tts_cache:
+            tts_metadata_path = os.path.join(self.cache_base_path, "tts_cache_metadata.json")
+            # Explicitly name the subdirectory for audio files
+            self.tts_cache_manager = CacheManager(
+                tts_metadata_path,
+                self.tts_cache_max_size,
+                data_subdir="tts_audio" # Store audio files here
+            )
+            printr.print(
+                f"TTS cache enabled (max memory: {self.tts_cache_max_size}, metadata: {tts_metadata_path}, audio: {self.tts_cache_manager.data_dir})",
+                tags="info",
+            )
+        # --- >>> END: Cache Initialization <<< ---
+
+    # --- >>> ADDED: Cache Management Methods <<< ---
+    def save_caches(self):
+        """Saves both caches to disk."""
+        if self.instant_command_cache_manager:
+            self.instant_command_cache_manager.save()
+        if self.tts_cache_manager:
+            self.tts_cache_manager.save() # CacheManager handles its own format
+
+    def clear_caches(self):
+        """Clears both caches (memory and disk/data)."""
+        if self.instant_command_cache_manager:
+            self.instant_command_cache_manager.clear()
+        if self.tts_cache_manager:
+            self.tts_cache_manager.clear()
+
+    def load_caches(self):
+        """Loads caches from disk."""
+        if self.instant_command_cache_manager:
+            self.instant_command_cache_manager.load()
+        if self.tts_cache_manager:
+            self.tts_cache_manager.load() # CacheManager handles its own format
+    # --- >>> END: Cache Management Methods <<< ---
+
+    # --- >>> ADDED: Hashing Helper <<< ---
+    def _generate_cache_key(self, data):
+        """Generates a stable SHA256 hash for cache key based on input data."""
+        try:
+            if isinstance(data, (dict, list)):
+                # Serialize complex types deterministically
+                serialized_data = json.dumps(data, ensure_ascii=False)
+            elif isinstance(data, str):
+                serialized_data = data
+            else:
+                # Fallback for other types? Or raise error?
+                serialized_data = str(data)
+
+            hasher = hashlib.sha256()
+            hasher.update(serialized_data.encode('utf-8'))
+            return hasher.hexdigest()
+        except Exception as e:
+            printr.print_err(f"Error generating TTS cache key: {e}")
+            # Return a fallback key or raise? Using timestamp as fallback for uniqueness.
+            return f"error_key_{time.time()}"
+    # --- >>> END: Hashing Helper <<< ---
+    
     @staticmethod
     def create_dynamically(
         module_path: str,
@@ -183,6 +283,7 @@ class Wingman(FileCreator):
         self.start_execution_benchmark()
 
         process_result = None
+        call_cache_key = None
 
         if self.debug:
             printr.print("Starting transcription...", tags="info")
@@ -195,12 +296,12 @@ class Wingman(FileCreator):
 
         if transcript:
             printr.print(f">> (You): {transcript}", tags="violet")
-
+            
             if self.debug:
                 printr.print("Getting response for transcript...", tags="info")
-
+            
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response = await self._get_response_for_transcript(
+            process_result, instant_response, call_cache_key = await self._get_response_for_transcript(
                 transcript, locale
             )
 
@@ -213,9 +314,15 @@ class Wingman(FileCreator):
         if self.debug:
             printr.print("Playing response back to user...", tags="info")
 
-        # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
-        if process_result:
-            await self._play_to_user(str(process_result))
+        if instant_response:
+            await self._play_to_user(
+                instant_response,
+                tts_cache_key=self._generate_cache_key(instant_response)
+            )
+        elif process_result and call_cache_key:
+            await self._play_to_user(process_result, tts_cache_key=call_cache_key)
+        else:
+            await self._play_to_user(process_result)
 
         if self.debug:
             self.print_execution_time()
@@ -235,7 +342,7 @@ class Wingman(FileCreator):
 
     async def _get_response_for_transcript(
         self, transcript: str, locale: str | None
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
 
@@ -245,11 +352,11 @@ class Wingman(FileCreator):
             locale (str | None): The language that was detected to be used in the transcript, e.g. "de-DE".
 
         Returns:
-            A tuple of strings representing the response to a function call and/or an instant response.
+            A tuple of strings representing the response to a function call and/or an instant response as well as an call_cache_key representing the cache key for the response.
         """
-        return ("", "")
+        return ("", "", "")  # Default: No response, no instant response, no cache key
 
-    async def _play_to_user(self, text: str):
+    async def _play_to_user(self, text: str, tts_cache_key: str = None):
         """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
 
         Args:
