@@ -284,7 +284,7 @@ if __name__ == "__main__":
 
         # Create and run the UI in the main thread
         ui = WingmanUI.get_instance(core)
-        # ui.process_tkinter_queue() # Process queue might be handled internally now
+        ui.process_tkinter_queue()
         ui.mainloop()  # This blocks until the UI is closed
 
     except Exception as e:
