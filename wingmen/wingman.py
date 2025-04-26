@@ -31,9 +31,6 @@ except AttributeError:
     import pyautogui as key_module
 
 DEBUG = True
-# >>> ADDED CACHE_DIR CONSTANT <<<
-CACHE_DIR = os.path.join("cache_data") # Define cache directory
-
 
 class Wingman(FileCreator):
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
@@ -86,51 +83,48 @@ class Wingman(FileCreator):
 
         self.instant_activation_commands = []
 
+        self.cache_config = self.config["features"].get("command_and_tts_cache", {})
+
         # --- >>> ADDED: Cache Initialization <<< ---
-        self.cache_base_path = os.path.join(
-            app_root_dir, CACHE_DIR, self.name
-        )  # Wingman-specific cache dir
-        self.enable_instant_command_cache = self.config["features"].get(
+        self.enable_instant_command_cache = self.cache_config.get(
             "cache_instant_commands", False
         )
-        self.enable_tts_cache = self.config["features"].get(
+        self.enable_tts_cache = self.cache_config.get(
             "cache_tts_responses", False
         )
-        self.instant_command_cache_max_size = self.config["features"].get(
+        self.instant_command_cache_max_size = self.cache_config.get(
             "instant_command_cache_max_size", 100
         )
-        self.tts_cache_max_size = self.config["features"].get("tts_cache_max_size", 50)
+        self.tts_cache_max_size = self.cache_config.get("tts_cache_max_size", 50)
 
-        # Instant Command Cache (remains the same, stores command data directly)
+        # Instant Command Cache (new, stores instant command responses)
         self.instant_command_cache_manager = None
         if self.enable_instant_command_cache:
-            cmd_cache_path = os.path.join(self.cache_base_path, "instant_commands.json")
-            # Using default data_subdir="data" which is fine for this simple cache
             self.instant_command_cache_manager = CacheManager(
-                cmd_cache_path, self.instant_command_cache_max_size
+                config=config,
+                app_root_dir=app_root_dir,
+                cache_name="instant_command_cache",
+                max_memory_size=self.instant_command_cache_max_size
             )
             printr.print(
-                f"Instant command cache enabled (max memory: {self.instant_command_cache_max_size}, path: {cmd_cache_path})",
+                f"Instant command cache enabled (max memory: {self.instant_command_cache_max_size}",
                 tags="info",
             )
 
-        # TTS Cache (uses separate audio files)
+        # TTS Cache (new, stores TTS responses)
         self.tts_cache_manager = None
         if self.enable_tts_cache:
-            tts_metadata_path = os.path.join(self.cache_base_path, "tts_cache_metadata.json")
-            # Explicitly name the subdirectory for audio files
             self.tts_cache_manager = CacheManager(
-                tts_metadata_path,
-                self.tts_cache_max_size,
-                data_subdir="tts_audio" # Store audio files here
+                config=config,
+                app_root_dir=app_root_dir,
+                cache_name="tts_cache",
+                max_memory_size=self.tts_cache_max_size,
             )
             printr.print(
-                f"TTS cache enabled (max memory: {self.tts_cache_max_size}, metadata: {tts_metadata_path}, audio: {self.tts_cache_manager.data_dir})",
+                f"TTS cache enabled (max memory: {self.tts_cache_max_size})",
                 tags="info",
             )
-        # --- >>> END: Cache Initialization <<< ---
 
-    # --- >>> ADDED: Cache Management Methods <<< ---
     def save_caches(self):
         """Saves both caches to disk."""
         if self.instant_command_cache_manager:
@@ -283,7 +277,7 @@ class Wingman(FileCreator):
         self.start_execution_benchmark()
 
         process_result = None
-        call_cache_key = None
+        tts_cache_key = None
 
         if self.debug:
             printr.print("Starting transcription...", tags="info")
@@ -301,7 +295,7 @@ class Wingman(FileCreator):
                 printr.print("Getting response for transcript...", tags="info")
             
             # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response, call_cache_key = await self._get_response_for_transcript(
+            process_result, instant_response, tts_cache_key = await self._get_response_for_transcript(
                 transcript, locale
             )
 
@@ -319,8 +313,8 @@ class Wingman(FileCreator):
                 instant_response,
                 tts_cache_key=self._generate_cache_key(instant_response)
             )
-        elif process_result and call_cache_key:
-            await self._play_to_user(process_result, tts_cache_key=call_cache_key)
+        elif process_result and tts_cache_key:
+            await self._play_to_user(process_result, tts_cache_key=tts_cache_key)
         else:
             await self._play_to_user(process_result)
 

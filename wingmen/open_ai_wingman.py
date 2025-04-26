@@ -444,9 +444,41 @@ class OpenAiWingman(Wingman):
             return instant_response_text, instant_response_text, None
 
         normalized_transcript = transcript.lower().strip() if transcript else ""
-        _, do_not_cache_phrase = find_best_match.find_best_match(
-            normalized_transcript, self.config["features"]["do_not_cache_phrases"]
+        
+        _, delete_last_cache_entry = find_best_match.find_best_match(
+            normalized_transcript, self.cache_config["delete_last_cached_command_phrases"]
         )
+
+        if delete_last_cache_entry:
+            if self.debug or DEBUG:
+                printr.print(
+                    f"Deleting last cache entry for: '{transcript}'", tags="info"
+                )
+            key = self.instant_command_cache_manager.remove_last_added_entry()
+
+            if key:
+                msg = {
+                        "role": "user",
+                        "content": "Deleted last cache entry successfully",
+                    }
+                self.messages.append(msg)
+                # Run summarization based on tool results
+                summarize_response_content = self._summarize_function_calls()
+                # Important: _summarize_function_calls *also* adds the summary message to self.messages in the original code
+                final_text_to_speak, _ = self._finalize_response(
+                    summarize_response_content
+                )
+
+                return final_text_to_speak, final_text_to_speak, None            
+        
+        _, do_not_cache_phrase = find_best_match.find_best_match(
+            normalized_transcript, self.cache_config["do_not_cache_phrases"]
+        )
+
+        _, flag_for_removal = find_best_match.find_best_match(
+            normalized_transcript, self.cache_config["short_memory_commands"]
+        )
+
         call_cache_key = self._generate_cache_key(normalized_transcript)
         tts_cache_key = None
         final_text_to_speak = None
@@ -493,9 +525,9 @@ class OpenAiWingman(Wingman):
                 printr.print("Executing tool calls...", tags="info")
             
             if do_not_cache_phrase:
-                call_cache_key = None  # Don't cache if do_not_cache_phrase is found
+                call_cache_key = None  
             instant_response, tts_cache_key = await self._handle_tool_calls(
-                tool_calls, call_cache_key
+                tool_calls, call_cache_key, flag_for_removal=flag_for_removal
             )  # Pass transcript
 
             # Run summarization based on tool results
@@ -572,6 +604,7 @@ class OpenAiWingman(Wingman):
 
     def _try_instant_activation(self, transcript):
         """Tries to execute an instant activation command if present in the transcript."""
+
         # Keep original logic
         command = self._execute_instant_activation_command(transcript)
         if command:
@@ -670,25 +703,26 @@ class OpenAiWingman(Wingman):
 
         return response_message, response_message.tool_calls
 
-    async def _handle_tool_calls(self, tool_calls, call_cache_key):
+    async def _handle_tool_calls(self, tool_calls, call_cache_key, flag_for_removal=False):
         """Processes all the tool calls identified in the response message."""
 
         instant_response = None
         # function_response = "" # Variable not used in original return
 
-        function_calls = []
-        function_call_responses = []
+        cached_function_calls = []
+        caching_key_function_objects = []
+        tool_call_response_cache_key = None
 
         if not tool_calls and call_cache_key:
-            function_calls = self.instant_command_cache_manager.get(
+            cached_function_calls = self.instant_command_cache_manager.get(
                 call_cache_key
             )  # Check cache for instant command
             if self.debug or DEBUG:
                 printr.print(
-                    f"Calling cached functions {json.dumps(function_calls, indent=2)}", tags="info"
+                    f"Calling cached functions {json.dumps(cached_function_calls, indent=2)}", tags="info"
                 )
 
-            for function_call in function_calls:
+            for function_call in cached_function_calls:
                 function_name = function_call[0]
                 function_args = function_call[1]
 
@@ -699,7 +733,7 @@ class OpenAiWingman(Wingman):
                     )
                 )
 
-                function_call_responses.append(function_response)
+                caching_key_function_objects.append((function_name, call_cache_key, function_response))
 
                 if instant_response_iter:
                     instant_response = instant_response_iter
@@ -716,7 +750,7 @@ class OpenAiWingman(Wingman):
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
 
-                function_calls.append((function_name, function_args))
+                cached_function_calls.append((function_name, function_args))
 
                 # Pass transcript and is_cached_call=False
                 function_response, instant_response_iter = (
@@ -724,7 +758,8 @@ class OpenAiWingman(Wingman):
                         function_name, function_args
                     )
                 )
-                function_call_responses.append(function_response)
+
+                caching_key_function_objects.append((function_name, call_cache_key, function_response))
 
                 if instant_response_iter:
                     instant_response = instant_response_iter
@@ -744,10 +779,15 @@ class OpenAiWingman(Wingman):
                     f"Caching function call '{function_name}':#{call_cache_key}", tags="info"
                 )
             self.instant_command_cache_manager.put(
-                key=call_cache_key, data=function_calls, storage_mode="json", file_extension=".json"
+                key=call_cache_key,
+                data=cached_function_calls,
+                storage_mode="json",
+                file_extension=".json",
+                flag_for_removal=flag_for_removal
             )
 
-        tool_call_response_cache_key = self._generate_cache_key(function_call_responses)
+        if len(caching_key_function_objects) > 0:
+            tool_call_response_cache_key = self._generate_cache_key(caching_key_function_objects)
         # Return the *last* instant response encountered during the loop
         return (
             instant_response,
@@ -882,7 +922,10 @@ class OpenAiWingman(Wingman):
                 if self.tts_cache_manager and tts_cache_key:
                     try:
                         self.tts_cache_manager.put(
-                            key=tts_cache_key, data=audio_bytes_generated, storage_mode="bytes", file_extension=".wav"
+                            key=tts_cache_key, 
+                            data=audio_bytes_generated, 
+                            storage_mode="bytes", 
+                            file_extension=".wav"
                         )
                         printr.print(
                             f"   Stored TTS response in cache (key: {tts_cache_key[:8]}...).",

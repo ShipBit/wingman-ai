@@ -14,6 +14,24 @@
 # ──────────────────────────────── FEATURES ─────────────────────────────────
 features:
   debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
+  
+  command_and_tts_cache:
+    cache_instant_commands: true # Setze auf true, um das Caching für Instant Commands zu aktivieren
+    cache_tts_responses: true    # Setze auf true, um das Caching für TTS-Antworten zu aktivieren
+    instant_command_cache_max_size: 200 # Max items in memory LRU for commands
+    tts_cache_max_size: 100           # Max items in memory LRU for TTS
+    do_not_cache_phrases:
+    - Hallo Cora
+    delete_last_cached_command_phrases:
+    - Lösche den letzten Befehl
+    - Befehl ignorieren
+    - ignoriere den Befehl
+    short_memory_commands: # these phrases will only be kept in cache as long as they are repeated consequently. A new cached phrase will automatically delete these cache entries
+    - Wiederhole den letzten Befehl
+    - Ja, Bitte
+    - Wiederhole
+  
+  # NOTE: Azure Subscriptions has rate limits far lower than other provider. You might reach these limits early if you have not high enough quota.
 
   # ─────────────────────── TTS Provider ─────────────────────────
   # You can override the text-to-spech provider if your Wingman supports it. Our OpenAI wingman does!
@@ -32,7 +50,7 @@ features:
 
   # ─────────────────────── Summarize Provider ─────────────────────────
   # You can override the summarize provider to use a different one than the default.
-  # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
+  # Note that the other providers may have additional config blocks as shown below fo•r edge_tts. These are only used if the provider is set here.
   summarize_provider: openai # available: openai, azure
 
   # ─────────────────────── Cost Control ─────────────────────────
@@ -57,7 +75,7 @@ sound:
   # adds a beep/Quindar sound before and after the wingman talks
   play_beep: false
 
-  volume: 0.5 # 0.0 - 1.0
+  volume: 0.3 # 0.0 - 1.0
 
 # ────────────────────────────────── Local AI ────────────────────────────────────
 local:
@@ -69,18 +87,50 @@ openai:
   # gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
   # gpt-3.5 is the default and should be enough for most use cases.
   # If something is not working as expected, you might want to test it with gpt-4.
-  conversation_model: gpt-4.1-nano # available: gpt-4.1-nano, gpt-4.1-mini, gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  conversation_model: gpt-4.1-mini # available: gpt-4.1-nano, gpt-4.1-mini, gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
 
   # This model summarizes function responses, like API call responses etc.
   # In most cases gpt-3.5 should be enough.
-  summarize_model: gpt-4.1-nano # gpt-3.5-turbo-0125 # available: gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  summarize_model: gpt-4.1-mini # gpt-3.5-turbo-0125 # available: gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+
+  summarize_instructions: |
+    You are a professional voice‑script writer.
+
+    **Task**  
+    Read the information (text or json format) that follows  
+    It contains:
+    • technical_info – raw machine data and diagnostics  
+    • error_messages – critical or warning level faults  
+    • instructions – rules on how the data must be interpreted  
+    • user_notes – general information for the end user  
+
+    **Output**  
+    Write a concise, listener‑friendly script tailored to the general context of the conversation in the given player language that can be spoken aloud.  
+    Follow these formatting rules:
+
+    1. Do NOT echo or quote any technical information or attributes unless required; only produce prose.  
+    2. Obey instructions with highest priority.   
+    3. Do not use technical terms of the JSON fields. Use them only to understand the context.   
+    4. Keep sentences short (≤ 20 words)  
+
+    Return ONLY the final script without any annotations or speaker information, just the raw text to be spoken by one person, nothing else.
 
   # The voice to use for OpenAI text-to-speech.
   # Only used if features > tts_provider is set to 'openai' above.
   tts_voice: nova # available: nova, alloy, echo, fable, onyx, shimmer
-  tts_model: tts-1 # available: tts-1, tts-1-hd or gpt-4o-mini-tts
+  tts_model: gpt-4o-mini-tts # available: tts-1, tts-1-hd or gpt-4o-mini-tts
+  tts_voice_instructions:  #| # leider kann man die Persona nicht "speichern", so dass sie jedes mal etwas anders klingt.
+    # Voice characteristics:
+    # - Accent: Standard (clear, neutral)
+    # - Emotional range: lively and irreverent; flips between teasing sarcasm and exaggerated excitement
+    # - Intonation: even phrase pacing with a gentle sentence‑final rise and minimal pitch fluctuation
+    # - Impressions: friendly starship computer—helpful AI
+    # - Speed of speech: brisk (≈ 150 WPM) with occasional slow‑downs to land a joke
+    # - Tone: bright, crisp timbre with a youthful edge and a hint of rasp
+    # - Whispering: rarely used, reserved for brief dramatic emphasis
 
-  stt_model: gpt-4o-transcribe # , gpt-4o-mini-transcribe, and whisper-1
+
+  stt_model: gpt-4o-mini-transcribe # , gpt-4o-mini-transcribe, and whisper-1, gpt-4o-transcribe
   # ADVANCED:
   # If you want to use a different API endpoint, uncomment this and configure it here.
   # Use this to hook up your local in-place OpenAI replacement like Ollama or if you want to use a proxy.
@@ -98,12 +148,12 @@ azure:
     deployment_name: whisper # The deployment name e.g. 'whisper'
   conversation:
     api_base_url: https://cora-ai.openai.azure.com/ # https://xxx.openai.azure.com/
-    api_version: 2024-08-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
-    deployment_name: gpt-4o # The deployment name e.g. 'whisper'
+    api_version: 2025-01-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
+    deployment_name: gpt-4o-mini # The deployment name e.g. 'whisper'
   summarize:
     api_base_url: https://cora-ai.openai.azure.com/ # https://xxx.openai.azure.com/
-    api_version: 2024-08-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
-    deployment_name: gpt-4o-mini # The deployment name e.g. 'whisper'
+    api_version: 2025-01-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
+    deployment_name: gpt-4.1-nano # The deployment name e.g. 'whisper'
   tts:
     api_base_url: https://cora-ai.openai.azure.com/ # https://xxx.openai.azure.com/
     api_version: 2024-10-01-preview # The API version to use. For a list o
@@ -541,7 +591,7 @@ wingmen:
           - hide FPS
         responses: False
       # ──────────────────────────────────────────────────────────────────────────
-      - name: HelloChatTest
+      - name: HelloCitizens
         keys: 
         - key: "enter" # start a chat
         - key:
@@ -554,8 +604,8 @@ wingmen:
       # ──────────────────────────────────────────────────────────────────────────
       - name: GetUp
         sc_commands:
-          - sc_command: player_Third_Person_View_Toggle
           - sc_command: spaceship_power_Toggle_Power_Thrusters
+          - sc_command: player_Third_Person_View_Toggle
           - sc_command: default_Exit_seat
             hold: 0.5 # as the keymapping files of some commands do not precise how to activate the action, you can individually overwrite the behaviour
         instant_activation:
@@ -799,8 +849,9 @@ wingmen:
       # ──────────────────────────────────────────────────────────────────────────
       - name: ToggleMuteMicrofoneDiscord
         keys: # You can still specify own key strokes
-        - key: home
-          modifiers: altright
+        - key: f10
+          modifiers: ctrlleft,shiftleft
+          hold: 0.01
         instant_activation: 
           - Mute Discord
           - Discord Stummschalten
@@ -813,3 +864,211 @@ wingmen:
     # ─────────────────────AdvancedGenericLogManager────────────────────────────────── 
     AdvancedGenericLogManager:
       log_file_path: "star_citizen_data/logs/log_memories.json"
+
+
+
+
+
+# Referenz für Tastennamen in pyautogui und pydirectinput
+# Stand: Basierend auf allgemeiner Dokumentation und üblicher Verwendung
+# Hinweis: Die tatsächliche Unterstützung kann je nach OS und Version variieren.
+#         pydirectinput ist Windows-spezifisch.
+
+reference_key_mappings:
+
+  # ===========================================================
+  # Tasten mit (höchstwahrscheinlich) identischen Namen
+  # ===========================================================
+  common_keys:
+    # Buchstaben (Kleinbuchstaben sind Standard)
+    - a
+    - b
+    - c
+    - d
+    - e
+    - f
+    - g
+    - h
+    - i
+    - j
+    - k
+    - l
+    - m
+    - n
+    - o
+    - p
+    - q
+    - r
+    - s
+    - t
+    - u
+    - v
+    - w
+    - x
+    - y
+    - z
+    # Zahlen (Haupttastatur)
+    - '0'
+    - '1'
+    - '2'
+    - '3'
+    - '4'
+    - '5'
+    - '6'
+    - '7'
+    - '8'
+    - '9'
+    # Funktionstasten
+    - f1
+    - f2
+    - f3
+    - f4
+    - f5
+    - f6
+    - f7
+    - f8
+    - f9
+    - f10
+    - f11
+    - f12
+    # (F13-F24 sind seltener, aber oft auch identisch)
+    - f13
+    - f14
+    - f15
+    - f16
+    - f17
+    - f18
+    - f19
+    - f20
+    - f21
+    - f22
+    - f23
+    - f24
+    # Modifier (Spezifische Links/Rechts Versionen)
+    - shiftleft
+    - shiftright
+    - ctrlleft
+    - ctrlright  # Wichtig: Dies ist der korrekte Name für die rechte Strg-Taste!
+    - altleft    # Linke Alt-Taste
+    - altright   # Rechte AltGr-Taste (oft als AltGr bezeichnet)
+    - winleft    # Linke Windows-Taste
+    - winright   # Rechte Windows-Taste
+    # Navigation
+    - up
+    - down
+    - left
+    - right
+    - pageup
+    - pagedown
+    - home
+    - end
+    # Bearbeitung & Whitespace
+    - backspace
+    - delete
+    - insert
+    - space
+    - tab
+    # Sperrtasten
+    - capslock
+    - numlock
+    - scrolllock
+    # Andere
+    - esc       # Escape-Taste
+    - pause
+    # Numpad-Ziffern
+    - num0
+    - num1
+    - num2
+    - num3
+    - num4
+    - num5
+    - num6
+    - num7
+    - num8
+    - num9
+    # Numpad-Operatoren & Tasten
+    - decimal   # Numpad '.'
+    - add       # Numpad '+'
+    - subtract  # Numpad '-'
+    - multiply  # Numpad '*'
+    - divide    # Numpad '/'
+    - numenter  # Numpad Enter
+    # Symbole (Layout-abhängig, aber Namen oft gleich)
+    - ';'
+    - '='
+    - ','
+    - '-'
+    - '.'
+    - '/'
+    - '`'
+    - '['
+    - '\' # Backslash muss ggf. escaped werden: '\\'
+    - ']'
+    - "'"
+
+  # ===========================================================
+  # Tasten mit unterschiedlichen oder alternativen Namen
+  # ===========================================================
+  equivalent_keys:
+    - pyautogui: enter      # PyAutoGUI verwendet oft 'enter'
+      pydirectinput: [enter, return] # pydirectinput akzeptiert oft beides
+      notes: "'enter' ist gebräuchlicher."
+
+    - pyautogui: alt        # Generisches Alt
+      pydirectinput: alt      # Funktioniert oft, aber 'altleft' ist spezifischer
+      notes: "Bevorzuge 'altleft' oder 'altright', wenn die Seite wichtig ist."
+
+    - pyautogui: ctrl       # Generisches Strg
+      pydirectinput: ctrl     # Funktioniert oft, aber 'ctrlleft'/'ctrlright' ist spezifischer
+      notes: "Bevorzuge 'ctrlleft' oder 'ctrlright', wenn die Seite wichtig ist."
+
+    - pyautogui: shift      # Generisches Shift
+      pydirectinput: shift    # Funktioniert oft, aber 'shiftleft'/'shiftright' ist spezifischer
+      notes: "Bevorzuge 'shiftleft' oder 'shiftright', wenn die Seite wichtig ist."
+
+    - pyautogui: printscreen # PyAutoGUI Standard
+      pydirectinput: [printscreen, prntscrn, snapshot] # pydirectinput kann mehrere Aliase haben
+      notes: "'printscreen' oder 'prntscrn' sind am wahrscheinlichsten."
+
+    - pyautogui: win        # Generische Windows-Taste (oder Command auf Mac)
+      pydirectinput: win      # Funktioniert oft, aber 'winleft'/'winright' ist spezifischer
+      notes: "Bevorzuge 'winleft' oder 'winright'."
+
+  # ===========================================================
+  # Tasten, die primär in pyautogui existieren (oder OS-spezifisch sind)
+  # ===========================================================
+  pyautogui_specific_or_os_dependent:
+    - command   # macOS Command-Taste
+    - option    # macOS Option-Taste (Alt)
+    - help
+    - apps      # Menü-/Kontext-Taste (könnte in pydirectinput als 'apps' oder via VK-Code gehen)
+    # Weniger gebräuchliche Tasten, die in pyautogui definiert sein können:
+    # - volumeup, volumedown, volumedmute
+    # - browser* Tasten etc. (Unterstützung in pydirectinput unsicher)
+    # - pyautogui listet manchmal Aliase wie 'return' zusätzlich zu 'enter'.
+
+  # ===========================================================
+  # Tasten, die spezifisch oder besonders relevant für pydirectinput sind
+  # ===========================================================
+  pydirectinput_relevant:
+    - notes: |
+        pydirectinput orientiert sich stark an Windows Virtual Key (VK) Codes
+        und Scan Codes. Während viele Aliase mit pyautogui übereinstimmen,
+        können für spezielle Tasten oder bei Problemen die VK-Codes oder
+        spezifische Namen wie 'prntscrn' nötig sein. Die Unterstützung für
+        alle von pyautogui gelisteten Symbole ist nicht garantiert, da dies
+        stark vom Tastaturlayout abhängt.
+
+# ===========================================================
+# Referenz für Maus-Buttons (für click(button=...))
+# ===========================================================
+mouse_buttons:
+  common:
+    - mouse_left 
+    - mouse_right
+    - mouse_middle
+  notes: |
+    Diese Namen sollten sowohl in pyautogui als auch in pydirectinput
+    für den `button` Parameter von `click()` funktionieren.
+    Deine Logik `key.split("mouse_")[-1]` ist korrekt, wenn deine
+    Input-Keys 'mouse_left', 'mouse_right', 'mouse_middle' sind.

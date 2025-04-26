@@ -408,7 +408,7 @@ class StarCitizenWingman(OpenAiWingman):
             # if the command has responses, we have to play one of them
             if command and command.get("responses"):
                 instant_reponse = self._select_command_response(command)
-                await self._play_to_user(instant_reponse)
+                await self. _play_to_user(instant_reponse)
 
         # finally, check for any function managers implementing the called function
         if function_name in self.ai_functions_manager.get_function_registry():
