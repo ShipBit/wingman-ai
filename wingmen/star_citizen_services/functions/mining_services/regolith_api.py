@@ -13,7 +13,7 @@ from gql.transport.requests import RequestsHTTPTransport
 from wingmen.star_citizen_services.helper import time_string_converter
 
 
-DEBUG = True
+DEBUG = False
 TEST = False
 SHIP_CLUSTER_TYPES = [
     'CTYPE',

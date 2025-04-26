@@ -312,7 +312,6 @@ class MiningManager(FunctionManager):
         printr.print(f'-> Refinery Management: {function_type}', tags="info")
         function_response = self.manage_work_order(type=function_type, work_order_index=work_order_index)
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
-        self.overlay.display_overlay_text("Cora: Done", vertical_position_ratio=3, display_duration=5000)
         return function_response
     
     def add_rock_scan_or_deposit_cluster_information(self, function_args):
@@ -320,7 +319,7 @@ class MiningManager(FunctionManager):
         function_type = function_args["type"]
         
         if not function_type or function_type == "save_scan_result":
-            image_path = screenshots.take_screenshot(self.mining_data_path, "scans", test=TEST)
+            image_path = screenshots.take_screenshot_ingame(self.mining_data_path, "scans", test=TEST)
             if not image_path:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
                 return {"success": False, "instructions": "Could not take screenshot. Explain the player, that you only take screenshots, if the active window is Star Citizen. "}
@@ -367,7 +366,7 @@ class MiningManager(FunctionManager):
 
     def manage_work_order(self, type="new", work_order_index=None):
         if type == "add_work_order":
-            image_path = screenshots.take_screenshot(self.mining_data_path, "workorder", "images", test=TEST)
+            image_path = screenshots.take_screenshot_ingame(self.mining_data_path, "workorder", "images", test=TEST)
             if not image_path:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
                 return {"success": False, "instructions": "Could not take screenshot. Explain the player, that you only take screenshots, if the active window is Star Citizen. "}
@@ -397,8 +396,13 @@ class MiningManager(FunctionManager):
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
                 return scan_result
             
-            return self.add_work_order_regolith_from_scan(scan_result)
-            
+            function_response = self.add_work_order_regolith_from_scan(scan_result)
+
+            self.overlay.display_overlay_text(f"Cora: {'Success' if function_response.get('success', False) else 'Error'}", vertical_position_ratio=3, display_duration=5000)
+            return function_response
+        
+        elif type == "add_work_order_uex":
+            pass
         if type == "get_all_work_orders":
             return self.regolith.get_active_work_orders()
 
