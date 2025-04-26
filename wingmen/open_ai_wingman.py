@@ -11,7 +11,7 @@ from wingmen.star_citizen_services.helper import find_best_match
 
 printr = Printr()
 
-DEBUG = True
+DEBUG = False
 
 DEBUG_LOG_PATH = os.path.join("debug_data", "openai", "debug.log")
 

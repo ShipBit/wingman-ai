@@ -1,7 +1,7 @@
 from wingmen.star_citizen_services.helper import find_best_match as search
 
 
-DEBUG = True
+DEBUG = False
 
 
 def print_debug(to_print):

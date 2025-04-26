@@ -30,7 +30,7 @@ except AttributeError:
     # )
     import pyautogui as key_module
 
-DEBUG = True
+DEBUG = False
 
 class Wingman(FileCreator):
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.

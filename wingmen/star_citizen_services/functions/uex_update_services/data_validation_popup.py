@@ -13,7 +13,7 @@ from wingmen.star_citizen_services.helper import find_best_match as search
 from wingmen.star_citizen_services.functions.uex_update_services.commodity_price_validator import CommodityPriceValidator
 
 
-DEBUG = True
+DEBUG = False
 
 
 def print_debug(to_print):

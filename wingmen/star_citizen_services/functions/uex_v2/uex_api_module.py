@@ -9,7 +9,7 @@ if __name__ != "__main__":
     from wingmen.star_citizen_services.helper import find_best_match
 
 
-DEBUG = True
+DEBUG = False
 TEST = False
 CALL_UEX_SR_ENDPOINT = True
 
