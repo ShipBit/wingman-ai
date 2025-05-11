@@ -81,6 +81,7 @@ class ATSTelemetry(Skill):
         self.ets_install_directory = ""
         self.dispatcher_backstory = ""
         self.autostart_dispatch_mode = False
+        
         # Define the ATS (American Truck Simulator) projection for use in converting in-game coordinates to real life
         self.ats_proj = Proj(
             proj="lcc",
@@ -472,13 +473,20 @@ class ATSTelemetry(Skill):
                 # Pull x, y coordinates from truck sim, note that there are x, y, z, so here z pertains to 2d y, and y pertains to altitude
                 x = data["coordinateX"]
                 y = data["coordinateZ"]
+                # Check if we're in ATS or ETS
+                is_ets2 = data["game"] == 1
                 # Convert to world latitude and longitude
-                longitude, latitude = await self.from_ats_coords_to_wgs84(
-                    data["coordinateX"], data["coordinateZ"]
-                )
+                if is_ets2:
+                    longitude, latitude = await self.from_ets2_coords_to_wgs84(
+                        data["coordinateX"], data["coordinateZ"]
+                    )                    
+                else:
+                    longitude, latitude = await self.from_ats_coords_to_wgs84(
+                        data["coordinateX"], data["coordinateZ"]
+                    )
                 if self.settings.debug_mode:
                     await self.printr.print_async(
-                        f"Executing get_information_about_current_location function with coordinateX as {x} and coordinateZ as {y}, latitude returned was {latitude}, longitude returned was {longitude}.",
+                        f"Executing get_information_about_current_location function (game is ets2: {is_ets2}) with coordinateX as {x} and coordinateZ as {y}, latitude returned was {latitude}, longitude returned was {longitude}.",
                         color=LogType.INFO,
                     )
                 place_info = await self.convert_lat_long_data_into_place_data(
