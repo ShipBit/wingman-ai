@@ -198,7 +198,7 @@ class StarCitizenWingman(OpenAiWingman):
                     f"by calling the switch_context function. Do switch to context {AIContext.CORA}, "
                     f"if the player adresses 'Cora' or using words like 'computer' or demanding a specific player or ship action or mission related actions. "
                     "Do switch as well, if the user is asking non trade related questions. "
-                    f'He wants you to respond in {self.config["openai"]["player_language"]}. '
+                    f'He wants you to respond in {self.config["openai"]["player_language"]}. Introduce yourself shortly giving yourself a name that fits the gender of your current voice-name "{self.config["openai"]["tts_voice"]}" and a role that fits the context of the TDD. '
                 )
             
             initial_user_message = ""

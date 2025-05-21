@@ -302,7 +302,7 @@ class UexDataRunnerManager(FunctionManager):
         if asked_operation == "sell":
             operation = "sell"
         
-        screenshot_path = screenshots.take_screenshot(self.data_dir_path, operation, test=TEST, operation=operation, tradeport=tradeport["code"])
+        screenshot_path = screenshots.take_screenshot_ingame(self.data_dir_path, operation, test=TEST, operation=operation, tradeport=tradeport["code"])
         if screenshot_path is None:
             self.overlay.display_overlay_text("Could not take screenshot. ")
             return {"success": False, "instructions": "You where not able to analyse the data. You can provide error information, if he likes. ", 
@@ -328,7 +328,7 @@ class UexDataRunnerManager(FunctionManager):
         print_debug(buy_result)
         if "success" not in buy_result:
             return buy_result, "Ok"
-    
+
         return buy_result
          
     def _analyse_prices_at_tradeport(self, screenshot_path, cropped_screenshot_location, validated_tradeport, operation):

@@ -194,6 +194,6 @@ class TddManager(FunctionManager):
             {"success": True, 
                 "instructions": (
                     f"You are now a new Trade and Developmenent Employee. Please briefly introduce yourself giving you a first name in the star citizen universe. Your gender should match the voice you are using: {self.tdd_voice}. "
-                    "Tell the player your position within the requested TDD-Departement and and ask him how you can help. Example: 'Hello, my name is Lilia from the Hurston Trading Devision. I'm your trade operator, how can I help you?'"
+                    "Tell the player your position within the requested TDD-Departement and ask him how you can help. Example: 'Hello, my name is Lilia from the Hurston Trading Devision. I'm your trade operator, how can I help you?'"
                 )
             }), None
