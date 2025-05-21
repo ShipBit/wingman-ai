@@ -326,7 +326,7 @@ class MiningManager(FunctionManager):
             self.overlay.display_overlay_text("Screenshot taken", vertical_position_ratio=3, display_duration=5000)
             
             area_image = screenshots.crop_screenshot_coordinates(
-                data_dir_path=f"{self.mining_data_path}/templates/scans)",
+                data_dir_path=f"{self.mining_data_path}/templates/scans",
                 screenshot=image_path,
                 instructions=[{'strategy': 'AREA', 'coords': ((1500, 400), (2300, 1200))}],
                 cash_key="rock_scan"
@@ -373,23 +373,14 @@ class MiningManager(FunctionManager):
             
             self.overlay.display_overlay_text("Screenshot taken", vertical_position_ratio=3, display_duration=5000)
 
-            cropped_image = screenshots.crop_screenshot(
+            area_image = screenshots.crop_screenshot_coordinates(
                 data_dir_path=f"{self.mining_data_path}/templates/refineries",
                 screenshot=image_path,
-                areas_and_corners_and_cropstrat=[
-                    ("UPPER_LEFT", "LOWER_LEFT", "AREA"), 
-                    ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")],
-                cash_key="workorder")
-            
-            # open ai image recognition
-            # retrieved_json, success = self.ocr.get_screenshot_texts(cropped_image, "workorder", refinery="{refinery}", test=TEST)
-            # if not success:
-            #     return {"success": False, "error": retrieved_json, "instructions": "Explain the player the reason for the work order not beeing able to be extracted. "}
+                instructions=[{'strategy': 'AREA', 'coords': ((180, 75), (1200, 1300))}],
+                cash_key="workorder"
+            )
 
-            # return self.add_work_order_regolith(retrieved_json)
-            
-            # if regolith api provides amt from screenshot, i can use this.
-            base64_jpg_image = screenshots.convert_cv2_image_to_base64_jpeg(cropped_image)
+            base64_jpg_image = screenshots.convert_cv2_image_to_base64_jpeg(area_image)
             scan_result = self.regolith.get_work_order_image_infos(base64_jpg_image)
 
             if "success" in scan_result and scan_result["success"] is False:
@@ -428,16 +419,31 @@ class MiningManager(FunctionManager):
             "sessionId": session_id,
             "shipOres": shipOres,
             "workOrder": {
-                "expenses": scan_result["captureRefineryOrder"]["expenses"],
+                "expenses": [
+                    {
+                        "name": scan_result["captureRefineryOrder"]["expenses"][0]["name"],
+                        "amount": scan_result["captureRefineryOrder"]["expenses"][0]["amount"],
+                        "ownerScName": self.regolith.retrieve_user_info(),
+                    }
+                ],
                 "includeTransferFee": True,
                 "isRefined": True,
                 "isSold": False,
-                "method": scan_result["captureRefineryOrder"]["method"],  
+                "method": scan_result["captureRefineryOrder"]["method"],
                 "note": "Work order created by Cora - Your Star Citizen Ai-compagnion",
                 "processStartTime": current_time,
-                "processDurationS": scan_result["captureRefineryOrder"]["processDurationS"], 
+                "processDurationS": scan_result["captureRefineryOrder"]["processDurationS"],
                 "refinery": scan_result["captureRefineryOrder"]["refinery"],
-            }
+                "shareRefinedValue": True,
+            },
+            "shares": [
+                {
+                    "payeeScName": self.regolith.sc_name,
+                    "share": 1,
+                    "shareType": "SHARE",
+                    "state": True
+                }
+            ]
         }
 
         return self.regolith.create_work_order(work_order_details=variables)

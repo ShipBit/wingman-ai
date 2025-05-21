@@ -37,7 +37,7 @@ except AttributeError:
 
 
 
-ENHANCE_IMAGES = True  # Schaltet die Verbesserung generell an/aus
+ENHANCE_IMAGES = False  # Schaltet die Verbesserung generell an/aus
 CLAHE_CLIP_LIMIT = (
     5.0  # Kontrastlimit (höher = stärkerer Kontrast, kann Rauschen verstärken)
 )

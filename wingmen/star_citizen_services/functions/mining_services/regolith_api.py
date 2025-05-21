@@ -95,6 +95,8 @@ class RegolithAPI:
         )
         self.active_session_id = None
         self.active_session = None
+        self.sc_name = None
+        self.user_id = None
         self.refineries = None
         self.refinery_methods = None
         self.gravity_wells_names = None
@@ -224,6 +226,48 @@ class RegolithAPI:
                 f"Error during refinery name retrieval: {str(e)}:\n{traceback.print_stack()}"
             )
             return []
+        
+    def retrieve_user_info(self):
+        if self.sc_name is not None and self.user_id is not None:
+            return self.sc_name
+        
+        get_profile = gql(
+            """
+            query getUserProfile {
+                profile {
+                    ...UserProfileFragment
+                }
+                }
+
+                fragment UserProfileFragment on UserProfile {
+                userId
+                scName
+                }
+            """
+        )
+
+        try:
+            response = self.client.execute(get_profile)
+
+            if "errors" in response:
+                print("Error during GraphQL-Request:")
+                for error in response["errors"]:
+                    print(error["message"])
+
+                return None
+            else:
+                print_debug("User-Info retrieved")
+                self.sc_name = response.get("profile", {}).get("scName", None)
+                self.user_id = response.get("profile", {}).get("userId", None)
+
+                return self.sc_name
+    
+        except Exception as e:
+            print(
+                f"Error trying to retrieve user information: {str(e)}:\n{traceback.print_stack()}"
+            )
+            return None
+
 
     def get_refinery_method_names(self):
         if self.refinery_methods is not None:
@@ -436,6 +480,7 @@ class RegolithAPI:
             return None
 
     def get_or_create_mining_session(self, name, activity, refinery):
+        self.retrieve_user_info()
         session_id = self.get_last_active_session()
         if session_id is None:
             session_id = self.create_mining_session(name, activity, refinery)
@@ -532,23 +577,56 @@ class RegolithAPI:
 
         mutation = gql(
             """
-            mutation CreateWorkOrder(
-                $sessionId: ID!,
-                $shipOres: [RefineryRowInput!],
-                $workOrder: WorkOrderInput!
-                ) {
+            mutation createWorkOrder($sessionId: ID!, $workOrder: WorkOrderInput!, $shipOres: [RefineryRowInput!], $shares: [CrewShareInput!]!) {
                 createWorkOrder(
-                        shares: [],
-                        sessionId: $sessionId,
-                        shipOres: $shipOres,
-                        workOrder: $workOrder
+                    sessionId: $sessionId
+                    workOrder: $workOrder
+                    shipOres: $shipOres
+                    shares: $shares
                 ) {
-                    ... on ShipMiningOrder {
-                        orderId
-                        __typename
+                    ...WorkOrderFragment
+                }
+                }
+
+                fragment WorkOrderFragment on WorkOrderInterface {
+                ...WorkOrderBaseFragment
+                state
+                }
+
+                fragment WorkOrderBaseFragment on WorkOrderInterface {
+                orderId
+                sessionId
+                createdAt
+                updatedAt
+                ownerId
+                isSold
+                sellerscName
+                sellerUserId
+                failReason
+                includeTransferFee
+                orderType
+                note
+                shareAmount
+                sellStore
+                expenses {
+                    amount
+                    name
+                    ownerScName
+                }
+                isSold
+                ... on ShipMiningOrder {
+                    isRefined
+                    shareRefinedValue
+                    refinery
+                    method
+                    processStartTime
+                    processDurationS
+                    shipOres {
+                    amt
+                    ore
                     }
                 }
-            }
+                }
         """
         )
 
@@ -1292,20 +1370,21 @@ class RegolithAPI:
         query = gql(
             """
             query captureRefineryOrder($imgUrl: String!) {
-                captureRefineryOrder(imgUrl: $imgUrl) {
-                    expenses {
-                    amount
-                    name
-                    }
-                    processDurationS
-                    refinery
-                    method
-                    shipOres {
-                    amt
-                    ore
-                    yield
-                    }
+            captureRefineryOrder(imgUrl: $imgUrl) {
+                expenses {
+                amount
+                name
+                ownerScName
                 }
+                processDurationS
+                refinery
+                method
+                shipOres {
+                amt
+                ore
+                yield
+                }
+            }
             }
         """
         )
