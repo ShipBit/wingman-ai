@@ -1092,7 +1092,8 @@ class RegolithAPI:
             else:
                 return {
                     "success": True,
-                    "response_instructions": "Shortly confirm that the scan has been saved, like: 'Scan saved'"
+                    "response_instructions": "Shortly confirm that the scan has been saved, like: '9 of 12 rocks scanned. ",
+                    "total_scans": f"{len(ship_rocks)}/{response['updateScoutingFind']['clusterCount']}"
                 }
         except Exception as e:
             print(f"Error during save scan: {str(e)}:\n{traceback.print_stack()}")

@@ -347,7 +347,10 @@ class MiningManager(FunctionManager):
             session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=None)
             cluster = self.regolith.get_or_create_scouting_cluster(session_id)
             function_response = self.regolith.add_ship_cluster_scan_results(session_id, cluster, scan_result["captureShipRockScan"])
-            self.overlay.display_overlay_text("Cora: saved.", vertical_position_ratio=3, display_duration=5000)
+            if function_response is None or function_response.get("success", False) is False:
+                self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
+            else:
+                self.overlay.display_overlay_text(f"Cora: saved {function_response['total_scans']}", vertical_position_ratio=3, display_duration=5000)
         
         elif function_type == "add_new_cluster":
             cluster_count = function_args.get("cluster_count", 0)
