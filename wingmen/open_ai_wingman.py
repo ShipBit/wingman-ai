@@ -494,7 +494,7 @@ class OpenAiWingman(Wingman):
                         f"Instant command cache hit for: '{transcript}':{call_cache_key}", tags="info"
                     )
                 instant_response, tts_cache_key = await self._handle_tool_calls(
-                    None, call_cache_key
+                    None, call_cache_key, normalized_transcript
                 )  
 
                 # Run summarization based on tool results
@@ -527,7 +527,7 @@ class OpenAiWingman(Wingman):
             if do_not_cache_phrase:
                 call_cache_key = None  
             instant_response, tts_cache_key = await self._handle_tool_calls(
-                tool_calls, call_cache_key, flag_for_removal=flag_for_removal
+                tool_calls, call_cache_key, flag_for_removal=flag_for_removal, command_phrase=normalized_transcript
             )  # Pass transcript
 
             # Run summarization based on tool results
@@ -703,7 +703,7 @@ class OpenAiWingman(Wingman):
 
         return response_message, response_message.tool_calls
 
-    async def _handle_tool_calls(self, tool_calls, call_cache_key, flag_for_removal=False):
+    async def _handle_tool_calls(self, tool_calls, call_cache_key, flag_for_removal=False, command_phrase=None):
         """Processes all the tool calls identified in the response message."""
 
         instant_response = None
@@ -783,7 +783,8 @@ class OpenAiWingman(Wingman):
                 data=cached_function_calls,
                 storage_mode="json",
                 file_extension=".json",
-                flag_for_removal=flag_for_removal
+                flag_for_removal=flag_for_removal,
+                key_text=command_phrase,
             )
 
         if len(caching_key_function_objects) > 0:
@@ -922,10 +923,11 @@ class OpenAiWingman(Wingman):
                 if self.tts_cache_manager and tts_cache_key:
                     try:
                         self.tts_cache_manager.put(
-                            key=tts_cache_key, 
-                            data=audio_bytes_generated, 
-                            storage_mode="bytes", 
-                            file_extension=".wav"
+                            key=tts_cache_key,
+                            data=audio_bytes_generated,
+                            storage_mode="bytes",
+                            file_extension=".wav",
+                            key_text=text
                         )
                         printr.print(
                             f"   Stored TTS response in cache (key: {tts_cache_key[:8]}...).",

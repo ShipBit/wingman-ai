@@ -55,7 +55,7 @@ class CacheManager:
 
         self.memory_cache: OrderedDict[str, str] = OrderedDict()
         # Full cache data: key -> [file_path_str, hit_count, last_used_timestamp, storage_mode]
-        self.disk_data: Dict[str, Tuple[str, int, float, StorageMode]] = {}
+        self.disk_data: Dict[str, Tuple[str, int, float, StorageMode, str]] = {}
         self._dirty = False
         self._last_added_key: Optional[str] = None
         self._last_key_flagged_for_removal: bool = False
@@ -81,15 +81,9 @@ class CacheManager:
                 loaded_json = json.load(f)
                 self.disk_data = {}
                 for k, v in loaded_json.items():
-                    if isinstance(v, list) and len(v) == 4:
+                    if isinstance(v, list) and len(v) == 5:
                         mode = v[3] if v[3] in ("bytes", "json") else "bytes"
-                        self.disk_data[k] = (str(v[0]), int(v[1]), float(v[2]), mode)
-                    elif isinstance(v, list) and len(v) == 3:
-                        printr.print_warn(
-                            f"Found old cache format entry for key '{k}'. Assuming 'bytes' storage.",
-                            console_only=True,
-                        )
-                        self.disk_data[k] = (str(v[0]), int(v[1]), float(v[2]), "bytes")
+                        self.disk_data[k] = (str(v[0]), int(v[1]), float(v[2]), mode, str(v[4]))
                     else:
                         printr.print_warn(
                             f"Skipping invalid cache metadata entry for key '{k}': {v}",
@@ -143,7 +137,7 @@ class CacheManager:
             if key in self.disk_data:
                 self.memory_cache.move_to_end(key)
                 file_path_str = self.memory_cache[key]
-                _, _, _, storage_mode = self.disk_data[key]
+                _, _, _, storage_mode, _ = self.disk_data[key]
             else:
                 printr.print_warn(
                     f"Cache inconsistency: Key '{key}' in memory but not disk. Removing memory entry."
@@ -153,7 +147,7 @@ class CacheManager:
 
         # 2. Check disk data
         elif key in self.disk_data:
-            file_path_str, _, _, storage_mode = self.disk_data[key]
+            file_path_str, _, _, storage_mode, _ = self.disk_data[key]
             self.memory_cache[key] = file_path_str
             self.memory_cache.move_to_end(key)
             if len(self.memory_cache) > self.max_memory_size:
@@ -206,6 +200,7 @@ class CacheManager:
         storage_mode: StorageMode,
         file_extension: Optional[str] = None,
         flag_for_removal: bool = False,
+        key_text: Optional[str] = None,
     ):
         """
         Adds or updates an item in the cache, storing it either as raw bytes
@@ -217,6 +212,7 @@ class CacheManager:
                   JSON-serializable object if storage_mode='json').
             storage_mode: How to store the data ('bytes' or 'json').
             file_extension: Optional file extension (defaults to .bin or .json).
+            key_text: corresponds to the text matching the key. i.e. instant command phrase cached or the spoken tts response.
         """
         if not key or not data or not storage_mode:
             printr.print_err(
@@ -272,7 +268,7 @@ class CacheManager:
             return
 
         # Update metadata
-        self.disk_data[key] = (file_path_str, hit_count, timestamp, storage_mode)
+        self.disk_data[key] = (file_path_str, hit_count, timestamp, storage_mode, key_text)
 
         # Update memory cache
         self.memory_cache[key] = file_path_str
@@ -287,12 +283,13 @@ class CacheManager:
     def _update_metadata(self, key: str):
         """Internal: Updates hit count and timestamp for an existing key."""
         if key in self.disk_data:
-            file_path_str, hit_count, _, storage_mode = self.disk_data[key]
+            file_path_str, hit_count, _, storage_mode, text = self.disk_data[key]
             self.disk_data[key] = (
                 file_path_str,
                 hit_count + 1,
                 time.time(),  # Update timestamp on access
                 storage_mode,
+                text
             )
             self._dirty = True
 
@@ -304,7 +301,7 @@ class CacheManager:
 
         # Retrieve path before deleting metadata
         if key in self.disk_data:
-            file_path_str, _, _, _ = self.disk_data[key]
+            file_path_str, _, _, _, _ = self.disk_data[key]
             del self.disk_data[key]
             removed_from_disk = True
             self._dirty = True  # Mark dirty only if disk metadata changed
@@ -435,7 +432,7 @@ class CacheManager:
         total_size_bytes = 0
         item_count = 0
         try:
-            for file_path_str, _, _, _ in self.disk_data.values():
+            for file_path_str, _, _, _, _ in self.disk_data.values():
                 p = Path(file_path_str)
                 if p.is_file():
                     total_size_bytes += p.stat().st_size
