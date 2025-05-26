@@ -54,15 +54,13 @@ class CacheManager:
         self.max_memory_size = max_memory_size
 
         self.memory_cache: OrderedDict[str, str] = OrderedDict()
-        # Full cache data: key -> [file_path_str, hit_count, last_used_timestamp, storage_mode]
-        self.disk_data: Dict[str, Tuple[str, int, float, StorageMode, str]] = {}
+        # Full cache data: key -> [file_path_str, hit_count, last_used_timestamp, storage_mode, key_text, force_update]
+        self.disk_data: Dict[str, Tuple[str, int, float, StorageMode, str, bool]] = {}
         self._dirty = False
         self._last_added_key: Optional[str] = None
         self._last_key_flagged_for_removal: bool = False
 
         self.cache_data_path.mkdir(parents=True, exist_ok=True)
-
-        self.load()  # Note: load() does not restore _last_added_key
 
     def load(self):
         """Loads cache metadata from the JSON file."""
@@ -81,9 +79,14 @@ class CacheManager:
                 loaded_json = json.load(f)
                 self.disk_data = {}
                 for k, v in loaded_json.items():
-                    if isinstance(v, list) and len(v) == 5:
+                    if isinstance(v, list) and len(v) == 6:
                         mode = v[3] if v[3] in ("bytes", "json") else "bytes"
-                        self.disk_data[k] = (str(v[0]), int(v[1]), float(v[2]), mode, str(v[4]))
+                        if mode == "bytes":
+                            # (cached_value, hit_count, timestamp, storage_mode, key_text, force_update)
+                            self.disk_data[k] = (str(v[0]), int(v[1]), float(v[2]), mode, str(v[4]), bool(v[5]))
+                        else:  # json mode: v[0] enthält die gespeicherten Daten direkt
+                            # (cached_value, hit_count, timestamp, storage_mode, key_text, force_update)
+                            self.disk_data[k] = (v[0], int(v[1]), float(v[2]), mode, v[4], bool(v[5]))
                     else:
                         printr.print_warn(
                             f"Skipping invalid cache metadata entry for key '{k}': {v}",
@@ -95,6 +98,34 @@ class CacheManager:
                     tags="info",
                     console_only=True,
                 )
+
+            # --- Clean up orphaned files in the cache data directory ---
+            if self.cache_data_path.exists():
+                for file in self.cache_data_path.iterdir():
+                    if file.is_file():
+                        found = False
+                        # Check if file is referenced by any disk_data entry in bytes mode.
+                        for meta in self.disk_data.values():
+                            if meta[3] == "bytes":
+                                try:
+                                    if file.resolve() == Path(meta[0]).resolve():
+                                        found = True
+                                        break
+                                except Exception:
+                                    pass
+                        if not found:
+                            try:
+                                file.unlink(missing_ok=True)
+                                printr.print(
+                                    f"Deleted orphaned cache file: {file}",
+                                    tags="info",
+                                    console_only=True,
+                                )
+                            except Exception as e:
+                                printr.print_err(
+                                    f"Error deleting orphaned file {file}: {e}",
+                                    console_only=True,
+                                )
         except (json.JSONDecodeError, IOError, TypeError, ValueError, IndexError) as e:
             printr.print_err(
                 f"Error loading or parsing cache metadata file {self.cache_metadata_file}: {e}. Starting fresh.",
@@ -128,69 +159,104 @@ class CacheManager:
         Retrieves data associated with a key. Reads raw bytes or parses JSON
         based on the stored storage_mode. Updates the timestamp on access.
         Returns bytes, a deserialized JSON object, or None if not found/error.
+        @param key: The cache key to retrieve.
+        @param text: Optional text to match against the key_text for fuzzy search.
         """
-        file_path_str = None
+        cached_value = None
         storage_mode: Optional[StorageMode] = None
 
         # 1. Check memory cache
         if key in self.memory_cache:
             if key in self.disk_data:
                 self.memory_cache.move_to_end(key)
-                file_path_str = self.memory_cache[key]
-                _, _, _, storage_mode, _ = self.disk_data[key]
+                cached_value = self.memory_cache[key]
+                # (cached_value, hit_count, timestamp, storage_mode, key_text, force_update)
+                _, _, _, storage_mode, _, _ = self.disk_data[key]
             else:
                 printr.print_warn(
-                    f"Cache inconsistency: Key '{key}' in memory but not disk. Removing memory entry."
+                    f"Cache inconsistency: Key '{key}' in memory but not disk. Removing memory entry.", console_only=True
                 )
                 del self.memory_cache[key]
                 return None
 
-        # 2. Check disk data
-        elif key in self.disk_data:
-            file_path_str, _, _, storage_mode, _ = self.disk_data[key]
-            self.memory_cache[key] = file_path_str
+        # 2. Check disk data (and update memory cache)
+        elif key in self.disk_data:  # (cached_value, hit_count, timestamp, storage_mode, key_text, force_update)
+            cached_value, _, _, storage_mode, _, _ = self.disk_data[key]
+            self.memory_cache[key] = cached_value
             self.memory_cache.move_to_end(key)
             if len(self.memory_cache) > self.max_memory_size:
                 self.memory_cache.popitem(last=False)
+        else:
+            cached_value = None
+            storage_mode = None
 
-        # 3. Read data if path and mode found
-        if file_path_str and storage_mode:
-            file_path = Path(file_path_str)
-            if file_path.exists():
-                try:
-                    data: Optional[Any] = None
-                    if storage_mode == "bytes":
+        # 3. Read data based on storage_mode
+        if cached_value is not None and storage_mode:
+            if storage_mode == "bytes":
+                file_path = Path(cached_value)
+                if file_path.exists():
+                    try:
                         with open(file_path, "rb") as f:
                             data = f.read()
-                    elif storage_mode == "json":
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            data = json.load(f)
-                    else:
+                        self._update_metadata(key)
+                        return data
+                    except (json.JSONDecodeError, IOError, Exception) as e:
                         printr.print_err(
-                            f"Unknown storage mode '{storage_mode}' for key '{key}'. Removing."
+                            f"Error reading cache file {file_path} for key '{key}': {e}. Removing.", console_only=True
                         )
                         self._remove_entry(key)
                         return None
-
-                    self._update_metadata(
-                        key
-                    )  # Update hits/timestamp on successful get
-                    return data
-
-                except (json.JSONDecodeError, IOError, Exception) as e:
-                    printr.print_err(
-                        f"Error reading/decoding cache file {file_path} for key '{key}': {e}. Removing."
+                else:
+                    printr.print_warn(
+                        f"Cache file not found for key '{key}' at {cached_value}. Removing metadata.", console_only=True
                     )
                     self._remove_entry(key)
                     return None
+            elif storage_mode == "json":
+                self._update_metadata(key)
+                return cached_value
             else:
-                printr.print_warn(
-                    f"Cache file not found for key '{key}' at {file_path_str}. Removing metadata."
+                printr.print_err(
+                    f"Unknown storage mode '{storage_mode}' for key '{key}'. Removing.", console_only=True
                 )
-                self._remove_entry(key)  # Remove metadata if file is missing
+                self._remove_entry(key)
                 return None
 
-        # 4. Not found
+        return None
+    
+    def get_key_from_text(self, text: str) -> Optional[str]:
+        """
+        Retrieves the cache key associated with a given text.
+        Uses fuzzy matching to find the best match in key_text.
+
+        Args:
+            text: The text to match against cached key_text values.
+
+        Returns:
+            The cache key if found, otherwise None.
+        """
+        if text is not None:
+            # 4. Not found: Attempt fuzzy search for json mode entries based on key_text
+            if self.debug:
+                printr.print(
+                    f"Searching cache entry for '{text}'",
+                    tags="info",
+                    console_only=True,
+                )
+            candidates = []
+            for cand_key, v in self.disk_data.items():
+                if v[3] == "json" and v[4]:
+                    candidates.append({"key": cand_key, "key_text": v[4]})
+            if candidates:
+                best, success = find_best_match.find_best_match(text, candidates, attributes=["key_text"], score_cutoff=80)
+                if success and best.get("matched_value") is not None:
+                    printr.print(
+                        f"found {json.dumps(best.get('root_object'),indent=2)} with score {best.get('score')}",
+                        tags="info",
+                        console_only=True,
+                    )
+                    return best.get("root_object").get("key")
+                
         return None
 
     def put(
@@ -203,8 +269,8 @@ class CacheManager:
         key_text: Optional[str] = None,
     ):
         """
-        Adds or updates an item in the cache, storing it either as raw bytes
-        or as a JSON file based on storage_mode.
+        Adds or updates an item in the cache.
+        Bei storage_mode "json" werden die Daten direkt in der Metadatei abgelegt.
 
         Args:
             key: The cache key.
@@ -219,7 +285,7 @@ class CacheManager:
                 f"Invalid arguments for put: key='{key}', data='{data}', storage_mode='{storage_mode}'"
             )
             return
-        
+
         timestamp = time.time()
         hit_count = 1
         if storage_mode not in ("bytes", "json"):
@@ -227,51 +293,52 @@ class CacheManager:
                 f"Invalid storage_mode: '{storage_mode}'. Must be 'bytes' or 'json'."
             )
 
-        if file_extension is None:
-            file_extension = ".bin" if storage_mode == "bytes" else ".json"
-        elif not file_extension.startswith("."):
-            file_extension = "." + file_extension
+        if storage_mode == "bytes":
+            if file_extension is None:
+                file_extension = ".bin"
+            elif not file_extension.startswith("."):
+                file_extension = "." + file_extension
 
-        # Using key directly as filename base. Consider sanitizing or hashing if keys can contain problematic chars.
-        filename = key + file_extension
-        file_path = self.cache_data_path / filename
-        file_path_str = str(file_path)
+            filename = key + file_extension
+            file_path = self.cache_data_path / filename
+            file_path_str = str(file_path)
 
-        if self._last_key_flagged_for_removal:
-            # the previous key was flagged for removal, so we need to remove it first, before adding the new one
-            self.remove_last_added_entry()
-            self._last_key_flagged_for_removal = False
+            if self._last_key_flagged_for_removal:
+                self.remove_last_added_entry()
+                self._last_key_flagged_for_removal = False
 
-        # Write data
-        try:
-            if storage_mode == "bytes":
-                if not isinstance(data, bytes):
-                    raise TypeError(
-                        f"Data must be bytes for storage_mode 'bytes', got {type(data).__name__}"
-                    )
+            try:
                 with open(file_path, "wb") as f:
                     f.write(data)
-            elif storage_mode == "json":
-                with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=4)
+            except (TypeError, IOError, Exception) as e:
+                printr.print_err(
+                    f"Error writing cache file {file_path} for key '{key}' (mode: {storage_mode}): {e}", console_only=True
+                )
+                try:
+                    file_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+                return
 
-        except (TypeError, IOError, Exception) as e:
-            printr.print_err(
-                f"Error writing cache file {file_path} for key '{key}' (mode: {storage_mode}): {e}"
-            )
-            # Attempt cleanup if file was partially written or exists from before
+            # Update metadata and memory cache with file path for bytes mode
+            # (cached_value, hit_count, timestamp, storage_mode, key_text, force_update)
+            self.disk_data[key] = (file_path_str, hit_count, timestamp, storage_mode, key_text, False)
+            self.memory_cache[key] = file_path_str
+        else:  # storage_mode == "json"
+            # Validierung der JSON-Serialisierbarkeit
             try:
-                file_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-            # --- IMPORTANT: Do not update metadata or last_added_key if write failed ---
-            return
+                json.dumps(data)
+            except Exception as e:
+                printr.print_err(
+                    f"Error serializing JSON data for key '{key}': {e}", console_only=True
+                )
+                return
 
-        # Update metadata
-        self.disk_data[key] = (file_path_str, hit_count, timestamp, storage_mode, key_text)
+            # Kein separates File – die Daten direkt speichern
+            # (cached_value, hit_count, timestamp, storage_mode, key_text, force_update)
+            self.disk_data[key] = (data, hit_count, timestamp, storage_mode, key_text, False)
+            self.memory_cache[key] = data
 
-        # Update memory cache
-        self.memory_cache[key] = file_path_str
         self.memory_cache.move_to_end(key)
         if len(self.memory_cache) > self.max_memory_size:
             self.memory_cache.popitem(last=False)
@@ -279,17 +346,18 @@ class CacheManager:
         self._dirty = True
         self._last_added_key = key
         self._last_key_flagged_for_removal = flag_for_removal
-        
+
     def _update_metadata(self, key: str):
         """Internal: Updates hit count and timestamp for an existing key."""
-        if key in self.disk_data:
-            file_path_str, hit_count, _, storage_mode, text = self.disk_data[key]
+        if key in self.disk_data:  # (cached_value, hit_count, timestamp, storage_mode, key_text, force_update)
+            file_path_str, hit_count, _, storage_mode, text, force_update = self.disk_data[key]
             self.disk_data[key] = (
                 file_path_str,
                 hit_count + 1,
                 time.time(),  # Update timestamp on access
                 storage_mode,
-                text
+                text,
+                force_update
             )
             self._dirty = True
 
@@ -297,31 +365,33 @@ class CacheManager:
         """Internal: Removes an entry from memory, disk metadata, and the data file."""
         removed_from_memory = False
         removed_from_disk = False
-        file_path_str = None
+        file_info = None
 
-        # Retrieve path before deleting metadata
         if key in self.disk_data:
-            file_path_str, _, _, _, _ = self.disk_data[key]
+            file_info = self.disk_data[key]  # (cached_value, hit_count, timestamp, storage_mode, key_text, force_update)
+            _, _, _, storage_mode, _, _ = file_info
             del self.disk_data[key]
             removed_from_disk = True
-            self._dirty = True  # Mark dirty only if disk metadata changed
+            self._dirty = True
 
         if key in self.memory_cache:
             del self.memory_cache[key]
             removed_from_memory = True
 
-        # Delete the associated data file if we found its path
-        if file_path_str:
+        # Nur im "bytes" mode eine Datei entfernen
+        if file_info and storage_mode == "bytes":
             try:
-                Path(file_path_str).unlink(missing_ok=True)
+                Path(file_info[0]).unlink(missing_ok=True)
             except OSError as e:
-                printr.print_err(f"Error deleting cache file {file_path_str}: {e}")
+                printr.print_err(f"Error deleting cache file {file_info[0]}: {e}", console_only=True)
 
         if key == self._last_added_key:
             self._last_added_key = None
 
         if self.debug and (removed_from_memory or removed_from_disk):
-            printr.print(f"Removed cache entry for key '{key}' (Memory: {removed_from_memory}, Disk: {removed_from_disk})", tags="info", console_only=True)
+            printr.print(f"Removed cache entry for key '{key}' (Memory: {removed_from_memory}, Disk: {removed_from_disk})",
+                         tags="info",
+                         console_only=True)
 
     def remove_last_added_entry(self) -> Optional[str]:
         """
@@ -358,7 +428,7 @@ class CacheManager:
         except Exception as e:
             # Should be unlikely if _remove_entry handles its errors, but just in case.
             printr.print_err(
-                f"An unexpected error occurred during the removal of last added entry '{key_to_remove}': {e}"
+                f"An unexpected error occurred during the removal of last added entry '{key_to_remove}': {e}", console_only=True
             )
             # _last_added_key is already None, so state is relatively safe.
             return None  # Indicate failure
@@ -389,7 +459,7 @@ class CacheManager:
             self._remove_entry(oldest_key)
             return oldest_key
         except Exception as e:
-            printr.print_err(f"Error removing oldest cache entry: {e}")
+            printr.print_err(f"Error removing oldest cache entry: {e}", console_only=True)
             return None
 
     def clear(self):
@@ -405,7 +475,7 @@ class CacheManager:
             self.cache_metadata_file.unlink(missing_ok=True)
         except OSError as e:
             printr.print_err(
-                f"Error deleting cache metadata file {self.cache_metadata_file}: {e}"
+                f"Error deleting cache metadata file {self.cache_metadata_file}: {e}", console_only=True
             )
 
         try:
@@ -413,12 +483,12 @@ class CacheManager:
                 shutil.rmtree(self.cache_data_path)
                 printr.print(
                     f"Cleared cache, deleted metadata file, and data directory: {self.cache_data_path}",
-                    tags="info",
+                    tags="info", console_only=True
                 )
                 self.cache_data_path.mkdir(exist_ok=True)  # Recreate dir
         except OSError as e:
             printr.print_err(
-                f"Error deleting cache data directory {self.cache_data_path}: {e}"
+                f"Error deleting cache data directory {self.cache_data_path}: {e}", console_only=True
             )
 
     def get_stats(self) -> dict:
@@ -461,10 +531,28 @@ class CacheManager:
                 else "N/A"
             ),
             "top_10_by_hits": top_hits,
-            # --- NEW: Add last added key info to stats ---
             "last_added_key_in_session": self._last_added_key,
-            # --- END NEW ---
         }
 
+    def exists(self, key: str) -> bool:
+        # Returns True if the key exists in the cache metadata, otherwise False.
+        return key in self.disk_data
+
+    def get_cached_text(self, key: str) -> Optional[str]:
+        # Returns the key_text associated with the given key, or None if not found.
+        return self.disk_data[key][4] if key in self.disk_data else None
+    
+    def needs_tts_update(self, key: str) -> bool:
+        """
+        For cached tts responses, returns True if the spoken text should be updated and saved again.
+
+        Only works on reloaded cache data, not in-memory cache.
+        Args:
+            key: The cache key to check.
+        """
+        if key in self.disk_data:
+            _, _, _, _, _, force_update = self.disk_data[key]
+            return force_update
+        return False
 
 # --- END OF FILE cache_manager.py ---

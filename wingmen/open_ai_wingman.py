@@ -11,7 +11,7 @@ from wingmen.star_citizen_services.helper import find_best_match
 
 printr = Printr()
 
-DEBUG = False
+DEBUG = True
 
 DEBUG_LOG_PATH = os.path.join("debug_data", "openai", "debug.log")
 
@@ -171,8 +171,7 @@ class OpenAiWingman(Wingman):
 
     def validate(self):
         errors = super().validate()
-        # >>> ADDED: Load caches after base validation <<<
-        self.load_caches()  # Call the updated load_caches
+        self.load_caches() 
 
         self.openai_api_key = self.secret_keeper.retrieve(
             requester=self.name,
@@ -437,14 +436,13 @@ class OpenAiWingman(Wingman):
                 f"Received transcript in {self.__class__.__name__}: '{transcript}' (locale: {locale})", tags="info"
             )
         self.last_transcript_locale = locale
+        normalized_transcript = transcript.lower().strip() if transcript else ""
 
         # 1. Check standard instant activation commands (using original transcript)
-        instant_response_text = self._try_instant_activation(transcript)
+        instant_response_text = self._try_instant_activation(normalized_transcript)
         if instant_response_text:
             return instant_response_text, instant_response_text, None
 
-        normalized_transcript = transcript.lower().strip() if transcript else ""
-        
         _, delete_last_cache_entry = find_best_match.find_best_match(
             normalized_transcript, self.cache_config["delete_last_cached_command_phrases"]
         )
@@ -452,7 +450,7 @@ class OpenAiWingman(Wingman):
         if delete_last_cache_entry:
             if self.debug or DEBUG:
                 printr.print(
-                    f"Deleting last cache entry for: '{transcript}'", tags="info"
+                    f"Deleting last cache entry for: '{normalized_transcript}'", tags="info"
                 )
             key = self.instant_command_cache_manager.remove_last_added_entry()
 
@@ -488,28 +486,39 @@ class OpenAiWingman(Wingman):
         # 2. Check cached instant commands (based on transcript)
         if self.instant_command_cache_manager and not do_not_cache_phrase:
             cached_command_data = self.instant_command_cache_manager.get(call_cache_key)
+            if cached_command_data is None:
+                fuzzy_key = self.instant_command_cache_manager.get_key_from_text(normalized_transcript)
+                if fuzzy_key:
+                    call_cache_key = fuzzy_key
+                cached_command_data = self.instant_command_cache_manager.get(call_cache_key)
+
             if cached_command_data:
-                if self.debug or DEBUG:
-                    printr.print(
-                        f"Instant command cache hit for: '{transcript}':{call_cache_key}", tags="info"
-                    )
+                printr.print(
+                    f"Instant command cache hit for: '{normalized_transcript}':{call_cache_key}", tags="info"
+                )
+
                 instant_response, tts_cache_key = await self._handle_tool_calls(
                     None, call_cache_key, normalized_transcript
-                )  
-
-                # Run summarization based on tool results
-                summarize_response_content = self._summarize_function_calls()
-                # Important: _summarize_function_calls *also* adds the summary message to self.messages in the original code
-                final_text_to_speak, _ = self._finalize_response(
-                    summarize_response_content
                 )
+
+                if not self.tts_cache_manager.exists(tts_cache_key):
+                    # if the response of the function call is not cached, we should put the conversation into history
+                    # such that we can summarize the response through ai calls.
+                    self._add_user_message(normalized_transcript)
+                    summarize_response_content = self._summarize_function_calls()
+                    final_text_to_speak, _ = self._finalize_response(
+                        summarize_response_content
+                    )
+                else:
+                    # If TTS response is cached, we can directly use it
+                    final_text_to_speak = self.tts_cache_manager.get_cached_text(tts_cache_key)
 
                 return final_text_to_speak, instant_response, tts_cache_key
         
         if self.debug or DEBUG:
             printr.print("calling ai api...", tags="info")
         # 3. If no cache hit, proceed with LLM call (Original logic starts here)
-        self._add_user_message(transcript)
+        self._add_user_message(normalized_transcript)
         completion = self._gpt_call()
 
         if completion is None:
@@ -717,10 +726,6 @@ class OpenAiWingman(Wingman):
             cached_function_calls = self.instant_command_cache_manager.get(
                 call_cache_key
             )  # Check cache for instant command
-            if self.debug or DEBUG:
-                printr.print(
-                    f"Calling cached functions {json.dumps(cached_function_calls, indent=2)}", tags="info"
-                )
 
             for function_call in cached_function_calls:
                 function_name = function_call[0]
@@ -898,6 +903,11 @@ class OpenAiWingman(Wingman):
                     f"   TTS cache hit (key: {tts_cache_key[:8]}...).", tags="info"
                 )
                 cache_hit = True
+                # we allow to regenerate the tts if needed. The text in the cache might have been adapted. 
+                needs_update = self.tts_cache_manager.needs_tts_update(
+                    tts_cache_key)
+                if needs_update:
+                    text = self.tts_cache_manager.get_cached_text(tts_cache_key)
             else:
                 printr.print(
                     f"   TTS cache miss (key: {tts_cache_key[:8]}...). Calling API.",
@@ -906,7 +916,7 @@ class OpenAiWingman(Wingman):
         # --- >>> END: TTS Cache Check <<< ---
 
         # If cache miss, generate audio
-        if not cache_hit:
+        if not cache_hit or needs_update:
             audio_bytes_generated = None
             if self.tts_provider == "azure":
                 # Call original _play_with_azure but modify it to *return bytes*
