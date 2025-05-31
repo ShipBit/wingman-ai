@@ -106,9 +106,8 @@ class RegolithAPI:
         self.activities = None
         self.lookups = None
 
-    def open_session_in_browser(self, session_id=None):
-        if not session_id:
-            session_id = self.get_last_active_session()
+    def open_session_in_browser(self):
+        session_id = self.get_last_active_session()
         return webbrowser.open(f"{self.url}/session/{session_id}/dash")
 
     def delete_mining_session(self, session_id):

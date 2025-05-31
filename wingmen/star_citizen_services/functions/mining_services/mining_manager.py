@@ -10,15 +10,20 @@ from wingmen.star_citizen_services.helper import screenshots, find_best_match, t
 from wingmen.star_citizen_services.helper.ocr import OCR
 
 from wingmen.star_citizen_services.functions.mining_services.regolith_api import RegolithAPI
+from wingmen.star_citizen_services.functions.mining_services.mining_validation_popup import MiningValidationPopup
 from wingmen.star_citizen_services.functions.uex_v2.uex_api_module import UEXApi2
 from wingmen.star_citizen_services.functions.uex_v2 import uex_api_module
 
 
 DEBUG = False
-TEST = False
+TEST = False # Set to True for testing purposes, e.g. to use example screenshots without being in the game
 REGOLITH_TEST = False
 printr = Printr()
 
+# Crop area coordinates for refinery work order screenshots
+REFINERY_CROP_COORDS = ((180, 75), (1200, 1300))
+# Add constant for rock scans
+ROCK_SCAN_COORDS = ((1500, 400), (2300, 1200))
 
 def print_debug(to_print):
     if DEBUG:
@@ -199,10 +204,6 @@ class MiningManager(FunctionManager):
                             "scouting_direction": {
                                 "type": "string",
                                 "description": "Only relevant for new sessions: In which scouting_direction does the scouting mainly focussing. Is either a POI name or a compass scouting_direction. Do not make assumptions on the value. "
-                            },
-                            "session_id": {
-                                "type": "string",
-                                "description": "The session_id of the session the player wants to open in his browser. "
                             }
                         },
                         "required": ["type"]
@@ -277,8 +278,7 @@ class MiningManager(FunctionManager):
             return self.create_session(function_args)
         
         if type == "open_session_in_browser":
-            session_id = function_args.get("session_id", None)
-            success = self.regolith.open_session_in_browser(session_id)
+            success = self.regolith.open_session_in_browser()
             if not success:
                 return {"success": False, "message": f"I couldn't open the browser{' as there is no active session. ' if self.regolith.active_session_id is None else '. '}"}
             return {"success": True, "message": "You should see the browser now. "}
@@ -328,15 +328,14 @@ class MiningManager(FunctionManager):
             area_image = screenshots.crop_screenshot_coordinates(
                 data_dir_path=f"{self.mining_data_path}/templates/scans",
                 screenshot=image_path,
-                instructions=[{'strategy': 'AREA', 'coords': ((1500, 400), (2300, 1200))}],
+                instructions=[{'strategy': 'AREA', 'coords': ROCK_SCAN_COORDS}],
                 cash_key="rock_scan"
             )
             cropped_image = screenshots.crop_screenshot(
                 data_dir_path=f"{self.mining_data_path}/templates/scans",
                 screenshot=area_image,
-                areas_and_corners_and_cropstrat=[
-                    ("UPPER_LEFT", "UPPER_LEFT", "AREA"), 
-                    ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")])
+                areas_and_corners_and_cropstrat=[("UPPER_LEFT", "UPPER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")]
+            )
             base64_jpg_image = screenshots.convert_cv2_image_to_base64_jpeg(cropped_image)
             scan_result = self.regolith.get_rock_scan_image_infos(base64_jpg_image)
 
@@ -344,6 +343,18 @@ class MiningManager(FunctionManager):
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
                 return {"success": False, "message": "Couldn't read scan data. Reposition or try have a darker background. "}
            
+            # Übergabe des gecroppten Bildes an das Validation Popup für Rock Scans
+            scan_result, operation = MiningValidationPopup.show_popup(
+                scan_result,
+                anchor_coords=ROCK_SCAN_COORDS[0],
+                title="Scan-Validierung",
+                align="left",
+                crop_image=cropped_image
+            )
+            if operation == "aborted":
+                self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
+                return {"success": False, "message": "Scan transmission aborted."}
+
             session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=None)
             cluster = self.regolith.get_or_create_scouting_cluster(session_id)
             function_response = self.regolith.add_ship_cluster_scan_results(session_id, cluster, scan_result["captureShipRockScan"])
@@ -351,7 +362,6 @@ class MiningManager(FunctionManager):
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
             else:
                 self.overlay.display_overlay_text(f"Cora: saved {function_response['total_scans']}", vertical_position_ratio=3, display_duration=5000)
-        
         elif function_type == "add_new_cluster":
             cluster_count = function_args.get("cluster_count", 0)
             cluster_type = function_args.get("cluster_type", None)
@@ -360,7 +370,7 @@ class MiningManager(FunctionManager):
             if scout_finding_id is None:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
                 return {"success": False, "message": "Couldn't create a new cluster."}
-            function_response = {"success": True, "instructions": f"Saved {cluster_count}x{cluster_type}'. "}
+            function_response = {"success": True, "instructions": f"Saved {cluster_count}x{cluster_type}'."}
             self.overlay.display_overlay_text("Cora: Saved", vertical_position_ratio=3, display_duration=5000)
        
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
@@ -379,7 +389,7 @@ class MiningManager(FunctionManager):
             area_image = screenshots.crop_screenshot_coordinates(
                 data_dir_path=f"{self.mining_data_path}/templates/refineries",
                 screenshot=image_path,
-                instructions=[{'strategy': 'AREA', 'coords': ((180, 75), (1200, 1300))}],
+                instructions=[{'strategy': 'AREA', 'coords': REFINERY_CROP_COORDS}],
                 cash_key="workorder"
             )
 
@@ -406,10 +416,19 @@ class MiningManager(FunctionManager):
         print_debug("\n ===== ADDING REGOLITH WORK ORDER ======")
         
         current_time = int(time.time() * 1000)
-        session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=scan_result["captureRefineryOrder"]["refinery"])
+        session_id = self.regolith.get_or_create_mining_session(
+            name="Ship", activity="SHIP_MINING", refinery=scan_result["captureRefineryOrder"]["refinery"]
+        )
         if session_id is None:
-            print_debug(f"Couldn't get or create session.")
+            print_debug("Couldn't get or create session.")
             return {"success": False, "message": "Couldn't get or create session."}
+        
+        # Calculate top-right anchor coordinate (x2, y1)
+        anchor_coords = (REFINERY_CROP_COORDS[1][0], REFINERY_CROP_COORDS[0][1])
+        scan_result, operation = MiningValidationPopup.show_popup(scan_result, anchor_coords=anchor_coords)
+        if operation == "aborted":
+            self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
+            return {"success": False, "message": "Work order transmission aborted."}
         
         shipOres = scan_result["captureRefineryOrder"]["shipOres"]
 
@@ -620,6 +639,4 @@ class MiningManager(FunctionManager):
         print(f"Executing action for job {job['id']}")
 
         self.overlay.display_overlay_text(f"Refinery job {job['id']} finished @{job['terminal_name']}.", display_duration=10000)
-
-        # maybe voice ?
 
