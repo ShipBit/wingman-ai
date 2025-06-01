@@ -135,12 +135,25 @@ class MiningValidationPopup(tk.Toplevel):
         height = self.winfo_reqheight()
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
-        x = (screen_w - width) // 2
-        y = (screen_h - height) // 2
+        # Positionierung basierend auf align
+        offset = 20
+        if align == "left":
+            x = 20
+        elif align == "right":
+            x = screen_w - width - 20
+        elif anchor_coords:
+            x = anchor_coords[0] + offset
+        else:
+            x = screen_w - width - 20
+        if anchor_coords:
+            y = anchor_coords[1]
+        else:
+            y = (screen_h - height) // 2
         self.geometry(f"{width}x{height}+{x}+{y}")
+        # entferne direkten Fokus, setze Verzögerung von 5 Sekunden
         self.bind("<Return>", lambda e: self.confirm())
         self.bind("<Escape>", lambda e: self.abort())
-        self.focus_force()
+        self.after(5000, self.focus_force)
 
     @staticmethod
     def show_popup(work_order_info, anchor_coords=None, title="Work-Order Validierung", align="default", crop_image=None):
