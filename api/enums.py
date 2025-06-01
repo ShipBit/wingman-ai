@@ -51,6 +51,7 @@ class CustomPropertyType(Enum):
     VOICE_SELECTION = "voice_selection"
     SLIDER = "slider"
     AUDIO_FILES = "audio_files"
+    AUDIO_DEVICE = "audio_device"
 
 
 class AzureApiVersion(Enum):

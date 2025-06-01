@@ -631,6 +631,7 @@ class CustomProperty(BaseModel):
         | VoiceSelection
         | list[VoiceSelection]
         | AudioFileConfig
+        | Optional[int | AudioDeviceSettings]
     )
     """The value of the property"""
     property_type: CustomPropertyType
