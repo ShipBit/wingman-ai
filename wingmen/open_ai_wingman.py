@@ -919,8 +919,9 @@ class OpenAiWingman(Wingman):
 
             # add tool calls to the conversation history
             await self._add_gpt_response(message, message.tool_calls)
-            for tool_call in message.tool_calls:
-                await self._update_tool_response(tool_call.id, "OK")
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    await self._update_tool_response(tool_call.id, "OK")
 
     async def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
@@ -1345,21 +1346,6 @@ class OpenAiWingman(Wingman):
         else:
             sound_config = self.config.sound
 
-        if sound_config.volume == 0.0:
-            printr.print(
-                "Volume modifier is set to 0. Skipping TTS processing.",
-                LogType.WARNING,
-                server_only=True,
-            )
-            return
-        if "{SKIP-TTS}" in text:
-            printr.print(
-                "Skip TTS phrase found in input. Skipping TTS processing.",
-                LogType.WARNING,
-                server_only=True,
-            )
-            return
-
         # remove Markdown, links, emotes and code blocks
         text, contains_links, contains_code_blocks = cleanup_text(text)
 
@@ -1367,6 +1353,33 @@ class OpenAiWingman(Wingman):
         if no_interrupt and self.audio_player.is_playing:
             while self.audio_player.is_playing:
                 await asyncio.sleep(0.1)
+
+        # call skill hooks
+        changed_text = text
+        for skill in self.skills:
+            changed_text = await skill.on_play_to_user(text, sound_config)
+            if changed_text != text:
+                printr.print(
+                    f"Skill '{skill.config.display_name}' modified the text to: '{changed_text}'",
+                    LogType.INFO,
+                )
+                text = changed_text
+
+        if sound_config.volume == 0.0:
+            printr.print(
+                "Volume modifier is set to 0. Skipping TTS processing.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
+
+        if "{SKIP-TTS}" in text:
+            printr.print(
+                "Skip TTS phrase found in input. Skipping TTS processing.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
 
         try:
             if self.config.features.tts_provider == TtsProvider.EDGE_TTS:

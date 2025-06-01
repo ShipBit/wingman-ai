@@ -4,6 +4,7 @@ from api.enums import WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,
+    SoundConfig,
     WingmanInitializationError,
 )
 from services.benchmark import Benchmark
@@ -73,6 +74,12 @@ class Skill:
     async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
         """Called when a system message is added to the system."""
         pass
+
+    async def on_play_to_user(self, text: str, sound_config: SoundConfig) -> str:
+        """Called before the text is synthetized to speech by the TTS provider.
+        You can modify the text if needed. Add {SKIP-TTS} to the text to to skip playback.
+        """
+        return text
 
     async def is_summarize_needed(self, tool_name: str) -> bool:
         """Returns whether a tool needs to be summarized."""
