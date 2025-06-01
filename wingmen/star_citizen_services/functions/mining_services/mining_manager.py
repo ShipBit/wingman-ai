@@ -123,6 +123,7 @@ class MiningManager(FunctionManager):
         function_register[self.refinery_job_work_order_management.__name__] = self.refinery_job_work_order_management
         function_register[self.mining_or_salvage_session_management.__name__] = self.mining_or_salvage_session_management
         function_register[self.add_rock_scan_or_deposit_cluster_information.__name__] = self.add_rock_scan_or_deposit_cluster_information
+        function_register[self.signature_based_cluster_info.__name__] = self.signature_based_cluster_info
     
     # @abstractmethod - overwritten
     def get_function_prompt(self) -> str:      
@@ -238,6 +239,23 @@ class MiningManager(FunctionManager):
                     }
                 }
             },
+            {
+                "type": "function",
+                "function": {
+                    "name": self.signature_based_cluster_info.__name__,
+                    "description": "Retrieve cluster size and rock type based on signature scan value using known rock signatures.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "scan_value": {
+                                "type": "integer",
+                                "description": "Signature scan value to lookup cluster info."
+                            }
+                        }
+                        # scan_value is optional
+                    }
+                }
+            }
         ]
 
         return tools
@@ -251,6 +269,9 @@ class MiningManager(FunctionManager):
         #     self.activate_refinery_job_monitoring(self.refinery_jobs)
 
         self.regolith.initialize_all_names()
+        # load mining knowledge for signature lookup
+        with open(f'{self.mining_data_path}/mining_knowledge.json', 'r', encoding='UTF-8') as f:
+            self.mining_knowledge = json.load(f)
 
     # overwritten
     def cora_start_information(self):
@@ -283,7 +304,7 @@ class MiningManager(FunctionManager):
                 return {"success": False, "message": f"I couldn't open the browser{' as there is no active session. ' if self.regolith.active_session_id is None else '. '}"}
             return {"success": True, "message": "You should see the browser now. "}
         
-        return {"success": False, "message": "I couldn't identify the action to be taken. Please repeat. "}
+        return {"success": False, "message": "I couldn't identify the action to be taken. Please repeat. ", "do_not_cache": True}
         
     def create_session(self, function_args):
         name = function_args.get("name", None)
@@ -294,16 +315,16 @@ class MiningManager(FunctionManager):
         scouting_direction = function_args.get("scouting_direction", None)
 
         if activity is None: 
-            return {"success": False, "message": f"Please provide the activity you want the session to track. One of: {self.regolith.get_activity_names()}"}
+            return {"success": False, "message": f"Please provide the activity you want the session to track. One of: {self.regolith.get_activity_names()}", "do_not_cache": True}
                 
         if activity == "SHIP_MINING" and refinery is None or gravityWell is None:
-            return {"success": False, "message": f"Please provide the {'refinery name' if refinery is None else 'gravity well'} to create a mining session. "}
+            return {"success": False, "message": f"Please provide the {'refinery name' if refinery is None else 'gravity well'} to create a mining session. ", "do_not_cache": True}
         
         session_id = self.regolith.create_mining_session(name, activity, refinery, gravityWell, scouting_start_location, scouting_direction)
         if session_id is not None:
-            return {"success": True, "message": "Session created. "}
+            return {"success": True, "message": "Session created. ", "do_not_cache": True}
         
-        return {"success": False, "message": "Session was not created."}
+        return {"success": False, "message": "Session was not created.", "do_not_cache": True}
 
     def refinery_job_work_order_management(self, function_args):
         printr.print(f"Executing function '{self.refinery_job_work_order_management.__name__}'.", tags="info")
@@ -369,8 +390,8 @@ class MiningManager(FunctionManager):
             scout_finding_id = self.regolith.create_scouting_cluster(session_id, cluster_count, cluster_type)
             if scout_finding_id is None:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                return {"success": False, "message": "Couldn't create a new cluster."}
-            function_response = {"success": True, "instructions": f"Saved {cluster_count}x{cluster_type}'."}
+                return {"success": False, "message": "Couldn't create a new cluster.", "do_not_cache": True}
+            function_response = {"success": True, "instructions": f"Saved {cluster_count}x{cluster_type}'.", "do_not_cache": True}
             self.overlay.display_overlay_text("Cora: Saved", vertical_position_ratio=3, display_duration=5000)
        
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
@@ -639,4 +660,33 @@ class MiningManager(FunctionManager):
         print(f"Executing action for job {job['id']}")
 
         self.overlay.display_overlay_text(f"Refinery job {job['id']} finished @{job['terminal_name']}.", display_duration=10000)
+
+    def signature_based_cluster_info(self, function_args):
+        """Lookup rock cluster info by signature scan value."""
+        scan_value = function_args.get("scan_value")
+        # build signature->(cluster_size, type) map for multiples 1..15, skip non-list entries
+        sigs = self.mining_knowledge.get("rock_signitures", {})
+        lookup = {}
+        for _, area in sigs.items():
+            if not isinstance(area, list):
+                continue
+            for rock in area:
+                base = rock.get("Signature_Value")
+                name = rock.get("RockType", "").lower()
+                if not isinstance(base, int):
+                    continue
+                for size in range(1, 16):
+                    lookup[base * size] = {"cluster_size": size, "type": name}
+        if scan_value is None:
+            return {"success": False, "message": "Please provide a scan_value to lookup.", "do_not_cache": True}
+        info = lookup.get(scan_value)
+        if not info:
+            return {"success": False, "message": f"No cluster info for signature {scan_value}.", "do_not_cache": True}
+        return {
+            "success": True,
+            "cluster_size": info["cluster_size"],
+            "type": info["type"],
+            "message": f"Detected {info['cluster_size']}× {info['type'].capitalize()} from signature {scan_value}.",
+            "do_not_cache": True
+        }
 

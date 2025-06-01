@@ -166,7 +166,8 @@ class OpenAiWingman(Wingman):
             "summarize_provider", None
         )
 
-        if DEBUG:
+        self.debug = DEBUG or self.debug
+        if self.debug:
             _ensure_debug_log()
 
     def validate(self):
@@ -721,6 +722,7 @@ class OpenAiWingman(Wingman):
         cached_function_calls = []
         caching_key_function_objects = []
         tool_call_response_cache_key = None
+        do_cache = True
 
         if not tool_calls and call_cache_key:
             cached_function_calls = self.instant_command_cache_manager.get(
@@ -764,12 +766,22 @@ class OpenAiWingman(Wingman):
                     )
                 )
 
+                # Skip caching if payload requests no-cache
+                if isinstance(function_response, dict) and function_response.get("do_not_cache") is True:
+                    if self.debug:
+                        printr.print(
+                            f"Skipping caching for key '{function_name}' due to do_not_cache flag.",
+                            tags="info",
+                            console_only=True,
+                        )
+                    do_cache = False
+                    
                 caching_key_function_objects.append((function_name, call_cache_key, function_response))
 
                 if instant_response_iter:
                     instant_response = instant_response_iter
 
-                msg = {"role": "tool", "content": function_response}
+                msg = {"role": "tool", "content": json.dumps(function_response)}
                 if tool_call.id is not None:
                     msg["tool_call_id"] = tool_call.id
                 # Original code added 'name', keep it for compatibility although 'tool_call_id' is primary
@@ -778,19 +790,20 @@ class OpenAiWingman(Wingman):
 
                 # Don't use self._add_user_message_to_history here because we never want to skip this because of history limitions
                 self.messages.append(msg)
-
-            if self.debug or DEBUG:
-                printr.print(
-                    f"Caching function call '{function_name}':#{call_cache_key}", tags="info"
+       
+            if do_cache:
+                if self.debug or DEBUG:
+                    printr.print(
+                        f"Caching function call '{function_name}':#{call_cache_key}", tags="info"
+                    )
+                self.instant_command_cache_manager.put(
+                    key=call_cache_key,
+                    data=cached_function_calls,
+                    storage_mode="json",
+                    file_extension=".json",
+                    flag_for_removal=flag_for_removal,
+                    key_text=command_phrase,
                 )
-            self.instant_command_cache_manager.put(
-                key=call_cache_key,
-                data=cached_function_calls,
-                storage_mode="json",
-                file_extension=".json",
-                flag_for_removal=flag_for_removal,
-                key_text=command_phrase,
-            )
 
         if len(caching_key_function_objects) > 0:
             tool_call_response_cache_key = self._generate_cache_key(caching_key_function_objects)

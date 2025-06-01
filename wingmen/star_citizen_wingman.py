@@ -420,7 +420,7 @@ class StarCitizenWingman(OpenAiWingman):
         if instructions and isinstance(function_response, dict):
             function_response["summarize_instructions"] = instructions
 
-        return json.dumps(function_response), instant_reponse
+        return function_response, instant_reponse
 
     def _execute_switch_context_function(self, function_args):
         print_debug(f'switching context call: {function_args["context_name"]}')
