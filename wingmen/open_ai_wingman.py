@@ -1347,7 +1347,14 @@ class OpenAiWingman(Wingman):
 
         if sound_config.volume == 0.0:
             printr.print(
-                "Volume modifier is set to 0, skipping TTS processing.",
+                "Volume modifier is set to 0. Skipping TTS processing.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
+        if "{SKIP-TTS}" in text:
+            printr.print(
+                "Skip TTS phrase found in input. Skipping TTS processing.",
                 LogType.WARNING,
                 server_only=True,
             )
