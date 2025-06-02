@@ -38,6 +38,7 @@ from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
+from providers.xtts2 import XTTS2
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
 from services.printr import Printr
@@ -63,6 +64,7 @@ class OpenAiWingman(Wingman):
         super().__init__(*args, **kwargs)
 
         self.edge_tts = Edge()
+        ##self.xtts2 = XTT2() # not sure what to do here, probably should be only one instance of XTTS running to avoid model being loaded multiple times, so should not be here probably
 
         # validate will set these:
         self.openai: OpenAi | None = None
@@ -222,6 +224,8 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.ELEVENLABS
         elif provider_type == "xvasynth":
             return self.config.features.tts_provider == TtsProvider.XVASYNTH
+        elif provider_type == "xtts2":
+            return self.config.features.tts_provider == TtsProvider.XTTS2
         elif provider_type == "whispercpp":
             return self.config.features.stt_provider == SttProvider.WHISPERCPP
         elif provider_type == "fasterwhisper":
@@ -1412,6 +1416,14 @@ class OpenAiWingman(Wingman):
                 await self.xvasynth.play_audio(
                     text=text,
                     config=self.config.xvasynth,
+                    sound_config=sound_config,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
+            elif self.config.features.tts_provider == TtsProvider.XTTS2:
+                await self.xtts2.play_audio(
+                    text=text,
+                    config=self.config.xtts2,
                     sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,

@@ -131,7 +131,9 @@ class XVASynthSettings(BaseModel):
     process_device: str
     """Can be cpu or gpu. You may need to take additional steps to have XVASynth run on your GPU."""
 
-
+class XTTS2Settings(BaseModel):
+    enable: bool
+    
 class WhispercppSttConfig(BaseModel):
     temperature: float
 
@@ -298,6 +300,35 @@ class XVASynthTtsConfig(BaseModel):
 
     voice: XVASynthVoiceConfig
 
+
+class XTTS2TtsConfig(BaseModel):
+    voice: str
+    """The name of the voice to use, whether built in or from wav files folder or latents folder"""
+    speed: float
+    """The speed of the voice playback. Default=1.2, lower = slower, higher = faster."""
+    temperature: float
+    """Generally used for cloning, how close the model adheres to the sample vs. how creative it is (0-1)."""
+    language: str
+    """The language the voice will speak in as a locale code. Available options:
+    ar:Arabic,
+    pt:Brazilian Portuguese,
+    zh-cn:"Chinese",
+    cs:Czech,
+    nl:Dutch,
+    en:English,
+    fr:French,
+    de:German,
+    it:Italian,
+    pl:Polish,
+    ru:Russian,
+    es:Spanish,
+    tr:Turkish,
+    ja:Japanese,
+    ko:Korean,
+    hu:Hungarian,
+    hi:Hindi"""
+    device: str
+    """Whether to run on gpu or cpu. Options: cpu, gpu, cuda, cuda:0, cuda:1 (where cuda:# reflects number of your gpu).  Running on GPU only supported with Nvidia."""
 
 class OpenAiConfig(BaseModel):
     conversation_model: str
@@ -774,6 +805,7 @@ class SettingsConfig(BaseModel):
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
+    xtts2: XTTS2Settings
     debug_mode: bool
     streamer_mode: bool
 
