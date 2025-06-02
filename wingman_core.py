@@ -37,6 +37,7 @@ from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
+from providers.xtts2 import XTTS2
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.file import get_writable_dir
@@ -335,10 +336,12 @@ class WingmanCore(WebSocketUser):
             app_is_bundled=app_is_bundled,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
+        self.xtts2 = XTTS2(settings=self.settings_service.settings.xtts2)
         self.settings_service.initialize(
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
+            xtts2=self.xtts2,
         )
 
         self.voice_service = VoiceService(
@@ -466,6 +469,7 @@ class WingmanCore(WebSocketUser):
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
+            xtts2=self.xtts2,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config

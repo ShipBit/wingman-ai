@@ -38,7 +38,6 @@ from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
-from providers.xtts2 import XTTS2
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
 from services.printr import Printr
@@ -64,7 +63,6 @@ class OpenAiWingman(Wingman):
         super().__init__(*args, **kwargs)
 
         self.edge_tts = Edge()
-        ##self.xtts2 = XTT2() # not sure what to do here, probably should be only one instance of XTTS running to avoid model being loaded multiple times, so should not be here probably
 
         # validate will set these:
         self.openai: OpenAi | None = None
