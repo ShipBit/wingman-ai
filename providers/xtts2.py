@@ -91,16 +91,29 @@ class XTTS2:
                 speed=speed,
             )
         elif voice.startswith(CLONING_WAVS_PATH):
+            full_path = Path(get_writable_dir(voice))
+            if full_path.is_dir():
+                # It's a directory: collect all .wav files
+                voices_list = [
+                    str(wav_path)
+                    for wav_path in full_path.glob("*.wav")
+                    if wav_path.is_file()
+                ]
+            elif full_path.is_file() and full_path.suffix == ".wav":
+                # It's a single .wav file
+                voices_list = [str(full_path)]
             completed_file_path = self.tts.tts_to_file(
                 text=text,
-                speaker_wav=[voice], # Will have to deal with how to make voice such if there's multiple wavs in a folder versus just one wav by itself
+                speaker_wav=voices_list,
                 language=language,
                 file_path=file_path,
                 temperature=temperature,
                 speed=speed,
             )
         elif voice.startswith(LATENTS_PATH):
-            gpt_cond_latent, speaker_embedding = self.load_latents_from_json(device, voice) # voice = "C:/OtherPrograms/Github/xtts2_test/mantella_latents/en/emperor.json"
+            voice_with_extension = voice + ".json"
+            voice_file_path = get_writable_dir(voice_with_extension)
+            gpt_cond_latent, speaker_embedding = self.load_latents_from_json(device, voice_file_path) # voice = "C:/OtherPrograms/Github/xtts2_test/mantella_latents/en/emperor.json"
             out = self.tts.synthesizer.tts_model.inference(
                 text,
                 language,
