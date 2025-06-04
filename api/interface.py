@@ -131,9 +131,11 @@ class XVASynthSettings(BaseModel):
     process_device: str
     """Can be cpu or gpu. You may need to take additional steps to have XVASynth run on your GPU."""
 
+
 class XTTS2Settings(BaseModel):
     enable: bool
-    
+
+
 class WhispercppSttConfig(BaseModel):
     temperature: float
 
@@ -329,6 +331,7 @@ class XTTS2TtsConfig(BaseModel):
     hi:Hindi"""
     device: str
     """Whether to run on gpu or cpu. Options: cpu, gpu, cuda, cuda:0, cuda:1 (where cuda:# reflects number of your gpu).  Running on GPU only supported with Nvidia."""
+
 
 class OpenAiConfig(BaseModel):
     conversation_model: str
@@ -707,7 +710,7 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
-    xtts2: Optional[XTTS2TtsConfig] = None
+    xtts2: XTTS2TtsConfig
     whispercpp: WhispercppSttConfig
     fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
