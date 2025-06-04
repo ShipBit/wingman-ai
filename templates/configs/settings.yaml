@@ -37,3 +37,5 @@ xvasynth:
   port: 8008
   install_dir: C:\Program Files (x86)\Steam\steamapps\common\xVASynth
   process_device: cpu
+xtts2_settings:
+  enable: false

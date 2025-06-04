@@ -26,6 +26,7 @@ from api.enums import (
 from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
+from providers.xtts2 import XTTS2
 from services.audio_player import AudioPlayer
 from services.benchmark import Benchmark
 from services.module_manager import ModuleManager
@@ -56,6 +57,7 @@ class Wingman:
         whispercpp: Whispercpp,
         fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
+        xtts2: XTTS2,
         tower: "Tower",
     ):
         """The constructor of the Wingman class. You can override it in your custom wingman.
@@ -95,7 +97,10 @@ class Wingman:
 
         self.xvasynth = xvasynth
         """A class that handles the communication with the XVASynth server for TTS."""
-
+        
+        self.xtts2 = xtts2
+        """A class that handles communication with XTTS2 for TTS."""
+        
         self.tower = tower
         """The Tower instance that manages all Wingmen in the same config dir."""
 

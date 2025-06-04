@@ -9,6 +9,7 @@ from services.file import get_writable_dir
 from services.printr import Printr
 import torch
 import torchaudio
+import numpy as np
 from TTS.api import TTS
 
 # To do - maybe allow custom latents and cloning paths for super advanced users
@@ -42,17 +43,25 @@ class XTTS2:
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
-        output_file = await self.__generate_speech(
-            text=text, voice=config.voice, temperature=config.temperature, speed=config.speed, language=config.language, device=config.device   # need these variables in config
-        )
-        audio, sample_rate = audio_player.get_audio_from_file(output_file)
-        
-        # TO DO, determine if streaming is viable
-        await audio_player.play_with_effects(
-            input_data=(audio, sample_rate),
-            config=sound_config,
-            wingman_name=wingman_name,
-        )
+        streaming = False
+        #if not config.streaming_mode:
+        if not streaming:
+            output_file = await self.__generate_speech(
+                text=text, voice=config.voice, temperature=config.temperature, speed=config.speed, language=config.language, device=config.device   # need these variables in config
+            )
+            audio, sample_rate = audio_player.get_audio_from_file(output_file)
+            
+            await audio_player.play_with_effects(
+                input_data=(audio, sample_rate),
+                config=sound_config,
+                wingman_name=wingman_name,
+            )
+        #elif config.streaming_mode:
+        elif streaming:
+            await self.__generate_streaming_speech(
+                sound_config=sound_config, audio_player=audio_player, wingman_name=wingman_name, text=text, voice=config.voice, temperature=config.temperature, speed=config.speed, language=config.language, device=config.device,   
+            )
+            
 
     # Generate speech depending on whether using XTTS2 built in voices, cloning from wav files, or generating from shared latents (e.g. the output of wav file cloning)
     async def __generate_speech(
@@ -130,6 +139,114 @@ class XTTS2:
         
         return completed_file_path
     
+    def _process_model_stream(self, stream_iterator): #,sample_rate, sample_width):
+        for chunk in stream_iterator:
+            if chunk is None:
+                continue
+
+            # Convert to NumPy
+            if not isinstance(chunk, np.ndarray):
+                chunk = chunk.cpu().numpy()
+
+            # Safety: Ensure it's 1D
+            if chunk.ndim > 1:
+                chunk = chunk.flatten()
+
+            # Clip, scale, convert to int16 PCM bytes
+            chunk = np.clip(chunk, -1.0, 1.0)
+            int16_chunk = (chunk * 32767).astype(np.int16)
+            yield int16_chunk.tobytes()
+            
+    async def __generate_streaming_speech(
+        self,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+        text: str,
+        voice: str = "Craig Gutsy",
+        temperature: float = 0.75,
+        speed: float = 1.20,
+        language: str = "en",
+        device: str = "cpu",
+    ):
+        if not text:
+            return
+        
+        # Allow users to just use "gpu" for less advanced users, and translate this to cuda, while allowing more advanced users to select gpu number by using cuda:0, cuda:1, etc.
+        if device == "gpu":
+            device = "cuda"
+        
+        # Only load model once there's a request for generation; this adds a slight delay but ensures XTTS2 uses no resources unless the user really wants to use it this session
+        if not self.tts or not self.tts_model_loaded:
+            await self.load_xtts2(device)
+        
+        await self.handle_vram_change(device)
+        
+        if voice.startswith(LATENTS_PATH):
+            voice_with_extension = voice + ".json"
+            voice_file_path = get_writable_dir(voice_with_extension)
+            gpt_cond_latent, speaker_embedding = self.load_latents_from_json(device, voice_file_path)
+        elif voice.startswith(CLONING_WAVS_PATH):
+            full_path = Path(get_writable_dir(voice))
+            if full_path.is_dir():
+                voices_list = [
+                    str(wav_path)
+                    for wav_path in full_path.glob("*.wav")
+                    if wav_path.is_file()
+                ]
+            elif full_path.is_file() and full_path.suffix == ".wav":
+                voices_list = [str(full_path)]
+            gpt_cond_latent, speaker_embedding = self.tts.synthesizer.tts_model.get_conditioning_latents(audio_path=voices_list)
+        else:
+            gpt_cond_latent, speaker_embedding = self.self.tts.synthesizer.tts_model.get_conditioning_latents(speaker=voice, language=language) # to do, built in voices -> latents, see https://gist.github.com/ichabodcole/1c0d19ef4c33b7b5705b0860c7c27f7b
+        
+        output_iterator = self.tts.synthesizer.tts_model.inference_stream(
+            text,
+            language,
+            gpt_cond_latent=gpt_cond_latent,
+            speaker_embedding=speaker_embedding,
+            temperature=temperature,
+            speed=speed,
+            stream_chunk_size=20
+            ##**self.tts_settings, # Expands the object with the settings and applies them for generation
+        )
+
+        generator_instance = self._process_model_stream(output_iterator)
+        incomplete_buffer = b""
+
+        def buffer_callback(audio_buffer):
+            nonlocal incomplete_buffer
+            try:
+                chunk = next(generator_instance)
+                chunk = incomplete_buffer + chunk
+                remainder = len(chunk) % 2  # assuming int16 samples
+
+                if remainder:
+                    incomplete_buffer = chunk[-remainder:]
+                    chunk = chunk[:-remainder]
+                else:
+                    incomplete_buffer = b""
+
+                audio_buffer[:len(chunk)] = chunk
+                return len(chunk)
+            except StopIteration:
+                if incomplete_buffer:
+                    chunk_length = len(incomplete_buffer)
+                    audio_buffer[:chunk_length] = incomplete_buffer
+                    incomplete_buffer = b""
+                    return chunk_length
+                return 0
+
+        await audio_player.stream_with_effects(
+            buffer_callback=buffer_callback,
+            config=sound_config,
+            wingman_name=wingman_name,
+            sample_rate=24000,
+            channels=1,
+            dtype="int16",
+        )
+        
+        await self.handle_vram_change("cpu")
     
     # Move model in and out of VRAM between generations to reduce performance impact - TBD if this should be async
     async def handle_vram_change(self, desired_device):

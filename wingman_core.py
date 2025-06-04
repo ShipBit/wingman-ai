@@ -343,7 +343,7 @@ class WingmanCore(WebSocketUser):
             app_is_bundled=app_is_bundled,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
-        self.xtts2 = XTTS2(settings=self.settings_service.settings.xtts2)
+        self.xtts2 = XTTS2(settings=self.settings_service.settings.xtts2_settings)
         self.settings_service.initialize(
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
@@ -355,6 +355,7 @@ class WingmanCore(WebSocketUser):
             config_manager=self.config_manager,
             audio_player=self.audio_player,
             xvasynth=self.xvasynth,
+            xtts2=self.xtts2
         )
 
         # restore settings

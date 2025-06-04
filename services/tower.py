@@ -115,7 +115,7 @@ class Tower:
                     whispercpp=self.whispercpp,
                     fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
-                    xtts2=self.xtts2
+                    xtts2=self.xtts2,
                     tower=self,
                 )
         except FileNotFoundError as e:  # pylint: disable=broad-except

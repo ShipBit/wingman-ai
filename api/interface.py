@@ -707,6 +707,7 @@ class NestedConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
+    xtts2: Optional[XTTS2TtsConfig] = None
     whispercpp: WhispercppSttConfig
     fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
@@ -740,6 +741,7 @@ class BasicWingmanConfig(BaseModel):
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
+    xtts2: XTTS2TtsConfig
     whispercpp: WhispercppSttConfig
     fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
@@ -805,7 +807,7 @@ class SettingsConfig(BaseModel):
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
-    xtts2: XTTS2Settings
+    xtts2_settings: XTTS2Settings
     debug_mode: bool
     streamer_mode: bool
 
