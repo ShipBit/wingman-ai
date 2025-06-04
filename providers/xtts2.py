@@ -312,7 +312,8 @@ class XTTS2:
             directory.mkdir(parents=True, exist_ok=True)
 
     def download_file(self, url, destination):
-        response = requests.get(url, stream=True, timeout=10)
+        # no timeout here, this takes a while
+        response = requests.get(url, stream=True)
         total_size_in_bytes = int(response.headers.get("content-length", 0))
         block_size = 1024  # 1 Kibibyte
         printr.print(
