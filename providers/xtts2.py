@@ -31,9 +31,10 @@ printr = Printr()
 class XTTS2:
     def __init__(self, settings: XTTS2Settings):
         self.tts = None
-        self.current_device = "cpu"
+        self.current_device = settings.device
         self.tts_model_loaded = False
         self.xtts2_model_installed = False
+        self.settings = settings
 
         # Only download XTTS2 model once someone enables it, alternative would be downloading on first run, which the code also will do if necessary
         if settings.enable:
@@ -43,21 +44,19 @@ class XTTS2:
     async def play_audio(
         self,
         text: str,
-        config: XTTS2TtsConfig,  # needs to be created
+        config: XTTS2TtsConfig,
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
-        streaming = False
-        # if not config.streaming_mode:
-        if not streaming:
+        if not config.output_streaming:
             output_file = await self.__generate_speech(
                 text=text,
                 voice=config.voice,
                 temperature=config.temperature,
                 speed=config.speed,
                 language=config.language,
-                device=config.device,  # need these variables in config
+                device=self.settings.device,
             )
             audio, sample_rate = audio_player.get_audio_from_file(output_file)
 
@@ -66,8 +65,8 @@ class XTTS2:
                 config=sound_config,
                 wingman_name=wingman_name,
             )
-        # elif config.streaming_mode:
-        elif streaming:
+        # streaming:
+        else:
             await self.__generate_streaming_speech(
                 sound_config=sound_config,
                 audio_player=audio_player,
@@ -77,25 +76,21 @@ class XTTS2:
                 temperature=config.temperature,
                 speed=config.speed,
                 language=config.language,
-                device=config.device,
+                device=self.settings.device,
             )
 
     # Generate speech depending on whether using XTTS2 built in voices, cloning from wav files, or generating from shared latents (e.g. the output of wav file cloning)
     async def __generate_speech(
         self,
         text: str,
-        voice: str = "Craig Gutsy",
-        temperature: float = 0.75,
-        speed: float = 1.20,
-        language: str = "en",
-        device: str = "cpu",
+        voice: str,
+        temperature: float,
+        speed: float,
+        language: str,
+        device: str,
     ):
         if not text:
             return
-
-        # Allow users to just use "gpu" for less advanced users, and translate this to cuda, while allowing more advanced users to select gpu number by using cuda:0, cuda:1, etc.
-        if device == "gpu":
-            device = "cuda"
 
         # Only load model once there's a request for generation; this adds a slight delay but ensures XTTS2 uses no resources unless the user really wants to use it this session
         if not self.tts or not self.tts_model_loaded:
@@ -185,18 +180,14 @@ class XTTS2:
         audio_player: AudioPlayer,
         wingman_name: str,
         text: str,
-        voice: str = "Craig Gutsy",
-        temperature: float = 0.75,
-        speed: float = 1.20,
-        language: str = "en",
-        device: str = "cpu",
+        voice: str,
+        temperature: float,
+        speed: float,
+        language: str,
+        device: str,
     ):
         if not text:
             return
-
-        # Allow users to just use "gpu" for less advanced users, and translate this to cuda, while allowing more advanced users to select gpu number by using cuda:0, cuda:1, etc.
-        if device == "gpu":
-            device = "cuda"
 
         # Only load model once there's a request for generation; this adds a slight delay but ensures XTTS2 uses no resources unless the user really wants to use it this session
         if not self.tts or not self.tts_model_loaded:
