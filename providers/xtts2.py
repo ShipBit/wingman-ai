@@ -12,12 +12,13 @@ from api.interface import (
     XTTS2Settings,
     XTTS2TtsConfig,
     SoundConfig,
-)  # Needs to be created
+)
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
 
-# To do - maybe allow direct use of mantella or other XTTS2 servers for super advanced users, input IP address like external provider
+# Todo: maybe allow direct use of mantella or other XTTS2 servers for super advanced users, input IP address like external provider
+# Todo: some voices create a lot of noise, which might be related to sample_rate (?)
 MODEL_DIR = "xtts2_model"
 RECORDING_PATH = "audio_output"
 OUTPUT_FILE: str = "xtts2.wav"
@@ -27,6 +28,7 @@ LATENTS_PATH = "xtts2_latents"
 printr = Printr()
 
 
+# Todo: changing speed and temperature (and output streaming?) in the UI only works if you change the voice back and forth afterwards
 class XTTS2:
     def __init__(self, settings: XTTS2Settings):
         self.tts = None
@@ -52,8 +54,8 @@ class XTTS2:
             await self.load_xtts2(self.settings.device)
 
         await self.handle_vram_change(self.settings.device)
-        
-        text_lines=self.split_text_for_xtts2(text, config.language)
+
+        text_lines = self.split_text_for_xtts2(text, config.language)
         combined_audio = np.array([], dtype=np.float32)
         if not config.output_streaming:
             for text_line in text_lines:
@@ -66,7 +68,7 @@ class XTTS2:
                     device=self.settings.device,
                 )
                 audio, sample_rate = audio_player.get_audio_from_file(output_file)
-                combined_audio=np.concatenate((combined_audio, audio))
+                combined_audio = np.concatenate((combined_audio, audio))
             await audio_player.play_with_effects(
                 input_data=(combined_audio, sample_rate),
                 config=sound_config,
@@ -86,8 +88,14 @@ class XTTS2:
                     language=config.language,
                     device=self.settings.device,
                 )
-        
+
         await self.handle_vram_change("cpu")
+
+    # this is called when the user changes XTTS2 settings in the UI. settings are the new settings
+    def update_settings(self, settings: XTTS2Settings):
+        self.settings = settings
+        # Todo: update current device (?)
+        printr.print("XTTS2 settings updated.", server_only=True)
 
     # Generate speech depending on whether using XTTS2 built in voices, cloning from wav files, or generating from shared latents (e.g. the output of wav file cloning)
     async def __generate_speech(
@@ -215,7 +223,9 @@ class XTTS2:
         else:
             # built in voices -> latents, see https://gist.github.com/ichabodcole/1c0d19ef4c33b7b5705b0860c7c27f7b
             model_version = "main"
-            speakers_dir = path.join(get_writable_dir(MODEL_DIR), f"{model_version}", "speakers_xtts.pth")
+            speakers_dir = path.join(
+                get_writable_dir(MODEL_DIR), f"{model_version}", "speakers_xtts.pth"
+            )
             speaker_data = torch.load(speakers_dir)
             speaker = list(speaker_data[voice].values())
             gpt_cond_latent = speaker[0]
@@ -257,6 +267,7 @@ class XTTS2:
                     return chunk_length
                 return 0
 
+        # Todo: if possible, it might be way easier to convert to sample_rate 16000 if possible
         await audio_player.stream_with_effects(
             buffer_callback=buffer_callback,
             config=sound_config,
@@ -304,40 +315,51 @@ class XTTS2:
         # Define language-specific punctuation and abbreviation rules
         lang_rules = {
             "en": {
-                "abbreviations": {"mr.", "mrs.", "dr.", "prof.", "e.g.", "i.e.", "vs.", "etc.", "u.s.", "u.s.a."},
-                "split_pattern": r'(?<!\d)([\.\!\?\;\:\n\r])(?!\d)',
+                "abbreviations": {
+                    "mr.",
+                    "mrs.",
+                    "dr.",
+                    "prof.",
+                    "e.g.",
+                    "i.e.",
+                    "vs.",
+                    "etc.",
+                    "u.s.",
+                    "u.s.a.",
+                },
+                "split_pattern": r"(?<!\d)([\.\!\?\;\:\n\r])(?!\d)",
             },
             "fr": {
                 "abbreviations": {"m.", "mme.", "p.ex.", "etc."},
-                "split_pattern": r'(?<!\d)([\.\!\?\;\:\n\r])(?!\d)',
+                "split_pattern": r"(?<!\d)([\.\!\?\;\:\n\r])(?!\d)",
             },
             "de": {
                 "abbreviations": {"z.b.", "u.a.", "etc."},
-                "split_pattern": r'(?<!\d)([\.\!\?\;\:\n\r])(?!\d)',
+                "split_pattern": r"(?<!\d)([\.\!\?\;\:\n\r])(?!\d)",
             },
             "es": {
                 "abbreviations": {"p.ej.", "sr.", "sra.", "etc."},
-                "split_pattern": r'(?<!\d)([\.\¡\!\¿\?\;\:\n\r])(?!\d)',
+                "split_pattern": r"(?<!\d)([\.\¡\!\¿\?\;\:\n\r])(?!\d)",
             },
             "ru": {
                 "abbreviations": {"т.е.", "и т.д."},
-                "split_pattern": r'(?<!\d)([\.\!\?\;\:\n\r])(?!\d)',
+                "split_pattern": r"(?<!\d)([\.\!\?\;\:\n\r])(?!\d)",
             },
             "ar": {
                 "abbreviations": set(),
-                "split_pattern": r'(?<!\d)([\.؟!\;\:\n\r])(?!\d)',
+                "split_pattern": r"(?<!\d)([\.؟!\;\:\n\r])(?!\d)",
             },
             "ja": {
                 "abbreviations": set(),
-                "split_pattern": r'[。！？\n\r]',
+                "split_pattern": r"[。！？\n\r]",
             },
             "zh-cn": {
                 "abbreviations": set(),
-                "split_pattern": r'[。！？\n\r]',
+                "split_pattern": r"[。！？\n\r]",
             },
             "ko": {
                 "abbreviations": set(),
-                "split_pattern": r'[。!?]\s*',
+                "split_pattern": r"[。!?]\s*",
             },
         }
 
@@ -375,8 +397,10 @@ class XTTS2:
         if not directory.exists():
             directory.mkdir(parents=True, exist_ok=True)
 
+    # TODO: propagate this to the UI using a socket command so that we can show a progress indicator
     def download_file(self, url, destination):
         # no timeout here, this takes a while
+        # todo: error handling if this fails
         response = requests.get(url, stream=True)
         total_size_in_bytes = int(response.headers.get("content-length", 0))
         block_size = 1024  # 1 Kibibyte
@@ -422,8 +446,13 @@ class XTTS2:
         speaker_embedding = torch.tensor(data["speaker_embedding"], device=device)
         return gpt_cond_latent, speaker_embedding
 
-    # Use to download the main xtts2 model files and store them in a designated directory
+    # Todo: this should probably be done when the user enables XTTS2 in the UI (and it's not already downloaded)
+    # For me, the model was downloaded after I enabled XTTS2 in the UI and then restarted Wingman Core.
+    # - use update_settings() for that and check if (!self.settings.enable and settings.enable)
+    # Todo: we need to tell the UI when the downloads starts and when it's finishes, so that we can show a progress indicator. We can use a socket command for that.
     def download_xtts2_main_model(self):
+        """Use to download the main xtts2 model files and store them in a designated directory"""
+
         this_dir = Path(get_writable_dir(MODEL_DIR))
         model_version = "main"
         config_path = this_dir / f"{model_version}" / "config.json"
@@ -452,4 +481,3 @@ class XTTS2:
         # Raise default character cap for generation (typically around 255) for XTTS2
         self.tts.synthesizer.tts_model.args.num_chars = 1000
         self.tts_model_loaded = True
-        
