@@ -305,90 +305,19 @@ class XTTS2:
 
     # Generic helper functions
     def split_text_for_xtts2(self, text, lang="en"):
-        if len(text) <= 150:
+        # Do not split short passages
+        if len(text) <= 200: # To do, how long can we make this to avoid segmenting as much as possible while also avoiding generation errors?
             return [text]
 
-        max_len = 150
-        text_lines = []
-        start = 0
-
-        # Define language-specific punctuation and abbreviation rules
-        lang_rules = {
-            "en": {
-                "abbreviations": {
-                    "mr.",
-                    "mrs.",
-                    "dr.",
-                    "prof.",
-                    "e.g.",
-                    "i.e.",
-                    "vs.",
-                    "etc.",
-                    "u.s.",
-                    "u.s.a.",
-                },
-                "split_pattern": r"(?<!\d)([\.\!\?\;\:\n\r])(?!\d)",
-            },
-            "fr": {
-                "abbreviations": {"m.", "mme.", "p.ex.", "etc."},
-                "split_pattern": r"(?<!\d)([\.\!\?\;\:\n\r])(?!\d)",
-            },
-            "de": {
-                "abbreviations": {"z.b.", "u.a.", "etc."},
-                "split_pattern": r"(?<!\d)([\.\!\?\;\:\n\r])(?!\d)",
-            },
-            "es": {
-                "abbreviations": {"p.ej.", "sr.", "sra.", "etc."},
-                "split_pattern": r"(?<!\d)([\.\¡\!\¿\?\;\:\n\r])(?!\d)",
-            },
-            "ru": {
-                "abbreviations": {"т.е.", "и т.д."},
-                "split_pattern": r"(?<!\d)([\.\!\?\;\:\n\r])(?!\d)",
-            },
-            "ar": {
-                "abbreviations": set(),
-                "split_pattern": r"(?<!\d)([\.؟!\;\:\n\r])(?!\d)",
-            },
-            "ja": {
-                "abbreviations": set(),
-                "split_pattern": r"[。！？\n\r]",
-            },
-            "zh-cn": {
-                "abbreviations": set(),
-                "split_pattern": r"[。！？\n\r]",
-            },
-            "ko": {
-                "abbreviations": set(),
-                "split_pattern": r"[。!?]\s*",
-            },
-        }
-
-        # Get the rules or fallback to English
-        rules = lang_rules.get(lang, lang_rules["en"])
-        pattern = re.compile(rules["split_pattern"], re.IGNORECASE)
-        abbreviations = rules["abbreviations"]
-
-        matches = list(pattern.finditer(text))
-        last_split = 0
-
-        for match in matches:
-            end = match.end()
-            chunk_candidate = text[start:end].strip().lower()
-
-            # Skip if it ends in a known abbreviation
-            if any(chunk_candidate.endswith(abbr) for abbr in abbreviations):
-                continue
-
-            if end - start >= max_len:
-                chunk = text[start:end].strip()
-                if chunk:
-                    text_lines.append(chunk)
-                start = end
-
-        # Add any remaining text
-        remaining = text[start:].strip()
-        if remaining:
-            text_lines.append(remaining)
+        if not self.tts:
+            return [text]
+        
+        # Use segmenter built into coqui-tts library to split sentences
+        try:
+            self.tts.synthesizer.seg = self.tts.synthesizer._get_segmenter(lang)
+        except Exception as e:
+            printr.print(f"XTTS2: Getting segmenter for language: {lang} failed, defaulting to English.  Reason: {e}.", server_only=True)
+        text_lines = self.tts.synthesizer.split_into_sentences(text)
 
         return text_lines
 
