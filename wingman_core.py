@@ -37,6 +37,7 @@ from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
+from providers.xtts2 import XTTS2
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.file import get_writable_dir
@@ -166,6 +167,13 @@ class WingmanCore(WebSocketUser):
             path="/xvsynth/voices",
             response_model=list[str],
             endpoint=self.get_xvasynth_voices,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/xtts2/voices",
+            response_model=list[str],
+            endpoint=self.get_xtts2_voices,
             tags=tags,
         )
         self.router.add_api_route(
@@ -335,16 +343,19 @@ class WingmanCore(WebSocketUser):
             app_is_bundled=app_is_bundled,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
+        self.xtts2 = XTTS2(settings=self.settings_service.settings.xtts2)
         self.settings_service.initialize(
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
+            xtts2=self.xtts2,
         )
 
         self.voice_service = VoiceService(
             config_manager=self.config_manager,
             audio_player=self.audio_player,
             xvasynth=self.xvasynth,
+            xtts2=self.xtts2,
         )
 
         # restore settings
@@ -466,6 +477,7 @@ class WingmanCore(WebSocketUser):
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
+            xtts2=self.xtts2,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -1043,6 +1055,93 @@ class WingmanCore(WebSocketUser):
             pass
         return voices
 
+    def get_xtts2_voices(self):
+        # Built in voices by default
+        CLONING_WAVS_PATH = "xtts2_cloning_wavs"
+        LATENTS_PATH = "xtts2_latents"
+        voices = [
+            "Claribel Dervla",
+            "Daisy Studious",
+            "Gracie Wise",
+            "Tammie Ema",
+            "Alison Dietlinde",
+            "Ana Florence",
+            "Annmarie Nele",
+            "Asya Anara",
+            "Brenda Stern",
+            "Gitta Nikolina",
+            "Henriette Usha",
+            "Sofia Hellen",
+            "Tammy Grit",
+            "Tanja Adelina",
+            "Vjollca Johnnie",
+            "Andrew Chipper",
+            "Badr Odhiambo",
+            "Dionisio Schuyler",
+            "Royston Min",
+            "Viktor Eka",
+            "Abrahan Mack",
+            "Adde Michal",
+            "Baldur Sanjin",
+            "Craig Gutsy",
+            "Damien Black",
+            "Gilberto Mathias",
+            "Ilkin Urbano",
+            "Kazuhiko Atallah",
+            "Ludvig Milivoj",
+            "Suad Qasim",
+            "Torcull Diarmuid",
+            "Viktor Menelaos",
+            "Zacharie Aimilios",
+            "Nova Hogarth",
+            "Maja Ruoho",
+            "Uta Obando",
+            "Lidiya Szekeres",
+            "Chandra MacFarland",
+            "Szofi Granger",
+            "Camilla Holmström",
+            "Lilya Stainthorpe",
+            "Zofija Kendrick",
+            "Narelle Moon",
+            "Barbora MacLean",
+            "Alexandra Hisakawa",
+            "Alma María",
+            "Rosemary Okafor",
+            "Ige Behringer",
+            "Filip Traverse",
+            "Damjan Chapman",
+            "Wulf Carlevaro",
+            "Aaron Dreschner",
+            "Kumar Dahl",
+            "Eugenio Mataracı",
+            "Ferran Simen",
+            "Xavier Hayasaka",
+            "Luis Moray",
+            "Marcos Rudaski",
+        ]
+        try:
+            # Cloning WAVs
+            cloning_dir = Path(get_writable_dir(CLONING_WAVS_PATH))
+            if cloning_dir.exists():
+                for wav_file in cloning_dir.glob("**/*.wav"):
+                    voices.append(
+                        str(wav_file.relative_to(get_writable_dir())).replace("\\", "/")
+                    )
+
+            # Latents (.json)
+            latents_dir = Path(get_writable_dir(LATENTS_PATH))
+            if latents_dir.exists():
+                for json_file in latents_dir.glob("**/*.json"):
+                    voices.append(
+                        str(json_file.relative_to(get_writable_dir())).replace(
+                            "\\", "/"
+                        )
+                    )
+        except Exception:
+            # if this fails, we return the default list at least.
+            pass
+        return voices
+
     # POST /open-filemanager
     def open_file_manager(self, path: str):
         show_in_file_manager(path)
@@ -1142,7 +1241,7 @@ class WingmanCore(WebSocketUser):
         response.raise_for_status()
         model_list = response.json()
         return model_list
-    
+
     async def get_wingman_pro_regions(self):
         wingman_pro_token = await self.secret_keeper.retrieve(
             key="wingman_pro", requester="WingmanPro"

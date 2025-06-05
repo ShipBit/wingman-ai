@@ -222,6 +222,8 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.ELEVENLABS
         elif provider_type == "xvasynth":
             return self.config.features.tts_provider == TtsProvider.XVASYNTH
+        elif provider_type == "xtts2":
+            return self.config.features.tts_provider == TtsProvider.XTTS2
         elif provider_type == "whispercpp":
             return self.config.features.stt_provider == SttProvider.WHISPERCPP
         elif provider_type == "fasterwhisper":
@@ -1412,6 +1414,14 @@ class OpenAiWingman(Wingman):
                 await self.xvasynth.play_audio(
                     text=text,
                     config=self.config.xvasynth,
+                    sound_config=sound_config,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
+            elif self.config.features.tts_provider == TtsProvider.XTTS2:
+                await self.xtts2.play_audio(
+                    text=text,
+                    config=self.config.xtts2,
                     sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,

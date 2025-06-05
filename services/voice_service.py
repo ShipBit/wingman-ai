@@ -9,12 +9,14 @@ from api.interface import (
     SoundConfig,
     VoiceInfo,
     XVASynthTtsConfig,
+    XTTS2TtsConfig,
 )
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
+from providers.xtts2 import XTTS2
 from services.audio_player import AudioPlayer
 from services.config_manager import ConfigManager
 from services.printr import Printr
@@ -26,11 +28,13 @@ class VoiceService:
         config_manager: ConfigManager,
         audio_player: AudioPlayer,
         xvasynth: XVASynth,
+        xtts2: XTTS2,
     ):
         self.printr = Printr()
         self.config_manager = config_manager
         self.audio_player = audio_player
         self.xvasynth = xvasynth
+        self.xtts2 = xtts2
 
         self.router = APIRouter()
         tags = ["voice"]
@@ -84,6 +88,12 @@ class VoiceService:
             methods=["POST"],
             path="/voices/preview/xvasynth",
             endpoint=self.play_xvasynth_tts,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preview/xtts2",
+            endpoint=self.play_xtts2,
             tags=tags,
         )
         self.router.add_api_route(
@@ -232,7 +242,17 @@ class VoiceService:
             audio_player=self.audio_player,
             wingman_name="system",
         )
-
+    # POST /play/xtts2
+    async def play_xtts2(
+        self, text: str, config: XTTS2TtsConfig, sound_config: SoundConfig
+    ):
+        await self.xtts2.play_audio(
+            text=text,
+            config=config,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+        )
     # POST /play/wingman-pro/azure
     async def play_wingman_pro_azure(
         self, text: str, config: AzureTtsConfig, sound_config: SoundConfig
