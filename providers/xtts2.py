@@ -1,5 +1,6 @@
 from os import path
 from pathlib import Path
+import re
 import json
 import gc
 import requests
@@ -16,8 +17,6 @@ from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
 
-
-# To do - maybe allow custom latents and cloning paths for super advanced users
 # To do - maybe allow direct use of mantella or other XTTS2 servers for super advanced users, input IP address like external provider
 MODEL_DIR = "xtts2_model"
 RECORDING_PATH = "audio_output"
@@ -39,7 +38,6 @@ class XTTS2:
         # Only download XTTS2 model once someone enables it, alternative would be downloading on first run, which the code also will do if necessary
         if settings.enable:
             checkpoint_dir, config_path = self.download_xtts2_main_model()
-        # checkpoint_dir, config_path = self.download_xtts2_main_model()
 
     async def play_audio(
         self,
@@ -49,35 +47,47 @@ class XTTS2:
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
-        if not config.output_streaming:
-            output_file = await self.__generate_speech(
-                text=text,
-                voice=config.voice,
-                temperature=config.temperature,
-                speed=config.speed,
-                language=config.language,
-                device=self.settings.device,
-            )
-            audio, sample_rate = audio_player.get_audio_from_file(output_file)
+        # Only load model once there's a request for generation; this adds a slight delay but ensures XTTS2 uses no resources unless the user really wants to use it this session
+        if not self.tts or not self.tts_model_loaded:
+            await self.load_xtts2(self.settings.device)
 
+        await self.handle_vram_change(self.settings.device)
+        
+        text_lines=self.split_text_for_xtts2(text, config.language)
+        combined_audio = np.array([], dtype=np.float32)
+        if not config.output_streaming:
+            for text_line in text_lines:
+                output_file = await self.__generate_speech(
+                    text=text_line,
+                    voice=config.voice,
+                    temperature=config.temperature,
+                    speed=config.speed,
+                    language=config.language,
+                    device=self.settings.device,
+                )
+                audio, sample_rate = audio_player.get_audio_from_file(output_file)
+                combined_audio=np.concatenate((combined_audio, audio))
             await audio_player.play_with_effects(
-                input_data=(audio, sample_rate),
+                input_data=(combined_audio, sample_rate),
                 config=sound_config,
                 wingman_name=wingman_name,
             )
         # streaming:
         else:
-            await self.__generate_streaming_speech(
-                sound_config=sound_config,
-                audio_player=audio_player,
-                wingman_name=wingman_name,
-                text=text,
-                voice=config.voice,
-                temperature=config.temperature,
-                speed=config.speed,
-                language=config.language,
-                device=self.settings.device,
-            )
+            for text_line in text_lines:
+                await self.__generate_streaming_speech(
+                    sound_config=sound_config,
+                    audio_player=audio_player,
+                    wingman_name=wingman_name,
+                    text=text_line,
+                    voice=config.voice,
+                    temperature=config.temperature,
+                    speed=config.speed,
+                    language=config.language,
+                    device=self.settings.device,
+                )
+        
+        await self.handle_vram_change("cpu")
 
     # Generate speech depending on whether using XTTS2 built in voices, cloning from wav files, or generating from shared latents (e.g. the output of wav file cloning)
     async def __generate_speech(
@@ -91,12 +101,6 @@ class XTTS2:
     ):
         if not text:
             return
-
-        # Only load model once there's a request for generation; this adds a slight delay but ensures XTTS2 uses no resources unless the user really wants to use it this session
-        if not self.tts or not self.tts_model_loaded:
-            await self.load_xtts2(device)
-
-        await self.handle_vram_change(device)
 
         completed_file_path = ""
 
@@ -139,7 +143,7 @@ class XTTS2:
             voice_file_path = get_writable_dir(voice_with_extension)
             gpt_cond_latent, speaker_embedding = self.load_latents_from_json(
                 device, voice_file_path
-            )  # voice = "C:/OtherPrograms/Github/xtts2_test/mantella_latents/en/emperor.json"
+            )
             out = self.tts.synthesizer.tts_model.inference(
                 text,
                 language,
@@ -147,16 +151,13 @@ class XTTS2:
                 speaker_embedding=speaker_embedding,
                 temperature=temperature,
                 speed=speed,
-                ##**self.tts_settings, # Expands the object with the settings and applies them for generation
             )
             torchaudio.save(file_path, torch.tensor(out["wav"]).unsqueeze(0), 24000)
             completed_file_path = file_path
 
-        await self.handle_vram_change("cpu")
-
         return completed_file_path
 
-    def _process_model_stream(self, stream_iterator):  # ,sample_rate, sample_width):
+    def _process_model_stream(self, stream_iterator):
         for chunk in stream_iterator:
             if chunk is None:
                 continue
@@ -189,12 +190,6 @@ class XTTS2:
         if not text:
             return
 
-        # Only load model once there's a request for generation; this adds a slight delay but ensures XTTS2 uses no resources unless the user really wants to use it this session
-        if not self.tts or not self.tts_model_loaded:
-            await self.load_xtts2(device)
-
-        await self.handle_vram_change(device)
-
         if voice.startswith(LATENTS_PATH):
             voice_with_extension = voice + ".json"
             voice_file_path = get_writable_dir(voice_with_extension)
@@ -218,11 +213,13 @@ class XTTS2:
                 )
             )
         else:
-            gpt_cond_latent, speaker_embedding = (
-                self.tts.synthesizer.tts_model.get_conditioning_latents(
-                    speaker=voice, language=language
-                )
-            )  # to do, built in voices -> latents, see https://gist.github.com/ichabodcole/1c0d19ef4c33b7b5705b0860c7c27f7b
+            # built in voices -> latents, see https://gist.github.com/ichabodcole/1c0d19ef4c33b7b5705b0860c7c27f7b
+            model_version = "main"
+            speakers_dir = path.join(get_writable_dir(MODEL_DIR), f"{model_version}", "speakers_xtts.pth")
+            speaker_data = torch.load(speakers_dir)
+            speaker = list(speaker_data[voice].values())
+            gpt_cond_latent = speaker[0]
+            speaker_embedding = speaker[1]
 
         output_iterator = self.tts.synthesizer.tts_model.inference_stream(
             text,
@@ -232,7 +229,6 @@ class XTTS2:
             temperature=temperature,
             speed=speed,
             stream_chunk_size=20,
-            ##**self.tts_settings, # Expands the object with the settings and applies them for generation
         )
 
         generator_instance = self._process_model_stream(output_iterator)
@@ -270,9 +266,7 @@ class XTTS2:
             dtype="int16",
         )
 
-        await self.handle_vram_change("cpu")
-
-    # Move model in and out of VRAM between generations to reduce performance impact - TBD if this should be async
+    # Move model in and out of VRAM between generations to reduce performance impact
     async def handle_vram_change(self, desired_device):
         if not self.tts:
             return
@@ -286,17 +280,96 @@ class XTTS2:
                 if "cuda" not in self.current_device:
                     printr.print("XTTS2: Moving XTTS2 model to GPU", server_only=True)
                     self.tts.synthesizer.tts_model.to(desired_device)
+                    self.tts.synthesizer.tts_model.args.num_chars = 1000
                     gc.collect()
                     self.current_device = desired_device
             if "cpu" in desired_device:
                 if "cpu" not in self.current_device:
                     printr.print("XTTS2: Moving model to CPU", server_only=True)
                     self.tts.synthesizer.tts_model.to(desired_device)
+                    self.tts.synthesizer.tts_model.args.num_chars = 1000
                     torch.cuda.empty_cache()
                     gc.collect()
                     self.current_device = desired_device
 
     # Generic helper functions
+    def split_text_for_xtts2(self, text, lang="en"):
+        if len(text) <= 150:
+            return [text]
+
+        max_len = 150
+        text_lines = []
+        start = 0
+
+        # Define language-specific punctuation and abbreviation rules
+        lang_rules = {
+            "en": {
+                "abbreviations": {"mr.", "mrs.", "dr.", "prof.", "e.g.", "i.e.", "vs.", "etc.", "u.s.", "u.s.a."},
+                "split_pattern": r'(?<!\d)([\.\!\?\;\:\n\r])(?!\d)',
+            },
+            "fr": {
+                "abbreviations": {"m.", "mme.", "p.ex.", "etc."},
+                "split_pattern": r'(?<!\d)([\.\!\?\;\:\n\r])(?!\d)',
+            },
+            "de": {
+                "abbreviations": {"z.b.", "u.a.", "etc."},
+                "split_pattern": r'(?<!\d)([\.\!\?\;\:\n\r])(?!\d)',
+            },
+            "es": {
+                "abbreviations": {"p.ej.", "sr.", "sra.", "etc."},
+                "split_pattern": r'(?<!\d)([\.\¡\!\¿\?\;\:\n\r])(?!\d)',
+            },
+            "ru": {
+                "abbreviations": {"т.е.", "и т.д."},
+                "split_pattern": r'(?<!\d)([\.\!\?\;\:\n\r])(?!\d)',
+            },
+            "ar": {
+                "abbreviations": set(),
+                "split_pattern": r'(?<!\d)([\.؟!\;\:\n\r])(?!\d)',
+            },
+            "ja": {
+                "abbreviations": set(),
+                "split_pattern": r'[。！？\n\r]',
+            },
+            "zh-cn": {
+                "abbreviations": set(),
+                "split_pattern": r'[。！？\n\r]',
+            },
+            "ko": {
+                "abbreviations": set(),
+                "split_pattern": r'[。!?]\s*',
+            },
+        }
+
+        # Get the rules or fallback to English
+        rules = lang_rules.get(lang, lang_rules["en"])
+        pattern = re.compile(rules["split_pattern"], re.IGNORECASE)
+        abbreviations = rules["abbreviations"]
+
+        matches = list(pattern.finditer(text))
+        last_split = 0
+
+        for match in matches:
+            end = match.end()
+            chunk_candidate = text[start:end].strip().lower()
+
+            # Skip if it ends in a known abbreviation
+            if any(chunk_candidate.endswith(abbr) for abbr in abbreviations):
+                continue
+
+            if end - start >= max_len:
+                chunk = text[start:end].strip()
+                if chunk:
+                    text_lines.append(chunk)
+                start = end
+
+        # Add any remaining text
+        remaining = text[start:].strip()
+        if remaining:
+            text_lines.append(remaining)
+
+        return text_lines
+
     def create_directory_if_not_exists(self, directory):
         directory = Path(directory)
         if not directory.exists():
@@ -376,4 +449,7 @@ class XTTS2:
 
         # Initialize TTS
         self.tts = TTS(model_path=checkpoint_dir, config_path=config_path).to(device)
+        # Raise default character cap for generation (typically around 255) for XTTS2
+        self.tts.synthesizer.tts_model.args.num_chars = 1000
         self.tts_model_loaded = True
+        
