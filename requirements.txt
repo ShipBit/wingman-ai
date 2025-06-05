@@ -25,5 +25,6 @@ setuptools==75.8.0
 show-in-file-manager==1.1.5
 sounddevice==0.5.1
 soundfile==0.13.1
+SpeechRecognition==3.14.1
 typing_extensions==4.12.2
 uvicorn==0.34.0
