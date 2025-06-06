@@ -53,7 +53,7 @@ class XTTS2:
         if not self.tts or not self.tts_model_loaded:
             await self.load_xtts2(self.settings.device)
 
-        await self.handle_vram_change(self.settings.device)
+        self.handle_vram_change(self.settings.device)
 
         text_lines = self.split_text_for_xtts2(text, config.language)
         combined_audio = np.array([], dtype=np.float32)
@@ -89,12 +89,24 @@ class XTTS2:
                     device=self.settings.device,
                 )
 
-        await self.handle_vram_change("cpu")
+        self.handle_vram_change("cpu")
 
-    # this is called when the user changes XTTS2 settings in the UI. settings are the new settings
+    # This is called when the user changes XTTS2 settings in the UI. Settings are the new settings.
     def update_settings(self, settings: XTTS2Settings):
+        # Detect change to model enabled state
+        if settings.enabled != self.settings.enabled:
+            # User has now enabled model
+            if settings.enabled:
+                self.load_xtts2(settings.device)
+            else:
+                self.unload_xtts2()
+        # Detect change to desired device
+        if settings.enabled and (settings.device != self.settings.device):
+            self.handle_vram_change(settings.device)
+        
+        # Cache new settings
         self.settings = settings
-        # Todo: update current device (?)
+        
         printr.print("XTTS2 settings updated.", server_only=True)
 
     # Generate speech depending on whether using XTTS2 built in voices, cloning from wav files, or generating from shared latents (e.g. the output of wav file cloning)
@@ -278,7 +290,7 @@ class XTTS2:
         )
 
     # Move model in and out of VRAM between generations to reduce performance impact
-    async def handle_vram_change(self, desired_device):
+    def handle_vram_change(self, desired_device):
         if not self.tts:
             return
         self.current_device = str(self.tts.synthesizer.tts_model.device)
@@ -291,14 +303,12 @@ class XTTS2:
                 if "cuda" not in self.current_device:
                     printr.print("XTTS2: Moving XTTS2 model to GPU", server_only=True)
                     self.tts.synthesizer.tts_model.to(desired_device)
-                    self.tts.synthesizer.tts_model.args.num_chars = 1000
                     gc.collect()
                     self.current_device = desired_device
             if "cpu" in desired_device:
                 if "cpu" not in self.current_device:
                     printr.print("XTTS2: Moving model to CPU", server_only=True)
                     self.tts.synthesizer.tts_model.to(desired_device)
-                    self.tts.synthesizer.tts_model.args.num_chars = 1000
                     torch.cuda.empty_cache()
                     gc.collect()
                     self.current_device = desired_device
@@ -306,7 +316,7 @@ class XTTS2:
     # Generic helper functions
     def split_text_for_xtts2(self, text, lang="en"):
         # Do not split short passages
-        if len(text) <= 200: # To do, how long can we make this to avoid segmenting as much as possible while also avoiding generation errors?
+        if len(text) <= 175:
             return [text]
 
         if not self.tts:
@@ -329,18 +339,22 @@ class XTTS2:
     # TODO: propagate this to the UI using a socket command so that we can show a progress indicator
     def download_file(self, url, destination):
         # no timeout here, this takes a while
-        # todo: error handling if this fails
-        response = requests.get(url, stream=True)
-        total_size_in_bytes = int(response.headers.get("content-length", 0))
-        block_size = 1024  # 1 Kibibyte
-        printr.print(
-            f"XTTS2: Downloading file at {url}, please wait...", server_only=True
-        )
+        try:
+            response = requests.get(url, stream=True)
+            total_size_in_bytes = int(response.headers.get("content-length", 0))
+            block_size = 1024  # 1 Kibibyte
+            printr.print(
+                f"XTTS2: Downloading file at {url}, please wait...", server_only=True
+            )
 
-        with open(destination, "wb") as file:
-            for data in response.iter_content(block_size):
-                file.write(data)
-        printr.print(f"XTTS2: File downloaded to {destination}.", server_only=True)
+            with open(destination, "wb") as file:
+                for data in response.iter_content(block_size):
+                    file.write(data)
+            printr.print(f"XTTS2: File downloaded to {destination}.", server_only=True)
+        except Exception as e:
+            printr.print(
+                f"XTTS2: Could not download file at {url}.  Error was {e}.  Manual download may be required to {destination}.", server_only=False
+            )
 
     def download_model(self, this_dir, model_version):
         # Define paths
@@ -375,9 +389,6 @@ class XTTS2:
         speaker_embedding = torch.tensor(data["speaker_embedding"], device=device)
         return gpt_cond_latent, speaker_embedding
 
-    # Todo: this should probably be done when the user enables XTTS2 in the UI (and it's not already downloaded)
-    # For me, the model was downloaded after I enabled XTTS2 in the UI and then restarted Wingman Core.
-    # - use update_settings() for that and check if (!self.settings.enable and settings.enable)
     # Todo: we need to tell the UI when the downloads starts and when it's finishes, so that we can show a progress indicator. We can use a socket command for that.
     def download_xtts2_main_model(self):
         """Use to download the main xtts2 model files and store them in a designated directory"""
@@ -402,11 +413,21 @@ class XTTS2:
         if self.tts_model_loaded and self.tts:
             return
 
-        # Just in case, make sure model is downloaded before proceeeding; this should have happened on init
+        # Just in case, make sure model is downloaded before proceeeding; this should have happened on enabled
         checkpoint_dir, config_path = self.download_xtts2_main_model()
 
         # Initialize TTS
         self.tts = TTS(model_path=checkpoint_dir, config_path=config_path).to(device)
-        # Raise default character cap for generation (typically around 255) for XTTS2
-        self.tts.synthesizer.tts_model.args.num_chars = 1000
         self.tts_model_loaded = True
+    
+    # Reset when user sets xtts2 to disabled
+    def unload_xtts2(self):
+        # Is there some function in xtts2 for unloading?
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            gc.collect()
+        self.tts = None
+        self.current_device = None
+        self.tts_model_loaded = False
+        self.xtts2_model_installed = False
+        self.settings = None
