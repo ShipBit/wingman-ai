@@ -94,14 +94,14 @@ class XTTS2:
     # This is called when the user changes XTTS2 settings in the UI. Settings are the new settings.
     def update_settings(self, settings: XTTS2Settings):
         # Detect change to model enabled state
-        if settings.enabled != self.settings.enabled:
+        if settings.enable != self.settings.enable:
             # User has now enabled model
-            if settings.enabled:
+            if settings.enable:
                 self.load_xtts2(settings.device)
             else:
                 self.unload_xtts2()
         # Detect change to desired device
-        if settings.enabled and (settings.device != self.settings.device):
+        if settings.enable and (settings.device != self.settings.device):
             self.handle_vram_change(settings.device)
         
         # Cache new settings
