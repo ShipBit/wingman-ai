@@ -5,7 +5,6 @@ from api.enums import (
     AzureApiVersion,
     AzureRegion,
     ConversationProvider,
-    GoogleAiModel,
     ImageGenerationProvider,
     MistralModel,
     CustomPropertyType,
@@ -353,7 +352,7 @@ class CerebrasConfig(BaseModel):
 
 
 class GoogleConfig(BaseModel):
-    conversation_model: GoogleAiModel
+    conversation_model: str
 
 
 class OpenRouterConfig(BaseModel):
