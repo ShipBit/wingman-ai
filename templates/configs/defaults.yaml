@@ -127,6 +127,12 @@ xvasynth:
   pace: 1.0
   use_super_resolution: false
   use_cleanup: false
+xtts2:
+  voice: Craig Gutsy
+  speed: 1.20
+  temperature: 0.75
+  language: en
+  output_streaming: false
 wingman_pro:
   stt_provider: azure_speech
   tts_provider: azure

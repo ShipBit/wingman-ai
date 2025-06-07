@@ -444,6 +444,8 @@ class ConfigMigrationService:
 
     def migrate_170_to_171(self):
         def migrate_settings(old: dict, new: dict) -> dict:
+            old["xtts2"] = new["xtts2"]
+            self.log("- added new settings: xtts2")
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:
@@ -455,6 +457,9 @@ class ConfigMigrationService:
             # openai-compatible tts
             old["openai_compatible_tts"] = new["openai_compatible_tts"]
             self.log("- added new property: openai_compatible_tts")
+
+            old["xtts2"] = new["xtts2"]
+            self.log("- added new property: xtts2")
 
             # perplexity model
             old["perplexity"]["conversation_model"] = "sonar"

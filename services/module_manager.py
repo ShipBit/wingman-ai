@@ -24,6 +24,7 @@ from skills.skill_base import Skill
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
     from services.tower import Tower
+    from providers.xtts2 import XTTS2
 
 SKILLS_DIR = "skills"
 
@@ -57,6 +58,7 @@ class ModuleManager:
         whispercpp: Whispercpp,
         fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
+        xtts2: "XTTS2",
         tower: "Tower",
     ):
         """Dynamically creates a Wingman instance from a module path and class name
@@ -96,6 +98,7 @@ class ModuleManager:
             whispercpp=whispercpp,
             fasterwhisper=fasterwhisper,
             xvasynth=xvasynth,
+            xtts2=xtts2,
             tower=tower,
         )
         return instance

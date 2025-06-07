@@ -11,6 +11,7 @@ from api.interface import (
 from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
+from providers.xtts2 import XTTS2
 from services.config_manager import ConfigManager
 from services.config_service import ConfigService
 from services.printr import Printr
@@ -28,6 +29,7 @@ class SettingsService:
         self.whispercpp: Whispercpp = None
         self.fasterwhisper: FasterWhisper = None
         self.xvasynth: XVASynth = None
+        self.xtts2: XTTS2 = None
 
         self.router = APIRouter()
         tags = ["settings"]
@@ -53,11 +55,12 @@ class SettingsService:
         )
 
     def initialize(
-        self, whispercpp: Whispercpp, fasterwhisper: FasterWhisper, xvasynth: XVASynth
+        self, whispercpp: Whispercpp, fasterwhisper: FasterWhisper, xvasynth: XVASynth, xtts2: XTTS2
     ):
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
+        self.xtts2 = xtts2
 
     # GET /settings
     def get_settings(self):
@@ -113,7 +116,16 @@ class SettingsService:
             return
         self.xvasynth.update_settings(settings=settings.xvasynth)
         self.config_manager.settings_config.xvasynth = settings.xvasynth
-
+        
+        #XTTS2
+        if not self.xtts2:
+            self.printr.toast_error(
+                "XTTS2 is not initialized. Please run SettingsService.initialize()",
+            )
+            return
+        self.xtts2.update_settings(settings=settings.xtts2)
+        self.config_manager.settings_config.xtts2 = settings.xtts2
+        
         # voice activation
         self.config_manager.settings_config.voice_activation = settings.voice_activation
 

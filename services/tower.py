@@ -9,6 +9,7 @@ from api.interface import (
 from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
+from providers.xtts2 import XTTS2
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.config_manager import ConfigManager
@@ -32,6 +33,7 @@ class Tower:
         whispercpp: Whispercpp,
         fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
+        xtts2: XTTS2,
     ):
         self.audio_player = audio_player
         self.audio_library = audio_library
@@ -44,6 +46,7 @@ class Tower:
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
+        self.xtts2 = xtts2
 
     async def instantiate_wingmen(self, settings: SettingsConfig):
         errors: list[WingmanInitializationError] = []
@@ -99,6 +102,7 @@ class Tower:
                     whispercpp=self.whispercpp,
                     fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
+                    xtts2=self.xtts2,
                     tower=self,
                 )
             else:
@@ -111,6 +115,7 @@ class Tower:
                     whispercpp=self.whispercpp,
                     fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
+                    xtts2=self.xtts2,
                     tower=self,
                 )
         except FileNotFoundError as e:  # pylint: disable=broad-except

@@ -975,6 +975,7 @@ class ConfigManager:
             "wingman_pro",
             "perplexity",
             "openai_compatible_tts",
+            "xtts2",
         ]:
             if key in default:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.
