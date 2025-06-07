@@ -1,6 +1,6 @@
 azure-cognitiveservices-speech==1.42.0
-edge-tts==7.0.0
-elevenlabslib==0.31.3
+edge-tts==7.0.2
+elevenlabslib==0.32.0
 fastapi==0.115.7
 faster_whisper==1.1.1
 google-generativeai==0.8.4
@@ -9,7 +9,7 @@ markdown==3.7
 numpy==1.26.4
 openai==1.60.2
 packaging==24.2
-pedalboard==0.9.16
+pedalboard==0.9.17
 platformdirs==4.3.6
 pyaudio==0.2.14
 pydantic==2.10.6
@@ -24,6 +24,6 @@ setuptools==75.8.0
 show-in-file-manager==1.1.5
 sounddevice==0.5.1
 soundfile==0.13.1
-SpeechRecognition==3.14.1
+SpeechRecognition==3.14.3
 typing_extensions==4.12.2
 uvicorn==0.34.0
