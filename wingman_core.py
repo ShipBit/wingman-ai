@@ -5,6 +5,7 @@ import re
 import threading
 from typing import Optional
 import pygame
+from google.genai import types
 from fastapi import APIRouter, File, UploadFile
 import requests
 import sounddevice as sd
@@ -33,6 +34,7 @@ from api.interface import (
 )
 from providers.elevenlabs import ElevenLabs
 from providers.faster_whisper import FasterWhisper
+from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
@@ -232,6 +234,13 @@ class WingmanCore(WebSocketUser):
             path="/models/elevenlabs",
             response_model=list[ElevenlabsModel],
             endpoint=self.get_elevenlabs_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/google",
+            response_model=list[types.Model],
+            endpoint=self.get_google_models,
             tags=tags,
         )
         # TODO: Refactor - move these to a new AudioLibrary service:
@@ -1142,7 +1151,7 @@ class WingmanCore(WebSocketUser):
         response.raise_for_status()
         model_list = response.json()
         return model_list
-    
+
     async def get_wingman_pro_regions(self):
         wingman_pro_token = await self.secret_keeper.retrieve(
             key="wingman_pro", requester="WingmanPro"
@@ -1182,6 +1191,19 @@ class WingmanCore(WebSocketUser):
             return result
         except ValueError as e:
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
+            return []
+
+    # GET /models/google
+    async def get_google_models(self) -> list[types.Model]:
+        google_api_key = await self.secret_keeper.retrieve(
+            key="google", requester="Google"
+        )
+        google = GoogleGenAI(api_key=google_api_key)
+        try:
+            models = google.get_available_models()
+            return models
+        except ValueError as e:
+            self.printr.toast_error(f"Google: \n{str(e)}")
             return []
 
     # GET /audio-library

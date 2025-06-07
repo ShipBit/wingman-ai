@@ -91,11 +91,6 @@ class PerplexityModel(Enum):
     R1_1776 = "r1-1776"
 
 
-class GoogleAiModel(Enum):
-    GEMINI_1_5_FLASH = "gemini-1.5-flash"
-    GEMINI_1_5_PRO = "gemini-1.5-pro"
-
-
 class SoundEffect(Enum):
     AI = "AI"
     LOW_QUALITY_RADIO = "LOW_QUALITY_RADIO"
@@ -225,10 +220,6 @@ class PerplexityModelEnumModel(BaseEnumModel):
     model: PerplexityModel
 
 
-class GoogleAiModelEnumModel(BaseEnumModel):
-    model: GoogleAiModel
-
-
 class SoundEffectEnumModel(BaseEnumModel):
     sound_effect: SoundEffect
 
@@ -284,7 +275,6 @@ ENUM_TYPES = {
     "AzureRegion": AzureRegionEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "MistralModel": MistralModelEnumModel,
-    "GoogleAiModel": GoogleAiModelEnumModel,
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
     "SttProvider": SttProviderEnumModel,

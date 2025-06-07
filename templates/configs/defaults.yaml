@@ -67,7 +67,7 @@ cerebras:
   conversation_model: llama3.1-70b
   endpoint: https://api.cerebras.ai/v1
 google:
-  conversation_model: gemini-1.5-flash
+  conversation_model: gemini-2.0-flash
 openrouter:
   conversation_model: meta-llama/llama-3-8b-instruct:free
   endpoint: https://openrouter.ai/api/v1

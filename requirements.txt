@@ -3,7 +3,7 @@ edge-tts==7.0.2
 elevenlabslib==0.32.0
 fastapi==0.115.7
 faster_whisper==1.1.1
-google-generativeai==0.8.4
+google-genai==1.19.0
 httptools==0.6.4
 markdown==3.7
 numpy==1.26.4

@@ -1098,7 +1098,7 @@ class OpenAiWingman(Wingman):
                 completion = self.google.ask(
                     messages=messages,
                     tools=tools,
-                    model=self.config.google.conversation_model.value,
+                    model=self.config.google.conversation_model,
                 )
             elif (
                 self.config.features.conversation_provider
