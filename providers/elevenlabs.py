@@ -4,16 +4,14 @@ from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXOptions
 from api.enums import SoundEffect, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
 from services.audio_player import AudioPlayer
-from services.secret_keeper import SecretKeeper
 from services.sound_effects import get_sound_effects
 from services.websocket_user import WebSocketUser
 
 
 class ElevenLabs:
     def __init__(self, api_key: str, wingman_name: str):
-        self.api_key = api_key
         self.wingman_name = wingman_name
-        self.secret_keeper = SecretKeeper()
+        self.user = User(api_key)
 
     def validate_config(
         self, config: ElevenlabsConfig, errors: list[WingmanInitializationError]
@@ -41,11 +39,10 @@ class ElevenLabs:
         wingman_name: str,
         stream: bool,
     ):
-        user = User(self.api_key)
         voice = (
-            user.get_voice_by_ID(config.voice.id)
+            self.user.get_voice_by_ID(config.voice.id)
             if config.voice.id
-            else user.get_voices_by_name(config.voice.name)[0]
+            else self.user.get_voices_by_name_v2(config.voice.name)[0]
         )
 
         def notify_playback_finished():
@@ -150,11 +147,10 @@ class ElevenLabs:
         duration_seconds: Optional[float] = None,
         prompt_influence: Optional[float] = None,
     ):
-        user = User(self.api_key)
         options = SFXOptions(
             duration_seconds=duration_seconds, prompt_influence=prompt_influence
         )
-        req, _ = user.generate_sfx(prompt, options)
+        req, _ = self.user.generate_sfx(prompt, options)
 
         result_ready = asyncio.Event()
         audio: bytes = None
@@ -171,13 +167,10 @@ class ElevenLabs:
         return audio
 
     def get_available_voices(self):
-        user = User(self.api_key)
-        return user.get_available_voices()
+        return self.user.get_available_voices()
 
     def get_available_models(self):
-        user = User(self.api_key)
-        return user.get_models()
+        return self.user.get_models()
 
     def get_subscription_data(self):
-        user = User(self.api_key)
-        return user.get_subscription_data()
+        return self.user.get_subscription_data()

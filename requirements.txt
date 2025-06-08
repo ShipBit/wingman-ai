@@ -1,6 +1,6 @@
 azure-cognitiveservices-speech==1.42.0
 edge-tts==7.0.2
-elevenlabslib==0.32.0
+elevenlabslib==0.32.1
 fastapi==0.115.7
 faster_whisper==1.1.1
 google-genai==1.19.0
