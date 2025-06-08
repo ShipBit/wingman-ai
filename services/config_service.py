@@ -388,6 +388,7 @@ class ConfigService:
         wingman_config.fasterwhisper = basic_config.fasterwhisper
         wingman_config.wingman_pro = basic_config.wingman_pro
         wingman_config.perplexity = basic_config.perplexity
+        wingman_config.openai_compatible_tts = basic_config.openai_compatible_tts
 
         updated = await wingman.update_config(config=wingman_config, validate=validate)
 

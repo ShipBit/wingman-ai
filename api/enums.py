@@ -108,6 +108,7 @@ class TtsProvider(Enum):
     AZURE = "azure"
     XVASYNTH = "xvasynth"
     WINGMAN_PRO = "wingman_pro"
+    OPENAI_COMPATIBLE = "openai_compatible"
 
 
 class SttProvider(Enum):
