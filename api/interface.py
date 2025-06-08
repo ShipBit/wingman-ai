@@ -278,6 +278,8 @@ class EdgeTtsConfig(BaseModel):
 
 
 class OpenAiCompatibleTtsConfig(BaseModel):
+    api_key: str
+    """Your local TTS provider probably won't need an API key, but if it does, you can set it here. The OpenAI client needs one to be initialized, so don't remove it even if you don't use it."""
     voice: Optional[str] = None
     base_url: Optional[str] = None
     model: Optional[str] = None
