@@ -277,6 +277,15 @@ class EdgeTtsConfig(BaseModel):
     """
 
 
+class OpenAiCompatibleTtsConfig(BaseModel):
+    api_key: str
+    """Your local TTS provider probably won't need an API key, but if it does, you can set it here. The OpenAI client needs one to be initialized, so don't remove it even if you don't use it."""
+    voice: Optional[str] = None
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+    speed: float
+
+
 class XVASynthVoiceConfig(BaseModel):
     model_config = ConfigDict(protected_namespaces=())
     model_directory: str
@@ -304,10 +313,10 @@ class OpenAiConfig(BaseModel):
     """
 
     tts_voice: str
-    """The voice to use when generating the audio. Supported voices are alloy, ash, coral, echo, fable, onyx, nova, sage and shimmer."""
+    """The voice to use when generating the audio. Supported voices are alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer."""
 
     tts_model: str
-    """One of the available TTS models: tts-1 or tts-1-hd"""
+    """One of the available TTS models: tts-1, tts-1-hd"""
 
     tts_speed: float
     """The speed of the generated audio. Select a value from 0.25 to 4.0. 1.0 is the default."""
@@ -672,6 +681,7 @@ class NestedConfig(BaseModel):
     openrouter: OpenRouterConfig
     local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig
+    openai_compatible_tts: OpenAiCompatibleTtsConfig
     elevenlabs: ElevenlabsConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
@@ -712,6 +722,7 @@ class BasicWingmanConfig(BaseModel):
     fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
+    openai_compatible_tts: OpenAiCompatibleTtsConfig
 
 
 class WingmanConfig(NestedConfig):

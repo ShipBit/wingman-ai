@@ -8,6 +8,7 @@ from typing import (
     Mapping,
     Optional,
 )
+from openai import NOT_GIVEN
 from openai.types.chat import (
     ChatCompletion,
     ChatCompletionMessage,
@@ -36,7 +37,7 @@ from api.enums import (
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
-from providers.open_ai import OpenAi, OpenAiAzure
+from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
 from providers.wingman_pro import WingmanPro
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
@@ -74,6 +75,7 @@ class OpenAiWingman(Wingman):
         self.local_llm: OpenAi | None = None
         self.openai_azure: OpenAiAzure | None = None
         self.elevenlabs: ElevenLabs | None = None
+        self.openai_compatible_tts: OpenAiCompatibleTts | None = None
         self.wingman_pro: WingmanPro | None = None
         self.google: GoogleGenAI | None = None
         self.perplexity: OpenAi | None = None
@@ -127,6 +129,9 @@ class OpenAiWingman(Wingman):
 
             if self.uses_provider("elevenlabs"):
                 await self.validate_and_set_elevenlabs(errors)
+
+            if self.uses_provider("openai_compatible"):
+                await self.validate_and_set_openai_compatible_tts(errors)
 
             if self.uses_provider("azure"):
                 await self.validate_and_set_azure(errors)
@@ -220,6 +225,8 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.EDGE_TTS
         elif provider_type == "elevenlabs":
             return self.config.features.tts_provider == TtsProvider.ELEVENLABS
+        elif provider_type == "openai_compatible":
+            return self.config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE
         elif provider_type == "xvasynth":
             return self.config.features.tts_provider == TtsProvider.XVASYNTH
         elif provider_type == "whispercpp":
@@ -384,6 +391,22 @@ class OpenAiWingman(Wingman):
             )
             self.elevenlabs.validate_config(
                 config=self.config.elevenlabs, errors=errors
+            )
+
+    async def validate_and_set_openai_compatible_tts(
+        self, errors: list[WingmanInitializationError]
+    ):
+        if (
+            self.config.openai_compatible_tts.base_url
+            and self.config.openai_compatible_tts.api_key
+        ):
+            self.openai_compatible_tts = OpenAiCompatibleTts(
+                api_key=self.config.openai_compatible_tts.api_key,
+                base_url=self.config.openai_compatible_tts.base_url,
+            )
+            printr.print(
+                f"Wingman {self.name}: Initialized OpenAI-compatible TTS with base URL {self.config.openai_compatible_tts.base_url} and API key {self.config.openai_compatible_tts.api_key}",
+                server_only=True,
             )
 
     async def validate_and_set_azure(self, errors: list[WingmanInitializationError]):
@@ -1422,6 +1445,20 @@ class OpenAiWingman(Wingman):
                     voice=self.config.openai.tts_voice,
                     model=self.config.openai.tts_model,
                     speed=self.config.openai.tts_speed,
+                    sound_config=sound_config,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
+            elif self.config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE:
+                await self.openai_compatible_tts.play_audio(
+                    text=text,
+                    voice=self.config.openai_compatible_tts.voice,
+                    model=self.config.openai_compatible_tts.model,
+                    speed=(
+                        self.config.openai_compatible_tts.speed
+                        if self.config.openai_compatible_tts.speed != 1.0
+                        else NOT_GIVEN
+                    ),
                     sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,

@@ -974,6 +974,7 @@ class ConfigManager:
             "xvasynth",
             "wingman_pro",
             "perplexity",
+            "openai_compatible_tts",
         ]:
             if key in default:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.

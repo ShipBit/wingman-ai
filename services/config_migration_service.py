@@ -452,9 +452,16 @@ class ConfigMigrationService:
             old["openai"]["tts_speed"] = 1.0
             self.log("- added new properties: openai.tts_model, openai.tts_speed")
 
+            # openai-compatible tts
+            old["openai_compatible_tts"] = new["openai_compatible_tts"]
+            self.log("- added new property: openai_compatible_tts")
+
             # perplexity model
             old["perplexity"]["conversation_model"] = "sonar"
-            self.log("- migrated perplexity model to new default (sonar), previous models don't exist anymore")
+            self.log(
+                "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
+            )
+
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:

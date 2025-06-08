@@ -54,6 +54,12 @@ openai:
   tts_voice: nova
   tts_model: tts-1
   tts_speed: 1.0
+openai_compatible_tts:
+  api_key: "probably-not-needed"
+  voice: ""
+  model: ""
+  base_url: ""
+  speed: 1.0
 mistral:
   conversation_model: mistral-large-latest
   endpoint: https://api.mistral.ai/v1
