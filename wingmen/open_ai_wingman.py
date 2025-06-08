@@ -396,9 +396,10 @@ class OpenAiWingman(Wingman):
     async def validate_and_set_openai_compatible_tts(
         self, errors: list[WingmanInitializationError]
     ):
-        self.openai_compatible_tts = OpenAiCompatibleTts(
-            base_url=self.config.openai_compatible_tts.base_url,
-        )
+        if self.config.openai_compatible_tts.base_url:
+            self.openai_compatible_tts = OpenAiCompatibleTts(
+                base_url=self.config.openai_compatible_tts.base_url,
+            )
 
     async def validate_and_set_azure(self, errors: list[WingmanInitializationError]):
         for key_type in self.AZURE_SERVICES:

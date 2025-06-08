@@ -315,6 +315,7 @@ class OpenAiCompatibleTts:
     ):
         super().__init__()
         self.client = OpenAI(
+            api_key="generic",
             base_url=base_url,
         )
 
