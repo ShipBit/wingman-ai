@@ -14,7 +14,7 @@ from api.interface import (
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.hume import Hume
-from providers.open_ai import OpenAi, OpenAiAzure
+from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
@@ -69,6 +69,12 @@ class VoiceService:
             methods=["POST"],
             path="/voices/preview/openai",
             endpoint=self.play_openai_tts,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preview/openai-compatible",
+            endpoint=self.play_openai_compatible_tts,
             tags=tags,
         )
         self.router.add_api_route(
@@ -187,6 +193,28 @@ class VoiceService:
         sound_config: SoundConfig,
     ):
         openai = OpenAi(api_key=api_key)
+        await openai.play_audio(
+            text=text,
+            voice=voice,
+            model=model,
+            speed=speed,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+        )
+
+    # POST /play/openai-compatible
+    async def play_openai_compatible_tts(
+        self,
+        text: str,
+        api_key: str,
+        base_url: str,
+        voice: str,
+        model: str,
+        speed: float,
+        sound_config: SoundConfig,
+    ):
+        openai = OpenAiCompatibleTts(api_key=api_key, base_url=base_url)
         await openai.play_audio(
             text=text,
             voice=voice,
