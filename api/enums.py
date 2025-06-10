@@ -110,6 +110,7 @@ class TtsProvider(Enum):
     XVASYNTH = "xvasynth"
     WINGMAN_PRO = "wingman_pro"
     OPENAI_COMPATIBLE = "openai_compatible"
+    HUME = "hume"
 
 
 class SttProvider(Enum):

@@ -38,6 +38,8 @@ from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
+from providers.hume import Hume
+from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
@@ -76,6 +78,7 @@ class OpenAiWingman(Wingman):
         self.openai_azure: OpenAiAzure | None = None
         self.elevenlabs: ElevenLabs | None = None
         self.openai_compatible_tts: OpenAiCompatibleTts | None = None
+        self.hume: Hume | None = None
         self.wingman_pro: WingmanPro | None = None
         self.google: GoogleGenAI | None = None
         self.perplexity: OpenAi | None = None
@@ -141,6 +144,9 @@ class OpenAiWingman(Wingman):
 
             if self.uses_provider("perplexity"):
                 await self.validate_and_set_perplexity(errors)
+
+            if self.uses_provider("hume"):
+                await self.validate_and_set_hume(errors)
 
         except Exception as e:
             errors.append(
@@ -227,6 +233,8 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.ELEVENLABS
         elif provider_type == "openai_compatible":
             return self.config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE
+        elif provider_type == "hume":
+            return self.config.features.tts_provider == TtsProvider.HUME
         elif provider_type == "xvasynth":
             return self.config.features.tts_provider == TtsProvider.XVASYNTH
         elif provider_type == "whispercpp":
@@ -408,6 +416,15 @@ class OpenAiWingman(Wingman):
                 f"Wingman {self.name}: Initialized OpenAI-compatible TTS with base URL {self.config.openai_compatible_tts.base_url} and API key {self.config.openai_compatible_tts.api_key}",
                 server_only=True,
             )
+
+    async def validate_and_set_hume(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("hume", errors)
+        if api_key:
+            self.hume = Hume(
+                api_key=api_key,
+                wingman_name=self.name,
+            )
+            self.hume.validate_config(config=self.config.hume, errors=errors)
 
     async def validate_and_set_azure(self, errors: list[WingmanInitializationError]):
         for key_type in self.AZURE_SERVICES:
@@ -1422,6 +1439,26 @@ class OpenAiWingman(Wingman):
                     wingman_name=self.name,
                     stream=self.config.elevenlabs.output_streaming,
                 )
+            elif self.config.features.tts_provider == TtsProvider.HUME:
+                try:
+                    await self.hume.play_audio(
+                        text=text,
+                        config=self.config.hume,
+                        sound_config=sound_config,
+                        audio_player=self.audio_player,
+                        wingman_name=self.name,
+                    )
+                except RuntimeError as e:
+                    if "Event loop is closed" in str(e):
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        await self.hume.play_audio(
+                            text=text,
+                            config=self.config.hume,
+                            sound_config=sound_config,
+                            audio_player=self.audio_player,
+                            wingman_name=self.name,
+                        )
             elif self.config.features.tts_provider == TtsProvider.AZURE:
                 await self.openai_azure.play_audio(
                     text=text,

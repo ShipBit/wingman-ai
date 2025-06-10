@@ -968,6 +968,7 @@ class ConfigManager:
             "local_llm",
             "edge_tts",
             "elevenlabs",
+            "hume",
             "azure",
             "whispercpp",
             "fasterwhisper",

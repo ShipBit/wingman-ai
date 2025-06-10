@@ -76,6 +76,7 @@ class VoiceInfo(BaseModel):
     name: Optional[str] = None
     gender: Optional[TtsVoiceGender] = None
     locale: Optional[str] = None
+    provider: Optional[str] = None
 
 
 # from sounddevice lib
@@ -266,6 +267,17 @@ class ElevenlabsConfig(BaseModel):
     voice: ElevenlabsVoiceConfig
     voice_settings: ElevenlabsVoiceSettingsConfig
     output_streaming: bool
+
+
+class HumeVoiceConfig(BaseModel):
+    id: str
+    name: str
+    provider: str
+
+
+class HumeConfig(BaseModel):
+    description: Optional[str] = None
+    voice: HumeVoiceConfig
 
 
 class EdgeTtsConfig(BaseModel):
@@ -595,7 +607,7 @@ class LabelValuePair(BaseModel):
 class VoiceSelection(BaseModel):
     provider: TtsProvider
     subprovider: Optional[WingmanProTtsProvider] = None
-    voice: str | ElevenlabsVoiceConfig | XVASynthVoiceConfig
+    voice: str | ElevenlabsVoiceConfig | XVASynthVoiceConfig | HumeVoiceConfig
 
     @model_validator(mode="before")
     def check_voice_config(cls, values):
@@ -605,6 +617,8 @@ class VoiceSelection(BaseModel):
                 return ElevenlabsVoiceConfig.model_validate(voice)
             if provider == "xvasynth":
                 return XVASynthVoiceConfig.model_validate(voice)
+            if provider == "hume":
+                return HumeVoiceConfig.model_validate(voice)
             return str(voice)
 
         if isinstance(values, list):
@@ -684,6 +698,7 @@ class NestedConfig(BaseModel):
     edge_tts: EdgeTtsConfig
     openai_compatible_tts: OpenAiCompatibleTtsConfig
     elevenlabs: ElevenlabsConfig
+    hume: HumeConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
@@ -717,6 +732,7 @@ class BasicWingmanConfig(BaseModel):
     local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
+    hume: HumeConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig

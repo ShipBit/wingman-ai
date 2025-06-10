@@ -92,6 +92,12 @@ elevenlabs:
     similarity_boost: 0.5
     style: 0.0
     use_speaker_boost: true
+hume:
+  description: ""
+  voice:
+    name: ""
+    id: ""
+    provider: ""
 azure:
   whisper:
     api_base_url: https://openai-w-eu.openai.azure.com/

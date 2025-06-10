@@ -211,6 +211,10 @@ class VoiceChanger(Skill):
             voice_name = voice
             provider_name = "Edge TTS"
             self.wingman.config.edge_tts.voice = voice
+        elif voice_provider == TtsProvider.HUME:
+            voice_name = voice.name
+            provider_name = "Hume"
+            self.wingman.config.hume.voice = voice
         else:
             error = True
 
