@@ -4,10 +4,15 @@ import aiofiles
 from hume import AsyncHumeClient
 from hume.tts import (
     PostedUtterance,
-    PostedUtteranceVoiceWithName,
+    PostedUtteranceVoiceWithId,
     PostedContextWithGenerationId,
 )
-from api.interface import HumeConfig, SoundConfig, WingmanInitializationError
+from api.interface import (
+    HumeConfig,
+    SoundConfig,
+    VoiceInfo,
+    WingmanInitializationError,
+)
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -45,9 +50,12 @@ class Hume:
         speech = await self.hume.tts.synthesize_json(
             utterances=[
                 PostedUtterance(
-                    description=(config.description if config.description else None),
                     text=text,
-                    voice=PostedUtteranceVoiceWithName(name=config.voice),
+                    description=(config.description if config.description else None),
+                    voice=PostedUtteranceVoiceWithId(
+                        id=config.voice.id,
+                        provider=config.voice.provider,
+                    ),
                 )
             ],
             context=(
@@ -67,8 +75,30 @@ class Hume:
             wingman_name=wingman_name,
         )
 
-    def get_available_voices(self):
-        return self.hume.tts.voices
+    async def get_available_voices(self):
+        voices: list[VoiceInfo] = []
+
+        custom_voices = await self.hume.tts.voices.list(provider="CUSTOM_VOICE")
+        for voice in custom_voices.items:
+            voices.append(
+                VoiceInfo(
+                    id=voice.id,
+                    name=voice.name,
+                    provider=voice.provider,
+                )
+            )
+
+        default_voices = await self.hume.tts.voices.list(provider="HUME_AI")
+        for voice in default_voices.items:
+            voices.append(
+                VoiceInfo(
+                    id=voice.id,
+                    name=voice.name,
+                    provider=voice.provider,
+                )
+            )
+
+        return voices
 
     async def __write_result_to_file(self, base64_encoded_audio: str):
         file_path = path.join(get_writable_dir(RECORDING_PATH), OUTPUT_FILE)

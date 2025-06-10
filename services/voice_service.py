@@ -150,9 +150,11 @@ class VoiceService:
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
             return []
 
-    # GET /voices/elevenlabs
+    # GET /voices/hume
     async def get_hume_voices(self, api_key: str) -> list[VoiceInfo]:
         hume = Hume(api_key=api_key, wingman_name="")
+        result = await hume.get_available_voices()
+        return result
 
     # GET /voices/azure
     def get_azure_voices(self, api_key: str, region: AzureRegion, locale: str = ""):
