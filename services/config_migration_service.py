@@ -525,8 +525,10 @@ class ConfigMigrationService:
                     skill.pop("examples", None)
                     skill.pop("category", None)
                     skill.pop("hint", None)
+
+                    skill_module = skill.get("module", "")
                     self.log(
-                        "- removed Skill property overrides: description, examples, category, hint"
+                        f"- Skill {skill_module}: removed property overrides: description, examples, category, hint"
                     )
 
             # perplexity model
