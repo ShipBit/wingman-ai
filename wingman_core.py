@@ -528,6 +528,13 @@ class WingmanCore(WebSocketUser):
         ):
             self.toggle_voice_recognition()
 
+        is_cancel_tts_hotkey_pressed = self.is_hotkey_pressed(
+            self.settings_service.settings.cancel_tts_key_codes
+            or self.settings_service.settings.cancel_tts_key
+        )
+        if is_cancel_tts_hotkey_pressed:
+            self.ensure_async(self.stop_playback())
+
         if self.tower and self.active_recording["key"] == "":
             wingman = None
             for potential_wingman in self.tower.wingmen:

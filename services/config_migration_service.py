@@ -476,6 +476,9 @@ class ConfigMigrationService:
                 old["voice_activation"]["fasterwhisper_config"]["hotwords"] = []
             old["voice_activation"]["fasterwhisper_config"]["additional_hotwords"] = []
             self.log("- migrated Voice Activation hotwords from string to list format")
+
+            old["cancel_tts_key"] = "Shift+y"
+            self.log("- set new 'Shut up key' to 'Shift+y'")
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:
