@@ -126,6 +126,8 @@ fasterwhisper:
   language_detection_threshold: 0.5
   multilingual: false
   language: ""
+  hotwords: []
+  additional_hotwords: []
 xvasynth:
   voice:
     model_directory: ""

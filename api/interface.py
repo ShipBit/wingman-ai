@@ -139,7 +139,8 @@ class WhispercppSttConfig(BaseModel):
 class FasterWhisperSttConfig(BaseModel):
     beam_size: int
     language: Optional[str] = None
-    hotwords: Optional[str] = None
+    hotwords: Optional[list[str]] = None
+    additional_hotwords: Optional[list[str]] = None
     best_of: int
     temperature: float
     no_speech_threshold: float
