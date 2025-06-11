@@ -29,6 +29,12 @@ class WingmanPro:
             color=LogType.ERROR,
         )
 
+    def send_server_error(self, response: requests.Response):
+        self.printr.print(
+            text=f"Server Error: {response.text}",
+            color=LogType.ERROR,
+        )
+
     def transcribe_whisper(self, filename: str):
         with open(filename, "rb") as audio_input:
             files = {"audio_file": (filename, audio_input)}
@@ -100,6 +106,9 @@ class WingmanPro:
         )
         if response.status_code == 401 or response.status_code == 403:
             self.send_unauthorized_error()
+            return None
+        elif response.status_code == 500:
+            self.send_server_error(response)
             return None
         else:
             response.raise_for_status()

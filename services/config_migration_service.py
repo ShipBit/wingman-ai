@@ -444,6 +444,13 @@ class ConfigMigrationService:
 
     def migrate_170_to_171(self):
         def migrate_settings(old: dict, new: dict) -> dict:
+            old_region = old["wingman_pro"]["region"]
+            if old_region == "europe":
+                old["wingman_pro"]["base_url"] = "https://wingman-api-europe.azurewebsites.net"
+            else:
+                old["wingman_pro"]["base_url"] = "https://wingman-api-usa.azurewebsites.net"
+
+            self.log(f"- set new base url based on region {old_region}")
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:

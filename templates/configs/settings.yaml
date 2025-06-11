@@ -29,7 +29,7 @@ voice_activation:
     language_detection_threshold: 0.5
     multilingual: false
 wingman_pro:
-  base_url: https://wingman-ai.azurewebsites.net
+  base_url: https://wingman-api-europe.azurewebsites.net
   region: europe
 xvasynth:
   enable: false
