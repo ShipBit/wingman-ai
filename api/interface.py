@@ -804,6 +804,8 @@ class SettingsConfig(BaseModel):
     xvasynth: XVASynthSettings
     debug_mode: bool
     streamer_mode: bool
+    cancel_tts_key: Optional[str] = None
+    cancel_tts_key_codes: Optional[list[int]] = None
 
 
 class BenchmarkResult(BaseModel):

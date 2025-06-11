@@ -1,6 +1,7 @@
 debug_mode: false
 audio: {}
 streamer_mode: false
+cancel_tts_key: "shift+y"
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"
