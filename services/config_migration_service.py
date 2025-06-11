@@ -442,16 +442,20 @@ class ConfigMigrationService:
             migrate_wingman=migrate_wingman,
         )
 
-    def migrate_170_to_171(self):
+    def migrate_170_to_180(self):
         def migrate_settings(old: dict, new: dict) -> dict:
             old_region = old["wingman_pro"]["region"]
             if old_region == "europe":
-                old["wingman_pro"]["base_url"] = "https://wingman-api-europe.azurewebsites.net"
+                old["wingman_pro"][
+                    "base_url"
+                ] = "https://wingman-api-europe.azurewebsites.net"
             else:
-                old["wingman_pro"]["base_url"] = "https://wingman-api-usa.azurewebsites.net"
+                old["wingman_pro"][
+                    "base_url"
+                ] = "https://wingman-api-usa.azurewebsites.net"
 
             self.log(f"- set new base url based on region {old_region}")
-            
+
             # hotwords was a comma-separated string, now it's a list
             if isinstance(
                 old["voice_activation"]["fasterwhisper_config"].get("hotwords"), str
@@ -535,7 +539,7 @@ class ConfigMigrationService:
 
         self.migrate(
             old_version="1_7_0",
-            new_version="1_7_1",
+            new_version="1_8_0",
             migrate_settings=migrate_settings,
             migrate_defaults=migrate_defaults,
             migrate_wingman=migrate_wingman,
@@ -733,6 +737,6 @@ MIGRATIONS = [
     ("1_6_0", "1_6_1", ConfigMigrationService.migrate_160_to_161),
     ("1_6_1", "1_6_2", ConfigMigrationService.migrate_161_to_162),
     ("1_6_2", "1_7_0", ConfigMigrationService.migrate_162_to_170),
-    ("1_7_0", "1_7_1", ConfigMigrationService.migrate_170_to_171),
+    ("1_7_0", "1_8_0", ConfigMigrationService.migrate_170_to_180),
     # Add new migrations here in order
 ]
