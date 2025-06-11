@@ -29,6 +29,7 @@ voice_activation:
     language_detection_threshold: 0.5
     multilingual: false
     hotwords: []
+    additional_hotwords: []
 wingman_pro:
   base_url: https://wingman-api-europe.azurewebsites.net
   region: europe
