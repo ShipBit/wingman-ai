@@ -563,10 +563,22 @@ class OpenAiWingman(Wingman):
                     filename=audio_input_wav, config=self.config.whispercpp
                 )
             elif self.config.features.stt_provider == SttProvider.FASTER_WHISPER:
+                hotwords: list[str] = []
+                # add my name
+                hotwords.append(self.name)
+                # add default hotwords
+                default_hotwords = self.config.fasterwhisper.hotwords
+                if default_hotwords and len(default_hotwords) > 0:
+                    hotwords.extend(default_hotwords)
+                # and my additional hotwords
+                wingman_hotwords = self.config.fasterwhisper.additional_hotwords
+                if wingman_hotwords and len(wingman_hotwords) > 0:
+                    hotwords.extend(wingman_hotwords)
+
                 transcript = self.fasterwhisper.transcribe(
                     filename=audio_input_wav,
                     config=self.config.fasterwhisper,
-                    initial_hotwords=self.name,
+                    hotwords=list(set(hotwords)),
                 )
             elif self.config.features.stt_provider == SttProvider.WINGMAN_PRO:
                 if (

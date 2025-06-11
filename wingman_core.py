@@ -692,18 +692,27 @@ class WingmanCore(WebSocketUser):
             transcription = openai.transcribe(filename=recording_file)
             text = transcription.text
         elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
-            combined_hotwords = []
+            combined_hotwords: list[str] = []
+
+            # add the default hotwords from settings
+            default_hotwords = (
+                self.settings_service.settings.voice_activation.fasterwhisper_config.hotwords
+            )
+            if default_hotwords and len(default_hotwords) > 0:
+                combined_hotwords.extend(default_hotwords)
+
             for wingman in self.tower.wingmen:
+                # add the wingman names explicitly
                 combined_hotwords.append(wingman.name)
-                if wingman.config.fasterwhisper.hotwords:
-                    combined_hotwords.append(wingman.config.fasterwhisper.hotwords)
+                # and their additional hotwords
+                wingman_hotwords = wingman.config.fasterwhisper.additional_hotwords
+                if wingman_hotwords and len(wingman_hotwords) > 0:
+                    combined_hotwords.extend(wingman_hotwords)
 
             transcription = self.fasterwhisper.transcribe(
                 config=self.settings_service.settings.voice_activation.fasterwhisper_config,
                 filename=recording_file,
-                initial_hotwords=(
-                    ", ".join(combined_hotwords) if len(combined_hotwords) > 0 else None
-                ),
+                hotwords=list(set(combined_hotwords)),
             )
             text = transcription.text
 

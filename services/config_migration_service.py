@@ -451,6 +451,25 @@ class ConfigMigrationService:
                 old["wingman_pro"]["base_url"] = "https://wingman-api-usa.azurewebsites.net"
 
             self.log(f"- set new base url based on region {old_region}")
+            
+            # hotwords was a comma-separated string, now it's a list
+            if isinstance(
+                old["voice_activation"]["fasterwhisper_config"].get("hotwords"), str
+            ):
+                old["voice_activation"]["fasterwhisper_config"]["hotwords"] = list(
+                    set(
+                        [
+                            word.strip()
+                            for word in old["voice_activation"]["fasterwhisper_config"][
+                                "hotwords"
+                            ].split(",")
+                            if word.strip()
+                        ]
+                    )
+                )
+            else:
+                old["voice_activation"]["fasterwhisper_config"]["hotwords"] = []
+            self.log("- migrated Voice Activation hotwords from string to list format")
             return old
 
         def migrate_defaults(old: dict, new: dict) -> dict:
@@ -472,6 +491,24 @@ class ConfigMigrationService:
                 "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
             )
 
+            # hotwords was a comma-separated string, now it's a list
+            if isinstance(old["fasterwhisper"].get("hotwords"), str):
+                old["fasterwhisper"]["additional_hotwords"] = list(
+                    set(
+                        [
+                            word.strip()
+                            for word in old["fasterwhisper"]["hotwords"].split(",")
+                            if word.strip()
+                        ]
+                    )
+                )
+            else:
+                old["fasterwhisper"]["additional_hotwords"] = []
+
+            old["fasterwhisper"]["hotwords"] = []
+            self.log(
+                "- migrated old hotwords from string to list to new additional_hotwords"
+            )
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
