@@ -458,7 +458,8 @@ class ConfigMigrationService:
 
             # hotwords was a comma-separated string, now it's a list
             if isinstance(
-                old["voice_activation"]["fasterwhisper_config"].get("hotwords"), str
+                old["voice_activation"]["fasterwhisper_config"].get("hotwords", None),
+                str,
             ):
                 old["voice_activation"]["fasterwhisper_config"]["hotwords"] = list(
                     set(
@@ -473,6 +474,7 @@ class ConfigMigrationService:
                 )
             else:
                 old["voice_activation"]["fasterwhisper_config"]["hotwords"] = []
+            old["voice_activation"]["fasterwhisper_config"]["additional_hotwords"] = []
             self.log("- migrated Voice Activation hotwords from string to list format")
             return old
 
@@ -496,8 +498,8 @@ class ConfigMigrationService:
             )
 
             # hotwords was a comma-separated string, now it's a list
-            if isinstance(old["fasterwhisper"].get("hotwords"), str):
-                old["fasterwhisper"]["additional_hotwords"] = list(
+            if isinstance(old["fasterwhisper"].get("hotwords", None), str):
+                old["fasterwhisper"]["hotwords"] = list(
                     set(
                         [
                             word.strip()
@@ -507,11 +509,11 @@ class ConfigMigrationService:
                     )
                 )
             else:
-                old["fasterwhisper"]["additional_hotwords"] = []
+                old["fasterwhisper"]["hotwords"] = []
 
-            old["fasterwhisper"]["hotwords"] = []
+            old["fasterwhisper"]["additional_hotwords"] = []
             self.log(
-                "- migrated old hotwords from string to list to new additional_hotwords"
+                "- migrated old default hotwords from string to list to new additional_hotwords"
             )
             return old
 
@@ -533,6 +535,26 @@ class ConfigMigrationService:
                 old["perplexity"]["conversation_model"] = "sonar"
                 self.log(
                     "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
+                )
+
+            # hotwords was a comma-separated string, now it's a list
+            if old.get("fasterwhisper", None):
+                if isinstance(old["fasterwhisper"].get("hotwords", None), str):
+                    old["fasterwhisper"]["additional_hotwords"] = list(
+                        set(
+                            [
+                                word.strip()
+                                for word in old["fasterwhisper"]["hotwords"].split(",")
+                                if word.strip()
+                            ]
+                        )
+                    )
+                else:
+                    old["fasterwhisper"]["additional_hotwords"] = []
+
+                old["fasterwhisper"]["hotwords"] = []
+                self.log(
+                    "- migrated old hotwords from string to list in new additional_hotwords"
                 )
 
             return old
