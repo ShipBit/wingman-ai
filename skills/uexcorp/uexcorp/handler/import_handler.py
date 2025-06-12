@@ -39,7 +39,7 @@ class ImportHandler:
             "space_station": self.__import_data_space_station,
             "terminal": self.__import_data_terminal,
             "vehicle": self.__import_data_vehicle,
-            # "commodity_status": self.__import_data_commodity_status,
+            "commodity_status": self.__import_data_commodity_status,
             "item_price": self.__import_data_item_price,
             "item_attribute": self.__import_data_item_attribute,
             "refinery_audit": self.__import_data_refinery_audit,
