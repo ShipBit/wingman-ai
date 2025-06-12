@@ -42,7 +42,7 @@ class DataModel:
 
         sql = f"INSERT OR REPLACE INTO {self.table} ({','.join(clean_data.keys())}) VALUES ({','.join(['?'] * len(clean_data))})"
         try:
-            self.helper.get_database().get_cursor().execute(
+            self.helper.get_database().execute(
                 sql,
                 tuple(clean_data.values())
             )
@@ -95,7 +95,7 @@ class DataModel:
             else:
                 sql += f" AND `{key_two}` IS NULL"
 
-        self.helper.get_database().get_cursor().execute(sql, parameters)
+        self.helper.get_database().execute(sql, parameters)
         result = self.helper.get_database().get_cursor().fetchmany(1)
 
         if not result:
