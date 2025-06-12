@@ -80,16 +80,16 @@ class CommodityPrice(DataModel):
         commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
-        commodity_status_buy = CommodityStatus(self.get_status_buy(), True, load=True) if self.get_status_buy() else None
-        commodity_status_sell = CommodityStatus(self.get_status_sell(), False, load=True) if self.get_status_sell() else None
+        # commodity_status_buy = CommodityStatus(self.get_status_buy(), True, load=True) if self.get_status_buy() else None
+        # commodity_status_sell = CommodityStatus(self.get_status_sell(), False, load=True) if self.get_status_sell() else None
 
         return {
             "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
             "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
             "price_buy": self.get_price_buy(),
             "price_sell": self.get_price_sell(),
-            "status_buy": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
-            "status_sell": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
+            # "status_buy": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
+            # "status_sell": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
             "scu_buy": self.get_scu_buy(),
             "scu_buy_avg": self.get_scu_buy_avg(),
             "scu_sell_stock": self.get_scu_sell_stock(),
@@ -109,8 +109,8 @@ class CommodityPrice(DataModel):
         commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
-        commodity_status_buy = CommodityStatus(self.get_status_buy(), True, load=True) if self.get_status_buy() else None
-        commodity_status_sell = CommodityStatus(self.get_status_sell(), False, load=True) if self.get_status_sell() else None
+        # commodity_status_buy = CommodityStatus(self.get_status_buy(), True, load=True) if self.get_status_buy() else None
+        # commodity_status_sell = CommodityStatus(self.get_status_sell(), False, load=True) if self.get_status_sell() else None
 
         information = {}
 
@@ -123,7 +123,7 @@ class CommodityPrice(DataModel):
         if self.get_price_buy():
             information.update({
                 "buy_price": self.get_price_buy() or "unknown",
-                "buy_status": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else "unknown",
+                # "buy_status": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else "unknown",
                 "buy_stock_in_scu": self.get_scu_buy() or "unknown",
                 "buy_stock_in_scu_avg": self.get_scu_buy_avg() or "unknown",
             })
@@ -131,7 +131,7 @@ class CommodityPrice(DataModel):
         if self.get_price_sell():
             information.update({
                 "sell_price": self.get_price_sell() or "unknown",
-                "sell_status": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else "unknown",
+                # "sell_status": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else "unknown",
                 "sell_demand_in_scu": self.get_scu_sell_stock() or "unknown",
                 "sell_demand_in_scu_avg": self.get_scu_sell_stock_avg() or "unknown",
             })
