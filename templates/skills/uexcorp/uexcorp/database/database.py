@@ -121,7 +121,7 @@ class Database:
             self.helper.get_handler_debug().write(
                 f"Skipped SQL: {sql} with parameters: {parameters}. No active cursor found. Probably old instance."
             )
-            return false
+            return False
         else:
             self.get_cursor().execute(sql, parameters)
         self.__inuse = False
