@@ -79,7 +79,9 @@ class ImportHandler:
 
         self.__helper.get_handler_debug().write("Importing UEX api data (may take a while) ...")
         self.__helper.start_timer("import_total")
+        self.__helper.sync_fasterwhisper_hotwords(unload=True)
         total_count = self.__import_data()
+        self.__helper.sync_fasterwhisper_hotwords()
         self.__helper.get_handler_debug().write(
             f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s",
             total_count > 0

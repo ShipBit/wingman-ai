@@ -46,6 +46,7 @@ class Helper:
         if cls._instance is not None:
             cls._instance.get_handler_import().destroy()
             cls._instance.get_database().destroy()
+            cls._instance.sync_fasterwhisper_hotwords(unload=True)
         cls._instance = None
 
     def __init__(self):
@@ -127,13 +128,14 @@ class Helper:
         self.get_handler_config().sync_blacklists()
         self.__version_uex = self.get_handler_import().get_version_uex()
         self.set_ready(True)
-        self.sync_fasterwhisper_hotwords()
 
-    def sync_fasterwhisper_hotwords(self):
+    def sync_fasterwhisper_hotwords(self, unload: bool = False):
         if not self.get_handler_config().get_behavior_use_fasterwhisper_hotwords():
             return
 
-        self.__handler_debug.write("Syncing UEX data with FasterWhisper hotwords ...")
+        self.__handler_debug.write(
+            f"{'Unloading' if unload else 'Syncing'} UEX unique names with FasterWhisper hotword list..."
+        )
         try:
             from skills.uexcorp.uexcorp.data_access.city_data_access import (
                 CityDataAccess,
@@ -200,33 +202,51 @@ class Helper:
         data_access_instances = [
             CityDataAccess(),
             CommodityDataAccess(),
-            CompanyDataAccess(),
-            ItemDataAccess(),
+            # CompanyDataAccess(),
+            # ItemDataAccess(),
             MoonDataAccess(),
-            OutpostDataAccess(),
+            # OutpostDataAccess(),
             PlanetDataAccess(),
-            PoiDataAccess(),
+            # PoiDataAccess(),
             SpaceStationDataAccess(),
             StarSystemDataAccess(),
-            TerminalDataAccess(),
+            # TerminalDataAccess(),
             VehicleDataAccess(),
         ]
-        wingman = self.get_wingmen()
-        hotwords = wingman.config.fasterwhisper.additional_hotwords or []
-        original_hotwords_count = len(hotwords)
 
-        hotwords.append("UEX")
+        wingman = self.get_wingmen()
+        wingman_hotwords = wingman.config.fasterwhisper.additional_hotwords or []
+        original_hotwords_count = len(wingman_hotwords)
+
+        uex_hotwords = ["UEX"]
         for data_access in data_access_instances:
             data = data_access.load()
             for item in data:
-                chunks = str(item).split(" ")
-                for chunk in chunks:
-                    hotwords.append(chunk)
-        unique_hotwords = list(set(hotwords))  # remove duplicates
-        self.get_wingmen().config.fasterwhisper.additional_hotwords = unique_hotwords
-        self.__handler_debug.write(
-            f"Synced {len(unique_hotwords) - original_hotwords_count} new hotwords with FasterWhisper."
-        )
+                item_name = str(item).strip()
+                if item_name:
+                    uex_hotwords.append(item_name)
+        uex_hotwords = list(set(uex_hotwords)) # remove duplicates
+
+        if unload:
+            wingman_hotwords = [word for word in wingman_hotwords if word not in uex_hotwords]
+        else:
+            wingman_hotwords.extend(uex_hotwords)
+            wingman_hotwords = list(set(wingman_hotwords))
+
+        self.get_wingmen().config.fasterwhisper.additional_hotwords = wingman_hotwords
+        hotword_change = len(wingman_hotwords) - original_hotwords_count
+        if hotword_change < 0:
+            self.__handler_debug.write(
+                f"Removed {abs(hotword_change)} hotwords from FasterWhisper."
+            )
+        elif hotword_change > 0:
+            self.__handler_debug.write(
+                f"Synced {hotword_change} new hotwords with FasterWhisper."
+            )
+        else:
+            self.__handler_debug.write(
+                "No new hotwords synced with FasterWhisper."
+            )
 
     def wait(self, seconds: int):
         time.sleep(seconds)
