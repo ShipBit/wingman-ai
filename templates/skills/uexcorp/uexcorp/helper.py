@@ -4,6 +4,7 @@ import time
 from typing import TYPE_CHECKING
 from os import path
 from services.file import get_writable_dir
+from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
 try:
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
         from uexcorp.uexcorp.handler.tool_handler import ToolHandler
     from wingmen.open_ai_wingman import OpenAiWingman
 
+printr = Printr()
 
 class Helper:
 
@@ -41,6 +43,9 @@ class Helper:
 
     @classmethod
     def destroy_instance(cls):
+        if cls._instance is not None:
+            cls._instance.get_handler_import().destroy()
+            cls._instance.get_database().destroy()
         cls._instance = None
 
     def __init__(self):
@@ -353,3 +358,6 @@ class Helper:
 
     def get_wingmen(self) -> "OpenAiWingman":
         return self.__wingman
+
+    def toast(self, message: str):
+        printr.toast_info(message)

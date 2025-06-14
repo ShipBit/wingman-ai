@@ -1,5 +1,6 @@
 import sys
 import os
+import uuid
 from api.enums import WingmanInitializationErrorType
 from services.benchmark import Benchmark
 
@@ -26,6 +27,7 @@ class UEXCorp(Skill):
         settings: SettingsConfig,
         wingman: "OpenAiWingman",
     ) -> None:
+        self.random_seed = uuid.uuid4()
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.__helper = Helper.get_instance()
         self.__invalid_session = False
