@@ -40,6 +40,7 @@ class CommandTag(Enum):
     PLAYBACK_STOPPED = "playback_stopped"
     UNAUTHORIZED = "unauthorized"
     CONFIG_LOADED = "config_loaded"
+    SECRET_SAVED = "secret_saved"
 
 
 class CustomPropertyType(Enum):

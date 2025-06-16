@@ -6,6 +6,8 @@ import difflib
 import asyncio
 import threading
 from typing import (
+    Any,
+    Dict,
     Optional,
     TYPE_CHECKING,
 )
@@ -19,6 +21,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from api.enums import (
+    CommandTag,
     LogSource,
     LogType,
     WingmanInitializationErrorType,
@@ -73,7 +76,9 @@ class Wingman:
 
         self.secret_keeper = SecretKeeper()
         """A service that allows you to store and retrieve secrets like API keys. It can prompt the user for secrets if necessary."""
-        self.secret_keeper.secret_events.subscribe("secrets_saved", self.validate)
+        self.secret_keeper.secret_events.subscribe(
+            "secrets_saved", self.handle_secret_saved
+        )
 
         self.name = name
         """The name of the wingman. This is the key you gave it in the config, e.g. "atc"."""
@@ -114,6 +119,14 @@ class Wingman:
         if not self.config.record_joystick_button:
             return None
         return f"{self.config.record_joystick_button.guid}{self.config.record_joystick_button.button}"
+
+    async def handle_secret_saved(self, _secrets: Dict[str, Any]):
+        await printr.print_async(
+            text="Secret saved",
+            source_name=self.name,
+            command_tag=CommandTag.SECRET_SAVED,
+        )
+        await self.validate()
 
     # ──────────────────────────────────── Hooks ─────────────────────────────────── #
 
