@@ -111,8 +111,8 @@ custom_properties:
 
   ### FasterWhisper Start ###
   - id: add_fasterwhisper_hotwords
-    name: Update Hotwords (FasterWhisper only)
-    hint: If enabled, this skill will update the FasterWhisper hotwords using common names in the Star Citizen universe. Voice detection might be improved, but bias towards Star Citizen content is possible.
+    name: Add FasterWhisper hotwords (Experimental)
+    hint: Add common names fetched from UEXCorp as FasterWhisper hotwords. Voice detection might be improved but bias towards Star Citizen content in the detection is possible.
     value: false
     required: true
     property_type: boolean
