@@ -1,3 +1,4 @@
+import time
 from typing import TYPE_CHECKING
 try:
     from skills.uexcorp.uexcorp.api.uex import Uex
@@ -19,6 +20,7 @@ class ImportHandler:
     ):
         self.__helper = helper
         self.__api = Uex(helper)
+        self.active = True
         self.__importers = {
             "category": self.__import_data_category,
             "category_attribute": self.__import_data_category_attribute,
@@ -77,7 +79,9 @@ class ImportHandler:
 
         self.__helper.get_handler_debug().write("Importing UEX api data (may take a while) ...")
         self.__helper.start_timer("import_total")
+        self.__helper.sync_fasterwhisper_hotwords(unload=True)
         total_count = self.__import_data()
+        self.__helper.sync_fasterwhisper_hotwords()
         self.__helper.get_handler_debug().write(
             f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s",
             total_count > 0
@@ -103,8 +107,9 @@ class ImportHandler:
         total_count = 0
         self.__imported_percent = 0
         for importer in self.__importers.values():
-            total_count += int(importer() or 0)
-            self.__imported_percent = int(min(self.__imported_percent + (100 / len(self.__importers)), 100))
+            if self.active:
+                total_count += int(importer() or 0)
+                self.__imported_percent = int(min(self.__imported_percent + (100 / len(self.__importers)), 100))
         self.__imported_percent = 100
         return total_count
 
@@ -1179,3 +1184,30 @@ class ImportHandler:
             f"Vehicle Rental data imported: {vehicle_rental_import.get_dataset_count()} record(s) in {vehicle_rental_import.get_time_taken()}s"
         )
         return len(vehicle_rental_data)
+
+    def destroy(self) -> None:
+        if self.__imported_percent != 100:
+            self.__helper.get_handler_debug().write(
+                f"UEX skill is tried to unload but import state is {self.__imported_percent}%."
+            )
+            self.__helper.toast(
+                f"UEX: Waiting for import to complete before unloading ({self.__imported_percent}%)..."
+            )
+
+            # wait until import is completed but max 60s
+            time_spend = 0
+            while self.__imported_percent < 100 and time_spend < 60:
+                time.sleep(0.2)
+                time_spend += 0.2
+
+            if self.__imported_percent < 100:
+                self.__helper.get_handler_debug().write(
+                    f"UEX skill is tried to unload but import state is still {self.__imported_percent}%. Force unload."
+                )
+                self.__helper.toast("UEX: Force continuing unloading skill due to import timeout.")
+            else:
+                self.__helper.get_handler_debug().write(
+                    f"UEX skill is unloaded after import completed with {self.__imported_percent}%."
+                )
+                self.__helper.toast("UEX: Import completed, skill unloading continues.")
+        self.active = False
