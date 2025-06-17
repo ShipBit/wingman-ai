@@ -2,7 +2,7 @@ module: skills.web_search.main
 name: WebSearch
 display_name: DuckDuckGo Web Search
 author: teddybear082
-category:
+tags:
   - Internet
   - Utility
 description:
