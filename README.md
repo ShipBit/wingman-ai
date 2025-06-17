@@ -38,18 +38,20 @@ Since version 2.0, Wingman AI Core acts as a "backend" API (using FastAPI and Py
   - Perplexity
   - Wingman Pro (unlimited access to several providers and models)
 - **Speech-to-text providers** (STT) for transcription:
-  - OpenAI Whisper
+  - FasterWhisper (local, default)
+  - whispercpp (local, needs to be installed separately)
   - Azure Whisper
   - Azure Speech
-  - whispercpp (local, needs to be installed separately)
-  - FasterWhisper (local, default)
+  - OpenAI Whisper
   - Wingman Pro (Azure Speech or Azure Whisper)
 - **Text-to-speech** (TTS) providers:
+  - XVASynth (local)
+  - OpenAI-compatible (e.g. xtts2, CoquiTTS local)
   - OpenAI TTS
   - Azure TTS
   - Edge TTS (free)
   - Elevenlabs
-  - XVASynth (local)
+  - Hume
 - **Sound effects** that work with every supported TTS provider
 - **Multilingual** by default
 - **Command recording & execution** (keyboard & mouse)
@@ -126,6 +128,10 @@ Elevenlabs offers a $5 tier with 30k characters and a $22 tier with 100k charact
 
 Signing up is very similar to OpenAI: Create your account, set up your payment method, and create an API key. Enter that API key in Wingman AI when asked.
 
+#### Hume
+
+Similar to Elevenlabs but more affordable.
+
 #### Edge TTS (Free)
 
 Microsoft Edge TTS is actually free and you don't need an API key to use it. However, it's not as "good" as the others in terms of quality. Their voices are split by language, so the same voice can't speak different languages - you have to choose a new voice for the new language instead. Wingman does this for you, but it's still "Windows TTS" and not as good as the other providers.
@@ -133,6 +139,10 @@ Microsoft Edge TTS is actually free and you don't need an API key to use it. How
 ### Are local LLMs replacing OpenAI supported?
 
 You can use any LLM offering an OpenAI-compatible API and connect it to Wingman AI Core easily.
+
+### Can I use a local TTS provider?
+
+XVASynth is a simple option and installable via Steam. Since version 1.8.0, Wingman AI Core also supports the new OpenAI TTS API and local TTS providers like CoquiTTS, xtts2 and others. If you want to dive into local TTS and voice cloning, we highly recommend you check out [teddybear082's Wingman AI version of CoquiTTS](https://github.com/teddybear082/WingmanAI-Coqui-TTS-Openai-Server).
 
 ## Installing Wingman AI
 
