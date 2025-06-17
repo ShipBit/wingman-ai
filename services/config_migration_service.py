@@ -512,8 +512,9 @@ class ConfigMigrationService:
                     "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
                 )
 
-            old["fasterwhisper"]["hotwords"] = []
-            old["fasterwhisper"]["additional_hotwords"] = []
+            if old.get("fasterwhisper", None):
+                old["fasterwhisper"]["hotwords"] = []
+                old["fasterwhisper"]["additional_hotwords"] = []
             self.log("- reset FasterWhisper hotwords")
 
             return old
