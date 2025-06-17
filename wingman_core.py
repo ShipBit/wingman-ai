@@ -5,6 +5,7 @@ import re
 import threading
 from typing import Optional
 import pygame
+from google.genai import types
 from fastapi import APIRouter, File, UploadFile
 import requests
 import sounddevice as sd
@@ -33,6 +34,7 @@ from api.interface import (
 )
 from providers.elevenlabs import ElevenLabs
 from providers.faster_whisper import FasterWhisper
+from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
@@ -59,6 +61,9 @@ class WingmanCore(WebSocketUser):
     ):
         self.printr = Printr()
         self.app_root_path = app_root_path
+        self.is_client_logged_in: bool = False
+        self.is_client_pro: bool = False
+        self.client_account_name: str = ""
 
         self.router = APIRouter()
         tags = ["core"]
@@ -231,6 +236,13 @@ class WingmanCore(WebSocketUser):
             endpoint=self.get_elevenlabs_models,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/google",
+            response_model=list[types.Model],
+            endpoint=self.get_google_models,
+            tags=tags,
+        )
         # TODO: Refactor - move these to a new AudioLibrary service:
         self.router.add_api_route(
             methods=["GET"],
@@ -269,6 +281,13 @@ class WingmanCore(WebSocketUser):
             path="/models/wingman-pro",
             response_model=list,
             endpoint=self.get_wingman_pro_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/regions/wingman-pro",
+            response_model=list,
+            endpoint=self.get_wingman_pro_regions,
             tags=tags,
         )
 
@@ -429,6 +448,14 @@ class WingmanCore(WebSocketUser):
         play_thread.start()
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
+        if not self.is_client_logged_in:
+            self.printr.print(
+                "Client not logged in yet - skipping Tower initialization.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return
+
         await self.unload_tower()
 
         config = config_dir_info.config
@@ -456,6 +483,11 @@ class WingmanCore(WebSocketUser):
             self.printr.toast_error(error.message)
 
         self.config_service.set_tower(self.tower)
+        self.printr.print(
+            "Tower initializated.",
+            color=LogType.POSITIVE,
+            server_only=True,
+        )
 
     async def unload_tower(self):
         if self.tower:
@@ -463,6 +495,10 @@ class WingmanCore(WebSocketUser):
                 await wingman.unload()
             self.tower = None
             self.config_service.set_tower(None)
+            self.printr.print(
+                "Tower unloaded.",
+                server_only=True,
+            )
 
     def is_hotkey_pressed(self, hotkey: list[int] | str) -> bool:
         codes = []
@@ -491,6 +527,13 @@ class WingmanCore(WebSocketUser):
             and is_mute_hotkey_pressed
         ):
             self.toggle_voice_recognition()
+
+        is_cancel_tts_hotkey_pressed = self.is_hotkey_pressed(
+            self.settings_service.settings.cancel_tts_key_codes
+            or self.settings_service.settings.cancel_tts_key
+        )
+        if is_cancel_tts_hotkey_pressed:
+            self.ensure_async(self.stop_playback())
 
         if self.tower and self.active_recording["key"] == "":
             wingman = None
@@ -656,18 +699,27 @@ class WingmanCore(WebSocketUser):
             transcription = openai.transcribe(filename=recording_file)
             text = transcription.text
         elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
-            combined_hotwords = []
+            combined_hotwords: list[str] = []
+
+            # add the default hotwords from settings
+            default_hotwords = (
+                self.settings_service.settings.voice_activation.fasterwhisper_config.hotwords
+            )
+            if default_hotwords and len(default_hotwords) > 0:
+                combined_hotwords.extend(default_hotwords)
+
             for wingman in self.tower.wingmen:
+                # add the wingman names explicitly
                 combined_hotwords.append(wingman.name)
-                if wingman.config.fasterwhisper.hotwords:
-                    combined_hotwords.append(wingman.config.fasterwhisper.hotwords)
+                # and their additional hotwords
+                wingman_hotwords = wingman.config.fasterwhisper.additional_hotwords
+                if wingman_hotwords and len(wingman_hotwords) > 0:
+                    combined_hotwords.extend(wingman_hotwords)
 
             transcription = self.fasterwhisper.transcribe(
                 config=self.settings_service.settings.voice_activation.fasterwhisper_config,
                 filename=recording_file,
-                initial_hotwords=(
-                    ", ".join(combined_hotwords) if len(combined_hotwords) > 0 else None
-                ),
+                hotwords=list(set(combined_hotwords)),
             )
             text = transcription.text
 
@@ -1105,7 +1157,24 @@ class WingmanCore(WebSocketUser):
         )
         response = requests.get(
             url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-models",
-            params={"region": self.settings_service.settings.wingman_pro.region.value},
+            params={"region": self.settings_service.settings.wingman_pro.region},
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {wingman_pro_token}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        model_list = response.json()
+        return model_list
+
+    async def get_wingman_pro_regions(self):
+        wingman_pro_token = await self.secret_keeper.retrieve(
+            key="wingman_pro", requester="WingmanPro"
+        )
+        response = requests.get(
+            url=f"{self.settings_service.settings.wingman_pro.base_url}/wingman-pro-regions",
+            params={"region": self.settings_service.settings.wingman_pro.region},
             timeout=10,
             headers={
                 "Authorization": f"Bearer {wingman_pro_token}",
@@ -1138,6 +1207,19 @@ class WingmanCore(WebSocketUser):
             return result
         except ValueError as e:
             self.printr.toast_error(f"Elevenlabs: \n{str(e)}")
+            return []
+
+    # GET /models/google
+    async def get_google_models(self) -> list[types.Model]:
+        google_api_key = await self.secret_keeper.retrieve(
+            key="google", requester="Google"
+        )
+        google = GoogleGenAI(api_key=google_api_key)
+        try:
+            models = google.get_available_models()
+            return models
+        except ValueError as e:
+            self.printr.toast_error(f"Google: \n{str(e)}")
             return []
 
     # GET /audio-library

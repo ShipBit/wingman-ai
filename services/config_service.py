@@ -1,8 +1,6 @@
-import os
 from typing import Optional
 from fastapi import APIRouter
-from packaging.version import Version, InvalidVersion
-from api.enums import LogType, OpenAiTtsVoice
+from api.enums import LogType
 from api.interface import (
     BasicWingmanConfig,
     ConfigDirInfo,
@@ -16,7 +14,6 @@ from api.interface import (
 )
 from services.config_manager import ConfigManager
 from services.config_migration_service import ConfigMigrationService
-from services.file import get_users_dir
 from services.module_manager import ModuleManager
 from services.printr import Printr
 from services.pub_sub import PubSub
@@ -365,10 +362,6 @@ class ConfigService:
         wingman_config.record_key_codes = basic_config.record_key_codes
         wingman_config.sound = basic_config.sound
         wingman_config.prompts = basic_config.prompts
-        try:
-            wingman_config.openai.tts_voice = OpenAiTtsVoice(basic_config.voice)
-        except ValueError:
-            wingman_config.azure.tts.voice = basic_config.voice
 
         reload_config = (
             wingman_config.record_joystick_button != basic_config.record_joystick_button
@@ -391,10 +384,12 @@ class ConfigService:
         wingman_config.elevenlabs = basic_config.elevenlabs
         wingman_config.azure = basic_config.azure
         wingman_config.xvasynth = basic_config.xvasynth
+        wingman_config.hume = basic_config.hume
         wingman_config.whispercpp = basic_config.whispercpp
         wingman_config.fasterwhisper = basic_config.fasterwhisper
         wingman_config.wingman_pro = basic_config.wingman_pro
         wingman_config.perplexity = basic_config.perplexity
+        wingman_config.openai_compatible_tts = basic_config.openai_compatible_tts
 
         updated = await wingman.update_config(config=wingman_config, validate=validate)
 

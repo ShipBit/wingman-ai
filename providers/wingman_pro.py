@@ -1,6 +1,6 @@
 import openai
 import requests
-from api.enums import CommandTag, LogType, OpenAiTtsVoice
+from api.enums import CommandTag, LogType
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
@@ -29,12 +29,18 @@ class WingmanPro:
             color=LogType.ERROR,
         )
 
+    def send_server_error(self, response: requests.Response):
+        self.printr.print(
+            text=f"Server Error: {response.text}",
+            color=LogType.ERROR,
+        )
+
     def transcribe_whisper(self, filename: str):
         with open(filename, "rb") as audio_input:
             files = {"audio_file": (filename, audio_input)}
             response = requests.post(
                 url=f"{self.settings.base_url}/transcribe-whisper",
-                params={"region": self.settings.region.value},
+                params={"region": self.settings.region},
                 files=files,
                 headers=self._get_headers(),
                 timeout=self.timeout,
@@ -52,7 +58,7 @@ class WingmanPro:
         with open(filename, "rb") as audio_input:
             files = {"file": (filename, audio_input)}
             params = {
-                "region": self.settings.region.value,
+                "region": self.settings.region,
                 "languages": config.languages,
             }
             response = requests.post(
@@ -93,13 +99,16 @@ class WingmanPro:
         }
         response = requests.post(
             url=f"{self.settings.base_url}/ask",
-            params={"region": self.settings.region.value},
+            params={"region": self.settings.region},
             headers=self._get_headers(),
             json=data,
             timeout=self.timeout,
         )
         if response.status_code == 401 or response.status_code == 403:
             self.send_unauthorized_error()
+            return None
+        elif response.status_code == 500:
+            self.send_server_error(response)
             return None
         else:
             response.raise_for_status()
@@ -126,7 +135,7 @@ class WingmanPro:
             def buffer_generator():
                 with requests.post(
                     url=f"{self.settings.base_url}/generate-azure-speech",
-                    params={"region": self.settings.region.value},
+                    params={"region": self.settings.region},
                     json=data,
                     headers=self._get_headers(),
                     timeout=self.timeout,
@@ -183,7 +192,7 @@ class WingmanPro:
         else:  # non-streaming
             response = requests.post(
                 url=f"{self.settings.base_url}/generate-azure-speech",
-                params={"region": self.settings.region.value},
+                params={"region": self.settings.region},
                 headers=self._get_headers(),
                 json=data,
                 timeout=self.timeout,
@@ -204,20 +213,24 @@ class WingmanPro:
     async def generate_openai_speech(
         self,
         text: str,
-        voice: OpenAiTtsVoice,
+        voice: str,
+        model: str,
+        speed: float,
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
         data = {
             "text": text,
-            "voice_name": voice.value,
+            "voice_name": voice,
+            "model": model,
+            "speed": speed,
             "stream": False,
         }
         response = requests.post(
             url=f"{self.settings.base_url}/generate-openai-speech",
             params={
-                "region": self.settings.region.value,
+                "region": self.settings.region,
             },
             headers=self._get_headers(),
             json=data,
@@ -245,7 +258,7 @@ class WingmanPro:
         response = requests.post(
             url=f"{self.settings.base_url}/generate-image",
             params={
-                "region": self.settings.region.value,
+                "region": self.settings.region,
             },
             headers=self._get_headers(),
             json=data,
@@ -262,7 +275,7 @@ class WingmanPro:
     def get_available_voices(self, locale: str = ""):
         response = requests.get(
             url=f"{self.settings.base_url}/azure-voices",
-            params={"region": self.settings.region.value, "locale": locale},
+            params={"region": self.settings.region, "locale": locale},
             timeout=self.timeout,
             headers=self._get_headers(),
         )

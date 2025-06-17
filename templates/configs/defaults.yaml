@@ -52,11 +52,19 @@ sound:
 openai:
   conversation_model: gpt-4o-mini
   tts_voice: nova
+  tts_model: tts-1
+  tts_speed: 1.0
+openai_compatible_tts:
+  api_key: "probably-not-needed"
+  voice: ""
+  model: ""
+  base_url: ""
+  speed: 1.0
 mistral:
   conversation_model: mistral-large-latest
   endpoint: https://api.mistral.ai/v1
 perplexity:
-  conversation_model: llama-3.1-sonar-large-128k-online
+  conversation_model: sonar
   endpoint: https://api.perplexity.ai
 groq:
   conversation_model: llama3-70b-8192
@@ -65,7 +73,7 @@ cerebras:
   conversation_model: llama3.1-70b
   endpoint: https://api.cerebras.ai/v1
 google:
-  conversation_model: gemini-1.5-flash
+  conversation_model: gemini-2.0-flash
 openrouter:
   conversation_model: meta-llama/llama-3-8b-instruct:free
   endpoint: https://openrouter.ai/api/v1
@@ -84,6 +92,12 @@ elevenlabs:
     similarity_boost: 0.5
     style: 0.0
     use_speaker_boost: true
+hume:
+  description: ""
+  voice:
+    name: ""
+    id: ""
+    provider: ""
 azure:
   whisper:
     api_base_url: https://openai-w-eu.openai.azure.com/
@@ -111,6 +125,9 @@ fasterwhisper:
   no_speech_threshold: 0.7
   language_detection_threshold: 0.5
   multilingual: false
+  language: ""
+  hotwords: []
+  additional_hotwords: []
 xvasynth:
   voice:
     model_directory: ""

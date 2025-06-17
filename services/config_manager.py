@@ -968,12 +968,14 @@ class ConfigManager:
             "local_llm",
             "edge_tts",
             "elevenlabs",
+            "hume",
             "azure",
             "whispercpp",
             "fasterwhisper",
             "xvasynth",
             "wingman_pro",
             "perplexity",
+            "openai_compatible_tts",
         ]:
             if key in default:
                 # Use copy.deepcopy to ensure a full deep copy is made and original is untouched.

@@ -43,7 +43,7 @@ class ImportData(DataModel):
             if not self.data["last_import_run_id"]:
                 return True
 
-            self.helper.get_database().get_cursor().execute(
+            self.helper.get_database().execute(
                 f"DELETE FROM {self.get_table()} WHERE last_import_run_id != {str(int(self.data['last_import_run_id'] or 0))}"
             )
             if not skip_commit:

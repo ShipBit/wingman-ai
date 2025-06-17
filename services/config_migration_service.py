@@ -442,6 +442,90 @@ class ConfigMigrationService:
             migrate_wingman=migrate_wingman,
         )
 
+    def migrate_170_to_180(self):
+        def migrate_settings(old: dict, new: dict) -> dict:
+            old_region = old["wingman_pro"]["region"]
+            if old_region == "europe":
+                old["wingman_pro"][
+                    "base_url"
+                ] = "https://wingman-api-europe.azurewebsites.net"
+            else:
+                old["wingman_pro"][
+                    "base_url"
+                ] = "https://wingman-api-usa.azurewebsites.net"
+
+            self.log(f"- set new base url based on region {old_region}")
+
+            old["voice_activation"]["fasterwhisper_config"]["hotwords"] = []
+            old["voice_activation"]["fasterwhisper_config"]["additional_hotwords"] = []
+            self.log("- reset Voice Activation hotwords")
+
+            old["cancel_tts_key"] = "Shift+y"
+            self.log("- set new 'Shut up key' to 'Shift+y'")
+            return old
+
+        def migrate_defaults(old: dict, new: dict) -> dict:
+            # openai tts
+            old["openai"]["tts_model"] = "tts-1"
+            old["openai"]["tts_speed"] = 1.0
+            self.log("- added new properties: openai.tts_model, openai.tts_speed")
+
+            old["hume"] = new["hume"]
+            self.log("- added new property: hume")
+
+            # openai-compatible tts
+            old["openai_compatible_tts"] = new["openai_compatible_tts"]
+            self.log("- added new property: openai_compatible_tts")
+
+            # perplexity model
+            old["perplexity"]["conversation_model"] = "sonar"
+            self.log(
+                "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
+            )
+
+            # FasterWhisper hotwords
+            old["fasterwhisper"]["hotwords"] = []
+            old["fasterwhisper"]["additional_hotwords"] = []
+            self.log("- reset FasterWhisper hotwords")
+
+            return old
+
+        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            # skill overrides
+            if old.get("skills", None):
+                for skill in old["skills"]:
+                    skill.pop("description", None)
+                    skill.pop("examples", None)
+                    skill.pop("category", None)
+                    skill.pop("hint", None)
+
+                    skill_module = skill.get("module", "")
+                    self.log(
+                        f"- Skill {skill_module}: removed property overrides: description, examples, category, hint"
+                    )
+
+            # perplexity model
+            if old.get("perplexity", {}).get("conversation_model", None):
+                # models got replaced
+                old["perplexity"]["conversation_model"] = "sonar"
+                self.log(
+                    "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
+                )
+
+            old["fasterwhisper"]["hotwords"] = []
+            old["fasterwhisper"]["additional_hotwords"] = []
+            self.log("- reset FasterWhisper hotwords")
+
+            return old
+
+        self.migrate(
+            old_version="1_7_0",
+            new_version="1_8_0",
+            migrate_settings=migrate_settings,
+            migrate_defaults=migrate_defaults,
+            migrate_wingman=migrate_wingman,
+        )
+
     # INTERNAL
 
     def log(self, message: str, highlight: bool = False):
@@ -634,5 +718,6 @@ MIGRATIONS = [
     ("1_6_0", "1_6_1", ConfigMigrationService.migrate_160_to_161),
     ("1_6_1", "1_6_2", ConfigMigrationService.migrate_161_to_162),
     ("1_6_2", "1_7_0", ConfigMigrationService.migrate_162_to_170),
+    ("1_7_0", "1_8_0", ConfigMigrationService.migrate_170_to_180),
     # Add new migrations here in order
 ]

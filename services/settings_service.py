@@ -45,6 +45,12 @@ class SettingsService:
             endpoint=self.save_settings,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/audio-devices",
+            endpoint=self.set_audio_devices,
+            tags=tags,
+        )
 
     def initialize(
         self, whispercpp: Whispercpp, fasterwhisper: FasterWhisper, xvasynth: XVASynth
@@ -79,7 +85,7 @@ class SettingsService:
                 )
             )
         ):
-            await self._set_audio_devices(settings.audio.input, settings.audio.output)
+            await self.set_audio_devices(settings.audio.input, settings.audio.output)
 
         # whispercpp
         if not self.whispercpp:
@@ -143,7 +149,7 @@ class SettingsService:
         for wingman in self.config_service.tower.wingmen:
             await wingman.update_settings(settings=self.config_manager.settings_config)
 
-    async def _set_audio_devices(
+    async def set_audio_devices(
         self, input_device: Optional[int] = None, output_device: Optional[int] = None
     ):
         input_settings = None

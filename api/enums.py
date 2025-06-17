@@ -40,6 +40,7 @@ class CommandTag(Enum):
     PLAYBACK_STOPPED = "playback_stopped"
     UNAUTHORIZED = "unauthorized"
     CONFIG_LOADED = "config_loaded"
+    SECRET_SAVED = "secret_saved"
 
 
 class CustomPropertyType(Enum):
@@ -51,6 +52,7 @@ class CustomPropertyType(Enum):
     VOICE_SELECTION = "voice_selection"
     SLIDER = "slider"
     AUDIO_FILES = "audio_files"
+    AUDIO_DEVICE = "audio_device"
 
 
 class AzureApiVersion(Enum):
@@ -81,29 +83,14 @@ class MistralModel(Enum):
 
 
 class PerplexityModel(Enum):
-    """https://docs.perplexity.ai/guides/model-cards"""
+    """https://docs.perplexity.ai/models/model-cards"""
 
-    SONAR_SMALL = "llama-3.1-sonar-small-128k-online"
-    SONAR_MEDIUM = "llama-3.1-sonar-large-128k-online"
-    SONAR_LARGE = "llama-3.1-sonar-huge-128k-online"
-    CHAT_SMALL = "llama-3.1-sonar-small-128k-chat"
-    CHAT_LARGE = "llama-3.1-sonar-large-128k-chat"
-    LLAMA3_8B = "llama-3.1-8b-instruct"
-    LLAMA3_70B = "llama-3.1-70b-instruct"
-
-
-class GoogleAiModel(Enum):
-    GEMINI_1_5_FLASH = "gemini-1.5-flash"
-    GEMINI_1_5_PRO = "gemini-1.5-pro"
-
-
-class OpenAiTtsVoice(Enum):
-    NOVA = "nova"
-    ALLOY = "alloy"
-    ECHO = "echo"
-    FABLE = "fable"
-    ONYX = "onyx"
-    SHIMMER = "shimmer"
+    SONAR_DEEP_SEARCH = "sonar-deep-research"
+    SONAR_REASON_PRO = "sonar-reasoning-pro"
+    SONAR_REASON = "sonar-reasoning"
+    SONAR_PRO = "sonar-pro"
+    SONAR = "sonar"
+    R1_1776 = "r1-1776"
 
 
 class SoundEffect(Enum):
@@ -123,6 +110,8 @@ class TtsProvider(Enum):
     AZURE = "azure"
     XVASYNTH = "xvasynth"
     WINGMAN_PRO = "wingman_pro"
+    OPENAI_COMPATIBLE = "openai_compatible"
+    HUME = "hume"
 
 
 class SttProvider(Enum):
@@ -172,11 +161,6 @@ class RecordingDevice(Enum):
     JOYSTICK = "joystick"
 
 
-class WingmanProRegion(Enum):
-    EUROPE = "europe"
-    USA = "usa"
-
-
 class WingmanProSttProvider(Enum):
     WHISPER = "whisper"
     AZURE_SPEECH = "azure_speech"
@@ -185,14 +169,6 @@ class WingmanProSttProvider(Enum):
 class WingmanProTtsProvider(Enum):
     AZURE = "azure"
     OPENAI = "openai"
-
-
-class SkillCategory(Enum):
-    GENERAL = "general"
-    STAR_CITIZEN = "star_citizen"
-    TRUCK_SIMULATOR = "truck_simulator"
-    NO_MANS_SKY = "no_mans_sky"
-    FLIGHT_SIMULATOR = "flight_simulator"
 
 
 # Pydantic models for enums
@@ -248,14 +224,6 @@ class PerplexityModelEnumModel(BaseEnumModel):
     model: PerplexityModel
 
 
-class GoogleAiModelEnumModel(BaseEnumModel):
-    model: GoogleAiModel
-
-
-class OpenAiTtsVoiceEnumModel(BaseEnumModel):
-    voice: OpenAiTtsVoice
-
-
 class SoundEffectEnumModel(BaseEnumModel):
     sound_effect: SoundEffect
 
@@ -288,20 +256,12 @@ class RecordingDeviceModel(BaseEnumModel):
     recording_device: RecordingDevice
 
 
-class WingmanProRegionModel(BaseEnumModel):
-    region: WingmanProRegion
-
-
 class WingmanProSttProviderModel(BaseEnumModel):
     stt_provider: WingmanProSttProvider
 
 
 class WingmanProTtsProviderModel(BaseEnumModel):
     tts_provider: WingmanProTtsProvider
-
-
-class SkillCategoryModel(BaseEnumModel):
-    category: SkillCategory
 
 
 # Add all additional Pydantic models for enums as needed
@@ -319,18 +279,14 @@ ENUM_TYPES = {
     "AzureRegion": AzureRegionEnumModel,
     "TtsVoiceGender": TtsVoiceGenderEnumModel,
     "MistralModel": MistralModelEnumModel,
-    "GoogleAiModel": GoogleAiModelEnumModel,
-    "OpenAiTtsVoice": OpenAiTtsVoiceEnumModel,
     "SoundEffect": SoundEffectEnumModel,
     "TtsProvider": TtsProviderEnumModel,
     "SttProvider": SttProviderEnumModel,
     "VoiceActivationSttProvider": VoiceActivationSttProviderEnumModel,
     "ConversationProvider": ConversationProviderEnumModel,
     "KeyboardRecordingType": KeyboardRecordingTypeModel,
-    "WingmanProRegion": WingmanProRegionModel,
     "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
-    "SkillCategory": SkillCategoryModel,
     "PerplexityModel": PerplexityModelEnumModel,
     "RecordingDevice": RecordingDeviceModel,
     # Add new enums here as key-value pairs

@@ -8,6 +8,7 @@ from typing import (
     Mapping,
     Optional,
 )
+from openai import NOT_GIVEN
 from openai.types.chat import (
     ChatCompletion,
     ChatCompletionMessage,
@@ -36,6 +37,8 @@ from api.enums import (
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
+from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
+from providers.hume import Hume
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
 from services.benchmark import Benchmark
@@ -74,6 +77,8 @@ class OpenAiWingman(Wingman):
         self.local_llm: OpenAi | None = None
         self.openai_azure: OpenAiAzure | None = None
         self.elevenlabs: ElevenLabs | None = None
+        self.openai_compatible_tts: OpenAiCompatibleTts | None = None
+        self.hume: Hume | None = None
         self.wingman_pro: WingmanPro | None = None
         self.google: GoogleGenAI | None = None
         self.perplexity: OpenAi | None = None
@@ -128,6 +133,9 @@ class OpenAiWingman(Wingman):
             if self.uses_provider("elevenlabs"):
                 await self.validate_and_set_elevenlabs(errors)
 
+            if self.uses_provider("openai_compatible"):
+                await self.validate_and_set_openai_compatible_tts(errors)
+
             if self.uses_provider("azure"):
                 await self.validate_and_set_azure(errors)
 
@@ -136,6 +144,9 @@ class OpenAiWingman(Wingman):
 
             if self.uses_provider("perplexity"):
                 await self.validate_and_set_perplexity(errors)
+
+            if self.uses_provider("hume"):
+                await self.validate_and_set_hume(errors)
 
         except Exception as e:
             errors.append(
@@ -220,6 +231,10 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.EDGE_TTS
         elif provider_type == "elevenlabs":
             return self.config.features.tts_provider == TtsProvider.ELEVENLABS
+        elif provider_type == "openai_compatible":
+            return self.config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE
+        elif provider_type == "hume":
+            return self.config.features.tts_provider == TtsProvider.HUME
         elif provider_type == "xvasynth":
             return self.config.features.tts_provider == TtsProvider.XVASYNTH
         elif provider_type == "whispercpp":
@@ -386,6 +401,31 @@ class OpenAiWingman(Wingman):
                 config=self.config.elevenlabs, errors=errors
             )
 
+    async def validate_and_set_openai_compatible_tts(
+        self, errors: list[WingmanInitializationError]
+    ):
+        if (
+            self.config.openai_compatible_tts.base_url
+            and self.config.openai_compatible_tts.api_key
+        ):
+            self.openai_compatible_tts = OpenAiCompatibleTts(
+                api_key=self.config.openai_compatible_tts.api_key,
+                base_url=self.config.openai_compatible_tts.base_url,
+            )
+            printr.print(
+                f"Wingman {self.name}: Initialized OpenAI-compatible TTS with base URL {self.config.openai_compatible_tts.base_url} and API key {self.config.openai_compatible_tts.api_key}",
+                server_only=True,
+            )
+
+    async def validate_and_set_hume(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("hume", errors)
+        if api_key:
+            self.hume = Hume(
+                api_key=api_key,
+                wingman_name=self.name,
+            )
+            self.hume.validate_config(config=self.config.hume, errors=errors)
+
     async def validate_and_set_azure(self, errors: list[WingmanInitializationError]):
         for key_type in self.AZURE_SERVICES:
             if self.uses_provider("azure"):
@@ -414,14 +454,9 @@ class OpenAiWingman(Wingman):
     async def update_settings(self, settings: SettingsConfig):
         """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
         try:
-            wingman_pro_changed = (
-                self.settings.wingman_pro.base_url != settings.wingman_pro.base_url
-                or self.settings.wingman_pro.region != settings.wingman_pro.region
-            )
-
             await super().update_settings(settings)
 
-            if wingman_pro_changed and self.uses_provider("wingman_pro"):
+            if self.uses_provider("wingman_pro"):
                 await self.validate_and_set_wingman_pro()
                 printr.print(
                     f"Wingman {self.name}: reinitialized Wingman Pro with new settings",
@@ -528,10 +563,22 @@ class OpenAiWingman(Wingman):
                     filename=audio_input_wav, config=self.config.whispercpp
                 )
             elif self.config.features.stt_provider == SttProvider.FASTER_WHISPER:
+                hotwords: list[str] = []
+                # add my name
+                hotwords.append(self.name)
+                # add default hotwords
+                default_hotwords = self.config.fasterwhisper.hotwords
+                if default_hotwords and len(default_hotwords) > 0:
+                    hotwords.extend(default_hotwords)
+                # and my additional hotwords
+                wingman_hotwords = self.config.fasterwhisper.additional_hotwords
+                if wingman_hotwords and len(wingman_hotwords) > 0:
+                    hotwords.extend(wingman_hotwords)
+
                 transcript = self.fasterwhisper.transcribe(
                     filename=audio_input_wav,
                     config=self.config.fasterwhisper,
-                    initial_hotwords=self.name,
+                    hotwords=list(set(hotwords)),
                 )
             elif self.config.features.stt_provider == SttProvider.WINGMAN_PRO:
                 if (
@@ -924,8 +971,9 @@ class OpenAiWingman(Wingman):
 
             # add tool calls to the conversation history
             await self._add_gpt_response(message, message.tool_calls)
-            for tool_call in message.tool_calls:
-                await self._update_tool_response(tool_call.id, "OK")
+            if message.tool_calls:
+                for tool_call in message.tool_calls:
+                    await self._update_tool_response(tool_call.id, "OK")
 
     async def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
@@ -1102,7 +1150,7 @@ class OpenAiWingman(Wingman):
                 completion = self.google.ask(
                     messages=messages,
                     tools=tools,
-                    model=self.config.google.conversation_model.value,
+                    model=self.config.google.conversation_model,
                 )
             elif (
                 self.config.features.conversation_provider
@@ -1350,14 +1398,6 @@ class OpenAiWingman(Wingman):
         else:
             sound_config = self.config.sound
 
-        if sound_config.volume == 0.0:
-            printr.print(
-                "Volume modifier is set to 0, skipping TTS processing.",
-                LogType.WARNING,
-                server_only=True,
-            )
-            return
-
         # remove Markdown, links, emotes and code blocks
         text, contains_links, contains_code_blocks = cleanup_text(text)
 
@@ -1365,6 +1405,33 @@ class OpenAiWingman(Wingman):
         if no_interrupt and self.audio_player.is_playing:
             while self.audio_player.is_playing:
                 await asyncio.sleep(0.1)
+
+        # call skill hooks
+        changed_text = text
+        for skill in self.skills:
+            changed_text = await skill.on_play_to_user(text, sound_config)
+            if changed_text != text:
+                printr.print(
+                    f"Skill '{skill.config.display_name}' modified the text to: '{changed_text}'",
+                    LogType.INFO,
+                )
+                text = changed_text
+
+        if sound_config.volume == 0.0:
+            printr.print(
+                "Volume modifier is set to 0. Skipping TTS processing.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
+
+        if "{SKIP-TTS}" in text:
+            printr.print(
+                "Skip TTS phrase found in input. Skipping TTS processing.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
 
         try:
             if self.config.features.tts_provider == TtsProvider.EDGE_TTS:
@@ -1384,6 +1451,26 @@ class OpenAiWingman(Wingman):
                     wingman_name=self.name,
                     stream=self.config.elevenlabs.output_streaming,
                 )
+            elif self.config.features.tts_provider == TtsProvider.HUME:
+                try:
+                    await self.hume.play_audio(
+                        text=text,
+                        config=self.config.hume,
+                        sound_config=sound_config,
+                        audio_player=self.audio_player,
+                        wingman_name=self.name,
+                    )
+                except RuntimeError as e:
+                    if "Event loop is closed" in str(e):
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        await self.hume.play_audio(
+                            text=text,
+                            config=self.config.hume,
+                            sound_config=sound_config,
+                            audio_player=self.audio_player,
+                            wingman_name=self.name,
+                        )
             elif self.config.features.tts_provider == TtsProvider.AZURE:
                 await self.openai_azure.play_audio(
                     text=text,
@@ -1405,6 +1492,22 @@ class OpenAiWingman(Wingman):
                 await self.openai.play_audio(
                     text=text,
                     voice=self.config.openai.tts_voice,
+                    model=self.config.openai.tts_model,
+                    speed=self.config.openai.tts_speed,
+                    sound_config=sound_config,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
+            elif self.config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE:
+                await self.openai_compatible_tts.play_audio(
+                    text=text,
+                    voice=self.config.openai_compatible_tts.voice,
+                    model=self.config.openai_compatible_tts.model,
+                    speed=(
+                        self.config.openai_compatible_tts.speed
+                        if self.config.openai_compatible_tts.speed != 1.0
+                        else NOT_GIVEN
+                    ),
                     sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,
@@ -1414,6 +1517,8 @@ class OpenAiWingman(Wingman):
                     await self.wingman_pro.generate_openai_speech(
                         text=text,
                         voice=self.config.openai.tts_voice,
+                        model=self.config.openai.tts_model,
+                        speed=self.config.openai.tts_speed,
                         sound_config=sound_config,
                         audio_player=self.audio_player,
                         wingman_name=self.name,

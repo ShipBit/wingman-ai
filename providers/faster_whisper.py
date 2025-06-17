@@ -60,13 +60,8 @@ class FasterWhisper:
         self,
         config: FasterWhisperSttConfig,
         filename: str,
-        initial_hotwords: Optional[str],
+        hotwords: Optional[list[str]],
     ):
-        hotwords = []
-        if initial_hotwords:
-            hotwords.append(initial_hotwords)
-        if config.hotwords:
-            hotwords.append(config.hotwords)
         try:
             segments, info = self.model.transcribe(
                 filename,
@@ -74,9 +69,11 @@ class FasterWhisper:
                 beam_size=config.beam_size,
                 best_of=config.best_of,
                 temperature=config.temperature,
-                hotwords=", ".join(hotwords) if len(hotwords) > 0 else None,
+                hotwords=(
+                    ", ".join(hotwords) if hotwords and len(hotwords) > 0 else None
+                ),
                 no_speech_threshold=config.no_speech_threshold,
-                language=config.language,
+                language=config.language if config.language else None,
                 multilingual=False if config.language else config.multilingual,
                 language_detection_threshold=(
                     None if config.language else config.language_detection_threshold

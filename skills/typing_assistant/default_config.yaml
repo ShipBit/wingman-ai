@@ -1,6 +1,10 @@
-name: TypingAssistant
 module: skills.typing_assistant.main
-category: general
+name: TypingAssistant
+display_name: Typing Assistant
+author: teddybear082
+tags:
+  - Utility
+  - Windows
 description:
   en: Let your Wingman type text for you!
   de: Lass deinen Wingman Texte für dich tippen!
@@ -8,18 +12,10 @@ hint:
   en: Types what you say, either by transcribing your speech or the response to your input. You can use this in Office or messaging programs etc. Not meant for pressing keys or macros - use Wingman commands for that.
   de: Tippt, was du sagst, indem deine Spracheingabe oder die Antwort darauf transkribiert werden. Verwende den Skill in Office- oder Messaging-Programmen usw. Er ist nicht für das Drücken einzelner Tasten oder Makros gedacht - dafür kannst du Wingman-Befehle verwenden.
 examples:
-  - question:
-      en: Type "How are you today?".
-      de: Tippe "Wie geht's dir heute?".
-    answer:
-      en: (types "How are you today?" in active window at the current cursor location)
-      de: (Tippt "Wie geht's dir heute?" im aktiven Fenster an der aktuellen Cursor-Position ein)
-  - question:
-      en: Type a poem about trees.
-      de: Schreibe ein Gedicht über Bäume.
-    answer:
-      en: (imagines a poem about trees and then types it in the active window)
-      de: (Erfindet ein Gedicht über Bäume und tippt es dann in das aktive Fenster)
+  - en: Type "How are you today?".
+    de: Tippe "Wie geht's dir heute?".
+  - en: Type a poem about trees.
+    de: Schreibe ein Gedicht über Bäume.
 prompt: |
   You can also type what the user says if they ask you to. The user might dictate what you type, word for word.
   The user might also ask you to imagine something, such as a poem, an email, or a speech, and then you type that content.

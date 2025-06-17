@@ -1,19 +1,17 @@
-name: ImageGeneration
 module: skills.image_generation.main
-category: general
+name: ImageGeneration
+display_name: Image Generation
+author: ShipBit
+tags:
+  - Image
+  - Utility
+  - Internet
 description:
   en: Use Wingman AI to generate images based on your input. It uses DALL-E 3.
   de: Verwende Wingman AI, um Bilder basierend auf deinen Eingaben zu generieren. Es verwendet DALL-E 3.
-# hint:
-#   en:
-#   de:
 examples:
-  - question:
-      en: Generate an image of a cat.
-      de: Generiere ein Bild einer Katze.
-    answer:
-      en: Here is an image of a cat.
-      de: Hier ist ein Bild einer Katze.
+  - en: Generate an image of a cat.
+    de: Generiere ein Bild einer Katze.
 prompt: |
   You can also generate images.
 custom_properties:

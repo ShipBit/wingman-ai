@@ -5,19 +5,15 @@ from api.enums import (
     AzureApiVersion,
     AzureRegion,
     ConversationProvider,
-    GoogleAiModel,
     ImageGenerationProvider,
     MistralModel,
     CustomPropertyType,
-    SkillCategory,
     TtsVoiceGender,
-    OpenAiTtsVoice,
     SoundEffect,
     SttProvider,
     TtsProvider,
     VoiceActivationSttProvider,
     WingmanInitializationErrorType,
-    WingmanProRegion,
     WingmanProSttProvider,
     WingmanProTtsProvider,
     PerplexityModel,
@@ -80,6 +76,7 @@ class VoiceInfo(BaseModel):
     name: Optional[str] = None
     gender: Optional[TtsVoiceGender] = None
     locale: Optional[str] = None
+    provider: Optional[str] = None
 
 
 # from sounddevice lib
@@ -142,7 +139,8 @@ class WhispercppSttConfig(BaseModel):
 class FasterWhisperSttConfig(BaseModel):
     beam_size: int
     language: Optional[str] = None
-    hotwords: Optional[str] = None
+    hotwords: list[str]
+    additional_hotwords: list[str]
     best_of: int
     temperature: float
     no_speech_threshold: float
@@ -272,6 +270,17 @@ class ElevenlabsConfig(BaseModel):
     output_streaming: bool
 
 
+class HumeVoiceConfig(BaseModel):
+    id: str
+    name: str
+    provider: str
+
+
+class HumeConfig(BaseModel):
+    description: Optional[str] = None
+    voice: HumeVoiceConfig
+
+
 class EdgeTtsConfig(BaseModel):
     voice: str
     """
@@ -279,6 +288,15 @@ class EdgeTtsConfig(BaseModel):
 
     Voice samples: https://speech.microsoft.com/portal/voicegallery
     """
+
+
+class OpenAiCompatibleTtsConfig(BaseModel):
+    api_key: str
+    """Your local TTS provider probably won't need an API key, but if it does, you can set it here. The OpenAI client needs one to be initialized, so don't remove it even if you don't use it."""
+    voice: Optional[str] = None
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+    speed: float
 
 
 class XVASynthVoiceConfig(BaseModel):
@@ -307,10 +325,14 @@ class OpenAiConfig(BaseModel):
     """ The model to use for conversations aka "chit-chat" and for function calls.
     """
 
-    tts_voice: OpenAiTtsVoice
-    """ The voice to use for OpenAI text-to-speech.
-    Only used if features > tts_provider is set to 'openai'.
-    """
+    tts_voice: str
+    """The voice to use when generating the audio. Supported voices are alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer."""
+
+    tts_model: str
+    """One of the available TTS models: tts-1, tts-1-hd"""
+
+    tts_speed: float
+    """The speed of the generated audio. Select a value from 0.25 to 4.0. 1.0 is the default."""
 
     base_url: Optional[str] = None
     """ If you want to use a different API endpoint, uncomment this and configure it here.
@@ -352,7 +374,7 @@ class CerebrasConfig(BaseModel):
 
 
 class GoogleConfig(BaseModel):
-    conversation_model: GoogleAiModel
+    conversation_model: str
 
 
 class OpenRouterConfig(BaseModel):
@@ -404,7 +426,7 @@ class WingmanProConfig(BaseModel):
 
 class WingmanProSettings(BaseModel):
     base_url: str
-    region: WingmanProRegion
+    region: str
 
 
 class SoundConfig(BaseModel):
@@ -586,7 +608,7 @@ class LabelValuePair(BaseModel):
 class VoiceSelection(BaseModel):
     provider: TtsProvider
     subprovider: Optional[WingmanProTtsProvider] = None
-    voice: str | ElevenlabsVoiceConfig | OpenAiTtsVoice | XVASynthVoiceConfig
+    voice: str | ElevenlabsVoiceConfig | XVASynthVoiceConfig | HumeVoiceConfig
 
     @model_validator(mode="before")
     def check_voice_config(cls, values):
@@ -594,10 +616,10 @@ class VoiceSelection(BaseModel):
         def __parse_voice(provider: any, voice: any):
             if provider == "elevenlabs":
                 return ElevenlabsVoiceConfig.model_validate(voice)
-            if provider == "openai":
-                return OpenAiTtsVoice(voice)
             if provider == "xvasynth":
                 return XVASynthVoiceConfig.model_validate(voice)
+            if provider == "hume":
+                return HumeVoiceConfig.model_validate(voice)
             return str(voice)
 
         if isinstance(values, list):
@@ -624,6 +646,7 @@ class CustomProperty(BaseModel):
         | VoiceSelection
         | list[VoiceSelection]
         | AudioFileConfig
+        | Optional[int | AudioDeviceSettings]
     )
     """The value of the property"""
     property_type: CustomPropertyType
@@ -639,22 +662,21 @@ class CustomProperty(BaseModel):
 class LocalizedMetadata(BaseModel):
     en: str
     de: Optional[str] = None
-
-
-class SkillExample(BaseModel):
-    question: LocalizedMetadata
-    answer: LocalizedMetadata
+    es: Optional[str] = None
+    fr: Optional[str] = None
 
 
 class SkillConfig(CustomClassConfig):
+    display_name: str
+    author: Optional[str] = None
+    tags: Optional[list[str]] = None
     description: LocalizedMetadata
     prompt: Optional[str] = None
     """An additional prompt that extends the system prompt of the Wingman."""
     custom_properties: Optional[list[CustomProperty]] = None
     """You can add custom properties here to use in your custom skill class."""
     hint: Optional[LocalizedMetadata] = None
-    examples: Optional[list[SkillExample]] = None
-    category: Optional[SkillCategory] = None
+    examples: Optional[list[LocalizedMetadata]] = None
 
 
 class SkillBase(BaseModel):
@@ -675,7 +697,9 @@ class NestedConfig(BaseModel):
     openrouter: OpenRouterConfig
     local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig
+    openai_compatible_tts: OpenAiCompatibleTtsConfig
     elevenlabs: ElevenlabsConfig
+    hume: HumeConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
@@ -696,7 +720,7 @@ class BasicWingmanConfig(BaseModel):
     record_mouse_button: Optional[str] = None
     record_joystick_button: Optional[CommandJoystickConfig] = None
     sound: SoundConfig
-    voice: str | OpenAiTtsVoice
+    voice: str
     prompts: PromptConfig
 
     features: FeaturesConfig
@@ -709,12 +733,14 @@ class BasicWingmanConfig(BaseModel):
     local_llm: LocalLlmConfig
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
+    hume: HumeConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
     fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
+    openai_compatible_tts: OpenAiCompatibleTtsConfig
 
 
 class WingmanConfig(NestedConfig):
@@ -778,6 +804,8 @@ class SettingsConfig(BaseModel):
     xvasynth: XVASynthSettings
     debug_mode: bool
     streamer_mode: bool
+    cancel_tts_key: Optional[str] = None
+    cancel_tts_key_codes: Optional[list[int]] = None
 
 
 class BenchmarkResult(BaseModel):

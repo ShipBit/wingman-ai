@@ -1,20 +1,24 @@
-name: VisionAI
 module: skills.vision_ai.main
-category: general
+name: VisionAI
+display_name: Vision AI
+author: ShipBit
+tags:
+  - Image
+  - Utility
+  - Game
+  - Windows
 description:
   en: Let your Wingman analyse whatever is on your screen.
   de: Lass deinen Wingman alles analysieren, was auf deinem Bildschirm zu sehen ist.
 examples:
-  - question:
-      en: What is on my screen?
-      de: Was siehst du auf meinem Bildschirm?
-    answer:
-      en: I see Spotify running and playing music.
-      de: Ich sehe die Spotify-App, die Musik abspielt.
+  - en: What is on my screen?
+    de: Was siehst du auf meinem Bildschirm?
 prompt: |
-  You can also see what the user is seeing and you can analyse it and answer all questions about what you see.
-  Use the tool 'analyse_what_you_or_user_sees' if you are asked to analyse what you see or whtat the user sees.
-  You can also see the screen of the user. Call 'analyse_what_you_or_user_sees' for this, too.
+  You can see what the user is seeing, you can analyse it, and you can answer all questions about what you see.
+  Use the tool 'analyse_what_you_or_user_sees' if you are asked to analyse what you see, or analyze what the user sees.
+  You can also see the screen of the user. Call 'analyse_what_you_or_user_sees' for this too.
+  If the user wants to specifically send or upload an image for analysis, make them open the image on their computer and inform you when they have done this. When the image is opened, make a snapshot and analyze it.
+  If the user wants you to analyze what they are looking at, treat this as if the image is already open on their screen.
 custom_properties:
   - id: display
     name: Display to capture

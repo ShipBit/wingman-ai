@@ -71,7 +71,8 @@ class DataAccess :
                     resolved_sql = resolved_sql.replace(f":{key}", repr(value))
             self.helper.get_handler_debug().write(resolved_sql)
 
-        self.database.get_cursor().execute(sql, self.filter.get_bind())
+        self.database.execute(sql, self.filter.get_bind())
+
     def _fetch_one(self, debug: bool = False) -> list[dict[str, any]]:
         self.__select(debug)
         return self.database.get_cursor().fetchmany(1)

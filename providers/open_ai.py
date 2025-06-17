@@ -1,12 +1,10 @@
 from abc import ABC, abstractmethod
 import re
-from typing import Literal
-from openai import OpenAI, APIStatusError, AzureOpenAI
+from typing import Literal, Mapping, Union
+from openai import NOT_GIVEN, NotGiven, Omit, OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
-from api.enums import (
-    AzureRegion,
-    OpenAiTtsVoice,
-)
+from api.enums import AzureRegion
+
 from api.interface import (
     AzureInstanceConfig,
     AzureSttConfig,
@@ -147,18 +145,18 @@ class OpenAi(BaseOpenAi):
     async def play_audio(
         self,
         text: str,
-        voice: OpenAiTtsVoice,
+        voice: str,
+        model: str,
+        speed: float,
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
         try:
-            if not voice:
-                voice = OpenAiTtsVoice.NOVA
-
             response = self.client.audio.speech.create(
-                model="tts-1",
-                voice=voice.value,
+                model=model,
+                voice=voice,
+                speed=speed,
                 input=text,
             )
             if response is not None:
@@ -308,3 +306,63 @@ class OpenAiAzure(BaseOpenAi):
                 f"Unable to retrieve Azure voices: {result.error_details}"
             )
         return None
+
+
+class OpenAiCompatibleTts:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str | None = None,
+    ):
+        super().__init__()
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+        )
+
+    async def play_audio(
+        self,
+        text: str,
+        voice: str,
+        model: str,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+        speed: float | NotGiven = NOT_GIVEN,
+        response_format: (
+            NotGiven | Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
+        ) = NOT_GIVEN,
+        extra_headers: Mapping[str, Union[str, Omit]] | None = None,
+    ):
+        try:
+            response = self.client.audio.speech.create(
+                input=text,
+                model=model,
+                voice=voice,
+                speed=speed,
+                response_format=response_format,
+                extra_headers=extra_headers,
+            )
+            if response is not None:
+                await audio_player.play_with_effects(
+                    input_data=response.content,
+                    config=sound_config,
+                    wingman_name=wingman_name,
+                )
+        except APIStatusError as e:
+            printr.toast_error(
+                f"OpenAI-compatible TTS error: {e.status_code} ({e.type})"
+            )
+            m = re.search(
+                r"'message': (?P<quote>['\"])(?P<message>.+?)(?P=quote)",
+                e.message,
+            )
+            if m is not None:
+                message = m["message"].replace(". ", ".\n")
+                printr.toast_error(message)
+            elif e.message:
+                printr.toast_error(e.message)
+            else:
+                printr.toast_error(
+                    "An unknown OpenAI-compatible TTS error has occured."
+                )

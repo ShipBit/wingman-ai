@@ -1,22 +1,18 @@
-name: AutoScreenshot
 module: skills.auto_screenshot.main
-category: general
+name: AutoScreenshot
+display_name: Auto Screenshot
+author: teddybear082
+tags:
+  - Utility
+  - Game
 description:
   en: Take screenshots on command or automatically when you show excitement.
   de: Mache Screenshots auf Befehl oder automatisch wenn du Aufregung zeigst.
 examples:
-  - question:
-      en: Take a screenshot
-      de: Mache einen Screenshot
-    answer:
-      en: (takes a screenshot of the focused window)
-      de: (macht einen Screenshot des fokussierten Fensters)
-  - question:
-      en: Oh wow, this is crazy!
-      de: Oh wow, das ist verrückt!
-    answer:
-      en: (takes a screenshot of the focused window)
-      de: (macht einen Screenshot des fokussierten Fensters)
+  - en: Take a screenshot
+    de: Mache einen Screenshot
+  - en: Oh wow, this is crazy!
+    de: Oh wow, das ist verrückt!
 prompt: |
   You can take a screenshot of the focused window when asked by the user. You can also take a screenshot when you infer something important, exciting, scary or interesting is going on where having a screenshot would create a nice memory of the moment for the user.
   Use the 'take_screenshot' tool to capture the screenshot, and provide a reason for why you are doing so, such as because of the request of the user or why you decided it would be good to take a screenshot.

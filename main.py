@@ -231,7 +231,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await printr.print_async("Client disconnected", server_only=True)
 
 
-# Websocket for other clients to stream audio to and from (like M5Atom Echo ESP32 devices)
+# Websocket for ESP32 clients to stream audio to and from
 @app.websocket("/")
 async def oi_websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -245,6 +245,121 @@ async def oi_websocket_endpoint(websocket: WebSocket):
         print(f"Connection lost. Error: {e}")
 
 
+@app.websocket("/ws/audio")
+async def websocket_global_audio_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    printr.print(
+        f"Audio client {websocket.client.host} connected",
+        server_only=True,
+        color=LogType.SUBTLE,
+    )
+
+    # Track connection state
+    is_connected = True
+
+    # Reference to the callback function for cleanup
+    audio_callback = None
+
+    try:
+        # Wait for the audio player to be ready
+        retry_count = 0
+        max_retries = 5
+
+        while retry_count < max_retries and is_connected:
+            # Check if audio_player is ready
+            if (
+                core.audio_player
+                and hasattr(core.audio_player, "stream_event")
+                and core.audio_player.stream_event is not None
+            ):
+                try:
+                    # Define handler for audio chunks
+                    async def on_audio_chunk(data: bytes):
+                        nonlocal is_connected
+
+                        if not is_connected:
+                            return
+
+                        try:
+                            # Forward the audio chunk to the browser client
+                            await websocket.send_bytes(data)
+                        except Exception as e:
+                            printr.print(
+                                f"Error sending audio: {str(e)}",
+                                server_only=True,
+                                color=LogType.ERROR,
+                            )
+                            is_connected = False
+
+                    # Save reference to the callback for later cleanup
+                    audio_callback = on_audio_chunk
+
+                    # Subscribe without expecting a return value
+                    core.audio_player.stream_event.subscribe("audio", audio_callback)
+                    printr.print(
+                        "Audio subscription successful",
+                        server_only=True,
+                        color=LogType.SUBTLE,
+                    )
+                    break
+
+                except Exception as e:
+                    printr.print(
+                        f"Error subscribing to audio: {str(e)}",
+                        server_only=True,
+                        color=LogType.WARNING,
+                    )
+
+            # Not ready or subscription failed, wait and retry
+            retry_count += 1
+            if retry_count < max_retries:
+                await asyncio.sleep(1)
+            else:
+                printr.print(
+                    "Audio player not ready after multiple attempts",
+                    server_only=True,
+                    color=LogType.WARNING,
+                )
+                await websocket.close(code=1013)
+                return
+
+        # Keep connection open until client disconnects
+        while is_connected:
+            try:
+                await websocket.receive_text()
+            except:
+                is_connected = False
+                break
+
+    except WebSocketDisconnect:
+        printr.print(
+            f"Audio client disconnected", server_only=True, color=LogType.SUBTLE
+        )
+    except Exception as e:
+        printr.print(f"Audio error: {str(e)}", server_only=True, color=LogType.ERROR)
+    finally:
+        # Clean up subscription using the audio_callback reference
+        if (
+            audio_callback is not None
+            and core.audio_player
+            and hasattr(core.audio_player, "stream_event")
+            and core.audio_player.stream_event is not None
+        ):
+            try:
+                core.audio_player.stream_event.unsubscribe("audio", audio_callback)
+                printr.print(
+                    "Audio unsubscribed successfully",
+                    server_only=True,
+                    color=LogType.SUBTLE,
+                )
+            except Exception as e:
+                printr.print(
+                    f"Error unsubscribing from audio: {str(e)}",
+                    server_only=True,
+                    color=LogType.ERROR,
+                )
+
+
 @app.post("/start-secrets", tags=["main"])
 async def start_secrets(secrets: dict[str, Any]):
     await secret_keeper.post_secrets(secrets)
@@ -252,9 +367,19 @@ async def start_secrets(secrets: dict[str, Any]):
     await core.config_service.load_config()
 
 
-@app.get("/ping", tags=["main"])
+@app.get("/ping", tags=["main"], response_model=str)
 async def ping():
     return "Ok" if core.is_started else "Starting"
+
+
+@app.get("/client/is-pro", tags=["main"], response_model=bool)
+async def is_client_pro():
+    return core.is_client_pro
+
+
+@app.get("/client/account-name", tags=["main"], response_model=str)
+async def get_client_account_name():
+    return core.client_account_name
 
 
 # required to generate API specs for class BenchmarkResult that is only used internally
