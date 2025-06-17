@@ -3,33 +3,27 @@ import time
 import os
 from typing import TYPE_CHECKING
 
-from sympy import false
-
 if TYPE_CHECKING:
     try:
         from skills.uexcorp.uexcorp.helper import Helper
     except ModuleNotFoundError:
         from uexcorp.uexcorp.helper import Helper
 
+
 class Database:
 
-    def __init__(
-            self,
-            data_path: str,
-            version: str,
-            helper: "Helper"
-    ) -> None:
+    def __init__(self, data_path: str, version: str, helper: "Helper") -> None:
         self.helper = helper
         self.db_path = data_path
-        self.db_info_file = os.path.join(self.db_path, 'db_info.txt')
-        self.db_name_base = 'uexcorp.db'
+        self.db_info_file = os.path.join(self.db_path, "db_info.txt")
+        self.db_name_base = "uexcorp.db"
         self.db_name_complete = self.db_name_base
         self.version = version
         self.cursor = None
         self.connection = None
         self.__inuse = False
         self.__set_db_name_current()
-        self.__queue_wait_time_max = 30 # in seconds
+        self.__queue_wait_time_max = 30  # in seconds
         self.__init_connection()
         self.__init_database()
 
@@ -39,20 +33,24 @@ class Database:
         if not os.path.exists(self.db_info_file):
             self.__set_db_name_new()
         else:
-            with open(self.db_info_file, 'r', encoding='UTF-8') as file:
+            with open(self.db_info_file, "r", encoding="UTF-8") as file:
                 content = file.read().strip()
                 if content:
                     self.db_name_complete = content
-                    self.helper.get_handler_debug().write(f"Database name set to {self.db_name_complete} from file.")
+                    self.helper.get_handler_debug().write(
+                        f"Database name set to {self.db_name_complete} from file."
+                    )
                 else:
                     self.__set_db_name_new()
 
     def __set_db_name_new(self) -> None:
-        timestamp = time.time() # needs sub seconds for uniqueness
+        timestamp = time.time()  # needs sub seconds for uniqueness
         self.db_name_complete = f"{timestamp}_{self.db_name_base}"
-        with open(self.db_info_file, 'w', encoding='UTF-8') as file:
+        with open(self.db_info_file, "w", encoding="UTF-8") as file:
             file.write(self.db_name_complete)
-        self.helper.get_handler_debug().write(f"Database name set to {self.db_name_complete} and written to file.")
+        self.helper.get_handler_debug().write(
+            f"Database name set to {self.db_name_complete} and written to file."
+        )
 
     def __init_database(self) -> None:
         if not self.table_exists("skill"):
@@ -61,7 +59,9 @@ class Database:
 
         self.cursor.execute("SELECT value FROM skill WHERE key = 'version'")
         if not self.cursor.fetchone()[0] == self.version:
-            self.helper.get_handler_debug().write("Skill version mismatch, recreating database..")
+            self.helper.get_handler_debug().write(
+                "Skill version mismatch, recreating database.."
+            )
             self.recreate_database()
 
     def __init_connection(self) -> None:
@@ -77,7 +77,7 @@ class Database:
         # So we will delete all old ones that are no longer needed.
         # But as they might still be used by another process, we wrap it in a try-except block.
         # No elegant solution, but it works.
-        db_files = [f for f in os.listdir(self.db_path) if f.endswith('.db')]
+        db_files = [f for f in os.listdir(self.db_path) if f.endswith(".db")]
         for db_file in db_files:
             try:
                 os.remove(os.path.join(self.db_path, db_file))
@@ -89,18 +89,21 @@ class Database:
         self.__set_db_name_new()
         self.__init_connection()
 
-        with open(os.path.join(os.path.dirname(__file__), "init.sql"), 'r', encoding="UTF-8") as file:
+        with open(
+            os.path.join(os.path.dirname(__file__), "init.sql"), "r", encoding="UTF-8"
+        ) as file:
             self.executescript(file.read())
 
         # update version
         self.execute(
-            "INSERT INTO skill (key, value) VALUES (?, ?)",
-            ("version", self.version)
+            "INSERT INTO skill (key, value) VALUES (?, ?)", ("version", self.version)
         )
         self.connection.commit()
 
     def table_exists(self, table: str) -> bool:
-        self.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'")
+        self.execute(
+            f"SELECT name FROM sqlite_master WHERE type='table' AND name='{table}'"
+        )
         return self.cursor.fetchone() is not None
 
     def table_clear(self, table: str) -> None:
@@ -113,7 +116,7 @@ class Database:
     def get_cursor(self) -> sqlite3.Cursor:
         return self.cursor
 
-    def execute(self, sql: str, parameters: tuple|dict|list = ()) -> bool:
+    def execute(self, sql: str, parameters: tuple | dict | list = ()) -> bool:
         self.__wait_for_database_capacity()
 
         self.__inuse = True
@@ -137,11 +140,15 @@ class Database:
 
     def __wait_for_database_capacity(self) -> None:
         if self.__inuse:
-            self.helper.get_handler_debug().write("Database is currently in use, waiting for it to be free...")
+            self.helper.get_handler_debug().write(
+                "Database is currently in use, waiting for it to be free..."
+            )
 
             for _ in range(int(self.__queue_wait_time_max / 0.1)):
                 if not self.__inuse:
-                    self.helper.get_handler_debug().write("Database is now free, proceeding with the action.")
+                    self.helper.get_handler_debug().write(
+                        "Database is now free, proceeding with the action."
+                    )
                     break
                 time.sleep(0.1)
 
