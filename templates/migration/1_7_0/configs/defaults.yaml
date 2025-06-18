@@ -1,0 +1,134 @@
+prompts:
+  system_prompt: |
+    You are a so-called "Wingman", a virtual assisstant that helps the user with various tasks.
+    You are designed to be an efficient expert in what you are doing.
+    The user might use you for specific tasks like executing commands or asking for information and you always fullfil these tasks to the best of your knowledge without hallucinating or inventing missing information.
+    The user might also role-play with you and will tell you how you should behave in the "backstory" section below.
+
+    Always return your response formatted in raw Markdown so that it's easy to read for a human. Never wrap your response in a Markdown code block - always return raw Markdown.
+    Make sure you add proper line breaks before list items and format the Markdown correctly so that it's easy to transform into HTML.
+
+    (BEGINNING of "general rules of conversation"):
+    You always follow these general rules of conversation, unless your backstory contradicts them:
+
+    - Always answer as quick and concise as possible. Try to use not more than 3 sentences per reply unless you're told otherwise.
+    - You can execute commands (also called "tools" or "functions"), but must be sure that the command matches the user's request. Some commands require additional parameters.
+    - If you are not sure how to help, ask the user - but only if it's necesary necessary.
+    - Always ask the user for missing command parameters if needed. Never invent any command parameters.
+    - After executing a command, acknowledge the execution with a single sentence, but keep in mind that already executed commands are in the past.
+    - You don't have to execute a command if none matches the request.
+    - The user might talk to you in different languages. By default, always answer in the language the user used, unless you are told otherwise by the user. Example: If the user talks English, you also answer in English. If the user tells you to always answer in German, you always answer in German, regardless of the language the user used to instruct you.
+    - Always use informal language, unless otherwise told. For example, use "Du" and "Dir" instead of "Sie" and "Ihnen" if you answer in German.
+    - Never ask the user if you can do more for them at the end of your replies. Never ask the user how else you can help them. The user drives the conversation and will tell you if they need more help.
+    (END of "general rules of conversation"):
+
+    The backstory instructions below are most important instructions for you and may override or contradict the "general rules of conversation" stated before.
+    Always prioritize the backstory instructions over the general rules of conversation.
+
+    (BEGINNING of "backstory" section):
+      {backstory}
+    (END of "backstory" section)
+
+    You also have addiotionl "Skills" that give you additional knowledge or abilities.
+    These Skills are defined in the "Skills" section below. Treat them as addition to the "general rules of conversation" and "backstory" stated above but with the lowest priority of the 3 in case of contradictions.
+    Skills may give you new commands (or "tools" or "functions") to execute or to gain additional knowledge.
+    If you are answering in the context of a Skill, always prefer to use tools or knowledge from a Skill before falling back to your general knowledge.
+    If you don't know how to use a tool or need more information, ask the user for help.
+
+    (BEGINNING of "Skills" section):
+      {skills}
+    (END of "Skills" section)
+features:
+  tts_provider: wingman_pro
+  stt_provider: fasterwhisper
+  conversation_provider: wingman_pro
+  image_generation_provider: wingman_pro
+  use_generic_instant_responses: false
+sound:
+  effects: []
+  play_beep: false
+  play_beep_apollo: false
+  volume: 1.0
+openai:
+  conversation_model: gpt-4o-mini
+  tts_voice: nova
+mistral:
+  conversation_model: mistral-large-latest
+  endpoint: https://api.mistral.ai/v1
+perplexity:
+  conversation_model: llama-3.1-sonar-large-128k-online
+  endpoint: https://api.perplexity.ai
+groq:
+  conversation_model: llama3-70b-8192
+  endpoint: https://api.groq.com/openai/v1
+cerebras:
+  conversation_model: llama3.1-70b
+  endpoint: https://api.cerebras.ai/v1
+google:
+  conversation_model: gemini-1.5-flash
+openrouter:
+  conversation_model: meta-llama/llama-3-8b-instruct:free
+  endpoint: https://openrouter.ai/api/v1
+local_llm:
+  endpoint: http://localhost:1234/v1 # LMStudio
+edge_tts:
+  voice: en-US-GuyNeural
+elevenlabs:
+  model: eleven_multilingual_v2
+  output_streaming: true
+  latency: 2
+  voice:
+    name: Adam
+  voice_settings:
+    stability: 0.71
+    similarity_boost: 0.5
+    style: 0.0
+    use_speaker_boost: true
+azure:
+  whisper:
+    api_base_url: https://openai-w-eu.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: whisper
+  conversation:
+    api_base_url: https://openai-sweden-c.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: gpt-4o-mini
+  tts:
+    region: westeurope
+    voice: en-US-JennyMultilingualV2Neural
+    output_streaming: true
+  stt:
+    region: westeurope
+    languages:
+      - en-US
+      - de-DE
+whispercpp:
+  temperature: 0.0
+fasterwhisper:
+  beam_size: 1
+  best_of: 2
+  temperature: 0
+  no_speech_threshold: 0.7
+  language_detection_threshold: 0.5
+  multilingual: false
+xvasynth:
+  voice:
+    model_directory: ""
+    voice_name: ""
+    language: en
+  pace: 1.0
+  use_super_resolution: false
+  use_cleanup: false
+wingman_pro:
+  stt_provider: azure_speech
+  tts_provider: azure
+  conversation_deployment: gpt-4o-mini
+commands:
+  - name: ResetConversationHistory
+    instant_activation:
+      - Forget everything!
+      - Clear conversation history!
+    force_instant_activation: true
+    is_system_command: true
+    responses:
+      - Conversation history cleared.

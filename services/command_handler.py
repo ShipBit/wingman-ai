@@ -307,6 +307,10 @@ class CommandHandler:
     async def handle_client_logged_in(
         self, command: ClientLoggedInCommand, websocket: WebSocket
     ):
+        if self.core.is_client_logged_in:
+            # retrieved keepalive / token refresh from Azure but Tower is still initialized
+            return
+
         self.core.is_client_logged_in = True
         self.core.is_client_pro = command.is_pro
         self.core.client_account_name = command.account_name
