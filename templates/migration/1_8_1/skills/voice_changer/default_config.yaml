@@ -1,0 +1,38 @@
+module: skills.voice_changer.main
+name: VoiceChanger
+display_name: Voice Changer
+author: JayMatthew
+tags:
+  - Game
+  - Utility
+description:
+  en: Changes the voice of your Wingman automatically. Customize it to your liking.
+  de: Wechselt die Stimme deines Wingman automatisch. Konfigurierbar nach eigenen Vorlieben.
+custom_properties:
+  - id: voice_changer_interval
+    name: Switching Interval
+    hint: The interval in seconds in which the voice should be changed. (Calculated from last interaction)
+    value: 180
+    required: true
+    property_type: number
+  - id: voice_changer_clearhistory
+    hint: Enable this to clear the message history (memory) when the voice is changed.
+    name: Clear history on voice switch
+    value: true
+    required: true
+    property_type: boolean
+  - id: voice_changer_voices
+    name: Available voices
+    hint: The voices your Wingman can use.
+    value: []
+    required: false
+    property_type: voice_selection
+    options:
+      - label: "multiple"
+        value: true
+  - id: voice_changer_personalityprompt
+    name: Personality Prompt
+    hint: A prompt used on voice change to generate a new personality. Leave empty to disable.
+    required: false
+    value: ""
+    property_type: textarea

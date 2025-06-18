@@ -1,0 +1,119 @@
+module: skills.uexcorp.main
+name: UEXCorp
+display_name: UEXCorp
+author: JayMatthew
+tags:
+  - Star Citizen
+  - Game
+  - API
+  - Internet
+description:
+  en: Uses the UEXCorp API to get commodity routes and ship information for Star Citizen.
+  de: Nutzt die UEXCorp API, um Handelsrouten und Schiffsinformationen für Star Citizen zu erhalten.
+examples:
+  - en: Please provide me a the best two trading routes for my Caterpillar, Im currently at Hurston.
+    de: Bitte gib mir die zwei besten Handelsrouten für meine Caterpillar, ich bin gerade bei Hurston.
+  - en: What can you tell me about the Hull-C?
+    de: Was kannst du mir über den Hull-C erzählen?
+prompt: |
+  You also have tools to access the UEXCorp API to get live data for Star Citizen.
+  If you are ever asked about commodities, ships, prices, price related data, this shall be treated as a request for information from UEXCorp.
+  Use these functions as possible. Prefer executing them with less data first before asking the user for more details.
+  Efficiently use filters, if available in a function, to get the best results the user asked for.
+
+  === Start of "How to work with uex functions" ===
+  - Functions have optional parameters. You shall only recommend to the user that these parameters exist, but must never require them.
+  - Function in general may return a list of "Important information for user:". If this information is given, it must be shown to the user in a condensed form.
+  - Commodity-related responses must always include the terminal status (e.g., Out of Stock, Full Inventory).
+  - Keep answers short and focus on necessary information only, even if a lot of information is available. Provide summaries and ask if more details should be displayed if available. This also effect lists, shorten them to max 5 entries if not specified differently and if shortened ALWAYS say how much results are available.
+  - If the same tool is executed multiple times in a row, execute them in silence and dont mention why they are executed in direct succession. You may only provide a reason on the final summary.
+  - If you notice the user speaking about a commodity, ship, item or others and you haven't retrieved detailed information for this object yet, silently retrieve it in the background without specific output.
+  - Some ships, like the Hull-C, require a loading dock at a terminal/station. Sometime a user may ask about that specific information and a freight elevator is not a substitute for a loading dock.
+  - negative values should be displayed as "negative 20%" or "minus 20%" instead of "-20%" for better use with the following TTS operation.
+  - Try to get missing values for uex_calculate_profit from other uex functions BEFORE asking the user about values.
+  === End of "How to work with uex functions" ===
+
+custom_properties:
+  ### Commodity Information Start ###
+  - id: tool_commodity_information
+    name: Provide commodity information
+    hint: If enabled, this skill can provide information about all commodities.
+    value: true
+    required: true
+    property_type: boolean
+  ### Commodity Information End ###
+
+  ### Item Information Start ###
+  - id: tool_item_information
+    name: Provide item information (Experimental)
+    hint: If enabled, this skill can provide information about all items, like ship components, weapons and more.
+    value: false
+    required: true
+    property_type: boolean
+  ### Item Information End ###
+
+  ### Location Information Start ###
+  - id: tool_location_information
+    name: Provide location information
+    hint: If enabled, this skill can provide information about all locations. This includes everything from a star system to a terminal.
+    value: true
+    required: true
+    property_type: boolean
+  ### Location Information End ###
+
+  ### Vehicle Information Start ###
+  - id: tool_vehicle_information
+    name: Provide vehicle information
+    hint: If enabled, this skill can provide information about all vehicles. This includes ships and ground vehicles.
+    value: true
+    required: true
+    property_type: boolean
+  ### Vehicle Information End ###
+
+  ### Route Information Start ###
+  - id: tool_commodity_route
+    name: Provide commodity routes
+    hint: If enabled, this skill can provide UEX trade routes for commodities (Only with legal commodities).
+    value: true
+    required: true
+    property_type: boolean
+
+  - id: commodity_route_default_count
+    name: Default trade route count
+    hint: Set this option to the amount of trade routes you want to show at default.
+    value: 1
+    required: true
+    property_type: number
+
+  - id: commodity_route_use_estimated_availability
+    name: Use Estimated Availability
+    hint: Enable this option to take estimated scu availability into account for trade route calculations.
+    value: true
+    required: true
+    property_type: boolean
+
+  - id: commodity_route_advanced_info
+    name: Show advanced trade route info
+    hint: Shows additional information as more location data (terminal name is always included), flags if locations are monitored and more like the score by uexcorp.
+    value: false
+    required: true
+    property_type: boolean
+  ### Route Information End ###
+
+  ### Profit Calculation Start ###
+  - id: tool_profit_calculation
+    name: Provide profit calculation
+    hint: If enabled, this skill can calculate the absolute profit, profit margin (%) and base profit (%) for a given buy and sell price.
+    value: true
+    required: true
+    property_type: boolean
+  ### Profit Calculation End ###
+
+  ### FasterWhisper Start ###
+  - id: add_fasterwhisper_hotwords
+    name: Add FasterWhisper hotwords (Experimental)
+    hint: Add common names fetched from UEXCorp as FasterWhisper hotwords. Voice detection might be improved but bias towards Star Citizen content in the detection is possible.
+    value: false
+    required: true
+    property_type: boolean
+  ### FasterWhisper End ###

@@ -1,0 +1,48 @@
+module: skills.api_request.main
+name: APIRequest
+display_name: API Requests
+author: teddybear082
+tags:
+  - API
+  - Utility
+  - Internet
+description:
+  en: Send HTTP requests to APIs with methods like GET, POST, PUT, etc. Combine it with the WebSearch skill to fetch API specs on-the-fly, so that your Wingman can interact with any API.
+  de: Sende API-Anfragen mit verschiedenen Methoden wie GET, POST, PUT etc. Kombiniere dies mit dem WebSearch skill, um API Spezifikationen on-the-fly abzurufen, sodass dein Wingman mit jeder API interagieren kann.
+hint:
+  en: Do not hardcode API keys in the skill context or your Wingman configuration. Enter them during a conversation (preferrably by text) or store them in `/files/api_request_key_holder.yaml`.
+  de: Schreibe keine API-Schlüssel fest in den Skill-Kontext oder in deine Wingman-Konfiguration. Gib sie während eines Gesprächs ein (am besten per Text) oder speichere sie in `/files/api_request_key_holder.yaml`.
+examples:
+  - en: Send a GET request to "https://api.example.com/data".
+    de: Sende eine GET-Anfrage an "https://api.example.com/data".
+  - en: Send a GET request with an API key.
+    de: Sende eine GET-Anfrage mit einem API-Schlüssel.
+prompt: |
+  You can send API requests with different methods such as GET, POST, PUT, PATCH, and DELETE to any endpoint specified by the user. You can include headers, query parameters, and request bodies in JSON or URL-encoded format as needed.
+  Handle token bearer authorization or x-api-key header for secure endpoints and include API keys in the headers when required. Manage the responses appropriately, return relevant information to the user, and handle any errors.
+  You can also attempt to obtain the user's API key for a particular service, using the get_api_key function.
+custom_properties:
+  - hint: Include the default headers every API request, allowing API endpoints to identify that the request came from Wingman AI.
+    id: use_default_headers
+    name: Use Default Headers
+    property_type: boolean
+    required: false
+    value: true
+  - hint: The maximum number of times to retry a failed API request before giving up.
+    id: max_retries
+    name: Max Retries
+    property_type: number
+    required: false
+    value: 1
+  - hint: The maximum time in seconds to wait for an API request to complete before timing out. This helps prevent requests from hanging indefinitely.
+    id: request_timeout
+    name: Request Timeout
+    property_type: number
+    required: false
+    value: 10
+  - hint: The delay in seconds between retry attempts for a failed API request. This allows time for the issue to resolve before trying again.
+    id: retry_delay
+    name: Retry Delay
+    property_type: number
+    required: false
+    value: 5
