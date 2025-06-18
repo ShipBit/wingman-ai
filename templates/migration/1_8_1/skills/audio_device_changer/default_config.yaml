@@ -1,0 +1,22 @@
+module: skills.audio_device_changer.main
+name: AudioDeviceChanger
+display_name: Audio Device Changer
+author: ShipBit
+tags:
+  - Utility
+description:
+  en: Stores a separate audio device per Wingman and outputs TTS output to it. Useful for VTubers, audio mixing etc.
+  de: Speichert ein separates Audiogerät pro Wingman und gibt TTS-Ausgaben darauf aus. Nützlich für VTuber, Audio-Mixing usw.
+custom_properties:
+  - id: audio_changer_device
+    name: Audio Device
+    hint: The audio device to use for this Wingman.
+    value: null
+    required: false
+    property_type: audio_device
+  - id: backend_port
+    name: Backend Port
+    hint: If you are running the backend on a different port, set it here.
+    value: 49111
+    required: true
+    property_type: number
