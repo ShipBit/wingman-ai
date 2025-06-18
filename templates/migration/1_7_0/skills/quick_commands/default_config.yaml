@@ -1,0 +1,13 @@
+name: QuickCommands
+module: skills.quick_commands.main
+category: general
+description:
+  en: Automatically learns instant activation phrases for commands you use regularly, speeding up their execution time.
+  de: Lernt automatisch Aktivierungsphrasen für Sofort-Befehle, die du regelmäßig verwendest und beschleunigt so die Ausführungszeit.
+custom_properties:
+  - id: quick_commands_learning_rule_count
+    name: Hits until learn
+    hint: The number of times a command got executed by the same phrase before it is learned.
+    value: 3
+    required: true
+    property_type: number

@@ -1,0 +1,39 @@
+debug_mode: false
+audio: {}
+streamer_mode: false
+voice_activation:
+  enabled: false
+  mute_toggle_key: "shift+x"
+  energy_threshold: 0.01
+  stt_provider: fasterwhisper
+  azure:
+    region: westeurope
+    languages:
+      - en-US
+      - de-DE
+  whispercpp:
+    host: http://127.0.0.1
+    port: 8080
+    enable: false
+  whispercpp_config:
+    temperature: 0.0
+  fasterwhisper:
+    model_size: base
+    device: cpu
+    compute_type: auto
+  fasterwhisper_config:
+    beam_size: 1
+    best_of: 2
+    temperature: 0
+    no_speech_threshold: 0.7
+    language_detection_threshold: 0.5
+    multilingual: false
+wingman_pro:
+  base_url: https://wingman-ai.azurewebsites.net
+  region: europe
+xvasynth:
+  enable: false
+  host: http://127.0.0.1
+  port: 8008
+  install_dir: C:\Program Files (x86)\Steam\steamapps\common\xVASynth
+  process_device: cpu
