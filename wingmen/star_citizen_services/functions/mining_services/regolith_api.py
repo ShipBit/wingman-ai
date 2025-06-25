@@ -1131,14 +1131,19 @@ class RegolithAPI:
         )  # Initialize to the largest possible number
 
         for order in unique_orders:
+            # skip if no end‐time
+            process_end = order.get("processEndTime")
+            if process_end is None:
+                continue
+
             # Prüfen, ob der Auftrag noch läuft
-            if order["processEndTime"] > current_time_ms:
+            if process_end > current_time_ms:
                 total_orders_in_processing += 1
-                if order["processEndTime"] < next_order_finish_duration:
-                    next_order_finish_duration = order["processEndTime"]
+                if process_end < next_order_finish_duration:
+                    next_order_finish_duration = process_end
 
             # Wenn Auftrag fertig (d. h. Endzeit < jetzt) und noch nicht verkauft
-            if not order["isSold"] and order["processEndTime"] < current_time_ms:
+            if not order.get("isSold", False) and process_end < current_time_ms:
                 refinery = order["refinery"]
                 session_id = order["sessionId"]
 

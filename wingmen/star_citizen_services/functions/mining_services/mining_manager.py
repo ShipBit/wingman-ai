@@ -369,7 +369,7 @@ class MiningManager(FunctionManager):
                 scan_result,
                 anchor_coords=ROCK_SCAN_COORDS[0],
                 title="Scan-Validierung",
-                align="left",
+                align="right",
                 crop_image=cropped_image
             )
             if operation == "aborted":
@@ -675,7 +675,7 @@ class MiningManager(FunctionManager):
                 name = rock.get("RockType", "").lower()
                 if not isinstance(base, int):
                     continue
-                for size in range(1, 16):
+                for size in range(1, 25):
                     lookup[base * size] = {"cluster_size": size, "type": name}
         if scan_value is None:
             return {"success": False, "message": "Please provide a scan_value to lookup.", "do_not_cache": True}

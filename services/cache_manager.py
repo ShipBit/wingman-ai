@@ -248,7 +248,7 @@ class CacheManager:
                 if v[3] == "json" and v[4]:
                     candidates.append({"key": cand_key, "key_text": v[4]})
             if candidates:
-                best, success = find_best_match.find_best_match(text, candidates, attributes=["key_text"], score_cutoff=90)
+                best, success = find_best_match.find_best_match(text, candidates, attributes=["key_text"], score_cutoff=80)
                 if success and best.get("matched_value") is not None:
                     printr.print(
                         f"found {json.dumps(best.get('root_object'),indent=2)} with score {best.get('score')}",

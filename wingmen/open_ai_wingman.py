@@ -166,8 +166,7 @@ class OpenAiWingman(Wingman):
             "summarize_provider", None
         )
 
-        self.debug = DEBUG or self.debug
-        if self.debug:
+        if self.debug or DEBUG:
             _ensure_debug_log()
 
     def validate(self):
@@ -768,7 +767,7 @@ class OpenAiWingman(Wingman):
 
                 # Skip caching if payload requests no-cache
                 if isinstance(function_response, dict) and function_response.get("do_not_cache") is True:
-                    if self.debug:
+                    if self.debug or DEBUG:
                         printr.print(
                             f"Skipping caching for key '{function_name}' due to do_not_cache flag.",
                             tags="info",

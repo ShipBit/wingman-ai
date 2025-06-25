@@ -81,17 +81,11 @@ class MiningValidationPopup(tk.Toplevel):
         self.rowconfigure(0, weight=1)
         self.rowconfigure(1, weight=0)
         if self.crop_image is not None:
-            # Zwei Spalten: Textbereich und Bild
-            if align == "left":
-                text_frame  = tk.Frame(self, width=text_pixel_width)
-                image_frame = tk.Frame(self, width=adjusted_image_width)
-                text_frame.grid(row=0, column=0, sticky="nsew")
-                image_frame.grid(row=0, column=1, sticky="nsew")
-            else:
-                image_frame = tk.Frame(self, width=adjusted_image_width)
-                text_frame  = tk.Frame(self, width=text_pixel_width)
-                image_frame.grid(row=0, column=0, sticky="nsew")
-                text_frame.grid(row=0, column=1, sticky="nsew")
+            # Zwei Spalten: Bild links, Text rechts (unabhängig von 'align')
+            image_frame = tk.Frame(self, width=adjusted_image_width)
+            text_frame  = tk.Frame(self, width=text_pixel_width)
+            image_frame.grid(row=0, column=0, sticky="nsew")
+            text_frame.grid(row=0, column=1, sticky="nsew")
             text_container = text_frame
         else:
             text_container = tk.Frame(self)
