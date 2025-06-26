@@ -18,6 +18,7 @@ import soundfile as sf
 from collections import deque
 from pathlib import Path
 from typing import Deque, Optional, List
+from services.memory_logger import log_memory_usage
 
 from services.printr import Printr
 from services.file_creator import FileCreator
@@ -86,6 +87,7 @@ class AudioRecorder(FileCreator):
         self.recording_chunks = list(self.ring_buffer)
         self.is_recording = True
         self.printr.print("Recording started", tags="grey")
+        log_memory_usage("audio_start")
 
     def stop_recording(self) -> Optional[str]:
         """Stop capture – returns the written WAV path or *None* if discarded."""
@@ -94,6 +96,7 @@ class AudioRecorder(FileCreator):
 
         self.is_recording = False
         self.printr.print("Recording stopped", tags="grey")
+        log_memory_usage("audio_stop")
 
         if not self.recording_chunks:
             self.printr.print("Ignored empty recording", tags="warn")

@@ -6,6 +6,7 @@ from openai import AzureOpenAI
 from services.open_ai import AzureConfig, OpenAi, STTConfig
 from services.printr import Printr
 from wingmen.wingman import Wingman
+from services.memory_logger import log_memory_usage
 
 from wingmen.star_citizen_services.helper import find_best_match
 
@@ -658,12 +659,14 @@ class OpenAiWingman(Wingman):
                 }
             )
 
+        log_memory_usage("before_gpt_call")
         result = self.openai.ask(
             messages=self.messages,
             tools=tools_to_use if tools_to_use else None,  # Pass None if no tools
             model=self.config["openai"].get("conversation_model"),
             azure_config=azure_config,
         )
+        log_memory_usage("after_gpt_call")
 
         # --- Debug logging: log response ---
         if DEBUG and result is not None:

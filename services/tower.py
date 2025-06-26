@@ -8,6 +8,7 @@ from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+from services.memory_logger import log_memory_usage
 
 
 printr = Printr()
@@ -100,7 +101,11 @@ class Tower:
                 if not errors:
                     wingman.prepare()
                     wingmen.append(wingman)
-                    printr.print(f"Successfully initialized Wingman: {wingman_name} ({type(wingman).__name__})", tags="success")
+                    printr.print(
+                        f"Successfully initialized Wingman: {wingman_name} ({type(wingman).__name__})",
+                        tags="success",
+                    )
+                    log_memory_usage(f"after_init_{wingman_name}")
                 else:
                     error_str = ", ".join(errors)
                     self.broken_wingmen.append({"name": wingman_name, "error": error_str})
