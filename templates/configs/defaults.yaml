@@ -98,6 +98,17 @@ hume:
     name: ""
     id: ""
     provider: ""
+inworld:
+  tts_endpoint: https://api.inworld.ai/tts/v1/voice
+  model_id: inworld-tts-1
+  voice_id: Hades
+  audio_config:
+    audio_encoding: MP3
+    bitrate: 128000
+    sample_rate_hertz: 48000
+    pitch: 0.0
+    speaking_rate: 1.0
+  temperature: 0.8
 azure:
   whisper:
     api_base_url: https://openai-w-eu.openai.azure.com/

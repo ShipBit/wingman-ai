@@ -969,6 +969,7 @@ class ConfigManager:
             "edge_tts",
             "elevenlabs",
             "hume",
+            "inworld",
             "azure",
             "whispercpp",
             "fasterwhisper",

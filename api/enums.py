@@ -112,6 +112,7 @@ class TtsProvider(Enum):
     WINGMAN_PRO = "wingman_pro"
     OPENAI_COMPATIBLE = "openai_compatible"
     HUME = "hume"
+    INWORLD = "inworld"
 
 
 class SttProvider(Enum):

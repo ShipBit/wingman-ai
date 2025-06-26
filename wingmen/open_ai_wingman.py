@@ -39,6 +39,7 @@ from providers.elevenlabs import ElevenLabs
 from providers.google import GoogleGenAI
 from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
 from providers.hume import Hume
+from providers.inworld import Inworld
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.wingman_pro import WingmanPro
 from services.benchmark import Benchmark
@@ -79,6 +80,7 @@ class OpenAiWingman(Wingman):
         self.elevenlabs: ElevenLabs | None = None
         self.openai_compatible_tts: OpenAiCompatibleTts | None = None
         self.hume: Hume | None = None
+        self.inworld: Inworld | None = None
         self.wingman_pro: WingmanPro | None = None
         self.google: GoogleGenAI | None = None
         self.perplexity: OpenAi | None = None
@@ -147,6 +149,9 @@ class OpenAiWingman(Wingman):
 
             if self.uses_provider("hume"):
                 await self.validate_and_set_hume(errors)
+
+            if self.uses_provider("inworld"):
+                await self.validate_and_set_inworld(errors)
 
         except Exception as e:
             errors.append(
@@ -235,6 +240,8 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE
         elif provider_type == "hume":
             return self.config.features.tts_provider == TtsProvider.HUME
+        elif provider_type == "inworld":
+            return self.config.features.tts_provider == TtsProvider.INWORLD
         elif provider_type == "xvasynth":
             return self.config.features.tts_provider == TtsProvider.XVASYNTH
         elif provider_type == "whispercpp":
@@ -425,6 +432,15 @@ class OpenAiWingman(Wingman):
                 wingman_name=self.name,
             )
             self.hume.validate_config(config=self.config.hume, errors=errors)
+
+    async def validate_and_set_inworld(self, errors: list[WingmanInitializationError]):
+        api_key = await self.retrieve_secret("inworld", errors)
+        if api_key:
+            self.inworld = Inworld(
+                api_key=api_key,
+                wingman_name=self.name,
+            )
+            self.inworld.validate_config(config=self.config.inworld, errors=errors)
 
     async def validate_and_set_azure(self, errors: list[WingmanInitializationError]):
         for key_type in self.AZURE_SERVICES:
@@ -1471,6 +1487,14 @@ class OpenAiWingman(Wingman):
                             audio_player=self.audio_player,
                             wingman_name=self.name,
                         )
+            elif self.config.features.tts_provider == TtsProvider.INWORLD:
+                await self.inworld.play_audio(
+                    text=text,
+                    config=self.config.inworld,
+                    sound_config=sound_config,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
             elif self.config.features.tts_provider == TtsProvider.AZURE:
                 await self.openai_azure.play_audio(
                     text=text,

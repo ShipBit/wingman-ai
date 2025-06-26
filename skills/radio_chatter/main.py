@@ -535,6 +535,9 @@ class RadioChatter(Skill):
         elif voice_provider == TtsProvider.HUME:
             voice_name = voice.name
             self.wingman.config.hume.voice = voice
+        elif voice_provider == TtsProvider.INWORLD:
+            voice_name = voice
+            self.wingman.config.inworld.voice_id = voice
         else:
             error = True
 
