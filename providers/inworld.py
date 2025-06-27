@@ -45,16 +45,15 @@ class Inworld:
             "text": text,
             "voiceId": config.voice_id,
             "modelId": config.model_id,
-            "audioConfig": config.audio_config,
+            "audioConfig": config.audio_config.model_dump(),
             "temperature": config.temperature,
         }
         response = requests.request(
-            "POST",
-            config.tts_endpoint,
-            headers=self.headers,
-            json=payload,
+            "POST", config.tts_endpoint, headers=self.headers, json=payload, timeout=60
         )
-        output_file = await self.__write_result_to_file(response.text)
+        response_data = response.json()
+        audio_content = response_data.get("audioContent", "")
+        output_file = await self.__write_result_to_file(audio_content)
         audio, sample_rate = audio_player.get_audio_from_file(output_file)
 
         await audio_player.play_with_effects(
@@ -72,11 +71,19 @@ class Inworld:
             params = {"filter": f"language={filter}"}
 
         response = requests.get(
-            "https://api.inworld.ai/tts/v1/voices", headers=self.headers, params=params
+            "https://api.inworld.ai/tts/v1/voices",
+            headers=self.headers,
+            params=params,
+            timeout=10,
         )
         response_data = response.json()
-        for voice in response_data.voices:
-            voices.append(VoiceInfo(id=voice.voiceId, name=voice.voiceId))
+        for voice in response_data.get("voices", []):
+            voice_id = voice.get("voiceId", "")
+            voices.append(
+                VoiceInfo(
+                    id=voice_id, name=voice_id, languages=voice.get("languages", [])
+                )
+            )
         return voices
 
     async def __write_result_to_file(self, base64_encoded_audio: str):

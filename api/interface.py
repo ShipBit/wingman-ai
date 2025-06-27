@@ -76,6 +76,7 @@ class VoiceInfo(BaseModel):
     name: Optional[str] = None
     gender: Optional[TtsVoiceGender] = None
     locale: Optional[str] = None
+    languages: Optional[list[str]] = None
     provider: Optional[str] = None
 
 
