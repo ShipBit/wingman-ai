@@ -385,6 +385,7 @@ class ConfigService:
         wingman_config.azure = basic_config.azure
         wingman_config.xvasynth = basic_config.xvasynth
         wingman_config.hume = basic_config.hume
+        wingman_config.inworld = basic_config.inworld
         wingman_config.whispercpp = basic_config.whispercpp
         wingman_config.fasterwhisper = basic_config.fasterwhisper
         wingman_config.wingman_pro = basic_config.wingman_pro

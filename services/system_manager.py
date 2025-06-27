@@ -4,7 +4,7 @@ import requests
 from packaging import version
 from api.interface import SystemCore, SystemInfo
 
-LOCAL_VERSION = "1.8.1"
+LOCAL_VERSION = "1.8.2"
 VERSION_ENDPOINT = "https://wingman-ai.com/api/version"
 
 

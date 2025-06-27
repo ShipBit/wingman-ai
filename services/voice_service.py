@@ -7,6 +7,7 @@ from api.interface import (
     EdgeTtsConfig,
     ElevenlabsConfig,
     HumeConfig,
+    InworldConfig,
     SoundConfig,
     VoiceInfo,
     XVASynthTtsConfig,
@@ -14,6 +15,7 @@ from api.interface import (
 from providers.edge import Edge
 from providers.elevenlabs import ElevenLabs
 from providers.hume import Hume
+from providers.inworld import Inworld
 from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
@@ -47,6 +49,13 @@ class VoiceService:
             methods=["GET"],
             path="/voices/hume",
             endpoint=self.get_hume_voices,
+            response_model=list[VoiceInfo],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voices/inworld",
+            endpoint=self.get_inworld_voices,
             response_model=list[VoiceInfo],
             tags=tags,
         )
@@ -93,6 +102,12 @@ class VoiceService:
             methods=["POST"],
             path="/voices/preview/hume",
             endpoint=self.play_hume,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preview/inworld",
+            endpoint=self.play_inworld,
             tags=tags,
         )
         self.router.add_api_route(
@@ -160,6 +175,12 @@ class VoiceService:
     async def get_hume_voices(self, api_key: str) -> list[VoiceInfo]:
         hume = Hume(api_key=api_key, wingman_name="")
         result = await hume.get_available_voices()
+        return result
+
+    # GET /voices/inworld
+    async def get_inworld_voices(self, api_key: str) -> list[VoiceInfo]:
+        inworld = Inworld(api_key=api_key, wingman_name="")
+        result = await inworld.get_available_voices()
         return result
 
     # GET /voices/azure
@@ -276,6 +297,19 @@ class VoiceService:
     ):
         hume = Hume(api_key=api_key, wingman_name="")
         await hume.play_audio(
+            text=text,
+            config=config,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+        )
+
+    # POST /play/inworld
+    async def play_inworld(
+        self, text: str, api_key: str, config: InworldConfig, sound_config: SoundConfig
+    ):
+        inworld = Inworld(api_key=api_key, wingman_name="")
+        await inworld.play_audio(
             text=text,
             config=config,
             sound_config=sound_config,

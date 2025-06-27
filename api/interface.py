@@ -76,6 +76,7 @@ class VoiceInfo(BaseModel):
     name: Optional[str] = None
     gender: Optional[TtsVoiceGender] = None
     locale: Optional[str] = None
+    languages: Optional[list[str]] = None
     provider: Optional[str] = None
 
 
@@ -279,6 +280,31 @@ class HumeVoiceConfig(BaseModel):
 class HumeConfig(BaseModel):
     description: Optional[str] = None
     voice: HumeVoiceConfig
+
+
+class InworldAudioConfig(BaseModel):
+    audio_encoding: str
+    """The audio encoding to use. Supported values: LINEAR16, MP3, OGG_OPUS, ALAW, MULAW"""
+    bitrate: float
+    """The bitrate to use for the audio encoding in bps. Default is 128k"""
+    sample_rate_hertz: float
+    """The synthesis sample rate (in hertz) for this audio. Accepts values within the range [8000, 48000]. Default is 48k"""
+    pitch: float
+    """Modifies the pitch of the synthesized speech. Accepts a double value in the range [-5.0, 5.0]. Default is 0"""
+    speaking_rate: float
+    """Speaking rate/speed, in the range [0.5, 1.5]. 1.0 is the normal native speed supported by the specific voice. The default is 1.0."""
+
+
+class InworldConfig(BaseModel):
+    tts_endpoint: str
+    model_id: str
+    """inworld-tts-1, inworld-tts-1-max"""
+    voice_id: str
+    """The ID of the voice to use for synthesizing speech."""
+    audio_config: InworldAudioConfig
+    temperature: float
+    """Determines the degree of randomness when sampling audio tokens to generate the response. Accepts values between 0 and 2. Defaults to 0.8"""
+    output_streaming: bool
 
 
 class EdgeTtsConfig(BaseModel):
@@ -700,6 +726,7 @@ class NestedConfig(BaseModel):
     openai_compatible_tts: OpenAiCompatibleTtsConfig
     elevenlabs: ElevenlabsConfig
     hume: HumeConfig
+    inworld: InworldConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig
@@ -734,6 +761,7 @@ class BasicWingmanConfig(BaseModel):
     edge_tts: EdgeTtsConfig
     elevenlabs: ElevenlabsConfig
     hume: HumeConfig
+    inworld: InworldConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
     whispercpp: WhispercppSttConfig

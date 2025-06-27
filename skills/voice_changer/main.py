@@ -180,6 +180,7 @@ class VoiceChanger(Skill):
         voice = voice_setting.voice
         voice_name = None
         error = False
+        provider_name = ""
 
         if voice_provider == TtsProvider.WINGMAN_PRO:
             if voice_setting.subprovider == WingmanProTtsProvider.OPENAI:
@@ -215,6 +216,10 @@ class VoiceChanger(Skill):
             voice_name = voice.name
             provider_name = "Hume"
             self.wingman.config.hume.voice = voice
+        elif voice_provider == TtsProvider.INWORLD:
+            voice_name = voice
+            provider_name = "Inworld"
+            self.wingman.config.inworld.voice = voice
         else:
             error = True
 
