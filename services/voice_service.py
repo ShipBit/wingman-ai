@@ -54,6 +54,13 @@ class VoiceService:
         )
         self.router.add_api_route(
             methods=["GET"],
+            path="/voices/inworld",
+            endpoint=self.get_inworld_voices,
+            response_model=list[VoiceInfo],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
             path="/voices/azure",
             endpoint=self.get_azure_voices,
             response_model=list[VoiceInfo],
@@ -168,6 +175,12 @@ class VoiceService:
     async def get_hume_voices(self, api_key: str) -> list[VoiceInfo]:
         hume = Hume(api_key=api_key, wingman_name="")
         result = await hume.get_available_voices()
+        return result
+
+    # GET /voices/inworld
+    async def get_inworld_voices(self, api_key: str) -> list[VoiceInfo]:
+        inworld = Inworld(api_key=api_key, wingman_name="")
+        result = await inworld.get_available_voices()
         return result
 
     # GET /voices/azure
