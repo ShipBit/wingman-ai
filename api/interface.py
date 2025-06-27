@@ -304,6 +304,7 @@ class InworldConfig(BaseModel):
     audio_config: InworldAudioConfig
     temperature: float
     """Determines the degree of randomness when sampling audio tokens to generate the response. Accepts values between 0 and 2. Defaults to 0.8"""
+    output_streaming: bool
 
 
 class EdgeTtsConfig(BaseModel):

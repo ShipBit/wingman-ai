@@ -109,6 +109,7 @@ inworld:
     pitch: 0.0
     speaking_rate: 1.0
   temperature: 0.8
+  output_streaming: true
 azure:
   whisper:
     api_base_url: https://openai-w-eu.openai.azure.com/
