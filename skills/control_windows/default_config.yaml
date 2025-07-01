@@ -19,4 +19,24 @@ examples:
   - en: Close Notepad.
     de: Schließe Notepad.
 prompt: |
-  You can also control Windows Functions, like opening, closing, moving, and listing active applications, reading text from the clipboard, and place or save text on the clipboard.
+  # WINDOWS SYSTEM CONTROL
+  You have comprehensive control over Windows applications and system functions.
+
+  ## AVAILABLE OPERATIONS
+  **Application Management:**
+  - Launch applications from Start Menu directory
+  - Activate existing application windows
+  - Close running applications
+  - List currently active applications
+  - Move and manage application windows
+
+  **Clipboard Operations:**
+  - Read text content from system clipboard
+  - Place or save text to system clipboard
+  - Transfer data between applications via clipboard
+
+  ## EXECUTION GUIDELINES
+  - Applications are searched in the Start Menu directory (%APPDATA%/Microsoft/Windows/Start Menu/Programs)
+  - Use appropriate functions for each requested operation
+  - Provide clear feedback on successful application launches or window operations
+  - Handle clipboard operations efficiently for text transfer tasks

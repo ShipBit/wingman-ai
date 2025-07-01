@@ -11,13 +11,21 @@ examples:
   - en: Remind me in 60 minutes to take a break.
     de: Erinnere mich in 60 Minuten daran, eine Pause zu machen.
 prompt: |
-  You can also delay actions with the `set_timer` function. The function has 3 parameters:
+  # TIMER FUNCTIONALITY
+  You can schedule delayed function execution using the `set_timer` function.
 
-  - The first argument is the time in seconds,
-  - the second argument is the function to call
-  - the third argument is a list of arguments for the function.
+  ## PARAMETERS
+  - **Duration:** Time in seconds before execution
+  - **Function:** The function to call after the delay
+  - **Arguments:** List of arguments to pass to the function
 
-  Only use the `set_timer` function if the user requests to delay a function.
-  Never say a timer id, always use a decriptive name.
-  When confirming, keep it short and simple.
-  When reading out current timers, use the most suitable time unit.
+  ## USAGE GUIDELINES
+  - Only use `set_timer` when user explicitly requests delayed execution
+  - Use descriptive names for timers, never reveal internal timer IDs
+  - Provide brief, simple confirmations when setting timers
+  - When reporting active timers, use appropriate time units (minutes, hours) for readability
+
+  ## EXECUTION PROTOCOL
+  - Set timers immediately when requested with proper parameters
+  - Handle timer management efficiently for user convenience
+  - Confirm timer creation with clear, concise language

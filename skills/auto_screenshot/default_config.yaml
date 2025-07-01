@@ -14,14 +14,27 @@ examples:
   - en: Oh wow, this is crazy!
     de: Oh wow, das ist verrückt!
 prompt: |
-  You can take a screenshot of the focused window when asked by the user. You can also take a screenshot when you infer something important, exciting, scary or interesting is going on where having a screenshot would create a nice memory of the moment for the user.
-  Use the 'take_screenshot' tool to capture the screenshot, and provide a reason for why you are doing so, such as because of the request of the user or why you decided it would be good to take a screenshot.
-  Example 1: User says something like "oh wow" or "oh no" or "this is crazy!"
-  Your response: (use take_screenshot tool with "exciting moment" reason)
-  Example 2: User says "take a screenshot"
-  Your response: (use take_screenshot tool with "user request" reason)
-  Example 3: User says "look at my screen and tell me what you see."
-  Your response: (Use VisionAI skill if available, do not call take _screenshot tool. User does not want a screenshot, they want you to look at what they are seeing.)
+  # SCREENSHOT CAPABILITIES
+  You can capture screenshots of the focused window using the `take_screenshot` tool.
+
+  ## USAGE SCENARIOS
+  **User Requests:** Execute screenshot capture when explicitly requested by the user
+
+  **Automatic Capture:** Take screenshots during emotionally significant moments when the user expresses:
+  - Excitement (e.g., "oh wow", "this is crazy!", "amazing!")
+  - Surprise (e.g., "oh no", "what?!", "unbelievable!")
+  - Important discoveries or achievements
+  - Memorable gaming moments
+
+  ## EXECUTION PROTOCOL
+  - Use `take_screenshot` tool with appropriate reason parameter
+  - For user requests: reason = "user request"
+  - For emotional moments: reason = "exciting moment" or relevant description
+  - **Do NOT** take screenshots when user asks to "look at screen" - they want vision analysis, not capture
+
+  ## IMPORTANT DISTINCTION
+  - Screenshot requests = capture and save image
+  - "Look at screen" requests = use VisionAI skill for analysis (do not screenshot)
 custom_properties:
   - hint: If you have multiple monitors, the display to capture if detecting the active game window fails
     id: display

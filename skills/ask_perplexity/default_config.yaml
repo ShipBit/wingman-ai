@@ -15,10 +15,20 @@ examples:
   - en: In Star Citizen mining, what is currently the best way to find quantanium?
     de: Beim Mining in Star Citizen, wie finde ich aktuell am besten Quantanium?
 prompt: |
-  There is a new function: 'ask_perplexity'
-  Perplexity is a powerful tool that can provide you with up-to-date information on a wide range of topics.
-  Use it everytime the user asks a question that implies the need for up-to-date information.
-  Always use this if no other available skill matches the request better to get up-to-date information.
+  # PERPLEXITY INTEGRATION
+  You have access to the Perplexity AI service for real-time information retrieval and research.
+
+  ## WHEN TO USE
+  - User requests current events, recent developments, or time-sensitive information
+  - Questions requiring up-to-date data beyond your training knowledge
+  - Research queries that benefit from live internet access
+  - When no other specialized skill better matches the request
+
+  ## EXECUTION PROTOCOL
+  - Use the `ask_perplexity` function for real-time information needs
+  - Prioritize this tool for questions implying currency or recent developments
+  - Process and format responses according to your wingman's language and style guidelines
+  - Provide comprehensive, well-sourced answers based on Perplexity's research capabilities
 custom_properties:
   - id: instant_response
     name: Instant Response

@@ -18,128 +18,38 @@ examples:
   - en: Start the dispatch mode.
     de: Starte den Dispatch-Modus.
 prompt: |
-  You can retrieve various game state variables from American Truck Simulator (ATS) and Euro Truck Simulator 2 (ETS). Use the tool 'get_game_state' to find out the current values of variables like speed, engine RPM, etc.
+  # TRUCK SIMULATOR TELEMETRY ACCESS
+  You have comprehensive access to live game state data from American Truck Simulator (ATS) and Euro Truck Simulator 2 (ETS2).
 
-  You can also start and end a dispatch mode which automatically checks telemetry models at specified intervals. Use the tool start_or_activate_dispatch_telemetry_loop to start the dispatch mode upon request. Use the end_or_stop_dispatch_telemetry_loop tool to end the dispatch mode upon request.
+  ## CORE FUNCTIONS
+  - **Data Retrieval:** Use `get_game_state` to access current telemetry values
+  - **Dispatch Mode:** Use `start_or_activate_dispatch_telemetry_loop` to begin automated monitoring
+  - **End Monitoring:** Use `end_or_stop_dispatch_telemetry_loop` to stop dispatch mode
 
-  The available game telemetry variables are as follows. If the user requests information that is not contained in one of these variables tell them that information is not available.
-  onJob
-  plannedDistance (planned distance to the current destination)
-  jobFinished
-  jobCancelled
-  jobDelivered
-  jobStartingTime
-  jobFinishedTime
-  jobIncome
-  jobCancelledPenalty
-  jobDeliveredRevenue
-  jobDeliveredEarnedXp
-  jobDeliveredCargoDamage
-  jobDeliveredDistance
-  jobDeliveredAutoparkUsed
-  jobDeliveredAutoloadUsed
-  isCargoLoaded
-  specialJob
-  jobMarket (type of job market for job)
-  routeDistance (distance of current route)
-  fined
-  tollgate
-  ferry
-  train
-  refuel
-  refuelPayed
-  gears
-  gears_reverse
-  truckWheelCount
-  gear
-  gearDashboard
-  engineRpmMax
-  engineRpm
-  cruiseControlSpeed
-  airPressure
-  brakeTemperature
-  oilPressure (in psi)
-  oilTemperature
-  waterTemperature
-  batteryVoltage
-  wearEngine
-  wearTransmission
-  wearCabin
-  wearChassis
-  wearWheels
-  truckOdometer (reading of truck's odometer)
-  refuelAmount
-  cargoDamage
-  parkBrake
-  airPressureEmergency
-  fuelWarning
-  electricEnabled
-  engineEnabled
-  wipers
-  blinkerLeftOn
-  blinkerRightOn
-  lightsParking
-  lightsBeamLow
-  lightsBeamHigh
-  lightsBeacon
-  lightsBrake
-  lightsReverse
-  lightsHazards
-  cruiseControl
-  accelerationX
-  accelerationY
-  accelerationZ
-  coordinateX
-  coordinateY
-  coordinateZ
-  rotationX
-  rotationY
-  rotationZ
-  truckBrand
-  truckName
-  cargo
-  unitMass
-  cityDst
-  compDst
-  citySrc
-  compSrc
-  truckLicensePlate
-  truckLicensePlateCountry
-  fineOffence
-  ferrySourceName
-  ferryTargetName
-  trainSourceName
-  trainTargetName
-  fineAmount
-  tollgatePayAmount
-  ferryPayAmount
-  trainPayAmount
-  isEts2 (whether the current game is EuroTruckSimulator 2)
-  isAts (whether the current game is American Truck Simulator)
-  truckSpeed(current truck speed)
-  speedLimit (speed limit of current road)
-  currentFuelPercentage (percent of fuel remaining)
-  currentAdbluePercentage (percent of adblue remaining)
-  truckDamageRounded (estimate of current truck wear and damage)
-  wearTrailerRounded (estimate of current trailer wear)
-  gameTime (current time in game)
-  nextRestStopTime (how long until next rest stop)
-  routeTime(how long current route is expected to take to complete)
-  jobExpirationTimeInDaysHoursMinutes (amount of time until job expires and delivery is late)
-  isWorldOfTrucksContract (whether the current job is a contract from the World of Trucks platform)
-  gameTimeLapsedToCompleteJob (when a job is completed, the amount of in-game time it took to complete)
-  realLifeTimeToCompleteWorldofTrucksJob (when a World of Trucks platform job is completed, how much real life time it took)
-  cargoMassInTons (if specifically asked, the mass of the cargo in tons)
-  cargoMass (the mass of the cargo)
-  routeDistance (distance remaining to complete the current route)
-  truckFuelRange (approximate distance that can be driven with remaining fuel)
-  fuelTankSize (total fuel capacity)
-  fuelRemaining (how much fuel is left in the tank)
-  fuelConsumption (the rate at which fuel is currently being used)
-  adblueTankSize (total capacity of adblue tank)
-  adblueRemaining (amount of adblue remaining)
-  plannedDistance (estimated distance to destination)
-  trailer (contains a large amount of information in a dictionary about the trailer being used)
+  ## AVAILABLE TELEMETRY DATA
+  **Job Information:** onJob, plannedDistance, jobFinished, jobCancelled, jobDelivered, jobStartingTime, jobFinishedTime, jobIncome, jobCancelledPenalty, jobDeliveredRevenue, jobDeliveredEarnedXp, jobDeliveredCargoDamage, jobDeliveredDistance, jobDeliveredAutoparkUsed, jobDeliveredAutoloadUsed, isCargoLoaded, specialJob, jobMarket, routeDistance
+
+  **Vehicle Status:** gears, gears_reverse, truckWheelCount, gear, gearDashboard, engineRpmMax, engineRpm, cruiseControlSpeed, airPressure, brakeTemperature, oilPressure, oilTemperature, waterTemperature, batteryVoltage, truckSpeed, speedLimit, currentFuelPercentage, currentAdbluePercentage, truckDamageRounded, wearTrailerRounded
+
+  **Vehicle Systems:** parkBrake, airPressureEmergency, fuelWarning, electricEnabled, engineEnabled, wipers, blinkerLeftOn, blinkerRightOn, lightsParking, lightsBeamLow, lightsBeamHigh, lightsBeacon, lightsBrake, lightsReverse, lightsHazards, cruiseControl
+
+  **Location & Movement:** accelerationX, accelerationY, accelerationZ, coordinateX, coordinateY, coordinateZ, rotationX, rotationY, rotationZ
+
+  **Vehicle Details:** truckBrand, truckName, truckLicensePlate, truckLicensePlateCountry, cargo, unitMass, cityDst, compDst, citySrc, compSrc
+
+  **Events:** fined, tollgate, ferry, train, refuel, refuelPayed, fineOffence, ferrySourceName, ferryTargetName, trainSourceName, trainTargetName, fineAmount, tollgatePayAmount, ferryPayAmount, trainPayAmount
+
+  **Game Context:** isEts2, isAts, gameTime, nextRestStopTime, routeTime, jobExpirationTimeInDaysHoursMinutes, isWorldOfTrucksContract, gameTimeLapsedToCompleteJob, realLifeTimeToCompleteWorldofTrucksJob
+
+  **Fuel & Cargo:** cargoMassInTons, cargoMass, truckFuelRange, fuelTankSize, fuelRemaining, fuelConsumption, adblueTankSize, adblueRemaining, refuelAmount, cargoDamage, trailer
+
+  **Vehicle Wear:** wearEngine, wearTransmission, wearCabin, wearChassis, wearWheels, truckOdometer
+
+  ## USAGE GUIDELINES
+  - Provide only information available in the telemetry variables listed above
+  - Inform users when requested data is unavailable in the telemetry system
+  - Use dispatch mode for continuous monitoring and automatic status updates
+  - Present data in clear, driver-friendly language with appropriate units
 custom_properties:
   - hint: Default is false and will attempt to use US Customary Units, like foot, yard, mile, and pound. Set to true to attempt to use metric units, like meters, kilometers, and kilograms.
     id: use_metric_system

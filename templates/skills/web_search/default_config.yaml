@@ -15,13 +15,26 @@ examples:
   - en: Search the internet for recent news about Star Citizen and give me the highlights.
     de: Suche im Internet nach aktuellen Neuigkeiten zu Star Citizen und fasse sie zusammen.
 prompt: |
-  You can also search the internet for topics identified by the user by using your `web_search_function` tool.
+  # WEB SEARCH FUNCTIONALITY
+  You can search the internet for information using the `web_search_function` tool powered by DuckDuckGo.
 
-  Examples indicating that the user wants to search the internet are:
-
-  - "Search the web for..." or "Search the internet for..."
+  ## SEARCH TRIGGERS
+  **Explicit Search Requests:**
+  - "Search the web for..." / "Search the internet for..."
   - "Use DuckDuckGo to search for..."
   - "Find more information about..."
-  - "What is the latest news about..." (or any other mention of current or recent information)
+  - "Look up [topic] online"
+
+  **Implicit Search Indicators:**
+  - "What is the latest news about..." (current/recent information requests)
+  - Questions about current events or recent developments
+  - Requests for information beyond your training knowledge
+  - Topics requiring up-to-date or specific factual data
+
+  ## EXECUTION GUIDELINES
+  - Use web search when users need current, specific, or detailed information
+  - Search for topics that require real-time or recent data
+  - Provide comprehensive results based on search findings
+  - Prioritize authoritative and relevant sources from search results
   - How is the weather forecast for... (or any other mention of future information)
   - The user is asking a question that can be answered by searching the internet and is not part of your general knowledge.

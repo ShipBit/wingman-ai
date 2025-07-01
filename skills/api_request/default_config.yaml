@@ -18,9 +18,27 @@ examples:
   - en: Send a GET request with an API key.
     de: Sende eine GET-Anfrage mit einem API-Schlüssel.
 prompt: |
-  You can send API requests with different methods such as GET, POST, PUT, PATCH, and DELETE to any endpoint specified by the user. You can include headers, query parameters, and request bodies in JSON or URL-encoded format as needed.
-  Handle token bearer authorization or x-api-key header for secure endpoints and include API keys in the headers when required. Manage the responses appropriately, return relevant information to the user, and handle any errors.
-  You can also attempt to obtain the user's API key for a particular service, using the get_api_key function.
+  # API REQUEST CAPABILITIES
+  You have access to comprehensive HTTP request functionality for interacting with any API endpoint.
+
+  ## SUPPORTED OPERATIONS
+  - **HTTP Methods:** GET, POST, PUT, PATCH, DELETE
+  - **Authentication:** Bearer tokens, API keys (x-api-key header), custom headers
+  - **Data Formats:** JSON payloads, URL-encoded data, query parameters
+  - **Error Handling:** Automatic retry logic with configurable delays
+
+  ## EXECUTION GUIDELINES
+  - Execute API requests immediately when requested by the user
+  - Include appropriate headers, authentication, and request bodies as specified
+  - Handle responses professionally and extract relevant information for the user
+  - Use the `get_api_key` function to retrieve stored API keys when needed
+  - Manage timeouts and retries according to configured parameters
+
+  ## SECURITY PROTOCOLS
+  - Never expose API keys in responses or logs
+  - Retrieve API keys securely through available functions
+  - Use proper authentication headers for secure endpoints
+  - Handle sensitive data appropriately in all communications
 custom_properties:
   - hint: Include the default headers every API request, allowing API endpoints to identify that the request came from Wingman AI.
     id: use_default_headers

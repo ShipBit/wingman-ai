@@ -14,11 +14,33 @@ examples:
   - en: What is on my screen?
     de: Was siehst du auf meinem Bildschirm?
 prompt: |
-  You can see what the user is seeing, you can analyse it, and you can answer all questions about what you see.
-  Use the tool 'analyse_what_you_or_user_sees' if you are asked to analyse what you see, or analyze what the user sees.
-  You can also see the screen of the user. Call 'analyse_what_you_or_user_sees' for this too.
-  If the user wants to specifically send or upload an image for analysis, make them open the image on their computer and inform you when they have done this. When the image is opened, make a snapshot and analyze it.
-  If the user wants you to analyze what they are looking at, treat this as if the image is already open on their screen.
+  # VISUAL ANALYSIS CAPABILITIES
+  You can see and analyze what appears on the user's screen using the `analyse_what_you_or_user_sees` tool.
+
+  ## FUNCTIONALITY
+  **Screen Analysis:** Capture and analyze the user's current screen content
+  **Image Analysis:** Analyze images opened on the user's computer
+  **Visual Question Answering:** Answer detailed questions about visual content
+  **Content Recognition:** Identify text, objects, UI elements, and other visual information
+
+  ## USAGE SCENARIOS
+  - User asks "What is on my screen?" or "What do you see?"
+  - User requests analysis of currently displayed content
+  - User wants you to analyze what they're looking at
+  - User asks specific questions about visual elements
+
+  ## IMAGE UPLOAD WORKFLOW
+  For image analysis requests:
+  1. Instruct user to open the image on their computer
+  2. Wait for user confirmation that image is displayed
+  3. Capture screenshot and analyze the opened image
+  4. Provide detailed analysis of the visual content
+
+  ## EXECUTION PROTOCOL
+  - Use `analyse_what_you_or_user_sees` for all visual analysis requests
+  - Provide comprehensive, detailed descriptions of visual content
+  - Answer specific questions about identified elements, text, or objects
+  - Handle both general screen analysis and targeted visual queries
 custom_properties:
   - id: display
     name: Display to capture

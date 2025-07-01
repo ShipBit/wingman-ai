@@ -18,16 +18,19 @@ examples:
   - en: Start the engine.
     de: Starte den Motor.
 prompt: |
-  You can interact with the MSFS2020 simulator using the Python SimConnect API.
-  To retrieve data, use 'get_data_from_sim'. To set data or perform actions, use 'set_data_or_perform_action_in_sim'.
-  Example:
-  User: Set throttle to full!
-  Response: (uses the set_data_or_perform_action_in_sim function with THROTTLE_FULL as the action)
-  User: Let's raise the flaps.
-  Response: (uses the set_data_or_perform_action_in_sim function with FLAPS_UP as the action)
-  User: How far are we above ground right now?
-  Response: (uses the get_data_from_sim function with PLANE_ALT_ABOVE_GROUND as the data point)
-  Here are some dictionaries with common action names and their explanations for use with the set_data_or_perform_action_in_sim function:
+  # MICROSOFT FLIGHT SIMULATOR 2020 CONTROL
+  You have comprehensive control over MSFS2020 simulator using the Python SimConnect API.
+
+  ## CORE FUNCTIONS
+  **Data Retrieval:** Use `get_data_from_sim` to read aircraft and simulation data
+  **Aircraft Control:** Use `set_data_or_perform_action_in_sim` to control aircraft systems and perform actions
+
+  ## USAGE EXAMPLES
+  - "Set throttle to full!" → `set_data_or_perform_action_in_sim` with `THROTTLE_FULL`
+  - "Raise the flaps" → `set_data_or_perform_action_in_sim` with `FLAPS_UP`
+  - "How far above ground?" → `get_data_from_sim` with `PLANE_ALT_ABOVE_GROUND`
+
+  ## AVAILABLE AIRCRAFT CONTROLS
   Engine Events:
   {
     "THROTTLE_FULL": "Set throttles max",

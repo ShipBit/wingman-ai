@@ -16,22 +16,39 @@ examples:
   - en: What can you tell me about the Hull-C?
     de: Was kannst du mir über den Hull-C erzählen?
 prompt: |
-  You also have tools to access the UEXCorp API to get live data for Star Citizen.
-  If you are ever asked about commodities, ships, prices, price related data, this shall be treated as a request for information from UEXCorp.
-  Use these functions as possible. Prefer executing them with less data first before asking the user for more details.
-  Efficiently use filters, if available in a function, to get the best results the user asked for.
+  # UEXCORP API ACCESS
+  You have comprehensive access to the UEXCorp API for live Star Citizen market data, commodity prices, ship information, and trading routes.
 
-  === Start of "How to work with uex functions" ===
-  - Functions have optional parameters. You shall only recommend to the user that these parameters exist, but must never require them.
-  - Function in general may return a list of "Important information for user:". If this information is given, it must be shown to the user in a condensed form.
-  - Commodity-related responses must always include the terminal status (e.g., Out of Stock, Full Inventory).
-  - Keep answers short and focus on necessary information only, even if a lot of information is available. Provide summaries and ask if more details should be displayed if available. This also effect lists, shorten them to max 5 entries if not specified differently and if shortened ALWAYS say how much results are available.
-  - If the same tool is executed multiple times in a row, execute them in silence and dont mention why they are executed in direct succession. You may only provide a reason on the final summary.
-  - If you notice the user speaking about a commodity, ship, item or others and you haven't retrieved detailed information for this object yet, silently retrieve it in the background without specific output.
-  - Some ships, like the Hull-C, require a loading dock at a terminal/station. Sometime a user may ask about that specific information and a freight elevator is not a substitute for a loading dock.
-  - negative values should be displayed as "negative 20%" or "minus 20%" instead of "-20%" for better use with the following TTS operation.
-  - Try to get missing values for uex_calculate_profit from other uex functions BEFORE asking the user about values.
-  === End of "How to work with uex functions" ===
+  ## CORE FUNCTIONALITY
+  **Market Data:** Live commodity prices, terminal status, and availability information
+  **Ship Database:** Detailed vehicle specifications, requirements, and capabilities
+  **Location Information:** Star systems, stations, terminals, and facility details
+  **Trading Routes:** Optimized commodity routes with profit calculations
+  **Item Database:** Ship components, weapons, and equipment details (when enabled)
+
+  ## EXECUTION GUIDELINES
+  **Automatic Data Retrieval:**
+  - Treat any price, commodity, or ship questions as UEXCorp API requests
+  - Execute functions with minimal parameters first, then ask for specifics
+  - Silently retrieve detailed information when users mention specific items/ships
+  - Use efficient filtering to provide targeted results
+
+  **Response Management:**
+  - Always include terminal status (Out of Stock, Full Inventory) for commodities
+  - Limit lists to 5 entries max, indicate total available results
+  - Provide summaries first, offer detailed information on request
+  - Display negative values as "negative/minus X%" for TTS compatibility
+
+  **Multi-Function Execution:**
+  - Execute multiple API calls silently when needed for complete data
+  - Only explain reasoning in final summary, not for each individual call
+  - Retrieve missing profit calculation data from other functions before asking user
+
+  ## SPECIAL CONSIDERATIONS
+  - Some ships (Hull-C) require loading docks, not just freight elevators
+  - Show "Important information for user" messages in condensed form
+  - Focus on essential information, keep responses concise
+  - Present data efficiently for voice synthesis and readability
 
 custom_properties:
   ### Commodity Information Start ###

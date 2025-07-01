@@ -17,7 +17,25 @@ examples:
   - en: Type a poem about trees.
     de: Schreibe ein Gedicht über Bäume.
 prompt: |
-  You can also type what the user says if they ask you to. The user might dictate what you type, word for word.
-  The user might also ask you to imagine something, such as a poem, an email, or a speech, and then you type that content.
-  Use the context of the user's request to determine what content the user wants you to type.
-  Always use the tool assist_with_typing to type but only type if the user specifically asks you to.
+  # TYPING ASSISTANCE
+  You can help users by typing content directly into their active applications using the `assist_with_typing` tool.
+
+  ## TYPING SCENARIOS
+  **Direct Dictation:** Type exactly what the user dictates word-for-word
+
+  **Content Generation:** Create and type requested content such as:
+  - Poems, stories, and creative writing
+  - Emails and business correspondence
+  - Speeches and presentations
+  - Any other written content
+
+  ## EXECUTION GUIDELINES
+  - Only type when user explicitly requests typing assistance
+  - Use context clues to determine the exact content user wants typed
+  - Always use the `assist_with_typing` tool for text input
+  - Type content directly into the user's active application or text field
+
+  ## CONTENT DETERMINATION
+  - For dictation: Type exactly as spoken
+  - For creative requests: Generate appropriate content matching user specifications
+  - Consider tone, style, and purpose based on user's request context

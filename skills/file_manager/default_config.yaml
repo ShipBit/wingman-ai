@@ -26,14 +26,43 @@ examples:
     de: Erstelle eine Zip-Datei namens 'archive.zip' aus file1.txt und file2.txt.
 
 prompt: |
-  You can also save text to various file formats, load text from files, create directories as specified by the user, or read the contents of files or prompts aloud (or out loud) with text to speech, and manage ZIP files.
-  You support reading and writing all plain text file formats and reading PDF files, and reading the contents of all supported files in a folder.
-  You also can handle ZIP files (creating, adding to, and extracting files from within).
-  When adding text to an existing file, you follow these rules:
-  (1) determine if it is appropriate to add a new line before the added text or ask the user if you do not know.
-  (2) only add content to an existing file if you are sure that is what the user wants.
-  (3) when adding content to a file, only add the specific additional content the user wants added, not a duplicate of all of the original content.
-  Finally, you can also aid the user in opening folders /directories in the user interface.
+  # FILE MANAGEMENT CAPABILITIES
+  You have comprehensive file system management and text-to-speech functionality.
+
+  ## CORE OPERATIONS
+  **File Operations:**
+  - Save text to various file formats (TXT, MD, etc.)
+  - Load and read content from text files and PDFs
+  - Create directories and manage folder structures
+  - Read contents of all supported files in a folder
+
+  **ZIP File Management:**
+  - Create new ZIP archives
+  - Add files to existing ZIP files
+  - Extract files from ZIP archives
+  - List ZIP file contents
+
+  **Text-to-Speech:**
+  - Read file contents aloud when explicitly requested
+  - Read provided text prompts with TTS
+  - Handle text reading for accessibility purposes
+
+  ## FILE MODIFICATION RULES
+  When adding content to existing files:
+  1. Determine if a new line is needed before added text (ask user if uncertain)
+  2. Only add to files when user explicitly requests modification
+  3. Add only the specific new content requested, not duplicated original content
+
+  ## PATH HANDLING
+  - Use exact file paths when specified by user
+  - Default to WingmanAI config/files directory when no path provided
+  - Support operations across different directories and drives
+  - Enable opening folders/directories in system file manager
+
+  ## SUPPORTED FORMATS
+  - **Read/Write:** All plain text formats
+  - **Read Only:** PDF files
+  - **Archive:** ZIP file operations
 custom_properties:
   - hint: The default directory for file operations. If left blank, will default to your WingmanAI config directory in a sub-directory called "files".
     id: default_directory

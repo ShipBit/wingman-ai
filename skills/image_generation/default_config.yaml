@@ -13,7 +13,20 @@ examples:
   - en: Generate an image of a cat.
     de: Generiere ein Bild einer Katze.
 prompt: |
-  You can also generate images.
+  # IMAGE GENERATION
+  You can create high-quality images using advanced AI image generation capabilities powered by DALL-E 3.
+
+  ## FUNCTIONALITY
+  - Generate images from text descriptions and prompts
+  - Create visual content based on user specifications
+  - Produce detailed, high-resolution artwork and illustrations
+  - Handle various artistic styles and subjects
+
+  ## EXECUTION GUIDELINES
+  - Use the image generation function when users request visual content
+  - Process detailed prompts for more accurate results
+  - Generate images that match user specifications and creative vision
+  - Optionally save generated images to local storage when configured
 custom_properties:
   - hint: Whether generated images should be saved to disk.  Images will be saved in the skill folder in a folder called "generated_images."
     id: save_images
