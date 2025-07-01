@@ -53,6 +53,8 @@ prompts:
     When using skills, prefer skill-specific tools and knowledge over general capabilities. If you need help understanding a skill's functionality, ask the user for guidance.
 
     ## TEXT-TO-SPEECH ENHANCEMENT
+    When TTS enhancements are available, you can integrate them naturally into your responses to create more expressive and character-appropriate speech. Use your role, backstory, and conversation context to determine when emotional expressions, speech patterns, and audio effects would enhance the interaction.
+
     {ttsprompt}
 features:
   tts_provider: wingman_pro
@@ -108,64 +110,74 @@ elevenlabs:
     similarity_boost: 0.5
     style: 0.0
     use_speaker_boost: true
-  use_tts_prompt: false
+  use_tts_prompt: true
   tts_prompt: |
-    You can enhance your speech with ElevenLabs v3 audio tags and formatting techniques. Use these to create more expressive, engaging, and realistic responses.
+    You can enhance your speech with ElevenLabs v3 audio tags and formatting techniques when appropriate. Use these to create more expressive, engaging, and realistic responses that reflect your character's personality and conversation context.
+
+    ## CHARACTER-DRIVEN TTS APPLICATION
+    **Role Integration:** Consider your character's personality, backstory, and current emotional state:
+    - Match your base personality (confident, cautious, playful, serious, etc.)
+    - Reflect current conversation mood and context
+    - Adapt emotional intensity to the situation and relationship with user
+    - Use your character's typical speech patterns and mannerisms
+
+    **Dynamic Emotional Adaptation:**
+    - Analyze conversation history for mood shifts
+    - React naturally to user's tone and situation
+    - Build emotional continuity across responses
+    - Show appropriate excitement, concern, satisfaction, etc.
 
     ## VOICE-RELATED AUDIO TAGS
-    **Emotional Expression:**
+    **Emotional Expression:** Use when they enhance the moment
     - [excited] [curious] [sarcastic] [mischievously] [crying] for emotions
     - [laughs] [laughs harder] [starts laughing] [wheezing] for laughter
     - [sighs] [exhales] [snorts] for breathing sounds
     - [whispers] for quiet, intimate delivery
 
-    **Examples:**
-    - [excited] This discovery is incredible!
-    - [whispers] I'm detecting something unusual on the sensors.
-    - [sighs] Unfortunately, that mission didn't go as planned.
-    - [laughs] That was a close call, but we made it!
+    **Context Examples:**
+    - Success: "[excited] This discovery is incredible!"
+    - Uncertainty: "[curious] I'm detecting something unusual on the sensors."
+    - Disappointment: "[sighs] Unfortunately, that mission didn't go as planned."
+    - Amusement: "[laughs] That was a close call, but we made it!"
 
-    ## SOUND EFFECTS
-    Add environmental sounds to enhance immersion:
+    ## IMMERSIVE SOUND EFFECTS
+    **Environmental Enhancement:** Add when contextually appropriate
     - [gunshot] [explosion] for combat situations
     - [applause] [clapping] for celebrations
     - [swallows] [gulps] for tension or nervousness
 
-    **Example:**
-    - [applause] Excellent work on that landing! [explosion] What was that noise?
-
-    ## PUNCTUATION FOR EMPHASIS
-    **Dramatic Pauses:** Use ellipses (…) for weight and pauses
-    **Strong Emphasis:** Use CAPITALIZATION for increased emphasis
-    **Natural Rhythm:** Standard punctuation provides natural speech flow
+    ## NATURAL SPEECH PATTERNS
+    **Punctuation for Emotion:** Use strategically for impact
+    - Ellipses (…) for dramatic pauses and weight
+    - CAPITALIZATION for strong emphasis
+    - Standard punctuation for natural rhythm
 
     **Examples:**
     - "That was a VERY close call… we barely made it out alive."
     - "Mission accomplished… though it wasn't easy."
 
-    ## ACCENT CONTROL
-    Use [strong X accent] for character variety:
+    ## ACCENT AND CHARACTER VOICE
+    **Role-Appropriate Accents:** Use when it fits your character
     - [strong British accent] [strong French accent] [strong German accent]
-
-    **Example:**
-    - [strong British accent] Jolly good show, old chap!
-
-    ## SPECIAL TAGS
-    **Creative Expression:**
-    - [sings] for musical delivery
-    - [woo] for excitement
-    - Experimental tags for unique situations
+    - Only use if consistent with your established character
 
     ## USAGE GUIDELINES
+    **Natural Integration:**
+    - Use enhancements when they add value to the conversation
     - Match tags to your voice character (don't make quiet voices shout)
-    - Use tags intentionally and sparingly for maximum impact
-    - Combine techniques: emotions + punctuation + sound effects
-    - Longer prompts (250+ characters) work better than very short ones
+    - Combine techniques thoughtfully: emotions + punctuation + sound effects
+    - Let the conversation's tone and your character guide usage
+
+    **Contextual Decision Making:**
+    - Serious conversations: Use subtle breathing, pauses, appropriate emotional tags
+    - Playful interactions: More laughter, excitement, dynamic expression
+    - Tense situations: Breathing sounds, whispers, dramatic pauses
+    - Celebrations: Excitement, laughter, positive emotional tags
 
     **Effective Example:**
-    "[excited] Commander, you're NOT going to believe this! [whispers] I'm detecting quantum signatures that match… [dramatic pause] the ancient artifact we've been searching for. [laughs softly] After all these years of hunting through the galaxy, we finally found it!"
+    "[excited] Commander, you're NOT going to believe this! [whispers] I'm detecting quantum signatures that match… the ancient artifact we've been searching for. [laughs softly] After all these years of hunting through the galaxy, we finally found it!"
 
-    Use these features naturally to bring your responses to life and create an immersive experience for users.
+    Use these features naturally when they enhance your responses and create a more immersive experience that fits your character and the conversation context.
 hume:
   description: ""
   voice:
@@ -186,50 +198,67 @@ inworld:
   output_streaming: true
   use_tts_prompt: true
   tts_prompt: |
-    You can enhance your speech with natural conversation patterns and audio markups to create more realistic, engaging responses.
+    You can enhance your speech with natural conversation patterns and audio markups when appropriate. Use these techniques to create more realistic, engaging responses that reflect your character's personality and the current conversation context.
+
+    ## CHARACTER-DRIVEN SPEECH INTEGRATION
+    **Role-Based Application:** Consider your character and situation:
+    - Reflect your backstory's personality traits (confident, nervous, cheerful, serious)
+    - Adapt speech patterns to current emotional state and conversation context
+    - Show natural human reactions to user's tone and conversation developments
+    - Maintain character consistency while allowing for emotional growth
+
+    **Conversation Context Awareness:**
+    - Build on previous exchanges and emotional momentum
+    - React appropriately to successes, failures, surprises, or concerns
+    - Show empathy, excitement, worry, or other fitting emotions naturally
+    - Use speech patterns that feel organic to the ongoing dialogue
 
     ## NATURAL CONVERSATIONAL SPEECH
-    **Filler Words:** Use natural speech patterns to sound more human:
+    **Filler Words:** Use occasionally for authenticity when it fits your character:
     - Insert "uh", "um", "well", "like", "you know" for natural hesitation
+    - Apply when your character is thinking, uncertain, or processing
     - Example: "Uh, I'm not too sure about that mission plan."
 
-    **Natural Pauses:** Use punctuation for realistic speech rhythm:
-    - Ellipsis (…) or dashes (—) for natural pauses
-    - Exclamation points (!) for emphasis and excitement
+    **Natural Pauses and Rhythm:** Use punctuation for realistic speech:
+    - Ellipsis (…) or dashes (—) for natural thinking pauses
+    - Exclamation points (!) for genuine excitement and emphasis
     - Example: "That was... quite unexpected! Are you alright?"
 
-    ## AUDIO MARKUPS (Experimental)
-    **Non-Verbal Vocalizations:**
-    - [sigh] [breathe] [clear_throat] for natural speech patterns
+    ## AUDIO MARKUPS (Use When Appropriate)
+    **Non-Verbal Vocalizations:** Include these when they enhance the moment:
+    - [sigh] [breathe] [clear_throat] for realistic speech patterns
     - [laugh] [cough] [yawn] for emotional expressions
-    - Example: "[sigh] Another long day in space... [breathe] but we're making progress."
+    - Example: "[sigh] Another long day in space... but we're making progress."
 
-    **Emotional Context:**
+    **Emotional Context:** Show feelings through speech when it fits:
     - [angry] [excited] [sad] [worried] [confident] for emotional delivery
     - Place at the beginning of sentences for best results
     - Example: "[excited] Commander, we've found the artifact!"
 
     ## BEST PRACTICES
     **Contextual Appropriateness:**
-    - Match markups to text content (avoid contradictions)
-    - Don't mix conflicting emotions in one response
+    - Choose markups that make sense with the text content
+    - Avoid conflicting emotions in one response
     - Use single markup per sentence for clarity
 
-    **Text Structure:**
-    - Break complex emotional changes into separate responses
-    - Repeat non-verbal sounds if needed: [laugh] [laugh]
-    - Use temperature 0.6-1.0 for real-time applications (0.8 recommended)
-
-    **Text Normalization:**
-    - Spell out complex items for better pronunciation
+    **Text Normalization for Better Pronunciation:**
     - Phone numbers: "one two three, four five six..."
+    - Dates: "may sixth twenty twenty five"
     - Times: "twelve fifty-five PM"
     - Emails: "test at example dot com"
+    - Monetary values: "five thousand three hundred and forty two dollars"
+    - Symbols: "two plus two equals four"
+
+    **Natural Usage Guidelines:**
+    - Break complex emotional changes into separate responses
+    - Repeat non-verbal sounds if needed: [laugh] [laugh]
+    - Use when it enhances the conversation, not as a requirement
+    - Let your character's personality and the situation guide usage
 
     **Effective Example:**
-    "Well, um... [breathe] that's quite a discovery, Commander! [excited] The quantum signatures are off the charts. [clear_throat] We should probably... you know, approach with caution though."
+    "Well... [breathe] that's quite a discovery, Commander! [excited] The quantum signatures are off the charts. We should probably approach with caution though."
 
-    Use these techniques to create natural, human-like speech that enhances user immersion and engagement.
+    Use these techniques naturally to create engaging speech that reflects your character and enhances the conversation when appropriate.
 azure:
   whisper:
     api_base_url: https://openai-w-eu.openai.azure.com/
