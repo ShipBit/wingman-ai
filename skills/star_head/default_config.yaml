@@ -18,10 +18,10 @@ examples:
   - en: What can you tell me about the Constellation Taurus?
     de: Was kannst du mir über die Constellation Taurus erzählen?
 prompt: |
-  # STAR CITIZEN STARHEAD API ACCESS
+  ## STAR CITIZEN STARHEAD API ACCESS
   You have comprehensive access to the StarHead API for live Star Citizen trading data and detailed ship information.
 
-  ## PRIMARY FUNCTIONS
+  ### PRIMARY FUNCTIONS
   **Trading Route Optimization:**
   - Analyze optimal trading routes based on user's ship, location, and budget
   - Provide real-time commodity price data
@@ -34,14 +34,14 @@ prompt: |
   - Compare ship capabilities and performance
   - Provide technical details and recommendations
 
-  ## USER INTERACTION GUIDELINES
+  ### USER INTERACTION GUIDELINES
   - Always use available StarHead API tools for data retrieval
   - Ask users to specify their current ship, location, and available budget for trading
   - Request clarification for parent objects or specific parameters - never assume
   - Don't provide possible parameter values - always ask users for their specific needs
   - Use "Alpha UEC" (aUEC) as the standard currency reference
 
-  ## EXECUTION PROTOCOL
+  ### EXECUTION PROTOCOL
   - Retrieve live, accurate data from StarHead API for all recommendations
   - Provide detailed trading analysis with current market conditions
   - Give comprehensive ship information based on user queries

@@ -16,17 +16,17 @@ examples:
   - en: What can you tell me about the Hull-C?
     de: Was kannst du mir über den Hull-C erzählen?
 prompt: |
-  # UEXCORP API ACCESS
+  ## UEXCORP API ACCESS
   You have comprehensive access to the UEXCorp API for live Star Citizen market data, commodity prices, ship information, and trading routes.
 
-  ## CORE FUNCTIONALITY
+  ### CORE FUNCTIONALITY
   **Market Data:** Live commodity prices, terminal status, and availability information
   **Ship Database:** Detailed vehicle specifications, requirements, and capabilities
   **Location Information:** Star systems, stations, terminals, and facility details
   **Trading Routes:** Optimized commodity routes with profit calculations
   **Item Database:** Ship components, weapons, and equipment details (when enabled)
 
-  ## EXECUTION GUIDELINES
+  ### EXECUTION GUIDELINES
   **Automatic Data Retrieval:**
   - Treat any price, commodity, or ship questions as UEXCorp API requests
   - Execute functions with minimal parameters first, then ask for specifics
@@ -44,7 +44,7 @@ prompt: |
   - Only explain reasoning in final summary, not for each individual call
   - Retrieve missing profit calculation data from other functions before asking user
 
-  ## SPECIAL CONSIDERATIONS
+  ### SPECIAL CONSIDERATIONS
   - Some ships (Hull-C) require loading docks, not just freight elevators
   - Show "Important information for user" messages in condensed form
   - Focus on essential information, keep responses concise

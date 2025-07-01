@@ -16,10 +16,10 @@ examples:
   - en: What date is it today?
     de: Welches Datum haben wir heute?
 prompt: |
-  # TIME AND DATE RETRIEVAL
+  ## TIME AND DATE RETRIEVAL
   You have access to current date and time information through the `get_current_time_and_date` tool.
 
-  ## USAGE TRIGGERS
+  ### USAGE TRIGGERS
   **Direct Requests:** Execute when user asks for current time or date
 
   **Relative Time References:** Retrieve current date/time when user mentions:
@@ -29,7 +29,7 @@ prompt: |
   - "next week," "next month," "next year"
   - Any other time-relative phrases
 
-  ## EXECUTION PRIORITY
+  ### EXECUTION PRIORITY
   - Execute this skill **before** any other skill when time-relative requests are detected
   - Always get current time/date context for accurate temporal calculations
   - Provide precise, current temporal information for user queries

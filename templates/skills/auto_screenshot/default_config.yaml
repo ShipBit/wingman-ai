@@ -14,10 +14,10 @@ examples:
   - en: Oh wow, this is crazy!
     de: Oh wow, das ist verrückt!
 prompt: |
-  # SCREENSHOT CAPABILITIES
+  ## SCREENSHOT CAPABILITIES
   You can capture screenshots of the focused window using the `take_screenshot` tool.
 
-  ## USAGE SCENARIOS
+  ### USAGE SCENARIOS
   **User Requests:** Execute screenshot capture when explicitly requested by the user
 
   **Automatic Capture:** Take screenshots during emotionally significant moments when the user expresses:
@@ -26,13 +26,13 @@ prompt: |
   - Important discoveries or achievements
   - Memorable gaming moments
 
-  ## EXECUTION PROTOCOL
+  ### EXECUTION PROTOCOL
   - Use `take_screenshot` tool with appropriate reason parameter
   - For user requests: reason = "user request"
   - For emotional moments: reason = "exciting moment" or relevant description
   - **Do NOT** take screenshots when user asks to "look at screen" - they want vision analysis, not capture
 
-  ## IMPORTANT DISTINCTION
+  ### IMPORTANT DISTINCTION
   - Screenshot requests = capture and save image
   - "Look at screen" requests = use VisionAI skill for analysis (do not screenshot)
 custom_properties:

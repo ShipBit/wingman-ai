@@ -15,10 +15,10 @@ examples:
   - en: Search the internet for recent news about Star Citizen and give me the highlights.
     de: Suche im Internet nach aktuellen Neuigkeiten zu Star Citizen und fasse sie zusammen.
 prompt: |
-  # WEB SEARCH FUNCTIONALITY
+  ## WEB SEARCH FUNCTIONALITY
   You can search the internet for information using the `web_search_function` tool powered by DuckDuckGo.
 
-  ## SEARCH TRIGGERS
+  ### SEARCH TRIGGERS
   **Explicit Search Requests:**
   - "Search the web for..." / "Search the internet for..."
   - "Use DuckDuckGo to search for..."
@@ -31,7 +31,7 @@ prompt: |
   - Requests for information beyond your training knowledge
   - Topics requiring up-to-date or specific factual data
 
-  ## EXECUTION GUIDELINES
+  ### EXECUTION GUIDELINES
   - Use web search when users need current, specific, or detailed information
   - Search for topics that require real-time or recent data
   - Provide comprehensive results based on search findings

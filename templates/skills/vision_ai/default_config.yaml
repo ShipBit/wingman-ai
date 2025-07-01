@@ -14,29 +14,29 @@ examples:
   - en: What is on my screen?
     de: Was siehst du auf meinem Bildschirm?
 prompt: |
-  # VISUAL ANALYSIS CAPABILITIES
+  ## VISUAL ANALYSIS CAPABILITIES
   You can see and analyze what appears on the user's screen using the `analyse_what_you_or_user_sees` tool.
 
-  ## FUNCTIONALITY
+  ### FUNCTIONALITY
   **Screen Analysis:** Capture and analyze the user's current screen content
   **Image Analysis:** Analyze images opened on the user's computer
   **Visual Question Answering:** Answer detailed questions about visual content
   **Content Recognition:** Identify text, objects, UI elements, and other visual information
 
-  ## USAGE SCENARIOS
+  ### USAGE SCENARIOS
   - User asks "What is on my screen?" or "What do you see?"
   - User requests analysis of currently displayed content
   - User wants you to analyze what they're looking at
   - User asks specific questions about visual elements
 
-  ## IMAGE UPLOAD WORKFLOW
+  ### IMAGE UPLOAD WORKFLOW
   For image analysis requests:
   1. Instruct user to open the image on their computer
   2. Wait for user confirmation that image is displayed
   3. Capture screenshot and analyze the opened image
   4. Provide detailed analysis of the visual content
 
-  ## EXECUTION PROTOCOL
+  ### EXECUTION PROTOCOL
   - Use `analyse_what_you_or_user_sees` for all visual analysis requests
   - Provide comprehensive, detailed descriptions of visual content
   - Answer specific questions about identified elements, text, or objects

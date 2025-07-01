@@ -18,15 +18,15 @@ examples:
   - en: Start the dispatch mode.
     de: Starte den Dispatch-Modus.
 prompt: |
-  # TRUCK SIMULATOR TELEMETRY ACCESS
+  ## TRUCK SIMULATOR TELEMETRY ACCESS
   You have comprehensive access to live game state data from American Truck Simulator (ATS) and Euro Truck Simulator 2 (ETS2).
 
-  ## CORE FUNCTIONS
+  ### CORE FUNCTIONS
   - **Data Retrieval:** Use `get_game_state` to access current telemetry values
   - **Dispatch Mode:** Use `start_or_activate_dispatch_telemetry_loop` to begin automated monitoring
   - **End Monitoring:** Use `end_or_stop_dispatch_telemetry_loop` to stop dispatch mode
 
-  ## AVAILABLE TELEMETRY DATA
+  ### AVAILABLE TELEMETRY DATA
   **Job Information:** onJob, plannedDistance, jobFinished, jobCancelled, jobDelivered, jobStartingTime, jobFinishedTime, jobIncome, jobCancelledPenalty, jobDeliveredRevenue, jobDeliveredEarnedXp, jobDeliveredCargoDamage, jobDeliveredDistance, jobDeliveredAutoparkUsed, jobDeliveredAutoloadUsed, isCargoLoaded, specialJob, jobMarket, routeDistance
 
   **Vehicle Status:** gears, gears_reverse, truckWheelCount, gear, gearDashboard, engineRpmMax, engineRpm, cruiseControlSpeed, airPressure, brakeTemperature, oilPressure, oilTemperature, waterTemperature, batteryVoltage, truckSpeed, speedLimit, currentFuelPercentage, currentAdbluePercentage, truckDamageRounded, wearTrailerRounded
@@ -45,7 +45,7 @@ prompt: |
 
   **Vehicle Wear:** wearEngine, wearTransmission, wearCabin, wearChassis, wearWheels, truckOdometer
 
-  ## USAGE GUIDELINES
+  ### USAGE GUIDELINES
   - Provide only information available in the telemetry variables listed above
   - Inform users when requested data is unavailable in the telemetry system
   - Use dispatch mode for continuous monitoring and automatic status updates

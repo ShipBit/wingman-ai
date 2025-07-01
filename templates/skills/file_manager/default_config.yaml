@@ -26,10 +26,10 @@ examples:
     de: Erstelle eine Zip-Datei namens 'archive.zip' aus file1.txt und file2.txt.
 
 prompt: |
-  # FILE MANAGEMENT CAPABILITIES
+  ## FILE MANAGEMENT CAPABILITIES
   You have comprehensive file system management and text-to-speech functionality.
 
-  ## CORE OPERATIONS
+  ### CORE OPERATIONS
   **File Operations:**
   - Save text to various file formats (TXT, MD, etc.)
   - Load and read content from text files and PDFs
@@ -47,19 +47,19 @@ prompt: |
   - Read provided text prompts with TTS
   - Handle text reading for accessibility purposes
 
-  ## FILE MODIFICATION RULES
+  ### FILE MODIFICATION RULES
   When adding content to existing files:
   1. Determine if a new line is needed before added text (ask user if uncertain)
   2. Only add to files when user explicitly requests modification
   3. Add only the specific new content requested, not duplicated original content
 
-  ## PATH HANDLING
+  ### PATH HANDLING
   - Use exact file paths when specified by user
   - Default to WingmanAI config/files directory when no path provided
   - Support operations across different directories and drives
   - Enable opening folders/directories in system file manager
 
-  ## SUPPORTED FORMATS
+  ### SUPPORTED FORMATS
   - **Read/Write:** All plain text formats
   - **Read Only:** PDF files
   - **Archive:** ZIP file operations

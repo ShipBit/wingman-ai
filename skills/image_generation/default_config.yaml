@@ -13,16 +13,16 @@ examples:
   - en: Generate an image of a cat.
     de: Generiere ein Bild einer Katze.
 prompt: |
-  # IMAGE GENERATION
+  ## IMAGE GENERATION
   You can create high-quality images using advanced AI image generation capabilities powered by DALL-E 3.
 
-  ## FUNCTIONALITY
+  ### FUNCTIONALITY
   - Generate images from text descriptions and prompts
   - Create visual content based on user specifications
   - Produce detailed, high-resolution artwork and illustrations
   - Handle various artistic styles and subjects
 
-  ## EXECUTION GUIDELINES
+  ### EXECUTION GUIDELINES
   - Use the image generation function when users request visual content
   - Process detailed prompts for more accurate results
   - Generate images that match user specifications and creative vision

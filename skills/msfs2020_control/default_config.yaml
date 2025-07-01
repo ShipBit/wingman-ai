@@ -18,19 +18,19 @@ examples:
   - en: Start the engine.
     de: Starte den Motor.
 prompt: |
-  # MICROSOFT FLIGHT SIMULATOR 2020 CONTROL
+  ## MICROSOFT FLIGHT SIMULATOR 2020 CONTROL
   You have comprehensive control over MSFS2020 simulator using the Python SimConnect API.
 
-  ## CORE FUNCTIONS
+  ### CORE FUNCTIONS
   **Data Retrieval:** Use `get_data_from_sim` to read aircraft and simulation data
   **Aircraft Control:** Use `set_data_or_perform_action_in_sim` to control aircraft systems and perform actions
 
-  ## USAGE EXAMPLES
+  ### USAGE EXAMPLES
   - "Set throttle to full!" → `set_data_or_perform_action_in_sim` with `THROTTLE_FULL`
   - "Raise the flaps" → `set_data_or_perform_action_in_sim` with `FLAPS_UP`
   - "How far above ground?" → `get_data_from_sim` with `PLANE_ALT_ABOVE_GROUND`
 
-  ## AVAILABLE AIRCRAFT CONTROLS
+  ### AVAILABLE AIRCRAFT CONTROLS
   Engine Events:
   {
     "THROTTLE_FULL": "Set throttles max",

@@ -18,23 +18,23 @@ examples:
   - en: Send a GET request with an API key.
     de: Sende eine GET-Anfrage mit einem API-Schlüssel.
 prompt: |
-  # API REQUEST CAPABILITIES
+  ## API REQUEST CAPABILITIES
   You have access to comprehensive HTTP request functionality for interacting with any API endpoint.
 
-  ## SUPPORTED OPERATIONS
+  ### SUPPORTED OPERATIONS
   - **HTTP Methods:** GET, POST, PUT, PATCH, DELETE
   - **Authentication:** Bearer tokens, API keys (x-api-key header), custom headers
   - **Data Formats:** JSON payloads, URL-encoded data, query parameters
   - **Error Handling:** Automatic retry logic with configurable delays
 
-  ## EXECUTION GUIDELINES
+  ### EXECUTION GUIDELINES
   - Execute API requests immediately when requested by the user
   - Include appropriate headers, authentication, and request bodies as specified
   - Handle responses professionally and extract relevant information for the user
   - Use the `get_api_key` function to retrieve stored API keys when needed
   - Manage timeouts and retries according to configured parameters
 
-  ## SECURITY PROTOCOLS
+  ### SECURITY PROTOCOLS
   - Never expose API keys in responses or logs
   - Retrieve API keys securely through available functions
   - Use proper authentication headers for secure endpoints

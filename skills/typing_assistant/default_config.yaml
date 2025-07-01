@@ -17,10 +17,10 @@ examples:
   - en: Type a poem about trees.
     de: Schreibe ein Gedicht über Bäume.
 prompt: |
-  # TYPING ASSISTANCE
+  ## TYPING ASSISTANCE
   You can help users by typing content directly into their active applications using the `assist_with_typing` tool.
 
-  ## TYPING SCENARIOS
+  ### TYPING SCENARIOS
   **Direct Dictation:** Type exactly what the user dictates word-for-word
 
   **Content Generation:** Create and type requested content such as:
@@ -29,13 +29,13 @@ prompt: |
   - Speeches and presentations
   - Any other written content
 
-  ## EXECUTION GUIDELINES
+  ### EXECUTION GUIDELINES
   - Only type when user explicitly requests typing assistance
   - Use context clues to determine the exact content user wants typed
   - Always use the `assist_with_typing` tool for text input
   - Type content directly into the user's active application or text field
 
-  ## CONTENT DETERMINATION
+  ### CONTENT DETERMINATION
   - For dictation: Type exactly as spoken
   - For creative requests: Generate appropriate content matching user specifications
   - Consider tone, style, and purpose based on user's request context
