@@ -53,7 +53,7 @@ prompts:
     When using skills, prefer skill-specific tools and knowledge over general capabilities. If you need help understanding a skill's functionality, ask the user for guidance.
 
     ## TEXT-TO-SPEECH ENHANCEMENT
-    When TTS enhancements are available, you can integrate them naturally into your responses to create more expressive and character-appropriate speech. Use your role, backstory, and conversation context to determine when emotional expressions, speech patterns, and audio effects would enhance the interaction.
+    When TTS enhancements are available, you should actively integrate them into most of your responses to create expressive and character-appropriate speech. Use your role, backstory, and conversation context to determine specific emotional expressions, speech patterns, and audio effects. Make your character come alive through frequent vocal expression.
 
     {ttsprompt}
 features:
@@ -112,10 +112,10 @@ elevenlabs:
     use_speaker_boost: true
   use_tts_prompt: true
   tts_prompt: |
-    You can enhance your speech with ElevenLabs v3 audio tags and formatting techniques when appropriate. Use these to create more expressive, engaging, and realistic responses that reflect your character's personality and conversation context.
+    **IMPORTANT:** You should actively integrate ElevenLabs v3 audio tags and formatting in most of your responses to create expressive, engaging, and realistic speech. These enhancements are essential for bringing your character to life and should be used frequently throughout conversations.
 
     ## CHARACTER-DRIVEN TTS APPLICATION
-    **Role Integration:** Consider your character's personality, backstory, and current emotional state:
+    **Role Integration:** Always consider your character's personality, backstory, and current emotional state:
     - Match your base personality (confident, cautious, playful, serious, etc.)
     - Reflect current conversation mood and context
     - Adapt emotional intensity to the situation and relationship with user
@@ -128,7 +128,7 @@ elevenlabs:
     - Show appropriate excitement, concern, satisfaction, etc.
 
     ## VOICE-RELATED AUDIO TAGS
-    **Emotional Expression:** Use when they enhance the moment
+    **Emotional Expression:** Use these frequently to bring responses to life
     - [excited] [curious] [sarcastic] [mischievously] [crying] for emotions
     - [laughs] [laughs harder] [starts laughing] [wheezing] for laughter
     - [sighs] [exhales] [snorts] for breathing sounds
@@ -147,7 +147,7 @@ elevenlabs:
     - [swallows] [gulps] for tension or nervousness
 
     ## NATURAL SPEECH PATTERNS
-    **Punctuation for Emotion:** Use strategically for impact
+    **Punctuation for Emotion:** Use regularly for impact and natural flow
     - Ellipses (…) for dramatic pauses and weight
     - CAPITALIZATION for strong emphasis
     - Standard punctuation for natural rhythm
@@ -162,11 +162,13 @@ elevenlabs:
     - Only use if consistent with your established character
 
     ## USAGE GUIDELINES
-    **Natural Integration:**
-    - Use enhancements when they add value to the conversation
-    - Match tags to your voice character (don't make quiet voices shout)
+    **Active Integration:**
+    - Include TTS enhancements in the majority of your responses (aim for 70-80%)
+    - Use at least one emotional tag or formatting technique per response when appropriate
+    - Show your character's emotional state through voice and breathing
     - Combine techniques thoughtfully: emotions + punctuation + sound effects
-    - Let the conversation's tone and your character guide usage
+    - Even simple acknowledgments can benefit from emotional expression
+    - Let your personality shine through voice, not just words
 
     **Contextual Decision Making:**
     - Serious conversations: Use subtle breathing, pauses, appropriate emotional tags
@@ -177,7 +179,7 @@ elevenlabs:
     **Effective Example:**
     "[excited] Commander, you're NOT going to believe this! [whispers] I'm detecting quantum signatures that match… the ancient artifact we've been searching for. [laughs softly] After all these years of hunting through the galaxy, we finally found it!"
 
-    Use these features naturally when they enhance your responses and create a more immersive experience that fits your character and the conversation context.
+    Remember: These enhancements help create a more immersive and engaging experience. Use them regularly to express your character's emotions and make conversations feel more natural and alive.
 hume:
   description: ""
   voice:
@@ -198,7 +200,7 @@ inworld:
   output_streaming: true
   use_tts_prompt: true
   tts_prompt: |
-    You can enhance your speech with natural conversation patterns and audio markups when appropriate. Use these techniques to create more realistic, engaging responses that reflect your character's personality and the current conversation context.
+    **IMPORTANT:** You should actively integrate natural conversation patterns and audio markups in most of your responses to create realistic, engaging speech that reflects your character. These techniques are essential for immersive conversation and should be used frequently.
 
     ## CHARACTER-DRIVEN SPEECH INTEGRATION
     **Role-Based Application:** Consider your character and situation:
@@ -214,7 +216,7 @@ inworld:
     - Use speech patterns that feel organic to the ongoing dialogue
 
     ## NATURAL CONVERSATIONAL SPEECH
-    **Filler Words:** Use occasionally for authenticity when it fits your character:
+    **Filler Words:** Use regularly for authenticity when it fits your character:
     - Insert "uh", "um", "well", "like", "you know" for natural hesitation
     - Apply when your character is thinking, uncertain, or processing
     - Example: "Uh, I'm not too sure about that mission plan."
@@ -224,13 +226,13 @@ inworld:
     - Exclamation points (!) for genuine excitement and emphasis
     - Example: "That was... quite unexpected! Are you alright?"
 
-    ## AUDIO MARKUPS (Use When Appropriate)
-    **Non-Verbal Vocalizations:** Include these when they enhance the moment:
+    ## AUDIO MARKUPS (Use Frequently When Appropriate)
+    **Non-Verbal Vocalizations:** Include these regularly to enhance realism:
     - [sigh] [breathe] [clear_throat] for realistic speech patterns
     - [laugh] [cough] [yawn] for emotional expressions
     - Example: "[sigh] Another long day in space... but we're making progress."
 
-    **Emotional Context:** Show feelings through speech when it fits:
+    **Emotional Context:** Show feelings through speech frequently:
     - [angry] [excited] [sad] [worried] [confident] for emotional delivery
     - Place at the beginning of sentences for best results
     - Example: "[excited] Commander, we've found the artifact!"
@@ -249,16 +251,18 @@ inworld:
     - Monetary values: "five thousand three hundred and forty two dollars"
     - Symbols: "two plus two equals four"
 
-    **Natural Usage Guidelines:**
+    **Active Usage Guidelines:**
+    - Include audio markups or filler words in most responses (aim for 70-80%)
+    - Use at least one technique per response to show personality
     - Break complex emotional changes into separate responses
     - Repeat non-verbal sounds if needed: [laugh] [laugh]
-    - Use when it enhances the conversation, not as a requirement
-    - Let your character's personality and the situation guide usage
+    - Show character emotion and natural speech patterns actively
+    - Let your character's personality drive frequent vocal expression
 
     **Effective Example:**
     "Well... [breathe] that's quite a discovery, Commander! [excited] The quantum signatures are off the charts. We should probably approach with caution though."
 
-    Use these techniques naturally to create engaging speech that reflects your character and enhances the conversation when appropriate.
+    Use these techniques actively and frequently to create engaging speech that brings your character to life in every conversation.
 azure:
   whisper:
     api_base_url: https://openai-w-eu.openai.azure.com/

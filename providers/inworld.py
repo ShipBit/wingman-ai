@@ -120,11 +120,8 @@ class Inworld:
             thread.start()
 
             # Wait for first chunk to arrive before starting playback
-            print("Inworld: Waiting for first chunk...")
             while audio_queue.empty() and not stream_finished:
                 time.sleep(0.001)  # 1ms sleep
-
-            print("Inworld: Starting streaming playback")
 
             # Streaming buffer management
             audio_buffer_data = b""
@@ -165,17 +162,12 @@ class Inworld:
 
                     # No data available right now - check if stream is finished
                     if stream_finished:
-                        print(
-                            "Inworld: Stream complete and buffer empty, ending playback"
-                        )
                         return 0  # Only return 0 when truly finished
 
                     # Stream not finished but no data available - wait for more data
                     try:
-                        print("Inworld: Waiting for more chunks...")
                         chunk = audio_queue.get(timeout=1.0)  # Wait up to 1 second
                         if chunk is None:  # End of stream signal
-                            print("Inworld: Stream end signal received while waiting")
                             # Set stream_finished and handle any remaining buffered data
                             stream_finished = True
                             if len(audio_buffer_data) > 0:
