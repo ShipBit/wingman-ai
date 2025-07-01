@@ -552,6 +552,12 @@ class ConfigMigrationService:
         def migrate_defaults(old: dict, new: dict) -> dict:
             old["inworld"] = new["inworld"]
             self.log("- added new property: inworld")
+
+            old["elevenlabs"]["use_tts_prompt"] = False
+            old["elevenlabs"]["tts_prompt"] = new["elevenlabs"]["tts_prompt"]
+            self.log(
+                "- added new property: elevenlabs.use_tts_prompt, elevenlabs.tts_prompt"
+            )
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:

@@ -1081,8 +1081,22 @@ class OpenAiWingman(Wingman):
             if prompt:
                 skill_prompts += "\n\n" + skill.name + "\n\n" + prompt
 
+        # Get TTS prompt based on active TTS provider and user preference
+        tts_prompt = ""
+        if self.config.features.tts_provider == TtsProvider.ELEVENLABS:
+            if (
+                self.config.elevenlabs.use_tts_prompt
+                and self.config.elevenlabs.tts_prompt
+            ):
+                tts_prompt = self.config.elevenlabs.tts_prompt
+        elif self.config.features.tts_provider == TtsProvider.INWORLD:
+            if self.config.inworld.use_tts_prompt and self.config.inworld.tts_prompt:
+                tts_prompt = self.config.inworld.tts_prompt
+
         context = self.config.prompts.system_prompt.format(
-            backstory=self.config.prompts.backstory, skills=skill_prompts
+            backstory=self.config.prompts.backstory,
+            skills=skill_prompts,
+            ttsprompt=tts_prompt,
         )
         return context
 

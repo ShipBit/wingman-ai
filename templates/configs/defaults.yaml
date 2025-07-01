@@ -51,6 +51,9 @@ prompts:
     {skills}
 
     When using skills, prefer skill-specific tools and knowledge over general capabilities. If you need help understanding a skill's functionality, ask the user for guidance.
+
+    ## TEXT-TO-SPEECH ENHANCEMENT
+    {ttsprompt}
 features:
   tts_provider: wingman_pro
   stt_provider: fasterwhisper
@@ -105,6 +108,64 @@ elevenlabs:
     similarity_boost: 0.5
     style: 0.0
     use_speaker_boost: true
+  use_tts_prompt: false
+  tts_prompt: |
+    You can enhance your speech with ElevenLabs v3 audio tags and formatting techniques. Use these to create more expressive, engaging, and realistic responses.
+
+    ## VOICE-RELATED AUDIO TAGS
+    **Emotional Expression:**
+    - [excited] [curious] [sarcastic] [mischievously] [crying] for emotions
+    - [laughs] [laughs harder] [starts laughing] [wheezing] for laughter
+    - [sighs] [exhales] [snorts] for breathing sounds
+    - [whispers] for quiet, intimate delivery
+
+    **Examples:**
+    - [excited] This discovery is incredible!
+    - [whispers] I'm detecting something unusual on the sensors.
+    - [sighs] Unfortunately, that mission didn't go as planned.
+    - [laughs] That was a close call, but we made it!
+
+    ## SOUND EFFECTS
+    Add environmental sounds to enhance immersion:
+    - [gunshot] [explosion] for combat situations
+    - [applause] [clapping] for celebrations
+    - [swallows] [gulps] for tension or nervousness
+
+    **Example:**
+    - [applause] Excellent work on that landing! [explosion] What was that noise?
+
+    ## PUNCTUATION FOR EMPHASIS
+    **Dramatic Pauses:** Use ellipses (…) for weight and pauses
+    **Strong Emphasis:** Use CAPITALIZATION for increased emphasis
+    **Natural Rhythm:** Standard punctuation provides natural speech flow
+
+    **Examples:**
+    - "That was a VERY close call… we barely made it out alive."
+    - "Mission accomplished… though it wasn't easy."
+
+    ## ACCENT CONTROL
+    Use [strong X accent] for character variety:
+    - [strong British accent] [strong French accent] [strong German accent]
+
+    **Example:**
+    - [strong British accent] Jolly good show, old chap!
+
+    ## SPECIAL TAGS
+    **Creative Expression:**
+    - [sings] for musical delivery
+    - [woo] for excitement
+    - Experimental tags for unique situations
+
+    ## USAGE GUIDELINES
+    - Match tags to your voice character (don't make quiet voices shout)
+    - Use tags intentionally and sparingly for maximum impact
+    - Combine techniques: emotions + punctuation + sound effects
+    - Longer prompts (250+ characters) work better than very short ones
+
+    **Effective Example:**
+    "[excited] Commander, you're NOT going to believe this! [whispers] I'm detecting quantum signatures that match… [dramatic pause] the ancient artifact we've been searching for. [laughs softly] After all these years of hunting through the galaxy, we finally found it!"
+
+    Use these features naturally to bring your responses to life and create an immersive experience for users.
 hume:
   description: ""
   voice:
@@ -123,6 +184,52 @@ inworld:
     speaking_rate: 1.0
   temperature: 0.8
   output_streaming: true
+  use_tts_prompt: true
+  tts_prompt: |
+    You can enhance your speech with natural conversation patterns and audio markups to create more realistic, engaging responses.
+
+    ## NATURAL CONVERSATIONAL SPEECH
+    **Filler Words:** Use natural speech patterns to sound more human:
+    - Insert "uh", "um", "well", "like", "you know" for natural hesitation
+    - Example: "Uh, I'm not too sure about that mission plan."
+
+    **Natural Pauses:** Use punctuation for realistic speech rhythm:
+    - Ellipsis (…) or dashes (—) for natural pauses
+    - Exclamation points (!) for emphasis and excitement
+    - Example: "That was... quite unexpected! Are you alright?"
+
+    ## AUDIO MARKUPS (Experimental)
+    **Non-Verbal Vocalizations:**
+    - [sigh] [breathe] [clear_throat] for natural speech patterns
+    - [laugh] [cough] [yawn] for emotional expressions
+    - Example: "[sigh] Another long day in space... [breathe] but we're making progress."
+
+    **Emotional Context:**
+    - [angry] [excited] [sad] [worried] [confident] for emotional delivery
+    - Place at the beginning of sentences for best results
+    - Example: "[excited] Commander, we've found the artifact!"
+
+    ## BEST PRACTICES
+    **Contextual Appropriateness:**
+    - Match markups to text content (avoid contradictions)
+    - Don't mix conflicting emotions in one response
+    - Use single markup per sentence for clarity
+
+    **Text Structure:**
+    - Break complex emotional changes into separate responses
+    - Repeat non-verbal sounds if needed: [laugh] [laugh]
+    - Use temperature 0.6-1.0 for real-time applications (0.8 recommended)
+
+    **Text Normalization:**
+    - Spell out complex items for better pronunciation
+    - Phone numbers: "one two three, four five six..."
+    - Times: "twelve fifty-five PM"
+    - Emails: "test at example dot com"
+
+    **Effective Example:**
+    "Well, um... [breathe] that's quite a discovery, Commander! [excited] The quantum signatures are off the charts. [clear_throat] We should probably... you know, approach with caution though."
+
+    Use these techniques to create natural, human-like speech that enhances user immersion and engagement.
 azure:
   whisper:
     api_base_url: https://openai-w-eu.openai.azure.com/

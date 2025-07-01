@@ -269,6 +269,8 @@ class ElevenlabsConfig(BaseModel):
     voice: ElevenlabsVoiceConfig
     voice_settings: ElevenlabsVoiceSettingsConfig
     output_streaming: bool
+    use_tts_prompt: bool
+    tts_prompt: str
 
 
 class HumeVoiceConfig(BaseModel):
@@ -305,6 +307,8 @@ class InworldConfig(BaseModel):
     temperature: float
     """Determines the degree of randomness when sampling audio tokens to generate the response. Accepts values between 0 and 2. Defaults to 0.8"""
     output_streaming: bool
+    use_tts_prompt: bool
+    tts_prompt: str
 
 
 class EdgeTtsConfig(BaseModel):
