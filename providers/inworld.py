@@ -1,11 +1,10 @@
 import base64
 import json
 from os import path
+from typing import Optional
 import threading
 import queue
 import time
-import numpy as np
-from typing import Optional
 import requests
 import aiofiles
 from api.interface import (
@@ -102,9 +101,6 @@ class Inworld:
 
                                 if len(audio_bytes) > 0:
                                     chunk_count += 1
-                                    print(
-                                        f"Inworld: Received chunk {chunk_count}, size: {len(audio_bytes)} bytes"
-                                    )
                                     audio_queue.put(audio_bytes)
                         except (json.JSONDecodeError, KeyError):
                             # Skip malformed chunks
@@ -112,7 +108,6 @@ class Inworld:
                 finally:
                     stream_finished = True
                     audio_queue.put(None)  # Signal end of stream
-                    print(f"Inworld: Stream finished, total chunks: {chunk_count}")
 
             # Start response processing in a background thread
             thread = threading.Thread(target=process_response_stream)
@@ -134,14 +129,10 @@ class Inworld:
                         try:
                             chunk = audio_queue.get_nowait()
                             if chunk is None:  # End of stream signal
-                                print("Inworld: Stream end signal received")
                                 stream_finished = True
                                 break
                             else:
                                 audio_buffer_data += chunk
-                                print(
-                                    f"Inworld: Added chunk to buffer, total: {len(audio_buffer_data)} bytes"
-                                )
                         except queue.Empty:
                             break
 
@@ -187,9 +178,6 @@ class Inworld:
                             return 0
                         else:
                             audio_buffer_data += chunk
-                            print(
-                                f"Inworld: Added waited chunk to buffer, total: {len(audio_buffer_data)} bytes"
-                            )
                             # Now try to return some data
                             bytes_to_copy = min(
                                 len(audio_buffer_data), len(audio_buffer)
@@ -262,10 +250,13 @@ class Inworld:
         )
         response_data = response.json()
         for voice in response_data.get("voices", []):
+            voice_name = voice.get("displayName", "")
             voice_id = voice.get("voiceId", "")
             voices.append(
                 VoiceInfo(
-                    id=voice_id, name=voice_id, languages=voice.get("languages", [])
+                    id=voice_id,
+                    name=voice_name or voice_id,
+                    languages=voice.get("languages", []),
                 )
             )
         return voices
