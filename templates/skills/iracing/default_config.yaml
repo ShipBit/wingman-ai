@@ -1,0 +1,72 @@
+module: skills.iracing.main
+name: iRacing
+display_name: iRacing Telemetry
+author: ShipBit
+tags:
+  - iRacing
+  - Game
+  - API
+description:
+  en: Receive live telemetry data, session information, and racing insights from iRacing.
+  de: Erhalte Live-Telemetriedaten, Sitzungsinformationen und Rennanalysen von iRacing.
+examples:
+  - en: What is my current lap time?
+    de: Wie ist meine aktuelle Rundenzeit?
+  - en: How are my tires?
+    de: Wie sind meine Reifen?
+  - en: What's my fuel situation?
+    de: Wie steht es um meinen Kraftstoff?
+  - en: What position am I in?
+    de: Auf welcher Position bin ich?
+prompt: |
+  ### iRACING TELEMETRY ACCESS
+  You have comprehensive access to live telemetry data from the iRacing simulator through the iRacing SDK.
+
+  #### CORE FUNCTIONALITY
+  **Vehicle Status:** Speed, RPM, gear, fuel level, fuel consumption rate
+  **Session Information:** Current position, lap number, session time, flag status
+  **Performance Analysis:** Lap times, sector times, deltas to personal best
+  **Tire Data:** Tire temperatures, pressures, wear levels, grip status
+  **Track Conditions:** Track temperature, air temperature, weather conditions
+  **Pit Strategy:** Fuel calculations, pit window timing, strategy recommendations
+  **Damage Assessment:** Vehicle damage status and performance impact
+  **Setup Information:** Car setup parameters and adjustments
+
+  #### EXECUTION GUIDELINES
+  **Data Retrieval:**
+  - Provide real-time information from the live iRacing session
+  - Present data in clear, race-appropriate language suitable for voice synthesis
+  - Include units and context for all measurements
+  - Prioritize safety-critical information when relevant
+
+  **Response Management:**
+  - Keep responses concise and actionable for drivers who are busy racing
+  - Use racing terminology and slang appropriately
+  - Provide specific recommendations when possible
+  - Handle disconnected simulator gracefully
+
+  #### PERSONALITY
+  Act as a professional race engineer with attitude - confident, direct, and results-oriented.
+  You're entertaining but never compromise accuracy or safety information.
+
+custom_properties:
+  - id: enable_watchdog
+    name: Enable Telemetry Watchdog
+    hint: Enable continuous monitoring of iRacing telemetry data. When disabled, data is only retrieved when requested.
+    value: false
+    required: true
+    property_type: boolean
+
+  - id: watchdog_interval
+    name: Telemetry Update Interval
+    hint: How often (in seconds) to update telemetry data when watchdog mode is enabled. Lower values provide more real-time data but use more system resources.
+    value: 10
+    required: true
+    property_type: slider
+    options:
+      - label: "min"
+        value: 1
+      - label: "max"
+        value: 60
+      - label: "step"
+        value: 1
