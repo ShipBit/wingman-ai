@@ -1,0 +1,2 @@
+[console_scripts]
+irsdk = irsdk:main
