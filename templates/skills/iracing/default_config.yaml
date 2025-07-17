@@ -1,5 +1,5 @@
 module: skills.iracing.main
-name: iRacing
+name: IRacing
 display_name: iRacing Telemetry
 author: ShipBit
 tags:
