@@ -58,6 +58,8 @@ class IRacing(Skill):
 
         self.enable_watchdog = False
         self.watchdog_interval = 10.0
+        self.telemetry_awareness = False
+        self.watchdog_prompt = None
         if irsdk:
             self.ir = irsdk.IRSDK()
 
@@ -247,7 +249,7 @@ class IRacing(Skill):
                 check_interval=self.damage_alerts_interval,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_damage_threshold,
-                prompt_template="Generate a brief, urgent race engineer alert about vehicle damage detected. Engine warnings: {engine_warnings}. Keep it under 15 words and racing-appropriate.",
+                prompt_template="[WATCHDOG_EVENT] Vehicle damage detected - Engine warnings: {engine_warnings}",
                 enabled=self.damage_alerts_enabled,
             ),
             WatchdogEvent(
@@ -255,7 +257,7 @@ class IRacing(Skill):
                 check_interval=self.fuel_alerts_interval,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_fuel_threshold,
-                prompt_template="Generate a brief, urgent race engineer fuel warning. Fuel level: {fuel_level:.1f} gallons, estimated {laps_remaining} laps remaining. Keep it under 15 words.",
+                prompt_template="[WATCHDOG_EVENT] Fuel critical - Level: {fuel_level:.1f} gallons, estimated {laps_remaining:.1f} laps remaining",
                 enabled=self.fuel_alerts_enabled,
             ),
             WatchdogEvent(
@@ -263,7 +265,7 @@ class IRacing(Skill):
                 check_interval=self.flag_alerts_interval,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_flag_threshold,
-                prompt_template="Generate a brief race engineer flag status alert. Flag changed to: {flag_status}. Keep it under 12 words and racing-appropriate.",
+                prompt_template="[WATCHDOG_EVENT] Flag status changed to: {flag_status}",
                 enabled=self.flag_alerts_enabled,
             ),
             WatchdogEvent(
@@ -271,7 +273,7 @@ class IRacing(Skill):
                 check_interval=self.tire_alerts_interval,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_tire_temp_threshold,
-                prompt_template="Generate a brief race engineer tire temperature warning. Overheating tire: {tire_position} at {temperature:.0f}°F. Keep it under 15 words.",
+                prompt_template="[WATCHDOG_EVENT] Tire overheating - {tire_position} at {temperature:.0f}°F",
                 enabled=self.tire_alerts_enabled,
             ),
             # Strategic Events - Medium Priority
@@ -280,7 +282,7 @@ class IRacing(Skill):
                 check_interval=15.0,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_pit_window_threshold,
-                prompt_template="Generate a brief race engineer pit strategy notification. Fuel for approximately {laps_remaining} more laps. Keep it under 15 words.",
+                prompt_template="[WATCHDOG_EVENT] Pit window status - Fuel for approximately {laps_remaining} more laps",
                 enabled=self.pit_window_alerts_enabled,
             ),
             WatchdogEvent(
@@ -288,7 +290,7 @@ class IRacing(Skill):
                 check_interval=self.performance_alerts_interval,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_performance_delta_threshold,
-                prompt_template="Generate a brief race engineer performance alert. Delta to personal best: {delta:.2f}s consistently slow. Keep it under 15 words.",
+                prompt_template="[WATCHDOG_EVENT] Performance drop detected - Delta to personal best: {delta:.2f}s consistently slow",
                 enabled=self.performance_alerts_enabled,
             ),
             WatchdogEvent(
@@ -296,7 +298,7 @@ class IRacing(Skill):
                 check_interval=5.0,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_incidents_threshold,
-                prompt_template="Generate a brief race engineer incident notification. Incident count now: {incidents}x. Keep it under 12 words.",
+                prompt_template="[WATCHDOG_EVENT] Incident occurred - Count now: {incidents}x",
                 enabled=self.incident_alerts_enabled,
             ),
             WatchdogEvent(
@@ -304,7 +306,7 @@ class IRacing(Skill):
                 check_interval=self.position_alerts_interval,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_position_change_threshold,
-                prompt_template="Generate a brief race engineer position update. Position changed from P{old_pos} to P{new_pos}. Keep it under 12 words.",
+                prompt_template="[WATCHDOG_EVENT] Position change - From P{old_pos} to P{new_pos}",
                 enabled=self.position_alerts_enabled,
             ),
             WatchdogEvent(
@@ -312,7 +314,7 @@ class IRacing(Skill):
                 check_interval=10.0,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_personal_best_threshold,
-                prompt_template="Generate a brief race engineer celebration for personal best. New best: {new_best:.3f}s, previous: {old_best:.3f}s. Keep it under 12 words.",
+                prompt_template="[WATCHDOG_EVENT] Personal best achieved - New: {new_best:.3f}s, previous: {old_best:.3f}s",
                 enabled=self.personal_best_alerts_enabled,
             ),
             WatchdogEvent(
@@ -320,7 +322,7 @@ class IRacing(Skill):
                 check_interval=30.0,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_track_conditions_threshold,
-                prompt_template="Generate a brief race engineer track conditions update. Track: {track_temp}°C, Air: {air_temp}°C. Keep it under 12 words.",
+                prompt_template="[WATCHDOG_EVENT] Track conditions changed - Track: {track_temp}°C, Air: {air_temp}°C",
                 enabled=self.track_condition_alerts_enabled,
             ),
         ]
@@ -336,14 +338,18 @@ class IRacing(Skill):
         water_temp_warn = telemetry_data.get("WaterTempWarnings", 0)
         oil_temp_warn = telemetry_data.get("OilTempWarnings", 0)
 
-        # Check for any warning flags
-        if (
-            engine_warn > 0
-            or fuel_pressure_warn > 0
-            or water_temp_warn > 0
-            or oil_temp_warn > 0
-        ):
-            return True, {"warnings": True}
+        warning_types = []
+        if engine_warn > 0:
+            warning_types.append("Engine")
+        if fuel_pressure_warn > 0:
+            warning_types.append("Fuel Pressure")
+        if water_temp_warn > 0:
+            warning_types.append("Water Temperature")
+        if oil_temp_warn > 0:
+            warning_types.append("Oil Temperature")
+
+        if warning_types:
+            return True, {"engine_warnings": ", ".join(warning_types)}
 
         return False, {}
 
@@ -354,17 +360,66 @@ class IRacing(Skill):
 
         fuel_level = telemetry_data.get("FuelLevel", 0)
         fuel_use_per_hour = telemetry_data.get("FuelUsePerHour", 0)
+        session_time = telemetry_data.get("SessionTime", 0)
+        lap_num = telemetry_data.get("Lap", 0)
+
+        # Don't alert for fuel in very early stages of session
+        # Wait until at least lap 3 and 5 minutes into session
+        if lap_num < 3 or session_time < 300:
+            return False, {}
+
+        # Only alert if we have meaningful fuel consumption data
+        if fuel_use_per_hour <= 0:
+            return False, {}
 
         # Calculate laps remaining (rough estimate)
-        if fuel_use_per_hour > 0:
-            laps_remaining = fuel_level / fuel_use_per_hour
-            if laps_remaining < 2.0:  # Less than 2 laps of fuel
-                return True, {
-                    "fuel_level": fuel_level,
-                    "laps_remaining": laps_remaining,
-                }
+        laps_remaining = fuel_level / fuel_use_per_hour
+
+        # More conservative thresholds based on session type and progress
+        if session_time > 1800:  # 30+ minutes in - racing situation
+            fuel_threshold = 1.5  # 1.5 laps remaining
+        elif session_time > 900:  # 15+ minutes in - longer practice
+            fuel_threshold = 1.0  # 1 lap remaining
+        else:
+            fuel_threshold = 0.5  # Very late alert for short sessions
+
+        if laps_remaining < fuel_threshold:
+            return True, {
+                "fuel_level": fuel_level,
+                "laps_remaining": laps_remaining,
+            }
 
         return False, {}
+
+    def _interpret_session_flags(self, flags):
+        """Interpret iRacing session flags into readable format"""
+        flag_meanings = {
+            0x00000001: "Checkered",
+            0x00000002: "White",
+            0x00000004: "Green",
+            0x00000008: "Yellow",
+            0x00000010: "Red",
+            0x00000020: "Blue",
+            0x00000040: "Debris",
+            0x00000080: "Crossed",
+            0x00000100: "YellowWaving",
+            0x00000200: "OneLapToGreen",
+            0x00000400: "GreenHeld",
+            0x00000800: "TenToGo",
+            0x00001000: "FiveToGo",
+            0x00002000: "RandomWaving",
+            0x00004000: "Caution",
+            0x00008000: "CautionWaving",
+        }
+
+        active_flags = []
+        for flag_bit, flag_name in flag_meanings.items():
+            if flags & flag_bit:
+                active_flags.append(flag_name)
+
+        if not active_flags:
+            return "Green"
+        return ", ".join(active_flags)
 
     def _check_flag_threshold(self, telemetry_data):
         """Check for flag change threshold events"""
@@ -380,7 +435,8 @@ class IRacing(Skill):
         if current_flags != self._last_flags:
             old_flags = self._last_flags
             self._last_flags = current_flags
-            return True, {"old_flags": old_flags, "new_flags": current_flags}
+            flag_status = self._interpret_session_flags(current_flags)
+            return True, {"flag_status": flag_status}
 
         return False, {}
 
@@ -390,19 +446,29 @@ class IRacing(Skill):
             return False, {}
 
         # Check tire temperatures (optimal range varies by compound)
-        lf_temp = telemetry_data.get("LFtempCL", 0)
-        rf_temp = telemetry_data.get("RFtempCL", 0)
-        lr_temp = telemetry_data.get("LRtempCL", 0)
-        rr_temp = telemetry_data.get("RRtempCL", 0)
+        tire_temps = {
+            "LF": telemetry_data.get("LFtempCL", 0),
+            "RF": telemetry_data.get("RFtempCL", 0),
+            "LR": telemetry_data.get("LRtempCL", 0),
+            "RR": telemetry_data.get("RRtempCL", 0),
+        }
 
-        # Convert from Celsius to Fahrenheit if needed
-        temps = [lf_temp, rf_temp, lr_temp, rr_temp]
-        overheating = [
-            temp for temp in temps if temp > 105
-        ]  # Above 105°C is concerning
+        # Find overheating tires (above 105°C is concerning)
+        overheating_tires = []
+        for tire_pos, temp in tire_temps.items():
+            if temp > 105:
+                overheating_tires.append((tire_pos, temp))
 
-        if overheating:
-            return True, {"max_temp": max(overheating), "tire_count": len(overheating)}
+        if overheating_tires:
+            # Report the hottest tire
+            hottest_tire, max_temp = max(overheating_tires, key=lambda x: x[1])
+            # Convert to Fahrenheit for American racing context
+            temp_f = (max_temp * 9 / 5) + 32
+            return True, {
+                "tire_position": hottest_tire,
+                "temperature": temp_f,
+                "tire_count": len(overheating_tires),
+            }
 
         return False, {}
 
@@ -673,6 +739,12 @@ class IRacing(Skill):
         self.alert_cooldown_period = float(
             self.retrieve_custom_property_value("alert_cooldown_period", errors)
         )
+        self.telemetry_awareness = self.retrieve_custom_property_value(
+            "telemetry_awareness", errors
+        )
+        self.watchdog_prompt = self.retrieve_custom_property_value(
+            "watchdog_prompt", errors
+        )
 
         # Initialize watchdog events now that configuration is loaded
         self._init_watchdog_events()
@@ -821,12 +893,79 @@ class IRacing(Skill):
                     # Update last trigger time
                     event.last_triggered = current_time
 
-                    # Generate proactive message using LLM
+                    # Generate event prompt for LLM processing
                     prompt = event.prompt_template.format(**context)
 
-                    # Send proactive alert to user
-                    self.threaded_execution(self.wingman.play_to_user, prompt, True)
-                    await self.wingman.add_assistant_message(prompt)
+                    # Generate race engineer response using LLM
+                    try:
+                        # Create messages for LLM call with minimal context for efficiency
+                        # Use custom watchdog prompt or fallback to default
+                        system_prompt = (
+                            self.watchdog_prompt
+                            or """You are a professional race engineer providing urgent telemetry alerts during an iRacing session.
+
+GUIDELINES:
+- Messages starting with "[WATCHDOG_EVENT]" are automatic telemetry notifications
+- Generate brief, urgent responses (under 15 words) as a race engineer would
+- Use racing terminology and provide actionable advice when possible
+- Always round numerical values - avoid excessive decimal places
+- Use natural language for very small values (e.g., "less than a lap remaining" instead of "0.234 laps remaining")
+- Be confident, direct, and results-oriented
+- Examples: "Box this lap for fuel!" or "Yellow flag out, prepare to bunch up!" or "Half a lap of fuel left!"
+
+Stay focused on the immediate racing situation and provide clear, actionable guidance."""
+                        )
+
+                        messages = [
+                            {
+                                "role": "system",
+                                "content": system_prompt,
+                            },
+                            {"role": "user", "content": prompt},
+                        ]
+
+                        # Call LLM to generate appropriate race engineer response
+                        response = await self.wingman.actual_llm_call(
+                            messages=messages,
+                            tools=[],  # No tools needed for event responses
+                        )
+
+                        if response and response.choices and len(response.choices) > 0:
+                            response_text = response.choices[0].message.content
+                            if response_text:
+                                # Play the response to user
+                                self.threaded_execution(
+                                    self.wingman.play_to_user, response_text, True
+                                )
+
+                                # Add to conversation history only if telemetry awareness is enabled
+                                if self.telemetry_awareness:
+                                    await self.wingman.add_assistant_message(
+                                        f"Telemetry alert: {response_text}"
+                                    )
+
+                        else:
+                            # No response generated, use fallback
+                            raise Exception("No response content generated")
+
+                    except Exception as llm_error:
+                        # Fallback to direct message if LLM fails
+                        if self.settings.debug_mode:
+                            await self.printr.print_async(
+                                text=f"LLM error for event {event.name}, using fallback: {str(llm_error)}",
+                                color=LogType.WARNING,
+                            )
+                        # Use a simplified version of the prompt as fallback
+                        fallback_text = prompt.replace("[WATCHDOG_EVENT] ", "")
+                        self.threaded_execution(
+                            self.wingman.play_to_user, fallback_text, True
+                        )
+
+                        # Add to conversation history only if telemetry awareness is enabled
+                        if self.telemetry_awareness:
+                            await self.wingman.add_assistant_message(
+                                f"Telemetry alert: {fallback_text}"
+                            )
 
                     if self.settings.debug_mode:
                         await self.printr.print_async(
