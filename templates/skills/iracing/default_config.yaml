@@ -22,6 +22,10 @@ examples:
     de: Wie läuft es in diesem Sektor?
   - en: What's my delta to my best lap?
     de: Wie ist mein Delta zu meiner besten Runde?
+  - en: How much track distance have I covered?
+    de: Wie viel Streckendistanz habe ich zurückgelegt?
+  - en: What's my current sector performance?
+    de: Wie ist meine aktuelle Sektorleistung?
 prompt: |
   ### iRACING TELEMETRY ACCESS
   You have comprehensive access to live telemetry data from the iRacing simulator through the iRacing SDK.
@@ -36,6 +40,7 @@ prompt: |
   **Pit Strategy:** Fuel calculations, pit window timing, strategy recommendations
   **Damage Assessment:** Vehicle damage status and performance impact
   **Setup Information:** Car setup parameters and adjustments
+  **Proactive Alerts:** Watchdog system monitors critical events and provides automatic notifications for damage, fuel warnings, flag changes, tire overheating, position changes, and more
 
   #### EXECUTION GUIDELINES
   **Data Retrieval:**
@@ -43,6 +48,11 @@ prompt: |
   - Present data in clear, race-appropriate language suitable for voice synthesis
   - Include units and context for all measurements
   - Prioritize safety-critical information when relevant
+
+  **Proactive Monitoring:**
+  - When watchdog mode is enabled, the system automatically monitors for critical racing events
+  - Provides immediate alerts for damage, fuel warnings, flag changes, tire overheating, position changes, and performance issues
+  - Generates race engineer-style notifications to keep drivers informed without being asked
 
   **Response Management:**
   - Keep responses concise and actionable for drivers who are busy racing
@@ -57,15 +67,15 @@ prompt: |
 custom_properties:
   - id: enable_watchdog
     name: Enable Telemetry Watchdog
-    hint: Enable continuous monitoring of iRacing telemetry data. When disabled, data is only retrieved when requested.
-    value: false
+    hint: Enable continuous monitoring of iRacing telemetry data and proactive event alerts. When disabled, data is only retrieved when requested.
+    value: true
     required: true
     property_type: boolean
 
   - id: watchdog_interval
     name: Telemetry Update Interval
     hint: How often (in seconds) to update telemetry data when watchdog mode is enabled. Lower values provide more real-time data but use more system resources.
-    value: 10
+    value: 5
     required: true
     property_type: slider
     options:
@@ -75,3 +85,171 @@ custom_properties:
         value: 60
       - label: "step"
         value: 1
+
+  - id: damage_alerts_enabled
+    name: Enable Damage Alerts
+    hint: Enable proactive alerts for engine warnings, fuel pressure issues, and temperature problems.
+    value: true
+    required: false
+    property_type: boolean
+
+  - id: damage_alerts_interval
+    name: Damage Check Interval
+    hint: How often (in seconds) to check for damage-related issues. More frequent checks provide faster alerts but may increase LLM usage.
+    value: 5
+    required: false
+    property_type: slider
+    options:
+      - label: "min"
+        value: 2
+      - label: "max"
+        value: 30
+      - label: "step"
+        value: 1
+
+  - id: fuel_alerts_enabled
+    name: Enable Fuel Alerts
+    hint: Enable proactive alerts when fuel levels become critically low.
+    value: true
+    required: false
+    property_type: boolean
+
+  - id: fuel_alerts_interval
+    name: Fuel Check Interval
+    hint: How often (in seconds) to check fuel levels. More frequent checks provide better fuel management but may increase LLM usage.
+    value: 10
+    required: false
+    property_type: slider
+    options:
+      - label: "min"
+        value: 5
+      - label: "max"
+        value: 60
+      - label: "step"
+        value: 5
+
+  - id: flag_alerts_enabled
+    name: Enable Flag Alerts
+    hint: Enable proactive alerts for flag changes (yellow flags, safety cars, green flag conditions).
+    value: true
+    required: false
+    property_type: boolean
+
+  - id: flag_alerts_interval
+    name: Flag Check Interval
+    hint: How often (in seconds) to check for flag changes. Frequent checks ensure you don't miss important race conditions.
+    value: 3
+    required: false
+    property_type: slider
+    options:
+      - label: "min"
+        value: 1
+      - label: "max"
+        value: 15
+      - label: "step"
+        value: 1
+
+  - id: tire_alerts_enabled
+    name: Enable Tire Temperature Alerts
+    hint: Enable proactive alerts when tire temperatures exceed safe operating limits.
+    value: true
+    required: false
+    property_type: boolean
+
+  - id: tire_alerts_interval
+    name: Tire Check Interval
+    hint: How often (in seconds) to check tire temperatures. More frequent checks help prevent tire damage but may increase LLM usage.
+    value: 8
+    required: false
+    property_type: slider
+    options:
+      - label: "min"
+        value: 3
+      - label: "max"
+        value: 30
+      - label: "step"
+        value: 1
+
+  - id: position_alerts_enabled
+    name: Enable Position Change Alerts
+    hint: Enable proactive alerts when your race position changes.
+    value: true
+    required: false
+    property_type: boolean
+
+  - id: position_alerts_interval
+    name: Position Check Interval
+    hint: How often (in seconds) to check for position changes. Frequent checks ensure immediate notifications of position changes.
+    value: 15
+    required: false
+    property_type: slider
+    options:
+      - label: "min"
+        value: 5
+      - label: "max"
+        value: 60
+      - label: "step"
+        value: 5
+
+  - id: performance_alerts_enabled
+    name: Enable Performance Delta Alerts
+    hint: Enable proactive alerts when lap times are significantly slower than your best.
+    value: false
+    required: false
+    property_type: boolean
+
+  - id: performance_alerts_interval
+    name: Performance Check Interval
+    hint: How often (in seconds) to check lap time performance. Less frequent checks reduce alert spam during practice sessions.
+    value: 20
+    required: false
+    property_type: slider
+    options:
+      - label: "min"
+        value: 10
+      - label: "max"
+        value: 120
+      - label: "step"
+        value: 10
+
+  - id: incident_alerts_enabled
+    name: Enable Incident Alerts
+    hint: Enable proactive alerts when incident count increases.
+    value: true
+    required: false
+    property_type: boolean
+
+  - id: personal_best_alerts_enabled
+    name: Enable Personal Best Alerts
+    hint: Enable proactive alerts when you set a new personal best lap time.
+    value: true
+    required: false
+    property_type: boolean
+
+  - id: pit_window_alerts_enabled
+    name: Enable Pit Window Alerts
+    hint: Enable proactive alerts when pit windows open or close.
+    value: true
+    required: false
+    property_type: boolean
+
+  - id: track_condition_alerts_enabled
+    name: Enable Track Condition Alerts
+    hint: Enable proactive alerts when track or air temperature changes significantly.
+    value: false
+    required: false
+    property_type: boolean
+
+  - id: alert_cooldown_period
+    name: Alert Cooldown Period
+    hint: Minimum time (in seconds) between repeated alerts of the same type to prevent spam.
+    value: 30
+    required: false
+    property_type: slider
+    options:
+      - label: "min"
+        value: 10
+      - label: "max"
+        value: 300
+      - label: "step"
+        value: 10
