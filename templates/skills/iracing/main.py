@@ -64,10 +64,9 @@ class IRacing(Skill):
         # Start watchdog after validation
         self.watchdog_started = False
 
-        # Initialize watchdog events system
+        # Initialize watchdog events system (will be populated after config loading)
         self.watchdog_events = []
         self.watchdog_event_configs = {}
-        self._init_watchdog_events()
 
         # Initialize telemetry dictionary structure once
         self._init_telemetry_structure()
@@ -674,6 +673,9 @@ class IRacing(Skill):
         self.alert_cooldown_period = float(
             self.retrieve_custom_property_value("alert_cooldown_period", errors)
         )
+
+        # Initialize watchdog events now that configuration is loaded
+        self._init_watchdog_events()
 
         # Start watchdog if enabled and not already started
         if self.enable_watchdog and not self.watchdog_started:
