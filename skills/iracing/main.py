@@ -803,15 +803,15 @@ class IRacing(Skill):
                 continue
 
             # Check if enough time has passed since last check
-            if current_time - event.last_check_time < event.check_interval:
+            if current_time - event.last_checked < event.check_interval:
                 continue
 
             # Check if cooldown period has passed since last trigger
-            if current_time - event.last_trigger_time < event.cooldown_period:
+            if current_time - event.last_triggered < event.cooldown_period:
                 continue
 
             # Update last check time
-            event.last_check_time = current_time
+            event.last_checked = current_time
 
             try:
                 # Call the threshold function
@@ -819,17 +819,14 @@ class IRacing(Skill):
 
                 if triggered:
                     # Update last trigger time
-                    event.last_trigger_time = current_time
+                    event.last_triggered = current_time
 
                     # Generate proactive message using LLM
                     prompt = event.prompt_template.format(**context)
 
                     # Send proactive alert to user
-                    await self.wingman.add_assistant_message(
-                        text=prompt,
-                        play_to_user=True,
-                        context={"event": event.name, "telemetry": context},
-                    )
+                    self.threaded_execution(self.wingman.play_to_user, prompt, True)
+                    await self.wingman.add_assistant_message(prompt)
 
                     if self.settings.debug_mode:
                         await self.printr.print_async(
