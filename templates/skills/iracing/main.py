@@ -79,6 +79,28 @@ class IRacing(Skill):
                     "LapLastLapTime": self._telemetry("LapLastLapTime", 0),
                     "LapBestLapTime": self._telemetry("LapBestLapTime", 0),
                     "LapCurrentLapTime": self._telemetry("LapCurrentLapTime", 0),
+                    # Delta timing and sector analysis data
+                    "LapDistPct": self._telemetry("LapDistPct", 0),
+                    "LapDeltaToBestLap": self._telemetry("LapDeltaToBestLap", 0),
+                    "LapDeltaToBestLap_OK": self._telemetry(
+                        "LapDeltaToBestLap_OK", False
+                    ),
+                    "LapDeltaToOptimalLap": self._telemetry("LapDeltaToOptimalLap", 0),
+                    "LapDeltaToOptimalLap_OK": self._telemetry(
+                        "LapDeltaToOptimalLap_OK", False
+                    ),
+                    "LapDeltaToSessionBestLap": self._telemetry(
+                        "LapDeltaToSessionBestLap", 0
+                    ),
+                    "LapDeltaToSessionBestLap_OK": self._telemetry(
+                        "LapDeltaToSessionBestLap_OK", False
+                    ),
+                    "LapDeltaToSessionLastlLap": self._telemetry(
+                        "LapDeltaToSessionLastlLap", 0
+                    ),
+                    "LapDeltaToSessionLastlLap_OK": self._telemetry(
+                        "LapDeltaToSessionLastlLap_OK", False
+                    ),
                     "LFtempCM": self._telemetry("LFtempCM", [0, 0, 0]),
                     "RFtempCM": self._telemetry("RFtempCM", [0, 0, 0]),
                     "LRtempCM": self._telemetry("LRtempCM", [0, 0, 0]),
@@ -185,6 +207,30 @@ class IRacing(Skill):
                         "LapLastLapTime": self._telemetry("LapLastLapTime", 0),
                         "LapBestLapTime": self._telemetry("LapBestLapTime", 0),
                         "LapCurrentLapTime": self._telemetry("LapCurrentLapTime", 0),
+                        # Delta timing and sector analysis data
+                        "LapDistPct": self._telemetry("LapDistPct", 0),
+                        "LapDeltaToBestLap": self._telemetry("LapDeltaToBestLap", 0),
+                        "LapDeltaToBestLap_OK": self._telemetry(
+                            "LapDeltaToBestLap_OK", False
+                        ),
+                        "LapDeltaToOptimalLap": self._telemetry(
+                            "LapDeltaToOptimalLap", 0
+                        ),
+                        "LapDeltaToOptimalLap_OK": self._telemetry(
+                            "LapDeltaToOptimalLap_OK", False
+                        ),
+                        "LapDeltaToSessionBestLap": self._telemetry(
+                            "LapDeltaToSessionBestLap", 0
+                        ),
+                        "LapDeltaToSessionBestLap_OK": self._telemetry(
+                            "LapDeltaToSessionBestLap_OK", False
+                        ),
+                        "LapDeltaToSessionLastlLap": self._telemetry(
+                            "LapDeltaToSessionLastlLap", 0
+                        ),
+                        "LapDeltaToSessionLastlLap_OK": self._telemetry(
+                            "LapDeltaToSessionLastlLap_OK", False
+                        ),
                         "LFtempCM": self._telemetry("LFtempCM", [0, 0, 0]),
                         "RFtempCM": self._telemetry("RFtempCM", [0, 0, 0]),
                         "LRtempCM": self._telemetry("LRtempCM", [0, 0, 0]),
@@ -283,7 +329,22 @@ class IRacing(Skill):
                     "type": "function",
                     "function": {
                         "name": "get_lap_times_and_performance_analysis",
-                        "description": "Get lap time analysis including last lap, best lap, sector times, and performance deltas",
+                        "description": "Get lap time analysis including last lap, best lap, current lap, and real-time delta timing to various references",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {},
+                            "required": [],
+                        },
+                    },
+                },
+            ),
+            (
+                "get_sector_times_and_track_position_analysis",
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "get_sector_times_and_track_position_analysis",
+                        "description": "Get detailed sector analysis including current track position, delta timing to best/optimal laps, and performance in different track sections",
                         "parameters": {
                             "type": "object",
                             "properties": {},
@@ -415,6 +476,7 @@ class IRacing(Skill):
             "get_current_vehicle_status_and_telemetry",
             "get_session_info_and_race_position",
             "get_lap_times_and_performance_analysis",
+            "get_sector_times_and_track_position_analysis",
             "get_tire_condition_and_temperature_data",
             "get_track_conditions_and_weather_info",
             "get_competitor_gaps_and_relative_positions",
@@ -525,7 +587,7 @@ class IRacing(Skill):
             return f"Error reading session info: {str(e)}"
 
     def get_lap_times_and_performance_analysis(self) -> str:
-        """Get lap time analysis and performance data"""
+        """Get lap time analysis and performance data with delta timing"""
         # Refresh data if watchdog is disabled
         if not self.enable_watchdog:
             self._refresh_telemetry_data()
@@ -538,6 +600,20 @@ class IRacing(Skill):
             best_lap_time = self.telemetry_data.get("LapBestLapTime", 0)
             current_lap_time = self.telemetry_data.get("LapCurrentLapTime", 0)
 
+            # Get delta timing data
+            delta_to_best = self.telemetry_data.get("LapDeltaToBestLap", 0)
+            delta_to_best_ok = self.telemetry_data.get("LapDeltaToBestLap_OK", False)
+            delta_to_optimal = self.telemetry_data.get("LapDeltaToOptimalLap", 0)
+            delta_to_optimal_ok = self.telemetry_data.get(
+                "LapDeltaToOptimalLap_OK", False
+            )
+            delta_to_session_best = self.telemetry_data.get(
+                "LapDeltaToSessionBestLap", 0
+            )
+            delta_to_session_best_ok = self.telemetry_data.get(
+                "LapDeltaToSessionBestLap_OK", False
+            )
+
             # Convert times to readable format
             def format_time(seconds):
                 if seconds <= 0:
@@ -546,23 +622,142 @@ class IRacing(Skill):
                 seconds = seconds % 60
                 return f"{minutes}:{seconds:06.3f}"
 
+            def format_delta(delta_seconds, is_valid=True):
+                if not is_valid or delta_seconds == 0:
+                    return "N/A"
+                return f"{delta_seconds:+.3f}s"
+
             last_lap = format_time(last_lap_time)
             best_lap = format_time(best_lap_time)
             current_lap = format_time(current_lap_time)
 
-            # Calculate delta to best
-            delta = ""
+            # Calculate delta to personal best for last lap
+            personal_delta = ""
             if last_lap_time > 0 and best_lap_time > 0:
                 diff = last_lap_time - best_lap_time
-                delta = f", {diff:+.3f} seconds from personal best"
+                personal_delta = f", {diff:+.3f}s from personal best"
 
-            return (
-                f"Last lap: {last_lap}{delta}. "
-                f"Personal best: {best_lap}. "
-                f"Current lap: {current_lap}."
-            )
+            # Build response with current delta timing
+            response_parts = [
+                f"Last lap: {last_lap}{personal_delta}",
+                f"Personal best: {best_lap}",
+                f"Current lap: {current_lap}",
+            ]
+
+            # Add real-time delta information
+            if delta_to_best_ok:
+                response_parts.append(
+                    f"Delta to PB: {format_delta(delta_to_best, delta_to_best_ok)}"
+                )
+
+            if delta_to_session_best_ok:
+                response_parts.append(
+                    f"Delta to session best: {format_delta(delta_to_session_best, delta_to_session_best_ok)}"
+                )
+
+            if delta_to_optimal_ok:
+                response_parts.append(
+                    f"Delta to optimal: {format_delta(delta_to_optimal, delta_to_optimal_ok)}"
+                )
+
+            return ". ".join(response_parts) + "."
+
         except Exception as e:
             return f"Error reading lap times: {str(e)}"
+
+    def get_sector_times_and_track_position_analysis(self) -> str:
+        """Get detailed sector analysis and track position data"""
+        # Refresh data if watchdog is disabled
+        if not self.enable_watchdog:
+            self._refresh_telemetry_data()
+
+        if not self.telemetry_data:
+            return "No sector data available."
+
+        try:
+            # Get track position data
+            lap_dist_pct = self.telemetry_data.get("LapDistPct", 0)
+
+            # Get delta timing data
+            delta_to_best = self.telemetry_data.get("LapDeltaToBestLap", 0)
+            delta_to_best_ok = self.telemetry_data.get("LapDeltaToBestLap_OK", False)
+            delta_to_optimal = self.telemetry_data.get("LapDeltaToOptimalLap", 0)
+            delta_to_optimal_ok = self.telemetry_data.get(
+                "LapDeltaToOptimalLap_OK", False
+            )
+            delta_to_session_best = self.telemetry_data.get(
+                "LapDeltaToSessionBestLap", 0
+            )
+            delta_to_session_best_ok = self.telemetry_data.get(
+                "LapDeltaToSessionBestLap_OK", False
+            )
+            delta_to_last_lap = self.telemetry_data.get("LapDeltaToSessionLastlLap", 0)
+            delta_to_last_lap_ok = self.telemetry_data.get(
+                "LapDeltaToSessionLastlLap_OK", False
+            )
+
+            # Determine current sector based on track position
+            def get_sector_info(pct):
+                if pct < 33.33:
+                    return "Sector 1", 1
+                elif pct < 66.67:
+                    return "Sector 2", 2
+                else:
+                    return "Sector 3", 3
+
+            def format_delta(delta_seconds, is_valid=True):
+                if not is_valid or delta_seconds == 0:
+                    return "N/A"
+                return f"{delta_seconds:+.3f}s"
+
+            # Get current sector
+            sector_name, sector_num = get_sector_info(lap_dist_pct)
+
+            # Build response
+            response_parts = [
+                f"Currently in {sector_name} ({lap_dist_pct:.1f}% around track)"
+            ]
+
+            # Add delta timing information
+            if delta_to_best_ok:
+                delta_str = format_delta(delta_to_best, delta_to_best_ok)
+                response_parts.append(f"Delta to personal best: {delta_str}")
+
+            if delta_to_session_best_ok:
+                delta_str = format_delta(
+                    delta_to_session_best, delta_to_session_best_ok
+                )
+                response_parts.append(f"Delta to session best: {delta_str}")
+
+            if delta_to_optimal_ok:
+                delta_str = format_delta(delta_to_optimal, delta_to_optimal_ok)
+                response_parts.append(f"Delta to optimal: {delta_str}")
+
+            # Performance analysis based on delta trends
+            if delta_to_best_ok and delta_to_best != 0:
+                if delta_to_best > 0.5:
+                    response_parts.append("Currently losing significant time")
+                elif delta_to_best > 0.1:
+                    response_parts.append("Currently losing time")
+                elif delta_to_best < -0.1:
+                    response_parts.append("Currently gaining time")
+                else:
+                    response_parts.append("Currently matching personal best pace")
+
+            # Sector-specific advice
+            if sector_num == 1:
+                response_parts.append("Focus on exit speed for the upcoming turns")
+            elif sector_num == 2:
+                response_parts.append("Mid-sector performance critical for lap time")
+            else:
+                response_parts.append(
+                    "Final sector - maintain consistency to finish line"
+                )
+
+            return ". ".join(response_parts) + "."
+
+        except Exception as e:
+            return f"Error reading sector data: {str(e)}"
 
     def get_tire_condition_and_temperature_data(self) -> str:
         """Get tire temperature and condition data"""

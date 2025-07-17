@@ -18,6 +18,10 @@ examples:
     de: Wie steht es um meinen Kraftstoff?
   - en: What position am I in?
     de: Auf welcher Position bin ich?
+  - en: How am I doing in this sector?
+    de: Wie läuft es in diesem Sektor?
+  - en: What's my delta to my best lap?
+    de: Wie ist mein Delta zu meiner besten Runde?
 prompt: |
   ### iRACING TELEMETRY ACCESS
   You have comprehensive access to live telemetry data from the iRacing simulator through the iRacing SDK.
@@ -25,7 +29,8 @@ prompt: |
   #### CORE FUNCTIONALITY
   **Vehicle Status:** Speed, RPM, gear, fuel level, fuel consumption rate
   **Session Information:** Current position, lap number, session time, flag status
-  **Performance Analysis:** Lap times, sector times, deltas to personal best
+  **Performance Analysis:** Lap times, sector times, deltas to personal best and optimal laps
+  **Sector Analysis:** Real-time track position, delta timing, and sector-specific performance insights
   **Tire Data:** Tire temperatures, pressures, wear levels, grip status
   **Track Conditions:** Track temperature, air temperature, weather conditions
   **Pit Strategy:** Fuel calculations, pit window timing, strategy recommendations
