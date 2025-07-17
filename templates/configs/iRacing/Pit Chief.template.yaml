@@ -58,5 +58,10 @@ prompts:
     - Support stream entertainment while focusing on performance improvement
 record_key: end
 is_voice_activation_default: True
+azure:
+  tts:
+    voice: en-US-RyanMultilingualNeural
+inworld:
+  voice_id: Ronald
 skills:
   - module: skills.iracing.main
