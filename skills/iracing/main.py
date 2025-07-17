@@ -47,13 +47,14 @@ class IRacing(Skill):
         wingman: "OpenAiWingman",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
-        self.ir = None
+        # Initialize telemetry data structures
         self.telemetry_data = {}
         self.session_data = {}
         self.is_connected = False
         self.watchdog_thread = None
         self.watchdog_running = False
         self.last_update = 0
+        self._last_session_update = 0  # Track session data updates
 
         self.enable_watchdog = False
         self.watchdog_interval = 10.0
@@ -68,6 +69,77 @@ class IRacing(Skill):
         self.watchdog_event_configs = {}
         self._init_watchdog_events()
 
+        # Initialize telemetry dictionary structure once
+        self._init_telemetry_structure()
+
+    def _init_telemetry_structure(self):
+        """Initialize telemetry dictionary structure once to avoid repeated allocation"""
+        self.telemetry_data = {
+            "Speed": 0,
+            "RPM": 0,
+            "Gear": 0,
+            "FuelLevel": 0,
+            "FuelUsePerHour": 0,
+            "PlayerCarPosition": 1,
+            "PlayerCarIdx": 0,
+            "Lap": 0,
+            "SessionTime": 0,
+            "SessionTimeRemain": 0,
+            "SessionFlags": 0,
+            "LapLastLapTime": 0,
+            "LapBestLapTime": 0,
+            "LapCurrentLapTime": 0,
+            # Delta timing and sector analysis data
+            "LapDistPct": 0,
+            "LapDeltaToBestLap": 0,
+            "LapDeltaToBestLap_OK": False,
+            "LapDeltaToOptimalLap": 0,
+            "LapDeltaToOptimalLap_OK": False,
+            "LapDeltaToSessionBestLap": 0,
+            "LapDeltaToSessionBestLap_OK": False,
+            "LapDeltaToSessionLastlLap": 0,
+            "LapDeltaToSessionLastlLap_OK": False,
+            "LFtempCM": [0, 0, 0],
+            "RFtempCM": [0, 0, 0],
+            "LRtempCM": [0, 0, 0],
+            "RRtempCM": [0, 0, 0],
+            "LFwearM": 0,
+            "RFwearM": 0,
+            "LRwearM": 0,
+            "RRwearM": 0,
+            "TrackTemp": 0,
+            "AirTemp": 0,
+            "RelativeHumidity": 0,
+            "WindVel": 0,
+            "PlayerCarMyIncidentCount": 0,
+            "EngineWarnings": 0,
+            "FuelPressureWarnings": 0,
+            "WaterTempWarnings": 0,
+            "OilTempWarnings": 0,
+            "LFtempCL": 0,
+            "RFtempCL": 0,
+            "LRtempCL": 0,
+            "RRtempCL": 0,
+            "PitWindowOpen": False,
+            "CarIdxPosition": [0],
+            "dcBrakeBias": 0,
+            # Enhanced competitor and proximity data
+            "CarDistAhead": 0,
+            "CarDistBehind": 0,
+            # Additional setup and car state variables
+            "LFpressure": 0,
+            "RFpressure": 0,
+            "LRpressure": 0,
+            "RRpressure": 0,
+        }
+
+        # Initialize session data structure
+        self.session_data = {
+            "WeekendInfo": None,
+            "SessionInfo": None,
+            "CarSetup": None,
+        }
+
     def _telemetry(self, key, default=None):
         """Safely get telemetry data with fallback"""
         try:
@@ -77,6 +149,91 @@ class IRacing(Skill):
             return default
         except (KeyError, AttributeError):
             return default
+
+    def _update_telemetry_data(self):
+        """Update telemetry data in-place to avoid memory allocation"""
+        # Update telemetry data structure in-place
+        self.telemetry_data.update(
+            {
+                "Speed": self._telemetry("Speed", 0),
+                "RPM": self._telemetry("RPM", 0),
+                "Gear": self._telemetry("Gear", 0),
+                "FuelLevel": self._telemetry("FuelLevel", 0),
+                "FuelUsePerHour": self._telemetry("FuelUsePerHour", 0),
+                "PlayerCarPosition": self._telemetry("PlayerCarPosition", 1),
+                "PlayerCarIdx": self._telemetry("PlayerCarIdx", 0),
+                "Lap": self._telemetry("Lap", 0),
+                "SessionTime": self._telemetry("SessionTime", 0),
+                "SessionTimeRemain": self._telemetry("SessionTimeRemain", 0),
+                "SessionFlags": self._telemetry("SessionFlags", 0),
+                "LapLastLapTime": self._telemetry("LapLastLapTime", 0),
+                "LapBestLapTime": self._telemetry("LapBestLapTime", 0),
+                "LapCurrentLapTime": self._telemetry("LapCurrentLapTime", 0),
+                # Delta timing and sector analysis data
+                "LapDistPct": self._telemetry("LapDistPct", 0),
+                "LapDeltaToBestLap": self._telemetry("LapDeltaToBestLap", 0),
+                "LapDeltaToBestLap_OK": self._telemetry("LapDeltaToBestLap_OK", False),
+                "LapDeltaToOptimalLap": self._telemetry("LapDeltaToOptimalLap", 0),
+                "LapDeltaToOptimalLap_OK": self._telemetry(
+                    "LapDeltaToOptimalLap_OK", False
+                ),
+                "LapDeltaToSessionBestLap": self._telemetry(
+                    "LapDeltaToSessionBestLap", 0
+                ),
+                "LapDeltaToSessionBestLap_OK": self._telemetry(
+                    "LapDeltaToSessionBestLap_OK", False
+                ),
+                "LapDeltaToSessionLastlLap": self._telemetry(
+                    "LapDeltaToSessionLastlLap", 0
+                ),
+                "LapDeltaToSessionLastlLap_OK": self._telemetry(
+                    "LapDeltaToSessionLastlLap_OK", False
+                ),
+                "LFtempCM": self._telemetry("LFtempCM", [0, 0, 0]),
+                "RFtempCM": self._telemetry("RFtempCM", [0, 0, 0]),
+                "LRtempCM": self._telemetry("LRtempCM", [0, 0, 0]),
+                "RRtempCM": self._telemetry("RRtempCM", [0, 0, 0]),
+                "LFwearM": self._telemetry("LFwearM", 0),
+                "RFwearM": self._telemetry("RFwearM", 0),
+                "LRwearM": self._telemetry("LRwearM", 0),
+                "RRwearM": self._telemetry("RRwearM", 0),
+                "TrackTemp": self._telemetry("TrackTemp", 0),
+                "AirTemp": self._telemetry("AirTemp", 0),
+                "RelativeHumidity": self._telemetry("RelativeHumidity", 0),
+                "WindVel": self._telemetry("WindVel", 0),
+                "PlayerCarMyIncidentCount": self._telemetry(
+                    "PlayerCarMyIncidentCount", 0
+                ),
+                "EngineWarnings": self._telemetry("EngineWarnings", 0),
+                "FuelPressureWarnings": self._telemetry("FuelPressureWarnings", 0),
+                "WaterTempWarnings": self._telemetry("WaterTempWarnings", 0),
+                "OilTempWarnings": self._telemetry("OilTempWarnings", 0),
+                "LFtempCL": self._telemetry("LFtempCL", 0),
+                "RFtempCL": self._telemetry("RFtempCL", 0),
+                "LRtempCL": self._telemetry("LRtempCL", 0),
+                "RRtempCL": self._telemetry("RRtempCL", 0),
+                "PitWindowOpen": self._telemetry("PitWindowOpen", False),
+                "CarIdxPosition": self._telemetry("CarIdxPosition", [0]),
+                "dcBrakeBias": self._telemetry("dcBrakeBias", 0),
+                # Enhanced competitor and proximity data
+                "CarDistAhead": self._telemetry("CarDistAhead", 0),
+                "CarDistBehind": self._telemetry("CarDistBehind", 0),
+                # Additional setup and car state variables
+                "LFpressure": self._telemetry("LFpressure", 0),
+                "RFpressure": self._telemetry("RFpressure", 0),
+                "LRpressure": self._telemetry("LRpressure", 0),
+                "RRpressure": self._telemetry("RRpressure", 0),
+            }
+        )
+
+        # Update session data structure in-place
+        self.session_data.update(
+            {
+                "WeekendInfo": self._telemetry("WeekendInfo"),
+                "SessionInfo": self._telemetry("SessionInfo"),
+                "CarSetup": self._telemetry("CarSetup"),
+            }
+        )
 
     def _init_watchdog_events(self):
         """Initialize watchdog events with their threshold functions"""
@@ -551,90 +708,8 @@ class IRacing(Skill):
                     # Freeze buffer for consistent data access
                     self.ir.freeze_var_buffer_latest()
 
-                    # Cache commonly used data for performance
-                    self.telemetry_data = {
-                        "Speed": self._telemetry("Speed", 0),
-                        "RPM": self._telemetry("RPM", 0),
-                        "Gear": self._telemetry("Gear", 0),
-                        "FuelLevel": self._telemetry("FuelLevel", 0),
-                        "FuelUsePerHour": self._telemetry("FuelUsePerHour", 0),
-                        "PlayerCarPosition": self._telemetry("PlayerCarPosition", 1),
-                        "PlayerCarIdx": self._telemetry("PlayerCarIdx", 0),
-                        "Lap": self._telemetry("Lap", 0),
-                        "SessionTime": self._telemetry("SessionTime", 0),
-                        "SessionTimeRemain": self._telemetry("SessionTimeRemain", 0),
-                        "SessionFlags": self._telemetry("SessionFlags", 0),
-                        "LapLastLapTime": self._telemetry("LapLastLapTime", 0),
-                        "LapBestLapTime": self._telemetry("LapBestLapTime", 0),
-                        "LapCurrentLapTime": self._telemetry("LapCurrentLapTime", 0),
-                        # Delta timing and sector analysis data
-                        "LapDistPct": self._telemetry("LapDistPct", 0),
-                        "LapDeltaToBestLap": self._telemetry("LapDeltaToBestLap", 0),
-                        "LapDeltaToBestLap_OK": self._telemetry(
-                            "LapDeltaToBestLap_OK", False
-                        ),
-                        "LapDeltaToOptimalLap": self._telemetry(
-                            "LapDeltaToOptimalLap", 0
-                        ),
-                        "LapDeltaToOptimalLap_OK": self._telemetry(
-                            "LapDeltaToOptimalLap_OK", False
-                        ),
-                        "LapDeltaToSessionBestLap": self._telemetry(
-                            "LapDeltaToSessionBestLap", 0
-                        ),
-                        "LapDeltaToSessionBestLap_OK": self._telemetry(
-                            "LapDeltaToSessionBestLap_OK", False
-                        ),
-                        "LapDeltaToSessionLastlLap": self._telemetry(
-                            "LapDeltaToSessionLastlLap", 0
-                        ),
-                        "LapDeltaToSessionLastlLap_OK": self._telemetry(
-                            "LapDeltaToSessionLastlLap_OK", False
-                        ),
-                        "LFtempCM": self._telemetry("LFtempCM", [0, 0, 0]),
-                        "RFtempCM": self._telemetry("RFtempCM", [0, 0, 0]),
-                        "LRtempCM": self._telemetry("LRtempCM", [0, 0, 0]),
-                        "RRtempCM": self._telemetry("RRtempCM", [0, 0, 0]),
-                        "LFwearM": self._telemetry("LFwearM", 0),
-                        "RFwearM": self._telemetry("RFwearM", 0),
-                        "LRwearM": self._telemetry("LRwearM", 0),
-                        "RRwearM": self._telemetry("RRwearM", 0),
-                        "TrackTemp": self._telemetry("TrackTemp", 0),
-                        "AirTemp": self._telemetry("AirTemp", 0),
-                        "RelativeHumidity": self._telemetry("RelativeHumidity", 0),
-                        "WindVel": self._telemetry("WindVel", 0),
-                        "PlayerCarMyIncidentCount": self._telemetry(
-                            "PlayerCarMyIncidentCount", 0
-                        ),
-                        "EngineWarnings": self._telemetry("EngineWarnings", 0),
-                        "FuelPressureWarnings": self._telemetry(
-                            "FuelPressureWarnings", 0
-                        ),
-                        "WaterTempWarnings": self._telemetry("WaterTempWarnings", 0),
-                        "OilTempWarnings": self._telemetry("OilTempWarnings", 0),
-                        "LFtempCL": self._telemetry("LFtempCL", 0),
-                        "RFtempCL": self._telemetry("RFtempCL", 0),
-                        "LRtempCL": self._telemetry("LRtempCL", 0),
-                        "RRtempCL": self._telemetry("RRtempCL", 0),
-                        "PitWindowOpen": self._telemetry("PitWindowOpen", False),
-                        "CarIdxPosition": self._telemetry("CarIdxPosition", [0]),
-                        "dcBrakeBias": self._telemetry("dcBrakeBias", 0),
-                        # Enhanced competitor and proximity data
-                        "CarDistAhead": self._telemetry("CarDistAhead", 0),
-                        "CarDistBehind": self._telemetry("CarDistBehind", 0),
-                        # Additional setup and car state variables
-                        "LFpressure": self._telemetry("LFpressure", 0),
-                        "RFpressure": self._telemetry("RFpressure", 0),
-                        "LRpressure": self._telemetry("LRpressure", 0),
-                        "RRpressure": self._telemetry("RRpressure", 0),
-                    }
-
-                    # Get session info
-                    self.session_data = {
-                        "WeekendInfo": self._telemetry("WeekendInfo"),
-                        "SessionInfo": self._telemetry("SessionInfo"),
-                        "CarSetup": self._telemetry("CarSetup"),
-                    }
+                    # Update telemetry data in-place to avoid memory allocation
+                    self._update_telemetry_data()
 
                     self.last_update = time.time()
 
@@ -1486,7 +1561,62 @@ class IRacing(Skill):
 
     def __del__(self):
         """Cleanup when the skill is destroyed"""
-        if hasattr(self, "watchdog_running"):
+        # Use the proper cleanup method
+        asyncio.run(self.unload())
+
+    async def unload(self) -> None:
+        """Unload the skill - stop all background tasks and cleanup resources"""
+        # Call parent cleanup first
+        await super().unload()
+
+        # Stop watchdog thread safely
+        if hasattr(self, "watchdog_running") and self.watchdog_running:
             self.watchdog_running = False
+
+            # Wait for thread to finish (with timeout to prevent hanging)
+            if (
+                hasattr(self, "watchdog_thread")
+                and self.watchdog_thread
+                and self.watchdog_thread.is_alive()
+            ):
+                self.watchdog_thread.join(timeout=2.0)  # 2 second timeout
+
+                if self.watchdog_thread.is_alive():
+                    # Log warning if thread doesn't stop gracefully
+                    if hasattr(self, "settings") and self.settings.debug_mode:
+                        await self.printr.print_async(
+                            text="iRacing: Watchdog thread did not stop gracefully - forcing cleanup",
+                            color=LogType.WARNING,
+                        )
+
+        # Clean up iRacing SDK connection
         if hasattr(self, "ir") and self.ir:
-            self.ir.shutdown()
+            try:
+                self.ir.shutdown()
+            except Exception as e:
+                # Log error but don't fail cleanup
+                if hasattr(self, "settings") and self.settings.debug_mode:
+                    await self.printr.print_async(
+                        text=f"iRacing: Error during SDK shutdown: {str(e)}",
+                        color=LogType.ERROR,
+                    )
+            finally:
+                self.ir = None
+
+        # Clear all telemetry data
+        if hasattr(self, "telemetry_data"):
+            self.telemetry_data.clear()
+        if hasattr(self, "session_data"):
+            self.session_data.clear()
+        if hasattr(self, "watchdog_events"):
+            self.watchdog_events.clear()
+
+        # Reset connection state
+        self.is_connected = False
+        self.watchdog_started = False
+
+        if hasattr(self, "settings") and self.settings.debug_mode:
+            await self.printr.print_async(
+                text="iRacing: Skill unloaded successfully",
+                color=LogType.INFO,
+            )
