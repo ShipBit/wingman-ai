@@ -718,11 +718,20 @@ class IRacing(Skill):
         current_pos = telemetry_data.get("CarIdxPosition", [0])[0]  # Player position
         if not hasattr(self, "_last_position"):
             self._last_position = current_pos
+            self._first_position_change = (
+                True  # Flag to ignore the first position change
+            )
             return False, {}
 
         if current_pos != self._last_position:
             old_pos = self._last_position
             self._last_position = current_pos
+
+            # Ignore the first position change event (usually "you're last")
+            if hasattr(self, "_first_position_change") and self._first_position_change:
+                self._first_position_change = False
+                return False, {}
+
             return True, {"old_pos": old_pos, "new_pos": current_pos}
 
         return False, {}
@@ -750,7 +759,9 @@ class IRacing(Skill):
             time_delta = old_best - current_best if old_best > 0 else 0
 
             # Determine if this new best was the lap just completed
-            was_last_lap = abs(last_lap_time - current_best) < 0.01 if last_lap_time > 0 else False
+            was_last_lap = (
+                abs(last_lap_time - current_best) < 0.01 if last_lap_time > 0 else False
+            )
 
             # Create appropriate improvement message
             if old_best == 0:
@@ -764,7 +775,9 @@ class IRacing(Skill):
             if was_last_lap and last_lap_time > 0:
                 lap_context = f" - Last lap was {last_lap_time:.3f}s"
             elif last_lap_time > 0:
-                lap_context = f" - Last lap: {last_lap_time:.3f}s, Best: {current_best:.3f}s"
+                lap_context = (
+                    f" - Last lap: {last_lap_time:.3f}s, Best: {current_best:.3f}s"
+                )
             else:
                 lap_context = ""
 
@@ -775,7 +788,7 @@ class IRacing(Skill):
                 "last_lap_time": last_lap_time,
                 "was_last_lap": was_last_lap,
                 "improvement_message": improvement_message,
-                "lap_context": lap_context
+                "lap_context": lap_context,
             }
 
         return False, {}
@@ -969,10 +982,18 @@ class IRacing(Skill):
         )
         # Handle optional watchdog_prompt - don't add error if missing or empty
         watchdog_prompt_property = next(
-            (prop for prop in self.config.custom_properties if prop.id == "watchdog_prompt"),
+            (
+                prop
+                for prop in self.config.custom_properties
+                if prop.id == "watchdog_prompt"
+            ),
             None,
         )
-        self.watchdog_prompt = watchdog_prompt_property.value if watchdog_prompt_property and watchdog_prompt_property.value else None
+        self.watchdog_prompt = (
+            watchdog_prompt_property.value
+            if watchdog_prompt_property and watchdog_prompt_property.value
+            else None
+        )
 
         # Initialize watchdog events now that configuration is loaded
         self._init_watchdog_events()
