@@ -80,15 +80,19 @@ class IRacing(Skill):
             "RPM": 0,
             "Gear": 0,
             "FuelLevel": 0,
+            "FuelLevelPct": 0,  # Better fuel percentage
             "FuelUsePerHour": 0,
             "PlayerCarPosition": 1,
             "PlayerCarIdx": 0,
             "Lap": 0,
+            "LapCompleted": 0,  # Laps completed
             "SessionTime": 0,
             "SessionTimeRemain": 0,
+            "SessionLapsRemainEx": 0,  # Better laps remaining
             "SessionFlags": 0,
             "SessionState": 0,
             "IsReplayPlaying": False,
+            "IsOnTrack": False,  # Car on track with player
             "LapLastLapTime": 0,
             "LapBestLapTime": 0,
             "LapCurrentLapTime": 0,
@@ -110,30 +114,31 @@ class IRacing(Skill):
             "RFwearM": 0,
             "LRwearM": 0,
             "RRwearM": 0,
-            "TrackTemp": 0,
+            "TrackTempCrew": 0,  # Better track temp
             "AirTemp": 0,
             "RelativeHumidity": 0,
             "WindVel": 0,
+            "WindDir": 0,  # Wind direction
             "PlayerCarMyIncidentCount": 0,
             "EngineWarnings": 0,
-            "FuelPressureWarnings": 0,
-            "WaterTempWarnings": 0,
-            "OilTempWarnings": 0,
+            "FuelPress": 0,  # Actual fuel pressure
+            "WaterTemp": 0,  # Engine coolant temp
+            "OilTemp": 0,  # Engine oil temp
+            "OilPress": 0,  # Engine oil pressure
             "LFtempCL": 0,
             "RFtempCL": 0,
             "LRtempCL": 0,
             "RRtempCL": 0,
-            "PitWindowOpen": False,
+            "OnPitRoad": False,  # Actual pit road status
             "CarIdxPosition": [0],
-            "dcBrakeBias": 0,
             # Enhanced competitor and proximity data
             "CarDistAhead": 0,
             "CarDistBehind": 0,
-            # Additional setup and car state variables
-            "LFpressure": 0,
-            "RFpressure": 0,
-            "LRpressure": 0,
-            "RRpressure": 0,
+            # Brake and throttle inputs for analysis
+            "Throttle": 0,
+            "Brake": 0,
+            # Note: iRacing does not provide live tire pressure data
+            # Only cold pressures (setup values) are available via LFcoldPressure, etc.
         }
 
         # Initialize session data structure
@@ -162,15 +167,25 @@ class IRacing(Skill):
                 "RPM": self._telemetry("RPM", 0),
                 "Gear": self._telemetry("Gear", 0),
                 "FuelLevel": self._telemetry("FuelLevel", 0),
+                "FuelLevelPct": self._telemetry(
+                    "FuelLevelPct", 0
+                ),  # Better fuel percentage
                 "FuelUsePerHour": self._telemetry("FuelUsePerHour", 0),
                 "PlayerCarPosition": self._telemetry("PlayerCarPosition", 1),
                 "PlayerCarIdx": self._telemetry("PlayerCarIdx", 0),
                 "Lap": self._telemetry("Lap", 0),
+                "LapCompleted": self._telemetry("LapCompleted", 0),  # Laps completed
                 "SessionTime": self._telemetry("SessionTime", 0),
                 "SessionTimeRemain": self._telemetry("SessionTimeRemain", 0),
+                "SessionLapsRemainEx": self._telemetry(
+                    "SessionLapsRemainEx", 0
+                ),  # Better laps remaining
                 "SessionFlags": self._telemetry("SessionFlags", 0),
                 "SessionState": self._telemetry("SessionState", 0),
                 "IsReplayPlaying": self._telemetry("IsReplayPlaying", False),
+                "IsOnTrack": self._telemetry(
+                    "IsOnTrack", False
+                ),  # Car on track with player
                 "LapLastLapTime": self._telemetry("LapLastLapTime", 0),
                 "LapBestLapTime": self._telemetry("LapBestLapTime", 0),
                 "LapCurrentLapTime": self._telemetry("LapCurrentLapTime", 0),
@@ -202,32 +217,37 @@ class IRacing(Skill):
                 "RFwearM": self._telemetry("RFwearM", 0),
                 "LRwearM": self._telemetry("LRwearM", 0),
                 "RRwearM": self._telemetry("RRwearM", 0),
-                "TrackTemp": self._telemetry("TrackTemp", 0),
+                "TrackTempCrew": self._telemetry(
+                    "TrackTempCrew", 0
+                ),  # Better track temp
                 "AirTemp": self._telemetry("AirTemp", 0),
                 "RelativeHumidity": self._telemetry("RelativeHumidity", 0),
                 "WindVel": self._telemetry("WindVel", 0),
+                "WindDir": self._telemetry("WindDir", 0),  # Wind direction
                 "PlayerCarMyIncidentCount": self._telemetry(
                     "PlayerCarMyIncidentCount", 0
                 ),
                 "EngineWarnings": self._telemetry("EngineWarnings", 0),
-                "FuelPressureWarnings": self._telemetry("FuelPressureWarnings", 0),
-                "WaterTempWarnings": self._telemetry("WaterTempWarnings", 0),
-                "OilTempWarnings": self._telemetry("OilTempWarnings", 0),
+                "FuelPress": self._telemetry("FuelPress", 0),  # Actual fuel pressure
+                "WaterTemp": self._telemetry("WaterTemp", 0),  # Engine coolant temp
+                "OilTemp": self._telemetry("OilTemp", 0),  # Engine oil temp
+                "OilPress": self._telemetry("OilPress", 0),  # Engine oil pressure
                 "LFtempCL": self._telemetry("LFtempCL", 0),
                 "RFtempCL": self._telemetry("RFtempCL", 0),
                 "LRtempCL": self._telemetry("LRtempCL", 0),
                 "RRtempCL": self._telemetry("RRtempCL", 0),
-                "PitWindowOpen": self._telemetry("PitWindowOpen", False),
+                "OnPitRoad": self._telemetry(
+                    "OnPitRoad", False
+                ),  # Actual pit road status
                 "CarIdxPosition": self._telemetry("CarIdxPosition", [0]),
-                "dcBrakeBias": self._telemetry("dcBrakeBias", 0),
                 # Enhanced competitor and proximity data
                 "CarDistAhead": self._telemetry("CarDistAhead", 0),
                 "CarDistBehind": self._telemetry("CarDistBehind", 0),
-                # Additional setup and car state variables
-                "LFpressure": self._telemetry("LFpressure", 0),
-                "RFpressure": self._telemetry("RFpressure", 0),
-                "LRpressure": self._telemetry("LRpressure", 0),
-                "RRpressure": self._telemetry("RRpressure", 0),
+                # Brake and throttle inputs for analysis
+                "Throttle": self._telemetry("Throttle", 0),
+                "Brake": self._telemetry("Brake", 0),
+                # Note: iRacing does not provide live tire pressure data
+                # Only cold pressures (setup values) are available
             }
         )
 
@@ -353,19 +373,32 @@ class IRacing(Skill):
 
         # Check for damage increase
         engine_warn = telemetry_data.get("EngineWarnings", 0)
-        fuel_pressure_warn = telemetry_data.get("FuelPressureWarnings", 0)
-        water_temp_warn = telemetry_data.get("WaterTempWarnings", 0)
-        oil_temp_warn = telemetry_data.get("OilTempWarnings", 0)
+        fuel_press = telemetry_data.get("FuelPress", 0)
+        water_temp = telemetry_data.get("WaterTemp", 0)
+        oil_temp = telemetry_data.get("OilTemp", 0)
+        oil_press = telemetry_data.get("OilPress", 0)
 
         warning_types = []
+
+        # Check engine warnings bitfield
         if engine_warn > 0:
             warning_types.append("Engine")
-        if fuel_pressure_warn > 0:
-            warning_types.append("Fuel Pressure")
-        if water_temp_warn > 0:
-            warning_types.append("Water Temperature")
-        if oil_temp_warn > 0:
-            warning_types.append("Oil Temperature")
+
+        # Check for critically low fuel pressure (typically should be 2-4 bar)
+        if fuel_press > 0 and fuel_press < 1.0:
+            warning_types.append("Low Fuel Pressure")
+
+        # Check for overheating (typical operating temp ~80-100°C)
+        if water_temp > 110:
+            warning_types.append("Overheating")
+
+        # Check for high oil temperature (typically should be under 120°C)
+        if oil_temp > 120:
+            warning_types.append("High Oil Temperature")
+
+        # Check for low oil pressure (typically should be above 1 bar)
+        if oil_press > 0 and oil_press < 0.5:
+            warning_types.append("Low Oil Pressure")
 
         if warning_types:
             return True, {"engine_warnings": ", ".join(warning_types)}
@@ -544,73 +577,9 @@ class IRacing(Skill):
 
     def _check_tire_pressure_threshold(self, telemetry_data):
         """Check for tire pressure threshold events"""
-        if not telemetry_data:
-            return False, {}
-
-        # Get current tire pressures
-        current_pressures = {
-            "LF": telemetry_data.get("LFpressure", 0),
-            "RF": telemetry_data.get("RFpressure", 0),
-            "LR": telemetry_data.get("LRpressure", 0),
-            "RR": telemetry_data.get("RRpressure", 0),
-        }
-
-        # Initialize baseline pressures if not set
-        if not hasattr(self, "_baseline_pressures"):
-            # Only set baseline if we have valid pressure data
-            if any(p > 0 for p in current_pressures.values()):
-                self._baseline_pressures = current_pressures.copy()
-            return False, {}
-
-        # Check for significant pressure changes or abnormal values
-        pressure_issues = []
-
-        for tire_pos, current_pressure in current_pressures.items():
-            if current_pressure <= 0:
-                continue  # Skip invalid readings
-
-            baseline_pressure = self._baseline_pressures.get(tire_pos, 0)
-            if baseline_pressure <= 0:
-                continue  # Skip if no baseline
-
-            pressure_change = current_pressure - baseline_pressure
-            pressure_change_pct = (pressure_change / baseline_pressure) * 100
-
-            # Check for significant pressure loss (>15% drop)
-            if pressure_change_pct < -15:
-                pressure_issues.append(
-                    (tire_pos, current_pressure, "significant pressure loss")
-                )
-
-            # Check for pressure gain (overheating or setup issue, >20% increase)
-            elif pressure_change_pct > 20:
-                pressure_issues.append((tire_pos, current_pressure, "pressure spike"))
-
-            # Check for abnormally low pressure (under 20 PSI for most cars)
-            elif current_pressure < 20:
-                pressure_issues.append(
-                    (tire_pos, current_pressure, "critically low pressure")
-                )
-
-            # Check for abnormally high pressure (over 45 PSI for most cars)
-            elif current_pressure > 45:
-                pressure_issues.append(
-                    (tire_pos, current_pressure, "critically high pressure")
-                )
-
-        if pressure_issues:
-            # Report the most critical issue (lowest or highest pressure)
-            critical_issue = min(
-                pressure_issues, key=lambda x: abs(x[1] - 30)
-            )  # 30 PSI as target
-            tire_pos, pressure, change_type = critical_issue
-
-            return True, {
-                "tire_position": tire_pos,
-                "pressure": pressure,
-                "change_type": change_type,
-            }
-
+        # iRacing does not provide live tire pressure data
+        # Only cold pressures (setup values) are available
+        # This function is disabled until proper tire pressure data is available
         return False, {}
 
     def _check_tire_wear_threshold(self, telemetry_data):
@@ -798,7 +767,7 @@ class IRacing(Skill):
         if not telemetry_data:
             return False, {}
 
-        track_temp = telemetry_data.get("TrackTemp", 0)
+        track_temp = telemetry_data.get("TrackTempCrew", 0)
         air_temp = telemetry_data.get("AirTemp", 0)
 
         # Store initial conditions
@@ -882,7 +851,7 @@ class IRacing(Skill):
                     "RFwearM": self._telemetry("RFwearM", 0),
                     "LRwearM": self._telemetry("LRwearM", 0),
                     "RRwearM": self._telemetry("RRwearM", 0),
-                    "TrackTemp": self._telemetry("TrackTemp", 0),
+                    "TrackTempCrew": self._telemetry("TrackTempCrew", 0),
                     "AirTemp": self._telemetry("AirTemp", 0),
                     "RelativeHumidity": self._telemetry("RelativeHumidity", 0),
                     "WindVel": self._telemetry("WindVel", 0),
@@ -1853,7 +1822,7 @@ Stay focused on the immediate racing situation and provide clear, actionable gui
             return "No track condition data available."
 
         try:
-            track_temp = self.telemetry_data.get("TrackTemp", 0)
+            track_temp = self.telemetry_data.get("TrackTempCrew", 0)
             air_temp = self.telemetry_data.get("AirTemp", 0)
             humidity = self.telemetry_data.get("RelativeHumidity", 0)
             wind_speed = self.telemetry_data.get("WindVel", 0)
