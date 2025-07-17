@@ -1,7 +1,7 @@
 import asyncio
 import threading
 import time
-from typing import TYPE_CHECKING, Any, Dict, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Tuple, Callable
 from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from services.benchmark import Benchmark
@@ -14,6 +14,29 @@ try:
     import irsdk
 except ImportError:
     irsdk = None
+
+
+class WatchdogEvent:
+    """Represents a watchdog event that can be triggered based on telemetry data"""
+
+    def __init__(
+        self,
+        name: str,
+        check_interval: float,
+        cooldown_period: float,
+        threshold_func: Callable[[dict, dict], bool],
+        prompt_template: str,
+        enabled: bool = True,
+    ):
+        self.name = name
+        self.check_interval = check_interval
+        self.cooldown_period = cooldown_period
+        self.threshold_func = threshold_func
+        self.prompt_template = prompt_template
+        self.enabled = enabled
+        self.last_triggered = 0
+        self.last_checked = 0
+        self.state = {}  # Store previous values and state data
 
 
 class IRacing(Skill):
@@ -40,6 +63,11 @@ class IRacing(Skill):
         # Start watchdog after validation
         self.watchdog_started = False
 
+        # Initialize watchdog events system
+        self.watchdog_events = []
+        self.watchdog_event_configs = {}
+        self._init_watchdog_events()
+
     def _telemetry(self, key, default=None):
         """Safely get telemetry data with fallback"""
         try:
@@ -49,6 +77,285 @@ class IRacing(Skill):
             return default
         except (KeyError, AttributeError):
             return default
+
+    def _init_watchdog_events(self):
+        """Initialize watchdog events with their threshold functions"""
+        self.watchdog_events = [
+            # Critical Events - High Priority
+            WatchdogEvent(
+                name="damage_detection",
+                check_interval=self.damage_alerts_interval,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_damage_threshold,
+                prompt_template="Generate a brief, urgent race engineer alert about vehicle damage detected. Engine warnings: {engine_warnings}. Keep it under 15 words and racing-appropriate.",
+                enabled=self.damage_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="fuel_critical",
+                check_interval=self.fuel_alerts_interval,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_fuel_threshold,
+                prompt_template="Generate a brief, urgent race engineer fuel warning. Fuel level: {fuel_level:.1f} gallons, estimated {laps_remaining} laps remaining. Keep it under 15 words.",
+                enabled=self.fuel_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="flag_change",
+                check_interval=self.flag_alerts_interval,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_flag_threshold,
+                prompt_template="Generate a brief race engineer flag status alert. Flag changed to: {flag_status}. Keep it under 12 words and racing-appropriate.",
+                enabled=self.flag_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="tire_overheat",
+                check_interval=self.tire_alerts_interval,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_tire_temp_threshold,
+                prompt_template="Generate a brief race engineer tire temperature warning. Overheating tire: {tire_position} at {temperature:.0f}°F. Keep it under 15 words.",
+                enabled=self.tire_alerts_enabled,
+            ),
+            # Strategic Events - Medium Priority
+            WatchdogEvent(
+                name="pit_window",
+                check_interval=15.0,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_pit_window_threshold,
+                prompt_template="Generate a brief race engineer pit strategy notification. Fuel for approximately {laps_remaining} more laps. Keep it under 15 words.",
+                enabled=self.pit_window_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="performance_drop",
+                check_interval=self.performance_alerts_interval,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_performance_delta_threshold,
+                prompt_template="Generate a brief race engineer performance alert. Delta to personal best: {delta:.2f}s consistently slow. Keep it under 15 words.",
+                enabled=self.performance_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="incident_alert",
+                check_interval=5.0,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_incidents_threshold,
+                prompt_template="Generate a brief race engineer incident notification. Incident count now: {incidents}x. Keep it under 12 words.",
+                enabled=self.incident_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="position_change",
+                check_interval=self.position_alerts_interval,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_position_change_threshold,
+                prompt_template="Generate a brief race engineer position update. Position changed from P{old_pos} to P{new_pos}. Keep it under 12 words.",
+                enabled=self.position_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="personal_best",
+                check_interval=10.0,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_personal_best_threshold,
+                prompt_template="Generate a brief race engineer celebration for personal best. New best: {new_best:.3f}s, previous: {old_best:.3f}s. Keep it under 12 words.",
+                enabled=self.personal_best_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="track_conditions",
+                check_interval=30.0,
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_track_conditions_threshold,
+                prompt_template="Generate a brief race engineer track conditions update. Track: {track_temp}°C, Air: {air_temp}°C. Keep it under 12 words.",
+                enabled=self.track_condition_alerts_enabled,
+            ),
+        ]
+
+    def _check_damage_threshold(self, telemetry_data):
+        """Check for damage threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        # Check for damage increase
+        engine_warn = telemetry_data.get("EngineWarnings", 0)
+        fuel_pressure_warn = telemetry_data.get("FuelPressureWarnings", 0)
+        water_temp_warn = telemetry_data.get("WaterTempWarnings", 0)
+        oil_temp_warn = telemetry_data.get("OilTempWarnings", 0)
+
+        # Check for any warning flags
+        if (
+            engine_warn > 0
+            or fuel_pressure_warn > 0
+            or water_temp_warn > 0
+            or oil_temp_warn > 0
+        ):
+            return True, {"warnings": True}
+
+        return False, {}
+
+    def _check_fuel_threshold(self, telemetry_data):
+        """Check for fuel critical threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        fuel_level = telemetry_data.get("FuelLevel", 0)
+        fuel_use_per_hour = telemetry_data.get("FuelUsePerHour", 0)
+
+        # Calculate laps remaining (rough estimate)
+        if fuel_use_per_hour > 0:
+            laps_remaining = fuel_level / fuel_use_per_hour
+            if laps_remaining < 2.0:  # Less than 2 laps of fuel
+                return True, {
+                    "fuel_level": fuel_level,
+                    "laps_remaining": laps_remaining,
+                }
+
+        return False, {}
+
+    def _check_flag_threshold(self, telemetry_data):
+        """Check for flag change threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        current_flags = telemetry_data.get("SessionFlags", 0)
+        if not hasattr(self, "_last_flags"):
+            self._last_flags = current_flags
+            return False, {}
+
+        # Check for flag changes
+        if current_flags != self._last_flags:
+            old_flags = self._last_flags
+            self._last_flags = current_flags
+            return True, {"old_flags": old_flags, "new_flags": current_flags}
+
+        return False, {}
+
+    def _check_tire_temp_threshold(self, telemetry_data):
+        """Check for tire temperature threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        # Check tire temperatures (optimal range varies by compound)
+        lf_temp = telemetry_data.get("LFtempCL", 0)
+        rf_temp = telemetry_data.get("RFtempCL", 0)
+        lr_temp = telemetry_data.get("LRtempCL", 0)
+        rr_temp = telemetry_data.get("RRtempCL", 0)
+
+        # Convert from Celsius to Fahrenheit if needed
+        temps = [lf_temp, rf_temp, lr_temp, rr_temp]
+        overheating = [
+            temp for temp in temps if temp > 105
+        ]  # Above 105°C is concerning
+
+        if overheating:
+            return True, {"max_temp": max(overheating), "tire_count": len(overheating)}
+
+        return False, {}
+
+    def _check_pit_window_threshold(self, telemetry_data):
+        """Check for pit window threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        # Check if pit window is opening/closing
+        pit_window_open = telemetry_data.get("PitWindowOpen", False)
+        if not hasattr(self, "_last_pit_window"):
+            self._last_pit_window = pit_window_open
+            return False, {}
+
+        if pit_window_open != self._last_pit_window:
+            self._last_pit_window = pit_window_open
+            return True, {"pit_window_open": pit_window_open}
+
+        return False, {}
+
+    def _check_performance_delta_threshold(self, telemetry_data):
+        """Check for performance delta threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        lap_delta = telemetry_data.get("LapDeltaToBestLap", 0)
+
+        # Alert if significantly off pace (more than 2 seconds slower)
+        if lap_delta > 2.0:
+            return True, {"delta": lap_delta}
+
+        return False, {}
+
+    def _check_incidents_threshold(self, telemetry_data):
+        """Check for incidents threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        current_incidents = telemetry_data.get("PlayerCarMyIncidentCount", 0)
+        if not hasattr(self, "_last_incidents"):
+            self._last_incidents = current_incidents
+            return False, {}
+
+        if current_incidents > self._last_incidents:
+            self._last_incidents = current_incidents
+            return True, {"incidents": current_incidents}
+
+        return False, {}
+
+    def _check_position_change_threshold(self, telemetry_data):
+        """Check for position change threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        current_pos = telemetry_data.get("CarIdxPosition", [0])[0]  # Player position
+        if not hasattr(self, "_last_position"):
+            self._last_position = current_pos
+            return False, {}
+
+        if current_pos != self._last_position:
+            old_pos = self._last_position
+            self._last_position = current_pos
+            return True, {"old_pos": old_pos, "new_pos": current_pos}
+
+        return False, {}
+
+    def _check_personal_best_threshold(self, telemetry_data):
+        """Check for personal best threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        current_best = telemetry_data.get("LapBestLapTime", 0)
+        if not hasattr(self, "_last_best_lap"):
+            self._last_best_lap = current_best
+            return False, {}
+
+        # Check if we have a new personal best (faster time)
+        if current_best > 0 and (
+            self._last_best_lap == 0 or current_best < self._last_best_lap
+        ):
+            old_best = self._last_best_lap
+            self._last_best_lap = current_best
+            return True, {"old_best": old_best, "new_best": current_best}
+
+        return False, {}
+
+    def _check_track_conditions_threshold(self, telemetry_data):
+        """Check for track conditions threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        track_temp = telemetry_data.get("TrackTemp", 0)
+        air_temp = telemetry_data.get("AirTemp", 0)
+
+        # Store initial conditions
+        if not hasattr(self, "_initial_track_temp"):
+            self._initial_track_temp = track_temp
+            self._initial_air_temp = air_temp
+            return False, {}
+
+        # Check for significant temperature changes (>10°C)
+        track_delta = abs(track_temp - self._initial_track_temp)
+        air_delta = abs(air_temp - self._initial_air_temp)
+
+        if track_delta > 10 or air_delta > 10:
+            return True, {
+                "track_temp": track_temp,
+                "air_temp": air_temp,
+                "track_delta": track_delta,
+                "air_delta": air_delta,
+            }
+
+        return False, {}
 
     def _refresh_telemetry_data(self):
         """Refresh telemetry data on-demand when watchdog is disabled"""
@@ -152,6 +459,59 @@ class IRacing(Skill):
             self.retrieve_custom_property_value("watchdog_interval", errors)
         )
 
+        # Read watchdog event configuration
+        self.damage_alerts_enabled = self.retrieve_custom_property_value(
+            "damage_alerts_enabled", errors
+        )
+        self.damage_alerts_interval = float(
+            self.retrieve_custom_property_value("damage_alerts_interval", errors)
+        )
+        self.fuel_alerts_enabled = self.retrieve_custom_property_value(
+            "fuel_alerts_enabled", errors
+        )
+        self.fuel_alerts_interval = float(
+            self.retrieve_custom_property_value("fuel_alerts_interval", errors)
+        )
+        self.flag_alerts_enabled = self.retrieve_custom_property_value(
+            "flag_alerts_enabled", errors
+        )
+        self.flag_alerts_interval = float(
+            self.retrieve_custom_property_value("flag_alerts_interval", errors)
+        )
+        self.tire_alerts_enabled = self.retrieve_custom_property_value(
+            "tire_alerts_enabled", errors
+        )
+        self.tire_alerts_interval = float(
+            self.retrieve_custom_property_value("tire_alerts_interval", errors)
+        )
+        self.position_alerts_enabled = self.retrieve_custom_property_value(
+            "position_alerts_enabled", errors
+        )
+        self.position_alerts_interval = float(
+            self.retrieve_custom_property_value("position_alerts_interval", errors)
+        )
+        self.performance_alerts_enabled = self.retrieve_custom_property_value(
+            "performance_alerts_enabled", errors
+        )
+        self.performance_alerts_interval = float(
+            self.retrieve_custom_property_value("performance_alerts_interval", errors)
+        )
+        self.incident_alerts_enabled = self.retrieve_custom_property_value(
+            "incident_alerts_enabled", errors
+        )
+        self.personal_best_alerts_enabled = self.retrieve_custom_property_value(
+            "personal_best_alerts_enabled", errors
+        )
+        self.pit_window_alerts_enabled = self.retrieve_custom_property_value(
+            "pit_window_alerts_enabled", errors
+        )
+        self.track_condition_alerts_enabled = self.retrieve_custom_property_value(
+            "track_condition_alerts_enabled", errors
+        )
+        self.alert_cooldown_period = float(
+            self.retrieve_custom_property_value("alert_cooldown_period", errors)
+        )
+
         # Start watchdog if enabled and not already started
         if self.enable_watchdog and not self.watchdog_started:
             self._start_watchdog()
@@ -247,6 +607,17 @@ class IRacing(Skill):
                             "PlayerCarMyIncidentCount", 0
                         ),
                         "EngineWarnings": self._telemetry("EngineWarnings", 0),
+                        "FuelPressureWarnings": self._telemetry(
+                            "FuelPressureWarnings", 0
+                        ),
+                        "WaterTempWarnings": self._telemetry("WaterTempWarnings", 0),
+                        "OilTempWarnings": self._telemetry("OilTempWarnings", 0),
+                        "LFtempCL": self._telemetry("LFtempCL", 0),
+                        "RFtempCL": self._telemetry("RFtempCL", 0),
+                        "LRtempCL": self._telemetry("LRtempCL", 0),
+                        "RRtempCL": self._telemetry("RRtempCL", 0),
+                        "PitWindowOpen": self._telemetry("PitWindowOpen", False),
+                        "CarIdxPosition": self._telemetry("CarIdxPosition", [0]),
                         "dcBrakeBias": self._telemetry("dcBrakeBias", 0),
                         # Enhanced competitor and proximity data
                         "CarDistAhead": self._telemetry("CarDistAhead", 0),
@@ -266,6 +637,11 @@ class IRacing(Skill):
                     }
 
                     self.last_update = time.time()
+
+                    # Process watchdog events for proactive alerts
+                    if self.enable_watchdog:
+                        asyncio.run(self._process_watchdog_events())
+
                     time.sleep(self.watchdog_interval)  # Use configurable interval
                 else:
                     if self.is_connected:
@@ -290,6 +666,59 @@ class IRacing(Skill):
                         )
                     )
                 time.sleep(1)
+
+    async def _process_watchdog_events(self):
+        """Process watchdog events and trigger proactive alerts"""
+        if not self.telemetry_data:
+            return
+
+        current_time = time.time()
+
+        for event in self.watchdog_events:
+            if not event.enabled:
+                continue
+
+            # Check if enough time has passed since last check
+            if current_time - event.last_check_time < event.check_interval:
+                continue
+
+            # Check if cooldown period has passed since last trigger
+            if current_time - event.last_trigger_time < event.cooldown_period:
+                continue
+
+            # Update last check time
+            event.last_check_time = current_time
+
+            try:
+                # Call the threshold function
+                triggered, context = event.threshold_func(self.telemetry_data)
+
+                if triggered:
+                    # Update last trigger time
+                    event.last_trigger_time = current_time
+
+                    # Generate proactive message using LLM
+                    prompt = event.prompt_template.format(**context)
+
+                    # Send proactive alert to user
+                    await self.wingman.add_assistant_message(
+                        text=prompt,
+                        play_to_user=True,
+                        context={"event": event.name, "telemetry": context},
+                    )
+
+                    if self.settings.debug_mode:
+                        await self.printr.print_async(
+                            text=f"iRacing watchdog triggered: {event.name}",
+                            color=LogType.INFO,
+                        )
+
+            except Exception as e:
+                if self.settings.debug_mode:
+                    await self.printr.print_async(
+                        text=f"iRacing watchdog event error ({event.name}): {str(e)}",
+                        color=LogType.ERROR,
+                    )
 
     def get_tools(self) -> list[Tuple[str, Dict[str, Any]]]:
         return [
