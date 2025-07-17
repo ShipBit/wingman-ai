@@ -86,6 +86,8 @@ class IRacing(Skill):
             "SessionTime": 0,
             "SessionTimeRemain": 0,
             "SessionFlags": 0,
+            "SessionState": 0,
+            "IsReplayPlaying": False,
             "LapLastLapTime": 0,
             "LapBestLapTime": 0,
             "LapCurrentLapTime": 0,
@@ -166,6 +168,8 @@ class IRacing(Skill):
                 "SessionTime": self._telemetry("SessionTime", 0),
                 "SessionTimeRemain": self._telemetry("SessionTimeRemain", 0),
                 "SessionFlags": self._telemetry("SessionFlags", 0),
+                "SessionState": self._telemetry("SessionState", 0),
+                "IsReplayPlaying": self._telemetry("IsReplayPlaying", False),
                 "LapLastLapTime": self._telemetry("LapLastLapTime", 0),
                 "LapBestLapTime": self._telemetry("LapBestLapTime", 0),
                 "LapCurrentLapTime": self._telemetry("LapCurrentLapTime", 0),
@@ -540,6 +544,8 @@ class IRacing(Skill):
                     "SessionTime": self._telemetry("SessionTime", 0),
                     "SessionTimeRemain": self._telemetry("SessionTimeRemain", 0),
                     "SessionFlags": self._telemetry("SessionFlags", 0),
+                    "SessionState": self._telemetry("SessionState", 0),
+                    "IsReplayPlaying": self._telemetry("IsReplayPlaying", False),
                     "LapLastLapTime": self._telemetry("LapLastLapTime", 0),
                     "LapBestLapTime": self._telemetry("LapBestLapTime", 0),
                     "LapCurrentLapTime": self._telemetry("LapCurrentLapTime", 0),
@@ -733,6 +739,7 @@ class IRacing(Skill):
                     )  # Use configurable interval when disconnected too
 
             except Exception as e:
+                # Only log watchdog errors in debug mode to avoid disturbing streamers
                 if self.settings.debug_mode:
                     asyncio.run(
                         self.printr.print_async(
@@ -742,9 +749,49 @@ class IRacing(Skill):
                     )
                 time.sleep(1)
 
+    def _is_in_active_session(self) -> bool:
+        """Check if the user is in an active racing session where watchdog alerts should be triggered"""
+        try:
+            # Check if we have valid telemetry data
+            if not self.telemetry_data:
+                return False
+
+            # Check session state - only trigger during active racing sessions
+            session_state = self._telemetry("SessionState", 0)
+            # SessionState values: 0=invalid, 1=get_in_car, 2=warmup, 3=parade_laps, 4=racing, 5=checkered, 6=cool_down
+            # We want alerts during: warmup(2), parade_laps(3), racing(4), checkered(5)
+            if session_state < 2 or session_state > 5:
+                return False
+
+            # Check if we're in a replay - don't trigger alerts during replay playback
+            is_replay_playing = self._telemetry("IsReplayPlaying", False)
+            if is_replay_playing:
+                return False
+
+            # Check if we're actually on track (speed > 0 or in gear)
+            speed = self.telemetry_data.get("Speed", 0)
+            gear = self.telemetry_data.get("Gear", 0)
+            # Allow alerts even at zero speed (pit stops, grid starts, etc.)
+            # but require a valid gear state or recent activity
+            if speed == 0 and gear == 0:
+                # Check if we have recent lap activity
+                current_lap = self.telemetry_data.get("Lap", 0)
+                if current_lap == 0:
+                    return False
+
+            return True
+
+        except Exception:
+            # If we can't determine session state, err on the side of caution
+            return False
+
     async def _process_watchdog_events(self):
         """Process watchdog events and trigger proactive alerts"""
         if not self.telemetry_data:
+            return
+
+        # Check if we're in an active racing session before processing events
+        if not self._is_in_active_session():
             return
 
         current_time = time.time()
@@ -789,6 +836,7 @@ class IRacing(Skill):
                         )
 
             except Exception as e:
+                # Only log watchdog errors in debug mode to avoid disturbing streamers
                 if self.settings.debug_mode:
                     await self.printr.print_async(
                         text=f"iRacing watchdog event error ({event.name}): {str(e)}",
