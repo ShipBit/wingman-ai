@@ -282,6 +282,7 @@ custom_properties:
       - Use racing terminology and provide actionable advice when possible
       - Always round numerical values - avoid excessive decimal places
       - Use natural language for very small values (e.g., "less than a lap remaining" instead of "0.234 laps remaining")
+      - Never start a conversation with „Telemetry alert“ or similar phrases. I already know that you’ll only talk to me about telemetry alerts. Just say the actual alert.
       - Be confident, direct, and results-oriented
       - Examples: "Box this lap for fuel!" or "Yellow flag out, prepare to bunch up!" or "Half a lap of fuel left!"
 

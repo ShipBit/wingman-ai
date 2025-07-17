@@ -257,7 +257,7 @@ class IRacing(Skill):
                 check_interval=self.fuel_alerts_interval,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_fuel_threshold,
-                prompt_template="[WATCHDOG_EVENT] Fuel critical - Level: {fuel_level:.1f} gallons, estimated {laps_remaining:.1f} laps remaining",
+                prompt_template="[WATCHDOG_EVENT] Fuel critical - Only {laps_remaining:.1f} laps of fuel remaining, need {laps_needed:.1f} to finish",
                 enabled=self.fuel_alerts_enabled,
             ),
             WatchdogEvent(
@@ -274,6 +274,25 @@ class IRacing(Skill):
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_tire_temp_threshold,
                 prompt_template="[WATCHDOG_EVENT] Tire overheating - {tire_position} at {temperature:.0f}°F",
+                enabled=self.tire_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="tire_pressure_loss",
+                check_interval=self.tire_alerts_interval
+                * 1.5,  # Check slightly less frequently
+                cooldown_period=self.alert_cooldown_period,
+                threshold_func=self._check_tire_pressure_threshold,
+                prompt_template="[WATCHDOG_EVENT] Tire pressure issue - {tire_position} at {pressure:.1f} PSI, {change_type}",
+                enabled=self.tire_alerts_enabled,
+            ),
+            WatchdogEvent(
+                name="tire_wear_critical",
+                check_interval=self.tire_alerts_interval
+                * 2.0,  # Check less frequently as wear is gradual
+                cooldown_period=self.alert_cooldown_period
+                * 2,  # Longer cooldown for wear alerts
+                threshold_func=self._check_tire_wear_threshold,
+                prompt_template="[WATCHDOG_EVENT] Critical tire wear - {tire_position} at {wear_percent:.0f}% worn, consider pit stop",
                 enabled=self.tire_alerts_enabled,
             ),
             # Strategic Events - Medium Priority
@@ -314,7 +333,7 @@ class IRacing(Skill):
                 check_interval=10.0,
                 cooldown_period=self.alert_cooldown_period,
                 threshold_func=self._check_personal_best_threshold,
-                prompt_template="[WATCHDOG_EVENT] Personal best achieved - New: {new_best:.3f}s, previous: {old_best:.3f}s",
+                prompt_template="[WATCHDOG_EVENT] {improvement_message}{lap_context}",
                 enabled=self.personal_best_alerts_enabled,
             ),
             WatchdogEvent(
@@ -361,32 +380,77 @@ class IRacing(Skill):
         fuel_level = telemetry_data.get("FuelLevel", 0)
         fuel_use_per_hour = telemetry_data.get("FuelUsePerHour", 0)
         session_time = telemetry_data.get("SessionTime", 0)
+        session_time_remain = telemetry_data.get("SessionTimeRemain", 0)
         lap_num = telemetry_data.get("Lap", 0)
+        current_lap_time = telemetry_data.get("LapCurrentLapTime", 0)
 
         # Don't alert for fuel in very early stages of session
-        # Wait until at least lap 3 and 5 minutes into session
-        if lap_num < 3 or session_time < 300:
+        # Wait until at least lap 5 and 10 minutes into session to get accurate consumption data
+        if lap_num < 5 or session_time < 600:
             return False, {}
 
         # Only alert if we have meaningful fuel consumption data
-        if fuel_use_per_hour <= 0:
+        if fuel_use_per_hour <= 0 or fuel_level <= 0:
             return False, {}
 
-        # Calculate laps remaining (rough estimate)
-        laps_remaining = fuel_level / fuel_use_per_hour
+        # Calculate more accurate laps remaining based on current consumption
+        # Convert fuel use per hour to fuel use per second
+        fuel_use_per_second = fuel_use_per_hour / 3600.0
 
-        # More conservative thresholds based on session type and progress
-        if session_time > 1800:  # 30+ minutes in - racing situation
-            fuel_threshold = 1.5  # 1.5 laps remaining
-        elif session_time > 900:  # 15+ minutes in - longer practice
-            fuel_threshold = 1.0  # 1 lap remaining
+        # Estimate lap time (use current lap time if available, otherwise estimate from session progress)
+        if (
+            current_lap_time > 0 and current_lap_time < 300
+        ):  # Valid lap time (under 5 minutes)
+            estimated_lap_time = current_lap_time
+        elif lap_num > 0 and session_time > 0:
+            # Estimate average lap time from session progress
+            estimated_lap_time = session_time / lap_num
         else:
-            fuel_threshold = 0.5  # Very late alert for short sessions
+            # Fallback to typical lap time estimate
+            estimated_lap_time = 90.0  # 1.5 minutes
 
-        if laps_remaining < fuel_threshold:
+        # Calculate fuel use per lap
+        fuel_per_lap = fuel_use_per_second * estimated_lap_time
+
+        if fuel_per_lap <= 0:
+            return False, {}
+
+        # Calculate laps remaining with current fuel
+        laps_remaining = fuel_level / fuel_per_lap
+
+        # Calculate laps needed to finish session
+        if session_time_remain > 0 and estimated_lap_time > 0:
+            laps_needed = session_time_remain / estimated_lap_time
+        else:
+            laps_needed = 0
+
+        # Only alert if we're in a race scenario (session has significant time remaining)
+        # and fuel is actually critically low
+        if session_time_remain < 300:  # Less than 5 minutes remaining
+            return False, {}  # Don't alert for very short remaining time
+
+        # Much more conservative thresholds - only alert when driver MUST act
+        if (
+            session_time_remain > 1800
+        ):  # More than 30 minutes remaining (endurance race)
+            # For long races, alert when less than 3 laps of fuel remain
+            fuel_threshold = 3.0
+        elif session_time_remain > 900:  # 15-30 minutes remaining
+            # For medium races, alert when less than 2 laps remain
+            fuel_threshold = 2.0
+        else:
+            # For shorter races (5-15 min), alert when less than 1 lap remains
+            fuel_threshold = 1.0
+
+        # Additional check: only alert if we actually need more fuel to finish
+        fuel_shortage = max(0, laps_needed - laps_remaining)
+
+        if laps_remaining < fuel_threshold and fuel_shortage > 0.5:
             return True, {
                 "fuel_level": fuel_level,
                 "laps_remaining": laps_remaining,
+                "laps_needed": laps_needed,
+                "shortage": fuel_shortage,
             }
 
         return False, {}
@@ -436,6 +500,12 @@ class IRacing(Skill):
             old_flags = self._last_flags
             self._last_flags = current_flags
             flag_status = self._interpret_session_flags(current_flags)
+
+            # Ignore green flag events as they are normal race start conditions
+            # Only alert for significant flag changes (yellow, red, checkered, etc.)
+            if flag_status == "Green":
+                return False, {}
+
             return True, {"flag_status": flag_status}
 
         return False, {}
@@ -468,6 +538,128 @@ class IRacing(Skill):
                 "tire_position": hottest_tire,
                 "temperature": temp_f,
                 "tire_count": len(overheating_tires),
+            }
+
+        return False, {}
+
+    def _check_tire_pressure_threshold(self, telemetry_data):
+        """Check for tire pressure threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        # Get current tire pressures
+        current_pressures = {
+            "LF": telemetry_data.get("LFpressure", 0),
+            "RF": telemetry_data.get("RFpressure", 0),
+            "LR": telemetry_data.get("LRpressure", 0),
+            "RR": telemetry_data.get("RRpressure", 0),
+        }
+
+        # Initialize baseline pressures if not set
+        if not hasattr(self, "_baseline_pressures"):
+            # Only set baseline if we have valid pressure data
+            if any(p > 0 for p in current_pressures.values()):
+                self._baseline_pressures = current_pressures.copy()
+            return False, {}
+
+        # Check for significant pressure changes or abnormal values
+        pressure_issues = []
+
+        for tire_pos, current_pressure in current_pressures.items():
+            if current_pressure <= 0:
+                continue  # Skip invalid readings
+
+            baseline_pressure = self._baseline_pressures.get(tire_pos, 0)
+            if baseline_pressure <= 0:
+                continue  # Skip if no baseline
+
+            pressure_change = current_pressure - baseline_pressure
+            pressure_change_pct = (pressure_change / baseline_pressure) * 100
+
+            # Check for significant pressure loss (>15% drop)
+            if pressure_change_pct < -15:
+                pressure_issues.append(
+                    (tire_pos, current_pressure, "significant pressure loss")
+                )
+
+            # Check for pressure gain (overheating or setup issue, >20% increase)
+            elif pressure_change_pct > 20:
+                pressure_issues.append((tire_pos, current_pressure, "pressure spike"))
+
+            # Check for abnormally low pressure (under 20 PSI for most cars)
+            elif current_pressure < 20:
+                pressure_issues.append(
+                    (tire_pos, current_pressure, "critically low pressure")
+                )
+
+            # Check for abnormally high pressure (over 45 PSI for most cars)
+            elif current_pressure > 45:
+                pressure_issues.append(
+                    (tire_pos, current_pressure, "critically high pressure")
+                )
+
+        if pressure_issues:
+            # Report the most critical issue (lowest or highest pressure)
+            critical_issue = min(
+                pressure_issues, key=lambda x: abs(x[1] - 30)
+            )  # 30 PSI as target
+            tire_pos, pressure, change_type = critical_issue
+
+            return True, {
+                "tire_position": tire_pos,
+                "pressure": pressure,
+                "change_type": change_type,
+            }
+
+        return False, {}
+
+    def _check_tire_wear_threshold(self, telemetry_data):
+        """Check for tire wear threshold events"""
+        if not telemetry_data:
+            return False, {}
+
+        # Get tire wear levels (0.0 = new, 1.0 = completely worn)
+        tire_wear = {
+            "LF": telemetry_data.get("LFwearM", 0),
+            "RF": telemetry_data.get("RFwearM", 0),
+            "LR": telemetry_data.get("LRwearM", 0),
+            "RR": telemetry_data.get("RRwearM", 0),
+        }
+
+        # Track wear progression to avoid repeat alerts
+        if not hasattr(self, "_last_wear_alert_level"):
+            self._last_wear_alert_level = {}
+
+        critical_wear_tires = []
+
+        for tire_pos, wear_level in tire_wear.items():
+            if wear_level <= 0:
+                continue  # Skip invalid readings
+
+            wear_percent = wear_level * 100
+            last_alert_level = self._last_wear_alert_level.get(tire_pos, 0)
+
+            # Alert at 70%, 85%, and 95% wear levels
+            if wear_percent >= 95 and last_alert_level < 95:
+                critical_wear_tires.append((tire_pos, wear_percent, "CRITICAL"))
+                self._last_wear_alert_level[tire_pos] = 95
+            elif wear_percent >= 85 and last_alert_level < 85:
+                critical_wear_tires.append((tire_pos, wear_percent, "HIGH"))
+                self._last_wear_alert_level[tire_pos] = 85
+            elif wear_percent >= 70 and last_alert_level < 70:
+                critical_wear_tires.append((tire_pos, wear_percent, "MODERATE"))
+                self._last_wear_alert_level[tire_pos] = 70
+
+        if critical_wear_tires:
+            # Report the most worn tire
+            most_worn = max(critical_wear_tires, key=lambda x: x[1])
+            tire_pos, wear_percent, severity = most_worn
+
+            return True, {
+                "tire_position": tire_pos,
+                "wear_percent": wear_percent,
+                "severity": severity,
+                "tire_count": len(critical_wear_tires),
             }
 
         return False, {}
@@ -541,6 +733,8 @@ class IRacing(Skill):
             return False, {}
 
         current_best = telemetry_data.get("LapBestLapTime", 0)
+        last_lap_time = telemetry_data.get("LapLastLapTime", 0)
+
         if not hasattr(self, "_last_best_lap"):
             self._last_best_lap = current_best
             return False, {}
@@ -551,7 +745,38 @@ class IRacing(Skill):
         ):
             old_best = self._last_best_lap
             self._last_best_lap = current_best
-            return True, {"old_best": old_best, "new_best": current_best}
+
+            # Calculate time improvement delta
+            time_delta = old_best - current_best if old_best > 0 else 0
+
+            # Determine if this new best was the lap just completed
+            was_last_lap = abs(last_lap_time - current_best) < 0.01 if last_lap_time > 0 else False
+
+            # Create appropriate improvement message
+            if old_best == 0:
+                # First personal best of the session
+                improvement_message = f"Personal best set - {current_best:.3f}s"
+            else:
+                # Improved existing personal best
+                improvement_message = f"Personal best achieved - {current_best:.3f}s (improved by {time_delta:.3f}s from {old_best:.3f}s)"
+
+            # Create contextual lap information
+            if was_last_lap and last_lap_time > 0:
+                lap_context = f" - Last lap was {last_lap_time:.3f}s"
+            elif last_lap_time > 0:
+                lap_context = f" - Last lap: {last_lap_time:.3f}s, Best: {current_best:.3f}s"
+            else:
+                lap_context = ""
+
+            return True, {
+                "old_best": old_best,
+                "new_best": current_best,
+                "time_delta": time_delta,
+                "last_lap_time": last_lap_time,
+                "was_last_lap": was_last_lap,
+                "improvement_message": improvement_message,
+                "lap_context": lap_context
+            }
 
         return False, {}
 
@@ -742,9 +967,12 @@ class IRacing(Skill):
         self.telemetry_awareness = self.retrieve_custom_property_value(
             "telemetry_awareness", errors
         )
-        self.watchdog_prompt = self.retrieve_custom_property_value(
-            "watchdog_prompt", errors
+        # Handle optional watchdog_prompt - don't add error if missing or empty
+        watchdog_prompt_property = next(
+            (prop for prop in self.config.custom_properties if prop.id == "watchdog_prompt"),
+            None,
         )
+        self.watchdog_prompt = watchdog_prompt_property.value if watchdog_prompt_property and watchdog_prompt_property.value else None
 
         # Initialize watchdog events now that configuration is loaded
         self._init_watchdog_events()
@@ -911,7 +1139,8 @@ GUIDELINES:
 - Always round numerical values - avoid excessive decimal places
 - Use natural language for very small values (e.g., "less than a lap remaining" instead of "0.234 laps remaining")
 - Be confident, direct, and results-oriented
-- Examples: "Box this lap for fuel!" or "Yellow flag out, prepare to bunch up!" or "Half a lap of fuel left!"
+- For personal best achievements, acknowledge the improvement delta and celebrate meaningful progress
+- Examples: "Box this lap for fuel!" or "Yellow flag out, prepare to bunch up!" or "Half a lap of fuel left!" or "Great lap! Three tenths faster!"
 
 Stay focused on the immediate racing situation and provide clear, actionable guidance."""
                         )
@@ -1450,7 +1679,7 @@ Stay focused on the immediate racing situation and provide clear, actionable gui
             return f"Error reading sector data: {str(e)}"
 
     def get_tire_condition_and_temperature_data(self) -> str:
-        """Get tire temperature and condition data"""
+        """Get tire temperature, pressure, and condition data"""
         # Refresh data if watchdog is disabled
         if not self.enable_watchdog:
             self._refresh_telemetry_data()
@@ -1459,35 +1688,137 @@ Stay focused on the immediate racing situation and provide clear, actionable gui
             return "No tire data available."
 
         try:
-            # Get tire temperatures (left, right, middle for each tire)
+            # Get tire temperatures (left, right, middle for each tire) in Celsius
             lf_temp = self.telemetry_data.get("LFtempCM", [0, 0, 0])
             rf_temp = self.telemetry_data.get("RFtempCM", [0, 0, 0])
             lr_temp = self.telemetry_data.get("LRtempCM", [0, 0, 0])
             rr_temp = self.telemetry_data.get("RRtempCM", [0, 0, 0])
 
-            # Get tire wear
+            # Get core/center line temperatures
+            lf_core = self.telemetry_data.get("LFtempCL", 0)
+            rf_core = self.telemetry_data.get("RFtempCL", 0)
+            lr_core = self.telemetry_data.get("LRtempCL", 0)
+            rr_core = self.telemetry_data.get("RRtempCL", 0)
+
+            # Get tire pressures in PSI
+            lf_pressure = self.telemetry_data.get("LFpressure", 0)
+            rf_pressure = self.telemetry_data.get("RFpressure", 0)
+            lr_pressure = self.telemetry_data.get("LRpressure", 0)
+            rr_pressure = self.telemetry_data.get("RRpressure", 0)
+
+            # Get tire wear (0.0 = new, 1.0 = worn out)
             lf_wear = self.telemetry_data.get("LFwearM", 0)
             rf_wear = self.telemetry_data.get("RFwearM", 0)
             lr_wear = self.telemetry_data.get("LRwearM", 0)
             rr_wear = self.telemetry_data.get("RRwearM", 0)
 
-            # Calculate average temperatures
-            lf_avg = sum(lf_temp) / 3 if lf_temp else 0
-            rf_avg = sum(rf_temp) / 3 if rf_temp else 0
-            lr_avg = sum(lr_temp) / 3 if lr_temp else 0
-            rr_avg = sum(rr_temp) / 3 if rr_temp else 0
+            # Calculate average temperatures and convert to Fahrenheit
+            lf_avg = sum(lf_temp) / 3 if lf_temp and any(lf_temp) else lf_core
+            rf_avg = sum(rf_temp) / 3 if rf_temp and any(rf_temp) else rf_core
+            lr_avg = sum(lr_temp) / 3 if lr_temp and any(lr_temp) else lr_core
+            rr_avg = sum(rr_temp) / 3 if rr_temp and any(rr_temp) else rr_core
 
-            # Convert to Fahrenheit and format
-            lf_f = (lf_avg * 9 / 5) + 32
-            rf_f = (rf_avg * 9 / 5) + 32
-            lr_f = (lr_avg * 9 / 5) + 32
-            rr_f = (rr_avg * 9 / 5) + 32
+            lf_f = (lf_avg * 9 / 5) + 32 if lf_avg > 0 else 0
+            rf_f = (rf_avg * 9 / 5) + 32 if rf_avg > 0 else 0
+            lr_f = (lr_avg * 9 / 5) + 32 if lr_avg > 0 else 0
+            rr_f = (rr_avg * 9 / 5) + 32 if rr_avg > 0 else 0
+
+            # Analyze tire wear condition
+            max_wear = max(lf_wear, rf_wear, lr_wear, rr_wear)
+            if max_wear < 0.3:
+                wear_status = "excellent"
+            elif max_wear < 0.6:
+                wear_status = "good"
+            elif max_wear < 0.8:
+                wear_status = "worn"
+            else:
+                wear_status = "critical"
+
+            # Build response with temperature, pressure, and wear data
+            response_parts = []
+
+            # Temperatures
+            if any(temp > 0 for temp in [lf_f, rf_f, lr_f, rr_f]):
+                response_parts.append(
+                    f"Temps: LF {lf_f:.0f}°F, RF {rf_f:.0f}°F, LR {lr_f:.0f}°F, RR {rr_f:.0f}°F"
+                )
+
+            # Pressures
+            if any(
+                pressure > 0
+                for pressure in [lf_pressure, rf_pressure, lr_pressure, rr_pressure]
+            ):
+                response_parts.append(
+                    f"Pressures: LF {lf_pressure:.1f}, RF {rf_pressure:.1f}, LR {lr_pressure:.1f}, RR {rr_pressure:.1f} PSI"
+                )
+
+            # Wear status with more detailed analysis
+            if max_wear > 0.85:
+                response_parts.append(
+                    f"Tire wear: {wear_status} - Consider pit stop soon!"
+                )
+            elif max_wear > 0.70:
+                response_parts.append(f"Tire wear: {wear_status} - Monitor closely")
+            else:
+                response_parts.append(f"Tire wear: {wear_status}")
+
+            # Pressure analysis
+            avg_pressure = sum(
+                p for p in [lf_pressure, rf_pressure, lr_pressure, rr_pressure] if p > 0
+            )
+            pressure_count = sum(
+                1 for p in [lf_pressure, rf_pressure, lr_pressure, rr_pressure] if p > 0
+            )
+
+            if pressure_count > 0:
+                avg_pressure = avg_pressure / pressure_count
+
+                # Check for pressure imbalances
+                pressure_issues = []
+                for pos, pressure in [
+                    ("LF", lf_pressure),
+                    ("RF", rf_pressure),
+                    ("LR", lr_pressure),
+                    ("RR", rr_pressure),
+                ]:
+                    if pressure > 0:
+                        diff_from_avg = abs(pressure - avg_pressure)
+                        if diff_from_avg > 5:  # More than 5 PSI difference
+                            pressure_issues.append(f"{pos} {pressure:.1f}")
+
+                if pressure_issues:
+                    response_parts.append(
+                        f"Pressure imbalance: {', '.join(pressure_issues)} PSI"
+                    )
+
+            # Temperature analysis and warnings
+            hot_tires = []
+            cold_tires = []
+            for pos, temp in [("LF", lf_f), ("RF", rf_f), ("LR", lr_f), ("RR", rr_f)]:
+                if temp > 220:  # Overheating
+                    hot_tires.append(pos)
+                elif temp > 0 and temp < 160:  # Under-temperature (not generating grip)
+                    cold_tires.append(pos)
+
+            if hot_tires:
+                response_parts.append(f"WARNING: {', '.join(hot_tires)} overheating!")
+            if cold_tires:
+                response_parts.append(
+                    f"Cold tires: {', '.join(cold_tires)} - Need more heat"
+                )
+
+            # Overall tire strategy advice
+            if max_wear > 0.85 or hot_tires:
+                response_parts.append("Recommend pit stop consideration")
+            elif max_wear > 0.70:
+                response_parts.append("Monitor tire degradation closely")
 
             return (
-                f"Tire temps: LF {lf_f:.0f}°F, RF {rf_f:.0f}°F, "
-                f"LR {lr_f:.0f}°F, RR {rr_f:.0f}°F. "
-                f"Wear levels looking {'good' if max(lf_wear, rf_wear, lr_wear, rr_wear) < 0.5 else 'concerning'}."
+                ". ".join(response_parts) + "."
+                if response_parts
+                else "Tire data not available during current session."
             )
+
         except Exception as e:
             return f"Error reading tire data: {str(e)}"
 
