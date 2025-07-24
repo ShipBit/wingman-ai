@@ -152,19 +152,68 @@ class OpenAi(BaseOpenAi):
         audio_player: AudioPlayer,
         wingman_name: str,
     ):
+        # For testing, force true; in implementation check provider streaming config variable.
+        stream = True
+        
         try:
-            response = self.client.audio.speech.create(
-                model=model,
-                voice=voice,
-                speed=speed,
-                input=text,
-            )
-            if response is not None:
-                await audio_player.play_with_effects(
-                    input_data=response.content,
-                    config=sound_config,
-                    wingman_name=wingman_name,
+            if not stream:
+                # Non-streaming implementation
+                response = self.client.audio.speech.create(
+                    input=text,
+                    model=model,
+                    voice=voice,
+                    speed=speed,
                 )
+                if response is not None:
+                    await audio_player.play_with_effects(
+                        input_data=response.content,
+                        config=sound_config,
+                        wingman_name=wingman_name,
+                    )
+            else:
+                # Streaming implementation
+                with self.client.audio.speech.with_streaming_response.create(
+                    input=text,
+                    model=model,
+                    voice=voice,
+                    speed=speed,
+                    response_format="pcm",
+                ) as response:
+                    # Create an iterator for the audio chunks. We can set the chunk size here.
+                    audio_stream_iterator = response.iter_bytes(chunk_size=1024)
+
+                    # This callback is passed to the audio_player and called repeatedly
+                    # to fill its buffer.
+                    def buffer_callback(audio_buffer):
+                        """
+                        Fetches the next chunk from the audio stream and loads it
+                        into the player's buffer.
+                        """
+                        try:
+                            # Get the next chunk of audio data from the iterator
+                            chunk = next(audio_stream_iterator)
+                            chunk_size = len(chunk)
+                            
+                            # Copy the received audio data into the buffer provided by the audio player
+                            audio_buffer[:chunk_size] = chunk
+                            
+                            # Return the number of bytes written
+                            return chunk_size
+                        except StopIteration:
+                            # When the iterator is exhausted, it raises StopIteration.
+                            # We catch it and return 0 to signal the end of the stream.
+                            return 0
+
+                    # OpenAI's PCM output is 24kHz, 16-bit, single-channel.
+                    await audio_player.stream_with_effects(
+                        buffer_callback=buffer_callback,
+                        config=sound_config,
+                        wingman_name=wingman_name,
+                        sample_rate=24000,
+                        dtype="int16",
+                        channels=1,
+                    )
+
         except APIStatusError as e:
             self._handle_api_error(e)
         except UnicodeEncodeError:
@@ -334,21 +383,70 @@ class OpenAiCompatibleTts:
         ) = NOT_GIVEN,
         extra_headers: Mapping[str, Union[str, Omit]] | None = None,
     ):
+        # For testing, stream forced to true, in implementation, check provider config.
+        stream = True
+        
         try:
-            response = self.client.audio.speech.create(
-                input=text,
-                model=model,
-                voice=voice,
-                speed=speed,
-                response_format=response_format,
-                extra_headers=extra_headers,
-            )
-            if response is not None:
-                await audio_player.play_with_effects(
-                    input_data=response.content,
-                    config=sound_config,
-                    wingman_name=wingman_name,
+            if not stream:
+                # Non-streaming implementation
+                response = self.client.audio.speech.create(
+                    input=text,
+                    model=model,
+                    voice=voice,
+                    speed=speed,
+                    response_format=response_format,
+                    extra_headers=extra_headers,
                 )
+                if response is not None:
+                    await audio_player.play_with_effects(
+                        input_data=response.content,
+                        config=sound_config,
+                        wingman_name=wingman_name,
+                    )
+            else:
+                # Streaming implementation
+                with self.client.audio.speech.with_streaming_response.create(
+                    input=text,
+                    model=model,
+                    voice=voice,
+                    speed=speed,
+                    response_format="pcm",
+                    extra_headers=extra_headers,
+                ) as response:
+                    # Create an iterator for the audio chunks. We can set the chunk size here.
+                    audio_stream_iterator = response.iter_bytes(chunk_size=1024)
+
+                    # This callback is passed to the audio_player and called repeatedly
+                    # to fill its buffer.
+                    def buffer_callback(audio_buffer):
+                        """
+                        Fetches the next chunk from the audio stream and loads it
+                        into the player's buffer.
+                        """
+                        try:
+                            # Get the next chunk of audio data from the iterator
+                            chunk = next(audio_stream_iterator)
+                            chunk_size = len(chunk)
+                            
+                            # Copy the received audio data into the buffer provided by the audio player
+                            audio_buffer[:chunk_size] = chunk
+                            
+                            # Return the number of bytes written
+                            return chunk_size
+                        except StopIteration:
+                            # When the iterator is exhausted, it raises StopIteration.
+                            # We catch it and return 0 to signal the end of the stream.
+                            return 0
+
+                    await audio_player.stream_with_effects(
+                        buffer_callback=buffer_callback,
+                        config=sound_config,
+                        wingman_name=wingman_name,
+                        sample_rate=22050,  # OpenAI TTS default for PCM is 24000 so potential incompatibility here
+                        dtype="int16",
+                        channels=1,
+                    )
+
         except APIStatusError as e:
             printr.toast_error(
                 f"OpenAI-compatible TTS error: {e.status_code} ({e.type})"
@@ -364,5 +462,5 @@ class OpenAiCompatibleTts:
                 printr.toast_error(e.message)
             else:
                 printr.toast_error(
-                    "An unknown OpenAI-compatible TTS error has occured."
+                    "An unknown OpenAI-compatible TTS error has occurred."
                 )
