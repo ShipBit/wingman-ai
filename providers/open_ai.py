@@ -151,11 +151,9 @@ class OpenAi(BaseOpenAi):
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
+        stream: bool,
     ):
-        # For testing, force true; in implementation check provider streaming config variable.
-        stream = True # = config.output_streaming
-        
-        #instructions = config.instructions # Instructions are for gpt-4o-mini-tts model only
+        # instructions = config.instructions # Instructions are for gpt-4o-mini-tts model only
         try:
             if not stream:
                 # Non-streaming implementation
@@ -164,7 +162,7 @@ class OpenAi(BaseOpenAi):
                     model=model,
                     voice=voice,
                     speed=speed,
-                    #instructions=instructions,
+                    # instructions=instructions,
                 )
                 if response is not None:
                     await audio_player.play_with_effects(
@@ -180,7 +178,7 @@ class OpenAi(BaseOpenAi):
                     voice=voice,
                     speed=speed,
                     response_format="pcm",
-                    #instructions=instructions,
+                    # instructions=instructions,
                 ) as response:
                     # Create an iterator for the audio chunks. We can set the chunk size here.
                     audio_stream_iterator = response.iter_bytes(chunk_size=1024)
@@ -195,10 +193,10 @@ class OpenAi(BaseOpenAi):
                             # Get the next chunk of audio data from the iterator
                             chunk = next(audio_stream_iterator)
                             chunk_size = len(chunk)
-                            
+
                             # Copy the received audio data into the buffer provided by the audio player
                             audio_buffer[:chunk_size] = chunk
-                            
+
                             # Return the number of bytes written
                             return chunk_size
                         except StopIteration:
@@ -379,19 +377,17 @@ class OpenAiCompatibleTts:
         sound_config: SoundConfig,
         audio_player: AudioPlayer,
         wingman_name: str,
+        stream: bool,
         speed: float | NotGiven = NOT_GIVEN,
         response_format: (
             NotGiven | Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
         ) = NOT_GIVEN,
         extra_headers: Mapping[str, Union[str, Omit]] | None = None,
     ):
-        # For testing, stream forced to true, in implementation, check provider config.
-        stream = True # = config.output_streaming
-        
-        #instructions = config.instructions # No current open source model supports this but adding for full compatibility
-        
+        # instructions = config.instructions # No current open source model supports this but adding for full compatibility
+
         # Should sample rate and response format be configurable in UI to ensure widest compatibilty?
-       
+
         try:
             if not stream:
                 # Non-streaming implementation
@@ -401,7 +397,7 @@ class OpenAiCompatibleTts:
                     voice=voice,
                     speed=speed,
                     response_format=response_format,
-                    #instructions=instructions,
+                    # instructions=instructions,
                     extra_headers=extra_headers,
                 )
                 if response is not None:
@@ -418,7 +414,7 @@ class OpenAiCompatibleTts:
                     voice=voice,
                     speed=speed,
                     response_format="pcm",
-                    #instructions=instructions,
+                    # instructions=instructions,
                     extra_headers=extra_headers,
                 ) as response:
                     # Create an iterator for the audio chunks. We can set the chunk size here.
@@ -435,10 +431,10 @@ class OpenAiCompatibleTts:
                             # Get the next chunk of audio data from the iterator
                             chunk = next(audio_stream_iterator)
                             chunk_size = len(chunk)
-                            
+
                             # Copy the received audio data into the buffer provided by the audio player
                             audio_buffer[:chunk_size] = chunk
-                            
+
                             # Return the number of bytes written
                             return chunk_size
                         except StopIteration:

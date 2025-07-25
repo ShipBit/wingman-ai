@@ -558,6 +558,12 @@ class ConfigMigrationService:
             self.log(
                 "- added new property: elevenlabs.use_tts_prompt, elevenlabs.tts_prompt"
             )
+
+            old["openai"]["output_streaming"] = True
+            self.log("- added new property: openai.output_streaming")
+
+            old["openai_compatible_tts"]["output_streaming"] = True
+            self.log("- added new property: openai_compatible_tts.output_streaming")
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:

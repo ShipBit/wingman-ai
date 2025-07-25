@@ -1535,6 +1535,7 @@ class OpenAiWingman(Wingman):
                     sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,
+                    stream=self.config.openai.output_streaming,
                 )
             elif self.config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE:
                 await self.openai_compatible_tts.play_audio(
@@ -1549,6 +1550,7 @@ class OpenAiWingman(Wingman):
                     sound_config=sound_config,
                     audio_player=self.audio_player,
                     wingman_name=self.name,
+                    stream=self.config.openai_compatible_tts.output_streaming,
                 )
             elif self.config.features.tts_provider == TtsProvider.WINGMAN_PRO:
                 if self.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:

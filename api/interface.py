@@ -327,6 +327,7 @@ class OpenAiCompatibleTtsConfig(BaseModel):
     base_url: Optional[str] = None
     model: Optional[str] = None
     speed: float
+    output_streaming: bool
 
 
 class XVASynthVoiceConfig(BaseModel):
@@ -373,6 +374,8 @@ class OpenAiConfig(BaseModel):
 
     organization: Optional[str] = None
     """If you have an organization key, you can set it here."""
+
+    output_streaming: bool
 
 
 class PromptConfig(BaseModel):

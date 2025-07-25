@@ -212,6 +212,7 @@ class VoiceService:
         model: str,
         speed: float,
         sound_config: SoundConfig,
+        stream: bool,
     ):
         openai = OpenAi(api_key=api_key)
         await openai.play_audio(
@@ -222,6 +223,7 @@ class VoiceService:
             sound_config=sound_config,
             audio_player=self.audio_player,
             wingman_name="system",
+            stream=stream,
         )
 
     # POST /play/openai-compatible
@@ -234,6 +236,7 @@ class VoiceService:
         model: str,
         speed: float,
         sound_config: SoundConfig,
+        stream: bool,
     ):
         openai = OpenAiCompatibleTts(api_key=api_key, base_url=base_url)
         await openai.play_audio(
@@ -244,6 +247,7 @@ class VoiceService:
             sound_config=sound_config,
             audio_player=self.audio_player,
             wingman_name="system",
+            stream=stream,
         )
 
     # POST /play/azure
