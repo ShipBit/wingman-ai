@@ -212,6 +212,7 @@ class OpenAi(BaseOpenAi):
                         sample_rate=24000,
                         dtype="int16",
                         channels=1,
+                        use_gain_boost=True, # All streaming PCM TTS providers need this
                     )
 
         except APIStatusError as e:
@@ -446,9 +447,10 @@ class OpenAiCompatibleTts:
                         buffer_callback=buffer_callback,
                         config=sound_config,
                         wingman_name=wingman_name,
-                        sample_rate=22050,  # OpenAI TTS default for PCM is 24000 so potential incompatibility here specifically with XTTS2
+                        sample_rate=24000,
                         dtype="int16",
                         channels=1,
+                        use_gain_boost=True, # All streaming PCM TTS providers need this
                     )
 
         except APIStatusError as e:
