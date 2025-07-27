@@ -1544,7 +1544,7 @@ class OpenAiWingman(Wingman):
                     model=self.config.openai_compatible_tts.model,
                     speed=(
                         self.config.openai_compatible_tts.speed
-                        if self.config.openai_compatible_tts.speed != 1.0
+                        if self.config.openai_compatible_tts.speed#!= 1.0
                         else NOT_GIVEN
                     ),
                     sound_config=sound_config,
