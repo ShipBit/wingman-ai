@@ -960,36 +960,45 @@ class OpenAiWingman(Wingman):
         Args:
             commands (list[CommandConfig]): The commands to add.
         """
-        # only for openai style llms
-        if (
-            self.config.features.conversation_provider == ConversationProvider.OPENAI
-        ) or (
-            self.config.features.conversation_provider
-            == ConversationProvider.WINGMAN_PRO
-            and "gpt" in self.config.wingman_pro.conversation_deployment.lower()
-        ):
-            # generate tool calls in openai style
-            message = ChatCompletionMessage(
-                content="",
-                role="assistant",
-                tool_calls=[],
-            )
-            for command in commands:
-                tool_call = ChatCompletionMessageToolCall(
-                    id=f"call_{str(uuid.uuid4()).replace('-', '')}",
-                    function=ParsedFunction(
-                        name="execute_command",
-                        arguments=json.dumps({"command_name": command.name}),
-                    ),
-                    type="function",
-                )
-                message.tool_calls.append(tool_call)
 
-            # add tool calls to the conversation history
-            await self._add_gpt_response(message, message.tool_calls)
-            if message.tool_calls:
-                for tool_call in message.tool_calls:
-                    await self._update_tool_response(tool_call.id, "OK")
+        if not commands:
+            return
+
+        message = ChatCompletionMessage(
+            content="",
+            role="assistant",
+            tool_calls=[],
+        )
+        for command in commands:
+            tool_id = None
+            if (
+                    self.config.features.conversation_provider == ConversationProvider.OPENAI
+            ) or (
+                    self.config.features.conversation_provider
+                    == ConversationProvider.WINGMAN_PRO
+                    and "gpt" in self.config.wingman_pro.conversation_deployment.lower()
+            ):
+                tool_id = f"call_{str(uuid.uuid4()).replace('-', '')}"
+            elif self.config.features.conversation_provider == ConversationProvider.GOOGLE:
+                tool_id = f"function-call-{''.join(random.choices('0123456789', k=20))}"
+
+            # early exit for unsupported providers/models
+            if not tool_id:
+                return
+
+            tool_call = ChatCompletionMessageToolCall(
+                id=tool_id,
+                function=ParsedFunction(
+                    name="execute_command",
+                    arguments=json.dumps({"command_name": command.name}),
+                ),
+                type="function",
+            )
+            message.tool_calls.append(tool_call)
+
+        await self._add_gpt_response(message, message.tool_calls)
+        for tool_call in message.tool_calls:
+            await self._update_tool_response(tool_call.id, "OK")
 
     async def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
