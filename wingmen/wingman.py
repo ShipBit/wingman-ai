@@ -463,7 +463,7 @@ class Wingman:
                 transcript.lower(),
                 commands_by_instant_activation.keys(),
                 n=1,
-                cutoff=0.8,
+                cutoff=1,
             )
 
             # if no phrase found, return None
