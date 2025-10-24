@@ -217,6 +217,7 @@ class Inworld:
                 sample_rate=int(audio_config["sample_rate_hertz"]),
                 channels=1,  # LINEAR16 is typically mono
                 dtype="int16",  # LINEAR16 uses 16-bit integers
+                use_gain_boost=True, # All streaming PCM TTS providers need this
             )
 
             # Wait for the background thread to complete
