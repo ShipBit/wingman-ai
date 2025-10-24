@@ -67,6 +67,7 @@ class VoiceChanger(Skill):
         )
         if not voices or len(voices) == 0:
             self.voice_switching = False
+            self.voices = []
         else:
             # we have to initiate all providers here
             initiated_providers = []
@@ -101,6 +102,13 @@ class VoiceChanger(Skill):
                         and not self.wingman.wingman_pro
                     ):
                         await self.wingman.validate_and_set_wingman_pro()
+                    elif (
+                        voice_provider == TtsProvider.INWORLD
+                        and not self.wingman.inworld
+                    ):
+                        await self.wingman.validate_and_set_inworld(errors)
+                        if len(errors) > 0:
+                            initiate_provider_error = True
 
             if not initiate_provider_error:
                 self.voices = voices
@@ -180,7 +188,6 @@ class VoiceChanger(Skill):
         voice = voice_setting.voice
         voice_name = None
         error = False
-        provider_name = ""
 
         if voice_provider == TtsProvider.WINGMAN_PRO:
             if voice_setting.subprovider == WingmanProTtsProvider.OPENAI:
@@ -212,23 +219,20 @@ class VoiceChanger(Skill):
             voice_name = voice
             provider_name = "Edge TTS"
             self.wingman.config.edge_tts.voice = voice
-        elif voice_provider == TtsProvider.HUME:
-            voice_name = voice.name
-            provider_name = "Hume"
-            self.wingman.config.hume.voice = voice
         elif voice_provider == TtsProvider.INWORLD:
             voice_name = voice
-            provider_name = "Inworld"
-            self.wingman.config.inworld.voice = voice
+            self.wingman.config.inworld.voice_id = voice
+            self.wingman.config.inworld.output_streaming = False
+            provider_name = "InWorld"
         else:
             error = True
 
         if error or not voice_name or not voice_provider:
             await self.printr.print_async(
-                "Voice switching failed due to an unknown voice provider/subprovider. Setting: {voice_setting}",
+                f"Voice switching failed due to an unknown voice provider/subprovider or different error. Provider: {voice_provider.value}",
                 LogType.ERROR,
             )
-            return f"Voice switching failed due to an unknown voice provider/subprovider. Setting: {voice_setting}"
+            return f"Voice switching failed due to an unknown voice provider/subprovider. Provider: {voice_provider.value}"
 
         self.wingman.config.features.tts_provider = voice_provider
 

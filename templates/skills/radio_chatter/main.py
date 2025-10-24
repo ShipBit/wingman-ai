@@ -67,6 +67,7 @@ class RadioChatter(Skill):
         voices: list[VoiceSelection] = self.retrieve_custom_property_value(
             "voices", errors
         )
+        self.voices = []
         if voices:
             # we have to initiate all providers here
             # we do no longer check voice availability or validate the structure
@@ -103,6 +104,13 @@ class RadioChatter(Skill):
                         and not self.wingman.wingman_pro
                     ):
                         await self.wingman.validate_and_set_wingman_pro()
+                    elif (
+                        voice_provider == TtsProvider.INWORLD
+                        and not self.wingman.inworld
+                    ):
+                        await self.wingman.validate_and_set_inworld(errors)
+                        if len(errors) > 0:
+                            initiate_provider_error = True
 
             if not initiate_provider_error:
                 self.voices = voices
@@ -408,6 +416,7 @@ class RadioChatter(Skill):
 
         original_voice_setting = await self._get_original_voice_setting()
         elevenlabs_streaming = self.wingman.config.elevenlabs.output_streaming
+        inworld_streaming = self.wingman.config.inworld.output_streaming
         original_sound_config = copy.deepcopy(self.wingman.config.sound)
 
         # copy for volume and effects
@@ -462,7 +471,7 @@ class RadioChatter(Skill):
             while not self.wingman.audio_player.is_playing or max_wait < 0:
                 time.sleep(0.1)
                 max_wait -= 0.1
-            await self._switch_voice(original_voice_setting, elevenlabs_streaming)
+            await self._switch_voice(original_voice_setting, elevenlabs_streaming, inworld_streaming)
 
         while self.wingman.audio_player.is_playing:
             time.sleep(1)  # stay in function call until last message got played
@@ -487,7 +496,7 @@ class RadioChatter(Skill):
         return voice_index
 
     async def _switch_voice(
-        self, voice_setting: VoiceSelection = None, elevenlabs_streaming: bool = False
+        self, voice_setting: VoiceSelection = None, elevenlabs_streaming: bool = False, inworld_streaming: bool = False
     ) -> None:
         """Switch voice to the given voice setting."""
 
@@ -532,6 +541,13 @@ class RadioChatter(Skill):
         elif voice_provider == TtsProvider.EDGE_TTS:
             voice_name = voice
             self.wingman.config.edge_tts.voice = voice
+        elif voice_provider == TtsProvider.HUME:
+            voice_name = voice.name
+            self.wingman.config.hume.voice = voice
+        elif voice_provider == TtsProvider.INWORLD:
+            voice_name = voice
+            self.wingman.config.inworld.voice_id = voice
+            self.wingman.config.inworld.output_streaming = inworld_streaming
         else:
             error = True
 
@@ -576,6 +592,8 @@ class RadioChatter(Skill):
                 == WingmanProTtsProvider.AZURE
             ):
                 voice = self.wingman.config.azure.tts.voice
+        elif voice_provider == TtsProvider.INWORLD:
+            voice = self.wingman.config.inworld.voice_id
         else:
             return None
 
