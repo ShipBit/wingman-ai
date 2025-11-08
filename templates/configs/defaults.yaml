@@ -86,6 +86,9 @@ mistral:
 perplexity:
   conversation_model: sonar
   endpoint: https://api.perplexity.ai
+xai:
+  conversation_model: grok-4-fast-non-reasoning
+  endpoint: https://api.x.ai/v1
 groq:
   conversation_model: llama3-70b-8192
   endpoint: https://api.groq.com/openai/v1

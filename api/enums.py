@@ -93,6 +93,17 @@ class PerplexityModel(Enum):
     R1_1776 = "r1-1776"
 
 
+class XaiModel(Enum):
+    """https://docs.x.ai/docs/models"""
+
+    GROK_CODE_FAST = "grok-code-fast"
+    GROK_4_FAST_NON_REASONING = "grok-4-fast-non-reasoning"
+    GROK_4_FAST_REASONING = "grok-4-fast-reasoning"
+    GROK_4 = "grok-4"
+    GROK_3_MINI = "grok-3-mini"
+    GROK_3 = "grok-3"
+
+
 class SoundEffect(Enum):
     AI = "AI"
     LOW_QUALITY_RADIO = "LOW_QUALITY_RADIO"
@@ -143,6 +154,7 @@ class ConversationProvider(Enum):
     GOOGLE = "google"
     CEREBRAS = "cerebras"
     PERPLEXITY = "perplexity"
+    XAI = "xai"
 
 
 class ImageGenerationProvider(Enum):
@@ -225,6 +237,10 @@ class PerplexityModelEnumModel(BaseEnumModel):
     model: PerplexityModel
 
 
+class XaiModelEnumModel(BaseEnumModel):
+    model: XaiModel
+
+
 class SoundEffectEnumModel(BaseEnumModel):
     sound_effect: SoundEffect
 
@@ -289,6 +305,7 @@ ENUM_TYPES = {
     "WingmanProSttProvider": WingmanProSttProviderModel,
     "WingmanProTtsProvider": WingmanProTtsProviderModel,
     "PerplexityModel": PerplexityModelEnumModel,
+    "XaiModel": XaiModelEnumModel,
     "RecordingDevice": RecordingDeviceModel,
     # Add new enums here as key-value pairs
 }

@@ -84,6 +84,7 @@ class OpenAiWingman(Wingman):
         self.wingman_pro: WingmanPro | None = None
         self.google: GoogleGenAI | None = None
         self.perplexity: OpenAi | None = None
+        self.xai: OpenAi | None = None
 
         # tool queue
         self.pending_tool_calls = []
@@ -146,6 +147,9 @@ class OpenAiWingman(Wingman):
 
             if self.uses_provider("perplexity"):
                 await self.validate_and_set_perplexity(errors)
+
+            if self.uses_provider("xai"):
+                await self.validate_and_set_xai(errors)
 
             if self.uses_provider("hume"):
                 await self.validate_and_set_hume(errors)
@@ -262,6 +266,13 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.PERPLEXITY,
+                ]
+            )
+        elif provider_type == "xai":
+            return any(
+                [
+                    self.config.features.conversation_provider
+                    == ConversationProvider.XAI,
                 ]
             )
         return False
@@ -464,6 +475,16 @@ class OpenAiWingman(Wingman):
             self.perplexity = OpenAi(
                 api_key=api_key,
                 base_url=self.config.perplexity.endpoint,
+            )
+
+    async def validate_and_set_xai(
+        self, errors: list[WingmanInitializationError]
+    ):
+        api_key = await self.retrieve_secret("xai", errors)
+        if api_key:
+            self.xai = OpenAi(
+                api_key=api_key,
+                base_url=self.config.xai.endpoint,
             )
 
     # overrides the base class method
@@ -1233,6 +1254,15 @@ class OpenAiWingman(Wingman):
                     messages=messages,
                     tools=tools,
                     model=self.config.perplexity.conversation_model.value,
+                )
+            elif (
+                self.config.features.conversation_provider
+                == ConversationProvider.XAI
+            ):
+                completion = self.xai.ask(
+                    messages=messages,
+                    tools=tools,
+                    model=self.config.xai.conversation_model.value,
                 )
         except Exception as e:
             await printr.print_async(
