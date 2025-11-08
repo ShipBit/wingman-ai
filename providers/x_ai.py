@@ -36,7 +36,7 @@ class XAi(OpenAi):
             return None
 
     def _fix_tools(self, tools: list[dict[str, any]]) -> list[dict[str, any]]:
-        # X.ai must have a "parameters" field in each tool
+        # X.AI must have a "parameters" field in each tool
         fixed_tools = []
         for tool in tools:
             fixed_tool = {
