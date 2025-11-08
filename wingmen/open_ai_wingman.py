@@ -41,6 +41,7 @@ from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
 from providers.hume import Hume
 from providers.inworld import Inworld
 from providers.open_ai import OpenAi, OpenAiAzure
+from providers.x_ai import XAi
 from providers.wingman_pro import WingmanPro
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
@@ -84,7 +85,7 @@ class OpenAiWingman(Wingman):
         self.wingman_pro: WingmanPro | None = None
         self.google: GoogleGenAI | None = None
         self.perplexity: OpenAi | None = None
-        self.xai: OpenAi | None = None
+        self.xai: XAi | None = None
 
         # tool queue
         self.pending_tool_calls = []
@@ -482,7 +483,7 @@ class OpenAiWingman(Wingman):
     ):
         api_key = await self.retrieve_secret("xai", errors)
         if api_key:
-            self.xai = OpenAi(
+            self.xai = XAi(
                 api_key=api_key,
                 base_url=self.config.xai.endpoint,
             )

@@ -976,6 +976,7 @@ class ConfigManager:
             "xvasynth",
             "wingman_pro",
             "perplexity",
+            "xai",
             "openai_compatible_tts",
         ]:
             if key in default:
