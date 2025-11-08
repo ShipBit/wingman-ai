@@ -85,7 +85,7 @@ class OpenAiWingman(Wingman):
         self.wingman_pro: WingmanPro | None = None
         self.google: GoogleGenAI | None = None
         self.perplexity: OpenAi | None = None
-        self.xai: XAi | None = None
+        self.xai: OpenAi | None = None
 
         # tool queue
         self.pending_tool_calls = []
@@ -483,7 +483,7 @@ class OpenAiWingman(Wingman):
     ):
         api_key = await self.retrieve_secret("xai", errors)
         if api_key:
-            self.xai = XAi(
+            self.xai = OpenAi(
                 api_key=api_key,
                 base_url=self.config.xai.endpoint,
             )
