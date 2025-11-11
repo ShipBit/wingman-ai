@@ -17,7 +17,6 @@ from api.enums import (
     WingmanProSttProvider,
     WingmanProTtsProvider,
     PerplexityModel,
-    XaiModel,
 )
 
 
@@ -398,7 +397,7 @@ class PerplexityConfig(BaseModel):
 
 
 class XaiConfig(BaseModel):
-    conversation_model: XaiModel
+    conversation_model: str
     endpoint: str
 
 

@@ -224,6 +224,13 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["GET"],
+            path="/models/xai",
+            response_model=list,
+            endpoint=self.get_xai_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
             path="/models/openai",
             response_model=list,
             endpoint=self.get_openai_models,
@@ -1128,6 +1135,22 @@ class WingmanCore(WebSocketUser):
             timeout=10,
             headers={
                 "Authorization": f"Bearer {cerebras_api_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        response.raise_for_status()
+        content = response.json()
+        return content.get("data", [])
+
+    async def get_xai_models(self):
+        xia_api_key = await self.secret_keeper.retrieve(
+            key="xai", requester="XAI"
+        )
+        response = requests.get(
+            url="https://api.x.ai/v1/models",
+            timeout=10,
+            headers={
+                "Authorization": f"Bearer {xia_api_key}",
                 "Content-Type": "application/json",
             },
         )
