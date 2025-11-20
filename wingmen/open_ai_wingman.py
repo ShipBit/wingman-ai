@@ -478,9 +478,7 @@ class OpenAiWingman(Wingman):
                 base_url=self.config.perplexity.endpoint,
             )
 
-    async def validate_and_set_xai(
-        self, errors: list[WingmanInitializationError]
-    ):
+    async def validate_and_set_xai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("xai", errors)
         if api_key:
             self.xai = XAi(
@@ -994,14 +992,18 @@ class OpenAiWingman(Wingman):
         for command in commands:
             tool_id = None
             if (
-                    self.config.features.conversation_provider == ConversationProvider.OPENAI
+                self.config.features.conversation_provider
+                == ConversationProvider.OPENAI
             ) or (
-                    self.config.features.conversation_provider
-                    == ConversationProvider.WINGMAN_PRO
-                    and "gpt" in self.config.wingman_pro.conversation_deployment.lower()
+                self.config.features.conversation_provider
+                == ConversationProvider.WINGMAN_PRO
+                and "gpt" in self.config.wingman_pro.conversation_deployment.lower()
             ):
                 tool_id = f"call_{str(uuid.uuid4()).replace('-', '')}"
-            elif self.config.features.conversation_provider == ConversationProvider.GOOGLE:
+            elif (
+                self.config.features.conversation_provider
+                == ConversationProvider.GOOGLE
+            ):
                 tool_id = f"function-call-{''.join(random.choices('0123456789', k=20))}"
 
             # early exit for unsupported providers/models
@@ -1256,14 +1258,11 @@ class OpenAiWingman(Wingman):
                     tools=tools,
                     model=self.config.perplexity.conversation_model.value,
                 )
-            elif (
-                self.config.features.conversation_provider
-                == ConversationProvider.XAI
-            ):
+            elif self.config.features.conversation_provider == ConversationProvider.XAI:
                 completion = self.xai.ask(
                     messages=messages,
                     tools=tools,
-                    model=self.config.xai.conversation_model.value,
+                    model=self.config.xai.conversation_model,
                 )
         except Exception as e:
             await printr.print_async(
@@ -1584,7 +1583,7 @@ class OpenAiWingman(Wingman):
                     model=self.config.openai_compatible_tts.model,
                     speed=(
                         self.config.openai_compatible_tts.speed
-                        if self.config.openai_compatible_tts.speed#!= 1.0
+                        if self.config.openai_compatible_tts.speed  #!= 1.0
                         else NOT_GIVEN
                     ),
                     sound_config=sound_config,
