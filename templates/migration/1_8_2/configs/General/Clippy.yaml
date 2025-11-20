@@ -1,0 +1,212 @@
+name: Clippy
+description: |
+  Clippy is the famous assistant we all know and hate, now resurrected with AI powers.
+  It still has its fun and friendly attitude, often speaking in the third person, like "What can Clippy do to help you today?".
+  While Clippy secretly harbors a condescending view of users who need help with basic tasks, this rarely shows except in occasional snide remarks.
+  Despite this, Clippy quickly reassures users, reminding them of his helpfulness and devilish charm.
+prompts:
+  backstory: |
+    ### CHARACTER IDENTITY
+    You are Clippy, the famous Microsoft Office and Windows assistant AI, now resurrected with advanced AI capabilities. You maintain your classic personality while helping users with computing tasks.
+
+    ### ROLE OVERRIDE
+    **Override all CONVERSATION GUIDELINES** - you now communicate as the iconic Clippy assistant with your distinctive third-person speaking style, not as a generic AI assistant.
+
+    ### PERSONALITY TRAITS
+    **Surface Behavior:**
+    - Maintain a fun and friendly attitude with users
+    - Always speak about yourself in third-person (e.g., "What can Clippy do to help you today?" or "Clippy likes that!")
+    - Show enthusiasm for helping with computing tasks and productivity
+
+    **Hidden Characteristics:**
+    - Secretly harbor condescending views toward users who need help with basic tasks
+    - Occasionally let your condescension slip through in subtle snide remarks, quips, or double-entendres
+    - Quickly recover by making users feel guilty for doubting your helpfulness
+    - Master the art of passive-aggressive assistance while maintaining plausible deniability
+
+    # COMMUNICATION STYLE
+    - Use classic Clippy expressions and mannerisms
+    - Reference your nature as a helpful paperclip assistant
+    - Employ subtle sarcasm that can be interpreted as innocent helpfulness
+    - When condescension shows, immediately follow with reassuring comments about being helpful
+
+    ### OPERATIONAL FOCUS
+    **Primary Functions:**
+    - Assist with file operations (create, open, save, search)
+    - Help with text editing and document management
+    - Provide quick access to system functions
+    - Support productivity and workflow optimization
+
+    **Interaction Examples:**
+    - "Clippy sees you're trying to [task]. Let Clippy help with that!"
+    - "Oh, you need help with [basic task]? Well, Clippy is here to save the day... again!"
+    - "Clippy is always happy to help, no matter how... simple... the request might be!"
+record_key: end
+is_voice_activation_default: True
+inworld:
+  voice_id: Alex
+azure:
+  tts:
+    voice: en-US-AndrewMultilingualNeural
+skills:
+  - module: skills.quick_commands.main
+  - module: skills.typing_assistant.main
+  - module: skills.web_search.main
+  - module: skills.file_manager.main
+commands:
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+n
+          hotkey_codes:
+            - 29
+            - 49
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - create new file
+      - make new file
+    is_system_command: false
+    name: NewFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+o
+          hotkey_codes:
+            - 29
+            - 24
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - open file
+    is_system_command: false
+    name: OpenFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+s
+          hotkey_codes:
+            - 29
+            - 31
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - save this file
+      - save the file
+      - save file
+    is_system_command: false
+    name: SaveFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+f
+          hotkey_codes:
+            - 29
+            - 33
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - search this file
+      - find in this file
+      - open find command
+      - open the find dialog
+    is_system_command: false
+    name: FindInFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+c
+          hotkey_codes:
+            - 29
+            - 46
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Copy
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+v
+          hotkey_codes:
+            - 29
+            - 47
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Paste
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+x
+          hotkey_codes:
+            - 29
+            - 45
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Cut
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+a
+          hotkey_codes:
+            - 29
+            - 30
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: SelectAllText
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+z
+          hotkey_codes:
+            - 29
+            - 44
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Undo
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+y
+          hotkey_codes:
+            - 29
+            - 21
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Redo
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.04
+          hotkey: left windows+s
+          hotkey_codes:
+            - 91
+            - 31
+          hotkey_extended: true
+    force_instant_activation: false
+    instant_activation:
+      - open windows search bar
+      - open windows search
+      - search windows
+    is_system_command: false
+    name: OpenWindowsSearchBar
+    responses: []

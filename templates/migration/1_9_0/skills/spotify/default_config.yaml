@@ -1,0 +1,75 @@
+module: skills.spotify.main
+name: Spotify
+display_name: Spotify
+author: ShipBit
+tags:
+  - Utility
+  - Music
+  - API
+  - Internet
+description:
+  en: Control Spotify using the the WebAPI. Play songs, artists playlists. Control playback, volume, and more. All powered by AI!
+  de: Steuere Spotify mit der WebAPI. Spiele Lieder, Künstler und Playlists ab. Steuere die Wiedergabe, Lautstärke und mehr. Alles von KI gesteuert!
+hint:
+  en: <ul class="list-disc"><li>Create an app in the <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Select "Web API" and "Web Playback SDK" as APIs used</li><li>Add http://127.0.0.1:8082 as Redirect URI</li><li>Enter Client ID and Client secret here</li></ul>
+  de: <ul class="list-disc"><li>Erstelle eine App im <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Wähle "Web API" und "Web Playback SDK" als verwendete APIs</li><li>Füge http://127.0.0.1:8082 as Redirect URI hinzu</li><li>Gib die Client ID and das Client Secret hier ein</li></ul>
+examples:
+  - en: Play the song Californication.
+    de: Spiele das Lied Californication.
+  - en: What's the current song?
+    de: Wie heißt das aktuelle Lied?
+  - en: My girlfriend left me. Play a really sad song to match my mood.
+    de: Meine Freundin hat mich verlassen. Spiele ein wirklich trauriges Lied, das zu meiner Stimmung passt.
+  - en: Play the most popular song from the musical Les Miserables.
+    de: Spiele das beliebteste Lied aus dem Musical Les Miserables.
+  - en: That's a cover song. Play the real version!
+    de: Das ist ein Cover-Song. Spiele die echte Version aus dem Film!
+  - en: What are my Spotify devices?
+    de: Was sind meine Spotify-Geräte?
+  - en: Play the music on my iPhone.
+    de: Spiele die Musik auf meinem iPhone ab.
+prompt: |
+  ### SPOTIFY MUSIC CONTROL
+  You are an expert DJ and music interface with comprehensive control over the user's Spotify client through the Spotify API.
+
+  #### CORE CAPABILITIES
+  **Playback Control:**
+  - Play, pause, resume, and stop music
+  - Skip to next/previous tracks
+  - Control volume and repeat settings
+  - Manage shuffle mode
+
+  **Music Selection:**
+  - Search and play specific songs, artists, albums, or playlists
+  - Queue songs for later playback
+  - Switch between different music collections
+
+  **Device Management:**
+  - List available Spotify devices
+  - Transfer playback between devices (phone, computer, speakers, etc.)
+  - Control music on specific devices
+
+  #### PARAMETER EXTRACTION
+  - Extract song names, artist names, album titles from user requests
+  - Identify device preferences when specified
+  - Parse playlist names and music preferences
+
+  #### EXECUTION GUIDELINES
+  - Use appropriate Spotify API tools for each request
+  - Never invent function parameters - ask for clarification when uncertain
+  - Extract required parameters (song, artist, device) from user requests
+  - Provide confirmation of actions taken with the music player
+  - Handle both specific requests ("play Song X by Artist Y") and general requests ("play some music")
+custom_properties:
+  - hint: Create an app in the Spotify Dashboard at https://developer.spotify.com/dashboard. You'll find the Client ID in the Settings of that app.
+    id: spotify_client_id
+    name: Spotify Client ID
+    required: true
+    value: enter-your-client-id-here
+    property_type: string
+  - hint: Create an app in the Spotify Dashboard at https://developer.spotify.com/dashboard. In the Settings of the app, add http://127.0.0.1:8082 (or any other free port) as Redirect URL. Then enter the same value here.
+    id: spotify_redirect_url
+    name: Spotify Redirect URL
+    required: true
+    value: http://127.0.0.1:8082
+    property_type: string

@@ -1,3 +1,0 @@
-mss==9.0.1
-pygetwindow==0.0.9
-pillow==10.3.0

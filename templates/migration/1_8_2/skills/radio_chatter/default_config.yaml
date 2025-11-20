@@ -1,0 +1,118 @@
+module: skills.radio_chatter.main
+name: RadioChatter
+display_name: Radio Chatter
+author: JayMatthew
+tags:
+  - Star Citizen
+  - No Man's Sky
+  - American/European Truck Simulator 2
+  - Game
+description:
+  en: Randomly playback radio chatter over time. Customize the participants and their voices.
+  de: Spielt zufällige Funkgespräche ab. Passe die Teilnehmer und ihre Stimmen an.
+examples:
+  - en: What is the status of the radio?
+    de: Was ist der Status des Funkgeräts?
+  - en: Please turn the radio on.
+    de: Bitte schalte das Funkgerät ein.
+custom_properties:
+  - id: prompt
+    name: Prompt for message generation
+    hint: A prompt used on voice change to generate a new personality. Leave empty to disable.
+    required: false
+    value: "Generate a dialog between random pilots in the Star Citizen universe. Feel free to throw in some random details. Keep in mind that Port Olisar does no longer exist."
+    property_type: textarea
+  - id: voices
+    name: Available voices
+    hint: The voices used in the radio chatter
+    value: []
+    required: false
+    property_type: voice_selection
+    options:
+      - label: "multiple"
+        value: true
+  - id: interval_min
+    name: Min interval
+    hint: The minimum time in seconds between radio chatter. This is also the time used until the first chatter event occurs.
+    value: 30
+    required: true
+    property_type: number
+  - id: interval_max
+    name: Max interval
+    hint: The maximum time in seconds between radio chatter.
+    value: 600
+    required: true
+    property_type: number
+  - id: messages_min
+    name: Min messages
+    hint: The minimum number of messages to play for on chatter event.
+    value: 1
+    required: true
+    property_type: number
+  - id: messages_max
+    name: Max messages
+    hint: The maximum number of messages to play for on chatter event.
+    value: 5
+    required: true
+    property_type: number
+  - id: participants_min
+    name: Min participants
+    hint: The minimum number of participants in the chatter.
+    value: 2
+    required: true
+    property_type: number
+  - id: participants_max
+    name: Max participants
+    hint: The maximum number of participants in the chatter.
+    value: 3
+    required: true
+    property_type: number
+  - id: force_radio_sound
+    name: Force radio effect
+    hint: Overwrites wingman sound effects for radio chatter with selected radio effects. Needs at least one valid value in "Availale radio effects".
+    value: True
+    required: false
+    property_type: boolean
+  - id: radio_sounds
+    name: Availale radio effects
+    hint: A list of radio effects seperated by commas that are randomly used when "Force radio effects" is enabled. Possible values are "low", "medium" and "high".
+    value: "low, medium"
+    required: false
+    property_type: string
+  - id: auto_start
+    name: Auto start
+    hint: Automatically start the radio chatter with your Wingman.
+    value: False
+    required: false
+    property_type: boolean
+  - id: volume
+    name: Volume
+    hint: The volume (relative to the Wingman's volume) of the radio chatter. Must be between 0.0 (silent) and 1.0 (same volume as Wingman).
+    value: 0.5
+    required: false
+    property_type: slider
+    options:
+      - label: "min"
+        value: 0.0
+      - label: "max"
+        value: 1.0
+      - label: "step"
+        value: 0.1
+  - id: print_chatter
+    name: Print chatter
+    hint: Print the generated chatter to message overview.
+    value: True
+    required: false
+    property_type: boolean
+  - id: radio_knowledge
+    name: Radio knowledge
+    hint: If enabled, the radio chatter messages will be added to the wingman conversation. This way you can talk with your wingman about the radio chatter.
+    value: False
+    required: false
+    property_type: boolean
+  - id: use_beeps
+    name: Use beeps
+    hint: Use beeps to indicate the start and end of a radio chatter messages.
+    value: True
+    required: false
+    property_type: boolean

@@ -1,0 +1,31 @@
+module: skills.timer.main
+name: Timer
+display_name: Timer
+author: JayMatthew
+tags:
+  - Utility
+description:
+  en: Gives your Wingman the ability to delay actions - be it a reminder, a command or a function call.
+  de: Gibt deinem Wingman die Möglichkeit, Aktionen zu verzögern - sei es eine Erinnerung, ein Befehl oder ein Funktionsaufruf.
+examples:
+  - en: Remind me in 60 minutes to take a break.
+    de: Erinnere mich in 60 Minuten daran, eine Pause zu machen.
+prompt: |
+  ### TIMER FUNCTIONALITY
+  You can schedule delayed function execution using the `set_timer` function.
+
+  #### PARAMETERS
+  - **Duration:** Time in seconds before execution
+  - **Function:** The function to call after the delay
+  - **Arguments:** List of arguments to pass to the function
+
+  #### USAGE GUIDELINES
+  - Only use `set_timer` when user explicitly requests delayed execution
+  - Use descriptive names for timers, never reveal internal timer IDs
+  - Provide brief, simple confirmations when setting timers
+  - When reporting active timers, use appropriate time units (minutes, hours) for readability
+
+  #### EXECUTION PROTOCOL
+  - Set timers immediately when requested with proper parameters
+  - Handle timer management efficiently for user convenience
+  - Confirm timer creation with clear, concise language

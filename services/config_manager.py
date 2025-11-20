@@ -49,7 +49,8 @@ class ConfigManager:
         self.default_config_path = path.join(self.config_dir, DEFAULT_CONFIG_FILE)
         self.create_settings_config()
         self.settings_config = self.load_settings_config()
-        self.default_config = self.load_defaults_config()
+        # Load defaults silently - migration may need to run first to fix validation errors
+        self.default_config = self.load_defaults_config(silent_on_error=True)
 
     def find_default_config(self) -> ConfigDirInfo:
         """Find the (first) default config (name starts with "_") found or another normal config as fallback."""
@@ -144,6 +145,18 @@ class ConfigManager:
             if not path.exists(target_path):
                 makedirs(target_path)
 
+            # Track if we've copied any files in this directory (for logging)
+            files_copied = []
+            path_parts = relative_path.split(path.sep)
+            is_skill_dir = "skills" in path_parts
+            # Only log for top-level skill directories, not subdirectories like dependencies
+            is_top_level_skill = len(path_parts) == 2 and path_parts[0] == "skills"
+            is_migration_skill = (
+                len(path_parts) == 3
+                and path_parts[0] == "migration"
+                and path_parts[2] != "configs"
+            )
+
             for filename in files:
                 # yaml files
                 if filename == ".DS_Store":
@@ -168,25 +181,39 @@ class ConfigManager:
 
                     if force or (not already_exists and not logical_deleted):
                         shutil.copyfile(path.join(root, filename), new_filepath)
-                        self.printr.print(
-                            f"Created config {new_filepath} from template.",
-                            color=LogType.INFO,
-                            server_only=True,
-                            source=LogSource.SYSTEM,
-                            source_name=self.log_source_name,
-                        )
+                        files_copied.append(new_filename)
+                        if not is_skill_dir:
+                            self.printr.print(
+                                f"Created config {new_filepath} from template.",
+                                color=LogType.INFO,
+                                server_only=True,
+                                source=LogSource.SYSTEM,
+                                source_name=self.log_source_name,
+                            )
                 else:
                     new_filepath = path.join(target_path, filename)
                     already_exists = path.exists(new_filepath)
                     if force or not already_exists:
                         shutil.copyfile(path.join(root, filename), new_filepath)
-                        self.printr.print(
-                            f"Created file {new_filepath} from template.",
-                            color=LogType.INFO,
-                            server_only=True,
-                            source=LogSource.SYSTEM,
-                            source_name=self.log_source_name,
-                        )
+                        files_copied.append(filename)
+                        if not is_skill_dir:
+                            self.printr.print(
+                                f"Created file {new_filepath} from template.",
+                                color=LogType.INFO,
+                                server_only=True,
+                                source=LogSource.SYSTEM,
+                                source_name=self.log_source_name,
+                            )
+
+            # Log once per skill directory if files were copied (only top-level, not dependencies)
+            if (is_top_level_skill or is_migration_skill) and files_copied:
+                self.printr.print(
+                    f"Created skill {relative_path} from template ({len(files_copied)} files).",
+                    color=LogType.INFO,
+                    server_only=True,
+                    source=LogSource.SYSTEM,
+                    source_name=self.log_source_name,
+                )
 
     def get_config_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config dirs."""
@@ -757,7 +784,7 @@ class ConfigManager:
                 )
         return SettingsConfig()
 
-    def load_defaults_config(self):
+    def load_defaults_config(self, silent_on_error: bool = False):
         """Load and validate Defaults config"""
         parsed = self.read_default_config()
         if parsed:
@@ -765,9 +792,10 @@ class ConfigManager:
                 validated = NestedConfig(**parsed)
                 return validated
             except ValidationError as e:
-                self.printr.toast_error(
-                    f"Invalid default config '{self.default_config_path}':\n{str(e)}"
-                )
+                if not silent_on_error:
+                    self.printr.toast_error(
+                        f"Invalid default config '{self.default_config_path}':\n{str(e)}"
+                    )
         return None
 
     def load_wingman_config(
@@ -1008,8 +1036,21 @@ class ConfigManager:
                 skill_default_config_path = path.join(
                     self.skills_dir, skill_dir, DEFAULT_SKILLS_CONFIG
                 )
-                skill_config = self.read_config(skill_default_config_path)
-                skill_config = self.__deep_merge(skill_config, skill_config_wingman)
+
+                # Check if default_config.yaml exists (custom skills may not have it)
+                if path.exists(skill_default_config_path):
+                    skill_config = self.read_config(skill_default_config_path)
+                    skill_config = self.__deep_merge(skill_config, skill_config_wingman)
+                else:
+                    # Custom skill without default_config.yaml - use wingman config as-is
+                    skill_config = skill_config_wingman
+                    self.printr.print(
+                        f"Custom skill '{skill_dir}' has no default_config.yaml, using wingman configuration only.",
+                        color=LogType.WARNING,
+                        server_only=True,
+                        source=LogSource.SYSTEM,
+                        source_name=self.log_source_name,
+                    )
 
                 merged_skills.append(skill_config)
 

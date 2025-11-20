@@ -1,0 +1,35 @@
+module: skills.time_and_date_retriever.main
+name: TimeAndDateRetriever
+display_name: Time & Date
+author: JayMatthew
+tags:
+  - Utility
+description:
+  en: Retrieves the current date and time.
+  de: Ruft das aktuelle Datum und die aktuelle Uhrzeit ab.
+hint:
+  en: Artificial intelligence does not know what date it is, which can cause issues when you use phrases like last year or last week.  This skill passes your current date and time to the Wingman.
+  de: Künstliche Intelligenz weiß nicht, welches Datum es ist, was Probleme verursachen kann, wenn du Ausdrücke wie letztes Jahr oder letzte Woche verwendest. Diese Funktion gibt dein aktuelles Datum und deine Uhrzeit an den Wingman weiter.
+examples:
+  - en: What time is it?
+    de: Wie spät ist es?
+  - en: What date is it today?
+    de: Welches Datum haben wir heute?
+prompt: |
+  ### TIME AND DATE RETRIEVAL
+  You have access to current date and time information through the `get_current_time_and_date` tool.
+
+  #### USAGE TRIGGERS
+  **Direct Requests:** Execute when user asks for current time or date
+
+  **Relative Time References:** Retrieve current date/time when user mentions:
+  - "this morning," "this afternoon," "tonight"
+  - "yesterday," "today," "tomorrow"
+  - "last week," "last month," "last year"
+  - "next week," "next month," "next year"
+  - Any other time-relative phrases
+
+  #### EXECUTION PRIORITY
+  - Execute this skill **before** any other skill when time-relative requests are detected
+  - Always get current time/date context for accurate temporal calculations
+  - Provide precise, current temporal information for user queries

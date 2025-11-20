@@ -526,3 +526,5 @@ class ConfigService:
             config_manager=self.config_manager, system_manager=system_manager
         )
         migration_service.migrate_to_latest()
+        # Reload defaults config after migration in case schema changed
+        self.config_manager.default_config = self.config_manager.load_defaults_config()
