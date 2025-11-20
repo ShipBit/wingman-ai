@@ -67,9 +67,16 @@ class ConfigMigrationService:
             True,
         )
 
+        # If the latest version directory already exists (e.g., created by ConfigManager),
+        # clean up any template configs that will be migrated from old versions
+        latest_existing_version = self.find_latest_existing_version(self.users_dir)
+        if path.exists(self.latest_config_path) and latest_existing_version:
+            self.remove_duplicate_template_configs(
+                latest_existing_version, self.latest_version
+            )
+
         # Copy custom skills from the LATEST existing version to new version
         # This ensures we get the most up-to-date custom skills
-        latest_existing_version = self.find_latest_existing_version(self.users_dir)
         self.log(
             f"Found latest existing version for custom skills: {latest_existing_version}"
         )
@@ -473,6 +480,61 @@ class ConfigMigrationService:
         )
         self.log_message += f"{message}\n"
 
+    def normalize_config_name(self, config_name: str) -> str:
+        """Remove DEFAULT_PREFIX and DELETED_PREFIX from config name for comparison.
+
+        This allows us to detect when '_Star Citizen' and 'Star Citizen' are the same config.
+        """
+        normalized = config_name
+        if normalized.startswith(DELETED_PREFIX):
+            normalized = normalized[len(DELETED_PREFIX) :]
+        if normalized.startswith(DEFAULT_PREFIX):
+            normalized = normalized[len(DEFAULT_PREFIX) :]
+        return normalized
+
+    def remove_duplicate_template_configs(
+        self, old_version: str, new_version: str
+    ) -> None:
+        """Remove template configs from new version that exist in old version.
+
+        This prevents duplicates when templates are copied before migration runs.
+        For example, if old version has 'Star Citizen' (undefaulted) and new version
+        has '_Star Citizen' (template), we remove the template since the old version
+        will be migrated.
+        """
+        old_config_path = path.join(self.users_dir, old_version, CONFIGS_DIR)
+        new_config_path = path.join(self.users_dir, new_version, CONFIGS_DIR)
+
+        if not path.exists(old_config_path) or not path.exists(new_config_path):
+            return
+
+        # Get normalized config names from old version
+        old_config_normalized = set()
+        for item in os.listdir(old_config_path):
+            item_path = path.join(old_config_path, item)
+            if path.isdir(item_path) and not item.startswith("."):
+                normalized = self.normalize_config_name(item)
+                old_config_normalized.add(normalized)
+                self.log(
+                    f"Old config found for duplicate check: {item} (normalized: {normalized})"
+                )
+
+        # Remove new configs that match old configs (after normalization)
+        for item in os.listdir(new_config_path):
+            item_path = path.join(new_config_path, item)
+            if path.isdir(item_path) and not item.startswith("."):
+                normalized = self.normalize_config_name(item)
+                if normalized in old_config_normalized:
+                    shutil.rmtree(item_path)
+                    self.log(
+                        f"Removed template config '{item}' - will be migrated from old version (normalized: {normalized})",
+                        highlight=True,
+                    )
+                    # Also remove associated avatar if it exists
+                    avatar_path = path.join(new_config_path, f"{item}.png")
+                    if path.exists(avatar_path):
+                        os.remove(avatar_path)
+
     def copy_file(self, old_file: str, new_file: str):
         new_dir = path.dirname(new_file)
         if not path.exists(new_dir):
@@ -499,13 +561,56 @@ class ConfigMigrationService:
                 self.templates_dir, "migration", new_version
             )
             if path.exists(migration_template_path):
-                shutil.copytree(
-                    migration_template_path,
-                    path.join(users_dir, new_version),
-                )
+                # Get list of config directories from old version (normalized names)
+                # Include ALL configs regardless of their state (default, undefaulted, or deleted)
+                # because if ANY version exists, we should skip the template
+                old_config_normalized = set()
+                if path.exists(old_config_path):
+                    for item in os.listdir(old_config_path):
+                        item_path = path.join(old_config_path, item)
+                        if path.isdir(item_path) and not item.startswith("."):
+                            # Add ALL configs (including deleted ones) after normalizing
+                            normalized = self.normalize_config_name(item)
+                            old_config_normalized.add(normalized)
+                            self.log(
+                                f"Old config found: {item} (normalized: {normalized})"
+                            )
+
+                # Copy migration template but skip configs that exist in old version (in any state)
+                template_config_path = path.join(migration_template_path, CONFIGS_DIR)
+                new_version_path = path.join(users_dir, new_version)
+
+                # First, copy the entire template structure
+                shutil.copytree(migration_template_path, new_version_path)
                 self.log(
                     f"{new_version} configs not found during multi-step migration. Copied migration templates from {migration_template_path}."
                 )
+
+                # Now remove template configs that have any version in old configs
+                # (whether default, undefaulted, or deleted)
+                if path.exists(template_config_path):
+                    for item in os.listdir(template_config_path):
+                        item_path = path.join(template_config_path, item)
+                        new_item_path = path.join(new_version_path, CONFIGS_DIR, item)
+                        if path.isdir(item_path) and not item.startswith("."):
+                            normalized = self.normalize_config_name(item)
+                            if normalized in old_config_normalized:
+                                # This template config exists in old version (in some form)
+                                # Remove template to avoid duplicates - old version will be migrated
+                                if path.exists(new_item_path):
+                                    shutil.rmtree(new_item_path)
+                                    self.log(
+                                        f"Skipped template config '{item}' - config exists in old version (normalized: {normalized})",
+                                        highlight=True,
+                                    )
+                                # Also remove associated avatar if it exists
+                                avatar_path = path.join(
+                                    new_version_path,
+                                    CONFIGS_DIR,
+                                    item.replace(".yaml", ".png"),
+                                )
+                                if path.exists(avatar_path):
+                                    os.remove(avatar_path)
             else:
                 self.err(f"Migration template not found: {migration_template_path}")
                 raise FileNotFoundError(
