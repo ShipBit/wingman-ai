@@ -319,8 +319,13 @@ class UEXApi2():
                 sent_headers = response.request.headers
                 print_debug(f"Error calling: {actual_url}")
                 print_debug(f"Sent headers: {json.dumps(dict(sent_headers), indent=2)}")
-                print_debug(f"Response Body: {json.dumps(response.json(), indent=2)}")
-                return None  # if there is one error, we stop the whole process
+                try:
+                    response_json = response.json()
+                    print_debug(f"Response Body: {json.dumps(response_json, indent=2)}")
+                    return response_json.get('data', [])
+                except json.JSONDecodeError:
+                    print_debug(f"Response Body (not JSON): {response.text}")
+                    return []
         
         return category_data
 
