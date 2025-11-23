@@ -370,7 +370,8 @@ class MiningManager(FunctionManager):
                 anchor_coords=ROCK_SCAN_COORDS[0],
                 title="Scan-Validierung",
                 align="right",
-                crop_image=cropped_image
+                crop_image=cropped_image,
+                config_dir=self.mining_data_path,
             )
             if operation == "aborted":
                 self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
@@ -446,7 +447,11 @@ class MiningManager(FunctionManager):
         
         # Calculate top-right anchor coordinate (x2, y1)
         anchor_coords = (REFINERY_CROP_COORDS[1][0], REFINERY_CROP_COORDS[0][1])
-        scan_result, operation = MiningValidationPopup.show_popup(scan_result, anchor_coords=anchor_coords)
+        scan_result, operation = MiningValidationPopup.show_popup(
+            scan_result,
+            anchor_coords=anchor_coords,
+            config_dir=self.mining_data_path,
+        )
         if operation == "aborted":
             self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
             return {"success": False, "message": "Work order transmission aborted."}
