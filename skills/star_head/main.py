@@ -12,6 +12,12 @@ if TYPE_CHECKING:
 
 
 class StarHead(Skill):
+    """
+    StarHead skill for Star Citizen trading and ship information.
+
+    Uses hybrid approach: Manual get_tools() for dynamic enums (ship names, locations),
+    but clean method-based tool execution.
+    """
 
     def __init__(
         self,
@@ -21,18 +27,12 @@ class StarHead(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
-        # config entry existence not validated yet. Assign later when checked!
         self.starhead_url = ""
-        """The base URL of the StarHead API"""
-
         self.headers = {"x-origin": "wingman-ai"}
-        """Requireds header for the StarHead API"""
-
         self.timeout = 5
-        """Global timeout for calls to the the StarHead API (in seconds)"""
-
         self.star_citizen_wiki_url = ""
 
+        # Data loaded at startup - used for dynamic enums
         self.vehicles = []
         self.ship_names = []
         self.celestial_objects = []
@@ -66,6 +66,7 @@ class StarHead(Skill):
         return errors
 
     async def _prepare_data(self):
+        """Load reference data from StarHead API for dynamic enums."""
         self.vehicles = await self._fetch_data("vehicle")
         self.ship_names = [
             self._format_ship_name(vehicle)
@@ -83,17 +84,12 @@ class StarHead(Skill):
         )
 
         self.shops = await self._fetch_data("shop")
-        self.shop_names = [shop["name"] for shop in self.shops]
-
-        # Remove duplicate shop names
-        self.shop_names = list(dict.fromkeys(self.shop_names))
-
-        self.shop_parent_names = [
-            shop["parent"]["name"] for shop in self.shops if shop["parent"]
-        ]
-
-        # Remove duplicate parent names
-        self.shop_parent_names = list(dict.fromkeys(self.shop_parent_names))
+        self.shop_names = list(dict.fromkeys([shop["name"] for shop in self.shops]))
+        self.shop_parent_names = list(
+            dict.fromkeys(
+                [shop["parent"]["name"] for shop in self.shops if shop["parent"]]
+            )
+        )
 
     async def _fetch_data(
         self, endpoint: str, params: Optional[dict[str, any]] = None
@@ -113,46 +109,19 @@ class StarHead(Skill):
         return response.json()
 
     def _format_ship_name(self, vehicle: dict[str, any]) -> str:
-        """Formats name by combining model and name, avoiding repetition"""
         return vehicle["name"]
-
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
-    ) -> tuple[str, str]:
-        instant_response = ""
-        function_response = ""
-
-        if tool_name in [
-            "get_best_trading_route",
-            "get_ship_information",
-            "get_trading_information_of_specific_shop",
-            "get_trading_shop_information_for_celestial_objects",
-        ]:
-            benchmark.start_snapshot(f"StarHead: {tool_name}")
-
-            if tool_name == "get_best_trading_route":
-                function_response = await self._get_best_trading_route(**parameters)
-            if tool_name == "get_ship_information":
-                function_response = await self._get_ship_information(**parameters)
-            if tool_name == "get_trading_information_of_specific_shop":
-                function_response = (
-                    await self._get_trading_information_of_specific_shop(**parameters)
-                )
-            if tool_name == "get_trading_shop_information_for_celestial_objects":
-                function_response = (
-                    await self._get_trading_shop_information_for_celestial_objects(
-                        **parameters
-                    )
-                )
-            benchmark.finish_snapshot()
-
-        return function_response, instant_response
 
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return True
 
     def get_tools(self) -> list[tuple[str, dict]]:
-        tools = [
+        """
+        Build tools with dynamic enums from loaded data.
+
+        These tools use dynamic enums populated from StarHead API data,
+        so they must be built at runtime rather than using @tool decorator.
+        """
+        return [
             (
                 "get_best_trading_route",
                 {
@@ -198,7 +167,7 @@ class StarHead(Skill):
                     "type": "function",
                     "function": {
                         "name": "get_trading_information_of_specific_shop",
-                        "description": "Gives trading information about the given shop, like which commodities you can sell or buy and for which price. If the name of the shop is not unique, you have to specify the celestial object.",
+                        "description": "Gives trading information about the given shop, like which commodities you can sell or buy and for which price.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -215,7 +184,7 @@ class StarHead(Skill):
                     "type": "function",
                     "function": {
                         "name": "get_trading_shop_information_for_celestial_objects",
-                        "description": "Gives trading information about the given celestial object, like which commodities you can sell or buy at which shop and for which price. All shops with shop items on that celestial object will be returned.",
+                        "description": "Gives trading information about the given celestial object, like which commodities you can sell or buy at which shop.",
                         "parameters": {
                             "type": "object",
                             "properties": {
@@ -231,11 +200,107 @@ class StarHead(Skill):
             ),
         ]
 
-        return tools
+    async def execute_tool(
+        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
+    ) -> tuple[str, str]:
+        """Execute StarHead tools using clean method dispatch."""
+        instant_response = ""
+        function_response = ""
+
+        # Map tool names to methods
+        tool_methods = {
+            "get_best_trading_route": self._get_best_trading_route,
+            "get_ship_information": self._get_ship_information,
+            "get_trading_information_of_specific_shop": self._get_trading_information_of_specific_shop,
+            "get_trading_shop_information_for_celestial_objects": self._get_trading_shop_information_for_celestial_objects,
+        }
+
+        if tool_name in tool_methods:
+            benchmark.start_snapshot(f"StarHead: {tool_name}")
+
+            if self.settings.debug_mode:
+                await self.printr.print_async(
+                    f"StarHead: executing tool '{tool_name}' with params: {parameters}",
+                    color=LogType.INFO,
+                )
+
+            function_response = await tool_methods[tool_name](**parameters)
+            benchmark.finish_snapshot()
+
+        return function_response, instant_response
+
+    # Tool implementation methods
+
+    async def _get_best_trading_route(
+        self, ship: str, position: str, money_to_spend: float
+    ) -> str:
+        """Calculates the best trading route for the specified ship and position."""
+        cargo, qd = await self._get_ship_details(ship)
+        if not cargo or not qd:
+            return f"Could not find ship '{ship}' in the StarHead database."
+
+        celestial_object_id = self._get_celestial_object_id(position)
+        if not celestial_object_id:
+            return f"Could not find celestial object '{position}' in the StarHead database."
+
+        data = {
+            "startCelestialObjectId": celestial_object_id,
+            "quantumDriveId": qd["id"] if qd else None,
+            "maxAvailablScu": cargo,
+            "maxAvailableMoney": money_to_spend,
+            "useOnlyWeaponFreeZones": False,
+            "onlySingleSections": True,
+        }
+
+        try:
+            response = requests.post(
+                url=f"{self.starhead_url}/trading",
+                json=data,
+                timeout=self.timeout,
+                headers=self.headers,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            return f"Failed to fetch trading route: {e}"
+
+        parsed_response = response.json()
+        if parsed_response:
+            return json.dumps(parsed_response[0])
+        return f"No route found for ship '{ship}' at '{position}' with '{money_to_spend}' aUEC."
+
+    async def _get_ship_information(self, ship: str) -> str:
+        """Gets information about a ship from the Star Citizen wiki."""
+        try:
+            response = requests.get(
+                url=f"{self.star_citizen_wiki_url}/vehicles/{ship}",
+                timeout=self.timeout,
+                headers=self.headers,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            return f"Failed to fetch ship information: {e}"
+        return json.dumps(response.json())
+
+    async def _get_trading_information_of_specific_shop(self, shop: str) -> str:
+        """Gets trading information for a specific shop."""
+        shops = [s for s in self.shops if s["name"].lower() == shop.lower()]
+
+        if len(shops) > 1:
+            return f"Multiple shops with the name '{shop}' found. Please specify the celestial object."
+
+        if not shops:
+            return f"Could not find shop '{shop}' in the StarHead database."
+
+        items = await self._fetch_data(f"shop/{shops[0]['id']}/items")
+        for item in items:
+            item["pricePerItem"] = item["pricePerItem"] * 100
+
+        return json.dumps(items)
 
     async def _get_trading_shop_information_for_celestial_objects(
         self, celestial_object: str
     ) -> str:
+        """Gets trading information for all shops on a celestial object."""
         object_id = self._get_celestial_object_id(celestial_object)
 
         if not object_id:
@@ -253,86 +318,9 @@ class StarHead(Skill):
                 )
             shop_items[f"{shop['parent']['name']} - {shop['name']}"] = items
 
-        shop_details = json.dumps(shop_items)
-        return shop_details
+        return json.dumps(shop_items)
 
-    async def _get_trading_information_of_specific_shop(self, shop: str = None) -> str:
-        # Get all shops with the given name
-        shops = [
-            shop for shop in self.shops if shop["name"].lower() == shop["name"].lower()
-        ]
-
-        # Check if there are multiple shops with the same name
-        if len(shops) > 1:
-            return f"Multiple shops with the name '{shop}' found. Please specify the celestial object."
-
-        if not shops:
-            return f"Could not find shop '{shop}' in the StarHead database."
-
-        shop_items = {}
-
-        for shop in shops:
-            items = await self._fetch_data(f"shop/{shop['id']}/items")
-            for item in items:
-                item["pricePerItem"] = item["pricePerItem"] * 100
-            shop_items[shop["name"]] = items
-
-        shop_details = json.dumps(items)
-        return shop_details
-
-    async def _get_ship_information(self, ship: str) -> str:
-        try:
-            response = requests.get(
-                url=f"{self.star_citizen_wiki_url}/vehicles/{ship}",
-                timeout=self.timeout,
-                headers=self.headers,
-            )
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            return f"Failed to fetch ship information: {e}"
-        ship_details = json.dumps(response.json())
-        return ship_details
-
-    async def _get_best_trading_route(
-        self, ship: str, position: str, money_to_spend: float
-    ) -> str:
-        """Calculates the best trading route for the specified ship and position.
-        Note that the function arguments have to match the funtion_args from OpenAI, hence the camelCase!
-        """
-
-        cargo, qd = await self._get_ship_details(ship)
-        if not cargo or not qd:
-            return f"Could not find ship '{ship}' in the StarHead database."
-
-        celestial_object_id = self._get_celestial_object_id(position)
-        if not celestial_object_id:
-            return f"Could not find celestial object '{position}' in the StarHead database."
-
-        data = {
-            "startCelestialObjectId": celestial_object_id,
-            "quantumDriveId": qd["id"] if qd else None,
-            "maxAvailablScu": cargo,
-            "maxAvailableMoney": money_to_spend,
-            "useOnlyWeaponFreeZones": False,
-            "onlySingleSections": True,
-        }
-        url = f"{self.starhead_url}/trading"
-        try:
-            response = requests.post(
-                url=url,
-                json=data,
-                timeout=self.timeout,
-                headers=self.headers,
-            )
-            response.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            return f"Failed to fetch trading route: {e}"
-
-        parsed_response = response.json()
-        if parsed_response:
-            section = parsed_response[0]
-            return json.dumps(section)
-        return f"No route found for ship '{ship}' at '{position}' with '{money_to_spend}' aUEC."
+    # Helper methods
 
     def _get_celestial_object_id(self, name: str) -> Optional[int]:
         """Finds the ID of the celestial object with the specified name."""

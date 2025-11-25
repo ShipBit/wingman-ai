@@ -2,14 +2,13 @@ import time
 import math
 from urllib.parse import urlparse
 from copy import deepcopy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, Optional
 from duckduckgo_search import DDGS
-from services.benchmark import Benchmark
 from trafilatura import fetch_url, extract
 from trafilatura.settings import DEFAULT_CONFIG
 from api.interface import SettingsConfig, SkillConfig
 from api.enums import LogType
-from skills.skill_base import Skill
+from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -32,7 +31,6 @@ class WebSearch(Skill):
         self.max_result_size = 4000
 
         # Set necessary trafilatura settings to match
-
         # Copy default config file that comes with trafilatura
         self.trafilatura_config = deepcopy(DEFAULT_CONFIG)
         # Change download and max redirects default in config
@@ -41,167 +39,140 @@ class WebSearch(Skill):
         ] = f"{math.ceil(self.max_time/2)}"
         self.trafilatura_config["DEFAULT"]["MAX_REDIRECTS "] = "3"
 
-    def get_tools(self) -> list[tuple[str, dict]]:
-        tools = [
-            (
-                "web_search_function",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "web_search_function",
-                        "description": "Searches the internet / web for the topic identified by the user or identified by the AI to answer a user question.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "search_query": {
-                                    "type": "string",
-                                    "description": "The topic to search the internet for.",
-                                },
-                                "search_type": {
-                                    "type": "string",
-                                    "description": "The type of search to perform.  Use 'news', if the user is looking for current events, weather, or recent news.  Use 'general' for general detailed information about a topic.  Use 'single_site' if the user has specified one particular web page that they want you to review, and then use the 'single_site_url' parameter to identify the web page.  If it is not clear what type of search the user wants, ask.",
-                                    "enum": [
-                                        "news",
-                                        "general",
-                                        "single_site",
-                                    ],
-                                },
-                                "single_site_url": {
-                                    "type": "string",
-                                    "description": "If the user wants to search a single website, the specific site url that they want to search, formatted as a proper url.",
-                                },
-                            },
-                            "required": ["search_query", "search_type"],
-                        },
-                    },
-                },
-            ),
-        ]
-        return tools
+        # Results collection for threaded execution
+        self._processed_results: list[str] = []
 
-    async def is_waiting_response_needed(self, tool_name: str) -> bool:
-        return True
+    async def _gather_information(
+        self,
+        result: dict,
+        search_type: str,
+        max_result_size: int,
+    ) -> None:
+        """Extract content from a search result. Used in threaded execution."""
+        title = result.get("title", "")
+        link = result.get("url") if search_type != "general" else result.get("href")
+        body = result.get("body", "")
 
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
-    ) -> tuple[str, str]:
-        function_response = "No search results found or search failed."
-        instant_response = ""
-
-        if tool_name == "web_search_function":
-            benchmark.start_snapshot(f"WebSearch: {tool_name}")
+        if link:
             if self.settings.debug_mode:
-                message = f"WebSearch: executing tool '{tool_name}'"
-                if parameters:
-                    message += f" with params: {parameters}"
-                await self.printr.print_async(text=message, color=LogType.INFO)
+                await self.printr.print_async(
+                    f"web_search skill analyzing website at: {link} for full content using trafilatura",
+                    color=LogType.INFO,
+                )
 
-            final_results = ""
-            search_query = parameters.get("search_query")
-            search_type = parameters.get("search_type")
-            site_url = parameters.get("single_site_url")
+            downloaded = fetch_url(link, config=self.trafilatura_config)
+            trafilatura_result = extract(
+                downloaded,
+                include_comments=False,
+                include_tables=False,
+            )
 
-            # Since site_url is not a required parameter, it is possible the AI may not to include it even when using single site type, and instead put the web address in the query field; check if that is the case.
-            if not site_url and search_type == "single_site":
-                try:
-                    urlparse(search_query)
-                    site_url = search_query
-                except ValueError:
+            if trafilatura_result:
+                self._processed_results.append(
+                    f"{title}\n{link}\n{trafilatura_result[:max_result_size]}"
+                )
+            else:
+                if self.settings.debug_mode:
                     await self.printr.print_async(
-                        "Tried single site search but no valid url to search.",
+                        f"web_search skill could not extract results from website at: {link}",
                         color=LogType.INFO,
                     )
+                self._processed_results.append(f"{title}\n{link}\n{body}")
 
-            processed_results = []
+    @tool(
+        name="web_search_function",
+        description="Searches the internet / web for the topic identified by the user or identified by the AI to answer a user question.",
+        wait_response=True,
+    )
+    async def web_search_function(
+        self,
+        search_query: str,
+        search_type: Literal["news", "general", "single_site"],
+        single_site_url: Optional[str] = None,
+    ) -> str:
+        """
+        Performs a web search using DuckDuckGo.
 
-            async def gather_information(result):
-                title = result.get("title")
-                link = result.get("url")
-                if search_type == "general":
-                    link = result.get("href")
-                body = result.get("body")
+        Args:
+            search_query: The topic to search the internet for.
+            search_type: The type of search - 'news' for current events/weather/news,
+                        'general' for detailed information, 'single_site' for a specific page.
+            single_site_url: If search_type is 'single_site', the specific URL to search.
+        """
+        if self.settings.debug_mode:
+            await self.printr.print_async(
+                f"WebSearch: executing search with query '{search_query}', type '{search_type}'",
+                color=LogType.INFO,
+            )
 
-                # If doing a deep dive on a single site get as much content as possible
-                if search_type == "single_site":
-                    self.max_result_size = 20000
-                else:
-                    self.max_result_size = 4000
-                # If a link is in search results or identified by the user, then use trafilatura to download its content and extract the content to text
-                if link:
-                    trafilatura_url = link
-                    trafilatura_downloaded = fetch_url(
-                        trafilatura_url, config=self.trafilatura_config
-                    )
-                    if self.settings.debug_mode:
-                        await self.printr.print_async(
-                            f"web_search skill analyzing website at: {link} for full content using trafilatura",
-                            color=LogType.INFO,
-                        )
-                    trafilatura_result = extract(
-                        trafilatura_downloaded,
-                        include_comments=False,
-                        include_tables=False,
-                    )
-                    if trafilatura_result:
-                        processed_results.append(
-                            title
-                            + "\n"
-                            + link
-                            + "\n"
-                            + trafilatura_result[: self.max_result_size]
-                        )
+        # Reset results collection
+        self._processed_results = []
 
-                    else:
-                        if self.settings.debug_mode:
-                            await self.printr.print_async(
-                                f"web_search skill could not extract results from website at: {link} for full content using trafilatura",
-                                color=LogType.INFO,
-                            )
-                        processed_results.append(title + "\n" + link + "\n" + body)
+        # Handle single_site_url fallback from query
+        site_url = single_site_url
+        if not site_url and search_type == "single_site":
+            try:
+                urlparse(search_query)
+                site_url = search_query
+            except ValueError:
+                await self.printr.print_async(
+                    "Tried single site search but no valid url to search.",
+                    color=LogType.INFO,
+                )
+
+        # Configure based on search type
+        if search_type == "single_site":
+            max_result_size = 20000
+            self.min_results = 1
+            self.max_time = 30
+            search_results = [
+                {"url": site_url, "title": "Site Requested", "body": "None found"}
+            ]
+        else:
+            max_result_size = 4000
+            self.min_results = 2
+            self.max_time = 5
 
             if search_type == "general":
-                self.min_results = 2
-                self.max_time = 5
                 search_results = DDGS().text(
                     search_query, safesearch="off", max_results=self.max_results
                 )
-            elif search_type == "news":
-                self.min_results = 2
-                self.max_time = 5
+            else:  # news
                 search_results = DDGS().news(
                     search_query, safesearch="off", max_results=self.max_results
                 )
-            else:
-                search_results = [
-                    {"url": site_url, "title": "Site Requested", "body": "None found"}
-                ]
-                self.min_results = 1
-                self.max_time = 30
 
-            self.trafilatura_config["DEFAULT"][
-                "DOWNLOAD_TIMEOUT"
-            ] = f"{math.ceil(self.max_time/2)}"
+        # Update trafilatura timeout
+        self.trafilatura_config["DEFAULT"][
+            "DOWNLOAD_TIMEOUT"
+        ] = f"{math.ceil(self.max_time/2)}"
 
-            start_time = time.time()
+        # Process results in parallel using threaded execution
+        start_time = time.time()
 
-            for result in search_results:
-                self.threaded_execution(gather_information, result)
+        for result in search_results:
+            self.threaded_execution(
+                self._gather_information,
+                result,
+                search_type,
+                max_result_size,
+            )
 
-            while (
-                len(processed_results) < self.min_results
-                and time.time() - start_time < self.max_time
-            ):
-                time.sleep(0.1)
+        # Wait for minimum results or timeout
+        while (
+            len(self._processed_results) < self.min_results
+            and time.time() - start_time < self.max_time
+        ):
+            time.sleep(0.1)
 
-            final_results = "\n\n".join(processed_results)
+        final_results = "\n\n".join(self._processed_results)
 
-            if final_results:
-                if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        f"WebSearch: final results used as context for AI response: \n\n {final_results}",
-                        color=LogType.INFO,
-                    )
-                function_response = final_results
-            benchmark.finish_snapshot()
+        if final_results:
+            if self.settings.debug_mode:
+                await self.printr.print_async(
+                    f"WebSearch: final results used as context for AI response: \n\n {final_results}",
+                    color=LogType.INFO,
+                )
+            return final_results
 
-        return function_response, instant_response
+        return "No search results found or search failed."

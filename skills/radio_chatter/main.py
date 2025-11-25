@@ -18,9 +18,8 @@ from api.enums import (
     WingmanProTtsProvider,
     SoundEffect,
 )
-from services.benchmark import Benchmark
 from services.file import get_writable_dir
-from skills.skill_base import Skill
+from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -250,76 +249,37 @@ class RadioChatter(Skill):
         random = randrange(start, stop)
         return random
 
-    def get_tools(self) -> list[tuple[str, dict]]:
-        tools = [
-            (
-                "turn_on_radio",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "turn_on_radio",
-                        "description": "Turn the radio on to pick up some chatter on open frequencies.",
-                    },
-                },
-            ),
-            (
-                "turn_off_radio",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "turn_off_radio",
-                        "description": "Turn the radio off to no longer pick up pick up chatter on open frequencies.",
-                    },
-                },
-            ),
-            (
-                "radio_status",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "radio_status",
-                        "description": "Get the status (on/off) of the radio.",
-                    },
-                },
-            ),
-        ]
-        return tools
+    @tool(
+        name="turn_on_radio",
+        description="Turn the radio on to pick up some chatter on open frequencies.",
+    )
+    def turn_on_radio(self) -> str:
+        """Turn the radio on."""
+        if self.radio_status:
+            return "Radio is already on."
+        else:
+            self.threaded_execution(self._init_chatter)
+            return "Radio is now on."
 
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
-    ) -> tuple[str, str]:
-        function_response = ""
-        instant_response = ""
+    @tool(
+        name="turn_off_radio",
+        description="Turn the radio off to no longer pick up pick up chatter on open frequencies.",
+    )
+    def turn_off_radio(self) -> str:
+        """Turn the radio off."""
+        if self.radio_status:
+            self.radio_status = False
+            return "Radio is now off."
+        else:
+            return "Radio is already off."
 
-        if tool_name in ["turn_on_radio", "turn_off_radio", "radio_status"]:
-            benchmark.start_snapshot(f"Radio Chatter: {tool_name}")
-
-            if self.settings.debug_mode:
-                message = f"RadioChatter: executing tool '{tool_name}'"
-                if parameters:
-                    message += f" with params: {parameters}"
-                await self.printr.print_async(text=message, color=LogType.INFO)
-
-            if tool_name == "turn_on_radio":
-                if self.radio_status:
-                    function_response = "Radio is already on."
-                else:
-                    self.threaded_execution(self._init_chatter)
-                    function_response = "Radio is now on."
-            elif tool_name == "turn_off_radio":
-                if self.radio_status:
-                    self.radio_status = False
-                    function_response = "Radio is now off."
-                else:
-                    function_response = "Radio is already off."
-            elif tool_name == "radio_status":
-                if self.radio_status:
-                    function_response = "Radio is on."
-                else:
-                    function_response = "Radio is off."
-
-            benchmark.finish_snapshot()
-        return function_response, instant_response
+    @tool(name="radio_status", description="Get the status (on/off) of the radio.")
+    def get_radio_status(self) -> str:
+        """Get the current radio status."""
+        if self.radio_status:
+            return "Radio is on."
+        else:
+            return "Radio is off."
 
     async def _init_chatter(self) -> None:
         """Start the radio chatter."""
@@ -471,7 +431,9 @@ class RadioChatter(Skill):
             while not self.wingman.audio_player.is_playing or max_wait < 0:
                 time.sleep(0.1)
                 max_wait -= 0.1
-            await self._switch_voice(original_voice_setting, elevenlabs_streaming, inworld_streaming)
+            await self._switch_voice(
+                original_voice_setting, elevenlabs_streaming, inworld_streaming
+            )
 
         while self.wingman.audio_player.is_playing:
             time.sleep(1)  # stay in function call until last message got played
@@ -496,7 +458,10 @@ class RadioChatter(Skill):
         return voice_index
 
     async def _switch_voice(
-        self, voice_setting: VoiceSelection = None, elevenlabs_streaming: bool = False, inworld_streaming: bool = False
+        self,
+        voice_setting: VoiceSelection = None,
+        elevenlabs_streaming: bool = False,
+        inworld_streaming: bool = False,
     ) -> None:
         """Switch voice to the given voice setting."""
 
@@ -553,7 +518,7 @@ class RadioChatter(Skill):
 
         if error or not voice_name or not voice_provider:
             await self.printr.print_async(
-               f"Voice switching failed due to an unknown voice provider/subprovider or different error. Provider: {voice_provider.value}",
+                f"Voice switching failed due to an unknown voice provider/subprovider or different error. Provider: {voice_provider.value}",
                 LogType.ERROR,
             )
             return

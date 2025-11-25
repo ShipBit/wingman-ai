@@ -7,8 +7,7 @@ import pygetwindow as gw
 from PIL import Image
 from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from services.benchmark import Benchmark
-from skills.skill_base import Skill
+from skills.skill_base import Skill, tool
 from services.file import get_writable_dir
 
 if TYPE_CHECKING:
@@ -51,7 +50,21 @@ class AutoScreenshot(Skill):
     def get_default_directory(self) -> str:
         return get_writable_dir("screenshots")
 
-    async def take_screenshot(self, reason: str) -> None:
+    @tool(
+        name="take_screenshot",
+        description="Takes a screenshot of the currently focused game window and saves it in the default directory.",
+    )
+    async def take_screenshot(self, reason: str) -> str:
+        """
+        Args:
+            reason: The reason for taking a screenshot.
+        """
+        if self.settings.debug_mode:
+            await self.printr.print_async(
+                f"AutoScreenshot: taking screenshot for reason: {reason}",
+                color=LogType.INFO,
+            )
+
         try:
             focused_window = gw.getActiveWindow()
 
@@ -105,47 +118,4 @@ class AutoScreenshot(Skill):
                     color=LogType.INFO,
                 )
 
-    def get_tools(self) -> list[tuple[str, dict]]:
-        tools = [
-            (
-                "take_screenshot",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "take_screenshot",
-                        "description": "Takes a screenshot of the currently focused game window and saves it in the default directory.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "reason": {
-                                    "type": "string",
-                                    "description": "The reason for taking a screenshot.",
-                                },
-                            },
-                            "required": ["reason"],
-                        },
-                    },
-                },
-            ),
-        ]
-        return tools
-
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
-    ) -> tuple[str, str]:
-        function_response = ""
-        instant_response = ""
-
-        if tool_name == "take_screenshot":
-            benchmark.start_snapshot("Auto Screenshot: take_screenshot")
-            if self.settings.debug_mode:
-                message = f"AutoScreenshot: executing tool '{tool_name}'"
-                if parameters:
-                    message += f" with params: {parameters}"
-                await self.printr.print_async(message, color=LogType.INFO)
-            reason = parameters.get("reason", "unspecified reason")
-            await self.take_screenshot(reason)
-            function_response = "Screenshot taken successfully."
-            benchmark.finish_snapshot()
-
-        return function_response, instant_response
+        return "Screenshot taken successfully."

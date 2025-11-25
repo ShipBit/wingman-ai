@@ -7,7 +7,7 @@ from clipboard import Clipboard
 from api.interface import SettingsConfig, SkillConfig
 from api.enums import LogType
 from services.benchmark import Benchmark
-from skills.skill_base import Skill
+from skills.skill_base import Skill, tool
 import mouse.mouse as mouse
 
 if TYPE_CHECKING:
@@ -68,20 +68,8 @@ class ControlWindows(Skill):
 
         return False
 
-    def close_application(self, app_name):
-        windows = self.get_and_check_windows(app_name)
-        if windows and len(windows) > 0:
-            for window in windows:
-                try:
-                    window.close()
-                except:
-                    return False
-
-            return True
-
-        return False
-
     def execute_ui_command(self, app_name: str, command: str):
+
         windows = self.get_and_check_windows(app_name)
         if windows and len(windows) > 0:
             for window in windows:
@@ -94,7 +82,14 @@ class ControlWindows(Skill):
 
         return False
 
-    def activate_application(self, app_name: str):
+    @tool(description="Activate (bring to front) an application.")
+    async def activate_application(self, app_name: str) -> str:
+        """
+        Activate (bring to front) an application.
+
+        Args:
+            app_name: The name of the application to activate.
+        """
         windows = self.get_and_check_windows(app_name)
         if windows and len(windows) > 0:
             for window in windows:
@@ -104,13 +99,25 @@ class ControlWindows(Skill):
                     window.restore()
                     window.activate()
                 except:
-                    return False
+                    return "Error: Application not found or could not be activated."
 
-            return True
+            return "Application activated."
 
-        return False
+        return "Error: Application not found or could not be activated."
 
-    async def move_application(self, app_name: str, command: str):
+    @tool(description="Move an application window to a specific position.")
+    async def move_application(self, app_name: str, position: str) -> str:
+        """
+        Move an application window to a specific position.
+
+        Args:
+            app_name: The name of the application to move.
+            position: The position to move the window to (left, right, top, bottom).
+        """
+        if position.lower() not in ["left", "right", "top", "bottom"]:
+            return "Error: Invalid position. Must be one of: left, right, top, bottom."
+
+        command = position.lower()
         windows = self.get_and_check_windows(app_name)
 
         if self.settings.debug_mode:
@@ -171,7 +178,7 @@ class ControlWindows(Skill):
                             mouse.move(20, 10, duration=1.0)
                             time.sleep(0.1)
                             mouse.release(button="left")
-                            return True
+                            return f"Application moved to {position}."
 
                         elif "right" in command:
                             mouse.move(int(monitor_width * 0.5), 10, duration=1.0)
@@ -180,34 +187,40 @@ class ControlWindows(Skill):
                             mouse.move(monitor_width - 20, 10, duration=1.0)
                             time.sleep(0.1)
                             mouse.release(button="left")
-                            return True
+                            return f"Application moved to {position}."
                         # Return False as failed if could not move through any method
-                        return False
-                    return True
+                        return "There was a problem moving that application. The application may not support moving it through automation."
+                    return f"Application moved to {position}."
 
                 # If any errors in trying to move and resize windows, return false as well
                 except:
-                    return False
+                    return "There was a problem moving that application. The application may not support moving it through automation."
 
         # If no windows found, return false
-        return False
+        return "There was a problem moving that application. The application may not support moving it through automation."
 
-    async def list_applications(self):
+    @tool(description="List all open application windows.")
+    async def list_applications(self) -> str:
+        """List all open application windows."""
         window_titles = gw.getAllTitles()
         if window_titles:
             titles_as_string = ", ".join(window_titles)
-            response = (
-                f"List of all application window titles found: {titles_as_string}."
-            )
             if self.settings.debug_mode:
                 await self.printr.print_async(
                     f"list_applications command found these applications: {titles_as_string}",
                     color=LogType.INFO,
                 )
-            return response
-        return False
+            return f"List of all application window titles found: {titles_as_string}."
+        return "There was a problem getting your list of applications."
 
-    def place_text_on_clipboard(self, text: str) -> str:
+    @tool(description="Place text on the clipboard.")
+    async def place_text_on_clipboard(self, text: str) -> str:
+        """
+        Place text on the clipboard.
+
+        Args:
+            text: The text to place on the clipboard.
+        """
         try:
             with Clipboard() as clipboard:
                 clipboard.set_clipboard(text)
@@ -217,7 +230,9 @@ class ControlWindows(Skill):
         except Exception as e:
             return f"Error: {str(e)}"
 
-    def get_text_from_clipboard(self) -> str:
+    @tool(description="Read the content of the clipboard.")
+    async def read_clipboard_content(self) -> str:
+        """Read the content of the clipboard."""
         try:
             with Clipboard() as clipboard:
                 text = clipboard["text"]
@@ -227,115 +242,71 @@ class ControlWindows(Skill):
         except Exception as e:
             return f"Error: {str(e)}"
 
-    def get_tools(self) -> list[tuple[str, dict]]:
-        tools = [
-            (
-                "control_windows_functions",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "control_windows_functions",
-                        "description": "Control Windows Functions, like opening, closing, listing, and moving applications, and reading clipboard content.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "command": {
-                                    "type": "string",
-                                    "description": "The command to execute",
-                                    "enum": [
-                                        "open",
-                                        "close",
-                                        "minimize",
-                                        "maximize",
-                                        "restore",
-                                        "activate",
-                                        "snap_left",
-                                        "snap_right",
-                                        "snap_top",
-                                        "snap_bottom",
-                                        "list_applications",
-                                        "read_clipboard_content",
-                                        "place_text_on_clipboard",
-                                    ],
-                                },
-                                "parameter": {
-                                    "type": "string",
-                                    "description": "The parameter for the command. For example, the application name to open, close, or move. Or the information to get or use.",
-                                },
-                            },
-                            "required": ["command"],
-                        },
-                    },
-                },
-            ),
-        ]
-        return tools
+    @tool(description="Open an application.")
+    async def open_application(self, app_name: str) -> str:
+        """
+        Open an application.
 
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
-    ) -> tuple[str, str]:
-        function_response = "Error: Application not found."
-        instant_response = ""
+        Args:
+            app_name: The name of the application to open.
+        """
+        app_started = self.search_and_start(app_name)
+        if app_started:
+            return "Application started."
+        return "Error: Application not found or could not be started."
 
-        if tool_name == "control_windows_functions":
-            benchmark.start_snapshot("Control Windows: control_windows_functions")
-            if self.settings.debug_mode:
-                message = f"Control Windows: executing tool '{tool_name}'"
-                if parameters:
-                    message += f" with params: {parameters}"
-                await self.printr.print_async(message, color=LogType.INFO)
+    @tool(description="Close an application.")
+    async def close_application(self, app_name: str) -> str:
+        """
+        Close an application.
 
-            parameter = parameters.get("parameter")
+        Args:
+            app_name: The name of the application to close.
+        """
+        windows = self.get_and_check_windows(app_name)
+        if windows and len(windows) > 0:
+            for window in windows:
+                try:
+                    window.close()
+                except:
+                    return "Error: Application not found or could not be closed."
 
-            if parameters["command"] == "open":
-                app_started = self.search_and_start(parameter)
-                if app_started:
-                    function_response = "Application started."
+            return "Application closed."
 
-            elif parameters["command"] == "close":
-                app_closed = self.close_application(parameter)
-                if app_closed:
-                    function_response = "Application closed."
+        return "Error: Application not found or could not be closed."
 
-            elif parameters["command"] == "activate":
-                app_activated = self.activate_application(parameter)
-                if app_activated:
-                    function_response = "Application activated."
+    @tool(description="Minimize an application window.")
+    async def minimize_application(self, app_name: str) -> str:
+        """
+        Minimize an application window.
 
-            elif any(
-                word in parameters["command"].lower()
-                for word in ["left", "right", "top", "bottom"]
-            ):
-                command = parameters["command"].lower()
-                app_moved = await self.move_application(parameter, command)
-                if app_moved:
-                    function_response = "Application moved"
-                else:
-                    function_response = "There was a problem moving that application. The application may not support moving it through automation."
+        Args:
+            app_name: The name of the application to minimize.
+        """
+        if self.execute_ui_command(app_name, "minimize"):
+            return "Application minimized."
+        return "Error: Application not found or could not be minimized."
 
-            elif "list" in parameters["command"].lower():
-                apps_listed = await self.list_applications()
-                if apps_listed:
-                    function_response = apps_listed
-                else:
-                    function_response = (
-                        "There was a problem getting your list of applications."
-                    )
+    @tool(description="Maximize an application window.")
+    async def maximize_application(self, app_name: str) -> str:
+        """
+        Maximize an application window.
 
-            elif "read_clipboard" in parameters["command"].lower():
-                text_received = self.get_text_from_clipboard()
-                function_response = text_received
+        Args:
+            app_name: The name of the application to maximize.
+        """
+        if self.execute_ui_command(app_name, "maximize"):
+            return "Application maximized."
+        return "Error: Application not found or could not be maximized."
 
-            elif "clipboard" in parameters["command"].lower():
-                text_placed = self.place_text_on_clipboard(parameter)
-                function_response = text_placed
+    @tool(description="Restore an application window.")
+    async def restore_application(self, app_name: str) -> str:
+        """
+        Restore an application window.
 
-            else:
-                command = parameters["command"]
-                app_minimize = self.execute_ui_command(parameter, command)
-                if app_minimize:
-                    function_response = f"Application {command}."
-
-            benchmark.finish_snapshot()
-
-        return function_response, instant_response
+        Args:
+            app_name: The name of the application to restore.
+        """
+        if self.execute_ui_command(app_name, "restore"):
+            return "Application restored."
+        return "Error: Application not found or could not be restored."

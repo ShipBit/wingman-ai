@@ -3,7 +3,7 @@ import json
 import random
 import asyncio
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import yaml
 import aiohttp
 from aiohttp import ClientError
@@ -11,7 +11,7 @@ from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from services.benchmark import Benchmark
 from services.file import get_writable_dir
-from skills.skill_base import Skill
+from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -278,47 +278,16 @@ class APIRequest(Skill):
         return True
 
     def get_tools(self) -> list[Tuple[str, Dict[str, Any]]]:
-        # Ensure api_keys_dictionary is populated, if not use placeholder
+        """Get tools - includes @tool decorated methods plus dynamic enum tool."""
+        # Get decorated tools first
+        tools = super().get_tools()
+
+        # Ensure api_keys_dictionary is populated
         if not self.api_keys_dictionary:
             self.api_keys_dictionary = {"Service": "API_key"}
 
-        return [
-            (
-                "send_api_request",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "send_api_request",
-                        "description": "Send an API request with the specified method, headers, parameters, and body. Return the response back.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "url": {
-                                    "type": "string",
-                                    "description": "The URL for the API request.",
-                                },
-                                "method": {
-                                    "type": "string",
-                                    "description": "The HTTP method (GET, POST, PUT, PATCH, DELETE, etc.).",
-                                },
-                                "headers": {
-                                    "type": "object",
-                                    "description": "Headers for the API request.",
-                                },
-                                "params": {
-                                    "type": "object",
-                                    "description": "URL parameters for the API request.",
-                                },
-                                "data": {
-                                    "type": "object",
-                                    "description": "Body or payload for the API request.",
-                                },
-                            },
-                            "required": ["url", "method"],
-                        },
-                    },
-                },
-            ),
+        # Add get_api_key with dynamic enum from yaml config
+        tools.append(
             (
                 "get_api_key",
                 {
@@ -339,42 +308,38 @@ class APIRequest(Skill):
                         },
                     },
                 },
-            ),
-        ]
+            )
+        )
+
+        return tools
 
     async def execute_tool(
         self, tool_name: str, parameters: Dict[str, Any], benchmark: Benchmark
     ) -> Tuple[str, str]:
-        function_response = "Error with API request, could not complete."
-        instant_response = ""
+        """Execute tools - delegates to base class for decorated tools."""
+        # Let base class handle decorated tools (send_api_request)
+        function_response, instant_response = await super().execute_tool(
+            tool_name, parameters, benchmark
+        )
 
-        if tool_name in ["send_api_request", "get_api_key"]:
+        # Handle dynamic enum tool manually
+        if tool_name == "get_api_key":
             benchmark.start_snapshot(f"API Request: {tool_name}")
 
             if self.settings.debug_mode:
-                message = f"API Request: executing tool '{tool_name}'"
-                if parameters:
-                    message += f" with params: {parameters}"
-                await self.printr.print_async(text=message, color=LogType.INFO)
+                await self.printr.print_async(
+                    f"API Request: executing tool '{tool_name}' with params: {parameters}",
+                    color=LogType.INFO,
+                )
 
-            if tool_name == "send_api_request":
-                try:
-                    function_response = await self._send_api_request(parameters)
-                except Exception as e:
-                    if self.settings.debug_mode:
-                        await self.printr.print_async(
-                            f"Unknown error with API call  {e}",
-                            color=LogType.INFO,
-                        )
-            elif tool_name == "get_api_key":
-                alias = parameters.get("api_key_alias", "Not found")
-                key = self.api_keys_dictionary.get(alias, None)
-                if key is not None and key != "API_key":
-                    function_response = f"{alias} API key is: {key}"
-                else:
-                    function_response = (
-                        f"Error. Could not retrieve {alias} API key. Not found."
-                    )
+            alias = parameters.get("api_key_alias", "Not found")
+            key = self.api_keys_dictionary.get(alias, None)
+            if key is not None and key != "API_key":
+                function_response = f"{alias} API key is: {key}"
+            else:
+                function_response = (
+                    f"Error. Could not retrieve {alias} API key. Not found."
+                )
 
             if self.settings.debug_mode:
                 await self.printr.print_async(
@@ -384,3 +349,26 @@ class APIRequest(Skill):
             benchmark.finish_snapshot()
 
         return function_response, instant_response
+
+    @tool(
+        name="send_api_request",
+        description="Send an API request with the specified method, headers, parameters, and body. Return the response back.",
+        wait_response=True,
+    )
+    async def send_api_request(
+        self,
+        url: str,
+        method: str,
+        headers: Optional[Dict[str, Any]] = None,
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """Send an API request and return the response."""
+        parameters = {
+            "url": url,
+            "method": method,
+            "headers": headers or {},
+            "params": params or {},
+            "data": data or {},
+        }
+        return await self._send_api_request(parameters)

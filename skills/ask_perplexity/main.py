@@ -1,19 +1,17 @@
-from api.interface import (
-    WingmanInitializationError,
-)
-from services.benchmark import Benchmark
-from skills.skill_base import Skill
+from api.interface import WingmanInitializationError
+from api.enums import LogType
+from skills.skill_base import Skill, tool
 
 
 class AskPerplexity(Skill):
+    """
+    A skill that queries the Perplexity API for up-to-date internet information.
 
-    def __init__(
-        self,
-        *args,
-        **kwargs,
-    ) -> None:
+    Demonstrates the @tool decorator with wait_response for slow API calls.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-
         self.instant_response = False
 
     async def validate(self) -> list[WingmanInitializationError]:
@@ -28,56 +26,33 @@ class AskPerplexity(Skill):
 
         return errors
 
-    def get_tools(self) -> list[tuple[str, dict]]:
-        tools = [
-            (
-                "ask_perplexity",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "ask_perplexity",
-                        "description": "Expects a question that is answered with up-to-date information from the internet.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "question": {"type": "string"},
-                            },
-                            "required": ["question"],
-                        },
-                    },
-                },
-            ),
-        ]
-        return tools
+    @tool(
+        name="ask_perplexity",
+        description="Expects a question that is answered with up-to-date information from the internet.",
+        wait_response=True,
+    )
+    def ask_perplexity(self, question: str) -> tuple[str, str]:
+        """
+        Uses the Perplexity API to answer a question.
 
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
-    ) -> tuple[str, str]:
-        function_response = ""
-        instant_response = ""
+        Args:
+            question: The question to ask Perplexity.
 
-        if tool_name in ["ask_perplexity"]:
-            if tool_name == "ask_perplexity" and "question" in parameters:
-                benchmark.start_snapshot("Ask Perplexity")
-                function_response = self.ask_perplexity(parameters["question"])
-                if self.instant_response:
-                    instant_response = function_response
-                benchmark.finish_snapshot()
-
-            if self.settings.debug_mode:
-                await self.printr.print_async(f"Perplexity answer: {function_response}")
-
-        return function_response, instant_response
-
-    def ask_perplexity(self, question: str) -> str:
-        """Uses the Perplexity API to answer a question."""
-
+        Returns:
+            Tuple of (function_response, instant_response)
+        """
         completion = self.wingman.perplexity.ask(
             messages=[{"role": "user", "content": question}],
             model=self.wingman.config.perplexity.conversation_model.value,
         )
 
+        if self.settings.debug_mode:
+            self.printr.print(f"Perplexity answer: {completion}", color=LogType.INFO)
+
         if completion and completion.choices:
-            return completion.choices[0].message.content
+            response = completion.choices[0].message.content
+            # Return instant_response if configured
+            instant = response if self.instant_response else ""
+            return response, instant
         else:
-            return "Error: Unable to retrieve a response from Perplexity API."
+            return "Error: Unable to retrieve a response from Perplexity API.", ""

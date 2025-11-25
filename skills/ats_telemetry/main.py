@@ -4,8 +4,8 @@ import math
 import copy
 from datetime import datetime, timedelta
 import requests
-from services.benchmark import Benchmark
 import truck_telemetry
+
 from pyproj import Proj, transform
 import time
 from typing import TYPE_CHECKING
@@ -15,7 +15,7 @@ from api.interface import (
     WingmanInitializationError,
 )
 from api.enums import LogType
-from skills.skill_base import Skill
+from skills.skill_base import Skill, tool
 from services.file import get_writable_dir
 
 
@@ -81,7 +81,7 @@ class ATSTelemetry(Skill):
         self.ets_install_directory = ""
         self.dispatcher_backstory = ""
         self.autostart_dispatch_mode = False
-        
+
         # Define the ATS (American Truck Simulator) projection for use in converting in-game coordinates to real life
         self.ats_proj = Proj(
             proj="lcc",
@@ -333,172 +333,123 @@ class ATSTelemetry(Skill):
         self.threaded_execution(self.wingman.play_to_user, response, True)
         await self.wingman.add_assistant_message(response)
 
-    def get_tools(self) -> list[tuple[str, dict]]:
-        tools = [
-            (
-                "get_game_state",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_game_state",
-                        "description": "Retrieve the current game state variable from American Truck Simulator.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "variable": {
-                                    "type": "string",
-                                    "description": "The game state variable to retrieve (e.g., 'speed').",
-                                }
-                            },
-                            "required": ["variable"],
-                        },
-                    },
-                },
-            ),
-            (
-                "get_information_about_current_location",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_information_about_current_location",
-                        "description": "Used to provide more detailed information if the user asks a general question like 'where are we?', or 'what city are we in?'",
-                    },
-                },
-            ),
-            (
-                "start_or_activate_dispatch_telemetry_loop",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "start_or_activate_dispatch_telemetry_loop",
-                        "description": "Begin dispatch function, which will check telemetry at designated intervals.",
-                    },
-                },
-            ),
-            (
-                "end_or_stop_dispatch_telemetry_loop",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "end_or_stop_dispatch_telemetry_loop",
-                        "description": "End or stop dispatch function, to stop automatically checking telemetry at designated intervals.",
-                    },
-                },
-            ),
-        ]
-        return tools
+    @tool(
+        description="Retrieve the current game state variable from American Truck Simulator."
+    )
+    async def get_game_state(self, variable: str) -> str:
+        """
+        Retrieve the current game state variable from American Truck Simulator.
 
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
-    ) -> tuple[str, str]:
-        function_response = ""
-        instant_response = ""
-
-        if tool_name in [
-            "get_game_state",
-            "start_or_activate_dispatch_telemetry_loop",
-            "end_or_stop_dispatch_telemetry_loop",
-            "get_information_about_current_location",
-        ]:
-            benchmark.start_snapshot(f"ATS Telemetry: {tool_name}")
-
+        Args:
+            variable: The game state variable to retrieve (e.g., 'speed').
+        """
+        if not self.already_initialized_telemetry:
+            self.already_initialized_telemetry = await self.initialize_telemetry()
             if not self.already_initialized_telemetry:
-                self.already_initialized_telemetry = await self.initialize_telemetry()
-                # If initialization of telemetry object fails because another instance is already running,
-                # try just checking getting the data as a fail safe; if still cannot get the data, trigger error
-                if not self.already_initialized_telemetry:
-                    try:
-                        _ = truck_telemetry.get_data()
-                        self.already_initialized_telemetry = True
-                    except Exception:
-                        function_response = "Error trying to access truck telemetry data. It appears there is a problem with the module. Check to see if the game is running, and that you have installed the SDK in the proper location."
-                        return function_response, instant_response
+                try:
+                    _ = truck_telemetry.get_data()
+                    self.already_initialized_telemetry = True
+                except Exception:
+                    return "Error trying to access truck telemetry data. It appears there is a problem with the module. Check to see if the game is running, and that you have installed the SDK in the proper location."
 
-                if self.settings.debug_mode:
-                    message = f"ATS Telemetry: executing tool '{tool_name}'"
-                    if parameters:
-                        message += f" with params: {parameters}"
-                    await self.printr.print_async(text=message, color=LogType.INFO)
+        data = truck_telemetry.get_data()
+        filtered_data = await self.filter_data(data)
+        if self.settings.debug_mode:
+            await self.printr.print_async(
+                f"Received telemetry data: {filtered_data}",
+                color=LogType.INFO,
+            )
 
-            if tool_name == "get_game_state":
-                data = truck_telemetry.get_data()
-                filtered_data = await self.filter_data(data)
-                if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        f"Received telemetry data: {filtered_data}",
-                        color=LogType.INFO,
-                    )
-                variable = parameters.get("variable")
-                if variable in filtered_data:
-                    value = filtered_data[variable]
-                    try:
-                        string_value = str(value)
-                    except Exception:
-                        string_value = "value could not be found."
-                    function_response = (
-                        f"The current value of '{variable}' is {string_value}."
-                    )
-                    if self.settings.debug_mode:
-                        await self.printr.print_async(
-                            f"Found variable result in telemetry for {variable}, {string_value}",
-                            color=LogType.INFO,
-                        )
-                else:
-                    function_response = f"Variable '{variable}' not found."
-                    if self.settings.debug_mode:
-                        await self.printr.print_async(
-                            f"Could not locate variable result in telemetry for {variable}.",
-                            color=LogType.INFO,
-                        )
+        if variable in filtered_data:
+            value = filtered_data[variable]
+            try:
+                string_value = str(value)
+            except Exception:
+                string_value = "value could not be found."
 
-            elif tool_name == "start_or_activate_dispatch_telemetry_loop":
-                if self.telemetry_loop_running:
-                    function_response = "Dispatch communications already open."
-                    if self.settings.debug_mode:
-                        await self.printr.print_async(
-                            "Attempted to start dispatch communications loop but loop is already running",
-                            color=LogType.INFO,
-                        )
-                    return function_response, instant_response
-                if not self.telemetry_loop_running:
-                    await self.initialize_telemetry_cache_loop(10)
-                function_response = "Opened dispatch communications."
-
-            elif tool_name == "end_or_stop_dispatch_telemetry_loop":
-                await self.stop_telemetry_loop()
-                function_response = "Closed dispatch communications."
-
-            elif tool_name == "get_information_about_current_location":
-                data = truck_telemetry.get_data()
-                # Pull x, y coordinates from truck sim, note that there are x, y, z, so here z pertains to 2d y, and y pertains to altitude
-                x = data["coordinateX"]
-                y = data["coordinateZ"]
-                # Check if we're in ATS or ETS
-                is_ets2 = data["game"] == 1
-                # Convert to world latitude and longitude
-                if is_ets2:
-                    longitude, latitude = await self.from_ets2_coords_to_wgs84(
-                        data["coordinateX"], data["coordinateZ"]
-                    )                    
-                else:
-                    longitude, latitude = await self.from_ats_coords_to_wgs84(
-                        data["coordinateX"], data["coordinateZ"]
-                    )
-                if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        f"Executing get_information_about_current_location function (game is ets2: {is_ets2}) with coordinateX as {x} and coordinateZ as {y}, latitude returned was {latitude}, longitude returned was {longitude}.",
-                        color=LogType.INFO,
-                    )
-                place_info = await self.convert_lat_long_data_into_place_data(
-                    latitude, longitude
+            if self.settings.debug_mode:
+                await self.printr.print_async(
+                    f"Found variable result in telemetry for {variable}, {string_value}",
+                    color=LogType.INFO,
                 )
-                if place_info:
-                    function_response = f"Information regarding the approximate location we are near: {place_info}"
-                else:
-                    function_response = "Unable to get more detailed information regarding the place based on the current truck coordinates."
+            return f"The current value of '{variable}' is {string_value}."
+        else:
+            if self.settings.debug_mode:
+                await self.printr.print_async(
+                    f"Could not locate variable result in telemetry for {variable}.",
+                    color=LogType.INFO,
+                )
+            return f"Variable '{variable}' not found."
 
-            benchmark.finish_snapshot()
-        return function_response, instant_response
+    @tool(description="Get detailed information about the current location.")
+    async def get_information_about_current_location(self) -> str:
+        """Used to provide more detailed information if the user asks a general question like 'where are we?'."""
+        if not self.already_initialized_telemetry:
+            self.already_initialized_telemetry = await self.initialize_telemetry()
+            if not self.already_initialized_telemetry:
+                try:
+                    _ = truck_telemetry.get_data()
+                    self.already_initialized_telemetry = True
+                except Exception:
+                    return "Error trying to access truck telemetry data. It appears there is a problem with the module. Check to see if the game is running, and that you have installed the SDK in the proper location."
+
+        data = truck_telemetry.get_data()
+        # Pull x, y coordinates from truck sim, note that there are x, y, z, so here z pertains to 2d y, and y pertains to altitude
+        x = data["coordinateX"]
+        y = data["coordinateZ"]
+        # Check if we're in ATS or ETS
+        is_ets2 = data["game"] == 1
+        # Convert to world latitude and longitude
+        if is_ets2:
+            longitude, latitude = await self.from_ets2_coords_to_wgs84(
+                data["coordinateX"], data["coordinateZ"]
+            )
+        else:
+            longitude, latitude = await self.from_ats_coords_to_wgs84(
+                data["coordinateX"], data["coordinateZ"]
+            )
+        if self.settings.debug_mode:
+            await self.printr.print_async(
+                f"Executing get_information_about_current_location function (game is ets2: {is_ets2}) with coordinateX as {x} and coordinateZ as {y}, latitude returned was {latitude}, longitude returned was {longitude}.",
+                color=LogType.INFO,
+            )
+        place_info = await self.convert_lat_long_data_into_place_data(
+            latitude, longitude
+        )
+        if place_info:
+            return f"Information regarding the approximate location we are near: {place_info}"
+        else:
+            return "Unable to get more detailed information regarding the place based on the current truck coordinates."
+
+    @tool(description="Begin dispatch function (telemetry loop).")
+    async def start_or_activate_dispatch_telemetry_loop(self) -> str:
+        """Begin dispatch function, which will check telemetry at designated intervals."""
+        if not self.already_initialized_telemetry:
+            self.already_initialized_telemetry = await self.initialize_telemetry()
+            if not self.already_initialized_telemetry:
+                try:
+                    _ = truck_telemetry.get_data()
+                    self.already_initialized_telemetry = True
+                except Exception:
+                    return "Error trying to access truck telemetry data. It appears there is a problem with the module. Check to see if the game is running, and that you have installed the SDK in the proper location."
+
+        if self.telemetry_loop_running:
+            if self.settings.debug_mode:
+                await self.printr.print_async(
+                    "Attempted to start dispatch communications loop but loop is already running",
+                    color=LogType.INFO,
+                )
+            return "Dispatch communications already open."
+
+        if not self.telemetry_loop_running:
+            await self.initialize_telemetry_cache_loop(10)
+        return "Opened dispatch communications."
+
+    @tool(description="End or stop dispatch function (telemetry loop).")
+    async def end_or_stop_dispatch_telemetry_loop(self) -> str:
+        """End or stop dispatch function."""
+        await self.stop_telemetry_loop()
+        return "Closed dispatch communications."
 
     # Function to autostart dispatch mode
     async def autostart_dispatcher_mode(self):
