@@ -48,8 +48,8 @@ class MiningValidationPopup(tk.Toplevel):
             except Exception:
                 self.config_path = Path(config_dir) / "popup_config.json"
         self._last_saved_geometry = None
-        self._save_job = None
-        self._initial_geometry_applied = False
+        self._tooltip_window = None
+        self.base_countdown = 10
         self._has_invalid_fields = False
 
         # Bereite JSON-String vor und bestimme Maße für den Textbereich
@@ -89,7 +89,6 @@ class MiningValidationPopup(tk.Toplevel):
             screen_height = self.winfo_screenheight()
             x = screen_width - total_width - 20
             y = int((screen_height - total_height) / 2)
-        self.geometry(f"{total_width}x{total_height}+{x}+{y}")
 
         self.rowconfigure(0, weight=1)
         self.rowconfigure(1, weight=0)
@@ -129,13 +128,16 @@ class MiningValidationPopup(tk.Toplevel):
         else:
             button_frame.grid(row=1, column=0, sticky="ew")
         # flexible Ränder links (0) und rechts (3)
-        button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(0, weight=0)
         button_frame.grid_columnconfigure(3, weight=1)
         # Buttons in Mitte (Spalten 1 und 2)
+        self.save_button = tk.Button(button_frame, text="💾", font=("Helvetica", 12, "bold"), command=self._save_current_geometry)
         self.confirm_button = tk.Button(button_frame, text="Bestätigen", bg="green", fg="white", font=("Helvetica", 14, "bold"), command=self.confirm)
         self.abort_button   = tk.Button(button_frame, text="Abbrechen", bg="red", fg="white",   font=("Helvetica", 14, "bold"), command=self.abort)
+        self.save_button.grid(row=0, column=0, padx=10, pady=10)
         self.confirm_button.grid(row=0, column=1, padx=10, pady=10)
         self.abort_button.grid  (row=0, column=2, padx=10, pady=10)
+        self._add_tooltip(self.save_button, "Speicher aktuelle Fensterposition")
         
         self.update_idletasks()
         # passe Fenstergröße an den benötigten Inhalt an (inkl. Dekoration)
@@ -173,8 +175,6 @@ class MiningValidationPopup(tk.Toplevel):
         self.countdown_seconds = self.base_countdown * (2 if self._has_invalid_fields else 1)
         self.geometry(f"{width}x{height}+{x}+{y}")
         self._last_saved_geometry = {"width": width, "height": height, "x": x, "y": y}
-        self._initial_geometry_applied = True
-        self.bind("<Configure>", self._on_configure)
         # entferne direkten Fokus, setze Verzögerung von 5 Sekunden
         self.bind("<Return>", lambda e: self.confirm())
         self.bind("<Escape>", lambda e: self.abort())
@@ -236,11 +236,6 @@ class MiningValidationPopup(tk.Toplevel):
         self.validated_data = None
         self.operation = "aborted"
         self.destroy()
-
-    def destroy(self):
-        # Stelle sicher, dass ein ausstehendes Geometry-Save ausgeführt wird.
-        self._flush_pending_save()
-        super().destroy()
 
     def _update_confirm_button_text(self):
         self.confirm_button.config(text=f"Bestätigen ({self.countdown_seconds})")
@@ -309,16 +304,8 @@ class MiningValidationPopup(tk.Toplevel):
         self.unbind_all("<ButtonRelease>")
         return "break"
 
-    def _on_configure(self, event):
-        if event.widget is not self or not self._initial_geometry_applied:
-            return
-        if self._save_job is not None:
-            self.after_cancel(self._save_job)
-        self._save_job = self.after(300, self._save_current_geometry)
-
     def _save_current_geometry(self):
-        self._save_job = None
-        if not self.config_path or not self._initial_geometry_applied:
+        if not self.config_path:
             return
         geometry = {
             "width": self.winfo_width(),
@@ -330,13 +317,40 @@ class MiningValidationPopup(tk.Toplevel):
             return
         config = {
             # Countdown aus der geladenen Konfiguration unverändert lassen
-            "countdown_seconds": self.popup_config.get("countdown_seconds", 10),
+            "countdown_seconds": self.base_countdown,
             "position": {"x": geometry["x"], "y": geometry["y"]},
             "size": {"width": geometry["width"], "height": geometry["height"]},
         }
         self.popup_config = config
         self._write_popup_config(config)
         self._last_saved_geometry = geometry
+
+    def _add_tooltip(self, widget, text):
+        def enter(_):
+            self._show_tooltip(widget, text)
+        def leave(_):
+            self._hide_tooltip()
+        widget.bind("<Enter>", enter)
+        widget.bind("<Leave>", leave)
+
+    def _show_tooltip(self, widget, text):
+        self._hide_tooltip()
+        self._tooltip_window = tw = tk.Toplevel(widget)
+        tw.wm_overrideredirect(True)
+        tw.attributes("-topmost", True)
+        x = widget.winfo_rootx() + widget.winfo_width() // 2
+        y = widget.winfo_rooty() + widget.winfo_height() + 4
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(tw, text=text, background="#ffffe0", relief="solid", borderwidth=1, font=("Helvetica", 9))
+        label.pack(ipadx=4, ipady=2)
+
+    def _hide_tooltip(self):
+        if self._tooltip_window is not None:
+            try:
+                self._tooltip_window.destroy()
+            except Exception:
+                pass
+            self._tooltip_window = None
 
     def _highlight_invalid_fields(self, json_str):
         """Markiere leere/null/0-Werte im JSON rot und liefere True, falls etwas markiert wurde."""
@@ -358,14 +372,6 @@ class MiningValidationPopup(tk.Toplevel):
                 self.text.tag_add("invalid_value", start_idx, end_idx)
                 invalid_found = True
         return invalid_found
-
-    def _flush_pending_save(self):
-        if self._save_job is not None:
-            self.after_cancel(self._save_job)
-            self._save_job = None
-            self._save_current_geometry()
-        else:
-            self._save_current_geometry()
 
     def _load_popup_config(self, default_config):
         config = copy.deepcopy(default_config)
