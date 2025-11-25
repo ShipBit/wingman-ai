@@ -136,7 +136,7 @@ class MiningManager(FunctionManager):
             f"- {self.refinery_job_work_order_management.__name__}: call it to add 1, remove 1 or retrieve all refinery work orders / jobs of the active refinery session. This function does not require any further information from the user. "
             f"- {self.mining_or_salvage_session_management.__name__}: call it to create a new mining / salvage session, delete all finalised sessions or to retrieve the current session. It also allows to open the active session in the browser. "
             f"- {self.add_rock_scan_or_deposit_cluster_information.__name__}: call it when the player wants to provide information about a scanned rock or found a new mining deposit cluster. "
-            "Never make assumptions on the values. Ask the user to provide them. "
+            "Only ask the user for confirmation of the values, if you didn't understand them properly. Do not make assumptions on the values. "
             # f"- {self.get_first_or_next_location_on_delivery_route.__name__}: get information about the next location the user should go. "
         )
     
@@ -243,7 +243,7 @@ class MiningManager(FunctionManager):
                 "type": "function",
                 "function": {
                     "name": self.signature_based_cluster_info.__name__,
-                    "description": "Retrieve cluster size and rock type based on signature scan value using known rock signatures.",
+                    "description": "Call this function to lookup rock cluster information based on a signature scan value.",
                     "parameters": {
                         "type": "object",
                         "properties": {
