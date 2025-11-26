@@ -715,6 +715,8 @@ class SkillConfig(CustomClassConfig):
     """You can add custom properties here to use in your custom skill class."""
     hint: Optional[LocalizedMetadata] = None
     examples: Optional[list[LocalizedMetadata]] = None
+    platforms: Optional[list[str]] = None
+    """List of supported platforms: 'windows', 'darwin' (macOS), 'linux'. If None, skill works on all platforms."""
 
 
 class SkillBase(BaseModel):
@@ -748,6 +750,7 @@ class NestedConfig(BaseModel):
     xai: XaiConfig
     commands: Optional[list[CommandConfig]] = None
     skills: Optional[list[SkillConfig]] = None
+    """User's skill configuration overrides. Skills not listed here use defaults."""
 
 
 class BasicWingmanConfig(BaseModel):

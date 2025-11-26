@@ -2,6 +2,8 @@ module: skills.ats_telemetry.main
 name: ATSTelemetry
 display_name: Truck Simulator 2 Telemetry
 author: teddybear082
+platforms:
+  - windows
 tags:
   - American/European Truck Simulator 2
   - Game

@@ -193,8 +193,12 @@ class Wingman:
         await self.unload_skills()
 
     async def unload_skills(self):
-        """Call this to trigger unload for all skills."""
+        """Call this to trigger unload for skills that were actually prepared/used."""
         for skill in self.skills:
+            # Only unload skills that were actually prepared (activated)
+            # Skills that were never used don't need cleanup
+            if not skill.is_prepared:
+                continue
             try:
                 await skill.unload()
             except Exception as e:
@@ -207,60 +211,93 @@ class Wingman:
                 )
 
     async def init_skills(self) -> list[WingmanInitializationError]:
-        """This method is called when the Wingman is instantiated by Tower or when a skill's config changes.
-        It is run AFTER validate() so you can access validated params safely here.
-        It is used to load and init the skills of the Wingman."""
+        """Load all available skills with lazy validation.
+
+        Skills are loaded but NOT validated during init. Validation happens
+        on first activation via the SkillRegistry. User config overrides from
+        self.config.skills are merged with default configs.
+
+        Platform-incompatible skills are skipped entirely.
+        """
+        import sys
+
+        current_platform = sys.platform  # 'win32', 'darwin', 'linux'
+        platform_map = {"win32": "windows", "darwin": "darwin", "linux": "linux"}
+        normalized_platform = platform_map.get(current_platform, current_platform)
+
         if self.skills:
             await self.unload_skills()
 
         errors = []
         self.skills = []
-        if not self.config.skills:
-            return errors
 
-        for skill_config in self.config.skills:
+        # Build a lookup of user config overrides by skill name
+        user_skill_configs: dict[str, "SkillConfig"] = {}
+        if self.config.skills:
+            for skill_config in self.config.skills:
+                user_skill_configs[skill_config.name] = skill_config
+
+        # Get all available skill configs
+        available_skills = ModuleManager.read_available_skill_configs()
+
+        for skill_name, skill_config_path in available_skills:
             try:
+                # Load default skill config
+                skill_config_dict = ModuleManager.read_config(skill_config_path)
+                if not skill_config_dict:
+                    continue
+
+                # Import SkillConfig here to avoid circular imports
+                from api.interface import SkillConfig
+
+                # Check if user has overrides for this skill
+                if skill_name in user_skill_configs:
+                    # Merge user overrides into default config
+                    user_config = user_skill_configs[skill_name]
+                    # User config takes precedence - merge custom_properties especially
+                    if user_config.custom_properties:
+                        skill_config_dict["custom_properties"] = [
+                            prop.model_dump() for prop in user_config.custom_properties
+                        ]
+                    if user_config.prompt:
+                        skill_config_dict["prompt"] = user_config.prompt
+
+                skill_config = SkillConfig(**skill_config_dict)
+
+                # Check platform compatibility BEFORE loading the module
+                if skill_config.platforms:
+                    if normalized_platform not in skill_config.platforms:
+                        printr.print(
+                            f"Skipping skill '{skill_name}' - not supported on {normalized_platform}",
+                            color=LogType.WARNING,
+                            server_only=True,
+                        )
+                        continue
+
+                # Load the skill module
                 skill = ModuleManager.load_skill(
                     config=skill_config,
                     settings=self.settings,
                     wingman=self,
                 )
                 if skill:
-                    # init skill methods
+                    # Set up skill methods
                     skill.threaded_execution = self.threaded_execution
 
-                    validation_errors = await skill.validate()
+                    # Add to skills list WITHOUT validation
+                    # Validation will happen lazily on first activation
+                    self.skills.append(skill)
+                    await self.prepare_skill(skill)
 
-                    # Give the user 2*5 seconds to enter the secret if one is required and missing
-                    if any(
-                        error.error_type == "missing_secret"
-                        for error in validation_errors
-                    ):
-                        for _attempt in range(2):
-                            await asyncio.sleep(5)
-                            validation_errors = await skill.validate()
-                            if not validation_errors:
-                                break
+                    printr.print(
+                        f"Skill '{skill_config.name}' loaded (pending validation).",
+                        color=LogType.INFO,
+                        server_only=True,
+                    )
 
-                    errors.extend(validation_errors)
-
-                    if len(validation_errors) == 0:
-                        self.skills.append(skill)
-                        await self.prepare_skill(skill)
-                        await skill.prepare()
-                        printr.print(
-                            f"Skill '{skill_config.name}' loaded successfully.",
-                            color=LogType.POSITIVE,
-                            server_only=True,
-                        )
-                    else:
-                        await printr.print_async(
-                            f"Skill '{skill_config.name}' could not be loaded: {' '.join(error.message for error in validation_errors)}",
-                            color=LogType.ERROR,
-                        )
             except Exception as e:
                 await printr.print_async(
-                    f"Error loading skill '{skill_config.name}': {str(e)}",
+                    f"Error loading skill '{skill_name}': {str(e)}",
                     color=LogType.ERROR,
                 )
                 printr.print(

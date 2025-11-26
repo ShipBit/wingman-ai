@@ -4,9 +4,10 @@ display_name: UEXCorp
 author: JayMatthew
 tags:
   - Star Citizen
-  - Game
-  - API
-  - Internet
+  - Star Citizen trading
+  - Star Citizen ships
+  - Star Citizen commodities
+  - aUEC prices
 description:
   en: Uses the UEXCorp API to get commodity routes and ship information for Star Citizen.
   de: Nutzt die UEXCorp API, um Handelsrouten und Schiffsinformationen für Star Citizen zu erhalten.

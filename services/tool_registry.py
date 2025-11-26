@@ -196,28 +196,74 @@ class SkillRegistry:
 
         # Sort by score descending
         scored.sort(key=lambda x: x[0], reverse=True)
-        return [m for _, m in scored[:limit]]
+        results = [m for _, m in scored[:limit]]
 
-    def activate_skill(self, skill_name: str) -> tuple[bool, str]:
+        # Log search results
+        if results:
+            skill_names = [m.name for m in results]
+            printr.print(
+                f"[Tool Discovery] Search '{query}' found {len(results)} skill(s): {', '.join(skill_names)}",
+                server_only=True,
+            )
+        else:
+            printr.print(
+                f"[Tool Discovery] Search '{query}' found no matching skills",
+                server_only=True,
+            )
+
+        return results
+
+    def activate_skill(self, skill_name: str) -> tuple[bool, str, bool]:
         """
         Activate a skill, making its tools available to the LLM.
 
+        Note: This only marks the skill as active. Lazy validation should be
+        performed by calling skill.ensure_activated() before first use.
+
         Returns:
-            (success, message) tuple
+            (success, message, needs_validation) tuple
+            - success: Whether the skill was found and marked active
+            - message: Status message
+            - needs_validation: Whether the skill needs validation before use
         """
         if skill_name not in self._skills:
             available = ", ".join(self._manifests.keys())
+            printr.print(
+                f"[Tool Discovery] Activation failed: skill '{skill_name}' not found",
+                server_only=True,
+            )
             return (
                 False,
                 f"Skill '{skill_name}' not found. Available skills: {available}",
+                False,
             )
+
+        skill = self._skills[skill_name]
+        needs_validation = skill.needs_activation()
 
         self._active_skills.add(skill_name)
         manifest = self._manifests[skill_name]
         tools_str = ", ".join(manifest.tool_names)
+
+        if needs_validation:
+            printr.print(
+                f"[Tool Discovery] Activating skill '{manifest.display_name}' (needs validation). Tools: {tools_str}",
+                server_only=True,
+            )
+            return (
+                True,
+                f"Activating '{manifest.display_name}' (validation pending). Tools: {tools_str}",
+                True,
+            )
+
+        printr.print(
+            f"[Tool Discovery] Activated skill '{manifest.display_name}'. Tools: {tools_str}",
+            server_only=True,
+        )
         return (
             True,
             f"Activated '{manifest.display_name}'. Available tools: {tools_str}",
+            False,
         )
 
     def deactivate_skill(self, skill_name: str) -> tuple[bool, str]:
@@ -234,6 +280,10 @@ class SkillRegistry:
         if skill_name:
             return self._skills.get(skill_name)
         return None
+
+    def get_skill_for_activation(self, skill_name: str) -> Optional["Skill"]:
+        """Get a skill by name for activation purposes."""
+        return self._skills.get(skill_name)
 
     def get_active_tools(self) -> list[tuple[str, dict]]:
         """
@@ -330,6 +380,11 @@ class SkillRegistry:
             (result_string, tools_changed) - tools_changed indicates if the LLM
             should receive an updated tool list
         """
+        printr.print(
+            f"[Tool Discovery] LLM invoked meta-tool: {tool_name}({parameters})",
+            server_only=True,
+        )
+
         if tool_name == "search_skills":
             query = parameters.get("query", "")
             results = self.search_skills(query)
@@ -350,8 +405,9 @@ class SkillRegistry:
 
         elif tool_name == "activate_skill":
             skill_name = parameters.get("skill_name", "")
-            success, message = self.activate_skill(skill_name)
-            # Tools changed if activation was successful
+            success, message, _ = self.activate_skill(skill_name)
+            # Return success status and whether tools changed
+            # Note: needs_validation is handled async in OpenAiWingman
             return message, success
 
         elif tool_name == "list_active_skills":
@@ -385,3 +441,8 @@ class SkillRegistry:
     def active_skill_count(self) -> int:
         """Number of currently active skills."""
         return len(self._active_skills)
+
+    @property
+    def active_skill_names(self) -> set[str]:
+        """Names of currently active skills."""
+        return self._active_skills.copy()

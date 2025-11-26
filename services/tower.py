@@ -141,6 +141,8 @@ class Tower:
             errors.extend(validation_errors)
 
             # init and validate skills
+            # Note: skill_errors are not added to errors - we don't want to
+            # prevent a wingman from loading just because one skill failed
             skill_errors = await wingman.init_skills()
 
             if not errors or len(errors) == 0:

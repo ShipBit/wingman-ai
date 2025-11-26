@@ -2,9 +2,14 @@ module: skills.control_windows.main
 name: ControlWindows
 display_name: Control Windows
 author: teddybear082
+platforms:
+  - windows
 tags:
   - Utility
   - Windows
+  - launch application
+  - open program
+  - clipboard
 description:
   en: Launch applications and control your Windows computer. Utilize the clipboard of your computer.
   de: Starte Anwendungen und steuere deinen Windows-Computer. Nutze die Zwischenablage deines Computers.

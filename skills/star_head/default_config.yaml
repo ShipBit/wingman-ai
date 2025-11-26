@@ -4,9 +4,9 @@ display_name: StarHead
 author: ShipBit
 tags:
   - Star Citizen
-  - Game
-  - API
-  - Internet
+  - Star Citizen trading routes
+  - Star Citizen ships
+  - Star Citizen profit
 description:
   en: Use the StarHead API to retrieve detailed information about spaceships, weapons and more. StarHead can also calculate optimal trading routes based on live data.
   de: Nutze die StarHead API, um detaillierte Informationen über Raumschiffe, Waffen und mehr abzurufen. StarHead kann auch optimale Handelsrouten anhand von Live-Daten berechnen.

@@ -46,6 +46,7 @@ from providers.wingman_pro import WingmanPro
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
 from services.printr import Printr
+from services.tool_registry import SkillRegistry
 from skills.skill_base import Skill
 from wingmen.wingman import Wingman
 
@@ -102,6 +103,10 @@ class OpenAiWingman(Wingman):
 
         self.tool_skills: dict[str, Skill] = {}
         self.skill_tools: list[dict] = []
+
+        # Progressive tool disclosure registry (MCP-inspired token optimization)
+        # Only meta-tools are sent to LLM initially; skills activated on-demand
+        self.skill_registry = SkillRegistry()
 
     async def validate(self):
         errors = await super().validate()
@@ -298,6 +303,7 @@ class OpenAiWingman(Wingman):
         await super().unload_skills()
         self.tool_skills = {}
         self.skill_tools = []
+        self.skill_registry.clear()
 
     async def prepare_skill(self, skill: Skill):
         # prepare the skill and skill tools
@@ -305,6 +311,9 @@ class OpenAiWingman(Wingman):
             for tool_name, tool in skill.get_tools():
                 self.tool_skills[tool_name] = skill
                 self.skill_tools.append(tool)
+
+            # Register with the progressive disclosure registry
+            self.skill_registry.register_skill(skill)
         except Exception as e:
             await printr.print_async(
                 f"Error while preparing skill '{skill.name}': {str(e)}",
@@ -815,9 +824,12 @@ class OpenAiWingman(Wingman):
             message (dict | ChatCompletionMessage): The message to add.
             tool_calls (list): The tool calls associated with the message.
         """
-        # call skill hooks
+        # call skill hooks (only for prepared/activated skills)
         for skill in self.skills:
-            await skill.on_add_assistant_message(message.content, message.tool_calls)
+            if skill.is_prepared:
+                await skill.on_add_assistant_message(
+                    message.content, message.tool_calls
+                )
 
         # do not tamper with this message as it will lead to 400 errors!
         self.messages.append(message)
@@ -836,7 +848,12 @@ class OpenAiWingman(Wingman):
                 self._add_tool_response(tool_call, "Loading..", False)
 
                 function_name = tool_call.function.name
-                if function_name in self.tool_skills:
+
+                # Meta-tools (search_skills, activate_skill, etc.) always need a follow-up
+                # LLM call so it can use the newly activated tools
+                if self.skill_registry.is_meta_tool(function_name):
+                    is_summarize_needed = True
+                elif function_name in self.tool_skills:
                     skill = self.tool_skills[function_name]
                     if await skill.is_waiting_response_needed(function_name):
                         is_waiting_response_needed = True
@@ -955,9 +972,10 @@ class OpenAiWingman(Wingman):
         Args:
             content (str): The message content to add.
         """
-        # call skill hooks
+        # call skill hooks (only for prepared/activated skills)
         for skill in self.skills:
-            await skill.on_add_user_message(content)
+            if skill.is_prepared:
+                await skill.on_add_user_message(content)
 
         msg = {"role": "user", "content": content}
         await self._cleanup_conversation_history()
@@ -969,9 +987,10 @@ class OpenAiWingman(Wingman):
         Args:
             content (str): The message content to add.
         """
-        # call skill hooks
+        # call skill hooks (only for prepared/activated skills)
         for skill in self.skills:
-            await skill.on_add_assistant_message(content, [])
+            if skill.is_prepared:
+                await skill.on_add_assistant_message(content, [])
 
         msg = {"role": "assistant", "content": content}
         self.messages.append(msg)
@@ -1109,10 +1128,28 @@ class OpenAiWingman(Wingman):
         return None, False
 
     async def get_context(self):
-        """build the context and inserts it into the messages"""
+        """Build the context and inserts it into the messages.
+
+        With progressive disclosure, only includes prompts from ACTIVATED skills.
+        Skill prompts are auto-generated from @tool descriptions if no custom prompt is set.
+        """
         skill_prompts = ""
+        active_skill_names = self.skill_registry.active_skill_names
+
         for skill in self.skills:
+            # Only include prompts from activated skills (in progressive mode)
+            if skill.name not in active_skill_names:
+                continue
+
+            # Get custom prompt if set
             prompt = await skill.get_prompt()
+
+            # Auto-generate prompt from tool descriptions if no custom prompt
+            if not prompt:
+                tools_desc = skill.get_tools_description()
+                if tools_desc:
+                    prompt = f"Available tools:\n{tools_desc}"
+
             if prompt:
                 skill_prompts += "\n\n" + skill.name + "\n\n" + prompt
 
@@ -1398,6 +1435,37 @@ class OpenAiWingman(Wingman):
         function_response = ""
         instant_response = ""
         used_skill = None
+
+        # Handle meta-tools for progressive skill discovery/activation
+        if self.skill_registry.is_meta_tool(function_name):
+            function_response, tools_changed = self.skill_registry.execute_meta_tool(
+                function_name, function_args
+            )
+
+            # If skill was activated, perform lazy validation
+            if tools_changed and function_name == "activate_skill":
+                skill_name = function_args.get("skill_name", "")
+                skill = self.skill_registry.get_skill_for_activation(skill_name)
+                if skill and skill.needs_activation():
+                    success, validation_msg = await skill.ensure_activated()
+                    if not success:
+                        # Validation failed - deactivate the skill
+                        self.skill_registry.deactivate_skill(skill_name)
+                        function_response = validation_msg
+                        tools_changed = False
+                    else:
+                        await printr.print_async(
+                            f"Skill '{skill_name}' validated and ready",
+                            color=LogType.INFO,
+                        )
+
+            if tools_changed:
+                await printr.print_async(
+                    "Skill activated: tools updated",
+                    color=LogType.INFO,
+                )
+            return function_response, None, None
+
         if function_name == "execute_command":
             # get the command based on the argument passed by the LLM
             command = self.get_command(function_args["command_name"])
@@ -1477,16 +1545,17 @@ class OpenAiWingman(Wingman):
             while self.audio_player.is_playing:
                 await asyncio.sleep(0.1)
 
-        # call skill hooks
+        # call skill hooks (only for prepared/activated skills)
         changed_text = text
         for skill in self.skills:
-            changed_text = await skill.on_play_to_user(text, sound_config)
-            if changed_text != text:
-                printr.print(
-                    f"Skill '{skill.config.display_name}' modified the text to: '{changed_text}'",
-                    LogType.INFO,
-                )
-                text = changed_text
+            if skill.is_prepared:
+                changed_text = await skill.on_play_to_user(text, sound_config)
+                if changed_text != text:
+                    printr.print(
+                        f"Skill '{skill.config.display_name}' modified the text to: '{changed_text}'",
+                        LogType.INFO,
+                    )
+                    text = changed_text
 
         if sound_config.volume == 0.0:
             printr.print(
@@ -1633,7 +1702,12 @@ class OpenAiWingman(Wingman):
 
     def build_tools(self) -> list[dict]:
         """
-        Builds a tool for each command that is not instant_activation.
+        Builds tools for the LLM call.
+
+        In progressive mode: Returns meta-tools (search_skills, activate_skill) plus
+        tools from activated skills only.
+
+        In legacy mode: Returns all skill tools.
 
         Returns:
             list[dict]: A list of tool descriptors in OpenAI format.
@@ -1664,8 +1738,12 @@ class OpenAiWingman(Wingman):
             },
         ]
 
-        # extend with skill tools
-        for tool in self.skill_tools:
+        # Progressive tool disclosure: only meta-tools + activated skills' tools
+        # This saves tokens by not sending all tool definitions on every call
+        for _, tool in self.skill_registry.get_meta_tools():
+            tools.append(tool)
+
+        for _, tool in self.skill_registry.get_active_tools():
             tools.append(tool)
 
         return tools

@@ -1,5 +1,6 @@
 import time
 from typing import TYPE_CHECKING
+
 try:
     from skills.uexcorp.uexcorp.api.uex import Uex
 except ModuleNotFoundError:
@@ -14,10 +15,7 @@ if TYPE_CHECKING:
 
 class ImportHandler:
 
-    def __init__(
-            self,
-            helper: "Helper"
-    ):
+    def __init__(self, helper: "Helper"):
         self.__helper = helper
         self.__api = Uex(helper)
         self.active = True
@@ -58,6 +56,7 @@ class ImportHandler:
             "last_import_run_id": 0,
         }
         self.__imported_percent: int = 0
+        self.__import_started: bool = False
 
         self.generate_import_session()
 
@@ -67,24 +66,30 @@ class ImportHandler:
 
     def generate_import_session(self) -> int:
         self.__common_data["last_import_run_id"] = self.__helper.get_timestamp()
-        self.__helper.get_handler_debug().write(f"Generated new import session: {self.__common_data['last_import_run_id']}")
+        self.__helper.get_handler_debug().write(
+            f"Generated new import session: {self.__common_data['last_import_run_id']}"
+        )
         return self.__common_data["last_import_run_id"]
 
     def import_data(self, force: bool = False):
         if not force and self.get_imported_percent() < 100:
-            self.__helper.get_handler_debug().write("Blocked new import as previous import wasn't finished")
+            self.__helper.get_handler_debug().write(
+                "Blocked new import as previous import wasn't finished"
+            )
             return
 
         self.__common_data["last_import_run_id"] = self.__helper.get_timestamp()
 
-        self.__helper.get_handler_debug().write("Importing UEX api data (may take a while) ...")
+        self.__helper.get_handler_debug().write(
+            "Importing UEX api data (may take a while) ..."
+        )
         self.__helper.start_timer("import_total")
         self.__helper.sync_fasterwhisper_hotwords(unload=True)
         total_count = self.__import_data()
         self.__helper.sync_fasterwhisper_hotwords()
         self.__helper.get_handler_debug().write(
             f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s",
-            total_count > 0
+            total_count > 0,
         )
         self.__helper.on_import_completed(total_count)
 
@@ -106,10 +111,13 @@ class ImportHandler:
     def __import_data(self) -> int:
         total_count = 0
         self.__imported_percent = 0
+        self.__import_started = True
         for importer in self.__importers.values():
             if self.active:
                 total_count += int(importer() or 0)
-                self.__imported_percent = int(min(self.__imported_percent + (100 / len(self.__importers)), 100))
+                self.__imported_percent = int(
+                    min(self.__imported_percent + (100 / len(self.__importers)), 100)
+                )
         self.__imported_percent = 100
         return total_count
 
@@ -125,7 +133,9 @@ class ImportHandler:
             return False
 
         category_import = ImportData("category", load=True)
-        if not category_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not category_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -156,7 +166,9 @@ class ImportHandler:
     def __import_data_category_attribute(self) -> bool | int:
         try:
             from skills.uexcorp.uexcorp.model.import_data import ImportData
-            from skills.uexcorp.uexcorp.model.category_attribute import CategoryAttribute
+            from skills.uexcorp.uexcorp.model.category_attribute import (
+                CategoryAttribute,
+            )
         except ModuleNotFoundError:
             from uexcorp.uexcorp.model.import_data import ImportData
             from uexcorp.uexcorp.model.category_attribute import CategoryAttribute
@@ -165,7 +177,9 @@ class ImportHandler:
             return False
 
         category_attribute_import = ImportData("category_attribute", load=True)
-        if not category_attribute_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not category_attribute_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -198,7 +212,9 @@ class ImportHandler:
             return False
 
         city_import = ImportData("city", load=True)
-        if not city_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not city_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -231,7 +247,9 @@ class ImportHandler:
             return False
 
         commodity_import = ImportData("commodity", load=True)
-        if not commodity_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not commodity_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -264,7 +282,9 @@ class ImportHandler:
             return False
 
         commodity_alert_import = ImportData("commodity_alert", load=True)
-        if not commodity_alert_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_short()):
+        if not commodity_alert_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_short()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -297,7 +317,9 @@ class ImportHandler:
             return False
 
         commodity_price_import = ImportData("commodity_price", load=True)
-        if not commodity_price_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_short()):
+        if not commodity_price_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_short()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -321,7 +343,9 @@ class ImportHandler:
     def __import_data_commodity_raw_price(self) -> bool | int:
         try:
             from skills.uexcorp.uexcorp.model.import_data import ImportData
-            from skills.uexcorp.uexcorp.model.commodity_raw_price import CommodityRawPrice
+            from skills.uexcorp.uexcorp.model.commodity_raw_price import (
+                CommodityRawPrice,
+            )
         except ModuleNotFoundError:
             from uexcorp.uexcorp.model.import_data import ImportData
             from uexcorp.uexcorp.model.commodity_raw_price import CommodityRawPrice
@@ -330,7 +354,9 @@ class ImportHandler:
             return False
 
         commodity_raw_price_import = ImportData("commodity_raw_price", load=True)
-        if not commodity_raw_price_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_short()):
+        if not commodity_raw_price_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_short()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -363,7 +389,9 @@ class ImportHandler:
             return False
 
         commodity_status_import = ImportData("commodity_status", load=True)
-        if not commodity_status_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_mid()):
+        if not commodity_status_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_mid()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -374,12 +402,16 @@ class ImportHandler:
                 for index, data in enumerate(commodity_status_data["buy"]):
                     commodity_status = CommodityStatus(data["code"], True)
                     commodity_status.set_data(data)
-                    commodity_status.persist(index < len(commodity_status_data["buy"]) - 1)
+                    commodity_status.persist(
+                        index < len(commodity_status_data["buy"]) - 1
+                    )
             if "sell" in commodity_status_data:
                 for index, data in enumerate(commodity_status_data["sell"]):
                     commodity_status = CommodityStatus(data["code"], False)
                     commodity_status.set_data(data)
-                    commodity_status.persist(index < len(commodity_status_data["sell"]) - 1)
+                    commodity_status.persist(
+                        index < len(commodity_status_data["sell"]) - 1
+                    )
 
         commodity_status_import.set_date_imported(self.__helper.get_timestamp())
         commodity_status_import.set_dataset_count(len(commodity_status_data))
@@ -394,17 +426,23 @@ class ImportHandler:
         try:
             from skills.uexcorp.uexcorp.model.import_data import ImportData
             from skills.uexcorp.uexcorp.model.commodity_route import CommodityRoute
-            from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+            from skills.uexcorp.uexcorp.data_access.commodity_data_access import (
+                CommodityDataAccess,
+            )
         except ModuleNotFoundError:
             from uexcorp.uexcorp.model.import_data import ImportData
             from uexcorp.uexcorp.model.commodity_route import CommodityRoute
-            from uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+            from uexcorp.uexcorp.data_access.commodity_data_access import (
+                CommodityDataAccess,
+            )
 
         if not self.__helper.get_database().table_exists("commodity_route"):
             return False
 
         commodity_route_import = ImportData("commodity_route", load=True)
-        if not commodity_route_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_short()):
+        if not commodity_route_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_short()
+        ):
             return False
 
         # Depends on commodity data
@@ -412,12 +450,19 @@ class ImportHandler:
 
         self.__helper.start_timer("import")
 
-        commodities = CommodityDataAccess().add_filter_has_buy_price().add_filter_has_sell_price().load()
+        commodities = (
+            CommodityDataAccess()
+            .add_filter_has_buy_price()
+            .add_filter_has_sell_price()
+            .load()
+        )
         commodity_ids = []
         for commodity in commodities:
             commodity_ids.append(commodity.get_id())
 
-        commodity_route_data = self.__api.fetch(self.__api.COMMODITIES_ROUTES, {"id_commodity": commodity_ids})
+        commodity_route_data = self.__api.fetch(
+            self.__api.COMMODITIES_ROUTES, {"id_commodity": commodity_ids}
+        )
         if commodity_route_data:
             for index, data in enumerate(commodity_route_data):
                 commodity_route = CommodityRoute(data["id"])
@@ -445,7 +490,9 @@ class ImportHandler:
             return False
 
         company_import = ImportData("company", load=True)
-        if not company_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not company_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -478,7 +525,9 @@ class ImportHandler:
             return False
 
         faction_import = ImportData("faction", load=True)
-        if not faction_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not faction_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -511,7 +560,9 @@ class ImportHandler:
             return False
 
         fuel_price_import = ImportData("fuel_price", load=True)
-        if not fuel_price_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_mid()):
+        if not fuel_price_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_mid()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -544,7 +595,9 @@ class ImportHandler:
             return False
 
         game_version_import = ImportData("game_version", load=True)
-        if not force_check and not game_version_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_short()):
+        if not force_check and not game_version_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_short()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -568,17 +621,23 @@ class ImportHandler:
         try:
             from skills.uexcorp.uexcorp.model.import_data import ImportData
             from skills.uexcorp.uexcorp.model.item import Item
-            from skills.uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
+            from skills.uexcorp.uexcorp.data_access.category_data_access import (
+                CategoryDataAccess,
+            )
         except ModuleNotFoundError:
             from uexcorp.uexcorp.model.import_data import ImportData
             from uexcorp.uexcorp.model.item import Item
-            from uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
+            from uexcorp.uexcorp.data_access.category_data_access import (
+                CategoryDataAccess,
+            )
 
         if not self.__helper.get_database().table_exists("item"):
             return False
 
         item_import = ImportData("item", load=True)
-        if not item_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not item_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -616,7 +675,9 @@ class ImportHandler:
             return False
 
         item_price_import = ImportData("item_price", load=True)
-        if not item_price_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_mid()):
+        if not item_price_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_mid()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -641,17 +702,23 @@ class ImportHandler:
         try:
             from skills.uexcorp.uexcorp.model.import_data import ImportData
             from skills.uexcorp.uexcorp.model.item_attribute import ItemAttribute
-            from skills.uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
+            from skills.uexcorp.uexcorp.data_access.category_data_access import (
+                CategoryDataAccess,
+            )
         except ModuleNotFoundError:
             from uexcorp.uexcorp.model.import_data import ImportData
             from uexcorp.uexcorp.model.item_attribute import ItemAttribute
-            from uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
+            from uexcorp.uexcorp.data_access.category_data_access import (
+                CategoryDataAccess,
+            )
 
         if not self.__helper.get_database().table_exists("item_attribute"):
             return False
 
         item_attribute_import = ImportData("item_attribute", load=True)
-        if not item_attribute_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not item_attribute_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         # depends on categories
@@ -660,11 +727,13 @@ class ImportHandler:
         self.__helper.start_timer("import")
 
         category_ids = []
-        categories =  CategoryDataAccess().add_filter_by_is_game_related(True).load()
+        categories = CategoryDataAccess().add_filter_by_is_game_related(True).load()
         for category in categories:
             category_ids.append(category.get_id())
 
-        item_attribute_data = self.__api.fetch(self.__api.ITEMS_ATTRIBUTES, {"id_category": category_ids})
+        item_attribute_data = self.__api.fetch(
+            self.__api.ITEMS_ATTRIBUTES, {"id_category": category_ids}
+        )
         if item_attribute_data:
             for index, data in enumerate(item_attribute_data):
                 item_attribute = ItemAttribute(data["id"])
@@ -692,7 +761,9 @@ class ImportHandler:
             return False
 
         jurisdiction_import = ImportData("jurisdiction", load=True)
-        if not jurisdiction_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not jurisdiction_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -725,7 +796,9 @@ class ImportHandler:
             return False
 
         moon_import = ImportData("moon", load=True)
-        if not moon_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not moon_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -758,7 +831,9 @@ class ImportHandler:
             return False
 
         orbit_import = ImportData("orbit", load=True)
-        if not orbit_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not orbit_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -783,17 +858,23 @@ class ImportHandler:
         try:
             from skills.uexcorp.uexcorp.model.import_data import ImportData
             from skills.uexcorp.uexcorp.model.orbit_distance import OrbitDistance
-            from skills.uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+            from skills.uexcorp.uexcorp.data_access.star_system_data_access import (
+                StarSystemDataAccess,
+            )
         except ModuleNotFoundError:
             from uexcorp.uexcorp.model.import_data import ImportData
             from uexcorp.uexcorp.model.orbit_distance import OrbitDistance
-            from uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+            from uexcorp.uexcorp.data_access.star_system_data_access import (
+                StarSystemDataAccess,
+            )
 
         if not self.__helper.get_database().table_exists("orbit_distance"):
             return False
 
         orbit_distance_import = ImportData("orbit_distance", load=True)
-        if not orbit_distance_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not orbit_distance_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         # Depends on star_system data
@@ -806,7 +887,9 @@ class ImportHandler:
         for star_system in star_systems:
             star_system_ids.append(star_system.get_id())
 
-        orbit_distance_data = self.__api.fetch(self.__api.ORBITS_DISTANCES, {"id_star_system": star_system_ids})
+        orbit_distance_data = self.__api.fetch(
+            self.__api.ORBITS_DISTANCES, {"id_star_system": star_system_ids}
+        )
         if orbit_distance_data:
             for index, data in enumerate(orbit_distance_data):
                 orbit_distance = OrbitDistance(data["id"])
@@ -834,7 +917,9 @@ class ImportHandler:
             return False
 
         outpost_import = ImportData("outpost", load=True)
-        if not outpost_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not outpost_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -867,7 +952,9 @@ class ImportHandler:
             return False
 
         planet_import = ImportData("planet", load=True)
-        if not planet_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not planet_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -900,7 +987,9 @@ class ImportHandler:
             return False
 
         poi_import = ImportData("poi", load=True)
-        if not poi_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not poi_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -933,7 +1022,9 @@ class ImportHandler:
             return False
 
         refinery_audit_import = ImportData("refinery_audit", load=True)
-        if not refinery_audit_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_mid()):
+        if not refinery_audit_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_mid()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -966,7 +1057,9 @@ class ImportHandler:
             return False
 
         refinery_method_import = ImportData("refinery_method", load=True)
-        if not refinery_method_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not refinery_method_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -999,7 +1092,9 @@ class ImportHandler:
             return False
 
         space_station_import = ImportData("space_station", load=True)
-        if not space_station_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not space_station_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -1032,7 +1127,9 @@ class ImportHandler:
             return False
 
         star_system_import = ImportData("star_system", load=True)
-        if not star_system_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not star_system_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -1065,7 +1162,9 @@ class ImportHandler:
             return False
 
         terminal_import = ImportData("terminal", load=True)
-        if not terminal_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not terminal_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -1098,7 +1197,9 @@ class ImportHandler:
             return False
 
         vehicle_import = ImportData("vehicle", load=True)
-        if not vehicle_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_long()):
+        if not vehicle_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_long()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -1122,16 +1223,22 @@ class ImportHandler:
     def __import_data_vehicle_purchase_price(self) -> bool | int:
         try:
             from skills.uexcorp.uexcorp.model.import_data import ImportData
-            from skills.uexcorp.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
+            from skills.uexcorp.uexcorp.model.vehicle_purchase_price import (
+                VehiclePurchasePrice,
+            )
         except ModuleNotFoundError:
             from uexcorp.uexcorp.model.import_data import ImportData
-            from uexcorp.uexcorp.model.vehicle_purchase_price import VehiclePurchasePrice
+            from uexcorp.uexcorp.model.vehicle_purchase_price import (
+                VehiclePurchasePrice,
+            )
 
         if not self.__helper.get_database().table_exists("vehicle_purchase_price"):
             return False
 
         vehicle_price_import = ImportData("vehicle_purchase_price", load=True)
-        if not vehicle_price_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_mid()):
+        if not vehicle_price_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_mid()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -1155,7 +1262,9 @@ class ImportHandler:
     def __import_data_vehicle_rental_price(self) -> bool | int:
         try:
             from skills.uexcorp.uexcorp.model.import_data import ImportData
-            from skills.uexcorp.uexcorp.model.vehicle_rental_price import VehicleRentalPrice
+            from skills.uexcorp.uexcorp.model.vehicle_rental_price import (
+                VehicleRentalPrice,
+            )
         except ModuleNotFoundError:
             from uexcorp.uexcorp.model.import_data import ImportData
             from uexcorp.uexcorp.model.vehicle_rental_price import VehicleRentalPrice
@@ -1164,7 +1273,9 @@ class ImportHandler:
             return False
 
         vehicle_rental_import = ImportData("vehicle_rental_price", load=True)
-        if not vehicle_rental_import.needs_import(self.__helper.get_handler_config().get_cache_lifetime_mid()):
+        if not vehicle_rental_import.needs_import(
+            self.__helper.get_handler_config().get_cache_lifetime_mid()
+        ):
             return False
 
         self.__helper.start_timer("import")
@@ -1186,7 +1297,8 @@ class ImportHandler:
         return len(vehicle_rental_data)
 
     def destroy(self) -> None:
-        if self.__imported_percent != 100:
+        # Only wait for import if it was actually started
+        if self.__import_started and self.__imported_percent != 100:
             self.__helper.get_handler_debug().write(
                 f"UEX skill is tried to unload but import state is {self.__imported_percent}%."
             )
@@ -1204,7 +1316,9 @@ class ImportHandler:
                 self.__helper.get_handler_debug().write(
                     f"UEX skill is tried to unload but import state is still {self.__imported_percent}%. Force unload."
                 )
-                self.__helper.toast("UEX: Force continuing unloading skill due to import timeout.")
+                self.__helper.toast(
+                    "UEX: Force continuing unloading skill due to import timeout."
+                )
             else:
                 self.__helper.get_handler_debug().write(
                     f"UEX skill is unloaded after import completed with {self.__imported_percent}%."

@@ -629,23 +629,6 @@ class ConfigManager:
         wingman_config_dict = self.convert_to_dict(wingman_config)
         wingman_config_diff = self.deep_diff(default_config, wingman_config_dict)
 
-        if wingman_config.skills:
-            skills = []
-
-            for skill_config in wingman_config.skills:
-                skill_dir = skill_config.module.replace(".main", "").replace(".", "/")
-                skill_default_config_path = path.join(
-                    get_writable_dir(skill_dir), DEFAULT_SKILLS_CONFIG
-                )
-                skill_default_config = self.read_config(skill_default_config_path)
-                skill_config_diff = self.deep_diff(
-                    skill_default_config, self.convert_to_dict(skill_config)
-                )
-                skill_config_diff["module"] = skill_config.module
-                skills.append(skill_config_diff)
-
-            wingman_config_diff["skills"] = skills
-
         return self.write_config(config_path, wingman_config_diff)
 
     def get_wingman_avatar_path(

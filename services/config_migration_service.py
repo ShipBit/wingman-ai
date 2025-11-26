@@ -449,9 +449,14 @@ class ConfigMigrationService:
             old["xai"] = new["xai"]
             self.log("- added new property: xai")
 
+            # Note: skills array is kept for user config overrides
+            # Skills are now loaded automatically, but user settings are preserved
+
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
+            # Note: skills array is kept for user config overrides
+            # Skills are now loaded automatically, but user settings are preserved
             return old
 
         def migrate_secrets(old: dict) -> dict:

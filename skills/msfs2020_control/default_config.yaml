@@ -2,6 +2,8 @@ module: skills.msfs2020_control.main
 name: Msfs2020Control
 display_name: Microsoft Flight Simulator Control
 author: teddybear082
+platforms:
+  - windows
 tags:
   - MSFS
   - Game
