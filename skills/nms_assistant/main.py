@@ -74,7 +74,7 @@ class NMSAssistant(Skill):
 
     @tool(
         name="get_release_info",
-        description="Fetch release information from No Man's Sky website.",
+        description="Fetch release information from No Man's Sky website. Use for questions about NMS updates, patches, version info, or latest releases.",
         wait_response=True,
     )
     async def get_release_info(self) -> str:
@@ -84,7 +84,7 @@ class NMSAssistant(Skill):
 
     @tool(
         name="get_news",
-        description="Fetch news from No Man's Sky website.",
+        description="Fetch news from No Man's Sky website. Use for NMS announcements, Hello Games news, or game-related updates.",
         wait_response=True,
     )
     async def get_news(self) -> str:
@@ -114,7 +114,7 @@ class NMSAssistant(Skill):
 
     @tool(
         name="get_item_info_by_name",
-        description="Fetch game item details based on name and language.",
+        description="Fetch No Man's Sky game item details. Use when user asks about crafting materials, resources, blueprints, or any in-game item properties.",
         wait_response=True,
     )
     async def get_item_info_by_name(self, name: str, languageCode: str) -> str:
@@ -150,7 +150,7 @@ class NMSAssistant(Skill):
 
     @tool(
         name="get_refiner_recipes_by_input",
-        description="Fetch refiner recipes by input item using appId.",
+        description="Fetch NMS refiner recipes by input item. Use when user asks 'what can I make with X?' or wants to know refining options for materials.",
         wait_response=True,
     )
     async def get_refiner_recipes_by_input(self, appId: str, languageCode: str) -> str:
@@ -175,7 +175,7 @@ class NMSAssistant(Skill):
 
     @tool(
         name="get_refiner_recipes_by_output",
-        description="Fetch refiner recipes by output item using appId.",
+        description="Fetch NMS refiner recipes to produce a specific item. Use when user asks 'how do I make X?' or 'what's the recipe for X?'",
         wait_response=True,
     )
     async def get_refiner_recipes_by_output(self, appId: str, languageCode: str) -> str:

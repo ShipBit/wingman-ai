@@ -81,7 +81,15 @@ class WebSearch(Skill):
 
     @tool(
         name="web_search_function",
-        description="Searches the internet / web for the topic identified by the user or identified by the AI to answer a user question.",
+        description="""Searches the internet using DuckDuckGo for current information.
+
+        WHEN TO USE:
+        - User says 'Search the web for...', 'Search the internet for...', 'Look up...'
+        - User asks about current events, news, weather, or recent developments
+        - Questions requiring up-to-date information beyond training knowledge
+        - Topics needing real-time or specific factual data
+
+        Supports news searches, general web searches, and single-site searches.""",
         wait_response=True,
     )
     async def web_search_function(

@@ -334,7 +334,7 @@ class ATSTelemetry(Skill):
         await self.wingman.add_assistant_message(response)
 
     @tool(
-        description="Retrieve the current game state variable from American Truck Simulator."
+        description="Retrieve telemetry from ATS/ETS2. Common variables: truckSpeed, speedLimit, gear, engineRpm, fuel*, cargo*, city*, job*, truckBrand, coordinates, damage/wear values, event flags (fined, tollgate, ferry). Tool returns error if variable doesn't exist."
     )
     async def get_game_state(self, variable: str) -> str:
         """
@@ -381,7 +381,9 @@ class ATSTelemetry(Skill):
                 )
             return f"Variable '{variable}' not found."
 
-    @tool(description="Get detailed information about the current location.")
+    @tool(
+        description="Get detailed information about current truck location. Use when driver asks 'where are we?', 'what city is this?', or needs navigation context."
+    )
     async def get_information_about_current_location(self) -> str:
         """Used to provide more detailed information if the user asks a general question like 'where are we?'."""
         if not self.already_initialized_telemetry:
@@ -421,7 +423,9 @@ class ATSTelemetry(Skill):
         else:
             return "Unable to get more detailed information regarding the place based on the current truck coordinates."
 
-    @tool(description="Begin dispatch function (telemetry loop).")
+    @tool(
+        description="Begin dispatch mode (telemetry monitoring loop). Provides ongoing commentary about trucking activities, job progress, and route information. Use for immersive AI dispatcher experience."
+    )
     async def start_or_activate_dispatch_telemetry_loop(self) -> str:
         """Begin dispatch function, which will check telemetry at designated intervals."""
         if not self.already_initialized_telemetry:
@@ -445,7 +449,9 @@ class ATSTelemetry(Skill):
             await self.initialize_telemetry_cache_loop(10)
         return "Opened dispatch communications."
 
-    @tool(description="End or stop dispatch function (telemetry loop).")
+    @tool(
+        description="End dispatch mode (stop telemetry monitoring loop). Stops the ongoing commentary and monitoring."
+    )
     async def end_or_stop_dispatch_telemetry_loop(self) -> str:
         """End or stop dispatch function."""
         await self.stop_telemetry_loop()

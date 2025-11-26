@@ -28,7 +28,15 @@ class AskPerplexity(Skill):
 
     @tool(
         name="ask_perplexity",
-        description="Expects a question that is answered with up-to-date information from the internet.",
+        description="""Queries Perplexity AI for real-time internet research and up-to-date information.
+
+        WHEN TO USE:
+        - User requests current events, recent developments, or time-sensitive information
+        - Questions requiring up-to-date data beyond training knowledge
+        - Research queries that benefit from live internet access
+        - When no other specialized skill better matches the request
+
+        Provides comprehensive, well-sourced answers based on live research.""",
         wait_response=True,
     )
     def ask_perplexity(self, question: str) -> tuple[str, str]:

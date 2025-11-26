@@ -251,7 +251,7 @@ class RadioChatter(Skill):
 
     @tool(
         name="turn_on_radio",
-        description="Turn the radio on to pick up some chatter on open frequencies.",
+        description="Turn the radio on to pick up ambient chatter on open frequencies. Creates immersive background radio communication. Use when user wants radio ambience or communication atmosphere.",
     )
     def turn_on_radio(self) -> str:
         """Turn the radio on."""
@@ -263,7 +263,7 @@ class RadioChatter(Skill):
 
     @tool(
         name="turn_off_radio",
-        description="Turn the radio off to no longer pick up pick up chatter on open frequencies.",
+        description="Turn the radio off to stop ambient chatter. Use when user wants silence or to disable radio communication sounds.",
     )
     def turn_off_radio(self) -> str:
         """Turn the radio off."""

@@ -33,7 +33,14 @@ class ImageGeneration(Skill):
 
     @tool(
         name="generate_image",
-        description="Generate an image based on the users prompt.",
+        description="""Generates an image using DALL-E 3 based on a text description.
+
+        WHEN TO USE:
+        - User requests image creation: 'Generate an image of...', 'Create a picture of...'
+        - User wants visual content created from a description
+        - Any request for AI-generated artwork or illustrations
+
+        Produces high-quality, detailed images matching user specifications.""",
         wait_response=True,
     )
     async def generate_image(self, prompt: str) -> str:

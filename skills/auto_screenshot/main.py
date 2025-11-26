@@ -52,7 +52,14 @@ class AutoScreenshot(Skill):
 
     @tool(
         name="take_screenshot",
-        description="Takes a screenshot of the currently focused game window and saves it in the default directory.",
+        description="""Captures a screenshot of the focused window and saves it.
+
+        WHEN TO USE:
+        - User explicitly requests: 'Take a screenshot', 'Capture my screen'
+        - User expresses excitement/surprise: 'Oh wow!', 'This is crazy!', 'Amazing!'
+        - Memorable gaming moments or achievements
+
+        IMPORTANT: Do NOT use for 'look at screen' requests - those need VisionAI for analysis, not capture.""",
     )
     async def take_screenshot(self, reason: str) -> str:
         """

@@ -24,7 +24,17 @@ class TimeAndDateRetriever(Skill):
     ) -> None:
         super().__init__(config, settings, wingman)
 
-    @tool()
+    @tool(
+        description="""Retrieves the current date and time.
+
+        WHEN TO USE:
+        - User asks for current time or date
+        - User mentions relative time: 'yesterday', 'today', 'tomorrow', 'last week', 'next month'
+        - User says 'this morning', 'tonight', 'last year', etc.
+        - Any time-relative phrase that requires knowing the current date/time
+
+        Execute this BEFORE other skills when time context is needed for accurate responses."""
+    )
     def get_current_time_and_date(self) -> str:
         """Retrieves the current date and time for the user."""
         if self.settings.debug_mode:

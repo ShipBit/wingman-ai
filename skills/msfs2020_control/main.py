@@ -59,7 +59,9 @@ class Msfs2020Control(Skill):
 
         return errors
 
-    @tool(description="Retrieve data points from Microsoft Flight Simulator 2020.")
+    @tool(
+        description="Retrieve data from MSFS2020 via SimConnect. Examples: PLANE_ALTITUDE, AIRSPEED_INDICATED, FUEL_TOTAL_QUANTITY, GEAR_HANDLE_POSITION. Use :index suffix for multi-engine (e.g., GENERAL_ENG_RPM:1)."
+    )
     async def get_data_from_sim(self, data_point: str) -> str:
         """
         Retrieve data points from Microsoft Flight Simulator 2020 using the Python SimConnect module.
@@ -71,7 +73,7 @@ class Msfs2020Control(Skill):
         return f"{data_point} value is: {value}"
 
     @tool(
-        description="Set data points or perform actions in Microsoft Flight Simulator 2020."
+        description="Control MSFS2020 aircraft via SimConnect. Examples: THROTTLE_FULL, FLAPS_UP, GEAR_TOGGLE, AP_MASTER, TOGGLE_BEACON_LIGHTS. Use TOGGLE_ prefix for switches, _INCR/_DECR for adjustments. Pass argument for SET commands (0-16383)."
     )
     async def set_data_or_perform_action_in_sim(
         self, action: str, argument: float = None
@@ -108,7 +110,9 @@ class Msfs2020Control(Skill):
 
         return f"Action '{action}' executed with argument '{argument}'"
 
-    @tool(description="Begin data monitoring loop (tour guide mode).")
+    @tool(
+        description="Begin flight data monitoring loop (tour guide mode). Periodically checks flight data and provides commentary. Use for immersive AI co-pilot experience."
+    )
     async def start_or_activate_data_monitoring_loop(self) -> str:
         """Begin data monitoring loop, which will check certain data points at designated intervals."""
         if self.data_monitoring_loop_running:

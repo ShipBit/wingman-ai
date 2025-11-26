@@ -82,7 +82,9 @@ class ControlWindows(Skill):
 
         return False
 
-    @tool(description="Activate (bring to front) an application.")
+    @tool(
+        description="Activate (bring to front) an application. Use when user says 'switch to', 'show me', 'open', or 'bring up' an app that's already running."
+    )
     async def activate_application(self, app_name: str) -> str:
         """
         Activate (bring to front) an application.
@@ -105,7 +107,9 @@ class ControlWindows(Skill):
 
         return "Error: Application not found or could not be activated."
 
-    @tool(description="Move an application window to a specific position.")
+    @tool(
+        description="Move an application window to a specific position (left, right, top, bottom). Use for window management, split-screen layouts, or organizing desktop."
+    )
     async def move_application(self, app_name: str, position: str) -> str:
         """
         Move an application window to a specific position.
@@ -199,7 +203,9 @@ class ControlWindows(Skill):
         # If no windows found, return false
         return "There was a problem moving that application. The application may not support moving it through automation."
 
-    @tool(description="List all open application windows.")
+    @tool(
+        description="List all open application windows. Use when user asks 'what apps are open?', 'show running programs', or needs to find a specific window."
+    )
     async def list_applications(self) -> str:
         """List all open application windows."""
         window_titles = gw.getAllTitles()
@@ -213,7 +219,9 @@ class ControlWindows(Skill):
             return f"List of all application window titles found: {titles_as_string}."
         return "There was a problem getting your list of applications."
 
-    @tool(description="Place text on the clipboard.")
+    @tool(
+        description="Place text on the clipboard. Use when user says 'copy this', 'put on clipboard', or needs text ready to paste elsewhere."
+    )
     async def place_text_on_clipboard(self, text: str) -> str:
         """
         Place text on the clipboard.
@@ -230,7 +238,9 @@ class ControlWindows(Skill):
         except Exception as e:
             return f"Error: {str(e)}"
 
-    @tool(description="Read the content of the clipboard.")
+    @tool(
+        description="Read the content of the clipboard. Use when user says 'what did I copy?', 'read clipboard', or wants to analyze copied text."
+    )
     async def read_clipboard_content(self) -> str:
         """Read the content of the clipboard."""
         try:
@@ -242,7 +252,9 @@ class ControlWindows(Skill):
         except Exception as e:
             return f"Error: {str(e)}"
 
-    @tool(description="Open an application.")
+    @tool(
+        description="Open an application. Use when user says 'launch', 'start', 'run', or 'open' a program that isn't currently running."
+    )
     async def open_application(self, app_name: str) -> str:
         """
         Open an application.
@@ -255,7 +267,9 @@ class ControlWindows(Skill):
             return "Application started."
         return "Error: Application not found or could not be started."
 
-    @tool(description="Close an application.")
+    @tool(
+        description="Close an application. Use when user says 'close', 'exit', 'quit', or 'shut down' a program."
+    )
     async def close_application(self, app_name: str) -> str:
         """
         Close an application.

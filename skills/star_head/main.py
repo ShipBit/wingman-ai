@@ -4,8 +4,8 @@ from typing import TYPE_CHECKING
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from services.benchmark import Benchmark
 from skills.skill_base import Skill
+from skills.tool_registry import tool
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -15,8 +15,10 @@ class StarHead(Skill):
     """
     StarHead skill for Star Citizen trading and ship information.
 
-    Uses hybrid approach: Manual get_tools() for dynamic enums (ship names, locations),
-    but clean method-based tool execution.
+    Uses lookup tools to handle voice input spelling errors:
+    1. LLM calls get_available_ships/locations to get valid names
+    2. LLM fuzzy-matches user's spoken input to valid names
+    3. LLM calls action tools with correct names
     """
 
     def __init__(
@@ -112,126 +114,87 @@ class StarHead(Skill):
         return vehicle["name"]
 
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
+        # Lookup tools are fast (cached data), don't need waiting response
+        if tool_name in (
+            "get_available_ships",
+            "get_available_locations",
+            "get_available_shops",
+        ):
+            return False
         return True
 
-    def get_tools(self) -> list[tuple[str, dict]]:
+    # ============================================================
+    # LOOKUP TOOLS - Call these first to get valid names for voice input
+    # ============================================================
+
+    @tool(
+        description="""Get a list of all available Star Citizen ship names.
+
+        IMPORTANT: Call this tool FIRST when the user mentions a ship name via voice input,
+        as speech-to-text often misspells ship names (e.g., 'Catapiller' instead of 'Caterpillar').
+
+        Use the returned list to find the closest match to what the user said, then use
+        that corrected name with get_best_trading_route or get_ship_information.
+
+        Returns a list of all valid ship names in the StarHead database.
         """
-        Build tools with dynamic enums from loaded data.
+    )
+    async def get_available_ships(self) -> str:
+        """Returns all available ship names for fuzzy matching."""
+        return json.dumps(self.ship_names)
 
-        These tools use dynamic enums populated from StarHead API data,
-        so they must be built at runtime rather than using @tool decorator.
+    @tool(
+        description="""Get a list of all available Star Citizen locations (planets, moons, stations).
+
+        IMPORTANT: Call this tool FIRST when the user mentions a location via voice input,
+        as speech-to-text often misspells location names (e.g., 'Houston' instead of 'Hurston',
+        'Yella' instead of 'Yela', 'Micro Tech' instead of 'microTech').
+
+        Use the returned list to find the closest match to what the user said, then use
+        that corrected name with get_best_trading_route or get_trading_shop_information_for_celestial_objects.
+
+        Returns a list of all valid celestial object names (planets, moons, space stations).
         """
-        return [
-            (
-                "get_best_trading_route",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_best_trading_route",
-                        "description": "Finds the best trade route for a given spaceship and position.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "ship": {"type": "string", "enum": self.ship_names},
-                                "position": {
-                                    "type": "string",
-                                    "enum": self.celestial_object_names,
-                                },
-                                "money_to_spend": {"type": "number"},
-                            },
-                            "required": ["ship", "position", "money_to_spend"],
-                        },
-                    },
-                },
-            ),
-            (
-                "get_ship_information",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_ship_information",
-                        "description": "Gives information about the given ship.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "ship": {"type": "string", "enum": self.ship_names},
-                            },
-                            "required": ["ship"],
-                        },
-                    },
-                },
-            ),
-            (
-                "get_trading_information_of_specific_shop",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_trading_information_of_specific_shop",
-                        "description": "Gives trading information about the given shop, like which commodities you can sell or buy and for which price.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "shop": {"type": "string", "enum": self.shop_names},
-                            },
-                            "required": ["shop"],
-                        },
-                    },
-                },
-            ),
-            (
-                "get_trading_shop_information_for_celestial_objects",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_trading_shop_information_for_celestial_objects",
-                        "description": "Gives trading information about the given celestial object, like which commodities you can sell or buy at which shop.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "celestial_object": {
-                                    "type": "string",
-                                    "enum": self.celestial_object_names,
-                                },
-                            },
-                            "required": ["celestial_object"],
-                        },
-                    },
-                },
-            ),
-        ]
+    )
+    async def get_available_locations(self) -> str:
+        """Returns all available celestial object names for fuzzy matching."""
+        return json.dumps(self.celestial_object_names)
 
-    async def execute_tool(
-        self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
-    ) -> tuple[str, str]:
-        """Execute StarHead tools using clean method dispatch."""
-        instant_response = ""
-        function_response = ""
+    @tool(
+        description="""Get a list of all available Star Citizen shop names.
 
-        # Map tool names to methods
-        tool_methods = {
-            "get_best_trading_route": self._get_best_trading_route,
-            "get_ship_information": self._get_ship_information,
-            "get_trading_information_of_specific_shop": self._get_trading_information_of_specific_shop,
-            "get_trading_shop_information_for_celestial_objects": self._get_trading_shop_information_for_celestial_objects,
-        }
+        IMPORTANT: Call this tool FIRST when the user mentions a shop name via voice input,
+        as speech-to-text often misspells shop names.
 
-        if tool_name in tool_methods:
-            benchmark.start_snapshot(f"StarHead: {tool_name}")
+        Use the returned list to find the closest match to what the user said, then use
+        that corrected name with get_trading_information_of_specific_shop.
 
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"StarHead: executing tool '{tool_name}' with params: {parameters}",
-                    color=LogType.INFO,
-                )
+        Returns a list of all valid shop names in the StarHead database.
+        """
+    )
+    async def get_available_shops(self) -> str:
+        """Returns all available shop names for fuzzy matching."""
+        return json.dumps(self.shop_names)
 
-            function_response = await tool_methods[tool_name](**parameters)
-            benchmark.finish_snapshot()
+    # ============================================================
+    # ACTION TOOLS - Use corrected names from lookup tools
+    # ============================================================
 
-        return function_response, instant_response
+    @tool(
+        description="""Find the best trade route for a given spaceship and position in Star Citizen.
 
-    # Tool implementation methods
+        PREREQUISITE: First call get_available_ships() and get_available_locations() to get valid names,
+        especially if the user's input came from voice (speech-to-text often misspells names).
 
-    async def _get_best_trading_route(
+        Args:
+            ship: Exact ship name from get_available_ships() list
+            position: Exact celestial object name from get_available_locations() list
+            money_to_spend: Available budget in aUEC (Alpha UEC)
+
+        Returns trading route with buy/sell locations, commodity, profit margin, and travel time.
+        """
+    )
+    async def get_best_trading_route(
         self, ship: str, position: str, money_to_spend: float
     ) -> str:
         """Calculates the best trading route for the specified ship and position."""
@@ -268,7 +231,19 @@ class StarHead(Skill):
             return json.dumps(parsed_response[0])
         return f"No route found for ship '{ship}' at '{position}' with '{money_to_spend}' aUEC."
 
-    async def _get_ship_information(self, ship: str) -> str:
+    @tool(
+        description="""Get detailed information about a Star Citizen spaceship.
+
+        PREREQUISITE: First call get_available_ships() to get valid ship names,
+        especially if the user's input came from voice (speech-to-text often misspells names).
+
+        Args:
+            ship: Exact ship name from get_available_ships() list
+
+        Returns ship specifications, components, cargo capacity, weapons, and performance data from the Star Citizen wiki.
+        """
+    )
+    async def get_ship_information(self, ship: str) -> str:
         """Gets information about a ship from the Star Citizen wiki."""
         try:
             response = requests.get(
@@ -281,7 +256,20 @@ class StarHead(Skill):
             return f"Failed to fetch ship information: {e}"
         return json.dumps(response.json())
 
-    async def _get_trading_information_of_specific_shop(self, shop: str) -> str:
+    @tool(
+        description="""Get trading information for a specific shop in Star Citizen.
+
+        PREREQUISITE: First call get_available_shops() to get valid shop names,
+        especially if the user's input came from voice (speech-to-text often misspells names).
+
+        Args:
+            shop: Exact shop name from get_available_shops() list
+
+        Returns commodities available for buying/selling with current prices. If multiple shops share the same name,
+        you'll need to specify the celestial object using get_trading_shop_information_for_celestial_objects.
+        """
+    )
+    async def get_trading_information_of_specific_shop(self, shop: str) -> str:
         """Gets trading information for a specific shop."""
         shops = [s for s in self.shops if s["name"].lower() == shop.lower()]
 
@@ -297,7 +285,19 @@ class StarHead(Skill):
 
         return json.dumps(items)
 
-    async def _get_trading_shop_information_for_celestial_objects(
+    @tool(
+        description="""Get all trading shop information for a celestial object in Star Citizen.
+
+        PREREQUISITE: First call get_available_locations() to get valid location names,
+        especially if the user's input came from voice (speech-to-text often misspells names).
+
+        Args:
+            celestial_object: Exact celestial object name from get_available_locations() list
+
+        Returns all shops at that location with their commodities and prices.
+        """
+    )
+    async def get_trading_shop_information_for_celestial_objects(
         self, celestial_object: str
     ) -> str:
         """Gets trading information for all shops on a celestial object."""

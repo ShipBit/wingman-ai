@@ -27,7 +27,14 @@ class TypingAssistant(Skill):
 
     @tool(
         name="assist_with_typing",
-        description="Identifies what the user wants the AI to type into an active application window. This may be either transcribing exactly what the user says or typing something the user wants the AI to imagine and then type. Also identifies whether to end the typed content with a press of the Enter / Return key, common typically for typing a response to a chat message or form field.",
+        description="""Types text into the user's active application window.
+
+        WHEN TO USE:
+        - User asks to type/dictate something: 'Type...', 'Write...'
+        - User wants content generated and typed: 'Type a poem about...', 'Write an email about...'
+
+        Handles both exact dictation and creative content generation.
+        Can optionally press Enter after typing (common for chat messages).""",
     )
     def assist_with_typing(
         self, content_to_type: str, end_by_pressing_enter: bool = False

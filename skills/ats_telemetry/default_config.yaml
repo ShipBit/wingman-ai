@@ -19,39 +19,14 @@ examples:
     de: Was ist meine aktuelle Geschwindigkeit?
   - en: Start the dispatch mode.
     de: Starte den Dispatch-Modus.
-prompt: |
-  ### TRUCK SIMULATOR TELEMETRY ACCESS
-  You have comprehensive access to live game state data from American Truck Simulator (ATS) and Euro Truck Simulator 2 (ETS2).
-
-  #### CORE FUNCTIONS
-  - **Data Retrieval:** Use `get_game_state` to access current telemetry values
-  - **Dispatch Mode:** Use `start_or_activate_dispatch_telemetry_loop` to begin automated monitoring
-  - **End Monitoring:** Use `end_or_stop_dispatch_telemetry_loop` to stop dispatch mode
-
-  #### AVAILABLE TELEMETRY DATA
-  **Job Information:** onJob, plannedDistance, jobFinished, jobCancelled, jobDelivered, jobStartingTime, jobFinishedTime, jobIncome, jobCancelledPenalty, jobDeliveredRevenue, jobDeliveredEarnedXp, jobDeliveredCargoDamage, jobDeliveredDistance, jobDeliveredAutoparkUsed, jobDeliveredAutoloadUsed, isCargoLoaded, specialJob, jobMarket, routeDistance
-
-  **Vehicle Status:** gears, gears_reverse, truckWheelCount, gear, gearDashboard, engineRpmMax, engineRpm, cruiseControlSpeed, airPressure, brakeTemperature, oilPressure, oilTemperature, waterTemperature, batteryVoltage, truckSpeed, speedLimit, currentFuelPercentage, currentAdbluePercentage, truckDamageRounded, wearTrailerRounded
-
-  **Vehicle Systems:** parkBrake, airPressureEmergency, fuelWarning, electricEnabled, engineEnabled, wipers, blinkerLeftOn, blinkerRightOn, lightsParking, lightsBeamLow, lightsBeamHigh, lightsBeacon, lightsBrake, lightsReverse, lightsHazards, cruiseControl
-
-  **Location & Movement:** accelerationX, accelerationY, accelerationZ, coordinateX, coordinateY, coordinateZ, rotationX, rotationY, rotationZ
-
-  **Vehicle Details:** truckBrand, truckName, truckLicensePlate, truckLicensePlateCountry, cargo, unitMass, cityDst, compDst, citySrc, compSrc
-
-  **Events:** fined, tollgate, ferry, train, refuel, refuelPayed, fineOffence, ferrySourceName, ferryTargetName, trainSourceName, trainTargetName, fineAmount, tollgatePayAmount, ferryPayAmount, trainPayAmount
-
-  **Game Context:** isEts2, isAts, gameTime, nextRestStopTime, routeTime, jobExpirationTimeInDaysHoursMinutes, isWorldOfTrucksContract, gameTimeLapsedToCompleteJob, realLifeTimeToCompleteWorldofTrucksJob
-
-  **Fuel & Cargo:** cargoMassInTons, cargoMass, truckFuelRange, fuelTankSize, fuelRemaining, fuelConsumption, adblueTankSize, adblueRemaining, refuelAmount, cargoDamage, trailer
-
-  **Vehicle Wear:** wearEngine, wearTransmission, wearCabin, wearChassis, wearWheels, truckOdometer
-
-  #### USAGE GUIDELINES
-  - Provide only information available in the telemetry variables listed above
-  - Inform users when requested data is unavailable in the telemetry system
-  - Use dispatch mode for continuous monitoring and automatic status updates
-  - Present data in clear, driver-friendly language with appropriate units
+# prompt: | # DEPRECATED: Now handled by @tool descriptions in main.py
+#   You have access to American Truck Simulator / Euro Truck Simulator 2 telemetry.
+#
+#   Common variables: truckSpeed, speedLimit, fuel*, cargo*, city*, job*, gear, engineRpm,
+#   truckBrand, truckName, coordinates, damage/wear values, and event flags (fined, tollgate, ferry, etc.)
+#
+#   Use `get_game_state` with variable names like 'truckSpeed', 'cityDst', 'cargoMass'.
+#   The tool will return available data or indicate if a variable doesn't exist.
 custom_properties:
   - hint: Default is false and will attempt to use US Customary Units, like foot, yard, mile, and pound. Set to true to attempt to use metric units, like meters, kilometers, and kilograms.
     id: use_metric_system

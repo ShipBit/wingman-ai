@@ -142,7 +142,9 @@ class Timer(Skill):
         prompt = f"{prompt or ''}\n\nActive timers:\n{await self.get_timer_status()}"
         return prompt
 
-    @tool(description="Set a timer to execute a function after a delay.")
+    @tool(
+        description="Set a timer to execute a function after a delay. Use for scheduling future actions, recurring tasks, or delayed execution. Supports looping for periodic operations."
+    )
     async def set_timer(
         self,
         delay: float,
@@ -274,7 +276,9 @@ class Timer(Skill):
             timer.silent = bool(silent)
         return f"Timer with id '{id}' settings have been changed.\n\n{await self.get_timer_status()}"
 
-    @tool(description="Remind the user with a message.")
+    @tool(
+        description="Remind the user with a message. Use when user says 'remind me to...', 'don't let me forget...', or needs to be notified about something later."
+    )
     async def remind_me(self, message: str) -> str:
         """
         Remind the user with the given message.

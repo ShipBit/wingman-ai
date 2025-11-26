@@ -65,7 +65,14 @@ class GoogleSearch(Skill):
 
     @tool(
         name="perform_google_search",
-        description="Performs a Google search with specified options.",
+        description="""Searches Google for information and extracts content from results.
+
+        WHEN TO USE:
+        - User says 'Search the web for...', 'Google...', 'Look up...'
+        - User asks about current events, recent news, or developments
+        - Questions requiring up-to-date information beyond training knowledge
+        - Topics needing real-time or specific factual data
+        - 'What is the latest news about...'""",
     )
     async def perform_google_search(
         self,

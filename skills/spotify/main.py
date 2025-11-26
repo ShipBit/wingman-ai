@@ -266,7 +266,7 @@ class Spotify(Skill):
 
     @tool(
         name="control_spotify_playback",
-        description="Control the Spotify audio playback with actions like play, pause/stop or play the previous/next track or set the volume level.",
+        description="Control Spotify playback with actions like play, pause, next/previous track, or set volume. Use when user wants to control music: 'play music', 'pause', 'skip', 'volume up'.",
     )
     def control_spotify_playback(
         self,
@@ -316,7 +316,7 @@ class Spotify(Skill):
 
     @tool(
         name="play_song_with_spotify",
-        description="Find a song with Spotify to either play it immediately or queue it.",
+        description="Search and play a specific song or artist on Spotify. Use when user says 'play [song/artist]', 'I want to hear', or requests specific music.",
     )
     def play_song_with_spotify(
         self,

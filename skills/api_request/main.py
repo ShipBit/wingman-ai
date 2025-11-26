@@ -352,7 +352,7 @@ class APIRequest(Skill):
 
     @tool(
         name="send_api_request",
-        description="Send an API request with the specified method, headers, parameters, and body. Return the response back.",
+        description="Send an HTTP API request with specified method, headers, parameters, and body. Use for calling external APIs, web services, REST endpoints, or webhooks.",
         wait_response=True,
     )
     async def send_api_request(

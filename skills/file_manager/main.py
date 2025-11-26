@@ -181,7 +181,9 @@ class FileManager(Skill):
         except Exception as e:
             return f"Failed to read file '{file_name}': {str(e)}"
 
-    @tool(description="Save the provided text to a file.")
+    @tool(
+        description="Save text content to a file. Use when user wants to save, write, create a document, or export text. Can append to existing files or create new ones."
+    )
     async def save_text_to_file(
         self,
         file_name: str,
@@ -295,7 +297,7 @@ class FileManager(Skill):
             return f"Failed to open folder '{folder_name}': {str(e)}"
 
     @tool(
-        description="Read aloud the content of a specified text file or provided text."
+        description="Read aloud the content of a specified text file or provided text. Use when user wants to hear file contents spoken, for accessibility, or text-to-speech of documents."
     )
     async def read_file_or_text_content_aloud(
         self,
@@ -392,7 +394,7 @@ class FileManager(Skill):
             return f"Error in reading folder contents in '{folder_path}': {str(e)}"
 
     @tool(
-        description="Combine and compress specified folders or files into a .zip file."
+        description="Combine and compress specified folders or files into a .zip file. Use when user wants to compress, archive, or bundle files for sharing or backup."
     )
     async def create_zip_file(
         self,

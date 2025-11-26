@@ -9,7 +9,85 @@ This document outlines the plan to modernize Wingman AI's skill system with:
 3. Opt-out skill model (all skills available by default)
 4. Auto-generated prompts from `@tool` decorators
 
-## Current Architecture Problems
+---
+
+## Phase 1 Status: ✅ COMPLETE
+
+### What Was Implemented
+
+#### Core Progressive Disclosure System
+
+- ✅ `ToolRegistry` with meta-tools (`search_skills`, `activate_skill`, `list_active_skills`)
+- ✅ Skills registered with manifests for searchable metadata (name, description, tags)
+- ✅ LLM receives only meta-tools initially, activates skills on-demand
+- ✅ Logging for tool discovery flow (`[Tool Discovery]` messages)
+
+#### Lazy Skill Validation
+
+- ✅ All skills loaded for all Wingmen at startup (pending validation)
+- ✅ Skills only validated/prepared when first activated
+- ✅ `is_validated`, `is_prepared`, `needs_activation()`, `ensure_activated()` added to Skill base class
+- ✅ Hooks (`on_add_user_message`, etc.) only fire for prepared skills
+- ✅ `unload()` only called for prepared skills
+
+#### Platform Filtering
+
+- ✅ `platforms` field added to `SkillConfig` (e.g., `platforms: [windows]`)
+- ✅ Skills filtered by platform during `init_skills()`
+- ✅ Applied to: `control_windows`, `ats_telemetry`, `msfs2020_control`
+
+#### Config System Changes
+
+- ✅ `skills` array in Wingman config now holds **user overrides only**
+- ✅ Skills auto-loaded from discovery, user configs merged on top
+- ✅ Migration service updated to preserve user skill configs
+
+#### Context Optimization
+
+- ✅ `get_context()` only includes prompts from **activated** skills
+- ✅ Skill prompts NOT included until skill is activated (token savings)
+
+#### Prompt Consolidation (@tool descriptions)
+
+- ✅ Enhanced `@tool` descriptions with prompt-like context in 17 skills
+- ✅ Commented out redundant `prompt` fields in `default_config.yaml` for 16 skills:
+  - TimeAndDateRetriever, VisionAI, GoogleSearch, AskPerplexity
+  - TypingAssistant, WebSearch, ImageGeneration, AutoScreenshot
+  - Timer, FileManager, NMSAssistant, RadioChatter (no top-level prompt)
+  - ControlWindows, Spotify, APIRequest
+  - MSFS2020Control, ATSTelemetry (simplified from 600+ lines to pattern hints)
+  - StarHead (migrated from dynamic enums to lookup tools)
+- ✅ MSFS2020Control: Reduced from 637→67 lines (89% reduction)
+  - SimConnect events/variables now documented via pattern hints in `@tool` descriptions
+  - Examples: "Use TOGGLE\_ prefix for switches, :index suffix for multi-engine"
+- ✅ ATSTelemetry: Simplified with wildcard patterns (fuel*, cargo*, city\*)
+- ✅ StarHead: Migrated from dynamic enums to **lookup tool pattern**
+  - Added 3 lookup tools: `get_available_ships`, `get_available_locations`, `get_available_shops`
+  - LLM calls lookup tools first, then fuzzy-matches voice input to valid names
+  - Solves speech-to-text spelling errors (e.g., "Houston" → "Hurston", "Catapiller" → "Caterpillar")
+  - Lookup tools don't require waiting response (cached data, instant)
+- ✅ All skills with tools now use `@tool` description as **single source of truth**
+
+### What Was NOT Changed (Intentional Decisions)
+
+- ❌ Did NOT remove `skills` property from WingmanConfig (still needed for user overrides)
+- ❌ Did NOT implement `disabled_skills` opt-out model (kept `skills` for compatibility)
+- ❌ Did NOT remove `/templates/skills/` duplication (deferred to Phase 5)
+
+### Skills Not Using `@tool` Decorator (Intentional)
+
+These skills don't have tools or use different patterns:
+
+- `uexcorp` - Complex external tool handler, tools defined in separate handler class
+- `audio_device_changer` - No tools
+- `quick_commands` - No tools
+- `thinking_sound` - No tools (hook-based)
+- `voice_changer` - No tools (hook-based)
+
+**Note:** Legacy skills still work! The `get_tools()` method returns tools regardless of whether
+they use `@tool` decorator or manual definitions. The ToolRegistry handles both.
+
+---
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -291,36 +369,96 @@ Skills and MCP servers should be interchangeable from the LLM's perspective - bo
 
 ---
 
-## Key Files to Modify
+## Key Files Modified in Phase 1
 
-1. `api/interface.py` - Add `disabled_skills` to WingmanConfig
-2. `skills/skill_base.py` - Add `get_tools_description()` method
-3. `wingmen/wingman.py` - Modify `init_skills()` for opt-out model
-4. `wingmen/open_ai_wingman.py` - Integrate ToolRegistry, modify `build_tools()`
-5. `services/module_manager.py` - Update skill discovery
-6. `services/config_migration_service.py` - Add 1.8.x → 1.9.0 migration
+1. ✅ `api/interface.py` - Added `platforms` to SkillConfig, kept `skills` in NestedConfig
+2. ✅ `skills/skill_base.py` - Added `@tool` decorator, `get_tools_description()`, lazy validation state
+3. ✅ `wingmen/wingman.py` - Rewrote `init_skills()` for all-skills loading, platform filtering
+4. ✅ `wingmen/open_ai_wingman.py` - Integrated ToolRegistry, hook filtering, context optimization
+5. ✅ `services/tool_registry.py` - Created ToolRegistry with progressive disclosure
+6. ✅ `services/config_migration_service.py` - Updated migration to preserve skills array
 
-## Already Created
+## Files Created
 
-- `services/tool_registry.py` - ToolRegistry with progressive disclosure
-- `skills/skill_base.py` - `@tool` decorator and base class updates
+- ✅ `services/tool_registry.py` - ToolRegistry with progressive disclosure
 
-## Migration Path Summary
+---
 
+## Remaining Work (Future Phases)
+
+### Phase 2: Prompt Cleanup (Optional)
+
+Many skills have both `@tool` descriptions AND detailed `prompt` fields in config.
+Consider commenting out redundant prompts where tool descriptions are sufficient.
+
+**Candidates for prompt removal:**
+
+- Skills with simple, well-described `@tool` decorators
+- Skills where the tool description fully explains when/how to use it
+
+**Keep prompts for:**
+
+- Complex skills with nuanced usage patterns (Spotify, UEXCorp)
+- Skills needing execution priority/ordering instructions (TimeAndDateRetriever)
+- Skills with extensive parameter guidelines
+
+### Phase 3: Skill Distribution Simplification
+
+#### New Directory Structure
+
+```text
+# Built-in skills (read-only, shipped with release)
+_internal/skills/           # PyInstaller bundle (release)
+/source/skills/             # Dev mode
+
+# Custom skills (read-write, user location, NOT versioned)
+APPDATA/WingmanAI/custom_skills/
+└── my_custom_skill/
+    ├── main.py
+    ├── skill.yaml          # Metadata (renamed from default_config.yaml)
+    └── dependencies/
 ```
-OLD (1.8.x)                          NEW (1.9.0)
+
+#### Eliminate `/templates/skills/`
+
+- Built-in skill **code** lives in `/skills/` (source) or `_internal/skills/` (release)
+- Built-in skill **configs** are bundled in the same location
+- **No more copying** skill code to APPDATA for built-in skills
+- Custom skills still go to `APPDATA/custom_skills/`
+
+### Phase 4: MCP Client Integration
+
+```yaml
+# wingman.yaml
+mcp_servers:
+  - name: 'filesystem'
+    command: 'npx'
+    args: ['-y', '@anthropic/mcp-server-filesystem']
+  - name: 'postgres'
+    url: 'http://localhost:3000/mcp'
+```
+
+Skills and MCP servers should be interchangeable from the LLM's perspective - both are just "tools".
+
+---
+
+## Current State Summary
+
+```text
+OLD (1.8.x)                          NEW (1.9.0 - Phase 1 Complete)
 ────────────────────────────────────────────────────────────────
 wingman.yaml:                        wingman.yaml:
-  skills:                              disabled_skills:
-    - name: Spotify                      - UEXCorp  # only list what's OFF
-      module: skills.spotify.main
+  skills:                              skills:  # Now for OVERRIDES only
+    - name: Spotify                      - name: UEXCorp
+      module: skills.spotify.main            custom_properties: [...]
     - name: StarHead
-      ...
+      ...                              # All skills auto-loaded!
 
 LLM receives:                        LLM receives:
-  - ALL skill tools (50+ tools)        - 3 meta-tools (search, activate, list)
-  - Full prompt for each skill         - Tool descriptions on-demand
+  - ALL skill tools (50+ tools)        - 3 meta-tools initially
+  - Full prompt for each skill         - Skill tools after activation
+                                        - Prompts only for active skills
 
-/templates/skills/spotify/           REMOVED (no more duplication)
-APPDATA/1_8_x/skills/spotify/        APPDATA/custom_skills/ (custom only)
+/templates/skills/spotify/           Still exists (Phase 3 will remove)
+APPDATA/1_8_x/skills/spotify/        Still exists (Phase 3 will remove)
 ```

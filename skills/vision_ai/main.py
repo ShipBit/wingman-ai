@@ -36,7 +36,15 @@ class VisionAI(Skill):
 
     @tool(
         name="analyse_what_you_or_user_sees",
-        description="Analyse what you or the user sees and answer questions about it.",
+        description="""Captures and analyzes the user's screen to answer questions about visual content.
+
+        WHEN TO USE:
+        - User asks 'What is on my screen?' or 'What do you see?'
+        - User wants analysis of currently displayed content
+        - User asks specific questions about visual elements, text, or objects on screen
+
+        For image analysis: Ask user to open the image on their computer first, then capture and analyze.
+        Provides detailed descriptions of visual content including text, UI elements, and objects.""",
         wait_response=True,
     )
     async def analyse_what_you_or_user_sees(self, question: str) -> str:
