@@ -12,10 +12,8 @@ Key concepts:
 """
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Any, Optional
-import inspect
-import json
-from pydantic import BaseModel, Field
+from typing import TYPE_CHECKING, Optional
+from api.enums import LogType
 from services.printr import Printr
 
 if TYPE_CHECKING:
@@ -185,12 +183,10 @@ class SkillRegistry:
             results = list(self._manifests.values())[:limit]
             if results:
                 skill_names = [m.display_name for m in results]
-                total = len(self._manifests)
-                shown = len(results)
-                msg = f"[Tool Discovery] Listing {shown} of {total} skill(s): {', '.join(skill_names)}"
-                if total > shown:
-                    msg += " (use more specific search to find others)"
-                printr.print(msg, server_only=True)
+                printr.print(
+                    f"🔍 Searching skills... found {len(self._manifests)} available",
+                    color=LogType.PURPLE,
+                )
             return results
 
         scored = []
@@ -203,17 +199,17 @@ class SkillRegistry:
         scored.sort(key=lambda x: x[0], reverse=True)
         results = [m for _, m in scored[:limit]]
 
-        # Log search results
+        # Log search results - visible to users
         if results:
-            skill_names = [m.name for m in results]
+            skill_names = [m.display_name for m in results]
             printr.print(
-                f"[Tool Discovery] Search '{query}' found {len(results)} skill(s): {', '.join(skill_names)}",
-                server_only=True,
+                f"🔍 Searching for '{query}'... found: {', '.join(skill_names)}",
+                color=LogType.PURPLE,
             )
         else:
             printr.print(
-                f"[Tool Discovery] Search '{query}' found no matching skills",
-                server_only=True,
+                f"🔍 Searching for '{query}'... no matching skills found",
+                color=LogType.WARNING,
             )
 
         return results
@@ -234,8 +230,8 @@ class SkillRegistry:
         if skill_name not in self._skills:
             available = ", ".join(self._manifests.keys())
             printr.print(
-                f"[Tool Discovery] Activation failed: skill '{skill_name}' not found",
-                server_only=True,
+                f"⚠️ Skill '{skill_name}' not found",
+                color=LogType.WARNING,
             )
             return (
                 False,
@@ -252,8 +248,8 @@ class SkillRegistry:
 
         if needs_validation:
             printr.print(
-                f"[Tool Discovery] Activating skill '{manifest.display_name}' (needs validation). Tools: {tools_str}",
-                server_only=True,
+                f"🔌 Activating skill: {manifest.display_name} (validating...)",
+                color=LogType.HIGHLIGHT,
             )
             return (
                 True,
@@ -262,8 +258,8 @@ class SkillRegistry:
             )
 
         printr.print(
-            f"[Tool Discovery] Activated skill '{manifest.display_name}'. Tools: {tools_str}",
-            server_only=True,
+            f"✅ Skill activated: {manifest.display_name}",
+            color=LogType.POSITIVE,
         )
         return (
             True,
@@ -277,7 +273,27 @@ class SkillRegistry:
             return False, f"Skill '{skill_name}' is not currently active."
 
         self._active_skills.discard(skill_name)
+        manifest = self._manifests.get(skill_name)
+        display_name = manifest.display_name if manifest else skill_name
+        printr.print(
+            f"🔌 Skill deactivated: {display_name}",
+            color=LogType.SUBTLE,
+        )
         return True, f"Deactivated skill '{skill_name}'."
+
+    def reset_activations(self) -> None:
+        """Reset all skill activations.
+
+        Called when conversation history is reset, since the LLM loses
+        all memory of which skills were activated and why.
+        """
+        if self._active_skills:
+            count = len(self._active_skills)
+            printr.print(
+                f"🔄 Conversation reset: deactivating {count} skill(s)",
+                color=LogType.SUBTLE,
+            )
+        self._active_skills.clear()
 
     def get_skill_for_tool(self, tool_name: str) -> Optional["Skill"]:
         """Get the skill that provides a given tool."""
@@ -289,6 +305,11 @@ class SkillRegistry:
     def get_skill_for_activation(self, skill_name: str) -> Optional["Skill"]:
         """Get a skill by name for activation purposes."""
         return self._skills.get(skill_name)
+
+    def get_skill_display_name(self, skill_name: str) -> str:
+        """Get the display name for a skill, or the skill name if not found."""
+        manifest = self._manifests.get(skill_name)
+        return manifest.display_name if manifest else skill_name
 
     def get_active_tools(self) -> list[tuple[str, dict]]:
         """
@@ -377,8 +398,10 @@ class SkillRegistry:
             (result_string, tools_changed) - tools_changed indicates if the LLM
             should receive an updated tool list
         """
+        # Debug logging for developers (server-only)
         printr.print(
-            f"[Tool Discovery] LLM invoked meta-tool: {tool_name}({parameters})",
+            f"Meta-tool called: {tool_name}({parameters})",
+            color=LogType.INFO,
             server_only=True,
         )
 

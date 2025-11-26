@@ -1094,8 +1094,14 @@ class OpenAiWingman(Wingman):
         return total_deleted_messages
 
     def reset_conversation_history(self):
-        """Resets the conversation history by removing all messages."""
+        """Resets the conversation history and skill activation state.
+
+        When the conversation is reset, the LLM loses all memory of which skills
+        were activated and why. So we must also reset the skill registry to ensure
+        the progressive disclosure state matches the LLM's memory.
+        """
         self.messages = []
+        self.skill_registry.reset_activations()
 
     async def _try_instant_activation(self, transcript: str) -> (str, bool):
         """Tries to execute an instant activation command if present in the transcript.
@@ -1453,17 +1459,20 @@ class OpenAiWingman(Wingman):
                         self.skill_registry.deactivate_skill(skill_name)
                         function_response = validation_msg
                         tools_changed = False
-                    else:
                         await printr.print_async(
-                            f"Skill '{skill_name}' validated and ready",
-                            color=LogType.INFO,
+                            f"❌ Skill activation failed: {skill_name}",
+                            color=LogType.ERROR,
+                        )
+                    else:
+                        # Get display name for user-friendly message
+                        display_name = self.skill_registry.get_skill_display_name(
+                            skill_name
+                        )
+                        await printr.print_async(
+                            f"✅ Skill ready: {display_name}",
+                            color=LogType.POSITIVE,
                         )
 
-            if tools_changed:
-                await printr.print_async(
-                    "Skill activated: tools updated",
-                    color=LogType.INFO,
-                )
             return function_response, None, None
 
         if function_name == "execute_command":
