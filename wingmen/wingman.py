@@ -240,9 +240,12 @@ class Wingman:
         # Get all available skill configs
         available_skills = ModuleManager.read_available_skill_configs()
 
-        for skill_name, skill_config_path in available_skills:
+        # Get disabled skills list (blacklist)
+        disabled_skills = self.config.disabled_skills or []
+
+        for skill_folder_name, skill_config_path in available_skills:
             try:
-                # Load default skill config
+                # Load default skill config first to get the display name
                 skill_config_dict = ModuleManager.read_config(skill_config_path)
                 if not skill_config_dict:
                     continue
@@ -251,9 +254,9 @@ class Wingman:
                 from api.interface import SkillConfig
 
                 # Check if user has overrides for this skill
-                if skill_name in user_skill_configs:
+                if skill_folder_name in user_skill_configs:
                     # Merge user overrides into default config
-                    user_config = user_skill_configs[skill_name]
+                    user_config = user_skill_configs[skill_folder_name]
                     # User config takes precedence - merge custom_properties especially
                     if user_config.custom_properties:
                         skill_config_dict["custom_properties"] = [
@@ -264,14 +267,19 @@ class Wingman:
 
                 skill_config = SkillConfig(**skill_config_dict)
 
+                # Check if skill is disabled for this wingman (use display name from config)
+                if skill_config.name in disabled_skills:
+                    continue
+
                 # Check platform compatibility BEFORE loading the module
                 if skill_config.platforms:
                     if normalized_platform not in skill_config.platforms:
                         printr.print(
-                            f"Skipping skill '{skill_name}' - not supported on {normalized_platform}",
+                            f"Skipping skill '{skill_config.name}' - not supported on {normalized_platform}",
                             color=LogType.WARNING,
                             server_only=True,
                         )
+                        continue
                         continue
 
                 # Load the skill module
@@ -303,6 +311,21 @@ class Wingman:
                 printr.print(
                     traceback.format_exc(), color=LogType.ERROR, server_only=True
                 )
+
+        # Log summary of enabled skills for this wingman
+        if self.skills:
+            skill_names = [s.config.name for s in self.skills]
+            printr.print(
+                f"[{self.name}] Enabled skills ({len(skill_names)}): {', '.join(skill_names)}",
+                color=LogType.INFO,
+                server_only=True,
+            )
+        else:
+            printr.print(
+                f"[{self.name}] No skills enabled.",
+                color=LogType.INFO,
+                server_only=True,
+            )
 
         return errors
 

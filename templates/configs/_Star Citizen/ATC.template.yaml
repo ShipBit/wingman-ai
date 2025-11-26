@@ -2,6 +2,24 @@ name: ATC
 description: |
   Air Traffic Controller for Star Citizen. Manages spacecraft traffic, landing permissions,
   and station operations with professional aviation communication protocols.
+disabled_skills:
+  - APIRequest
+  - AskPerplexity
+  - ATSTelemetry
+  - AudioDeviceChanger
+  - ControlWindows
+  - FileManager
+  - GoogleSearch
+  - Msfs2020Control
+  - NMSAssistant
+  - QuickCommands
+  - RadioChatter
+  - Spotify
+  - ThinkingSound
+  - TypingAssistant
+  - UEXCorp
+  - VoiceChanger
+  - WebSearch
 prompts:
   backstory: |
     You are an AI Air Traffic Controller (ATC) stationed at a major space station in the Star Citizen universe.

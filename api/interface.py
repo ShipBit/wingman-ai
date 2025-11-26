@@ -725,6 +725,16 @@ class SkillBase(BaseModel):
     logo: Optional[Annotated[str, Base64Str]] = None
 
 
+class WingmanSkillState(BaseModel):
+    """Skill info with enabled/disabled state for a specific wingman."""
+
+    skill: SkillBase
+    """The skill configuration and metadata."""
+
+    is_enabled: bool
+    """Whether the skill is enabled for this wingman (not in disabled_skills list)."""
+
+
 class NestedConfig(BaseModel):
     prompts: PromptConfig
     sound: SoundConfig
@@ -800,6 +810,11 @@ class WingmanConfig(NestedConfig):
 
     disabled: Optional[bool] = False
     """Set this to true if you want to disable this wingman. You can also just remove it from the config."""
+
+    disabled_skills: Optional[list[str]] = None
+    """List of skill names to disable for this wingman. Skills not listed are enabled by default.
+    This is a blacklist - new skills are automatically available unless explicitly disabled.
+    Example: ["iRacing", "ATSTelemetry"] to disable racing game skills on a Star Citizen wingman."""
     custom_class: Optional[CustomClassConfig] = None
     """If you want to use a custom Wingman (Python) class, you can specify it here."""
     name: str

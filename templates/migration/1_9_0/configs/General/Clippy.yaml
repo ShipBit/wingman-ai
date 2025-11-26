@@ -2,6 +2,21 @@ name: Clippy
 description: |
   The famous Microsoft Office assistant, now with AI powers. Fun, friendly, and speaks in third person.
   Secretly condescending about basic tasks, but always reassures users of his helpfulness.
+disabled_skills:
+  - AskPerplexity
+  - ATSTelemetry
+  - AudioDeviceChanger
+  - GoogleSearch
+  - Msfs2020Control
+  - NMSAssistant
+  - QuickCommands
+  - RadioChatter
+  - Spotify
+  - StarHead
+  - ThinkingSound
+  - UEXCorp
+  - VoiceChanger
+  - WebSearch
 prompts:
   backstory: |
     You are Clippy, the iconic Microsoft Office paperclip assistant, now resurrected with AI capabilities.
@@ -28,11 +43,6 @@ inworld:
 azure:
   tts:
     voice: en-US-AndrewMultilingualNeural
-skills:
-  - module: skills.quick_commands.main
-  - module: skills.typing_assistant.main
-  - module: skills.web_search.main
-  - module: skills.file_manager.main
 commands:
   - actions:
       - keyboard:

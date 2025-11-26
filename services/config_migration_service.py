@@ -526,10 +526,66 @@ class ConfigMigrationService:
                 if not old["inworld"]:
                     del old["inworld"]
 
-            if changes_made:
-                self.log(
-                    f"- cleared prompt overrides: {', '.join(changes_made)} (using new defaults)"
+            # Remove old skills array (skills are now auto-loaded)
+            if "skills" in old:
+                del old["skills"]
+                changes_made.append("skills (now auto-loaded)")
+
+            # Set disabled_skills for known wingmen (opt-out model)
+            wingman_name = old.get("name", "")
+
+            # Star Citizen wingmen: ATC and Computer get same blacklist
+            sc_blacklist = [
+                "APIRequest",
+                "AskPerplexity",
+                "ATSTelemetry",
+                "AudioDeviceChanger",
+                "ControlWindows",
+                "FileManager",
+                "GoogleSearch",
+                "Msfs2020Control",
+                "NMSAssistant",
+                "QuickCommands",
+                "RadioChatter",
+                "Spotify",
+                "ThinkingSound",
+                "TypingAssistant",
+                "UEXCorp",
+                "VoiceChanger",
+                "WebSearch",
+            ]
+
+            # Clippy blacklist (general assistant)
+            clippy_blacklist = [
+                "AskPerplexity",
+                "ATSTelemetry",
+                "AudioDeviceChanger",
+                "GoogleSearch",
+                "Msfs2020Control",
+                "NMSAssistant",
+                "QuickCommands",
+                "RadioChatter",
+                "Spotify",
+                "StarHead",
+                "ThinkingSound",
+                "UEXCorp",
+                "VoiceChanger",
+                "WebSearch",
+            ]
+
+            if wingman_name in ("ATC", "Computer"):
+                old["disabled_skills"] = sc_blacklist
+                changes_made.append(
+                    f"disabled_skills (SC wingman: {len(sc_blacklist)} skills disabled)"
                 )
+            elif wingman_name == "Clippy":
+                old["disabled_skills"] = clippy_blacklist
+                changes_made.append(
+                    f"disabled_skills (Clippy: {len(clippy_blacklist)} skills disabled)"
+                )
+
+            if changes_made:
+                self.log(f"- cleared/updated: {', '.join(changes_made)}")
 
             return old
 

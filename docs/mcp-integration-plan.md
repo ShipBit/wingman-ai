@@ -71,7 +71,31 @@ This document outlines the plan to modernize Wingman AI's skill system with:
 ### What Was NOT Changed (Intentional Decisions)
 
 - ❌ Did NOT remove `skills` property from WingmanConfig (still needed for user overrides)
-- ❌ Did NOT implement `disabled_skills` opt-out model (kept `skills` for compatibility)
+
+### Disabled Skills (Opt-Out Model) - ✅ IMPLEMENTED
+
+- ✅ Added `disabled_skills: list[str]` to `WingmanConfig`
+- ✅ Blacklist approach: skills not listed are enabled by default
+- ✅ New skills automatically available without config changes
+- ✅ Disabled skills are skipped in `init_skills()` before loading
+- ✅ Disabled skills not registered with ToolRegistry (invisible to LLM)
+
+**Example Usage:**
+
+```yaml
+# Star Citizen wingman - disable racing game skills
+disabled_skills:
+  - iRacing
+  - ATSTelemetry
+  - MSFS2020Control
+```
+
+**Benefits:**
+
+- Minimal config: only list what you DON'T want
+- Future-proof: new skills work automatically
+- Per-wingman: each wingman can have different disabled skills
+- Clean UI: show all skills with checkboxes, unchecked = disabled
 
 ### Skills Not Using `@tool` Decorator (Intentional)
 
@@ -458,19 +482,21 @@ Skills and MCP servers should be interchangeable from the LLM's perspective - bo
 ## Current State Summary
 
 ```text
-OLD (1.8.x)                          NEW (1.9.0 - Phase 3 Complete)
-────────────────────────────────────────────────────────────────
+OLD (1.8.x)                          NEW (1.9.0 - Phases 1-3 Complete)
+────────────────────────────────────────────────────────────────────────
 wingman.yaml:                        wingman.yaml:
   skills:                              skills:  # Now for OVERRIDES only
     - name: Spotify                      - name: UEXCorp
       module: skills.spotify.main            custom_properties: [...]
-    - name: StarHead
-      ...                              # All skills auto-loaded!
+    - name: StarHead                   disabled_skills:  # NEW - opt-out!
+      ...                                - iRacing
+                                         - ATSTelemetry
+                                       # All other skills auto-loaded!
 
 LLM receives:                        LLM receives:
   - ALL skill tools (50+ tools)        - 3 meta-tools initially
   - Full prompt for each skill         - Skill tools after activation
-                                        - Prompts only for active skills
+                                       - Prompts only for active skills
 
 /templates/skills/spotify/           REMOVED (bundled in _internal/skills/)
 APPDATA/1_8_x/skills/spotify/        Migrated to custom_skills/ if custom

@@ -11,6 +11,7 @@ from api.interface import (
     SkillBase,
     WingmanConfig,
     WingmanConfigFileInfo,
+    WingmanSkillState,
 )
 from services.config_manager import ConfigManager
 from services.config_migration_service import ConfigMigrationService
@@ -141,6 +142,19 @@ class ConfigService:
         )
         self.router.add_api_route(
             methods=["GET"],
+            path="/wingman-skills",
+            endpoint=self.get_wingman_skills,
+            response_model=list[WingmanSkillState],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/wingman-skills/toggle",
+            endpoint=self.toggle_wingman_skill,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
             path="/config/defaults",
             endpoint=self.get_defaults_config,
             response_model=NestedConfig,
@@ -165,6 +179,111 @@ class ConfigService:
             raise e
 
         return skills
+
+    # GET /wingman-skills
+    async def get_wingman_skills(
+        self,
+        config_name: str,
+        wingman_name: str,
+    ) -> list[WingmanSkillState]:
+        """Get all skills with their enabled/disabled state for a specific wingman."""
+        import sys
+
+        try:
+            # Get all available skills
+            all_skills = ModuleManager.read_available_skills()
+
+            # Get the wingman's config to check disabled_skills
+            config_dir = self.config_manager.get_config_dir(config_name)
+            wingman_files = self.config_manager.get_wingmen_configs(config_dir)
+
+            # Find the wingman file
+            wingman_file = next(
+                (f for f in wingman_files if f.name == wingman_name), None
+            )
+            if not wingman_file:
+                self.printr.toast_error(f"Wingman '{wingman_name}' not found.")
+                return []
+
+            # Load the wingman config
+            wingman_config = self.config_manager.load_wingman_config(
+                config_dir=config_dir, wingman_file=wingman_file
+            )
+
+            disabled_skills = wingman_config.disabled_skills or []
+
+            # Get current platform for filtering
+            current_platform = sys.platform
+            platform_map = {"win32": "windows", "darwin": "darwin", "linux": "linux"}
+            normalized_platform = platform_map.get(current_platform, current_platform)
+
+            # Build response with enabled state
+            result = []
+            for skill in all_skills:
+                # Check platform compatibility
+                platforms = skill.config.platforms
+                if platforms and normalized_platform not in platforms:
+                    continue  # Skip platform-incompatible skills
+
+                is_enabled = skill.name not in disabled_skills
+                result.append(WingmanSkillState(skill=skill, is_enabled=is_enabled))
+
+            return result
+
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            raise e
+
+    # POST /wingman-skills/toggle
+    async def toggle_wingman_skill(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        skill_name: str,
+        enabled: bool,
+    ):
+        """Enable or disable a skill for a specific wingman."""
+        try:
+            # Load the wingman config
+            wingman_config = self.config_manager.load_wingman_config(
+                config_dir=config_dir, wingman_file=wingman_file
+            )
+
+            # Initialize disabled_skills if needed
+            if wingman_config.disabled_skills is None:
+                wingman_config.disabled_skills = []
+
+            if enabled:
+                # Remove from disabled list (enable the skill)
+                if skill_name in wingman_config.disabled_skills:
+                    wingman_config.disabled_skills.remove(skill_name)
+                    # Clean up empty list
+                    if not wingman_config.disabled_skills:
+                        wingman_config.disabled_skills = None
+            else:
+                # Add to disabled list (disable the skill)
+                if skill_name not in wingman_config.disabled_skills:
+                    wingman_config.disabled_skills.append(skill_name)
+
+            # Save the config and update the wingman
+            await self.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+                wingman_config=wingman_config,
+                silent=False,
+                validate=False,
+                update_skills=True,  # Reload skills after change
+            )
+
+            action = "enabled" if enabled else "disabled"
+            self.printr.print(
+                f"Skill '{skill_name}' {action} for {wingman_file.name}.",
+                server_only=True,
+            )
+
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            raise e
 
     # GET /configs
     def get_config_dirs(self):

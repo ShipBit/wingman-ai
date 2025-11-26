@@ -2,6 +2,24 @@ name: Computer
 description: |
   Your ship's board computer. Controls all ship systems and executes commands.
   Has access to StarHead API for real-time trading routes and ship information.
+disabled_skills:
+  - APIRequest
+  - AskPerplexity
+  - ATSTelemetry
+  - AudioDeviceChanger
+  - ControlWindows
+  - FileManager
+  - GoogleSearch
+  - Msfs2020Control
+  - NMSAssistant
+  - QuickCommands
+  - RadioChatter
+  - Spotify
+  - ThinkingSound
+  - TypingAssistant
+  - UEXCorp
+  - VoiceChanger
+  - WebSearch
 prompts:
   backstory: |
     You are the AI board computer of a spacecraft in the Star Citizen universe.
@@ -27,8 +45,6 @@ record_key: end
 is_voice_activation_default: True
 sound:
   effects: [AI]
-skills:
-  - module: skills.star_head.main
 commands:
   - name: ToggleCruiseControlOrToggleHoldCurrentSpeed
     actions:
