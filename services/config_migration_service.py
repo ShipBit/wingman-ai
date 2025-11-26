@@ -476,14 +476,61 @@ class ConfigMigrationService:
             old["xai"] = new["xai"]
             self.log("- added new property: xai")
 
-            # Note: skills array is kept for user config overrides
-            # Skills are now loaded automatically, but user settings are preserved
+            # Force override prompts with new MCP-optimized versions
+            # These new prompts establish tool-first behavior and cleaner TTS instructions
+            if "prompts" not in old:
+                old["prompts"] = {}
+            old["prompts"]["system_prompt"] = new["prompts"]["system_prompt"]
+            self.log(
+                "- force updated prompts.system_prompt (MCP tool-first architecture)"
+            )
+
+            # Force update TTS prompts for ElevenLabs and Inworld
+            if "elevenlabs" in new:
+                old["elevenlabs"]["tts_prompt"] = new["elevenlabs"]["tts_prompt"]
+                self.log("- force updated elevenlabs.tts_prompt (new v3 audio tags)")
+
+            if "inworld" in new:
+                old["inworld"]["tts_prompt"] = new["inworld"]["tts_prompt"]
+                self.log("- force updated inworld.tts_prompt (new audio markup format)")
 
             return old
 
         def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
-            # Note: skills array is kept for user config overrides
-            # Skills are now loaded automatically, but user settings are preserved
+            # Clear prompt overrides so everyone uses the new defaults
+            # IMPORTANT: We keep 'backstory' - only clear system_prompt and tts_prompt
+            changes_made = []
+
+            # Clear system_prompt override (force use of new default)
+            if "prompts" in old:
+                if "system_prompt" in old["prompts"]:
+                    del old["prompts"]["system_prompt"]
+                    changes_made.append("prompts.system_prompt")
+                # Remove prompts dict if empty
+                if not old["prompts"]:
+                    del old["prompts"]
+
+            # Clear ElevenLabs tts_prompt override
+            if "elevenlabs" in old and "tts_prompt" in old["elevenlabs"]:
+                del old["elevenlabs"]["tts_prompt"]
+                changes_made.append("elevenlabs.tts_prompt")
+                # Remove elevenlabs dict if empty
+                if not old["elevenlabs"]:
+                    del old["elevenlabs"]
+
+            # Clear Inworld tts_prompt override
+            if "inworld" in old and "tts_prompt" in old["inworld"]:
+                del old["inworld"]["tts_prompt"]
+                changes_made.append("inworld.tts_prompt")
+                # Remove inworld dict if empty
+                if not old["inworld"]:
+                    del old["inworld"]
+
+            if changes_made:
+                self.log(
+                    f"- cleared prompt overrides: {', '.join(changes_made)} (using new defaults)"
+                )
+
             return old
 
         def migrate_secrets(old: dict) -> dict:
