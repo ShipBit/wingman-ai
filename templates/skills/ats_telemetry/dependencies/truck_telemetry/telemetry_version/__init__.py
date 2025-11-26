@@ -1,1 +1,0 @@
-# telemetry_version

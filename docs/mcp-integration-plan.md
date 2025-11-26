@@ -72,7 +72,6 @@ This document outlines the plan to modernize Wingman AI's skill system with:
 
 - ❌ Did NOT remove `skills` property from WingmanConfig (still needed for user overrides)
 - ❌ Did NOT implement `disabled_skills` opt-out model (kept `skills` for compatibility)
-- ❌ Did NOT remove `/templates/skills/` duplication (deferred to Phase 5)
 
 ### Skills Not Using `@tool` Decorator (Intentional)
 
@@ -89,7 +88,7 @@ they use `@tool` decorator or manual definitions. The ToolRegistry handles both.
 
 ---
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                              CURRENT ARCHITECTURE                            │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -97,24 +96,29 @@ they use `@tool` decorator or manual definitions. The ToolRegistry handles both.
 │  CONFIG STORAGE (per version)                                                │
 │  ├── Windows: %APPDATA%/WingmanAI/1_9_0/                                    │
 │  │   ├── configs/Star Citizen/wingman.yaml  ← skill configs here            │
-│  │   └── skills/                            ← skill CODE + dependencies     │
+│  │   └── skills/                            ← LEGACY (migrated to custom_skills) │
 │  │                                                                           │
 │  └── MacOS: ~/Library/Application Support/WingmanAI/1_9_0/                  │
 │                                                                              │
-│  SOURCE (dev mode)                                                          │
-│  └── /source/skills/                        ← skill CODE executed from here │
+│  BUILT-IN SKILLS (bundled, read-only)                                        │
+│  ├── Release: _internal/skills/             ← bundled with PyInstaller     │
+│  └── Dev: /source/skills/                   ← skill CODE executed from here │
+│                                                                              │
+│  CUSTOM SKILLS (user-created, NOT versioned)                                │
+│  └── APPDATA/WingmanAI/custom_skills/       ← persists across updates!     │
 │                                                                              │
 │  TEMPLATES (bundled with release)                                           │
-│  └── _internal/templates/skills/            ← copied to APPDATA on install  │
+│  ├── _internal/templates/configs/           ← config templates only         │
+│  └── _internal/templates/migration/         ← migration templates           │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-Pain Points:
-1. Triple Maintenance: /skills, /templates/skills, and APPDATA/skills must stay in sync
-2. Manual Skill Assignment: Users must explicitly add skills to each Wingman in config
-3. Prompt Redundancy: Each skill has a `prompt` field duplicating what @tool descriptions provide
-4. Custom Skill Distribution: Users must manually copy skill folders to obscure APPDATA paths
-5. Version Migration: Skills are copied per-version, bloating disk and causing sync issues
+Benefits:
+1. No More Duplication: Skills exist in ONE place only (/skills/ in source)
+2. Custom Skills Persist: User skills in custom_skills/ survive version updates
+3. Reduced Disk Usage: Built-in skills not copied to APPDATA anymore
+4. Simpler Distribution: Just drop skill folder into custom_skills/
+5. Cleaner Migrations: Only user configs and custom skills need migration
 ```
 
 ## Proposed Architecture
@@ -248,19 +252,13 @@ def build_tools(self) -> list[dict]:
     # Commands tool (unchanged)
     tools = [self._build_execute_command_tool()]
 
-    # In progressive mode: only meta-tools + active skill tools
-    # In legacy mode: all skill tools
-    if self.tool_registry._progressive_mode:
-        # Add meta-tools
-        for _, tool_def in self.tool_registry.get_meta_tools():
-            tools.append(tool_def)
-        # Add active skill tools
-        for _, tool_def in self.tool_registry.get_active_tools():
-            tools.append(tool_def)
-    else:
-        # Legacy: all tools
-        for _, tool_def in self.tool_registry.get_active_tools():
-            tools.append(tool_def)
+    # Progressive disclosure: meta-tools + active skill tools
+    # Add meta-tools (search_skills, activate_skill, list_active_skills)
+    for _, tool_def in self.tool_registry.get_meta_tools():
+        tools.append(tool_def)
+    # Add tools from activated skills
+    for _, tool_def in self.tool_registry.get_active_tools():
+        tools.append(tool_def)
 
     return tools
 ```
@@ -329,11 +327,42 @@ def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
     return old
 ```
 
-### Phase 5: Skill Distribution Simplification (Future)
+### Phase 3: Skill Distribution Simplification - ✅ COMPLETE
 
-#### 5.1 New Directory Structure
+#### What Was Implemented
 
-```
+**Simplified Skill Loading:**
+
+- ✅ Built-in skills now loaded directly from bundled location (`_internal/skills/` in release, `./skills/` in dev)
+- ✅ Removed `/templates/skills/` directory - no more duplication!
+- ✅ `ModuleManager` updated to use `set_bundled_skills_dir()` / `get_bundled_skills_dir()`
+
+**Non-Versioned Custom Skills:**
+
+- ✅ Custom skills now go to `APPDATA/WingmanAI/custom_skills/` (NOT versioned!)
+- ✅ Custom skills persist across Wingman AI version updates
+- ✅ Added `get_custom_skills_dir()` helper in `services/file.py`
+
+**Build System Updates:**
+
+- ✅ GitHub Actions workflow: `--add-data "skills;skills"` instead of templates
+- ✅ `build.py` and `build_macos.py` updated to bundle skills directly
+- ✅ Config templates (`templates/configs/`) and migration templates (`templates/migration/`) still bundled
+
+**Migration Service Updates:**
+
+- ✅ `reset_to_fresh_configs()` no longer copies skills to APPDATA
+- ✅ `copy_custom_skills()` migrates custom skills to non-versioned `custom_skills/` directory
+- ✅ Legacy versioned skills dir (`APPDATA/version/skills/`) still checked for backwards compatibility
+
+**ConfigManager Updates:**
+
+- ✅ `copy_templates()` now skips `skills/` directory entirely
+- ✅ Only copies config templates and migration templates
+
+#### New Directory Structure
+
+```text
 # Built-in skills (read-only, shipped with release)
 _internal/skills/           # PyInstaller bundle (release)
 /source/skills/             # Dev mode
@@ -342,18 +371,12 @@ _internal/skills/           # PyInstaller bundle (release)
 APPDATA/WingmanAI/custom_skills/
 └── my_custom_skill/
     ├── main.py
-    ├── skill.yaml          # Metadata (renamed from default_config.yaml)
+    ├── default_config.yaml
+    ├── logo.png
     └── dependencies/
 ```
 
-#### 5.2 Eliminate `/templates/skills/`
-
-- Built-in skill **code** lives in `/skills/` (source) or `_internal/skills/` (release)
-- Built-in skill **configs** are bundled in the same location
-- **No more copying** skill code to APPDATA for built-in skills
-- Custom skills still go to `APPDATA/custom_skills/`
-
-### Phase 6: MCP Client Integration (Future)
+### Phase 4: MCP Client Integration (Future)
 
 ```yaml
 # wingman.yaml
@@ -378,9 +401,23 @@ Skills and MCP servers should be interchangeable from the LLM's perspective - bo
 5. ✅ `services/tool_registry.py` - Created ToolRegistry with progressive disclosure
 6. ✅ `services/config_migration_service.py` - Updated migration to preserve skills array
 
-## Files Created
+## Files Created in Phase 1
 
 - ✅ `services/tool_registry.py` - ToolRegistry with progressive disclosure
+
+## Key Files Modified in Phase 3
+
+1. ✅ `services/module_manager.py` - Added bundled skills dir support, custom skills loading
+2. ✅ `services/file.py` - Added `get_custom_skills_dir()` for non-versioned custom skills
+3. ✅ `services/config_manager.py` - Updated `copy_templates()` to skip skills directory
+4. ✅ `services/config_migration_service.py` - Updated custom skills migration to non-versioned location
+5. ✅ `main.py` - Set bundled skills directory on startup
+6. ✅ `.github/workflows/release.yml` - Bundle skills directly instead of via templates
+7. ✅ `build.py` and `build_macos.py` - Updated PyInstaller data bundling
+
+## Files Removed in Phase 3
+
+- ✅ `/templates/skills/` - Entire directory removed (no longer needed)
 
 ---
 
@@ -402,31 +439,7 @@ Consider commenting out redundant prompts where tool descriptions are sufficient
 - Skills needing execution priority/ordering instructions (TimeAndDateRetriever)
 - Skills with extensive parameter guidelines
 
-### Phase 3: Skill Distribution Simplification
-
-#### New Directory Structure
-
-```text
-# Built-in skills (read-only, shipped with release)
-_internal/skills/           # PyInstaller bundle (release)
-/source/skills/             # Dev mode
-
-# Custom skills (read-write, user location, NOT versioned)
-APPDATA/WingmanAI/custom_skills/
-└── my_custom_skill/
-    ├── main.py
-    ├── skill.yaml          # Metadata (renamed from default_config.yaml)
-    └── dependencies/
-```
-
-#### Eliminate `/templates/skills/`
-
-- Built-in skill **code** lives in `/skills/` (source) or `_internal/skills/` (release)
-- Built-in skill **configs** are bundled in the same location
-- **No more copying** skill code to APPDATA for built-in skills
-- Custom skills still go to `APPDATA/custom_skills/`
-
-### Phase 4: MCP Client Integration
+### Phase 4: MCP Client Integration (Future)
 
 ```yaml
 # wingman.yaml
@@ -445,7 +458,7 @@ Skills and MCP servers should be interchangeable from the LLM's perspective - bo
 ## Current State Summary
 
 ```text
-OLD (1.8.x)                          NEW (1.9.0 - Phase 1 Complete)
+OLD (1.8.x)                          NEW (1.9.0 - Phase 3 Complete)
 ────────────────────────────────────────────────────────────────
 wingman.yaml:                        wingman.yaml:
   skills:                              skills:  # Now for OVERRIDES only
@@ -459,6 +472,6 @@ LLM receives:                        LLM receives:
   - Full prompt for each skill         - Skill tools after activation
                                         - Prompts only for active skills
 
-/templates/skills/spotify/           Still exists (Phase 3 will remove)
-APPDATA/1_8_x/skills/spotify/        Still exists (Phase 3 will remove)
+/templates/skills/spotify/           REMOVED (bundled in _internal/skills/)
+APPDATA/1_8_x/skills/spotify/        Migrated to custom_skills/ if custom
 ```

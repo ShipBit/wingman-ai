@@ -17,7 +17,7 @@ from api.interface import (
     WingmanConfig,
     WingmanConfigFileInfo,
 )
-from services.file import get_writable_dir
+from services.file import get_writable_dir, get_custom_skills_dir
 from services.printr import Printr
 
 TEMPLATES_DIR = "templates"
@@ -123,8 +123,24 @@ class ConfigManager:
         )
 
     def copy_templates(self, force: bool = False):
+        """Copy templates to the user's config directory.
+
+        Note: Skills are NO LONGER copied from templates. Built-in skills are now
+        loaded directly from the bundled location (_internal/skills/ in release).
+        Custom skills go in APPDATA/WingmanAI/custom_skills/ (not versioned).
+
+        This method now only copies config templates (configs/, migration/*/configs/).
+        Skills directories are skipped entirely.
+        """
         for root, dirs, files in walk(self.templates_dir):
             relative_path = path.relpath(root, self.templates_dir)
+            path_parts = relative_path.split(path.sep)
+
+            # Skip ALL skills directories - both top-level and within migration folders
+            # e.g., "skills/...", "migration/1_8_0/skills/...", etc.
+            if "skills" in path_parts:
+                continue
+
             if relative_path != ".":
                 config_dir_name = (
                     relative_path.replace(DELETED_PREFIX, "", 1)
@@ -145,20 +161,7 @@ class ConfigManager:
             if not path.exists(target_path):
                 makedirs(target_path)
 
-            # Track if we've copied any files in this directory (for logging)
-            files_copied = []
-            path_parts = relative_path.split(path.sep)
-            is_skill_dir = "skills" in path_parts
-            # Only log for top-level skill directories, not subdirectories like dependencies
-            is_top_level_skill = len(path_parts) == 2 and path_parts[0] == "skills"
-            is_migration_skill = (
-                len(path_parts) == 3
-                and path_parts[0] == "migration"
-                and path_parts[2] != "configs"
-            )
-
             for filename in files:
-                # yaml files
                 if filename == ".DS_Store":
                     continue
 
@@ -181,39 +184,25 @@ class ConfigManager:
 
                     if force or (not already_exists and not logical_deleted):
                         shutil.copyfile(path.join(root, filename), new_filepath)
-                        files_copied.append(new_filename)
-                        if not is_skill_dir:
-                            self.printr.print(
-                                f"Created config {new_filepath} from template.",
-                                color=LogType.INFO,
-                                server_only=True,
-                                source=LogSource.SYSTEM,
-                                source_name=self.log_source_name,
-                            )
+                        self.printr.print(
+                            f"Created config {new_filepath} from template.",
+                            color=LogType.INFO,
+                            server_only=True,
+                            source=LogSource.SYSTEM,
+                            source_name=self.log_source_name,
+                        )
                 else:
                     new_filepath = path.join(target_path, filename)
                     already_exists = path.exists(new_filepath)
                     if force or not already_exists:
                         shutil.copyfile(path.join(root, filename), new_filepath)
-                        files_copied.append(filename)
-                        if not is_skill_dir:
-                            self.printr.print(
-                                f"Created file {new_filepath} from template.",
-                                color=LogType.INFO,
-                                server_only=True,
-                                source=LogSource.SYSTEM,
-                                source_name=self.log_source_name,
-                            )
-
-            # Log once per skill directory if files were copied (only top-level, not dependencies)
-            if (is_top_level_skill or is_migration_skill) and files_copied:
-                self.printr.print(
-                    f"Created skill {relative_path} from template ({len(files_copied)} files).",
-                    color=LogType.INFO,
-                    server_only=True,
-                    source=LogSource.SYSTEM,
-                    source_name=self.log_source_name,
-                )
+                        self.printr.print(
+                            f"Created file {new_filepath} from template.",
+                            color=LogType.INFO,
+                            server_only=True,
+                            source=LogSource.SYSTEM,
+                            source_name=self.log_source_name,
+                        )
 
     def get_config_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config dirs."""
@@ -1016,12 +1005,44 @@ class ConfigManager:
                     .split("/")[1]
                 )
 
-                skill_default_config_path = path.join(
-                    self.skills_dir, skill_dir, DEFAULT_SKILLS_CONFIG
-                )
+                # Look for skill default_config.yaml in multiple locations:
+                # 1. Bundled skills directory (set by main.py)
+                # 2. Custom skills directory (non-versioned)
+                # 3. Legacy: versioned APPDATA skills directory
+                from services.module_manager import get_bundled_skills_dir
 
-                # Check if default_config.yaml exists (custom skills may not have it)
-                if path.exists(skill_default_config_path):
+                skill_default_config_path = None
+                search_paths = []
+
+                # 1. Bundled skills
+                bundled_dir = get_bundled_skills_dir()
+                if bundled_dir:
+                    bundled_path = path.join(
+                        bundled_dir, skill_dir, DEFAULT_SKILLS_CONFIG
+                    )
+                    search_paths.append(bundled_path)
+                    if path.exists(bundled_path):
+                        skill_default_config_path = bundled_path
+
+                # 2. Custom skills (non-versioned)
+                if not skill_default_config_path:
+                    custom_path = path.join(
+                        get_custom_skills_dir(), skill_dir, DEFAULT_SKILLS_CONFIG
+                    )
+                    search_paths.append(custom_path)
+                    if path.exists(custom_path):
+                        skill_default_config_path = custom_path
+
+                # 3. Legacy: versioned APPDATA (for migration compatibility)
+                if not skill_default_config_path:
+                    legacy_path = path.join(
+                        self.skills_dir, skill_dir, DEFAULT_SKILLS_CONFIG
+                    )
+                    search_paths.append(legacy_path)
+                    if path.exists(legacy_path):
+                        skill_default_config_path = legacy_path
+
+                if skill_default_config_path:
                     skill_config = self.read_config(skill_default_config_path)
                     skill_config = self.__deep_merge(skill_config, skill_config_wingman)
                 else:

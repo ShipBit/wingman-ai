@@ -35,6 +35,16 @@ cmd = [
     "--add-data",
     os.pathsep.join(["wingmen", "wingmen"]),
     "--add-data",
+    os.pathsep.join(["skills", "skills"]),  # Bundle skills directly (not via templates)
+    "--add-data",
+    os.pathsep.join(
+        ["templates/configs", "templates/configs"]
+    ),  # Config templates only
+    "--add-data",
+    os.pathsep.join(
+        ["templates/migration", "templates/migration"]
+    ),  # Migration templates
+    "--add-data",
     os.pathsep.join(["audio_samples", "audio_samples"]),
     "--add-data",
     os.pathsep.join(["LICENSE", "."]),

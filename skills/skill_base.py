@@ -12,7 +12,7 @@ from typing import (
     get_origin,
     get_args,
 )
-from api.enums import WingmanInitializationErrorType
+from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
     SkillConfig,

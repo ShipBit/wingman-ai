@@ -12,7 +12,7 @@ from services.config_manager import (
     DELETED_PREFIX,
     ConfigManager,
 )
-from services.file import get_users_dir
+from services.file import get_users_dir, get_custom_skills_dir
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
@@ -203,10 +203,14 @@ class ConfigMigrationService:
         return version_parts < min_parts
 
     def reset_to_fresh_configs(self):
-        """Copy fresh configs and skills from templates to the latest version directory."""
+        """Copy fresh configs from templates to the latest version directory.
+
+        Note: Skills are NO LONGER copied here. Built-in skills are loaded directly
+        from the bundled location. Custom skills persist in the non-versioned
+        custom_skills/ directory.
+        """
         try:
             configs_template = path.join(self.templates_dir, "configs")
-            skills_template = path.join(self.templates_dir, "skills")
 
             latest_dir = path.join(self.users_dir, self.latest_version)
 
@@ -218,36 +222,63 @@ class ConfigMigrationService:
             # Create the latest version directory
             os.makedirs(latest_dir, exist_ok=True)
 
-            # Copy configs
+            # Copy configs only (skills are now loaded from bundled location)
             if path.exists(configs_template):
                 shutil.copytree(configs_template, path.join(latest_dir, CONFIGS_DIR))
                 self.log("Copied fresh configs from templates")
-
-            # Copy skills
-            if path.exists(skills_template):
-                shutil.copytree(skills_template, path.join(latest_dir, "skills"))
-                self.log("Copied fresh skills from templates")
 
             # Create migration log
             migration_file = path.join(latest_dir, CONFIGS_DIR, MIGRATION_LOG)
             with open(migration_file, "w", encoding="UTF-8") as stream:
                 stream.write(self.log_message)
 
-            self.log("Fresh configs and skills installed successfully!", True)
+            self.log("Fresh configs installed successfully!", True)
 
         except Exception as e:
             self.err(f"Failed to reset to fresh configs: {str(e)}")
             raise
 
     def copy_custom_skills(self, old_version: str, new_version: str) -> list[str]:
-        """Copy custom skills (not in templates) from old version to new version.
+        """Copy custom skills from old versioned location to new non-versioned custom_skills directory.
+
+        Starting with 1.9.0, custom skills are stored in a non-versioned location:
+        APPDATA/WingmanAI/custom_skills/ (persists across updates)
+
+        This method migrates custom skills from the old versioned location to the new one.
 
         Returns:
             List of custom skill names that were copied
         """
         old_skills_dir = path.join(self.users_dir, old_version, "skills")
-        new_skills_dir = path.join(self.users_dir, new_version, "skills")
-        template_skills_dir = path.join(self.templates_dir, "skills")
+        # NEW: Custom skills now go to non-versioned location
+        custom_skills_target_dir = get_custom_skills_dir()
+
+        # Get list of built-in skill names from bundled skills directory
+        # We need to determine which skills are custom (not built-in)
+        from services.module_manager import get_bundled_skills_dir, SKILLS_DIR
+
+        builtin_skills = set()
+
+        # Check bundled skills directory
+        bundled_dir = get_bundled_skills_dir()
+        if bundled_dir and path.exists(bundled_dir):
+            builtin_skills.update(os.listdir(bundled_dir))
+
+        # Check source skills directory (dev mode)
+        if path.exists(SKILLS_DIR):
+            builtin_skills.update(os.listdir(SKILLS_DIR))
+
+        # Also check migration template skills (for older version detection)
+        template_skills_dir = path.join(
+            self.templates_dir, "migration", new_version, "skills"
+        )
+        if path.exists(template_skills_dir):
+            builtin_skills.update(os.listdir(template_skills_dir))
+
+        # Legacy: Also check old templates/skills location
+        legacy_template_skills = path.join(self.templates_dir, "skills")
+        if path.exists(legacy_template_skills):
+            builtin_skills.update(os.listdir(legacy_template_skills))
 
         custom_skills_copied = []
 
@@ -257,34 +288,29 @@ class ConfigMigrationService:
             )
             return custom_skills_copied
 
-        # Get list of template skill names
-        template_skills = set()
-        if path.exists(template_skills_dir):
-            template_skills = set(os.listdir(template_skills_dir))
-
         self.log(f"Checking for custom skills in: {old_skills_dir}")
+        self.log(f"Built-in skills detected: {sorted(builtin_skills)}")
 
-        # Find custom skills (exist in old but not in templates)
+        # Find custom skills (exist in old but not in built-in skills)
         for skill_name in os.listdir(old_skills_dir):
             old_skill_path = path.join(old_skills_dir, skill_name)
             if not path.isdir(old_skill_path) or skill_name.startswith("."):
                 continue
 
-            self.log(
-                f"Evaluating skill: {skill_name} - Is custom? {skill_name not in template_skills}"
-            )
+            is_custom = skill_name not in builtin_skills
+            self.log(f"Evaluating skill: {skill_name} - Is custom? {is_custom}")
 
-            # If skill is not in templates, it's a custom skill
-            if skill_name not in template_skills:
-                new_skill_path = path.join(new_skills_dir, skill_name)
+            # If skill is not in built-in skills, it's a custom skill
+            if is_custom:
+                new_skill_path = path.join(custom_skills_target_dir, skill_name)
 
                 try:
-                    # Remove existing directory if it exists (might be partially created)
+                    # Skip if already exists in custom skills (don't overwrite)
                     if path.exists(new_skill_path):
                         self.log(
-                            f"Removing existing directory for custom skill '{skill_name}' before copying"
+                            f"Custom skill '{skill_name}' already exists in custom_skills directory, skipping"
                         )
-                        shutil.rmtree(new_skill_path)
+                        continue
 
                     # Copy the entire custom skill directory
                     shutil.copytree(old_skill_path, new_skill_path)
@@ -295,11 +321,12 @@ class ConfigMigrationService:
                     )
 
                     self.log(
-                        f"Copied CUSTOM skill skills/{skill_name} from old version ({file_count} files)"
+                        f"Migrated CUSTOM skill '{skill_name}' to custom_skills/ ({file_count} files)",
+                        highlight=True,
                     )
                     custom_skills_copied.append(skill_name)
                 except Exception as e:
-                    self.err(f"Failed to copy custom skill '{skill_name}': {str(e)}")
+                    self.err(f"Failed to migrate custom skill '{skill_name}': {str(e)}")
 
         return custom_skills_copied
 

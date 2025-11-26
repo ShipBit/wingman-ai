@@ -122,13 +122,10 @@ class SkillRegistry:
     """
     Central registry for skills with progressive disclosure support.
 
-    In progressive mode:
-    - Only meta-tools (search_skills, activate_skill) are sent to the LLM
+    Progressive disclosure:
+    - Only meta-tools (search_skills, activate_skill, list_active_skills) are sent to the LLM initially
     - Skills are activated on-demand when the LLM calls activate_skill
     - Activated skills' tools are added to the conversation
-
-    In legacy mode:
-    - All skill tools are sent to the LLM (current behavior)
     """
 
     def __init__(self):
@@ -143,9 +140,6 @@ class SkillRegistry:
 
         self._tool_to_skill: dict[str, str] = {}
         """Maps tool names to skill names"""
-
-        self._progressive_mode: bool = False
-        """Whether progressive disclosure is enabled"""
 
     def register_skill(self, skill: "Skill") -> None:
         """Register a skill and create its manifest."""
@@ -176,18 +170,29 @@ class SkillRegistry:
         self._active_skills.clear()
         self._tool_to_skill.clear()
 
-    def set_progressive_mode(self, enabled: bool) -> None:
-        """Enable or disable progressive disclosure mode."""
-        self._progressive_mode = enabled
-        if not enabled:
-            # In legacy mode, all skills are "active"
-            self._active_skills = set(self._skills.keys())
-
     def search_skills(self, query: str, limit: int = 5) -> list[SkillManifest]:
         """
         Search for skills matching the query.
         Returns manifests sorted by relevance.
+
+        Special queries:
+        - "all", "*", "list", "list all" - returns all skills (up to limit)
         """
+        query_lower = query.lower().strip()
+
+        # Special case: list all skills
+        if query_lower in ("all", "*", "list", "list all", "everything", "show all"):
+            results = list(self._manifests.values())[:limit]
+            if results:
+                skill_names = [m.display_name for m in results]
+                total = len(self._manifests)
+                shown = len(results)
+                msg = f"[Tool Discovery] Listing {shown} of {total} skill(s): {', '.join(skill_names)}"
+                if total > shown:
+                    msg += " (use more specific search to find others)"
+                printr.print(msg, server_only=True)
+            return results
+
         scored = []
         for manifest in self._manifests.values():
             score = manifest.matches_query(query)
@@ -287,21 +292,13 @@ class SkillRegistry:
 
     def get_active_tools(self) -> list[tuple[str, dict]]:
         """
-        Get tools from all active skills.
-
-        In progressive mode: only returns tools from explicitly activated skills.
-        In legacy mode: returns tools from all skills.
+        Get tools from all active (explicitly activated) skills.
         """
         tools = []
-        target_skills = (
-            self._active_skills if self._progressive_mode else set(self._skills.keys())
-        )
-
-        for skill_name in target_skills:
+        for skill_name in self._active_skills:
             skill = self._skills.get(skill_name)
             if skill:
                 tools.extend(skill.get_tools())
-
         return tools
 
     def get_meta_tools(self) -> list[tuple[str, dict]]:
@@ -387,7 +384,15 @@ class SkillRegistry:
 
         if tool_name == "search_skills":
             query = parameters.get("query", "")
-            results = self.search_skills(query)
+            # Use higher limit for "all" type queries
+            query_lower = query.lower().strip()
+            limit = (
+                20
+                if query_lower
+                in ("all", "*", "list", "list all", "everything", "show all")
+                else 5
+            )
+            results = self.search_skills(query, limit=limit)
             if not results:
                 return (
                     "No skills found matching your query. Try different keywords.",
@@ -417,13 +422,16 @@ class SkillRegistry:
                     False,
                 )
 
-            parts = ["Currently active skills:\n"]
+            parts = [f"Currently active skills ({len(self._active_skills)} total):\n"]
             for skill_name in self._active_skills:
                 manifest = self._manifests.get(skill_name)
                 if manifest:
-                    parts.append(
-                        f"- {manifest.display_name}: {', '.join(manifest.tool_names)}"
+                    tools = (
+                        ", ".join(manifest.tool_names)
+                        if manifest.tool_names
+                        else "no tools"
                     )
+                    parts.append(f"- {manifest.display_name}: {tools}")
             return "\n".join(parts), False
 
         return f"Unknown meta-tool: {tool_name}", False

@@ -31,3 +31,21 @@ def get_users_dir() -> str:
         roaming=True,
     )
     return dirs.user_data_dir
+
+
+def get_custom_skills_dir() -> str:
+    """Get the path to the custom skills directory.
+
+    Unlike get_writable_dir(), this is NOT versioned - custom skills persist
+    across Wingman AI updates. Location: APPDATA/WingmanAI/custom_skills/
+    """
+    dirs = PlatformDirs(
+        appname=APP_NAME,
+        appauthor=APP_AUTHOR,
+        ensure_exists=True,
+        roaming=True,
+    )
+    custom_skills_path = path.join(dirs.user_data_dir, "custom_skills")
+    if not path.exists(custom_skills_path):
+        makedirs(custom_skills_path)
+    return custom_skills_path

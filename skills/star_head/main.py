@@ -4,8 +4,7 @@ from typing import TYPE_CHECKING
 import requests
 from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from skills.skill_base import Skill
-from skills.tool_registry import tool
+from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman

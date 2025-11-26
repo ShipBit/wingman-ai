@@ -26,6 +26,12 @@ cmd = [
     "--add-data",
     f"wingmen{os.pathsep}wingmen",
     "--add-data",
+    f"skills{os.pathsep}skills",  # Bundle skills directly (not via templates)
+    "--add-data",
+    f"templates/configs{os.pathsep}templates/configs",  # Config templates only
+    "--add-data",
+    f"templates/migration{os.pathsep}templates/migration",  # Migration templates
+    "--add-data",
     f"audio_samples{os.pathsep}audio_samples",
     "--add-data",
     f"LICENSE{os.pathsep}.",

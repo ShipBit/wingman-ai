@@ -38,6 +38,17 @@ Printr.set_connection_manager(connection_manager)
 app_is_bundled = getattr(sys, "frozen", False)
 app_root_path = sys._MEIPASS if app_is_bundled else path.dirname(path.abspath(__file__))
 
+# Set the bundled skills directory for ModuleManager
+from services.module_manager import set_bundled_skills_dir
+
+bundled_skills_path = path.join(app_root_path, "skills")
+set_bundled_skills_dir(bundled_skills_path)
+printr.print(
+    f"Skills directory: {bundled_skills_path}",
+    server_only=True,
+    color=LogType.HIGHLIGHT,
+)
+
 # creates all the configs from templates - do this first!
 config_manager = ConfigManager(app_root_path)
 printr.print(

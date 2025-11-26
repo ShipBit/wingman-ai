@@ -17,7 +17,7 @@ from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_library import AudioLibrary
 from services.audio_player import AudioPlayer
-from services.file import get_writable_dir
+from services.file import get_writable_dir, get_custom_skills_dir
 from services.printr import Printr
 from skills.skill_base import Skill
 
@@ -26,6 +26,20 @@ if TYPE_CHECKING:
     from services.tower import Tower
 
 SKILLS_DIR = "skills"
+
+# Global variable to store the bundled skills path (set by main.py)
+_bundled_skills_dir: str | None = None
+
+
+def set_bundled_skills_dir(skills_dir: str):
+    """Set the path to bundled skills directory. Called from main.py after determining app_root_path."""
+    global _bundled_skills_dir
+    _bundled_skills_dir = skills_dir
+
+
+def get_bundled_skills_dir() -> str | None:
+    """Get the path to bundled skills directory."""
+    return _bundled_skills_dir
 
 
 class ModuleManager:
@@ -113,11 +127,11 @@ class ModuleManager:
             finally:
                 sys.path.remove(path_to_add)
 
+        skill_name, skill_path = ModuleManager.get_module_name_and_path(config.module)
+        module = None
+
+        # 1. Try import_module first (works for dev mode or bundled skills in sys.path)
         try:
-            # try to load from the src dir first (develop mode)
-            skill_name, skill_path = ModuleManager.get_module_name_and_path(
-                config.module
-            )
             dependencies_dir = (
                 path.join(skill_path, "venv", "lib", "python3.11", "site-packages")
                 if sys.platform == "darwin"
@@ -127,27 +141,56 @@ class ModuleManager:
             with add_to_sys_path(dependencies_dir):
                 module = import_module(config.module)
         except ModuleNotFoundError:
-            # load from Wingman AI config dir (AppData)
-            skill_name, skill_path = ModuleManager.get_module_name_and_path(
-                config.module
-            )
-            skill_path = get_writable_dir(skill_path)
-            # Add the dependencies directory to sys.path so the plugin can load them
-            dependencies_dir = get_writable_dir(path.join(skill_path, "dependencies"))
-            # sys.path.insert(0, dependencies_dir)
-            with add_to_sys_path(dependencies_dir):
-                # Path to the plugin's main module file (e.g., plugin.py)
-                plugin_module_path = get_writable_dir(path.join(skill_path, "main.py"))
+            pass
 
-                if path.exists(plugin_module_path):
-                    # Load the plugin module dynamically
+        # 2. Try bundled skills directory (for release mode)
+        if module is None:
+            bundled_dir = get_bundled_skills_dir()
+            if bundled_dir:
+                # skill_path is like "skills/spotify", we need just "spotify"
+                skill_folder = skill_path.replace("skills/", "").replace("skills\\", "")
+                bundled_skill_path = path.join(bundled_dir, skill_folder)
+                plugin_module_path = path.join(bundled_skill_path, "main.py")
+
+                if path.isfile(plugin_module_path):
+                    dependencies_dir = (
+                        path.join(
+                            bundled_skill_path,
+                            "venv",
+                            "lib",
+                            "python3.11",
+                            "site-packages",
+                        )
+                        if sys.platform == "darwin"
+                        else path.join(
+                            bundled_skill_path, "venv", "Lib", "site-packages"
+                        )
+                    )
+                    with add_to_sys_path(dependencies_dir):
+                        spec = util.spec_from_file_location(
+                            skill_name, plugin_module_path
+                        )
+                        module = util.module_from_spec(spec)
+                        spec.loader.exec_module(module)
+
+        # 3. Try custom skills directory (for user-created skills)
+        if module is None:
+            custom_skills_dir = get_custom_skills_dir()
+            skill_folder = skill_path.replace("skills/", "").replace("skills\\", "")
+            custom_skill_path = path.join(custom_skills_dir, skill_folder)
+            plugin_module_path = path.join(custom_skill_path, "main.py")
+
+            if path.isfile(plugin_module_path):
+                dependencies_dir = path.join(custom_skill_path, "dependencies")
+                with add_to_sys_path(dependencies_dir):
                     spec = util.spec_from_file_location(skill_name, plugin_module_path)
                     module = util.module_from_spec(spec)
                     spec.loader.exec_module(module)
-                else:
-                    raise FileNotFoundError(
-                        f"Plugin '{skill_name}' not found in directory '{skill_path}'"
-                    )
+
+        if module is None:
+            raise FileNotFoundError(
+                f"Skill '{skill_name}' not found in bundled skills or custom skills directory"
+            )
 
         DerivedSkillClass = getattr(module, config.name)
         instance = DerivedSkillClass(config=config, settings=settings, wingman=wingman)
@@ -155,31 +198,67 @@ class ModuleManager:
 
     @staticmethod
     def read_available_skill_configs() -> list[tuple[str, str]]:
-        skill_dirs = [get_writable_dir(SKILLS_DIR)]
+        """Read skill configs from bundled skills and custom skills directories.
 
-        if os.path.isdir(SKILLS_DIR):
-            skill_dirs.append(SKILLS_DIR)
+        Built-in skills are read from:
+        - Bundled location (_internal/skills/ in release, ./skills/ in dev)
+
+        Custom skills are read from:
+        - APPDATA/WingmanAI/custom_skills/ (NOT versioned - persists across updates)
+
+        Priority order (later entries override earlier):
+        1. Bundled skills (base, read-only)
+        2. Dev mode local skills (for development)
+        3. Custom skills (user-created, override built-in)
+
+        Note: Legacy versioned APPDATA/skills is NO LONGER checked. Custom skills
+        should be migrated to the non-versioned custom_skills/ directory.
+        """
+        skill_dirs = []
+
+        # 1. Add bundled skills directory (set by main.py)
+        bundled_dir = get_bundled_skills_dir()
+        if bundled_dir and os.path.isdir(bundled_dir):
+            skill_dirs.append(bundled_dir)
+
+        # 2. Fallback: dev mode - check local skills directory
+        # In dev mode, bundled_dir IS the local skills dir, so this is a no-op
+        # But we keep it for explicitness
+        if os.path.isdir(SKILLS_DIR) and SKILLS_DIR not in skill_dirs:
+            if bundled_dir != os.path.abspath(SKILLS_DIR):
+                skill_dirs.append(SKILLS_DIR)
+
+        # 3. Add custom skills directory (user-created skills, NOT versioned)
+        # These can override built-in skills for customization
+        custom_skills_dir = get_custom_skills_dir()
+        if os.path.isdir(custom_skills_dir):
+            skill_dirs.append(custom_skills_dir)
 
         skills_default_configs = {}
         for skills_dir in skill_dirs:
             # Traverse the skills directory
-            for skill_name in os.listdir(skills_dir):
-                # Construct the path to the skill's directory
-                skill_path = os.path.join(skills_dir, skill_name)
+            try:
+                for skill_name in os.listdir(skills_dir):
+                    # Construct the path to the skill's directory
+                    skill_path = os.path.join(skills_dir, skill_name)
 
-                # Check if the path is a directory (to avoid non-folder files)
-                if os.path.isdir(skill_path):
-                    # Construct the path to the default_config.yaml file
-                    default_config_path = os.path.join(
-                        skill_path, "default_config.yaml"
-                    )
-
-                    # Check if the default_config.yaml file exists
-                    if os.path.isfile(default_config_path):
-                        # Add the skill name and the default_config.yaml file path to the list
-                        skills_default_configs.update(
-                            {skill_name: (skill_name, default_config_path)}
+                    # Check if the path is a directory (to avoid non-folder files)
+                    if os.path.isdir(skill_path):
+                        # Construct the path to the default_config.yaml file
+                        default_config_path = os.path.join(
+                            skill_path, "default_config.yaml"
                         )
+
+                        # Check if the default_config.yaml file exists
+                        if os.path.isfile(default_config_path):
+                            # Add the skill name and the default_config.yaml file path to the list
+                            # Later entries (custom skills) override earlier ones (built-in)
+                            skills_default_configs.update(
+                                {skill_name: (skill_name, default_config_path)}
+                            )
+            except OSError:
+                # Directory might not exist or be inaccessible
+                pass
 
         return list(skills_default_configs.values())
 
