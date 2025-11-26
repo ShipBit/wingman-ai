@@ -719,10 +719,22 @@ class SkillConfig(CustomClassConfig):
     """List of supported platforms: 'windows', 'darwin' (macOS), 'linux'. If None, skill works on all platforms."""
 
 
+class SkillToolInfo(BaseModel):
+    """Basic info about a tool in a skill."""
+
+    name: str
+    """The tool's function name."""
+
+    description: str
+    """Brief description of what the tool does."""
+
+
 class SkillBase(BaseModel):
     name: str
     config: SkillConfig
     logo: Optional[Annotated[str, Base64Str]] = None
+    tools: Optional[list[SkillToolInfo]] = None
+    """List of tools provided by this skill."""
 
 
 class WingmanSkillState(BaseModel):

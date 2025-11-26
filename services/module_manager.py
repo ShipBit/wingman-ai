@@ -1,6 +1,7 @@
 import base64
 from contextlib import contextmanager
 from importlib import import_module, util
+import inspect
 from os import path
 import os
 import sys
@@ -10,6 +11,7 @@ from api.interface import (
     SettingsConfig,
     SkillBase,
     SkillConfig,
+    SkillToolInfo,
     WingmanConfig,
 )
 from providers.faster_whisper import FasterWhisper
@@ -269,7 +271,7 @@ class ModuleManager:
         # Get the list of available skill configs
         available_skill_configs = ModuleManager.read_available_skill_configs()
         # Load each skill from its config
-        for _, skill_config_path in available_skill_configs:
+        for skill_folder_name, skill_config_path in available_skill_configs:
             skill_config = ModuleManager.read_config(skill_config_path)
 
             logo = None
@@ -277,11 +279,22 @@ class ModuleManager:
             if path.exists(logo_path):
                 logo = ModuleManager.load_image_as_base64(logo_path)
 
+            # Extract tool definitions from the skill class
+            tools = ModuleManager.extract_skill_tools(skill_folder_name, skill_config)
+
+            # If we have @tool decorated tools, strip config metadata to minimize payload
+            # Legacy skills keep their config metadata (prompt, examples) for UI display
+            # Note: hint is always kept - it's UI-only info not covered by @tool descriptions
+            if tools:
+                skill_config.pop("prompt", None)
+                skill_config.pop("examples", None)
+
             try:
                 skill = SkillBase(
                     name=skill_config["name"],
                     config=skill_config,
                     logo=logo,
+                    tools=tools if tools else None,
                 )
                 skills.append(skill)
             except Exception as e:
@@ -289,6 +302,76 @@ class ModuleManager:
                     f"Could not load skill from '{skill_config_path}': {str(e)}"
                 )
         return skills
+
+    @staticmethod
+    def extract_skill_tools(
+        skill_folder_name: str, skill_config: dict
+    ) -> list[SkillToolInfo]:
+        """
+        Extract tool definitions from a skill class without instantiating it.
+
+        This introspects the skill module's class to find @tool decorated methods.
+        """
+        tools = []
+        try:
+            skill_path = skill_config.get("module", f"skills.{skill_folder_name}.main")
+
+            # Try to import the module
+            module = None
+            try:
+                module = import_module(skill_path)
+            except Exception:
+                # Try loading from bundled/custom skills directories
+                bundled_dir = get_bundled_skills_dir()
+                custom_skills_dir = get_custom_skills_dir()
+
+                for base_dir in [bundled_dir, custom_skills_dir, SKILLS_DIR]:
+                    if base_dir and path.isdir(base_dir):
+                        plugin_module_path = path.join(
+                            base_dir, skill_folder_name, "main.py"
+                        )
+                        if path.isfile(plugin_module_path):
+                            try:
+                                spec = util.spec_from_file_location(
+                                    skill_folder_name, plugin_module_path
+                                )
+                                module = util.module_from_spec(spec)
+                                spec.loader.exec_module(module)
+                                break
+                            except Exception:
+                                continue
+
+            if module is None:
+                return tools
+
+            # Get the skill class
+            skill_name = skill_config.get("name", skill_folder_name)
+            skill_class = getattr(module, skill_name, None)
+            if skill_class is None:
+                return tools
+
+            # Scan class methods for @tool decorators
+            for name, method in inspect.getmembers(
+                skill_class, predicate=inspect.isfunction
+            ):
+                if hasattr(method, "_tool_definition"):
+                    tool_def = method._tool_definition
+                    description = tool_def.description or ""
+                    if not description and tool_def.func.__doc__:
+                        # Use first line of docstring
+                        description = tool_def.func.__doc__.split("\n")[0].strip()
+                    tools.append(
+                        SkillToolInfo(
+                            name=tool_def.name,
+                            description=description or f"Execute {tool_def.name}",
+                        )
+                    )
+
+        except Exception:
+            # If we can't introspect, just return empty list
+            pass
+
+        return tools
 
     @staticmethod
     def load_image_as_base64(file_path: str):

@@ -280,7 +280,6 @@ class Wingman:
                             server_only=True,
                         )
                         continue
-                        continue
 
                 # Load the skill module
                 skill = ModuleManager.load_skill(

@@ -14,19 +14,6 @@ description:
 hint:
   en: Requires a DLL to in the /plugins directory of your game. If you enter the path to your ATS/ETS2 installation, the skill will move the DLL automatically.
   de: Erfordert eine DLL im /plugins Verzeichnis des Spiels. Wenn du den Pfad zu deiner ATS/ETS2-Installation angibst, wird die DLL automatisch dorthin kopiert.
-examples:
-  - en: What is my current speed?
-    de: Was ist meine aktuelle Geschwindigkeit?
-  - en: Start the dispatch mode.
-    de: Starte den Dispatch-Modus.
-# prompt: | # DEPRECATED: Now handled by @tool descriptions in main.py
-#   You have access to American Truck Simulator / Euro Truck Simulator 2 telemetry.
-#
-#   Common variables: truckSpeed, speedLimit, fuel*, cargo*, city*, job*, gear, engineRpm,
-#   truckBrand, truckName, coordinates, damage/wear values, and event flags (fined, tollgate, ferry, etc.)
-#
-#   Use `get_game_state` with variable names like 'truckSpeed', 'cityDst', 'cargoMass'.
-#   The tool will return available data or indicate if a variable doesn't exist.
 custom_properties:
   - hint: Default is false and will attempt to use US Customary Units, like foot, yard, mile, and pound. Set to true to attempt to use metric units, like meters, kilometers, and kilograms.
     id: use_metric_system

@@ -14,30 +14,6 @@ description:
 hint:
   en: This skill can retrieve data and perform actions in the MSFS2020 simulator based on dynamic inputs.
   de: Dieser Skill kann Daten abrufen und Aktionen im MSFS2020-Simulator basierend auf dynamischen Eingaben ausführen.
-examples:
-  - en: What is my current altitude?
-    de: Wie hoch bin ich gerade?
-  - en: Start the engine.
-    de: Starte den Motor.
-# prompt: | # DEPRECATED: Now handled by @tool descriptions in main.py
-#   You control MSFS2020 via SimConnect. Use pattern-based naming:
-#
-#   **Actions** (`set_data_or_perform_action_in_sim`):
-#   - Throttle: THROTTLE_FULL, THROTTLE_CUT, THROTTLE_INCR, THROTTLE_SET (0-16383)
-#   - Flaps: FLAPS_UP, FLAPS_DOWN, FLAPS_INCR, FLAPS_DECR
-#   - Gear: GEAR_TOGGLE, GEAR_UP, GEAR_DOWN
-#   - Lights: TOGGLE_BEACON_LIGHTS, LANDING_LIGHTS_TOGGLE, STROBES_TOGGLE
-#   - Autopilot: AP_MASTER, AP_ALT_HOLD, AP_NAV1_HOLD, AP_HDG_HOLD
-#   - Engine: TOGGLE_MASTER_BATTERY, TOGGLE_STARTER1, MIXTURE_RICH, MIXTURE_LEAN
-#
-#   **Data** (`get_data_from_sim`):
-#   - Position: PLANE_ALTITUDE, PLANE_LATITUDE, PLANE_LONGITUDE, PLANE_HEADING_DEGREES_TRUE
-#   - Speed: AIRSPEED_INDICATED, GROUND_VELOCITY, VERTICAL_SPEED
-#   - Engine: GENERAL_ENG_RPM:1, ENG_N1_RPM:1, FUEL_TOTAL_QUANTITY
-#   - Systems: GEAR_HANDLE_POSITION, FLAPS_HANDLE_INDEX, AUTOPILOT_MASTER
-#
-#   Pattern hints: Use TOGGLE_ prefix for switches, _INCR/_DECR for increments, :index suffix for multi-engine.
-#   If a command fails, try variations - the tool will report errors.
 custom_properties:
   - hint: Whether to try to autostart data monitoring mode (tour guide mode), which automatically monitors for latitude, longitude and altitude. This can also be toggled with a voice command to start or end data monitoring mode.
     id: autostart_data_monitoring_loop_mode

@@ -219,14 +219,23 @@ class ConfigService:
 
             # Build response with enabled state
             result = []
+            skipped_platform = []
             for skill in all_skills:
                 # Check platform compatibility
                 platforms = skill.config.platforms
                 if platforms and normalized_platform not in platforms:
+                    skipped_platform.append(skill.name)
                     continue  # Skip platform-incompatible skills
 
                 is_enabled = skill.name not in disabled_skills
                 result.append(WingmanSkillState(skill=skill, is_enabled=is_enabled))
+
+            if skipped_platform:
+                self.printr.print(
+                    f"Skills not available on {normalized_platform}: {', '.join(skipped_platform)}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
 
             return result
 

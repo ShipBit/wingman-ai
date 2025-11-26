@@ -10,11 +10,6 @@ tags:
 description:
   en: Randomly playback radio chatter over time. Customize the participants and their voices.
   de: Spielt zufällige Funkgespräche ab. Passe die Teilnehmer und ihre Stimmen an.
-examples:
-  - en: What is the status of the radio?
-    de: Was ist der Status des Funkgeräts?
-  - en: Please turn the radio on.
-    de: Bitte schalte das Funkgerät ein.
 custom_properties:
   - id: prompt
     name: Prompt for message generation
