@@ -249,7 +249,7 @@ class SkillRegistry:
         if needs_validation:
             printr.print(
                 f"🔌 Activating skill: {manifest.display_name} (validating...)",
-                color=LogType.HIGHLIGHT,
+                color=LogType.PURPLE,
             )
             return (
                 True,
@@ -258,8 +258,8 @@ class SkillRegistry:
             )
 
         printr.print(
-            f"✅ Skill activated: {manifest.display_name}",
-            color=LogType.POSITIVE,
+            f"🔧 Skill activated: {manifest.display_name}",
+            color=LogType.PURPLE,
         )
         return (
             True,
@@ -277,7 +277,7 @@ class SkillRegistry:
         display_name = manifest.display_name if manifest else skill_name
         printr.print(
             f"🔌 Skill deactivated: {display_name}",
-            color=LogType.SUBTLE,
+            color=LogType.PURPLE,
         )
         return True, f"Deactivated skill '{skill_name}'."
 
@@ -291,7 +291,7 @@ class SkillRegistry:
             count = len(self._active_skills)
             printr.print(
                 f"🔄 Conversation reset: deactivating {count} skill(s)",
-                color=LogType.SUBTLE,
+                color=LogType.PURPLE,
             )
         self._active_skills.clear()
 

@@ -1469,8 +1469,8 @@ class OpenAiWingman(Wingman):
                             skill_name
                         )
                         await printr.print_async(
-                            f"✅ Skill ready: {display_name}",
-                            color=LogType.POSITIVE,
+                            f"🔧 Skill activated: {display_name}",
+                            color=LogType.PURPLE,
                         )
 
             return function_response, None, None
@@ -1488,11 +1488,13 @@ class OpenAiWingman(Wingman):
         # Go through the skills and check if the function name matches any of the tools
         if function_name in self.tool_skills:
             skill = self.tool_skills[function_name]
+            display_name = self.skill_registry.get_skill_display_name(skill.name)
+            tool_display = function_name.replace("_", " ")
 
-            benchmark = Benchmark(f"Processing Skill '{skill.name}'")
+            benchmark = Benchmark(f"Skill '{skill.name}' - {function_name}")
             await printr.print_async(
-                f"Processing Skill '{skill.name}'",
-                color=LogType.INFO,
+                f"⚡ {display_name}: calling `{function_name}`",
+                color=LogType.PURPLE,
                 skill_name=skill.name,
             )
 
@@ -1507,7 +1509,7 @@ class OpenAiWingman(Wingman):
                     await self.play_to_user(instant_response)
             except Exception as e:
                 await printr.print_async(
-                    f"Error while processing Skill '{skill.name}': {str(e)}",
+                    f"❌ {display_name}: `{function_name}` failed - {str(e)}",
                     color=LogType.ERROR,
                 )
                 printr.print(
@@ -1519,8 +1521,8 @@ class OpenAiWingman(Wingman):
                 instant_response = None
             finally:
                 await printr.print_async(
-                    f"Finished processing Skill '{skill.name}'",
-                    color=LogType.INFO,
+                    f"✅ {display_name}: `{function_name}` completed",
+                    color=LogType.PURPLE,
                     benchmark_result=benchmark.finish(),
                     skill_name=skill.name,
                 )
