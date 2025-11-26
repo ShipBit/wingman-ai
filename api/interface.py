@@ -6,6 +6,7 @@ from api.enums import (
     AzureRegion,
     ConversationProvider,
     ImageGenerationProvider,
+    McpTransportType,
     MistralModel,
     CustomPropertyType,
     TtsVoiceGender,
@@ -747,6 +748,110 @@ class WingmanSkillState(BaseModel):
     """Whether the skill is enabled for this wingman (not in disabled_skills list)."""
 
 
+# ─────────────────────────────── MCP Configuration ─────────────────────────────── #
+
+
+class McpServerConfig(BaseModel):
+    """Configuration for an MCP (Model Context Protocol) server connection."""
+
+    name: str
+    """Unique identifier for this MCP server (e.g., 'context7', 'docker'). Used as key for secrets."""
+
+    display_name: str
+    """Human-readable name shown in the UI."""
+
+    description: Optional[str] = None
+    """Brief description of what this MCP server provides."""
+
+    type: McpTransportType
+    """Transport type: 'http' for hosted servers, 'stdio' for local processes, 'sse' for Server-Sent Events."""
+
+    # HTTP/SSE transport settings
+    url: Optional[str] = None
+    """URL for HTTP or SSE transports (e.g., 'https://mcp.context7.com/mcp')."""
+
+    headers: Optional[dict[str, str]] = None
+    """Optional headers for HTTP requests. API keys should use SecretKeeper with 'mcp_<name>' prefix."""
+
+    # STDIO transport settings
+    command: Optional[str] = None
+    """Command to run for stdio transport (e.g., 'docker', 'python', 'npx')."""
+
+    args: Optional[list[str]] = None
+    """Arguments for the command (e.g., ['mcp', 'gateway', 'run'])."""
+
+    env: Optional[dict[str, str]] = None
+    """Environment variables to set for the process."""
+
+    timeout: Optional[int] = None
+    """Connection timeout in seconds. Defaults to 30s for HTTP/SSE, 60s for stdio."""
+
+    aliases: Optional[list[str]] = None
+    """Alternative search terms for this server (e.g., ['11 labs', 'eleven labs'] for ElevenLabs)."""
+
+    # Common settings
+    enabled: bool = True
+    """Whether this MCP server is enabled."""
+
+    # Optional metadata
+    version: Optional[str] = None
+    """Version of the MCP server, if known."""
+
+
+class McpToolInfo(BaseModel):
+    """Information about a tool provided by an MCP server."""
+
+    name: str
+    """The tool's function name as provided by the MCP server."""
+
+    prefixed_name: str
+    """The prefixed tool name used internally (e.g., 'mcp_context7_resolve_library')."""
+
+    description: str
+    """Description of what the tool does."""
+
+    server_name: str
+    """Name of the MCP server that provides this tool."""
+
+    input_schema: Optional[dict] = None
+    """JSON Schema for the tool's input parameters."""
+
+
+class McpServerState(BaseModel):
+    """MCP server info with connection state for a specific wingman."""
+
+    config: McpServerConfig
+    """The MCP server configuration."""
+
+    is_enabled: bool
+    """Whether the MCP server is enabled for this wingman (not in disabled_mcps list)."""
+
+    is_connected: bool
+    """Whether the server is currently connected."""
+
+    tools: Optional[list[McpToolInfo]] = None
+    """List of tools provided by this server when connected."""
+
+    error: Optional[str] = None
+    """Error message if connection failed."""
+
+
+class McpConnectResult(BaseModel):
+    """Result of attempting to connect to an MCP server."""
+
+    success: bool
+    """Whether the connection was successful."""
+
+    server_name: str
+    """The MCP server name that was connected."""
+
+    tools: Optional[list[McpToolInfo]] = None
+    """List of tools provided by this server if connection succeeded."""
+
+    error: Optional[str] = None
+    """Error message if connection failed."""
+
+
 class NestedConfig(BaseModel):
     prompts: PromptConfig
     sound: SoundConfig
@@ -827,6 +932,15 @@ class WingmanConfig(NestedConfig):
     """List of skill names to disable for this wingman. Skills not listed are enabled by default.
     This is a blacklist - new skills are automatically available unless explicitly disabled.
     Example: ["iRacing", "ATSTelemetry"] to disable racing game skills on a Star Citizen wingman."""
+
+    disabled_mcps: Optional[list[str]] = None
+    """List of MCP server names to disable for this wingman. MCP servers not listed are enabled by default.
+    This is a blacklist - new MCP servers are automatically available unless explicitly disabled.
+    Example: ["docker"] to disable Docker MCP for a specific wingman."""
+
+    mcp: Optional[list[McpServerConfig]] = None
+    """MCP (Model Context Protocol) server configurations. Each server provides additional tools to the wingman."""
+
     custom_class: Optional[CustomClassConfig] = None
     """If you want to use a custom Wingman (Python) class, you can specify it here."""
     name: str

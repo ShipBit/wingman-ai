@@ -30,6 +30,7 @@ class WingmanInitializationErrorType(Enum):
     UNKNOWN = "unknown"
     INVALID_CONFIG = "invalid_config"
     MISSING_SECRET = "missing_secret"
+    MCP_CONNECTION_FAILED = "mcp_connection_failed"
 
 
 class CommandTag(Enum):
@@ -171,6 +172,14 @@ class WingmanProSttProvider(Enum):
 class WingmanProTtsProvider(Enum):
     AZURE = "azure"
     OPENAI = "openai"
+
+
+class McpTransportType(Enum):
+    """Transport type for MCP server connections."""
+
+    HTTP = "http"
+    STDIO = "stdio"
+    SSE = "sse"
 
 
 # Pydantic models for enums

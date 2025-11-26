@@ -8,6 +8,7 @@ google-genai==1.51.0
 httptools==0.6.4
 hume==0.13.4
 markdown==3.10
+mcp==1.22.0
 numpy==1.26.4
 openai==2.8.1
 packaging==24.2

@@ -340,13 +340,13 @@ class SkillRegistry:
                     "type": "function",
                     "function": {
                         "name": "search_skills",
-                        "description": f"Search for available skills/capabilities by keyword or description. Use this to find tools that can help with the user's request. Available skills include: {skills_hint}",
+                        "description": f"Search for built-in Wingman skills. These are bundled capabilities like game controls, timers, screenshots, image generation, etc. Available: {skills_hint}",
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "query": {
                                     "type": "string",
-                                    "description": "Search query - can be keywords, skill name, or description of what you need",
+                                    "description": "Search query - action or capability needed",
                                 },
                             },
                             "required": ["query"],

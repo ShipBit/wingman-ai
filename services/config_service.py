@@ -6,6 +6,8 @@ from api.interface import (
     ConfigDirInfo,
     ConfigWithDirInfo,
     ConfigsInfo,
+    McpConnectResult,
+    McpServerState,
     NestedConfig,
     NewWingmanTemplate,
     SkillBase,
@@ -153,6 +155,27 @@ class ConfigService:
             endpoint=self.toggle_wingman_skill,
             tags=tags,
         )
+        # MCP server endpoints
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/wingman-mcps",
+            endpoint=self.get_wingman_mcps,
+            response_model=list[McpServerState],
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/wingman-mcps/toggle",
+            endpoint=self.toggle_wingman_mcp,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/wingman-mcps/connect",
+            endpoint=self.connect_wingman_mcp,
+            response_model=McpConnectResult,
+            tags=tags,
+        )
         self.router.add_api_route(
             methods=["GET"],
             path="/config/defaults",
@@ -294,6 +317,252 @@ class ConfigService:
             self.printr.toast_error(str(e))
             raise e
 
+    # GET /wingman-mcps
+    async def get_wingman_mcps(
+        self,
+        config_name: str,
+        wingman_name: str,
+    ) -> list[McpServerState]:
+        """Get all MCP servers with their enabled/connected state for a specific wingman."""
+        try:
+            # Get the wingman's config
+            config_dir = self.config_manager.get_config_dir(config_name)
+            wingman_files = self.config_manager.get_wingmen_configs(config_dir)
+
+            # Find the wingman file
+            wingman_file = next(
+                (f for f in wingman_files if f.name == wingman_name), None
+            )
+            if not wingman_file:
+                self.printr.toast_error(f"Wingman '{wingman_name}' not found.")
+                return []
+
+            # Load the wingman config
+            wingman_config = self.config_manager.load_wingman_config(
+                config_dir=config_dir, wingman_file=wingman_file
+            )
+
+            mcp_configs = wingman_config.mcp or []
+            disabled_mcps = wingman_config.disabled_mcps or []
+
+            # Get connection state and tools from the active wingman if available
+            wingman = (
+                self.tower.get_wingman_by_name(wingman_name) if self.tower else None
+            )
+            registry = None
+            if wingman and hasattr(wingman, "mcp_registry") and wingman.mcp_registry:
+                registry = wingman.mcp_registry
+
+            # Build response with enabled/connected state, tools, and errors
+            result = []
+            for mcp_config in mcp_configs:
+                is_enabled = mcp_config.name not in disabled_mcps
+                is_connected = False
+                tools = None
+                error = None
+
+                if registry:
+                    is_connected = (
+                        mcp_config.name in registry.get_connected_server_names()
+                    )
+                    if is_connected:
+                        tools = registry.get_server_tools(mcp_config.name)
+                    else:
+                        error = registry.get_server_error(mcp_config.name)
+
+                result.append(
+                    McpServerState(
+                        config=mcp_config,
+                        is_enabled=is_enabled,
+                        is_connected=is_connected,
+                        tools=tools,
+                        error=error,
+                    )
+                )
+
+            return result
+
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            raise e
+
+    # POST /wingman-mcps/toggle
+    async def toggle_wingman_mcp(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        mcp_name: str,
+        enabled: bool,
+    ):
+        """Enable or disable an MCP server for a specific wingman."""
+        try:
+            # Load the wingman config
+            wingman_config = self.config_manager.load_wingman_config(
+                config_dir=config_dir, wingman_file=wingman_file
+            )
+
+            # Initialize disabled_mcps if needed
+            if wingman_config.disabled_mcps is None:
+                wingman_config.disabled_mcps = []
+
+            if enabled:
+                # Remove from disabled list (enable the MCP)
+                if mcp_name in wingman_config.disabled_mcps:
+                    wingman_config.disabled_mcps.remove(mcp_name)
+                    # Clean up empty list
+                    if not wingman_config.disabled_mcps:
+                        wingman_config.disabled_mcps = None
+            else:
+                # Add to disabled list (disable the MCP)
+                if mcp_name not in wingman_config.disabled_mcps:
+                    wingman_config.disabled_mcps.append(mcp_name)
+
+            # Save the config and update the wingman
+            await self.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+                wingman_config=wingman_config,
+                silent=False,
+                validate=False,
+            )
+
+            # Reinitialize MCPs on the active wingman
+            wingman = (
+                self.tower.get_wingman_by_name(wingman_file.name)
+                if self.tower
+                else None
+            )
+            if wingman and hasattr(wingman, "init_mcps"):
+                await wingman.init_mcps()
+
+            action = "enabled" if enabled else "disabled"
+            self.printr.print(
+                f"MCP server '{mcp_name}' {action} for {wingman_file.name}.",
+                server_only=True,
+            )
+
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            raise e
+
+    # POST /wingman-mcps/connect
+    async def connect_wingman_mcp(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        mcp_name: str,
+    ) -> McpConnectResult:
+        """Connect (or reconnect) to a specific MCP server and return immediate feedback."""
+        try:
+            wingman = (
+                self.tower.get_wingman_by_name(wingman_file.name)
+                if self.tower
+                else None
+            )
+            if not wingman:
+                return McpConnectResult(
+                    success=False,
+                    server_name=mcp_name,
+                    error=f"Wingman '{wingman_file.name}' not found or not active.",
+                )
+
+            if not hasattr(wingman, "mcp_registry") or not wingman.mcp_registry:
+                return McpConnectResult(
+                    success=False,
+                    server_name=mcp_name,
+                    error="MCP registry not available on this wingman.",
+                )
+
+            # Find the MCP config
+            mcp_config = None
+            if wingman.config.mcp:
+                for cfg in wingman.config.mcp:
+                    if cfg.name == mcp_name:
+                        mcp_config = cfg
+                        break
+
+            if not mcp_config:
+                return McpConnectResult(
+                    success=False,
+                    server_name=mcp_name,
+                    error=f"MCP server '{mcp_name}' not found in wingman config.",
+                )
+
+            # Build headers with secrets (same logic as init_mcps)
+            headers = {}
+            if mcp_config.headers:
+                headers.update(mcp_config.headers)
+
+            # Check for API key in secrets
+            if hasattr(wingman, "secret_keeper"):
+                secret_key = f"mcp_{mcp_config.name}"
+                api_key = await wingman.secret_keeper.retrieve(
+                    requester=wingman.name,
+                    key=secret_key,
+                    prompt_if_missing=False,
+                )
+                if api_key:
+                    if not any(
+                        k.lower() in ["authorization", "api-key", "x-api-key"]
+                        for k in headers.keys()
+                    ):
+                        headers["Authorization"] = f"Bearer {api_key}"
+
+            # Try to connect
+            import asyncio
+
+            default_timeout = 60.0 if mcp_config.type.value == "stdio" else 30.0
+            timeout = (
+                float(mcp_config.timeout) if mcp_config.timeout else default_timeout
+            )
+
+            try:
+                connection = await asyncio.wait_for(
+                    wingman.mcp_registry.register_server(
+                        config=mcp_config,
+                        headers=headers if headers else None,
+                        auto_activate=True,
+                    ),
+                    timeout=timeout,
+                )
+
+                if connection:
+                    tools = wingman.mcp_registry.get_server_tools(mcp_name)
+                    tool_count = len(tools) if tools else 0
+                    self.printr.print(
+                        f"🌐 MCP '{mcp_config.display_name}' connected with {tool_count} tools.",
+                        server_only=True,
+                    )
+                    return McpConnectResult(
+                        success=True,
+                        server_name=mcp_name,
+                        tools=tools,
+                    )
+                else:
+                    error = wingman.mcp_registry.get_server_error(mcp_name)
+                    return McpConnectResult(
+                        success=False,
+                        server_name=mcp_name,
+                        error=error or "Connection returned no result.",
+                    )
+
+            except asyncio.TimeoutError:
+                error_msg = f"Connection timed out ({int(timeout)}s)."
+                wingman.mcp_registry.set_server_error(mcp_name, error_msg)
+                return McpConnectResult(
+                    success=False,
+                    server_name=mcp_name,
+                    error=error_msg,
+                )
+
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            return McpConnectResult(
+                success=False,
+                server_name=mcp_name,
+                error=str(e),
+            )
+
     # GET /configs
     def get_config_dirs(self):
         return ConfigsInfo(
@@ -413,6 +682,21 @@ class ConfigService:
         validate: bool = False,
         update_skills: bool = False,
     ):
+        # Check if tower is available
+        if not self.tower:
+            self.printr.toast_error(
+                "Cannot save wingman config: Tower not initialized. Please wait for the config to fully load."
+            )
+            return
+
+        # Debug: Log MCP configs being saved
+        if wingman_config.mcp:
+            for mcp in wingman_config.mcp:
+                self.printr.print(
+                    f"[DEBUG] Saving MCP '{mcp.name}': headers={mcp.headers}, type={mcp.type}",
+                    server_only=True,
+                )
+
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
         if not wingman:

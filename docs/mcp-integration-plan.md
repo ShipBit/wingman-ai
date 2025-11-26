@@ -416,6 +416,125 @@ Skills and MCP servers should be interchangeable from the LLM's perspective - bo
 
 ---
 
+## Phase 4 Status: 🚧 IN PROGRESS - MCP Client Integration
+
+### What Has Been Implemented
+
+#### Core MCP Infrastructure
+
+- ✅ `api/enums.py` - Added `McpTransportType` enum (HTTP, STDIO, SSE)
+- ✅ `api/interface.py` - Added MCP config interfaces:
+  - `McpServerConfig` - Configuration for MCP servers (name, type, url, command, args, env, headers)
+  - `McpToolInfo` - Tool metadata with prefixed names
+  - `McpServerState` - Runtime server state
+  - Updated `WingmanConfig` with `mcp: list[McpServerConfig]` and `disabled_mcps: list[str]`
+
+#### MCP Client Service (`services/mcp_client.py`)
+
+- ✅ `McpClient` class for connecting to MCP servers
+- ✅ Supports three transport types:
+  - **HTTP/SSE**: For hosted MCP servers (Context7, Svelte MCP, etc.)
+  - **STDIO**: For local processes (Docker containers, Python scripts)
+  - **SSE**: For Server-Sent Events based servers
+- ✅ Connection lifecycle management with proper async cleanup
+- ✅ `connect()`, `disconnect()`, `list_tools()`, `call_tool()` methods
+- ✅ Graceful error handling and timeout management
+
+#### MCP Registry Service (`services/mcp_registry.py`)
+
+- ✅ `McpRegistry` class - similar to `SkillRegistry` but for MCP servers
+- ✅ Progressive disclosure with meta-tools:
+  - `search_mcp_servers` - Find available MCP servers by keyword
+  - `activate_mcp_server` - Activate a server to use its tools
+  - `deactivate_mcp_server` - Deactivate a server
+  - `list_active_mcp_servers` - Show currently active servers
+- ✅ Tool prefixing (`mcp_{server_name}_{tool_name}`) to prevent naming collisions
+- ✅ Server manifest generation for LLM discovery
+- ✅ `reset_activations()` for conversation reset
+
+#### OpenAiWingman Integration
+
+- ✅ Added `mcp_client` and `mcp_registry` properties
+- ✅ `init_mcps()` method - loads and connects to MCP servers from config
+- ✅ `unload_mcps()` method - disconnects all MCP servers
+- ✅ `build_tools()` updated to include MCP meta-tools and active server tools
+- ✅ `execute_command_by_function_call()` updated to handle MCP tool calls
+- ✅ `reset_conversation_history()` resets MCP activations
+
+#### Tower/Wingman Lifecycle
+
+- ✅ `services/tower.py` - Calls `init_mcps()` after `init_skills()` during wingman instantiation
+- ✅ `wingmen/wingman.py` - `update_config()` and `update_settings()` reload MCPs when skills reload
+
+#### Dependencies
+
+- ✅ `requirements.txt` - Added `mcp>=1.22.0`
+
+### Example Wingman Config
+
+```yaml
+# ATC.yaml or Clippy.yaml
+mcp:
+  # Context7 - SSE-based documentation lookup
+  - name: context7
+    display_name: Context7 Documentation
+    type: sse
+    url: https://mcp.context7.com/mcp
+    enabled: true
+
+  # Svelte MCP - SSE-based Svelte documentation
+  - name: svelte
+    display_name: Svelte MCP
+    type: sse
+    url: https://svelte.dev/mcp
+    enabled: true
+
+  # Docker Hub - Local stdio process
+  - name: docker
+    display_name: Docker Hub
+    type: stdio
+    command: docker
+    args:
+      - run
+      - -i
+      - --rm
+      - mcp/dockerhub
+    enabled: true
+
+# Optional: disable specific MCP servers for this wingman
+disabled_mcps:
+  - some_mcp_to_disable
+```
+
+### Secret Management
+
+MCP servers can use API keys stored in `secrets.yaml`:
+
+- Key format: `mcp_{server_name}` (e.g., `mcp_context7`)
+- Automatically added to `Authorization: Bearer {key}` header if no auth header specified
+- Config can specify custom headers that reference secrets
+
+### Current Issues Being Debugged
+
+1. 🔧 **MCP servers not connecting on startup** - Need to verify `init_mcps()` is being called
+2. 🔧 **LLM not seeing MCP tools** - Verify `build_tools()` includes MCP meta-tools
+
+### Files Created in Phase 4
+
+- ✅ `services/mcp_client.py` - MCP client with transport support (~350 lines)
+- ✅ `services/mcp_registry.py` - MCP registry with progressive disclosure (~500 lines)
+
+### Files Modified in Phase 4
+
+- ✅ `api/enums.py` - Added `McpTransportType`
+- ✅ `api/interface.py` - Added MCP config types
+- ✅ `wingmen/open_ai_wingman.py` - MCP integration
+- ✅ `wingmen/wingman.py` - MCP lifecycle in update methods
+- ✅ `services/tower.py` - Call `init_mcps()` on wingman creation
+- ✅ `requirements.txt` - Added `mcp>=1.22.0`
+
+---
+
 ## Key Files Modified in Phase 1
 
 1. ✅ `api/interface.py` - Added `platforms` to SkillConfig, kept `skills` in NestedConfig
@@ -462,20 +581,6 @@ Consider commenting out redundant prompts where tool descriptions are sufficient
 - Complex skills with nuanced usage patterns (Spotify, UEXCorp)
 - Skills needing execution priority/ordering instructions (TimeAndDateRetriever)
 - Skills with extensive parameter guidelines
-
-### Phase 4: MCP Client Integration (Future)
-
-```yaml
-# wingman.yaml
-mcp_servers:
-  - name: 'filesystem'
-    command: 'npx'
-    args: ['-y', '@anthropic/mcp-server-filesystem']
-  - name: 'postgres'
-    url: 'http://localhost:3000/mcp'
-```
-
-Skills and MCP servers should be interchangeable from the LLM's perspective - both are just "tools".
 
 ---
 

@@ -713,6 +713,9 @@ class Wingman:
 
             if update_skills:
                 await self.init_skills()
+                # Also reload MCPs if the wingman supports them
+                if hasattr(self, "init_mcps"):
+                    await self.init_mcps()
 
             if validate:
                 errors = await self.validate()
@@ -742,5 +745,8 @@ class Wingman:
         """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
         self.settings = settings
         await self.init_skills()
+        # Also reload MCPs if the wingman supports them
+        if hasattr(self, "init_mcps"):
+            await self.init_mcps()
 
         printr.print(f"Wingman {self.name}'s settings changed", server_only=True)

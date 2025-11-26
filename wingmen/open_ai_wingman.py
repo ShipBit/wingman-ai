@@ -47,6 +47,8 @@ from services.benchmark import Benchmark
 from services.markdown import cleanup_text
 from services.printr import Printr
 from services.tool_registry import SkillRegistry
+from services.mcp_client import McpClient
+from services.mcp_registry import McpRegistry
 from skills.skill_base import Skill
 from wingmen.wingman import Wingman
 
@@ -107,6 +109,11 @@ class OpenAiWingman(Wingman):
         # Progressive tool disclosure registry (MCP-inspired token optimization)
         # Only meta-tools are sent to LLM initially; skills activated on-demand
         self.skill_registry = SkillRegistry()
+
+        # MCP (Model Context Protocol) support
+        # Allows connecting to external MCP servers that provide additional tools
+        self.mcp_client = McpClient()
+        self.mcp_registry = McpRegistry(self.mcp_client)
 
     async def validate(self):
         errors = await super().validate()
@@ -305,6 +312,10 @@ class OpenAiWingman(Wingman):
         self.skill_tools = []
         self.skill_registry.clear()
 
+    async def unload_mcps(self):
+        """Disconnect from all MCP servers."""
+        await self.mcp_registry.clear()
+
     async def prepare_skill(self, skill: Skill):
         # prepare the skill and skill tools
         try:
@@ -323,6 +334,183 @@ class OpenAiWingman(Wingman):
 
         # init skill methods
         skill.llm_call = self.actual_llm_call
+
+    async def init_mcps(self) -> list[WingmanInitializationError]:
+        """
+        Initialize MCP (Model Context Protocol) server connections.
+
+        Connects to MCP servers defined in config.mcp, skipping any in disabled_mcps.
+        MCP servers provide external tools similar to skills.
+
+        Returns:
+            list[WingmanInitializationError]: Errors encountered (non-fatal, wingman still loads)
+        """
+        errors = []
+
+        printr.print(
+            f"[{self.name}] Initializing MCP servers...",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+        # Check if MCP SDK is available
+        if not self.mcp_client.is_available:
+            printr.print(
+                f"[{self.name}] MCP SDK not installed, skipping MCP initialization.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return errors
+
+        printr.print(
+            f"[{self.name}] MCP SDK available, checking config...",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+        # Disconnect existing MCP servers
+        await self.unload_mcps()
+
+        # Get MCP configs
+        mcp_configs = self.config.mcp or []
+        if not mcp_configs:
+            printr.print(
+                f"[{self.name}] No MCP servers configured.",
+                color=LogType.INFO,
+                server_only=True,
+            )
+            return errors
+
+        printr.print(
+            f"[{self.name}] Found {len(mcp_configs)} MCP server(s) in config.",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+        # Get disabled MCPs list (blacklist)
+        disabled_mcps = self.config.disabled_mcps or []
+
+        connected_count = 0
+        for mcp_config in mcp_configs:
+            try:
+                # Check if MCP is disabled for this wingman
+                if mcp_config.name in disabled_mcps:
+                    printr.print(
+                        f"[{self.name}] MCP '{mcp_config.name}' is disabled, skipping.",
+                        color=LogType.INFO,
+                        server_only=True,
+                    )
+                    continue
+
+                printr.print(
+                    f"[{self.name}] Connecting to MCP '{mcp_config.display_name}'...",
+                    color=LogType.INFO,
+                    server_only=True,
+                )
+
+                # Build headers with secrets
+                headers = {}
+                if mcp_config.headers:
+                    headers.update(mcp_config.headers)
+
+                # Check for API key in secrets (using mcp_ prefix)
+                secret_key = f"mcp_{mcp_config.name}"
+                api_key = await self.secret_keeper.retrieve(
+                    requester=self.name,
+                    key=secret_key,
+                    prompt_if_missing=False,  # Don't prompt, just check
+                )
+                if api_key:
+                    # Add to headers - common header names for API keys
+                    # The config.headers should specify the actual header name
+                    # If not, we'll add it as Authorization
+                    if not any(
+                        k.lower() in ["authorization", "api-key", "x-api-key"]
+                        for k in headers.keys()
+                    ):
+                        headers["Authorization"] = f"Bearer {api_key}"
+
+                # Connect to the MCP server with timeout
+                # Default: 30s for HTTP/SSE, 60s for stdio (may need to pull images)
+                default_timeout = 60.0 if mcp_config.type.value == "stdio" else 30.0
+                timeout = (
+                    float(mcp_config.timeout) if mcp_config.timeout else default_timeout
+                )
+
+                try:
+                    connection = await asyncio.wait_for(
+                        self.mcp_registry.register_server(
+                            config=mcp_config,
+                            headers=headers if headers else None,
+                            auto_activate=True,  # MCP servers are active by default
+                        ),
+                        timeout=timeout,
+                    )
+                except asyncio.TimeoutError:
+                    error_msg = f"MCP '{mcp_config.display_name}' connection timed out ({int(timeout)}s)."
+                    printr.print(
+                        f"[{self.name}] {error_msg}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                    errors.append(
+                        WingmanInitializationError(
+                            wingman_name=self.name,
+                            message=error_msg,
+                            error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
+                        )
+                    )
+                    continue
+
+                if connection.is_connected:
+                    connected_count += 1
+                    printr.print(
+                        f"[{self.name}] MCP '{mcp_config.display_name}' connected ({len(connection.tools)} tools).",
+                        color=LogType.POSITIVE,
+                        server_only=True,
+                    )
+                else:
+                    error_msg = f"MCP '{mcp_config.display_name}' failed to connect: {connection.error}"
+                    printr.print(
+                        f"[{self.name}] {error_msg}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                    errors.append(
+                        WingmanInitializationError(
+                            wingman_name=self.name,
+                            message=error_msg,
+                            error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
+                        )
+                    )
+                    # Non-fatal error - continue with other MCPs
+
+            except Exception as e:
+                error_msg = f"MCP '{mcp_config.name}' initialization error: {str(e)}"
+                printr.print(
+                    f"[{self.name}] {error_msg}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.name,
+                        message=error_msg,
+                        error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
+                    )
+                )
+
+        if connected_count > 0:
+            printr.print(
+                f"[{self.name}] Connected to {connected_count} MCP server(s).",
+                color=LogType.POSITIVE,
+                server_only=True,
+            )
+
+        return errors
 
     async def validate_and_set_openai(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("openai", errors)
@@ -1097,11 +1285,12 @@ class OpenAiWingman(Wingman):
         """Resets the conversation history and skill activation state.
 
         When the conversation is reset, the LLM loses all memory of which skills
-        were activated and why. So we must also reset the skill registry to ensure
-        the progressive disclosure state matches the LLM's memory.
+        were activated and why. So we must also reset the skill registry and MCP
+        registry to ensure the progressive disclosure state matches the LLM's memory.
         """
         self.messages = []
         self.skill_registry.reset_activations()
+        self.mcp_registry.reset_activations()
 
     async def _try_instant_activation(self, transcript: str) -> (str, bool):
         """Tries to execute an instant activation command if present in the transcript.
@@ -1475,6 +1664,50 @@ class OpenAiWingman(Wingman):
 
             return function_response, None, None
 
+        # Handle MCP meta-tools for server discovery/activation
+        if self.mcp_registry.is_meta_tool(function_name):
+            function_response, tools_changed = self.mcp_registry.execute_meta_tool(
+                function_name, function_args
+            )
+            return function_response, None, None
+
+        # Handle MCP server tools (prefixed with mcp_)
+        if self.mcp_registry.is_mcp_tool(function_name):
+            connection = self.mcp_registry.get_connection_for_tool(function_name)
+            if connection:
+                display_name = connection.config.display_name
+                original_name = self.mcp_registry.get_original_tool_name(function_name)
+
+                benchmark = Benchmark(
+                    f"MCP '{connection.config.name}' - {original_name}"
+                )
+                await printr.print_async(
+                    f"🌐 {display_name}: calling `{original_name}`",
+                    color=LogType.PURPLE,
+                )
+
+                try:
+                    function_response = await self.mcp_registry.call_tool(
+                        function_name, function_args
+                    )
+                except Exception as e:
+                    await printr.print_async(
+                        f"❌ {display_name}: `{original_name}` failed - {str(e)}",
+                        color=LogType.ERROR,
+                    )
+                    printr.print(
+                        traceback.format_exc(), color=LogType.ERROR, server_only=True
+                    )
+                    function_response = "ERROR DURING MCP TOOL EXECUTION"
+                finally:
+                    await printr.print_async(
+                        f"✅ {display_name}: `{original_name}` completed",
+                        color=LogType.PURPLE,
+                        benchmark_result=benchmark.finish(),
+                    )
+
+                return function_response, None, None
+
         if function_name == "execute_command":
             # get the command based on the argument passed by the LLM
             command = self.get_command(function_args["command_name"])
@@ -1756,6 +1989,16 @@ class OpenAiWingman(Wingman):
 
         for _, tool in self.skill_registry.get_active_tools():
             tools.append(tool)
+
+        # MCP tools: add meta-tools for discovery if servers are available
+        # MCP servers auto-activate on connect, so their tools are immediately available
+        if self.mcp_registry.server_count > 0:
+            for _, tool in self.mcp_registry.get_meta_tools():
+                tools.append(tool)
+
+            # Add tools from active MCP servers
+            for _, tool in self.mcp_registry.get_active_tools():
+                tools.append(tool)
 
         return tools
 

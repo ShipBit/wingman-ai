@@ -145,6 +145,19 @@ class Tower:
             # prevent a wingman from loading just because one skill failed
             skill_errors = await wingman.init_skills()
 
+            # init MCP servers (if the wingman supports them)
+            # Note: MCP errors are non-fatal but should be shown to user
+            if hasattr(wingman, "init_mcps"):
+                try:
+                    mcp_errors = await wingman.init_mcps()
+                    errors.extend(mcp_errors)  # Add to errors for client notification
+                except Exception as e:
+                    printr.print(
+                        f"Error initializing MCP servers for {wingman_name}: {e}",
+                        color=LogType.ERROR,
+                        server_only=True,
+                    )
+
             if not errors or len(errors) == 0:
                 await wingman.prepare()
                 self.wingmen.append(wingman)
