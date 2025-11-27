@@ -73,6 +73,13 @@ class VoiceService:
             response_model=list[VoiceInfo],
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/voices/inworld/wingman-pro",
+            endpoint=self.get_wingman_pro_inworld_voices,
+            response_model=list[VoiceInfo],
+            tags=tags,
+        )
 
         self.router.add_api_route(
             methods=["POST"],
@@ -208,6 +215,18 @@ class VoiceService:
             return []
         result = [self.__convert_azure_voice(voice) for voice in voices]
         return result
+
+    # GET /voices/inworld/wingman-pro
+    def get_wingman_pro_inworld_voices(
+        self, filter_language: str = None
+    ) -> list[VoiceInfo]:
+        wingman_pro = WingmanPro(
+            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
+        )
+        voices = wingman_pro.get_available_inworld_voices(
+            filter_language=filter_language
+        )
+        return voices
 
     # POST /play/openai
     async def play_openai_tts(

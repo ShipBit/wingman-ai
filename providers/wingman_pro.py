@@ -1,10 +1,12 @@
 import openai
 import requests
+from typing import Optional
 from api.enums import CommandTag, LogType
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
     SoundConfig,
+    VoiceInfo,
     WingmanProSettings,
 )
 from services.audio_player import AudioPlayer
@@ -406,6 +408,39 @@ class WingmanPro:
         ]
 
         return voice_infos
+
+    def get_available_inworld_voices(
+        self, filter_language: Optional[str] = None
+    ) -> list[VoiceInfo]:
+        params = {"region": self.settings.region}
+        if filter_language:
+            params["filter"] = f"language={filter_language}"
+
+        response = requests.get(
+            url=f"{self.settings.base_url}/inworld-voices",
+            params=params,
+            timeout=self.timeout,
+            headers=self._get_headers(),
+        )
+        if response.status_code == 403:
+            self.send_unauthorized_error()
+            return []
+        else:
+            response.raise_for_status()
+
+        response_data = response.json()
+        voices: list[VoiceInfo] = []
+        for voice in response_data.get("voices", []):
+            voice_name = voice.get("displayName", "")
+            voice_id = voice.get("voiceId", "")
+            voices.append(
+                VoiceInfo(
+                    id=voice_id,
+                    name=voice_name or voice_id,
+                    languages=voice.get("languages", []),
+                )
+            )
+        return voices
 
     def _get_headers(self):
         token = self.secret_keeper.secrets.get("wingman_pro", "")
