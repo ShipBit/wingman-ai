@@ -134,6 +134,12 @@ class VoiceService:
             endpoint=self.play_wingman_pro_openai,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preview/wingman-pro/inworld",
+            endpoint=self.play_wingman_pro_inworld,
+            tags=tags,
+        )
 
     def __convert_azure_voice(self, voice):
         # retrieved from Wingman Pro as serialized dict
@@ -349,7 +355,7 @@ class VoiceService:
             wingman_name="system",
         )
 
-    # POST /play/wingman-pro/azure
+    # POST /play/wingman-pro/openai
     async def play_wingman_pro_openai(
         self, text: str, voice: str, model: str, speed: float, sound_config: SoundConfig
     ):
@@ -365,4 +371,26 @@ class VoiceService:
             sound_config=sound_config,
             audio_player=self.audio_player,
             wingman_name="system",
+        )
+
+    # POST /play/wingman-pro/inworld
+    async def play_wingman_pro_inworld(
+        self,
+        text: str,
+        config: InworldConfig,
+        sound_config: SoundConfig,
+    ):
+        wingman_pro = WingmanPro(
+            wingman_name="system",
+            settings=self.config_manager.settings_config.wingman_pro,
+        )
+        await wingman_pro.generate_inworld_speech(
+            text=text,
+            voice_id=config.voice_id,
+            sound_config=sound_config,
+            audio_player=self.audio_player,
+            wingman_name="system",
+            stream=config.output_streaming,
+            model_id=config.model_id,
+            temperature=config.temperature,
         )

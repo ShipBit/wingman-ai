@@ -1927,6 +1927,20 @@ class OpenAiWingman(Wingman):
                         audio_player=self.audio_player,
                         wingman_name=self.name,
                     )
+                elif (
+                    self.config.wingman_pro.tts_provider
+                    == WingmanProTtsProvider.INWORLD
+                ):
+                    await self.wingman_pro.generate_inworld_speech(
+                        text=text,
+                        voice_id=self.config.inworld.voice_id,
+                        sound_config=sound_config,
+                        audio_player=self.audio_player,
+                        wingman_name=self.name,
+                        stream=self.config.inworld.output_streaming,
+                        model_id=self.config.inworld.model_id,
+                        temperature=self.config.inworld.temperature,
+                    )
             else:
                 printr.toast_error(
                     f"Unsupported TTS provider: {self.config.features.tts_provider}"

@@ -248,6 +248,106 @@ class WingmanPro:
                 wingman_name=wingman_name,
             )
 
+    async def generate_inworld_speech(
+        self,
+        text: str,
+        voice_id: str,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+        stream: bool = False,
+        model_id: str = "inworld-tts-1",
+        temperature: float = 1.1,
+        audio_config: dict = None,
+        timestamp_type: str = "TIMESTAMP_TYPE_UNSPECIFIED",
+        apply_text_normalization: str = "APPLY_TEXT_NORMALIZATION_UNSPECIFIED",
+        speed: float = 1.0,
+    ):
+        data = {
+            "text": text,
+            "voice_id": voice_id,
+            "stream": stream,
+            "model_id": model_id,
+            "temperature": temperature,
+            "timestamp_type": timestamp_type,
+            "apply_text_normalization": apply_text_normalization,
+            "speed": speed,
+        }
+        if audio_config is not None:
+            data["audio_config"] = audio_config
+
+        if stream:
+
+            def buffer_generator():
+                with requests.post(
+                    url=f"{self.settings.base_url}/generate-inworld-speech",
+                    params={"region": self.settings.region},
+                    json=data,
+                    headers=self._get_headers(),
+                    timeout=self.timeout,
+                    stream=True,
+                ) as response:
+                    if response.status_code == 403:
+                        self.send_unauthorized_error()
+                        return None
+                    else:
+                        response.raise_for_status()
+                    for chunk in response.iter_content(chunk_size=2048):
+                        if not chunk:
+                            break
+                        yield chunk
+
+            generator_instance = buffer_generator()
+            incomplete_buffer = b""
+
+            def buffer_callback(audio_buffer):
+                nonlocal incomplete_buffer
+                try:
+                    chunk = next(generator_instance)
+                    chunk = incomplete_buffer + chunk
+                    remainder = len(chunk) % 2
+                    if remainder:
+                        incomplete_buffer = chunk[-remainder:]
+                        chunk = chunk[:-remainder]
+                    else:
+                        incomplete_buffer = b""
+
+                    audio_buffer[: len(chunk)] = chunk
+                    return len(chunk)
+                except StopIteration:
+                    if incomplete_buffer:
+                        audio_buffer[: len(incomplete_buffer)] = incomplete_buffer
+                        chunk_length = len(incomplete_buffer)
+                        incomplete_buffer = b""
+                        return chunk_length
+                    return 0
+
+            await audio_player.stream_with_effects(
+                buffer_callback=buffer_callback,
+                config=sound_config,
+                wingman_name=wingman_name,
+            )
+        else:
+            response = requests.post(
+                url=f"{self.settings.base_url}/generate-inworld-speech",
+                params={"region": self.settings.region},
+                headers=self._get_headers(),
+                json=data,
+                timeout=self.timeout,
+            )
+            if response.status_code == 403:
+                self.send_unauthorized_error()
+                return
+            else:
+                response.raise_for_status()
+
+            audio_data = response.content
+            await audio_player.play_with_effects(
+                input_data=audio_data,
+                config=sound_config,
+                wingman_name=wingman_name,
+            )
+
     async def generate_image(
         self,
         text: str,
