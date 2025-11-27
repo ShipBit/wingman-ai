@@ -277,6 +277,11 @@ class WingmanPro:
             data["audio_config"] = audio_config
 
         if stream:
+            # For streaming, we need LINEAR16 format for raw PCM playback
+            data["audio_config"] = {
+                "audio_encoding": "LINEAR16",
+                "sample_rate_hertz": 16000,
+            }
 
             def buffer_generator():
                 with requests.post(
@@ -295,7 +300,11 @@ class WingmanPro:
                     for chunk in response.iter_content(chunk_size=2048):
                         if not chunk:
                             break
-                        yield chunk
+                        # Skip WAV header if present (44 bytes starting with "RIFF")
+                        if len(chunk) > 44 and chunk[:4] == b"RIFF":
+                            chunk = chunk[44:]
+                        if len(chunk) > 0:
+                            yield chunk
 
             generator_instance = buffer_generator()
             incomplete_buffer = b""
