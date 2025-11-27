@@ -172,6 +172,7 @@ class WingmanProSttProvider(Enum):
 class WingmanProTtsProvider(Enum):
     AZURE = "azure"
     OPENAI = "openai"
+    INWORLD = "inworld"
 
 
 class McpTransportType(Enum):
