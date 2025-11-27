@@ -15,7 +15,7 @@ packaging==24.2
 pedalboard==0.9.19
 platformdirs==4.3.6
 pyaudio==0.2.14
-pydantic==2.10.6
+pydantic==2.11.4
 pydirectinput-rgx==2.1.2
 pyinstaller==6.16.0
 pygame==2.6.1
