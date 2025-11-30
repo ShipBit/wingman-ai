@@ -304,7 +304,7 @@ class MiningManager(FunctionManager):
                 return {"success": False, "message": f"I couldn't open the browser{' as there is no active session. ' if self.regolith.active_session_id is None else '. '}"}
             return {"success": True, "message": "You should see the browser now. "}
         
-        return {"success": False, "message": "I couldn't identify the action to be taken. Please repeat. ", "do_not_cache": True}
+        return {"success": False, "message": "I couldn't identify the action to be taken. Please repeat. "}
         
     def create_session(self, function_args):
         name = function_args.get("name", None)
@@ -315,16 +315,16 @@ class MiningManager(FunctionManager):
         scouting_direction = function_args.get("scouting_direction", None)
 
         if activity is None: 
-            return {"success": False, "message": f"Please provide the activity you want the session to track. One of: {self.regolith.get_activity_names()}", "do_not_cache": True}
+            return {"success": False, "message": f"Please provide the activity you want the session to track. One of: {self.regolith.get_activity_names()}"}
                 
         if activity == "SHIP_MINING" and refinery is None or gravityWell is None:
-            return {"success": False, "message": f"Please provide the {'refinery name' if refinery is None else 'gravity well'} to create a mining session. ", "do_not_cache": True}
+            return {"success": False, "message": f"Please provide the {'refinery name' if refinery is None else ''} {'and ' if refinery is None and gravityWell is None else ''} {'gravity well' if gravityWell is None else ''} to create a mining session. "}
         
         session_id = self.regolith.create_mining_session(name, activity, refinery, gravityWell, scouting_start_location, scouting_direction)
         if session_id is not None:
             return {"success": True, "message": "Session created. ", "do_not_cache": True}
         
-        return {"success": False, "message": "Session was not created.", "do_not_cache": True}
+        return {"success": False, "message": "Session was not created."}
 
     def refinery_job_work_order_management(self, function_args):
         printr.print(f"Executing function '{self.refinery_job_work_order_management.__name__}'.", tags="info")
@@ -384,6 +384,8 @@ class MiningManager(FunctionManager):
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
             else:
                 self.overlay.display_overlay_text(f"Cora: saved {function_response['total_scans']}", vertical_position_ratio=3, display_duration=5000)
+                function_response["do_not_cache"] = True
+                
         elif function_type == "add_new_cluster":
             cluster_count = function_args.get("cluster_count", 0)
             cluster_type = function_args.get("cluster_type", None)
@@ -391,7 +393,7 @@ class MiningManager(FunctionManager):
             scout_finding_id = self.regolith.create_scouting_cluster(session_id, cluster_count, cluster_type)
             if scout_finding_id is None:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                return {"success": False, "message": "Couldn't create a new cluster.", "do_not_cache": True}
+                return {"success": False, "message": "Couldn't create a new cluster."}
             function_response = {"success": True, "instructions": f"Saved {cluster_count}x{cluster_type}'.", "do_not_cache": True}
             self.overlay.display_overlay_text("Cora: Saved", vertical_position_ratio=3, display_duration=5000)
        
@@ -423,6 +425,7 @@ class MiningManager(FunctionManager):
                 return scan_result
             
             function_response = self.add_work_order_regolith_from_scan(scan_result)
+            function_response["do_not_cache"] = True
 
             self.overlay.display_overlay_text(f"Cora: {'Success' if function_response.get('success', False) else 'Error'}", vertical_position_ratio=3, display_duration=5000)
             return function_response
@@ -683,15 +686,15 @@ class MiningManager(FunctionManager):
                 for size in range(1, 25):
                     lookup[base * size] = {"cluster_size": size, "type": name}
         if scan_value is None:
-            return {"success": False, "message": "Please provide a scan_value to lookup.", "do_not_cache": True}
+            return {"success": False, "message": "Please provide a scan_value to lookup."}
         info = lookup.get(scan_value)
         if not info:
-            return {"success": False, "message": f"No cluster info for signature {scan_value}.", "do_not_cache": True}
+            return {"success": False, "message": f"No cluster info for signature {scan_value} available."}
         return {
             "success": True,
             "cluster_size": info["cluster_size"],
             "type": info["type"],
-            "message": f"Detected {info['cluster_size']}× {info['type'].capitalize()} from signature {scan_value}.",
+            "message": f"Signature {scan_value} corresponds to a cluster of {info['cluster_size']} {info['type'].capitalize()} rocks.",
             "do_not_cache": True
         }
 

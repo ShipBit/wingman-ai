@@ -157,6 +157,8 @@ class TddManager(FunctionManager):
         # Process response
         success = function_response.get("success", False)
         if success and function_response.get("trade_routes"):
+            function_response["do_not_cache"] = True
+            
             trade_route = function_response["trade_routes"][0]
             # Safely retrieve keys with fallback values
             moon_or_planet_buy = trade_route.get("buy_moon", "") or trade_route.get("buy_orbit", "")
