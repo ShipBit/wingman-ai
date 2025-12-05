@@ -114,12 +114,12 @@ class ConfigMigrationService:
             True,
         )
 
-    def find_earliest_existing_version(self, users_dir):
+    def find_latest_migratable_version(self, users_dir):
         """Find the latest migratable version to start migration from.
 
-        Despite the name, this returns the LATEST migratable version because
-        we want to skip intermediate versions the user already has.
-        For example, if user has 1.8.1 and 1.8.2, we start from 1.8.2.
+        Returns the latest migratable version present in the user's directory,
+        skipping intermediate versions and versions that are too old.
+        For example, if user has 1.8.1 and 1.8.2, migration starts from 1.8.2.
         """
         # Get all version directories (not just valid ones for migration)
         all_versions = next(os.walk(users_dir))[1]
