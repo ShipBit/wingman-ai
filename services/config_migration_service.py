@@ -59,17 +59,6 @@ class ConfigMigrationService:
             )
             return
 
-        # Check if the version is too old to migrate
-        if self.is_version_too_old(earliest_version):
-            self.log(
-                f"Version {earliest_version.replace('_', '.')} is too old (minimum supported: {MINIMUM_SUPPORTED_VERSION.replace('_', '.')}). Resetting to fresh configs.",
-                True,
-            )
-            self.reset_to_fresh_configs()
-            # Apply CUDA auto-detection for the fresh configs
-            self._apply_fresh_install_cuda_settings()
-            return
-
         self.log(
             f"Starting migration from version {earliest_version.replace('_', '.')} to {self.latest_version.replace('_', '.')}",
             True,
@@ -126,17 +115,32 @@ class ConfigMigrationService:
         )
 
     def find_earliest_existing_version(self, users_dir):
+        """Find the latest migratable version to start migration from.
+
+        Despite the name, this returns the LATEST migratable version because
+        we want to skip intermediate versions the user already has.
+        For example, if user has 1.8.1 and 1.8.2, we start from 1.8.2.
+        """
         # Get all version directories (not just valid ones for migration)
         all_versions = next(os.walk(users_dir))[1]
         # Filter to version-like directories (format: X_Y_Z)
         version_dirs = [
             v for v in all_versions if v.replace("_", "").replace(".", "").isdigit()
         ]
-        version_dirs.sort(key=lambda v: [int(n) for n in v.split("_")])
+        # Sort descending to get latest version first
+        version_dirs.sort(key=lambda v: [int(n) for n in v.split("_")], reverse=True)
 
         for version in version_dirs:
-            if version != self.latest_version:
-                return version
+            # Skip the target version
+            if version == self.latest_version:
+                continue
+            # Skip versions that are too old to migrate
+            if self.is_version_too_old(version):
+                self.log(
+                    f"Ignoring legacy version {version.replace('_', '.')} (older than minimum supported {MINIMUM_SUPPORTED_VERSION.replace('_', '.')})"
+                )
+                continue
+            return version
 
         return None
 
@@ -154,8 +158,11 @@ class ConfigMigrationService:
         self.log(f"All version directories found: {version_dirs}")
         self.log(f"Latest version (target): {self.latest_version}")
 
-        # Return the first one that's not the latest version
+        # Return the first one that's not the latest version and is migratable
         for version in version_dirs:
+            # Skip versions that are too old to migrate
+            if self.is_version_too_old(version):
+                continue
             if version != self.latest_version:
                 self.log(f"Selected latest existing version: {version}")
                 return version
@@ -195,7 +202,11 @@ class ConfigMigrationService:
 
     def get_valid_versions(self, users_dir):
         versions = next(os.walk(users_dir))[1]
-        return [v for v in versions if self.is_valid_version(v)]
+        return [
+            v
+            for v in versions
+            if self.is_valid_version(v) and not self.is_version_too_old(v)
+        ]
 
     def find_latest_user_version(self, users_dir):
         valid_versions = self.get_valid_versions(users_dir)
