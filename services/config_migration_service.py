@@ -160,12 +160,14 @@ class ConfigMigrationService:
 
         # Return the first one that's not the latest version and is migratable
         for version in version_dirs:
+            # Skip the target version
+            if version == self.latest_version:
+                continue
             # Skip versions that are too old to migrate
             if self.is_version_too_old(version):
                 continue
-            if version != self.latest_version:
-                self.log(f"Selected latest existing version: {version}")
-                return version
+            self.log(f"Selected latest existing version: {version}")
+            return version
 
         self.log("No suitable version found for custom skills migration")
         return None
