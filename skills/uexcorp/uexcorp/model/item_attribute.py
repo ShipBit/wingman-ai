@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 # Currently unused, as information is included in the Item model
 class ItemAttribute(DataModel):
@@ -45,14 +42,9 @@ class ItemAttribute(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.item import Item
-            from skills.uexcorp.uexcorp.model.category import Category
-            from skills.uexcorp.uexcorp.model.category_attribute import CategoryAttribute
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.item import Item
-            from uexcorp.uexcorp.model.category import Category
-            from uexcorp.uexcorp.model.category_attribute import CategoryAttribute
+        from skills.uexcorp.uexcorp.model.item import Item
+        from skills.uexcorp.uexcorp.model.category import Category
+        from skills.uexcorp.uexcorp.model.category_attribute import CategoryAttribute
 
         item = Item(self.get_id_item(), load=True) if self.get_id_item() else None
         category = Category(self.get_id_category(), load=True) if self.get_id_category() else None

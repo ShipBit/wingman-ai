@@ -1,11 +1,6 @@
-try:
-    from skills.uexcorp.uexcorp.database.filter import Filter
-    from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
-    from skills.uexcorp.uexcorp.model.planet import Planet
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.database.filter import Filter
-    from uexcorp.uexcorp.data_access.data_access import DataAccess
-    from uexcorp.uexcorp.model.planet import Planet
+from skills.uexcorp.uexcorp.database.filter import Filter
+from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
+from skills.uexcorp.uexcorp.model.planet import Planet
 
 
 class PlanetDataAccess(DataAccess):

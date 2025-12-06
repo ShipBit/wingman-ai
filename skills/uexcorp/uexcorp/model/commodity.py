@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class Commodity(DataModel):
 
@@ -105,12 +102,8 @@ class Commodity(DataModel):
         return properties
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-            from skills.uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-            from uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
 
         information = {
             "name": self.get_name(),
@@ -141,12 +134,8 @@ class Commodity(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-            from skills.uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-            from uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
 
         information = {
             "name": self.get_name(),
@@ -173,10 +162,7 @@ class Commodity(DataModel):
         return information
 
     def __calculate_profit(self) -> None:
-        try:
-            from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
 
         buy_min = None
         buy_max = None

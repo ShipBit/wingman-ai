@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class Vehicle(DataModel):
 
@@ -204,10 +201,7 @@ class Vehicle(DataModel):
         return additional_information
 
     def get_data_for_ai(self) -> dict[str, any]:
-        try:
-            from skills.uexcorp.uexcorp.model.company import Company
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.company import Company
+        from skills.uexcorp.uexcorp.model.company import Company
 
         company = Company(self.get_id_company(), load=True) if self.get_id_company() else None
         parent = Vehicle(self.get_id_parent(), load=True) if self.get_id_parent() and self.get_id_parent() != self.get_id() else None
@@ -252,10 +246,7 @@ class Vehicle(DataModel):
         return data
 
     def get_purchase_options(self) -> list[dict[str, any]]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
 
         prices = VehiclePurchasePriceDataAccess().add_filter_by_id_vehicle(self.get_id()).load()
         price_data = []
@@ -265,10 +256,7 @@ class Vehicle(DataModel):
         return price_data
 
     def get_rental_options(self) -> list[dict[str, any]]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
 
         prices = VehicleRentalPriceDataAccess().add_filter_by_id_vehicle(self.get_id()).load()
         price_data = []

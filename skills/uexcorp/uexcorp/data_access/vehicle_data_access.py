@@ -1,9 +1,5 @@
-try:
-    from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
-    from skills.uexcorp.uexcorp.model.vehicle import Vehicle
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.data_access.data_access import DataAccess
-    from uexcorp.uexcorp.model.vehicle import Vehicle
+from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
+from skills.uexcorp.uexcorp.model.vehicle import Vehicle
 
 
 class VehicleDataAccess(DataAccess):

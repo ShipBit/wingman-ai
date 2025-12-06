@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class Company(DataModel):
 
@@ -42,12 +39,8 @@ class Company(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-            from skills.uexcorp.uexcorp.model.faction import Faction
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-            from uexcorp.uexcorp.model.faction import Faction
+        from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+        from skills.uexcorp.uexcorp.model.faction import Faction
 
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
 
@@ -66,12 +59,8 @@ class Company(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-            from skills.uexcorp.uexcorp.model.faction import Faction
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-            from uexcorp.uexcorp.model.faction import Faction
+        from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+        from skills.uexcorp.uexcorp.model.faction import Faction
 
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
 

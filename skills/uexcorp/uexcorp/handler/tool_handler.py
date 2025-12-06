@@ -1,25 +1,14 @@
 import inspect
 from typing import TYPE_CHECKING
-try:
-    from skills.uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
-    from skills.uexcorp.uexcorp.tool.commodity_route import CommodityRoute
-    from skills.uexcorp.uexcorp.tool.commodity_information import CommodityInformation
-    from skills.uexcorp.uexcorp.tool.location_information import LocationInformation
-    from skills.uexcorp.uexcorp.tool.item_information import ItemInformation
-    from skills.uexcorp.uexcorp.tool.profit_calculation import ProfitCalculation
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
-    from uexcorp.uexcorp.tool.commodity_route import CommodityRoute
-    from uexcorp.uexcorp.tool.commodity_information import CommodityInformation
-    from uexcorp.uexcorp.tool.location_information import LocationInformation
-    from uexcorp.uexcorp.tool.item_information import ItemInformation
-    from uexcorp.uexcorp.tool.profit_calculation import ProfitCalculation
+from skills.uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
+from skills.uexcorp.uexcorp.tool.commodity_route import CommodityRoute
+from skills.uexcorp.uexcorp.tool.commodity_information import CommodityInformation
+from skills.uexcorp.uexcorp.tool.location_information import LocationInformation
+from skills.uexcorp.uexcorp.tool.item_information import ItemInformation
+from skills.uexcorp.uexcorp.tool.profit_calculation import ProfitCalculation
 
 if TYPE_CHECKING:
-    try:
-        from uexcorp.uexcorp.helper import Helper
-    except ModuleNotFoundError:
-        from skills.uexcorp.uexcorp.helper import Helper
+    from skills.uexcorp.uexcorp.helper import Helper
 
 
 class ToolHandler:

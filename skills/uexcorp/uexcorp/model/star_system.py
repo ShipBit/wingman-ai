@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class StarSystem(DataModel):
 
@@ -50,16 +47,10 @@ class StarSystem(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-            from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from skills.uexcorp.uexcorp.model.faction import Faction
-            from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-            from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from uexcorp.uexcorp.model.faction import Faction
-            from uexcorp.uexcorp.model.jurisdiction import Jurisdiction
+        from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp.uexcorp.model.faction import Faction
+        from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
 
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
         jurisdiction = Jurisdiction(self.get_id_jurisdiction(), load=True) if self.get_id_jurisdiction() else None
@@ -87,12 +78,8 @@ class StarSystem(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-            from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-            from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
 
         planets = PlanetDataAccess().add_filter_by_id_star_system(self.get_id()).load()
         space_station_data_access = SpaceStationDataAccess()

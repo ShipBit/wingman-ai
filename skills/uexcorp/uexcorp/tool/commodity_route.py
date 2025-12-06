@@ -1,10 +1,6 @@
 import json
-try:
-    from skills.uexcorp.uexcorp.tool.tool import Tool
-    from skills.uexcorp.uexcorp.tool.validator import Validator
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.tool.tool import Tool
-    from uexcorp.uexcorp.tool.validator import Validator
+from skills.uexcorp.uexcorp.tool.tool import Tool
+from skills.uexcorp.uexcorp.tool.validator import Validator
 
 
 class CommodityRoute(Tool):
@@ -15,36 +11,28 @@ class CommodityRoute(Tool):
         super().__init__()
 
     def execute(
-            self,
-            filter_commodity_whitelist: list[str] | None = None,
-            filter_commodity_blacklist: list[str] | None = None,
-            filter_allow_illegal_commodities: bool | None = None,
-            filter_star_system_whitelist: list[str] | None = None,
-            filter_star_system_blacklist: list[str] | None = None,
-            limit: int | None = None,
-            offset: int | None = None,
-            used_ship: str | None = None,
-            available_money: int | None = None,
-            available_cargo_space_scu: int | None = None,
-            filter_allow_star_system_change: bool | None = None,
-            filter_start_location: str | None = None,
-            filter_destination_location: str | None = None,
-            filter_location_blacklist: list[str] | None = None,
+        self,
+        filter_commodity_whitelist: list[str] | None = None,
+        filter_commodity_blacklist: list[str] | None = None,
+        filter_allow_illegal_commodities: bool | None = None,
+        filter_star_system_whitelist: list[str] | None = None,
+        filter_star_system_blacklist: list[str] | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        used_ship: str | None = None,
+        available_money: int | None = None,
+        available_cargo_space_scu: int | None = None,
+        filter_allow_star_system_change: bool | None = None,
+        filter_start_location: str | None = None,
+        filter_destination_location: str | None = None,
+        filter_location_blacklist: list[str] | None = None,
     ) -> (str, str):
-        try:
-            from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-            from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-            from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-            from skills.uexcorp.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
-            from skills.uexcorp.uexcorp.model.terminal import Terminal
-            from skills.uexcorp.uexcorp.helper import Helper
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-            from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-            from uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-            from uexcorp.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
-            from uexcorp.uexcorp.model.terminal import Terminal
-            from uexcorp.uexcorp.helper import Helper
+        from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+        from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_route_data_access import CommodityRouteDataAccess
+        from skills.uexcorp.uexcorp.model.terminal import Terminal
+        from skills.uexcorp.uexcorp.helper import Helper
 
         helper = Helper.get_instance()
 

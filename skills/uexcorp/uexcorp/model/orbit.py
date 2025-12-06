@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class Orbit(DataModel):
 
@@ -56,18 +53,11 @@ class Orbit(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.star_system import StarSystem
-            from skills.uexcorp.uexcorp.model.faction import Faction
-            from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
-            from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.star_system import StarSystem
-            from uexcorp.uexcorp.model.faction import Faction
-            from uexcorp.uexcorp.model.jurisdiction import Jurisdiction
-            from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        from skills.uexcorp.uexcorp.model.star_system import StarSystem
+        from skills.uexcorp.uexcorp.model.faction import Faction
+        from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
+        from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
 
         star_system = StarSystem(self.get_id_star_system(), load=True) if self.get_id_star_system() else None
         space_stations = SpaceStationDataAccess().add_filter_by_id_orbit(self.get_id()).load()
@@ -89,12 +79,8 @@ class Orbit(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
 
         space_stations = SpaceStationDataAccess().add_filter_by_id_orbit(self.get_id()).load()
         planets = PlanetDataAccess().add_filter_by_name(self.get_name()).load()

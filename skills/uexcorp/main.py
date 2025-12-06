@@ -1,6 +1,8 @@
 import sys
 import os
 import uuid
+
+import skills.uexcorp.uexcorp.handler.config_handler
 from api.enums import WingmanInitializationErrorType
 from services.benchmark import Benchmark
 
@@ -10,11 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill
-
-try:
-    from skills.uexcorp.uexcorp.helper import Helper
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.helper import Helper
+from skills.uexcorp.uexcorp.helper import Helper
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -31,7 +29,8 @@ class UEXCorp(Skill):
     ) -> None:
         self.random_seed = uuid.uuid4()
         super().__init__(config=config, settings=settings, wingman=wingman)
-        self.__helper: Helper = None
+        self.__helper: Helper = Helper.get_instance()
+        self.__helper.prepare(self.threaded_execution, self.wingman)
         self.__invalid_session = False
         self.__initialized = False
 
@@ -40,29 +39,25 @@ class UEXCorp(Skill):
 
         # Lazy initialization of Helper singleton - only when skill is actually validated/activated
         if not self.__initialized:
-            self.__helper = Helper.get_instance()
             if (
                 self.__helper.get_wingmen() is not None
                 and self.__helper.get_wingmen() != self.wingman
             ):
                 self.__helper.get_handler_debug().write(
-                    "Please ensure that only one instance of UEXCorp skill is initialized at a time, that's a current limitation.",
+                    f"Please ensure that only one instance of UEXCorp skill is initialized at a time, that's a current limitation. Currently activated in {self.__helper.get_wingmen().name}",
                     True,
                 )
                 self.__invalid_session = True
-            else:
-                self.__helper.prepare(self.threaded_execution, self.wingman)
-                self.__helper.get_handler_config().set_wingman(self.wingman)
             self.__initialized = True
-
         if self.__invalid_session:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message=f"The UEXCorp skill is already initialized with '{self.__helper.get_wingmen().name}'.",
-                    error_type=WingmanInitializationErrorType.UNKNOWN,
-                )
-            )
+            # We will let it slide here but inform on skill call.
+            # errors.append(
+            #     WingmanInitializationError(
+            #         wingman_name=self.wingman.name,
+            #         message=f"The UEXCorp skill is already initialized with '{self.__helper.get_wingmen().name}'.",
+            #         error_type=WingmanInitializationErrorType.UNKNOWN,
+            #     )
+            # )
             return errors
 
         errors = await self.__helper.get_handler_config().validate(
@@ -116,6 +111,12 @@ class UEXCorp(Skill):
     async def execute_tool(
         self, tool_name: str, parameters: dict[str, any], benchmark: Benchmark
     ) -> tuple[str, str]:
+        if self.__invalid_session:
+            return (
+                f"Inform the user, that the UEXCorp skill is already initialized with '{self.__helper.get_wingmen().name}'. The user should ensure only one wingman has an activated UEXCorp skill. Currently activated another wingmane named '{self.__helper.get_wingmen().name}'.",
+                "",
+            )
+
         benchmark.start_snapshot(f"UEXCorp: {tool_name}")
         function_response, instant_response = (
             await self.__helper.get_handler_tool().execute_tool(tool_name, parameters)

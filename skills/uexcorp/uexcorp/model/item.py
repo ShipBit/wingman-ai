@@ -1,15 +1,8 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
-
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 if TYPE_CHECKING:
-    try:
-        from skills.uexcorp.uexcorp.model.item_attribute import ItemAttribute
-    except ModuleNotFoundError:
-        from uexcorp.uexcorp.model.item_attribute import ItemAttribute
+    from skills.uexcorp.uexcorp.model.item_attribute import ItemAttribute
 
 
 class Item(DataModel):
@@ -68,18 +61,9 @@ class Item(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.category import Category
-            from skills.uexcorp.uexcorp.model.category_attribute import CategoryAttribute
-            from skills.uexcorp.uexcorp.model.vehicle import Vehicle
-            from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-            from skills.uexcorp.uexcorp.model.item_attribute import ItemAttribute
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.category import Category
-            from uexcorp.uexcorp.model.category_attribute import CategoryAttribute
-            from uexcorp.uexcorp.model.vehicle import Vehicle
-            from uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-            from uexcorp.uexcorp.model.item_attribute import ItemAttribute
+        from skills.uexcorp.uexcorp.model.category import Category
+        from skills.uexcorp.uexcorp.model.vehicle import Vehicle
+        from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
 
         category = Category(self.get_id_category(), load=True) if self.get_id_category() else None
 
@@ -115,14 +99,7 @@ class Item(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.category_attribute import CategoryAttribute
-            from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-            from skills.uexcorp.uexcorp.model.vehicle import Vehicle
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.category_attribute import CategoryAttribute
-            from uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-            from uexcorp.uexcorp.model.vehicle import Vehicle
+        from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
 
         information = {
             "name": self.get_name(),
@@ -154,10 +131,7 @@ class Item(DataModel):
         return information
 
     def get_attributes(self) -> list["ItemAttribute"]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
+        from skills.uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
 
         return ItemAttributeDataAccess().add_filter_by_id_item(self.get_id()).load()
 

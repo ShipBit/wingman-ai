@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class Terminal(DataModel):
 
@@ -165,18 +162,11 @@ class Terminal(DataModel):
         return extras
 
     def get_offerings(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
-            from skills.uexcorp.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
-            from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-            from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-            from skills.uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
-            from uexcorp.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
-            from uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-            from uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-            from uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.vehicle_rental_price_data_access import VehicleRentalPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.vehicle_purchase_price_data_access import VehiclePurchasePriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_raw_price_data_access import CommodityRawPriceDataAccess
 
         offerings = {}
 
@@ -203,18 +193,11 @@ class Terminal(DataModel):
         return offerings
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.city import City
-            from skills.uexcorp.uexcorp.model.poi import Poi
-            from skills.uexcorp.uexcorp.model.outpost import Outpost
-            from skills.uexcorp.uexcorp.model.space_station import SpaceStation
-            from skills.uexcorp.uexcorp.model.faction import Faction
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.city import City
-            from uexcorp.uexcorp.model.poi import Poi
-            from uexcorp.uexcorp.model.outpost import Outpost
-            from uexcorp.uexcorp.model.space_station import SpaceStation
-            from uexcorp.uexcorp.model.faction import Faction
+        from skills.uexcorp.uexcorp.model.city import City
+        from skills.uexcorp.uexcorp.model.poi import Poi
+        from skills.uexcorp.uexcorp.model.outpost import Outpost
+        from skills.uexcorp.uexcorp.model.space_station import SpaceStation
+        from skills.uexcorp.uexcorp.model.faction import Faction
 
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
 
@@ -249,10 +232,7 @@ class Terminal(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.poi import Poi
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.poi import Poi
+        from skills.uexcorp.uexcorp.model.poi import Poi
 
         information = {
             "name": self.get_nickname(),

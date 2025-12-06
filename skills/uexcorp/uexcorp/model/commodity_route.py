@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class CommodityRoute(DataModel):
 
@@ -168,10 +165,7 @@ class CommodityRoute(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.helper import Helper
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.helper import Helper
+        from skills.uexcorp.uexcorp.helper import Helper
 
         helper = Helper.get_instance()
 

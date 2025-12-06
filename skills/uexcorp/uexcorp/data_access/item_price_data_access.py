@@ -1,9 +1,5 @@
-try:
-    from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
-    from skills.uexcorp.uexcorp.model.item_price import ItemPrice
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.data_access.data_access import DataAccess
-    from uexcorp.uexcorp.model.item_price import ItemPrice
+from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
+from skills.uexcorp.uexcorp.model.item_price import ItemPrice
 
 
 

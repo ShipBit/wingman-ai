@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class Faction(DataModel):
 
@@ -42,10 +39,7 @@ class Faction(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.star_system import StarSystem
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.star_system import StarSystem
+        from skills.uexcorp.uexcorp.model.star_system import StarSystem
 
         information = {
             "name": self.data["name"],
@@ -74,10 +68,7 @@ class Faction(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.star_system import StarSystem
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.star_system import StarSystem
+        from skills.uexcorp.uexcorp.model.star_system import StarSystem
 
         information = {
             "name": self.data["name"],

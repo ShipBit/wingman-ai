@@ -1,10 +1,6 @@
 import json
-try:
-    from skills.uexcorp.uexcorp.tool.tool import Tool
-    from skills.uexcorp.uexcorp.tool.validator import Validator
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.tool.tool import Tool
-    from uexcorp.uexcorp.tool.validator import Validator
+from skills.uexcorp.uexcorp.tool.tool import Tool
+from skills.uexcorp.uexcorp.tool.validator import Validator
 
 
 class VehicleInformation(Tool):
@@ -24,12 +20,8 @@ class VehicleInformation(Tool):
         limit: int | None = None,
         offset: int | None = None
     ) -> (str, str):
-        try:
-            from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-            from skills.uexcorp.uexcorp.helper import Helper
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-            from uexcorp.uexcorp.helper import Helper
+        from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+        from skills.uexcorp.uexcorp.helper import Helper
 
         helper = Helper.get_instance()
 

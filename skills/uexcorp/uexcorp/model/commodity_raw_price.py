@@ -1,7 +1,4 @@
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class CommodityRawPrice(DataModel):
 
@@ -47,12 +44,8 @@ class CommodityRawPrice(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.commodity import Commodity
-            from skills.uexcorp.uexcorp.model.terminal import Terminal
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.commodity import Commodity
-            from uexcorp.uexcorp.model.terminal import Terminal
+        from skills.uexcorp.uexcorp.model.commodity import Commodity
+        from skills.uexcorp.uexcorp.model.terminal import Terminal
 
         commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None

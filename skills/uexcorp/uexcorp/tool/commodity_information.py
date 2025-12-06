@@ -1,11 +1,7 @@
 import json
 
-try:
-    from skills.uexcorp.uexcorp.tool.tool import Tool
-    from skills.uexcorp.uexcorp.tool.validator import Validator
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.tool.tool import Tool
-    from uexcorp.uexcorp.tool.validator import Validator
+from skills.uexcorp.uexcorp.tool.tool import Tool
+from skills.uexcorp.uexcorp.tool.validator import Validator
 
 
 class CommodityInformation(Tool):
@@ -16,31 +12,24 @@ class CommodityInformation(Tool):
         super().__init__()
 
     def execute(
-            self,
-            filter_commodities: list[str] | None = None,
-            filter_is_buyable: bool | None = None,
-            filter_is_sellable: bool | None = None,
-            filter_is_legal: bool | None = None,
-            filter_location_whitelist: list[str] | None = None,
-            filter_location_blacklist: list[str] | None = None,
-            filter_buy_price: list[(int, str)] | None = None,
-            filter_sell_price: list[(int, str)] | None = None,
-            filter_profit_absolute_per_scu: list[(int, str)] | None = None,
-            filter_profit_margin_percent: list[(int, str)] | None = None,
-            filter_base_profit_percent: list[(int, str)] | None = None,
+        self,
+        filter_commodities: list[str] | None = None,
+        filter_is_buyable: bool | None = None,
+        filter_is_sellable: bool | None = None,
+        filter_is_legal: bool | None = None,
+        filter_location_whitelist: list[str] | None = None,
+        filter_location_blacklist: list[str] | None = None,
+        filter_buy_price: list[(int, str)] | None = None,
+        filter_sell_price: list[(int, str)] | None = None,
+        filter_profit_absolute_per_scu: list[(int, str)] | None = None,
+        filter_profit_margin_percent: list[(int, str)] | None = None,
+        filter_base_profit_percent: list[(int, str)] | None = None,
     ) -> (str, str):
-        try:
-            from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-            from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-            from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-            from skills.uexcorp.uexcorp.model.terminal import Terminal
-            from skills.uexcorp.uexcorp.helper import Helper
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-            from uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
-            from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-            from uexcorp.uexcorp.model.terminal import Terminal
-            from uexcorp.uexcorp.helper import Helper
+        from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_price_data_access import CommodityPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        from skills.uexcorp.uexcorp.model.terminal import Terminal
+        from skills.uexcorp.uexcorp.helper import Helper
 
         helper = Helper().get_instance()
 

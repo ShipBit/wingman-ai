@@ -5,10 +5,7 @@ from os import path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    try:
-        from skills.uexcorp.uexcorp.helper import Helper
-    except ModuleNotFoundError:
-        from uexcorp.uexcorp.helper import Helper
+    from skills.uexcorp.uexcorp.helper import Helper
 
 
 class ErrorHandler:

@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 class ItemPrice(DataModel):
 
@@ -44,12 +41,8 @@ class ItemPrice(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.item import Item
-            from skills.uexcorp.uexcorp.model.terminal import Terminal
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.item import Item
-            from uexcorp.uexcorp.model.terminal import Terminal
+        from skills.uexcorp.uexcorp.model.item import Item
+        from skills.uexcorp.uexcorp.model.terminal import Terminal
 
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
         item = Item(self.get_id_item(), load=True) if self.get_id_item() else None

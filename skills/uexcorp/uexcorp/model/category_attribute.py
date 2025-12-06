@@ -1,10 +1,7 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.category import Category
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.category import Category
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.category import Category
+from skills.uexcorp.uexcorp.model.data_model import DataModel
+
 
 class CategoryAttribute(DataModel):
 
@@ -36,10 +33,7 @@ class CategoryAttribute(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.category import Category
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.category import Category
+        from skills.uexcorp.uexcorp.model.category import Category
 
         category = Category(self.get_id_category(), load=True) if self.get_id_category() else None
 

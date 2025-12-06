@@ -1,8 +1,5 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 
 class City(DataModel):
@@ -155,18 +152,11 @@ class City(DataModel):
         return properties
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.planet import Planet
-            from skills.uexcorp.uexcorp.model.moon import Moon
-            from skills.uexcorp.uexcorp.model.faction import Faction
-            from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
-            from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.planet import Planet
-            from uexcorp.uexcorp.model.moon import Moon
-            from uexcorp.uexcorp.model.faction import Faction
-            from uexcorp.uexcorp.model.jurisdiction import Jurisdiction
-            from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        from skills.uexcorp.uexcorp.model.planet import Planet
+        from skills.uexcorp.uexcorp.model.moon import Moon
+        from skills.uexcorp.uexcorp.model.faction import Faction
+        from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
+        from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
         terminals = TerminalDataAccess().add_filter_by_id_city(self.get_id()).load()
         faction = Faction(self.get_id_faction(), load=True) if self.get_id_faction() else None
@@ -194,10 +184,7 @@ class City(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
         terminals = TerminalDataAccess().add_filter_by_id_space_station(self.get_id()).load()
 

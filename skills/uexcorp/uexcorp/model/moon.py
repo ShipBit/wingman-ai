@@ -1,8 +1,6 @@
 from datetime import datetime
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.model.data_model import DataModel
+
 
 class Moon(DataModel):
 
@@ -63,22 +61,13 @@ class Moon(DataModel):
 
 
     def get_data_for_ai(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.model.planet import Planet
-            from skills.uexcorp.uexcorp.model.faction import Faction
-            from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
-            from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
-            from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-            from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.planet import Planet
-            from uexcorp.uexcorp.model.faction import Faction
-            from uexcorp.uexcorp.model.jurisdiction import Jurisdiction
-            from uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
-            from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-            from uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+        from skills.uexcorp.uexcorp.model.planet import Planet
+        from skills.uexcorp.uexcorp.model.faction import Faction
+        from skills.uexcorp.uexcorp.model.jurisdiction import Jurisdiction
+        from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
+        from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
+        from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
 
         planet = Planet(self.get_id_planet(), load=True) if self.get_id_planet() else None
         cities = CityDataAccess().add_filter_by_id_moon(self.get_id()).load()
@@ -103,16 +92,10 @@ class Moon(DataModel):
         return information
 
     def get_data_for_ai_minimal(self) -> dict:
-        try:
-            from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
-            from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-            from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
-            from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-            from uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-            from uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+        from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
+        from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
+        from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
 
         cities = CityDataAccess().add_filter_by_id_moon(self.get_id()).load()
         pois = PoiDataAccess().add_filter_by_id_moon(self.get_id()).load()

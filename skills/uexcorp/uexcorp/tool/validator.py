@@ -1,38 +1,21 @@
 import inspect
-try:
-    from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
-    from skills.uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
-    from skills.uexcorp.uexcorp.data_access.orbit_data_access import OrbitDataAccess
-    from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
-    from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-    from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-    from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-    from skills.uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
-    from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-    from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-    from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-    from skills.uexcorp.uexcorp.data_access.company_data_access import CompanyDataAccess
-    from skills.uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
-    from skills.uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
-    from skills.uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
-    from skills.uexcorp.uexcorp.helper import Helper
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
-    from uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
-    from uexcorp.uexcorp.data_access.orbit_data_access import OrbitDataAccess
-    from uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
-    from uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-    from uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-    from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-    from uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
-    from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-    from uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
-    from uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-    from uexcorp.uexcorp.data_access.company_data_access import CompanyDataAccess
-    from uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
-    from uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
-    from uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
-    from uexcorp.uexcorp.helper import Helper
+from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
+from skills.uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
+from skills.uexcorp.uexcorp.data_access.orbit_data_access import OrbitDataAccess
+from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
+from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
+from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+from skills.uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+from skills.uexcorp.uexcorp.data_access.vehicle_data_access import VehicleDataAccess
+from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+from skills.uexcorp.uexcorp.data_access.company_data_access import CompanyDataAccess
+from skills.uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
+from skills.uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
+from skills.uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
+from skills.uexcorp.uexcorp.helper import Helper
+
 
 class Validator:
 
@@ -154,10 +137,10 @@ class Validator:
         if isinstance(boolean, bool):
             return boolean, None
 
-        if boolean.lower() == "true" or "1":
+        if boolean.lower() == "true" or boolean == "1":
             return True, None
 
-        elif boolean.lower() == "false" or "0":
+        if boolean.lower() == "false" or boolean == "0":
             return False, None
 
         return None, "Invalid boolean value"
@@ -202,10 +185,7 @@ class Validator:
         return {"type": "string"}
 
     async def __validate_vehicle_role(self, name: str) -> (str | None, str | None):
-        try:
-            from skills.uexcorp.uexcorp.model.vehicle import Vehicle
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.vehicle import Vehicle
+        from skills.uexcorp.uexcorp.model.vehicle import Vehicle
 
         closest_match, options = await self.__helper.get_llm().find_closest_match(name, list(Vehicle.VEHICLE_ROLES.keys()))
         if closest_match:
@@ -214,10 +194,7 @@ class Validator:
         return None, f"Invalid vehicle role, no match found for '{name}': Did you mean one of those?: {options}"
 
     def __definition_vehicle_role(self, **kwargs) -> dict[str, any]:
-        try:
-            from skills.uexcorp.uexcorp.model.vehicle import Vehicle
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.vehicle import Vehicle
+        from skills.uexcorp.uexcorp.model.vehicle import Vehicle
 
         return {"type": "string", "enum": list(Vehicle.VEHICLE_ROLES.keys())}
 
@@ -238,6 +215,9 @@ class Validator:
         return None, f"Invalid star system name, no match found for '{name}': Did you mean one of those?: {options}"
 
     def __definition_star_system(self, available: bool = False) -> dict[str, any]:
+        return {"type": "string"}
+
+        # backup for pre 1_9_0 logic
         if not available:
             return {"type": "string"}
 
@@ -373,6 +353,9 @@ class Validator:
         return None, f"Invalid category name, no match found for '{name}': Did you mean one of those?: {options}"
 
     def __definition_category(self, is_game_related: bool | None = None, **kwargs) -> dict[str, any]:
+        return {"type": "string"}
+
+        # backup for pre 1_9_0 logic
         category_data_access = CategoryDataAccess()
         if is_game_related is not None:
             category_data_access.add_filter_by_is_game_related(is_game_related)

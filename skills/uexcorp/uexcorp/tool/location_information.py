@@ -1,12 +1,7 @@
 import json
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-    from skills.uexcorp.uexcorp.tool.tool import Tool
-    from skills.uexcorp.uexcorp.tool.validator import Validator
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
-    from uexcorp.uexcorp.tool.tool import Tool
-    from uexcorp.uexcorp.tool.validator import Validator
+from skills.uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.tool.tool import Tool
+from skills.uexcorp.uexcorp.tool.validator import Validator
 
 
 class LocationInformation(Tool):
@@ -38,10 +33,7 @@ class LocationInformation(Tool):
         is_monitored: bool | None = None,
         has_quantum_marker: bool | None = None,
     ) -> (str, str):
-        try:
-            from skills.uexcorp.uexcorp.helper import Helper
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.helper import Helper
+        from skills.uexcorp.uexcorp.helper import Helper
 
         self.__filter_locations = filter_locations or []
         self.__filter_location_types = filter_location_types or []
@@ -101,10 +93,7 @@ class LocationInformation(Tool):
         return json.dumps(locations), ""
 
     def __get_star_systems(self) -> list[DataModel]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
+        from skills.uexcorp.uexcorp.data_access.star_system_data_access import StarSystemDataAccess
 
         star_system_data_access = StarSystemDataAccess()
         star_system_data_access.add_filter_by_is_available(True)
@@ -114,10 +103,7 @@ class LocationInformation(Tool):
         return star_system_data_access.load()
 
     def __get_space_stations(self) -> list[DataModel]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
+        from skills.uexcorp.uexcorp.data_access.space_station_data_access import SpaceStationDataAccess
 
         space_station_data_access = SpaceStationDataAccess()
         space_station_data_access.add_filter_by_is_available(True)
@@ -131,10 +117,7 @@ class LocationInformation(Tool):
         return space_station_data_access.load()
 
     def __get_planets(self) -> list[DataModel]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
+        from skills.uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
 
         planet_data_access = PlanetDataAccess()
         planet_data_access.add_filter_by_is_available(True)
@@ -146,10 +129,7 @@ class LocationInformation(Tool):
         return planet_data_access.load()
 
     def __get_pois(self) -> list[DataModel]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
+        from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
 
         poi_data_access = PoiDataAccess()
         poi_data_access.add_filter_by_is_available(True)
@@ -161,10 +141,7 @@ class LocationInformation(Tool):
         return poi_data_access.load()
 
     def __get_outposts(self) -> list[DataModel]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
+        from skills.uexcorp.uexcorp.data_access.outpost_data_access import OutpostDataAccess
 
         outpost_data_access = OutpostDataAccess()
         outpost_data_access.add_filter_by_is_available(True)
@@ -176,10 +153,7 @@ class LocationInformation(Tool):
         return outpost_data_access.load()
 
     def __get_moons(self) -> list[DataModel]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
+        from skills.uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
 
         moon_data_access = MoonDataAccess()
         moon_data_access.add_filter_by_is_available(True)
@@ -191,10 +165,7 @@ class LocationInformation(Tool):
         return moon_data_access.load()
 
     def __get_cities(self) -> list[DataModel]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
+        from skills.uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
 
         city_data_access = CityDataAccess()
         city_data_access.add_filter_by_is_available(True)
@@ -206,12 +177,8 @@ class LocationInformation(Tool):
         return city_data_access.load()
 
     def __get_terminals(self) -> list[DataModel]:
-        try:
-            from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-            from skills.uexcorp.uexcorp.model.terminal import Terminal
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-            from uexcorp.uexcorp.model.terminal import Terminal
+        from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        from skills.uexcorp.uexcorp.model.terminal import Terminal
 
         terminal_data_access = TerminalDataAccess()
         terminal_data_access.add_filter_by_type(Terminal.TYPE_COMMODITY)

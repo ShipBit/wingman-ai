@@ -1,10 +1,6 @@
 import json
-try:
-    from skills.uexcorp.uexcorp.tool.tool import Tool
-    from skills.uexcorp.uexcorp.tool.validator import Validator
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.tool.tool import Tool
-    from uexcorp.uexcorp.tool.validator import Validator
+from skills.uexcorp.uexcorp.tool.tool import Tool
+from skills.uexcorp.uexcorp.tool.validator import Validator
 
 
 class ProfitCalculation(Tool):

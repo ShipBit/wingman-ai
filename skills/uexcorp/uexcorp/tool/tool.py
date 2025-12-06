@@ -1,9 +1,5 @@
-try:
-    from skills.uexcorp.uexcorp.helper import Helper
-    from skills.uexcorp.uexcorp.tool.validator import Validator
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.helper import Helper
-    from uexcorp.uexcorp.tool.validator import Validator
+from skills.uexcorp.uexcorp.helper import Helper
+from skills.uexcorp.uexcorp.tool.validator import Validator
 
 
 class Tool:

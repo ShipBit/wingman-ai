@@ -7,10 +7,56 @@ from services.file import get_writable_dir
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
+    from skills.uexcorp.uexcorp.helper import Helper
+
+
+def get_tools() -> tuple[list, bool]:
+    from skills.uexcorp.uexcorp.tool.commodity_information import CommodityInformation
+    from skills.uexcorp.uexcorp.tool.commodity_route import CommodityRoute
+    from skills.uexcorp.uexcorp.tool.item_information import ItemInformation
+    from skills.uexcorp.uexcorp.tool.location_information import LocationInformation
+    from skills.uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
+    from skills.uexcorp.uexcorp.tool.profit_calculation import ProfitCalculation
+
+    needs_authentication = False
+    tools = []
     try:
-        from skills.uexcorp.uexcorp.helper import Helper
-    except ModuleNotFoundError:
-        from uexcorp.uexcorp.helper import Helper
+        # Enable all tools by default for now as a test with new skill discovery
+
+        # if retrieve_custom_property_value("tool_commodity_information", errors):
+        tools.append(CommodityInformation.TOOL_NAME)
+        if CommodityInformation.REQUIRES_AUTHENTICATION:
+            needs_authentication = True
+
+        # if True or retrieve_custom_property_value("tool_commodity_route", errors):
+        tools.append(CommodityRoute.TOOL_NAME)
+        if CommodityRoute.REQUIRES_AUTHENTICATION:
+            needs_authentication = True
+
+        # if True or retrieve_custom_property_value("tool_item_information", errors):
+        tools.append(ItemInformation.TOOL_NAME)
+        if ItemInformation.REQUIRES_AUTHENTICATION:
+            needs_authentication = True
+
+        # if True or retrieve_custom_property_value("tool_location_information", errors):
+        tools.append(LocationInformation.TOOL_NAME)
+        if LocationInformation.REQUIRES_AUTHENTICATION:
+            needs_authentication = True
+
+        # if True or retrieve_custom_property_value("tool_vehicle_information", errors):
+        tools.append(VehicleInformation.TOOL_NAME)
+        if VehicleInformation.REQUIRES_AUTHENTICATION:
+            needs_authentication = True
+
+        # if True or retrieve_custom_property_value("tool_profit_calculation", errors):
+        tools.append(ProfitCalculation.TOOL_NAME)
+        if ProfitCalculation.REQUIRES_AUTHENTICATION:
+            needs_authentication = True
+    except Exception:
+        pass
+
+    return tools, needs_authentication
+
 
 class ConfigHandler:
     def __init__(
@@ -18,7 +64,7 @@ class ConfigHandler:
         helper: "Helper"
     ):
         self.__helper = helper
-        self.__wingman: "OpenAiWingman" | None = None
+        self.__wingman: "OpenAiWingman | None" = None
         self.__fine_config_path: str = get_writable_dir(os.path.join(self.__helper.get_data_path(), "config"))
         self.__api_url: str = "https://api.uexcorp.space/2.0"
         self.__api_use_key: bool = False
@@ -30,7 +76,9 @@ class ConfigHandler:
         self.__cache_lifetime_mid: int = 24 * 60 * 60 # 24 hours
         self.__cache_lifetime_long: int = 14 * 24 * 60 * 60 # 14 days
 
-        self.__behavior_enabled_tools: list[str] = []
+        tools, needs_authentication = get_tools()
+        self.__behavior_enabled_tools: list[str] = tools
+        self.__behavior_enabled_tools_need_authentication: bool = needs_authentication
         self.__behavior_commodity_route_default_count: int = 1
         self.__behavior_commodity_route_use_estimated_availability: bool = True
         self.__behavior_commodity_route_advanced_info: bool = False
@@ -38,62 +86,6 @@ class ConfigHandler:
 
     async def validate(self, errors: list[WingmanInitializationError], retrieve_custom_property_value: callable) -> list[WingmanInitializationError]:
         try:
-            from skills.uexcorp.uexcorp.tool.commodity_information import CommodityInformation
-            from skills.uexcorp.uexcorp.tool.commodity_route import CommodityRoute
-            from skills.uexcorp.uexcorp.tool.item_information import ItemInformation
-            from skills.uexcorp.uexcorp.tool.location_information import LocationInformation
-            from skills.uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
-            from skills.uexcorp.uexcorp.tool.profit_calculation import ProfitCalculation
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.tool.commodity_information import CommodityInformation
-            from uexcorp.uexcorp.tool.commodity_route import CommodityRoute
-            from uexcorp.uexcorp.tool.item_information import ItemInformation
-            from uexcorp.uexcorp.tool.location_information import LocationInformation
-            from uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
-            from uexcorp.uexcorp.tool.profit_calculation import ProfitCalculation
-
-        try:
-            needs_authentication = False
-
-            if retrieve_custom_property_value("tool_commodity_information", errors):
-                self.__behavior_enabled_tools.append(CommodityInformation.TOOL_NAME)
-                if CommodityInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
-
-            if retrieve_custom_property_value("tool_commodity_route", errors):
-                self.__behavior_enabled_tools.append(CommodityRoute.TOOL_NAME)
-                if CommodityRoute.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
-
-            if retrieve_custom_property_value("tool_item_information", errors):
-                self.__behavior_enabled_tools.append(ItemInformation.TOOL_NAME)
-                if ItemInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
-
-            if retrieve_custom_property_value("tool_location_information", errors):
-                self.__behavior_enabled_tools.append(LocationInformation.TOOL_NAME)
-                if LocationInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
-
-            if retrieve_custom_property_value("tool_vehicle_information", errors):
-                self.__behavior_enabled_tools.append(VehicleInformation.TOOL_NAME)
-                if VehicleInformation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
-
-            if retrieve_custom_property_value("tool_profit_calculation", errors):
-                self.__behavior_enabled_tools.append(ProfitCalculation.TOOL_NAME)
-                if ProfitCalculation.REQUIRES_AUTHENTICATION:
-                    needs_authentication = True
-
-            if needs_authentication:
-                api_key = await self.__helper.get_handler_secret().retrieve(
-                    requester="UEX config service",
-                    key="uex",
-                    prompt_if_missing=True
-                )
-                if api_key:
-                    self.set_api_key(api_key)
-
             self.set_behavior_update_fasterwhisper_hotwords(
                 retrieve_custom_property_value("add_fasterwhisper_hotwords", errors)
             )
@@ -109,6 +101,16 @@ class ConfigHandler:
             self.set_behavior_commodity_route_advanced_info(
                 retrieve_custom_property_value("commodity_route_advanced_info", errors)
             )
+
+            if self.__behavior_enabled_tools_need_authentication:
+                api_key = await self.__helper.get_handler_secret().retrieve(
+                    requester="UEX config service",
+                    key="uex",
+                    prompt_if_missing=True
+                )
+                if api_key:
+                    self.set_api_key(api_key)
+
         except Exception as e:
             self.__helper.get_handler_debug().write(f"Error while validating config: {e}", True)
             self.__helper.get_handler_error().write("ConfigHandler.validate", [errors], e)
@@ -127,10 +129,7 @@ class ConfigHandler:
         self.__sync_terminal_blacklist()
 
     def __sync_commodity_blacklist(self):
-        try:
-            from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
+        from skills.uexcorp.uexcorp.data_access.commodity_data_access import CommodityDataAccess
 
         if not self.__helper.is_ready():
             return False
@@ -180,10 +179,7 @@ class ConfigHandler:
             file.write(yaml.dump(commodity_data))
 
     def __sync_terminal_blacklist(self):
-        try:
-            from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
 
         if not self.__helper.is_ready():
             return False

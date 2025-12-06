@@ -1,12 +1,6 @@
 import json
-try:
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-    from skills.uexcorp.uexcorp.tool.tool import Tool
-    from skills.uexcorp.uexcorp.tool.validator import Validator
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.model.data_model import DataModel
-    from uexcorp.uexcorp.tool.tool import Tool
-    from uexcorp.uexcorp.tool.validator import Validator
+from skills.uexcorp.uexcorp.tool.tool import Tool
+from skills.uexcorp.uexcorp.tool.validator import Validator
 
 
 class ItemInformation(Tool):
@@ -25,26 +19,15 @@ class ItemInformation(Tool):
         filter_company: list[str] | None = None,
         filter_attribute: list[dict[str, str, str]] | None = None,
     ) -> (str, str):
-        try:
-            from skills.uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
-            from skills.uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
-            from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-            from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-            from skills.uexcorp.uexcorp.data_access.company_data_access import CompanyDataAccess
-            from skills.uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
-            from skills.uexcorp.uexcorp.database.filter import Filter
-            from skills.uexcorp.uexcorp.model.terminal import Terminal
-            from skills.uexcorp.uexcorp.helper import Helper
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
-            from uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
-            from uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
-            from uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
-            from uexcorp.uexcorp.data_access.company_data_access import CompanyDataAccess
-            from uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
-            from uexcorp.uexcorp.database.filter import Filter
-            from uexcorp.uexcorp.model.terminal import Terminal
-            from uexcorp.uexcorp.helper import Helper
+        from skills.uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
+        from skills.uexcorp.uexcorp.data_access.category_data_access import CategoryDataAccess
+        from skills.uexcorp.uexcorp.data_access.terminal_data_access import TerminalDataAccess
+        from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
+        from skills.uexcorp.uexcorp.data_access.company_data_access import CompanyDataAccess
+        from skills.uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess
+        from skills.uexcorp.uexcorp.database.filter import Filter
+        from skills.uexcorp.uexcorp.model.terminal import Terminal
+        from skills.uexcorp.uexcorp.helper import Helper
 
         helper = Helper().get_instance()
         item_data_access = ItemDataAccess()

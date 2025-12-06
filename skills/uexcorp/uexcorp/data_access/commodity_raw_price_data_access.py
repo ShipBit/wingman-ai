@@ -1,9 +1,5 @@
-try:
-    from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
-    from skills.uexcorp.uexcorp.model.commodity_raw_price import CommodityRawPrice
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.data_access.data_access import DataAccess
-    from uexcorp.uexcorp.model.commodity_raw_price import CommodityRawPrice
+from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
+from skills.uexcorp.uexcorp.model.commodity_raw_price import CommodityRawPrice
 
 
 class CommodityRawPriceDataAccess(DataAccess):

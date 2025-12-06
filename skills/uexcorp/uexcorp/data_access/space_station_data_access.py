@@ -1,11 +1,6 @@
-try:
-    from skills.uexcorp.uexcorp.database.filter import Filter
-    from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
-    from skills.uexcorp.uexcorp.model.space_station import SpaceStation
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.database.filter import Filter
-    from uexcorp.uexcorp.data_access.data_access import DataAccess
-    from uexcorp.uexcorp.model.space_station import SpaceStation
+from skills.uexcorp.uexcorp.database.filter import Filter
+from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
+from skills.uexcorp.uexcorp.model.space_station import SpaceStation
 
 
 class SpaceStationDataAccess(DataAccess):

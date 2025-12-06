@@ -7,26 +7,15 @@ from services.file import get_writable_dir
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
-try:
-    from skills.uexcorp.uexcorp.handler.config_handler import ConfigHandler
-    from skills.uexcorp.uexcorp.database.database import Database
-    from skills.uexcorp.uexcorp.handler.import_handler import ImportHandler
-    from skills.uexcorp.uexcorp.handler.debug_handler import DebugHandler
-    from skills.uexcorp.uexcorp.handler.error_handler import ErrorHandler
-    from skills.uexcorp.uexcorp.api.llm import Llm
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.handler.config_handler import ConfigHandler
-    from uexcorp.uexcorp.database.database import Database
-    from uexcorp.uexcorp.handler.import_handler import ImportHandler
-    from uexcorp.uexcorp.handler.debug_handler import DebugHandler
-    from uexcorp.uexcorp.handler.error_handler import ErrorHandler
-    from uexcorp.uexcorp.api.llm import Llm
+from skills.uexcorp.uexcorp.handler.config_handler import ConfigHandler
+from skills.uexcorp.uexcorp.database.database import Database
+from skills.uexcorp.uexcorp.handler.import_handler import ImportHandler
+from skills.uexcorp.uexcorp.handler.debug_handler import DebugHandler
+from skills.uexcorp.uexcorp.handler.error_handler import ErrorHandler
+from skills.uexcorp.uexcorp.api.llm import Llm
 
 if TYPE_CHECKING:
-    try:
-        from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
-    except ModuleNotFoundError:
-        from uexcorp.uexcorp.handler.tool_handler import ToolHandler
+    from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
     from wingmen.open_ai_wingman import OpenAiWingman
 
 printr = Printr()
@@ -52,9 +41,7 @@ class Helper:
     def __init__(self):
         self.__is_loaded = None
         self.__data_path: str = get_writable_dir(path.join("skills", "uexcorp", "data"))
-        self.__version_file_path: str = get_writable_dir(path.join("skills", "uexcorp"))
-        self.__version_file_name: str = "version"
-        self.__version_skill: str | None = None
+        self.__version_skill: str = 'v2.1.1-20251206'
         self.__version_uex: str | None = None
         self.__debug: bool = True
         self.__default_thread = threading.get_ident()
@@ -80,12 +67,10 @@ class Helper:
         self.__wingman = None
 
     def prepare(self, threaded_execution: callable, wingman: "OpenAiWingman"):
-        try:
-            from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.handler.tool_handler import ToolHandler
+        from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
 
         self.__wingman = wingman
+        self.get_handler_config().set_wingman(self.__wingman)
         self.__threaded_execution = threaded_execution
         self.__database: Database = Database(
             self.__data_path, self.get_version_skill(), self
@@ -136,68 +121,40 @@ class Helper:
         self.__handler_debug.write(
             f"{'Unloading' if unload else 'Syncing'} UEX unique names with FasterWhisper hotword list..."
         )
-        try:
-            from skills.uexcorp.uexcorp.data_access.city_data_access import (
-                CityDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.commodity_data_access import (
-                CommodityDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.company_data_access import (
-                CompanyDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.item_data_acceess import (
-                ItemDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.moon_data_access import (
-                MoonDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.outpost_data_access import (
-                OutpostDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.planet_data_access import (
-                PlanetDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-            from skills.uexcorp.uexcorp.data_access.space_station_data_access import (
-                SpaceStationDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.star_system_data_access import (
-                StarSystemDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.terminal_data_access import (
-                TerminalDataAccess,
-            )
-            from skills.uexcorp.uexcorp.data_access.vehicle_data_access import (
-                VehicleDataAccess,
-            )
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.data_access.city_data_access import CityDataAccess
-            from uexcorp.uexcorp.data_access.commodity_data_access import (
-                CommodityDataAccess,
-            )
-            from uexcorp.uexcorp.data_access.company_data_access import (
-                CompanyDataAccess,
-            )
-            from uexcorp.uexcorp.data_access.item_data_acceess import ItemDataAccess
-            from uexcorp.uexcorp.data_access.moon_data_access import MoonDataAccess
-            from uexcorp.uexcorp.data_access.outpost_data_access import (
-                OutpostDataAccess,
-            )
-            from uexcorp.uexcorp.data_access.planet_data_access import PlanetDataAccess
-            from uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
-            from uexcorp.uexcorp.data_access.space_station_data_access import (
-                SpaceStationDataAccess,
-            )
-            from uexcorp.uexcorp.data_access.star_system_data_access import (
-                StarSystemDataAccess,
-            )
-            from uexcorp.uexcorp.data_access.terminal_data_access import (
-                TerminalDataAccess,
-            )
-            from uexcorp.uexcorp.data_access.vehicle_data_access import (
-                VehicleDataAccess,
-            )
+        from skills.uexcorp.uexcorp.data_access.city_data_access import (
+            CityDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.commodity_data_access import (
+            CommodityDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.company_data_access import (
+            CompanyDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.item_data_acceess import (
+            ItemDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.moon_data_access import (
+            MoonDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.outpost_data_access import (
+            OutpostDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.planet_data_access import (
+            PlanetDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.poi_data_access import PoiDataAccess
+        from skills.uexcorp.uexcorp.data_access.space_station_data_access import (
+            SpaceStationDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.star_system_data_access import (
+            StarSystemDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.terminal_data_access import (
+            TerminalDataAccess,
+        )
+        from skills.uexcorp.uexcorp.data_access.vehicle_data_access import (
+            VehicleDataAccess,
+        )
 
         data_access_instances = [
             CityDataAccess(),
@@ -328,21 +285,13 @@ class Helper:
         return self.__debug
 
     def get_version_skill(self, force_check: bool = False) -> str:
-        if not self.__version_skill or force_check:
-            with open(
-                path.join(self.__version_file_path, self.__version_file_name), "r"
-            ) as f:
-                self.__version_skill = f"{f.read()}"
         return self.__version_skill
 
     def get_version_skill_short(self):
         return self.get_version_skill().split("-")[0]
 
     def get_version_uex(self, force_check: bool = False):
-        try:
-            from skills.uexcorp.uexcorp.model.game_version import GameVersion
-        except ModuleNotFoundError:
-            from uexcorp.uexcorp.model.game_version import GameVersion
+        from skills.uexcorp.uexcorp.model.game_version import GameVersion
 
         if force_check:
             self.__version_uex = self.__handler_import.get_version_uex(force_check)

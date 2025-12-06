@@ -1,11 +1,6 @@
-try:
-    from skills.uexcorp.uexcorp.database.filter import Filter
-    from skills.uexcorp.uexcorp.helper import Helper
-    from skills.uexcorp.uexcorp.model.data_model import DataModel
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.database.filter import Filter
-    from uexcorp.uexcorp.helper import Helper
-    from uexcorp.uexcorp.model.data_model import DataModel
+from skills.uexcorp.uexcorp.database.filter import Filter
+from skills.uexcorp.uexcorp.helper import Helper
+from skills.uexcorp.uexcorp.model.data_model import DataModel
 
 
 class DataAccess :

@@ -1,8 +1,5 @@
 import json
-try:
-    from skills.uexcorp.uexcorp.helper import Helper
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.helper import Helper
+from skills.uexcorp.uexcorp.helper import Helper
 
 
 class DataModel:

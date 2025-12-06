@@ -1,11 +1,7 @@
-try:
-    from skills.uexcorp.uexcorp.database.filter import Filter
-    from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
-    from skills.uexcorp.uexcorp.model.moon import Moon
-except ModuleNotFoundError:
-    from uexcorp.uexcorp.database.filter import Filter
-    from uexcorp.uexcorp.data_access.data_access import DataAccess
-    from uexcorp.uexcorp.model.moon import Moon
+from skills.uexcorp.uexcorp.database.filter import Filter
+from skills.uexcorp.uexcorp.data_access.data_access import DataAccess
+from skills.uexcorp.uexcorp.model.moon import Moon
+
 
 class MoonDataAccess(DataAccess):
     def __init__(
