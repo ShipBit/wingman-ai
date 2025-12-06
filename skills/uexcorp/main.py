@@ -113,7 +113,7 @@ class UEXCorp(Skill):
     ) -> tuple[str, str]:
         if self.__invalid_session:
             return (
-                f"Inform the user, that the UEXCorp skill is already initialized with '{self.__helper.get_wingmen().name}'. The user should ensure only one wingman has an activated UEXCorp skill. Currently activated another wingmane named '{self.__helper.get_wingmen().name}'.",
+                f"Inform the user, that the UEXCorp skill is already initialized with '{self.__helper.get_wingmen().name}'. The user should ensure only one wingman has an activated UEXCorp skill. Currently activated another wingman named '{self.__helper.get_wingmen().name}'.",
                 "",
             )
 
