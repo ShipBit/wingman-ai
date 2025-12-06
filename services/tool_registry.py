@@ -401,12 +401,12 @@ class SkillRegistry:
 
         return [
             (
-                "search_capabilities",
+                "search_skills",
                 {
                     "type": "function",
                     "function": {
-                        "name": "search_capabilities",
-                        "description": f"Search for built-in Wingman skills or external MCP servers to get details and activate them. Available: {skills_hint}",
+                        "name": "search_skills",
+                        "description": f"Search for built-in Wingman skills to get details and activate them. Available: {skills_hint}",
                         "parameters": {
                             "type": "object",
                             "properties": {
