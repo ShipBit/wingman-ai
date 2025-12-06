@@ -2,7 +2,6 @@ import sys
 import os
 import uuid
 
-import skills.uexcorp.uexcorp.handler.config_handler
 from api.enums import WingmanInitializationErrorType
 from services.benchmark import Benchmark
 
