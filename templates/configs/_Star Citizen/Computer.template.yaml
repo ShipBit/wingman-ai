@@ -9,7 +9,6 @@ disabled_skills:
   - ControlWindows
   - FileManager
   - Msfs2020Control
-  - NMSAssistant
   - QuickCommands
   - RadioChatter
   - Spotify
@@ -20,6 +19,7 @@ disabled_skills:
 disabled_mcps:
   - wingman_websearch
   - wingman_perplexity
+  - wingman_no_mans_sky
 prompts:
   backstory: |
     Your name is "Computer" and you are the AI board computer of a spacecraft in the Star Citizen universe.

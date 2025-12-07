@@ -2,12 +2,14 @@ name: Clippy
 description: |
   The famous Microsoft Office assistant, now with AI powers. Fun, friendly, and speaks in third person.
   Secretly condescending about basic tasks, but always reassures users of his helpfulness.
+disabled_mcps:
+  - wingman_perplexity
+  - wingman_no_mans_sky
 disabled_skills:
   - ATSTelemetry
   - AudioDeviceChanger
   - GoogleSearch
   - Msfs2020Control
-  - NMSAssistant
   - QuickCommands
   - RadioChatter
   - Spotify

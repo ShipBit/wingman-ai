@@ -1,50 +1,48 @@
-# MCP (Model Context Protocol) Server Configuration
-# This file defines all available MCP servers that can be used by any Wingman.
-# Individual Wingmen can disable specific servers using their disabled_mcps list.
-
 servers:
   - name: wingman_date_time
     display_name: Wingman Date Time
-    description: Retrieves the current date and time and converts dates to different timezones.
+    description: Get current date and time. Convert between timezones. What time is it? What day is today?
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/time/mcp
     enabled: true
     aliases:
-      - date
-      - time
-      - today
-      - current date
+      - clock
+      - now
 
   - name: wingman_websearch
     display_name: Wingman Web Search
-    description: Search the internet with Brave or Tavily and fetches web pages. Use this MCP for any generic web searches.
+    description: Search the web with Brave or Tavily. Fetch and read web pages. Extract content from URLs.
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/mcp
     enabled: false
     aliases:
       - Brave
       - Tavily
+      - Google
+      - website
       - internet
-      - web
-      - search
-      - news
-      - information
-      - fetch
-      - read website
+      - look up
+      - find online
 
   - name: wingman_perplexity
     display_name: Perplexity Web Search
-    description: Search the internet with Perplexity. Only use this MCP if the user specifically requests Perplexity or states they want synthesized information from multiple online sources, complete with citations for verification.
+    description: Perplexity AI web search with citations. Deep internet research and fact-checking. Synthesized answers from multiple online sources.
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/perplexity/mcp
     enabled: false
     aliases:
-      - Perplexity
-      - internet
-      - web
-      - search
-      - news
-      - information
-      - fetch
-      - synthesized information
-      - citations for verification
+      - verify
+      - references
+
+  - name: wingman_no_mans_sky
+    display_name: No Man's Sky Assistant
+    description: No Man's Sky game data. Item lookup, refiner recipes, cooking recipes. Expeditions, community missions, patch notes.
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/no-mans-sky-assistant/mcp
+    enabled: false
+    aliases:
+      - No Mans Sky
+      - NMS
+      - Hello Games
+      - how to make
+      - what can I craft

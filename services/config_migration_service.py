@@ -404,7 +404,10 @@ class ConfigMigrationService:
             "google_search",
             "web_search",
             "time_and_date_retriever",
+            "ask_perplexity",
+            "nms_assistant",
         }
+
         builtin_skills.update(removed_builtin_skills)
 
         custom_skills_copied = []
@@ -724,17 +727,36 @@ class ConfigMigrationService:
                 if not old["inworld"]:
                     del old["inworld"]
 
+            # Skills removed in 1.9.0 (converted to MCP servers or deprecated)
+            # We must remove any config overrides for these skills
+            removed_skill_modules = {
+                "skills.google_search.main",
+                "skills.web_search.main",
+                "skills.time_and_date_retriever.main",
+                "skills.nms_assistant.main",
+                "skills.ask_perplexity.main",
+            }
+
             # Clean up old skills array but PRESERVE custom property and prompt overrides
             # Skills are now auto-loaded, but overrides per wingman still need to be saved
-            # We keep overrides even for skills that may no longer exist - they're harmlessly ignored
+            # Skip overrides for removed skills - they no longer exist
             if "skills" in old:
                 skills_with_overrides = []
                 for skill in old["skills"]:
+                    skill_module = skill.get("module", "")
+
+                    # Skip removed skills entirely - don't preserve their overrides
+                    if skill_module in removed_skill_modules:
+                        changes_made.append(
+                            f"removed skill config for '{skill_module}' (skill deprecated)"
+                        )
+                        continue
+
                     has_custom_props = skill.get("custom_properties")
                     has_prompt = skill.get("prompt")
 
                     if has_custom_props or has_prompt:
-                        stripped_skill = {"module": skill.get("module")}
+                        stripped_skill = {"module": skill_module}
 
                         # Keep prompt override if present
                         if has_prompt:
@@ -814,7 +836,6 @@ class ConfigMigrationService:
                 "ControlWindows",
                 "FileManager",
                 "Msfs2020Control",
-                "NMSAssistant",
                 "QuickCommands",
                 "RadioChatter",
                 "Spotify",
@@ -829,7 +850,6 @@ class ConfigMigrationService:
                 "ATSTelemetry",
                 "AudioDeviceChanger",
                 "Msfs2020Control",
-                "NMSAssistant",
                 "QuickCommands",
                 "RadioChatter",
                 "Spotify",
@@ -850,24 +870,31 @@ class ConfigMigrationService:
                     f"disabled_skills (Clippy: {len(clippy_blacklist)} skills disabled)"
                 )
             else:
-                # For all other wingmen, just remove AskPerplexity if present
-                # (skill has been removed, replaced by MCP)
+                # For all other wingmen, remove deprecated skills from disabled_skills
+                # (these skills have been removed, replaced by MCP servers)
+                removed_skill_names = {
+                    "AskPerplexity",
+                    "GoogleSearch",
+                    "WebSearch",
+                    "TimeAndDateRetriever",
+                    "NMSAssistant",
+                }
                 if "disabled_skills" in old and old["disabled_skills"]:
-                    if "AskPerplexity" in old["disabled_skills"]:
-                        old["disabled_skills"].remove("AskPerplexity")
+                    removed_from_disabled = [
+                        s for s in old["disabled_skills"] if s in removed_skill_names
+                    ]
+                    if removed_from_disabled:
+                        old["disabled_skills"] = [
+                            s
+                            for s in old["disabled_skills"]
+                            if s not in removed_skill_names
+                        ]
                         changes_made.append(
-                            "disabled_skills (removed AskPerplexity - skill deprecated)"
+                            f"disabled_skills (removed {', '.join(removed_from_disabled)} - skills deprecated)"
                         )
-
-            # Remove AskPerplexity from skills array if user had it configured
-            if "skills" in old:
-                old["skills"] = [
-                    s
-                    for s in old["skills"]
-                    if not s.get("module", "").endswith("ask_perplexity")
-                ]
-                if not old["skills"]:
-                    del old["skills"]
+                    # Clean up empty disabled_skills list
+                    if not old["disabled_skills"]:
+                        del old["disabled_skills"]
 
             # MCP servers are now centralized in mcp.yaml
             # Remove old per-wingman mcp array if it exists (shouldn't in 1.8.2, but clean up)

@@ -10,7 +10,6 @@ disabled_skills:
   - FileManager
   - GoogleSearch
   - Msfs2020Control
-  - NMSAssistant
   - QuickCommands
   - RadioChatter
   - Spotify
@@ -19,6 +18,10 @@ disabled_skills:
   - UEXCorp
   - VoiceChanger
   - WebSearch
+disabled_mcps:
+  - wingman_websearch
+  - wingman_perplexity
+  - wingman_no_mans_sky
 prompts:
   backstory: |
     You are an AI Air Traffic Controller (ATC) stationed at a major space station in the Star Citizen universe.

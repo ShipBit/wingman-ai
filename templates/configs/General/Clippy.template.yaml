@@ -4,11 +4,11 @@ description: |
   Secretly condescending about basic tasks, but always reassures users of his helpfulness.
 disabled_mcps:
   - wingman_perplexity
+  - wingman_no_mans_sky
 disabled_skills:
   - ATSTelemetry
   - AudioDeviceChanger
   - Msfs2020Control
-  - NMSAssistant
   - QuickCommands
   - RadioChatter
   - Spotify
