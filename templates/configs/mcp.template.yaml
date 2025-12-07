@@ -17,7 +17,7 @@ servers:
 
   - name: wingman_websearch
     display_name: Wingman Web Search
-    description: Search the internet with Brave or Tavily and fetches web pages.
+    description: Search the internet with Brave or Tavily and fetches web pages. Use this MCP for any generic web searches.
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/mcp
     enabled: false
@@ -31,3 +31,20 @@ servers:
       - information
       - fetch
       - read website
+
+  - name: wingman_perplexity
+    display_name: Perplexity Web Search
+    description: Search the internet with Perplexity. Only use this MCP if the user specifically requests Perplexity or states they want synthesized information from multiple online sources, complete with citations for verification.
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/perplexity/mcp
+    enabled: false
+    aliases:
+      - Perplexity
+      - internet
+      - web
+      - search
+      - news
+      - information
+      - fetch
+      - synthesized information
+      - citations for verification

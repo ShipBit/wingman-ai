@@ -428,7 +428,13 @@ class OpenAiWingman(Wingman):
                     key=secret_key,
                     prompt_if_missing=False,  # Don't prompt, just check
                 )
+                # Debug: Log whether secret was found (without revealing the actual key)
                 if api_key:
+                    printr.print(
+                        f"[{self.name}] MCP secret '{secret_key}' found ({len(api_key)} chars)",
+                        color=LogType.INFO,
+                        server_only=True,
+                    )
                     # Add to headers - common header names for API keys
                     # The config.headers should specify the actual header name
                     # If not, we'll add it as Authorization
@@ -1875,13 +1881,13 @@ class OpenAiWingman(Wingman):
 
                 # Always show simple 'called' message in UI so users know the wingman is working
                 await printr.print_async(
-                    f"{display_name}: called `{original_name}`",
+                    f"{display_name}: called `{original_name}` with {function_args}",
                     color=LogType.MCP,
                 )
 
                 # Detailed 'calling' log only in terminal/log file
                 await printr.print_async(
-                    f"{display_name}: calling `{original_name}`...",
+                    f"{display_name}: calling `{original_name}` with {function_args}...",
                     color=LogType.MCP,
                     server_only=True,
                 )
@@ -1931,14 +1937,14 @@ class OpenAiWingman(Wingman):
 
             # Always show simple 'called' message in UI so users know the wingman is working
             await printr.print_async(
-                f"{display_name}: called `{function_name}`",
+                f"{display_name}: called `{function_name}` with {function_args}",
                 color=LogType.SKILL,
                 skill_name=skill.name,
             )
 
             # Detailed 'calling' log only in terminal/log file
             await printr.print_async(
-                f"{display_name}: calling `{function_name}`...",
+                f"{display_name}: calling `{function_name}` with {function_args}...",
                 color=LogType.SKILL,
                 skill_name=skill.name,
                 server_only=True,
