@@ -4,7 +4,6 @@ description: |
   and station operations with professional aviation communication protocols.
 disabled_skills:
   - APIRequest
-  - AskPerplexity
   - ATSTelemetry
   - AudioDeviceChanger
   - ControlWindows

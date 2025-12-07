@@ -4,7 +4,6 @@ description: |
   Has access to StarHead API for real-time trading routes and ship information.
 disabled_skills:
   - APIRequest
-  - AskPerplexity
   - ATSTelemetry
   - AudioDeviceChanger
   - ControlWindows

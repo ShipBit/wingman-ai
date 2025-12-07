@@ -3,7 +3,6 @@ description: |
   The famous Microsoft Office assistant, now with AI powers. Fun, friendly, and speaks in third person.
   Secretly condescending about basic tasks, but always reassures users of his helpfulness.
 disabled_skills:
-  - AskPerplexity
   - ATSTelemetry
   - AudioDeviceChanger
   - GoogleSearch

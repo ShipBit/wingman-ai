@@ -809,7 +809,6 @@ class ConfigMigrationService:
             # Star Citizen wingmen: ATC and Computer get same blacklist
             sc_blacklist = [
                 "APIRequest",
-                "AskPerplexity",
                 "ATSTelemetry",
                 "AudioDeviceChanger",
                 "ControlWindows",
@@ -827,7 +826,6 @@ class ConfigMigrationService:
 
             # Clippy blacklist (general assistant)
             clippy_blacklist = [
-                "AskPerplexity",
                 "ATSTelemetry",
                 "AudioDeviceChanger",
                 "Msfs2020Control",
@@ -851,6 +849,25 @@ class ConfigMigrationService:
                 changes_made.append(
                     f"disabled_skills (Clippy: {len(clippy_blacklist)} skills disabled)"
                 )
+            else:
+                # For all other wingmen, just remove AskPerplexity if present
+                # (skill has been removed, replaced by MCP)
+                if "disabled_skills" in old and old["disabled_skills"]:
+                    if "AskPerplexity" in old["disabled_skills"]:
+                        old["disabled_skills"].remove("AskPerplexity")
+                        changes_made.append(
+                            "disabled_skills (removed AskPerplexity - skill deprecated)"
+                        )
+
+            # Remove AskPerplexity from skills array if user had it configured
+            if "skills" in old:
+                old["skills"] = [
+                    s
+                    for s in old["skills"]
+                    if not s.get("module", "").endswith("ask_perplexity")
+                ]
+                if not old["skills"]:
+                    del old["skills"]
 
             # MCP servers are now centralized in mcp.yaml
             # Remove old per-wingman mcp array if it exists (shouldn't in 1.8.2, but clean up)
