@@ -3,13 +3,12 @@ import json
 import random
 import asyncio
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional
 import yaml
 import aiohttp
 from aiohttp import ClientError
 from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from services.benchmark import Benchmark
 from services.file import get_writable_dir
 from skills.skill_base import Skill, tool
 
@@ -30,6 +29,30 @@ DEFAULT_HEADERS = {
     "Access-Control-Allow-Methods": "*",
     "Access-Control-Allow-Headers": "*",
 }
+
+# Content-Type to file extension mapping
+CONTENT_TYPE_EXTENSIONS = {
+    "audio/mpeg": ".mp3",
+    "audio/wav": ".wav",
+    "audio/ogg": ".ogg",
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "video/mp4": ".mp4",
+    "application/pdf": ".pdf",
+}
+
+# Content types that should be saved as binary files
+BINARY_CONTENT_TYPES = [
+    "application/octet-stream",
+    "application/",
+    "audio/mpeg",
+    "audio/wav",
+    "audio/ogg",
+    "image/jpeg",
+    "image/png",
+    "video/mp4",
+    "application/pdf",
+]
 
 
 class APIRequest(Skill):
@@ -73,7 +96,7 @@ class APIRequest(Skill):
         # If no key holder file is present yet, create it
         if not os.path.isfile(api_key_holder):
             os.makedirs(os.path.dirname(api_key_holder), exist_ok=True)
-            with open(api_key_holder, "w", encoding="utf-8") as file:
+            with open(api_key_holder, "w", encoding="utf-8") as _file:
                 pass
         # Open key holder file to read stored API keys
         with open(api_key_holder, "r", encoding="UTF-8") as stream:
@@ -83,103 +106,64 @@ class APIRequest(Skill):
                     parsed, dict
                 ):  # Ensure the parsed content is a dictionary
                     return parsed  # Return the dictionary of alias/keys
-            except Exception as e:
+            except Exception:
                 return {}
+        return {}
 
-    # Prepare and send API request using parameters provided by LLM response to function call
     async def _send_api_request(self, parameters: Dict[str, Any]) -> str:
         """Send an API request with the specified parameters."""
-        # Get headers from LLM, check whether they are a dictionary, if not at least let user know in debug mode.
-        headers = parameters.get("headers")
-        if headers and isinstance(headers, dict):
+        # Validate and prepare headers
+        headers = parameters.get("headers", {})
+        if not isinstance(headers, dict):
             if self.settings.debug_mode:
                 await self.printr.print_async(
-                    f"Validated that headers returned from LLM is a dictionary.",
+                    f"Headers is not a dictionary. Type is {type(headers)}. Using empty dict.",
                     color=LogType.INFO,
                 )
-        elif headers:
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"Headers returned from LLM is not a dictionary.  Type is {type(headers)}",
-                    color=LogType.INFO,
-                )
-        else:
             headers = {}
 
-        # If using default headers, add those to AI generated headers
+        # Merge with default headers if configured
         if self.use_default_headers:
-            headers.update(
-                self.default_headers
-            )  # Defaults will override AI-generated if necessary
+            merged_headers = {**headers, **self.default_headers}
+            headers = merged_headers
             if self.settings.debug_mode:
                 await self.printr.print_async(
-                    f"Default headers being used for API call: {headers}",
+                    "Default headers merged for API call.",
                     color=LogType.INFO,
                 )
 
-        # Get params, check whether they are a dictionary, if not, at least let user know in debug mode.
-        params = parameters.get("params")
-        if params and isinstance(params, dict):
+        # Validate and prepare params
+        params = parameters.get("params", {})
+        if not isinstance(params, dict):
             if self.settings.debug_mode:
                 await self.printr.print_async(
-                    f"Validated that params returned from LLM is a dictionary.",
+                    f"Params is not a dictionary. Type is {type(params)}. Using empty dict.",
                     color=LogType.INFO,
                 )
-        elif params:
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"Params returned from LLM is not a dictionary.  Type is {type(params)}",
-                    color=LogType.INFO,
-                )
-        else:
             params = {}
 
-        # Get body of request.  First check to see if LLM returned a "data" field, and if so, whether data is a dictionary, if not, at least let the user know in debug mode.
-        body = parameters.get("data")
-        if body and isinstance(body, dict):
+        # Validate and prepare request body
+        body = parameters.get("data", {})
+        if not isinstance(body, dict):
             if self.settings.debug_mode:
                 await self.printr.print_async(
-                    f"Validated that data returned from LLM is a dictionary.",
+                    f"Data is not a dictionary. Type is {type(body)}. Using empty dict.",
                     color=LogType.INFO,
                 )
-        elif body:
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"Data returned from LLM is not a dictionary.  Type is {type(body)}",
-                    color=LogType.INFO,
-                )
-        # 'data' was not present in parameters, so check if 'body' was provided instead.  If so, check whether body is a dictionary, and if not, at least let the user know in debug mode.
-        else:
-            body = parameters.get("body")
-            if body and isinstance(body, dict):
-                if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        f"Validated that body returned from LLM is a dictionary.",
-                        color=LogType.INFO,
-                    )
-            elif body:
-                if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        f"Body returned from LLM is not a dictionary.  Type is {type(body)}",
-                        color=LogType.INFO,
-                    )
-            else:
-                body = {}  # Should this be None instead?
+            body = {}
 
-        # However we got the body for the request, try turning it into the valid json that aiohttp session.request expects for data field
+        # Serialize body to JSON
         try:
             data = json.dumps(body)
-        except:
-
+        except (TypeError, ValueError) as e:
             if self.settings.debug_mode:
                 await self.printr.print_async(
-                    f"Cannot convert data into valid json: {data}.",
+                    f"Cannot convert data to JSON: {e}. Using empty object.",
+                    color=LogType.WARNING,
                 )
-            data = json.dumps(
-                {}
-            )  # Just send an empty dictionary if everything else failed
+            data = json.dumps({})
 
-        # Try request up to max numner of retries
+        # Try request up to max number of retries
         for attempt in range(1, self.max_retries + 1):
             try:
                 async with aiohttp.ClientSession() as session:
@@ -192,67 +176,13 @@ class APIRequest(Skill):
                         timeout=self.request_timeout,
                     ) as response:
                         response.raise_for_status()
+                        return await self._process_response(response)
 
-                        # Default to treating content as text if Content-Type is not specified
-                        content_type = response.headers.get("Content-Type", "").lower()
-                        if "application/json" in content_type:
-                            return await response.text()
-                        elif any(
-                            x in content_type
-                            for x in [
-                                "application/octet-stream",
-                                "application/",
-                                "audio/mpeg",
-                                "audio/wav",
-                                "audio/ogg",
-                                "image/jpeg",
-                                "image/png",
-                                "video/mp4",
-                                "application/pdf",
-                            ]
-                        ):
-                            file_content = await response.read()
-
-                            # Determine appropriate file extension and name
-                            if "audio/mpeg" in content_type:
-                                file_extension = ".mp3"
-                            elif "audio/wav" in content_type:
-                                file_extension = ".wav"
-                            elif "audio/ogg" in content_type:
-                                file_extension = ".ogg"
-                            elif "image/jpeg" in content_type:
-                                file_extension = ".jpg"
-                            elif "image/png" in content_type:
-                                file_extension = ".png"
-                            elif "video/mp4" in content_type:
-                                file_extension = ".mp4"
-                            elif "application/pdf" in content_type:
-                                file_extension = ".pdf"
-                            else:
-                                file_extension = ".file"
-                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                            file_name = f"downloaded_file_{timestamp}{file_extension}"  # Use a default name or extract it from response headers if available
-
-                            if "Content-Disposition" in response.headers:
-                                disposition = response.headers["Content-Disposition"]
-                                if "filename=" in disposition:
-                                    file_name = disposition.split("filename=")[1].strip(
-                                        '"'
-                                    )
-
-                            files_directory = get_writable_dir("files")
-                            file_path = os.path.join(files_directory, file_name)
-                            with open(file_path, "wb") as file:
-                                file.write(file_content)
-
-                            return f"File returned from API saved as {file_path}"
-                        else:
-                            return await response.text()
             except (ClientError, asyncio.TimeoutError) as e:
-                if attempt <= self.max_retries:
+                if attempt < self.max_retries:
                     if self.settings.debug_mode:
                         await self.printr.print_async(
-                            f"Retrying API request due to: {e}.",
+                            f"Retrying API request (attempt {attempt}/{self.max_retries}) due to: {e}",
                             color=LogType.INFO,
                         )
                     delay = self.retry_delay * (2 ** (attempt - 1)) + random.uniform(
@@ -262,93 +192,93 @@ class APIRequest(Skill):
                 else:
                     if self.settings.debug_mode:
                         await self.printr.print_async(
-                            f"Error with api request: {e}.",
-                            color=LogType.INFO,
+                            f"API request failed after {self.max_retries} attempts: {e}",
+                            color=LogType.WARNING,
                         )
                     return f"Error, could not complete API request. Exception was: {e}."
             except Exception as e:
                 if self.settings.debug_mode:
                     await self.printr.print_async(
-                        f"Error with api request: {e}.",
-                        color=LogType.INFO,
+                        f"Unexpected error with API request: {e}",
+                        color=LogType.WARNING,
                     )
-                return f"Error, could not complete API request.  Reason was {e}."
+                return f"Error, could not complete API request. Reason was {e}."
 
-    async def is_waiting_response_needed(self, tool_name: str) -> bool:
-        return True
+        return "Error, could not complete API request after all retries."
 
-    def get_tools(self) -> list[Tuple[str, Dict[str, Any]]]:
-        """Get tools - includes @tool decorated methods plus dynamic enum tool."""
-        # Get decorated tools first
-        tools = super().get_tools()
+    async def _process_response(self, response: aiohttp.ClientResponse) -> str:
+        """Process API response based on content type."""
+        content_type = response.headers.get("Content-Type", "").lower()
 
-        # Ensure api_keys_dictionary is populated
+        # Handle JSON responses
+        if "application/json" in content_type:
+            return await response.text()
+
+        # Handle binary content types
+        if any(ct in content_type for ct in BINARY_CONTENT_TYPES):
+            return await self._save_binary_response(response, content_type)
+
+        # Default to text response
+        return await response.text()
+
+    async def _save_binary_response(
+        self, response: aiohttp.ClientResponse, content_type: str
+    ) -> str:
+        """Save binary response content to a file."""
+        file_content = await response.read()
+
+        # Determine file extension from content type
+        file_extension = ".file"
+        for ct, ext in CONTENT_TYPE_EXTENSIONS.items():
+            if ct in content_type:
+                file_extension = ext
+                break
+
+        # Generate filename
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        file_name = f"downloaded_file_{timestamp}{file_extension}"
+
+        # Try to extract filename from Content-Disposition header
+        if "Content-Disposition" in response.headers:
+            disposition = response.headers["Content-Disposition"]
+            if "filename=" in disposition:
+                file_name = disposition.split("filename=")[1].strip('"')
+
+        # Save file
+        files_directory = get_writable_dir("files")
+        file_path = os.path.join(files_directory, file_name)
+        with open(file_path, "wb") as file:
+            file.write(file_content)
+
+        return f"File returned from API saved as {file_path}"
+
+    @tool(
+        name="list_api_keys",
+        description="List all available API key aliases. Use this to discover what API keys are configured before making authenticated API requests.",
+        wait_response=True,
+    )
+    async def list_api_keys(self) -> str:
+        """List all available API key aliases."""
         if not self.api_keys_dictionary:
-            self.api_keys_dictionary = {"Service": "API_key"}
+            return "No API keys configured. Add keys to files/api_request_key_holder.yaml in the format 'alias: your_api_key'."
+        aliases = list(self.api_keys_dictionary.keys())
+        return f"Available API key aliases: {', '.join(aliases)}"
 
-        # Add get_api_key with dynamic enum from yaml config
-        tools.append(
-            (
-                "get_api_key",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "get_api_key",
-                        "description": "Obtain the API key needed for an API request.",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "api_key_alias": {
-                                    "type": "string",
-                                    "description": "The API key needed.",
-                                    "enum": list(self.api_keys_dictionary.keys()),
-                                },
-                            },
-                            "required": ["api_key_alias"],
-                        },
-                    },
-                },
-            )
+    @tool(
+        name="get_api_key",
+        description="Retrieve a stored API key by its alias name. Use list_api_keys first to discover available aliases. Use this before making API calls that require authentication.",
+        wait_response=True,
+    )
+    async def get_api_key(self, api_key_alias: str) -> str:
+        """Get an API key by alias from the stored keys."""
+        key = self.api_keys_dictionary.get(api_key_alias, None)
+        if key is not None:
+            return f"{api_key_alias} API key is: {key}"
+        available = (
+            list(self.api_keys_dictionary.keys()) if self.api_keys_dictionary else []
         )
-
-        return tools
-
-    async def execute_tool(
-        self, tool_name: str, parameters: Dict[str, Any], benchmark: Benchmark
-    ) -> Tuple[str, str]:
-        """Execute tools - delegates to base class for decorated tools."""
-        # Let base class handle decorated tools (send_api_request)
-        function_response, instant_response = await super().execute_tool(
-            tool_name, parameters, benchmark
-        )
-
-        # Handle dynamic enum tool manually
-        if tool_name == "get_api_key":
-            benchmark.start_snapshot(f"API Request: {tool_name}")
-
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"API Request: executing tool '{tool_name}' with params: {parameters}",
-                    color=LogType.INFO,
-                )
-
-            alias = parameters.get("api_key_alias", "Not found")
-            key = self.api_keys_dictionary.get(alias, None)
-            if key is not None and key != "API_key":
-                function_response = f"{alias} API key is: {key}"
-            else:
-                function_response = (
-                    f"Error. Could not retrieve {alias} API key. Not found."
-                )
-
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"Response from {tool_name}: {function_response}",
-                    color=LogType.INFO,
-                )
-            benchmark.finish_snapshot()
-
-        return function_response, instant_response
+        hint = f" Available aliases: {', '.join(available)}" if available else ""
+        return f"Error. Could not retrieve '{api_key_alias}' API key. Not found.{hint}"
 
     @tool(
         name="send_api_request",
