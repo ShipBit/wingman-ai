@@ -902,20 +902,21 @@ class ConfigMigrationService:
                 del old["mcp"]
                 changes_made.append("mcp (removed - now centralized in mcp.yaml)")
 
-            # For servers that are disabled by default in mcp.yaml, add them to disabled_mcps
-            # This ensures the disabled_mcps list is the sole source of truth at runtime
-            # When user toggles ON a server, it's removed from disabled_mcps
-            disabled_by_default_mcps = [
-                "wingman_websearch"
-            ]  # From mcp.template.yaml where enabled: false
-            if disabled_by_default_mcps:
-                if "disabled_mcps" not in old or old["disabled_mcps"] is None:
-                    old["disabled_mcps"] = []
-                for mcp_name in disabled_by_default_mcps:
-                    if mcp_name not in old["disabled_mcps"]:
-                        old["disabled_mcps"].append(mcp_name)
+            # For custom wingmen without disabled_mcps, disable all optional MCP servers
+            # wingman_date_time is always enabled for all wingmen (not in this list)
+            # This ensures migrated custom wingmen start with a clean slate
+            # Users can then enable specific MCPs as needed
+            # Template-based wingmen already have their disabled_mcps defined
+            if "disabled_mcps" not in old or old["disabled_mcps"] is None:
+                optional_mcp_servers = [
+                    "wingman_websearch",
+                    "wingman_perplexity",
+                    "wingman_starhead",
+                    "wingman_no_mans_sky",
+                ]  # All optional servers from mcp.template.yaml (excludes wingman_date_time)
+                old["disabled_mcps"] = optional_mcp_servers
                 changes_made.append(
-                    f"disabled_mcps ({len(disabled_by_default_mcps)} MCPs disabled by default)"
+                    f"disabled_mcps (initialized with all {len(optional_mcp_servers)} optional MCPs disabled)"
                 )
 
             if changes_made:
