@@ -34,6 +34,20 @@ servers:
       - verify
       - references
 
+  - name: wingman_starhead
+    display_name: StarHead - Star Citizen
+    description: Star Citizen game data. Ship info, trading routes, commodity prices. StarHead API for live SC data.
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/starhead/mcp
+    enabled: false
+    aliases:
+      - spaceship
+      - spend auec
+      - trade route
+      - shop
+      - celestial object
+      - locations
+
   - name: wingman_no_mans_sky
     display_name: No Man's Sky Assistant
     description: No Man's Sky game data. Item lookup, refiner recipes, cooking recipes. Expeditions, community missions, patch notes.

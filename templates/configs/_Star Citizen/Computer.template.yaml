@@ -1,7 +1,7 @@
 name: Computer
 description: |
   Your ship's board computer. Controls all ship systems and executes commands.
-  Has access to StarHead API for real-time trading routes and ship information.
+  Connected to StarHead for real-time trading routes and ship information.
 disabled_skills:
   - APIRequest
   - ATSTelemetry

@@ -853,7 +853,6 @@ class ConfigMigrationService:
                 "QuickCommands",
                 "RadioChatter",
                 "Spotify",
-                "StarHead",
                 "ThinkingSound",
                 "UEXCorp",
                 "VoiceChanger",
@@ -878,6 +877,7 @@ class ConfigMigrationService:
                     "WebSearch",
                     "TimeAndDateRetriever",
                     "NMSAssistant",
+                    "StarHead",
                 }
                 if "disabled_skills" in old and old["disabled_skills"]:
                     removed_from_disabled = [

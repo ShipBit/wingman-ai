@@ -1,7 +1,7 @@
 name: Computer
 description: |
   Your ship's board computer. Controls all ship systems and executes commands.
-  Has access to StarHead API for real-time trading routes and ship information.
+  Connected to StarHead for real-time trading routes and ship information.
 disabled_skills:
   - APIRequest
   - ATSTelemetry
@@ -22,6 +22,8 @@ disabled_mcps:
   - wingman_websearch
   - wingman_perplexity
   - wingman_no_mans_sky
+enabled_mcps:
+  - wingman_starhead
 prompts:
   backstory: |
     You are the AI board computer of a spacecraft in the Star Citizen universe.
