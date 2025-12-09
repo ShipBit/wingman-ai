@@ -736,6 +736,10 @@ class SkillConfig(CustomClassConfig):
     """If True, this skill's tools are always available without LLM activation.
     Use for event-driven skills or skills that should always be active when enabled.
     Auto-activated skills are hidden from activate_skill and don't need LLM activation."""
+    enabled_by_default: Optional[bool] = True
+    """Whether this skill is enabled by default when creating new wingmen.
+    Set to False for specialized skills that most users won't need immediately.
+    Users can still enable disabled skills per wingman."""
 
 
 class SkillToolInfo(BaseModel):

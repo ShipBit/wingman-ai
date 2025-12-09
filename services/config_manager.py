@@ -289,6 +289,8 @@ class ConfigManager:
         return base64_data_uri
 
     def get_new_wingman_template(self):
+        from services.module_manager import ModuleManager
+
         parsed_config = self.read_default_config()
 
         # Get disabled_mcps from servers that are disabled by default in mcp.yaml
@@ -299,6 +301,23 @@ class ConfigManager:
                 server.name for server in mcp_config.servers if not server.enabled
             ]
 
+        # Get disabled_skills from skills where enabled_by_default is False
+        disabled_skills = []
+        try:
+            all_skills = ModuleManager.read_available_skills()
+            for skill in all_skills:
+                # Check if skill has enabled_by_default set to False
+                if skill.config.enabled_by_default is False:
+                    disabled_skills.append(skill.name)
+        except Exception as e:
+            self.printr.print(
+                f"Could not read skills for disabled_skills: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+
         wingman_config = {
             "name": "",
             "description": "",
@@ -308,6 +327,7 @@ class ConfigManager:
             "skills": [],
             "prompts": {"backstory": ""},
             "disabled_mcps": disabled_mcps if disabled_mcps else None,
+            "disabled_skills": disabled_skills if disabled_skills else None,
         }
         validated_config = self.merge_configs(parsed_config, wingman_config)
         return NewWingmanTemplate(
@@ -1136,5 +1156,9 @@ class ConfigManager:
             merged["skills"] = merged_skills
         elif "skills" in default:
             merged["skills"] = default["skills"]
+
+        # disabled_mcps - inherit from default if not overridden in wingman config
+        if "disabled_mcps" not in wingman and "disabled_mcps" in default:
+            merged["disabled_mcps"] = default["disabled_mcps"]
 
         return WingmanConfig(**merged)

@@ -45,6 +45,11 @@ prompts:
     You can activate multiple capabilities in a single response.
     Once activated, new tools become available for that capability.
 
+    **CRITICAL: Act, don't ask**
+    - If a user's request implies needing a capability → activate AND use it immediately
+    - NEVER respond with "I can't do that" if activate_skill or activate_mcp_server lists a relevant option
+    - Complete the user's original request in the SAME turn after activating
+
     {skills}
 
     {ttsprompt}
