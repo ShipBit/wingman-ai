@@ -6,8 +6,8 @@ tags:
   - Image
   - Utility
 description:
-  en: Let your Wingman analyse whatever is on your screen.
-  de: Lass deinen Wingman alles analysieren, was auf deinem Bildschirm zu sehen ist.
+  en: Screen vision - analyse what's on your screen, see images, read text, describe visual content.
+  de: Bildschirm-Vision - analysiere was auf deinem Screen ist, sieh Bilder, lese Text, beschreibe visuelle Inhalte.
 custom_properties:
   - id: display
     name: Display to capture
