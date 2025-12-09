@@ -253,7 +253,7 @@ class SkillRegistry:
                 color=LogType.SKILL,
                 server_only=True,
             )
-        self._active_skills.clear()
+        self._active_skills = self._auto_activated_skills.copy()
 
     def get_skill_for_tool(self, tool_name: str) -> Optional["Skill"]:
         """Get the skill that provides a given tool."""
