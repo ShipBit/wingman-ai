@@ -4,14 +4,6 @@ display_name: Voice Changer
 author: JayMatthew
 tags:
   - Utility
-aliases:
-  - change voice
-  - switch voice
-  - new personality
-  - different voice
-  - voice rotation
-  - random voice
-  - personality change
 description:
   en: Changes the voice of your Wingman automatically. Customize it to your liking.
   de: Wechselt die Stimme deines Wingman automatisch. Konfigurierbar nach eigenen Vorlieben.

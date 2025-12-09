@@ -7,17 +7,6 @@ platforms:
 tags:
   - Game
   - MSFS
-aliases:
-  - flight sim
-  - Flight Simulator 2020
-  - SimConnect
-  - aviation
-  - flying
-  - cockpit
-  - tour guide
-  - flight data
-  - aircraft
-  - plane
 description:
   en: Control and retrieve data from MSFS2020 dynamically using SimConnect.
   de: Steuern und Abrufen von Daten aus MSFS2020 dynamisch mit SimConnect.

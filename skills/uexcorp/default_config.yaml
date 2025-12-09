@@ -6,17 +6,6 @@ tags:
   - Game
   - Star Citizen
   - Internet
-aliases:
-  - trading
-  - commodities
-  - aUEC
-  - prices
-  - ship info
-  - trade routes
-  - cargo
-  - profit
-  - SC market
-  - Star Citizen economy
 description:
   en: Uses the UEXCorp API to get commodity routes and ship information for Star Citizen.
   de: Nutzt die UEXCorp API, um Handelsrouten und Schiffsinformationen für Star Citizen zu erhalten.

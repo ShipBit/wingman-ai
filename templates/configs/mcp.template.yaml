@@ -5,9 +5,6 @@ servers:
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/time/mcp
     enabled: true
-    aliases:
-      - clock
-      - now
 
   - name: wingman_websearch
     display_name: Wingman Web Search
@@ -15,14 +12,6 @@ servers:
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/mcp
     enabled: false
-    aliases:
-      - Brave
-      - Tavily
-      - Google
-      - website
-      - internet
-      - look up
-      - find online
 
   - name: wingman_perplexity
     display_name: Perplexity Web Search
@@ -30,9 +19,6 @@ servers:
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/perplexity/mcp
     enabled: false
-    aliases:
-      - verify
-      - references
 
   - name: wingman_starhead
     display_name: StarHead - Star Citizen
@@ -40,13 +26,6 @@ servers:
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/starhead/mcp
     enabled: false
-    aliases:
-      - spaceship
-      - spend auec
-      - trade route
-      - shop
-      - celestial object
-      - locations
 
   - name: wingman_no_mans_sky
     display_name: No Man's Sky Assistant
@@ -54,9 +33,3 @@ servers:
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/no-mans-sky-assistant/mcp
     enabled: false
-    aliases:
-      - No Mans Sky
-      - NMS
-      - Hello Games
-      - how to make
-      - what can I craft

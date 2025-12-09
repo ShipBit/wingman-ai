@@ -16,6 +16,7 @@ import mouse.mouse as mouse
 from api.interface import (
     CommandConfig,
     SettingsConfig,
+    SkillConfig,
     SoundConfig,
     WingmanConfig,
     WingmanInitializationError,
@@ -329,7 +330,7 @@ class Wingman:
         if self.skills:
             skill_names = [s.config.name for s in self.skills]
             printr.print(
-                f"Enabled skills ({len(skill_names)}): {', '.join(skill_names)}",
+                f"[{self.name}] Enabled skills ({len(skill_names)}): {', '.join(skill_names)}",
                 color=LogType.WINGMAN,
                 source=LogSource.WINGMAN,
                 source_name=self.name,
@@ -877,12 +878,8 @@ class Wingman:
 
             self.config = config
 
-            # DEPRECATED: update_skills is no longer used
-            # Skill toggling now uses incremental enable_skill()/disable_skill()
-            # if update_skills:
-            #     await self.init_skills()
-            #     if hasattr(self, "init_mcps"):
-            #         await self.init_mcps()
+            # Propagate skill config changes to loaded skills
+            await self._update_skill_configs(config)
 
             if validate:
                 errors = await self.validate()
@@ -903,6 +900,44 @@ class Wingman:
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return False
+
+    async def _update_skill_configs(self, wingman_config: WingmanConfig) -> None:
+        """Propagate skill config changes to loaded skills.
+
+        When the wingman config changes (e.g., user updates custom_properties for a skill),
+        we need to update the SkillConfig on each loaded skill instance so they see the new values.
+        """
+        if not self.skills or not wingman_config.skills:
+            return
+
+        # Helper to get skill folder from module path
+        def get_skill_folder_from_module(module: str) -> str:
+            return module.replace(".main", "").replace(".", "/").split("/")[1]
+
+        # Build lookup of new skill configs by folder name
+        new_skill_configs: dict[str, "SkillConfig"] = {}
+        for skill_config in wingman_config.skills:
+            folder_name = get_skill_folder_from_module(skill_config.module)
+            new_skill_configs[folder_name] = skill_config
+
+        # Update each loaded skill if its config changed
+        for skill in self.skills:
+            # Get the folder name for this skill
+            skill_folder = get_skill_folder_from_module(skill.config.module)
+
+            if skill_folder in new_skill_configs:
+                user_override = new_skill_configs[skill_folder]
+
+                # Create updated config by copying current and applying overrides
+                # This preserves all default values while applying user overrides
+                updated_config = deepcopy(skill.config)
+                if user_override.custom_properties:
+                    updated_config.custom_properties = user_override.custom_properties
+                if user_override.prompt:
+                    updated_config.prompt = user_override.prompt
+
+                # Let the skill handle the config update (will compare old vs new)
+                await skill.update_config(updated_config)
 
     async def save_config(self):
         """Save the config of the Wingman."""

@@ -440,7 +440,11 @@ class ConfigService:
         mcp_name: str,
         enabled: bool,
     ):
-        """Enable or disable an MCP server for a specific wingman."""
+        """Enable or disable an MCP server for a specific wingman.
+
+        Uses incremental MCP toggle to avoid reinitializing all MCP connections,
+        which improves performance and prevents unnecessary disconnections.
+        """
         try:
             # Load the wingman config
             wingman_config = self.config_manager.load_wingman_config(
@@ -463,27 +467,46 @@ class ConfigService:
                 if mcp_name not in wingman_config.disabled_mcps:
                     wingman_config.disabled_mcps.append(mcp_name)
 
-            # Save the config and update the wingman
+            # Save the config WITHOUT reinitializing all MCPs
             await self.save_wingman_config(
                 config_dir=config_dir,
                 wingman_file=wingman_file,
                 wingman_config=wingman_config,
-                silent=False,
+                silent=True,  # We'll show our own message
                 validate=False,
             )
 
-            # Reinitialize MCPs on the active wingman
+            # Incrementally toggle just this MCP on the active wingman
             wingman = (
                 self.tower.get_wingman_by_name(wingman_file.name)
                 if self.tower
                 else None
             )
-            if wingman and hasattr(wingman, "init_mcps"):
-                await wingman.init_mcps()
+            if wingman:
+                if enabled:
+                    if hasattr(wingman, "enable_mcp"):
+                        success, message = await wingman.enable_mcp(mcp_name)
+                    else:
+                        # Fallback for wingmen without incremental MCP support
+                        if hasattr(wingman, "init_mcps"):
+                            await wingman.init_mcps()
+                        success, message = True, f"MCP server '{mcp_name}' enabled."
+                else:
+                    if hasattr(wingman, "disable_mcp"):
+                        success, message = await wingman.disable_mcp(mcp_name)
+                    else:
+                        # Fallback for wingmen without incremental MCP support
+                        if hasattr(wingman, "init_mcps"):
+                            await wingman.init_mcps()
+                        success, message = True, f"MCP server '{mcp_name}' disabled."
+
+                if not success:
+                    self.printr.toast_error(message)
+                    return
 
             action = "enabled" if enabled else "disabled"
             self.printr.print(
-                f"MCP server '{mcp_name}' {action} for {wingman_file.name}.",
+                f"[{wingman_file.name}] MCP server '{mcp_name}' {action}.",
                 server_only=True,
             )
 

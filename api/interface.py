@@ -723,9 +723,6 @@ class SkillConfig(CustomClassConfig):
     display_name: str
     author: Optional[str] = None
     tags: Optional[list[str]] = None
-    aliases: Optional[list[str]] = None
-    """Alternative search terms for this skill (e.g., ['news', 'current events'] for Perplexity).
-    Unlike tags which are categorical, aliases are optimized for search discoverability."""
     description: LocalizedMetadata
     prompt: Optional[str] = None
     """An additional prompt that extends the system prompt of the Wingman."""
@@ -735,6 +732,10 @@ class SkillConfig(CustomClassConfig):
     examples: Optional[list[LocalizedMetadata]] = None
     platforms: Optional[list[str]] = None
     """List of supported platforms: 'windows', 'darwin' (macOS), 'linux'. If None, skill works on all platforms."""
+    auto_activate: Optional[bool] = False
+    """If True, this skill's tools are always available without LLM activation.
+    Use for event-driven skills or skills that should always be active when enabled.
+    Auto-activated skills are hidden from activate_skill and don't need LLM activation."""
 
 
 class SkillToolInfo(BaseModel):
@@ -802,9 +803,6 @@ class McpServerConfig(BaseModel):
 
     timeout: Optional[int] = None
     """Connection timeout in seconds. Defaults to 30s for HTTP/SSE, 60s for stdio."""
-
-    aliases: Optional[list[str]] = None
-    """Alternative search terms for this server (e.g., ['11 labs', 'eleven labs'] for ElevenLabs)."""
 
     # Common settings
     enabled: bool = True
@@ -976,7 +974,7 @@ class WingmanConfig(NestedConfig):
     """If you want to use a custom Wingman (Python) class, you can specify it here."""
     name: str
     """The "friendly" name of this Wingman. Can be changed by the user."""
-    description: str
+    description: Optional[str] = None
     """A short description of this Wingman."""
     record_key: Optional[str] = None
     """The "push-to-talk" key for this wingman. Keep it pressed while talking! Don't use the same key for multiple wingmen!"""

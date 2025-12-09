@@ -5,16 +5,6 @@ author: JayMatthew
 tags:
   - Game
   - Music
-aliases:
-  - radio
-  - comms
-  - communications
-  - ambient
-  - background chatter
-  - pilot chatter
-  - immersion
-  - NPC voices
-  - random dialog
 description:
   en: Randomly playback radio chatter over time. Customize the participants and their voices.
   de: Spielt zufällige Funkgespräche ab. Passe die Teilnehmer und ihre Stimmen an.

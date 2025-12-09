@@ -331,6 +331,112 @@ class OpenAiWingman(Wingman):
         """Disconnect from all MCP servers."""
         await self.mcp_registry.clear()
 
+    async def enable_mcp(self, mcp_name: str) -> tuple[bool, str]:
+        """Enable and connect to a single MCP server without reinitializing all MCPs.
+
+        Args:
+            mcp_name: The name of the MCP server to enable
+
+        Returns:
+            (success, message) tuple
+        """
+        # Check if MCP SDK is available
+        if not self.mcp_client.is_available:
+            return False, "MCP SDK not installed."
+
+        # Check if already connected
+        if mcp_name in self.mcp_registry.get_connected_server_names():
+            return True, f"MCP server '{mcp_name}' is already connected."
+
+        # Find the MCP config from central mcp.yaml
+        central_mcp_config = self.tower.config_manager.mcp_config
+        mcp_configs = central_mcp_config.servers if central_mcp_config else []
+
+        mcp_config = None
+        for cfg in mcp_configs:
+            if cfg.name == mcp_name:
+                mcp_config = cfg
+                break
+
+        if not mcp_config:
+            return False, f"MCP server '{mcp_name}' not found in mcp.yaml."
+
+        try:
+            # Build headers with secrets (same logic as init_mcps)
+            headers = {}
+            if mcp_config.headers:
+                headers.update(mcp_config.headers)
+
+            # Check for API key in secrets
+            secret_key = f"mcp_{mcp_config.name}"
+            api_key = await self.secret_keeper.retrieve(
+                requester=self.name,
+                key=secret_key,
+                prompt_if_missing=False,
+            )
+            if api_key:
+                if not any(
+                    k.lower() in ["authorization", "api-key", "x-api-key"]
+                    for k in headers.keys()
+                ):
+                    headers["Authorization"] = f"Bearer {api_key}"
+
+            # Connect with timeout
+            default_timeout = 60.0 if mcp_config.type.value == "stdio" else 30.0
+            timeout = (
+                float(mcp_config.timeout) if mcp_config.timeout else default_timeout
+            )
+
+            connection = await asyncio.wait_for(
+                self.mcp_registry.register_server(
+                    config=mcp_config,
+                    headers=headers if headers else None,
+                    auto_activate=True,
+                ),
+                timeout=timeout,
+            )
+
+            if connection.is_connected:
+                tool_count = len(connection.tools)
+                return True, f"MCP server '{mcp_name}' enabled with {tool_count} tools."
+            else:
+                error = connection.error or "Connection failed."
+                return False, f"MCP server '{mcp_name}' failed to connect: {error}"
+
+        except asyncio.TimeoutError:
+            error_msg = f"Connection timed out ({int(timeout)}s)."
+            self.mcp_registry.set_server_error(mcp_name, error_msg)
+            return False, f"MCP server '{mcp_name}': {error_msg}"
+
+        except Exception as e:
+            error_msg = f"Error enabling MCP '{mcp_name}': {str(e)}"
+            printr.print(error_msg, color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return False, error_msg
+
+    async def disable_mcp(self, mcp_name: str) -> tuple[bool, str]:
+        """Disable and disconnect from a single MCP server without affecting other MCPs.
+
+        Args:
+            mcp_name: The name of the MCP server to disable
+
+        Returns:
+            (success, message) tuple
+        """
+        # Check if the MCP is connected
+        if mcp_name not in self.mcp_registry.get_connected_server_names():
+            return True, f"MCP server '{mcp_name}' is already disconnected."
+
+        try:
+            await self.mcp_registry.unregister_server(mcp_name)
+            return True, f"MCP server '{mcp_name}' disabled."
+
+        except Exception as e:
+            error_msg = f"Error disabling MCP '{mcp_name}': {str(e)}"
+            printr.print(error_msg, color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return False, error_msg
+
     async def prepare_skill(self, skill: Skill):
         # prepare the skill and skill tools
         try:
@@ -340,6 +446,16 @@ class OpenAiWingman(Wingman):
 
             # Register with the progressive disclosure registry
             self.skill_registry.register_skill(skill)
+
+            # Auto-activated skills need to be validated/prepared immediately
+            # so their hooks (like on_play_to_user) will work
+            if skill.config.auto_activate:
+                success, message = await skill.ensure_activated()
+                if not success:
+                    await printr.print_async(
+                        f"Auto-activated skill '{skill.config.display_name}' failed to activate: {message}",
+                        color=LogType.ERROR,
+                    )
         except Exception as e:
             await printr.print_async(
                 f"Error while preparing skill '{skill.name}': {str(e)}",
@@ -518,7 +634,7 @@ class OpenAiWingman(Wingman):
         # Log consolidated MCP status for this wingman
         if connected_count > 0:
             printr.print(
-                f"MCP servers ({connected_count}): {', '.join(connected_names)}",
+                f"[{self.name}] MCP servers ({connected_count}): {', '.join(connected_names)}",
                 color=LogType.WINGMAN,
                 source=LogSource.WINGMAN,
                 source_name=self.name,
@@ -1503,15 +1619,21 @@ class OpenAiWingman(Wingman):
         backstory = self.config.prompts.backstory or ""
         backstory_lower = backstory.lower()
 
-        # Timezone information
+        # Date and timezone information
         try:
-            local_tz = datetime.now().astimezone().tzinfo
+            now = datetime.now().astimezone()
+            local_tz = now.tzinfo
             tz_name = str(local_tz)
             # Get UTC offset in a readable format
-            utc_offset = datetime.now().astimezone().strftime("%z")
+            utc_offset = now.strftime("%z")
             # Format as +HH:MM or -HH:MM
             if len(utc_offset) >= 5:
                 utc_offset = f"{utc_offset[:3]}:{utc_offset[3:]}"
+            # Include current date for relative date references ("last Sunday", "tomorrow", etc.)
+            current_date = now.strftime(
+                "%A, %B %d, %Y"
+            )  # e.g., "Tuesday, December 09, 2025"
+            context_parts.append(f"- Current date: {current_date}")
             context_parts.append(f"- Timezone: {tz_name} (UTC{utc_offset})")
         except Exception:
             context_parts.append("- Timezone: Unknown")
@@ -1705,12 +1827,12 @@ class OpenAiWingman(Wingman):
         await self.add_context(messages)
 
         # DEBUG: Print compiled context (dev-only, remove before release)
-        if messages and messages[0].get("role") == "system":
-            print("\n" + "=" * 80)
-            print("COMPILED CONTEXT:")
-            print("=" * 80)
-            print(messages[0].get("content", ""))
-            print("=" * 80 + "\n")
+        # if messages and messages[0].get("role") == "system":
+        #     print("\n" + "=" * 80)
+        #     print("COMPILED CONTEXT:")
+        #     print("=" * 80)
+        #     print(messages[0].get("content", ""))
+        #     print("=" * 80 + "\n")
 
         completion = await self.actual_llm_call(messages, tools)
 

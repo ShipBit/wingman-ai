@@ -1,20 +1,22 @@
 """
-Skill Registry with Progressive Tool Disclosure
+Skill Registry with Enum-Based Tool Discovery
 
-This module implements MCP-inspired progressive tool disclosure to reduce token usage.
-Instead of sending all tools to the LLM on every call, we send lightweight meta-tools
-that allow the LLM to discover and activate skills on-demand.
+This module implements enum-based progressive tool disclosure to reduce token usage
+and improve reliability across all languages.
 
 Key concepts:
-- SkillManifest: Lightweight metadata about a skill (name, description, tags)
+- SkillManifest: Lightweight metadata about a skill (name, description)
 - SkillRegistry: Central registry that tracks all skills and their manifests
-- Meta-tools: search_skills and activate_skill - the only tools sent to LLM initially
+- Unified activation: LLM selects from enum of available skills (no fuzzy search)
+
+The enum approach ensures:
+- 100% reliable activation (LLM must pick from valid options)
+- Works in any language (LLM translates user intent to enum value)
+- Fewer LLM calls (no separate search step needed)
 """
 
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Optional
-
-from rapidfuzz import fuzz
 
 from api.enums import LogType
 from services.printr import Printr
@@ -27,19 +29,19 @@ printr = Printr()
 
 @dataclass
 class SkillManifest:
-    """Lightweight metadata about a skill for progressive disclosure."""
+    """Lightweight metadata about a skill for enum-based discovery."""
 
     name: str
-    """Internal skill class name (e.g., 'TimeAndDateRetriever')"""
+    """Internal skill class name (e.g., 'FileManager')"""
 
     display_name: str
-    """Human-readable name (e.g., 'Time and Date')"""
+    """Human-readable name (e.g., 'File Manager')"""
 
     description: str
-    """What the skill does - used for semantic search"""
+    """What the skill does - shown in enum tool description"""
 
     tags: list[str] = field(default_factory=list)
-    """Searchable tags like ['time', 'date', 'clock', 'calendar']"""
+    """Categorical tags like ['Utility', 'Image']"""
 
     tool_names: list[str] = field(default_factory=list)
     """Names of tools this skill provides"""
@@ -47,8 +49,8 @@ class SkillManifest:
     tool_summaries: list[str] = field(default_factory=list)
     """One-line descriptions of each tool"""
 
-    aliases: list[str] = field(default_factory=list)
-    """Alternative search terms for this skill (e.g., ['news', 'headlines'] for Perplexity)"""
+    is_auto_activated: bool = False
+    """If True, this skill is always active and hidden from progressive disclosure."""
 
     @classmethod
     def from_skill(cls, skill: "Skill") -> "SkillManifest":
@@ -74,110 +76,29 @@ class SkillManifest:
             tags=skill.config.tags or [],
             tool_names=tool_names,
             tool_summaries=tool_summaries,
-            aliases=skill.config.aliases or [],
+            is_auto_activated=skill.config.auto_activate or False,
         )
 
-    def matches_query(self, query: str) -> float:
-        """
-        Returns a relevance score (0-1) for how well this skill matches the query.
-        Uses fuzzy matching with rapidfuzz for better discoverability.
-        """
-        query_lower = query.lower().strip()
-        query_words = set(query_lower.split())
-
-        score = 0.0
-
-        # Fuzzy match threshold (0-100 scale from rapidfuzz)
-        FUZZY_THRESHOLD = 75
-
-        # Check aliases first (highest priority) - exact and fuzzy match
-        for alias in self.aliases:
-            alias_lower = alias.lower()
-            # Exact substring match
-            if alias_lower in query_lower or query_lower in alias_lower:
-                return 0.95  # Very high score for alias match
-            # Fuzzy match on alias
-            ratio = fuzz.ratio(query_lower, alias_lower)
-            if ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.85 * (ratio / 100))
-            # Partial ratio for multi-word queries
-            partial = fuzz.partial_ratio(query_lower, alias_lower)
-            if partial >= FUZZY_THRESHOLD:
-                score = max(score, 0.8 * (partial / 100))
-
-        # Check display name (high weight) - exact and fuzzy
-        name_lower = self.display_name.lower()
-        if query_lower in name_lower or name_lower in query_lower:
-            score = max(score, 0.7)
-        else:
-            # Fuzzy match on name
-            ratio = fuzz.ratio(query_lower, name_lower)
-            if ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.6 * (ratio / 100))
-            # Token set ratio handles word reordering
-            token_ratio = fuzz.token_set_ratio(query_lower, name_lower)
-            if token_ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.55 * (token_ratio / 100))
-
-        # Check description (medium weight) - fuzzy partial matching
-        desc_lower = self.description.lower()
-        if query_lower in desc_lower:
-            score = max(score, 0.5)
-        else:
-            # Partial ratio good for finding query within longer text
-            partial = fuzz.partial_ratio(query_lower, desc_lower)
-            if partial >= FUZZY_THRESHOLD:
-                score = max(score, 0.4 * (partial / 100))
-
-        # Check tags (medium weight) - fuzzy match on each tag
-        for tag in self.tags:
-            tag_lower = tag.lower()
-            if query_lower in tag_lower or tag_lower in query_lower:
-                score = max(score, 0.45)
-                break
-            ratio = fuzz.ratio(query_lower, tag_lower)
-            if ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.35 * (ratio / 100))
-
-        # Check tool names (lower weight) - word overlap and fuzzy
-        for tool_name in self.tool_names:
-            tool_words = set(tool_name.lower().replace("_", " ").split())
-            if query_words & tool_words:
-                score = max(score, 0.3)
-                break
-            # Fuzzy match on tool name
-            ratio = fuzz.partial_ratio(query_lower, tool_name.lower().replace("_", " "))
-            if ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.25 * (ratio / 100))
-
-        # Check tool summaries (lowest weight)
-        for summary in self.tool_summaries:
-            summary_lower = summary.lower()
-            if any(word in summary_lower for word in query_words):
-                score = max(score, 0.2)
-                break
-            partial = fuzz.partial_ratio(query_lower, summary_lower)
-            if partial >= 80:  # Higher threshold for summaries
-                score = max(score, 0.15 * (partial / 100))
-
-        return min(score, 1.0)
+    def get_short_description(self, max_length: int = 80) -> str:
+        """Get a shortened description for enum display."""
+        if len(self.description) <= max_length:
+            return self.description
+        return self.description[: max_length - 3] + "..."
 
     def to_summary(self) -> str:
         """Returns a compact string representation for LLM context."""
         tools_str = ", ".join(self.tool_names) if self.tool_names else "No tools"
-        # Show aliases (search terms) instead of tags - more useful for LLM to understand relevance
-        aliases_str = ", ".join(self.aliases) if self.aliases else ""
-        alias_line = f"\n  Also known as: {aliases_str}" if aliases_str else ""
-        return f"**{self.display_name}** (id: {self.name})\n  {self.description}\n  Tools: {tools_str}{alias_line}"
+        return f"**{self.display_name}** (id: {self.name})\n  {self.description}\n  Tools: {tools_str}"
 
 
 class SkillRegistry:
     """
-    Central registry for skills with progressive disclosure support.
+    Central registry for skills with enum-based discovery.
 
-    Progressive disclosure:
-    - Only meta-tools (search_skills, activate_skill, list_active_skills) are sent to the LLM initially
-    - Skills are activated on-demand when the LLM calls activate_skill
+    Enum-based discovery:
+    - The activate_skill tool has an enum of all available skill IDs
+    - LLM sees descriptions in tool definition and picks the right one
+    - No fuzzy search needed - works reliably in any language
     - Activated skills' tools are added to the conversation
     """
 
@@ -191,17 +112,30 @@ class SkillRegistry:
         self._active_skills: set[str] = set()
         """Currently activated skills (their tools are available to LLM)"""
 
+        self._auto_activated_skills: set[str] = set()
+        """Skills that are always active (configured with auto_activate=True)"""
+
         self._tool_to_skill: dict[str, str] = {}
         """Maps tool names to skill names"""
 
     def register_skill(self, skill: "Skill") -> None:
         """Register a skill and create its manifest."""
         self._skills[skill.name] = skill
-        self._manifests[skill.name] = SkillManifest.from_skill(skill)
+        manifest = SkillManifest.from_skill(skill)
+        self._manifests[skill.name] = manifest
 
         # Map tool names to this skill
         for tool_name, _ in skill.get_tools():
             self._tool_to_skill[tool_name] = skill.name
+
+        # Auto-activate if configured
+        if manifest.is_auto_activated:
+            self._auto_activated_skills.add(skill.name)
+            printr.print(
+                f"Auto-activated skill: {manifest.display_name}",
+                color=LogType.SKILL,
+                server_only=True,
+            )
 
     def unregister_skill(self, skill_name: str) -> None:
         """Remove a skill from the registry."""
@@ -215,67 +149,22 @@ class SkillRegistry:
             self._skills.pop(skill_name, None)
             self._manifests.pop(skill_name, None)
             self._active_skills.discard(skill_name)
+            self._auto_activated_skills.discard(skill_name)
 
     def clear(self) -> None:
         """Clear all registered skills."""
         self._skills.clear()
         self._manifests.clear()
         self._active_skills.clear()
+        self._auto_activated_skills.clear()
         self._tool_to_skill.clear()
 
-    def search_skills(self, query: str, limit: int = 5) -> list[SkillManifest]:
+    def get_discoverable_skills(self) -> list[SkillManifest]:
         """
-        Search for skills matching the query.
-        Returns manifests sorted by relevance.
-
-        Special queries:
-        - "all", "*", "list", "list all" - returns all skills (up to limit)
+        Get all skills that can be activated by the LLM.
+        Excludes auto-activated skills (they're always available).
         """
-        query_lower = query.lower().strip()
-
-        # Special case: list all skills
-        if query_lower in ("all", "*", "list", "list all", "everything", "show all"):
-            results = list(self._manifests.values())[:limit]
-            printr.print(
-                f"🔍 Skill search 'list all' → {len(self._manifests)} skills available",
-                color=LogType.SKILL,
-                server_only=True,
-            )
-            return results
-
-        scored = []
-        for manifest in self._manifests.values():
-            score = manifest.matches_query(query)
-            if score > 0:
-                scored.append((score, manifest))
-
-        # Sort by score descending
-        scored.sort(key=lambda x: x[0], reverse=True)
-        results = [m for _, m in scored[:limit]]
-
-        # Log search results with scores for debugging - server-only
-        # This helps debug "why didn't my wingman find the skill?" issues
-        if scored:
-            top_matches = scored[:3]  # Show top 3 for debugging
-            matches_str = ", ".join(
-                f"{m.display_name}({s:.2f})" for s, m in top_matches
-            )
-            printr.print(
-                f"🔍 Skill search '{query}' → {matches_str}",
-                color=LogType.SKILL,
-                server_only=True,
-            )
-        else:
-            # Log all available skills when nothing matched - helps debug
-            available = [m.display_name for m in list(self._manifests.values())[:5]]
-            hint = f" [available: {', '.join(available)}...]" if available else ""
-            printr.print(
-                f"🔍 Skill search '{query}' → no matches{hint}",
-                color=LogType.WARNING,
-                server_only=True,
-            )
-
-        return results
+        return [m for m in self._manifests.values() if not m.is_auto_activated]
 
     def activate_skill(self, skill_name: str) -> tuple[bool, str, bool]:
         """
@@ -349,17 +238,20 @@ class SkillRegistry:
         return True, f"Deactivated skill '{skill_name}'."
 
     def reset_activations(self) -> None:
-        """Reset all skill activations.
+        """Reset all skill activations except auto-activated skills.
 
         Called when conversation history is reset, since the LLM loses
         all memory of which skills were activated and why.
+        Auto-activated skills remain active since they don't require LLM activation.
         """
-        if self._active_skills:
-            count = len(self._active_skills)
+        # Only count non-auto-activated skills being reset
+        manual_activations = self._active_skills - self._auto_activated_skills
+        if manual_activations:
+            count = len(manual_activations)
             printr.print(
                 f"Conversation reset: deactivating {count} skill(s)",
                 color=LogType.SKILL,
-                server_only=True,  # Reset is internal, keep in log
+                server_only=True,
             )
         self._active_skills.clear()
 
@@ -381,10 +273,12 @@ class SkillRegistry:
 
     def get_active_tools(self) -> list[tuple[str, dict]]:
         """
-        Get tools from all active (explicitly activated) skills.
+        Get tools from all active skills (both explicitly activated and auto-activated).
         """
         tools = []
-        for skill_name in self._active_skills:
+        # Combine manually activated and auto-activated skills
+        all_active = self._active_skills | self._auto_activated_skills
+        for skill_name in all_active:
             skill = self._skills.get(skill_name)
             if skill:
                 tools.extend(skill.get_tools())
@@ -392,47 +286,40 @@ class SkillRegistry:
 
     def get_meta_tools(self) -> list[tuple[str, dict]]:
         """
-        Returns the meta-tools for progressive disclosure.
-        These are the only tools sent to the LLM initially.
+        Returns meta-tools for enum-based skill discovery.
+        Uses enum constraint for reliable activation in any language.
         """
-        # Build full skills list - no truncation so LLM knows all available skills
-        all_skills = [m.display_name for m in self._manifests.values()]
-        skills_hint = ", ".join(all_skills)
+        discoverable = self.get_discoverable_skills()
+
+        if not discoverable:
+            return []  # No discoverable skills available
+
+        # Build enum values (skill IDs)
+        skill_ids = [m.name for m in discoverable]
+
+        # Build descriptions for the tool (helps LLM choose correctly)
+        skill_descriptions = []
+        for m in discoverable:
+            short_desc = m.get_short_description(60)
+            skill_descriptions.append(f"- {m.name}: {short_desc}")
+
+        descriptions_block = "\n".join(skill_descriptions)
 
         return [
-            (
-                "search_skills",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "search_skills",
-                        "description": f"Search for built-in Wingman skills to get details and activate them. Available: {skills_hint}",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "Search query - action or capability needed",
-                                },
-                            },
-                            "required": ["query"],
-                        },
-                    },
-                },
-            ),
             (
                 "activate_skill",
                 {
                     "type": "function",
                     "function": {
                         "name": "activate_skill",
-                        "description": "Activate a skill to access its tools. Use search_skills first to find the skill name. Once activated, the skill's tools become available.",
+                        "description": f"Activate a skill to use its tools. Pick based on what you need:\n\n{descriptions_block}",
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "skill_name": {
                                     "type": "string",
-                                    "description": "The internal name (id) of the skill to activate, as returned by search_skills",
+                                    "enum": skill_ids,
+                                    "description": "The skill to activate",
                                 },
                             },
                             "required": ["skill_name"],
@@ -471,33 +358,7 @@ class SkillRegistry:
             server_only=True,
         )
 
-        if tool_name == "search_skills":
-            query = parameters.get("query", "")
-            # Use higher limit for "all" type queries
-            query_lower = query.lower().strip()
-            limit = (
-                20
-                if query_lower
-                in ("all", "*", "list", "list all", "everything", "show all")
-                else 5
-            )
-            results = self.search_skills(query, limit=limit)
-            if not results:
-                return (
-                    "No skills found matching your query. Try different keywords.",
-                    False,
-                )
-
-            response_parts = [f"Found {len(results)} skill(s) matching '{query}':\n"]
-            for manifest in results:
-                response_parts.append(manifest.to_summary())
-                response_parts.append("")
-            response_parts.append(
-                "\nUse activate_skill with the skill id to enable its tools."
-            )
-            return "\n".join(response_parts), False
-
-        elif tool_name == "activate_skill":
+        if tool_name == "activate_skill":
             skill_name = parameters.get("skill_name", "")
             success, message, _ = self.activate_skill(skill_name)
             # Return success status and whether tools changed
@@ -505,14 +366,15 @@ class SkillRegistry:
             return message, success
 
         elif tool_name == "list_active_skills":
-            if not self._active_skills:
+            if not self._active_skills and not self._auto_activated_skills:
                 return (
-                    "No skills are currently active. Use search_skills to find available skills.",
+                    "No skills are currently active. Use activate_skill to enable one.",
                     False,
                 )
 
-            parts = [f"Currently active skills ({len(self._active_skills)} total):\n"]
-            for skill_name in self._active_skills:
+            all_active = self._active_skills | self._auto_activated_skills
+            parts = [f"Currently active skills ({len(all_active)} total):\n"]
+            for skill_name in all_active:
                 manifest = self._manifests.get(skill_name)
                 if manifest:
                     tools = (
@@ -520,14 +382,15 @@ class SkillRegistry:
                         if manifest.tool_names
                         else "no tools"
                     )
-                    parts.append(f"- {manifest.display_name}: {tools}")
+                    auto_tag = " (auto)" if manifest.is_auto_activated else ""
+                    parts.append(f"- {manifest.display_name}{auto_tag}: {tools}")
             return "\n".join(parts), False
 
         return f"Unknown meta-tool: {tool_name}", False
 
     def is_meta_tool(self, tool_name: str) -> bool:
         """Check if a tool name is a meta-tool."""
-        return tool_name in {"search_skills", "activate_skill", "list_active_skills"}
+        return tool_name in {"activate_skill", "list_active_skills"}
 
     @property
     def skill_count(self) -> int:
@@ -536,10 +399,10 @@ class SkillRegistry:
 
     @property
     def active_skill_count(self) -> int:
-        """Number of currently active skills."""
-        return len(self._active_skills)
+        """Number of currently active skills (including auto-activated)."""
+        return len(self._active_skills | self._auto_activated_skills)
 
     @property
     def active_skill_names(self) -> set[str]:
-        """Names of currently active skills."""
-        return self._active_skills.copy()
+        """Names of currently active skills (including auto-activated)."""
+        return (self._active_skills | self._auto_activated_skills).copy()

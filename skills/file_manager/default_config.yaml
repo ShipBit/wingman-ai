@@ -4,18 +4,6 @@ display_name: File Manager
 author: teddybear082
 tags:
   - Utility
-aliases:
-  - save file
-  - load file
-  - read file
-  - write file
-  - create folder
-  - directory
-  - ZIP
-  - archive
-  - text file
-  - document
-  - read aloud
 description:
   en: Manage local files - save, load, create directories, and handle ZIP files. Read files or prompts aloud with text-to-speech.
   de: Verwalte lokale Dateien - speichern, laden, Verzeichnisse erstellen und ZIP-Dateien handhaben. Lies Dateien oder Aufforderungen mit Text-to-Speech vor.

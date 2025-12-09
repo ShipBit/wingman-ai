@@ -4,17 +4,6 @@ display_name: Timer
 author: JayMatthew
 tags:
   - Utility
-aliases:
-  - reminder
-  - alarm
-  - schedule
-  - delay
-  - wait
-  - countdown
-  - set timer
-  - remind me
-  - in X minutes
-  - notify me
 description:
   en: Gives your Wingman the ability to delay actions - be it a reminder, a command or a function call.
   de: Gibt deinem Wingman die Möglichkeit, Aktionen zu verzögern - sei es eine Erinnerung, ein Befehl oder ein Funktionsaufruf.

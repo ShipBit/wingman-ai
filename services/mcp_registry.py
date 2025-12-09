@@ -1,15 +1,14 @@
 """
-MCP Registry with Progressive Tool Disclosure
+MCP Registry with Enum-Based Tool Discovery
 
-This module manages MCP server connections and their tools, similar to SkillRegistry.
-It supports progressive disclosure where MCP servers can be searched and activated on-demand.
+This module manages MCP server connections and their tools.
+It uses enum-based progressive disclosure where MCP servers are activated via
+a constrained enum parameter (no fuzzy search needed).
 """
 
 import asyncio
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Optional
-
-from rapidfuzz import fuzz
 
 from api.enums import LogType
 from api.interface import McpServerConfig, McpToolInfo
@@ -24,25 +23,22 @@ printr = Printr()
 
 @dataclass
 class McpServerManifest:
-    """Lightweight metadata about an MCP server for progressive disclosure."""
+    """Lightweight metadata about an MCP server for enum-based discovery."""
 
     name: str
-    """Internal server name (e.g., 'context7')"""
+    """Internal server name (e.g., 'wingman_websearch')"""
 
     display_name: str
-    """Human-readable name (e.g., 'Context7 Documentation')"""
+    """Human-readable name (e.g., 'Wingman Web Search')"""
 
     description: str
-    """What the server provides - used for semantic search"""
+    """What the server provides - shown in enum tool description"""
 
     tool_names: list[str] = field(default_factory=list)
     """Names of tools this server provides (prefixed)"""
 
     tool_summaries: list[str] = field(default_factory=list)
     """One-line descriptions of each tool"""
-
-    aliases: list[str] = field(default_factory=list)
-    """Alternative search terms for this server (from config)"""
 
     is_connected: bool = False
     """Whether the server is currently connected"""
@@ -60,86 +56,14 @@ class McpServerManifest:
             or f"MCP server: {connection.config.display_name}",
             tool_names=tool_names,
             tool_summaries=tool_summaries,
-            aliases=connection.config.aliases or [],
             is_connected=connection.is_connected,
         )
 
-    def matches_query(self, query: str) -> float:
-        """
-        Returns a relevance score (0-1) for how well this server matches the query.
-        Uses fuzzy matching with rapidfuzz for better discoverability.
-        """
-        query_lower = query.lower().strip()
-        query_words = set(query_lower.split())
-
-        score = 0.0
-
-        # Fuzzy match threshold (0-100 scale from rapidfuzz)
-        FUZZY_THRESHOLD = 75
-
-        # Check aliases first (highest priority) - exact and fuzzy match
-        for alias in self.aliases:
-            alias_lower = alias.lower()
-            # Exact substring match
-            if alias_lower in query_lower or query_lower in alias_lower:
-                return 0.95  # Very high score for alias match
-            # Fuzzy match on alias
-            ratio = fuzz.ratio(query_lower, alias_lower)
-            if ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.85 * (ratio / 100))
-            # Partial ratio for multi-word queries
-            partial = fuzz.partial_ratio(query_lower, alias_lower)
-            if partial >= FUZZY_THRESHOLD:
-                score = max(score, 0.8 * (partial / 100))
-
-        # Check display name (high weight) - exact and fuzzy
-        name_lower = self.display_name.lower()
-        if query_lower in name_lower or name_lower in query_lower:
-            score = max(score, 0.7)
-        else:
-            # Fuzzy match on name
-            ratio = fuzz.ratio(query_lower, name_lower)
-            if ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.6 * (ratio / 100))
-            # Token set ratio handles word reordering
-            token_ratio = fuzz.token_set_ratio(query_lower, name_lower)
-            if token_ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.55 * (token_ratio / 100))
-
-        # Check description (medium weight) - fuzzy partial matching
-        desc_lower = self.description.lower()
-        if query_lower in desc_lower:
-            score = max(score, 0.5)
-        else:
-            # Partial ratio good for finding query within longer text
-            partial = fuzz.partial_ratio(query_lower, desc_lower)
-            if partial >= FUZZY_THRESHOLD:
-                score = max(score, 0.4 * (partial / 100))
-
-        # Check tool names (lower weight) - word overlap and fuzzy
-        for tool_name in self.tool_names:
-            tool_words = set(
-                tool_name.lower().replace("_", " ").replace("-", " ").split()
-            )
-            if query_words & tool_words:
-                score = max(score, 0.3)
-                break
-            # Fuzzy match on tool name
-            ratio = fuzz.partial_ratio(query_lower, tool_name.lower().replace("_", " "))
-            if ratio >= FUZZY_THRESHOLD:
-                score = max(score, 0.25 * (ratio / 100))
-
-        # Check tool summaries (lowest weight)
-        for summary in self.tool_summaries:
-            summary_lower = summary.lower()
-            if any(word in summary_lower for word in query_words):
-                score = max(score, 0.2)
-                break
-            partial = fuzz.partial_ratio(query_lower, summary_lower)
-            if partial >= 80:  # Higher threshold for summaries
-                score = max(score, 0.15 * (partial / 100))
-
-        return min(score, 1.0)
+    def get_short_description(self, max_length: int = 80) -> str:
+        """Get a shortened description for enum display."""
+        if len(self.description) <= max_length:
+            return self.description
+        return self.description[: max_length - 3] + "..."
 
     def to_summary(self) -> str:
         """Returns a compact string representation for LLM context."""
@@ -149,18 +73,17 @@ class McpServerManifest:
         )
         if len(self.tool_names) > 5:
             tools_str += f", and {len(self.tool_names) - 5} more"
-        # Show aliases (search terms) - helps LLM understand why this server matched
-        aliases_str = ", ".join(self.aliases) if self.aliases else ""
-        alias_line = f"\n  Also known as: {aliases_str}" if aliases_str else ""
-        return f"**{self.display_name}** (id: {self.name}) [{status}]\n  {self.description}\n  Tools: {tools_str}{alias_line}"
+        return f"**{self.display_name}** (id: {self.name}) [{status}]\n  {self.description}\n  Tools: {tools_str}"
 
 
 class McpRegistry:
     """
-    Central registry for MCP servers with progressive disclosure support.
+    Central registry for MCP servers with enum-based discovery.
 
-    Similar to SkillRegistry, but for external MCP servers. Manages connections,
-    tracks available tools, and supports search/activate pattern.
+    Enum-based discovery:
+    - The activate_mcp_server tool has an enum of all connected server IDs
+    - LLM sees descriptions in tool definition and picks the right one
+    - No fuzzy search needed - works reliably in any language
     """
 
     def __init__(
@@ -285,87 +208,9 @@ class McpRegistry:
         for server_name in server_names:
             await self.unregister_server(server_name)
 
-    def search_servers(self, query: str, limit: int = 5) -> list[McpServerManifest]:
-        """
-        Search for MCP servers matching the query.
-        Returns manifests sorted by relevance.
-        """
-        query_lower = query.lower().strip()
-
-        # Special case: list all
-        if query_lower in ("all", "*", "list", "list all", "everything", "show all"):
-            results = list(self._manifests.values())[:limit]
-            printr.print(
-                f"🔍 MCP search 'list all' → {len(self._manifests)} servers available",
-                color=LogType.MCP,
-                source_name=self._wingman_name if self._wingman_name else None,
-                server_only=True,
-            )
-            return results
-
-        scored = []
-        for manifest in self._manifests.values():
-            score = manifest.matches_query(query)
-            if score > 0:
-                scored.append((score, manifest))
-
-        scored.sort(key=lambda x: x[0], reverse=True)
-        results = [m for _, m in scored[:limit]]
-
-        # Fallback: If no results, check for servers with discovery tools (mcp-find)
-        # These are meta-servers like Docker MCP Gateway that can find other servers
-        if not results:
-            for manifest in self._manifests.values():
-                # Check if any tool contains "mcp-find" (handles prefixed names)
-                has_discovery = any(
-                    "mcp-find" in name.lower() or "mcp_find" in name.lower()
-                    for name in manifest.tool_names
-                )
-                # Also check description for discovery-related keywords
-                desc_lower = manifest.description.lower()
-                has_discovery = has_discovery or any(
-                    kw in desc_lower
-                    for kw in ["mcp-find", "discover", "dynamic", "aggregator"]
-                )
-                if has_discovery:
-                    results = [manifest]
-                    printr.print(
-                        f"🔍 MCP search '{query}' → {manifest.display_name}(fallback-discovery)",
-                        color=LogType.MCP,
-                        source_name=self._wingman_name if self._wingman_name else None,
-                        server_only=True,
-                    )
-                    return results
-
-        # Log search results with scores for debugging - server-only
-        # This helps debug "why didn't my wingman find the MCP server?" issues
-        if scored:
-            top_matches = scored[:3]  # Show top 3 for debugging
-            matches_str = ", ".join(
-                f"{m.display_name}({s:.2f})" for s, m in top_matches
-            )
-            printr.print(
-                f"🔍 MCP search '{query}' → {matches_str}",
-                color=LogType.MCP,
-                source_name=self._wingman_name if self._wingman_name else None,
-                server_only=True,
-            )
-        else:
-            # Log available servers when nothing matched - helps debug
-            available = [m.display_name for m in list(self._manifests.values())[:5]]
-            hint = (
-                f" [available: {', '.join(available)}...]"
-                if available
-                else " [no MCP servers connected]"
-            )
-            printr.print(
-                f"🔍 MCP search '{query}' → no matches{hint}",
-                color=LogType.WARNING,
-                source_name=self._wingman_name if self._wingman_name else None,
-                server_only=True,
-            )
-
-        return results
+    def get_connected_servers(self) -> list[McpServerManifest]:
+        """Get all connected MCP server manifests."""
+        return [m for m in self._manifests.values() if m.is_connected]
 
     def activate_server(self, server_name: str) -> tuple[bool, str]:
         """
@@ -393,7 +238,7 @@ class McpRegistry:
 
         prefix = f"[{self._wingman_name}] " if self._wingman_name else ""
         printr.print(
-            f"{prefix}🌐 MCP activated: {manifest.display_name}",
+            f"{prefix} MCP activated: {manifest.display_name}",
             color=LogType.MCP,
             source_name=self._wingman_name if self._wingman_name else None,
             # Always show activation in UI - important for users to know
@@ -476,58 +321,40 @@ class McpRegistry:
 
     def get_meta_tools(self) -> list[tuple[str, dict]]:
         """
-        Returns meta-tools for MCP progressive disclosure.
-        These allow the LLM to discover and activate MCP servers.
+        Returns meta-tools for enum-based MCP server discovery.
+        Uses enum constraint for reliable activation in any language.
         """
-        if not self._manifests:
-            return []
+        connected = self.get_connected_servers()
 
-        # Build servers summary with descriptions for better matching
-        server_hints = []
-        for m in list(self._manifests.values())[:5]:
-            server_hints.append(
-                f"{m.display_name} ({m.description[:50]}...)"
-                if len(m.description) > 50
-                else f"{m.display_name} ({m.description})"
-            )
-        servers_hint = "; ".join(server_hints)
-        if len(self._manifests) > 5:
-            servers_hint += f"; and {len(self._manifests) - 5} more"
+        if not connected:
+            return []  # No MCP servers connected
+
+        # Build enum values (server IDs)
+        server_ids = [m.name for m in connected]
+
+        # Build descriptions for the tool (helps LLM choose correctly)
+        server_descriptions = []
+        for m in connected:
+            short_desc = m.get_short_description(60)
+            server_descriptions.append(f"- {m.name}: {short_desc}")
+
+        descriptions_block = "\n".join(server_descriptions)
 
         return [
-            (
-                "search_mcp_servers",
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "search_mcp_servers",
-                        "description": f"Search for MCP servers connected by the user. These provide external capabilities - could be documentation, APIs, local apps, databases, or any other tools. Available: {servers_hint}",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {
-                                    "type": "string",
-                                    "description": "Search query - what you're looking for (e.g., 'Svelte', 'containers', 'documentation')",
-                                },
-                            },
-                            "required": ["query"],
-                        },
-                    },
-                },
-            ),
             (
                 "activate_mcp_server",
                 {
                     "type": "function",
                     "function": {
                         "name": "activate_mcp_server",
-                        "description": "Activate an MCP server to access its tools. Use search_mcp_servers first to find the server name.",
+                        "description": f"Activate an MCP server to use its tools. Pick based on what you need:\n\n{descriptions_block}",
                         "parameters": {
                             "type": "object",
                             "properties": {
                                 "server_name": {
                                     "type": "string",
-                                    "description": "The internal name (id) of the MCP server to activate",
+                                    "enum": server_ids,
+                                    "description": "The MCP server to activate",
                                 },
                             },
                             "required": ["server_name"],
@@ -568,24 +395,7 @@ class McpRegistry:
             server_only=True,
         )
 
-        if tool_name == "search_mcp_servers":
-            query = parameters.get("query", "")
-            limit = 20 if query.lower() in ("all", "*", "list") else 5
-            results = self.search_servers(query, limit=limit)
-
-            if not results:
-                return "No MCP servers found matching your query.", False
-
-            parts = [f"Found {len(results)} MCP server(s) matching '{query}':\n"]
-            for manifest in results:
-                parts.append(manifest.to_summary())
-                parts.append("")
-            parts.append(
-                "\nUse activate_mcp_server with the server id to enable its tools."
-            )
-            return "\n".join(parts), False
-
-        elif tool_name == "activate_mcp_server":
+        if tool_name == "activate_mcp_server":
             server_name = parameters.get("server_name", "")
             success, message = self.activate_server(server_name)
             return message, success
@@ -593,7 +403,7 @@ class McpRegistry:
         elif tool_name == "list_active_mcp_servers":
             if not self._active_servers:
                 return (
-                    "No MCP servers are currently active. Use search_mcp_servers to find available servers.",
+                    "No MCP servers are currently active. Use activate_mcp_server to enable one.",
                     False,
                 )
 
@@ -615,11 +425,7 @@ class McpRegistry:
 
     def is_meta_tool(self, tool_name: str) -> bool:
         """Check if a tool name is an MCP meta-tool."""
-        return tool_name in {
-            "search_mcp_servers",
-            "activate_mcp_server",
-            "list_active_mcp_servers",
-        }
+        return tool_name in {"activate_mcp_server", "list_active_mcp_servers"}
 
     def is_mcp_tool(self, tool_name: str) -> bool:
         """Check if a tool name is from an MCP server."""

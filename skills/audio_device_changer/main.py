@@ -1,5 +1,9 @@
+import asyncio
 from typing import TYPE_CHECKING
+
 import aiohttp
+from aiohttp import ClientError
+
 from api.interface import (
     AudioDeviceSettings,
     SettingsConfig,
@@ -15,6 +19,7 @@ if TYPE_CHECKING:
 
 
 class AudioDeviceChanger(Skill):
+    """Skill that automatically routes TTS output to a configured audio device per Wingman."""
 
     def __init__(
         self,
@@ -40,13 +45,16 @@ class AudioDeviceChanger(Skill):
         return errors
 
     async def _change_audio_device(self, device_id: int | AudioDeviceSettings) -> bool:
-        """Change the audio output device via HTTP request."""
+        """Change the audio output device via HTTP request to the backend."""
         try:
             async with aiohttp.ClientSession() as session:
+                url = f"http://127.0.0.1:{self.backend_port}/settings/audio-devices"
+                if device_id is not None:
+                    url = f"{url}?output_device={device_id}"
+
                 async with session.post(
-                    f"http://127.0.0.1:{self.backend_port}/settings/audio-devices?output_device={device_id}"
-                    if device_id
-                    else f"http://127.0.0.1:{self.backend_port}/settings/audio-devices"
+                    url,
+                    timeout=aiohttp.ClientTimeout(total=10),
                 ) as response:
                     if response.status == 200:
                         self.printr.print(
@@ -61,9 +69,21 @@ class AudioDeviceChanger(Skill):
                             LogType.ERROR,
                         )
                         return False
+        except ClientError as e:
+            await self.printr.print_async(
+                f"Audio Device Changer: HTTP error changing audio device: {e}",
+                LogType.ERROR,
+            )
+            return False
+        except asyncio.TimeoutError:
+            await self.printr.print_async(
+                "Audio Device Changer: Timeout while changing audio device",
+                LogType.ERROR,
+            )
+            return False
         except Exception as e:
             await self.printr.print_async(
-                f"Audio Device Changer: Error changing audio device. Error: {str(e)}",
+                f"Audio Device Changer: Unexpected error changing audio device: {e}",
                 LogType.ERROR,
             )
             return False

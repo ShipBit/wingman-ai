@@ -310,6 +310,35 @@ class Skill:
         """Check if this skill still needs validation and preparation."""
         return not self.is_validated or not self.is_prepared
 
+    async def update_config(self, new_config: SkillConfig) -> None:
+        """Update the skill's configuration.
+
+        Called when the user changes skill settings at runtime (e.g., custom properties).
+        By default, this updates self.config and invalidates validation state so the skill
+        will be revalidated on next use.
+
+        Skills that cache config values in __init__ or validate() should override this
+        method to also update their cached values.
+
+        Args:
+            new_config: The updated SkillConfig with new custom_properties or prompt.
+        """
+        old_config = self.config
+        self.config = new_config
+
+        # Check if custom_properties actually changed (not just the same object)
+        old_props = {p.id: p.value for p in (old_config.custom_properties or [])}
+        new_props = {p.id: p.value for p in (new_config.custom_properties or [])}
+
+        if old_props != new_props:
+            # Custom properties changed - invalidate validation so skill re-reads config
+            self.is_validated = False
+            self.printr.print(
+                f"Skill '{self.config.display_name}' config updated, will revalidate on next use.",
+                color=LogType.INFO,
+                server_only=True,
+            )
+
     async def secret_changed(self, secrets: dict[str, any]):
         """Called when a secret is changed."""
         pass
