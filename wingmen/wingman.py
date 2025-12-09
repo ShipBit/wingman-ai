@@ -44,6 +44,11 @@ if TYPE_CHECKING:
 printr = Printr()
 
 
+def _get_skill_folder_from_module(module: str) -> str:
+    """Extract folder name from module path like 'skills.star_head.main' -> 'star_head'"""
+    return module.replace(".main", "").replace(".", "/").split("/")[1]
+
+
 class Wingman:
     """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
 
@@ -236,17 +241,12 @@ class Wingman:
         errors = []
         self.skills = []
 
-        # Helper function to extract skill folder name from module path
-        def get_skill_folder_from_module(module: str) -> str:
-            """Extract folder name from module path like 'skills.star_head.main' -> 'star_head'"""
-            return module.replace(".main", "").replace(".", "/").split("/")[1]
-
         # Build a lookup of user config overrides by skill folder name
         # The key must be the folder name (e.g., 'star_head') not the class name (e.g., 'StarHead')
         user_skill_configs: dict[str, "SkillConfig"] = {}
         if self.config.skills:
             for skill_config in self.config.skills:
-                folder_name = get_skill_folder_from_module(skill_config.module)
+                folder_name = _get_skill_folder_from_module(skill_config.module)
                 user_skill_configs[folder_name] = skill_config
 
         # Get all available skill configs
@@ -374,16 +374,11 @@ class Wingman:
         # Find the skill config
         available_skills = ModuleManager.read_available_skill_configs()
 
-        # Helper function to extract skill folder name from module path
-        def get_skill_folder_from_module(module: str) -> str:
-            """Extract folder name from module path like 'skills.star_head.main' -> 'star_head'"""
-            return module.replace(".main", "").replace(".", "/").split("/")[1]
-
         # Build user config lookup by skill folder name
         user_skill_configs: dict[str, "SkillConfig"] = {}
         if self.config.skills:
             for skill_config in self.config.skills:
-                folder_name = get_skill_folder_from_module(skill_config.module)
+                folder_name = _get_skill_folder_from_module(skill_config.module)
                 user_skill_configs[folder_name] = skill_config
 
         for skill_folder_name, skill_config_path in available_skills:
@@ -910,20 +905,16 @@ class Wingman:
         if not self.skills or not wingman_config.skills:
             return
 
-        # Helper to get skill folder from module path
-        def get_skill_folder_from_module(module: str) -> str:
-            return module.replace(".main", "").replace(".", "/").split("/")[1]
-
         # Build lookup of new skill configs by folder name
         new_skill_configs: dict[str, "SkillConfig"] = {}
         for skill_config in wingman_config.skills:
-            folder_name = get_skill_folder_from_module(skill_config.module)
+            folder_name = _get_skill_folder_from_module(skill_config.module)
             new_skill_configs[folder_name] = skill_config
 
         # Update each loaded skill if its config changed
         for skill in self.skills:
             # Get the folder name for this skill
-            skill_folder = get_skill_folder_from_module(skill.config.module)
+            skill_folder = _get_skill_folder_from_module(skill.config.module)
 
             if skill_folder in new_skill_configs:
                 user_override = new_skill_configs[skill_folder]
