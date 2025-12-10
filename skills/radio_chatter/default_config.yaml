@@ -5,6 +5,7 @@ author: JayMatthew
 tags:
   - Game
   - Music
+auto_activate: true
 description:
   en: Randomly playback radio chatter over time. Customize the participants and their voices.
   de: Spielt zufällige Funkgespräche ab. Passe die Teilnehmer und ihre Stimmen an.
@@ -76,7 +77,7 @@ custom_properties:
   - id: auto_start
     name: Auto start
     hint: Automatically start the radio chatter with your Wingman.
-    value: False
+    value: True
     required: false
     property_type: boolean
   - id: volume
@@ -100,7 +101,7 @@ custom_properties:
     property_type: boolean
   - id: radio_knowledge
     name: Radio knowledge
-    hint: If enabled, the radio chatter messages will be added to the wingman conversation. This way you can talk with your wingman about the radio chatter.
+    hint: If enabled, the radio chatter messages will be added to the Wingman conversation. This way you can talk with your Wingman about the radio chatter.
     value: False
     required: false
     property_type: boolean
