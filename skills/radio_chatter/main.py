@@ -39,6 +39,7 @@ class RadioChatter(Skill):
         self.last_message = None
         self.radio_status = False
         self.loaded = False
+        self._chatter_starting = False  # Track if chatter initialization is in progress
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -289,6 +290,7 @@ class RadioChatter(Skill):
         await super().unload()
         self.loaded = False
         self.radio_status = False
+        self._chatter_starting = False
 
     def randrange(self, start, stop=None):
         if start == stop:
@@ -302,7 +304,7 @@ class RadioChatter(Skill):
     )
     def turn_on_radio(self) -> str:
         """Turn the radio on."""
-        if self.radio_status:
+        if self.radio_status or self._chatter_starting:
             return "Radio is already on."
         else:
             self.threaded_execution(self._init_chatter)
@@ -331,17 +333,23 @@ class RadioChatter(Skill):
     async def _monitor_auto_start(self) -> None:
         """Monitor auto_start setting and start radio when enabled."""
         while self.loaded:
-            if self._get_auto_start() and not self.radio_status:
-                # auto_start is enabled and radio is off - start it
+            if (
+                self._get_auto_start()
+                and not self.radio_status
+                and not self._chatter_starting
+            ):
+                # auto_start is enabled and radio is off and not already starting - start it
                 self.threaded_execution(self._init_chatter)
             time.sleep(5)  # Check every 5 seconds
 
     async def _init_chatter(self) -> None:
         """Start the radio chatter."""
 
+        self._chatter_starting = True
         self.radio_status = True
         interval_min = self._get_interval_min()
         time.sleep(max(5, interval_min))  # sleep for min 5s else min interval
+        self._chatter_starting = False
 
         while self.is_active():
             await self._generate_chatter()
