@@ -41,9 +41,10 @@ class VisionAI(Skill):
         WHEN TO USE:
         - User asks 'What is on my screen?' or 'What do you see?'
         - User wants analysis of currently displayed content
+        - User asks to look at something or check something out
         - User asks specific questions about visual elements, text, or objects on screen
 
-        For image analysis: Ask user to open the image on their computer first, then capture and analyze.
+        Immediately captures and analyzes the current screen content.
         Provides detailed descriptions of visual content including text, UI elements, and objects.""",
         wait_response=True,
     )

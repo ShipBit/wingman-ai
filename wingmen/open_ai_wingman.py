@@ -51,6 +51,7 @@ from services.printr import Printr
 from services.tool_registry import SkillRegistry
 from services.mcp_client import McpClient
 from services.mcp_registry import McpRegistry
+from services.capability_registry import CapabilityRegistry
 from skills.skill_base import Skill
 from wingmen.wingman import Wingman
 
@@ -119,6 +120,12 @@ class OpenAiWingman(Wingman):
             self.mcp_client,
             wingman_name=self.name,
             on_state_changed=self._broadcast_mcp_state_changed,
+        )
+
+        # Unified capability registry - combines skill and MCP discovery
+        # From the LLM's perspective, both are just "capabilities"
+        self.capability_registry = CapabilityRegistry(
+            self.skill_registry, self.mcp_registry
         )
 
     def _broadcast_mcp_state_changed(self):
@@ -1949,7 +1956,41 @@ class OpenAiWingman(Wingman):
         used_skill = None
         tool_label = None
 
-        # Handle meta-tools for progressive skill discovery/activation
+        # Handle unified capability meta-tools (activate_capability, list_active_capabilities)
+        if self.capability_registry.is_meta_tool(function_name):
+            function_response, tools_changed = (
+                self.capability_registry.execute_meta_tool(function_name, function_args)
+            )
+
+            # If a skill was activated, perform lazy validation
+            if tools_changed and function_name == "activate_capability":
+                capability_name = function_args.get("capability_name", "")
+                skill = self.skill_registry.get_skill_for_activation(capability_name)
+                if skill and skill.needs_activation():
+                    success, validation_msg = await skill.ensure_activated()
+                    if not success:
+                        # Validation failed - deactivate the skill
+                        self.skill_registry.deactivate_skill(capability_name)
+                        function_response = validation_msg
+                        tools_changed = False
+                        await printr.print_async(
+                            f"Skill activation failed: {capability_name}",
+                            color=LogType.ERROR,
+                        )
+                    else:
+                        # Get display name for user-friendly message
+                        display_name = self.skill_registry.get_skill_display_name(
+                            capability_name
+                        )
+                        await printr.print_async(
+                            f"Skill activated: {display_name}",
+                            color=LogType.SKILL,
+                        )
+
+            return function_response, None, None, None  # Meta-tool, no timing label
+
+        # Handle legacy meta-tools for progressive skill discovery/activation
+        # These are kept for backward compatibility but shouldn't be called
         if self.skill_registry.is_meta_tool(function_name):
             function_response, tools_changed = self.skill_registry.execute_meta_tool(
                 function_name, function_args
@@ -2335,23 +2376,17 @@ class OpenAiWingman(Wingman):
             },
         ]
 
-        # Progressive tool disclosure: only meta-tools + activated skills' tools
-        # This saves tokens by not sending all tool definitions on every call
-        for _, tool in self.skill_registry.get_meta_tools():
+        # Unified capability discovery: single activate_capability meta-tool
+        # Combines skills and MCP servers - LLM doesn't need to know the difference
+        for _, tool in self.capability_registry.get_meta_tools():
             tools.append(tool)
 
+        # Add tools from activated capabilities (both skills and MCPs)
         for _, tool in self.skill_registry.get_active_tools():
             tools.append(tool)
 
-        # MCP tools: add meta-tools for discovery if servers are available
-        # MCP servers auto-activate on connect, so their tools are immediately available
-        if self.mcp_registry.server_count > 0:
-            for _, tool in self.mcp_registry.get_meta_tools():
-                tools.append(tool)
-
-            # Add tools from active MCP servers
-            for _, tool in self.mcp_registry.get_active_tools():
-                tools.append(tool)
+        for _, tool in self.mcp_registry.get_active_tools():
+            tools.append(tool)
 
         return tools
 

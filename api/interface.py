@@ -1005,11 +1005,6 @@ class WingmanConfig(NestedConfig):
     Empty list means no MCP servers are discoverable.
     Example: ["wingman_date_time", "wingman_starhead"] to make only these MCPs available."""
 
-    mcp: Optional[list[McpServerConfig]] = None
-    """DEPRECATED: MCP servers are now defined centrally in mcp.yaml.
-    This field is kept for backward compatibility during migration.
-    Use discoverable_mcps to control which MCP servers are enabled per wingman."""
-
     custom_class: Optional[CustomClassConfig] = None
     """If you want to use a custom Wingman (Python) class, you can specify it here."""
     name: str

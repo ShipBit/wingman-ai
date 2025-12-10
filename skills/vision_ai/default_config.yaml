@@ -9,8 +9,8 @@ description:
   en: Screen vision - analyse what's on your screen, see images, read text, describe visual content.
   de: Bildschirm-Vision - analysiere was auf deinem Screen ist, sieh Bilder, lese Text, beschreibe visuelle Inhalte.
 discovery_keywords:
-  en: screenshot, OCR, image analysis, text recognition, screen capture, what do you see, vision
-  de: Screenshot, OCR, Bildanalyse, Texterkennung, Bildschirmaufnahme, was siehst du, Vision
+  en: screenshot, OCR, image analysis, text recognition, screen capture, what do you see, vision, look at this, look at that, check this out, see this, look at my screen, what's on my screen
+  de: Screenshot, OCR, Bildanalyse, Texterkennung, Bildschirmaufnahme, was siehst du, Vision, schau dir das an, sieh dir das an, guck mal, schau auf meinen Bildschirm
 custom_properties:
   - id: display
     name: Display to capture

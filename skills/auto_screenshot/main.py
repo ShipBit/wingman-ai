@@ -125,4 +125,4 @@ class AutoScreenshot(Skill):
                     color=LogType.INFO,
                 )
 
-        return "Screenshot taken successfully."
+        return f"Screenshot saved to: {screenshot_file}"
