@@ -13,6 +13,7 @@ from services.config_manager import (
     ConfigManager,
 )
 from services.file import get_users_dir, get_custom_skills_dir, get_audio_library_dir
+from services.module_manager import ModuleManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
@@ -380,23 +381,35 @@ class ConfigMigrationService:
         # Check bundled skills directory
         bundled_dir = get_bundled_skills_dir()
         if bundled_dir and path.exists(bundled_dir):
-            builtin_skills.update(os.listdir(bundled_dir))
+            for item in os.listdir(bundled_dir):
+                item_path = path.join(bundled_dir, item)
+                if self._is_valid_skill_directory(item_path):
+                    builtin_skills.add(item)
 
         # Check source skills directory (dev mode)
         if path.exists(SKILLS_DIR):
-            builtin_skills.update(os.listdir(SKILLS_DIR))
+            for item in os.listdir(SKILLS_DIR):
+                item_path = path.join(SKILLS_DIR, item)
+                if self._is_valid_skill_directory(item_path):
+                    builtin_skills.add(item)
 
         # Also check migration template skills (for older version detection)
         template_skills_dir = path.join(
             self.templates_dir, "migration", new_version, "skills"
         )
         if path.exists(template_skills_dir):
-            builtin_skills.update(os.listdir(template_skills_dir))
+            for item in os.listdir(template_skills_dir):
+                item_path = path.join(template_skills_dir, item)
+                if self._is_valid_skill_directory(item_path):
+                    builtin_skills.add(item)
 
         # Legacy: Also check old templates/skills location
         legacy_template_skills = path.join(self.templates_dir, "skills")
         if path.exists(legacy_template_skills):
-            builtin_skills.update(os.listdir(legacy_template_skills))
+            for item in os.listdir(legacy_template_skills):
+                item_path = path.join(legacy_template_skills, item)
+                if self._is_valid_skill_directory(item_path):
+                    builtin_skills.add(item)
 
         # Skills that were removed in 1.9.0 (converted to MCP servers)
         # These should NOT be detected as custom skills during migration
@@ -834,87 +847,67 @@ class ConfigMigrationService:
                     del old["skills"]
                     changes_made.append("skills (removed - no overrides)")
 
-            # Set disabled_skills for known wingmen (opt-out model)
+            # Set discoverable_skills and discoverable_mcps for wingmen
             wingman_name = old.get("name", "")
 
-            # Star Citizen wingmen: ATC and Computer get same blacklist
-            sc_blacklist = [
-                "APIRequest",
-                "ATSTelemetry",
-                "AudioDeviceChanger",
-                "ControlWindows",
-                "FileManager",
-                "Msfs2020Control",
-                "QuickCommands",
-                "RadioChatter",
-                "Spotify",
-                "ThinkingSound",
-                "TypingAssistant",
-                "UEXCorp",
-                "VoiceChanger",
-            ]
+            # Get all available skill names
+            all_skill_names = self._get_all_skill_names()
 
-            # Clippy blacklist (general assistant)
-            clippy_blacklist = [
-                "ATSTelemetry",
-                "AudioDeviceChanger",
-                "Msfs2020Control",
-                "QuickCommands",
-                "RadioChatter",
-                "Spotify",
-                "ThinkingSound",
-                "UEXCorp",
-                "VoiceChanger",
-            ]
-
-            if wingman_name in ("ATC", "Computer"):
-                old["disabled_skills"] = sc_blacklist
-                changes_made.append(
-                    f"disabled_skills (SC wingman: {len(sc_blacklist)} skills disabled)"
-                )
-            elif wingman_name == "Clippy":
-                old["disabled_skills"] = clippy_blacklist
-                changes_made.append(
-                    f"disabled_skills (Clippy: {len(clippy_blacklist)} skills disabled)"
-                )
-            else:
-                # For all other wingmen (custom wingmen), handle disabled_skills
-                # Remove deprecated skills that have been removed/replaced by MCP servers
-                removed_skill_names = {
-                    "AskPerplexity",
-                    "GoogleSearch",
-                    "WebSearch",
-                    "TimeAndDateRetriever",
-                    "NMSAssistant",
-                    "StarHead",
-                }
-
-                if "disabled_skills" in old and old["disabled_skills"]:
-                    # Custom wingman has existing disabled_skills - clean up deprecated skills
-                    removed_from_disabled = [
-                        s for s in old["disabled_skills"] if s in removed_skill_names
-                    ]
-                    if removed_from_disabled:
-                        old["disabled_skills"] = [
-                            s
-                            for s in old["disabled_skills"]
-                            if s not in removed_skill_names
-                        ]
-                        changes_made.append(
-                            f"disabled_skills (removed {', '.join(removed_from_disabled)} - skills deprecated)"
+            # For template wingmen (ATC, Computer, Clippy), read from their template.yaml
+            # For custom wingmen, build from skills with discoverable_by_default=True
+            if wingman_name in ("ATC", "Computer", "Clippy"):
+                # Read discoverable skills/mcps from template
+                template_path = self._get_template_path(wingman_name)
+                if template_path and path.exists(template_path):
+                    template_config = ModuleManager.read_config(template_path)
+                    if template_config:
+                        # Template already has new 1.9.0 format with discoverable_skills/discoverable_mcps
+                        old["discoverable_skills"] = template_config.get(
+                            "discoverable_skills", []
                         )
-                    # Clean up empty disabled_skills list
-                    if not old["disabled_skills"]:
-                        del old["disabled_skills"]
+                        changes_made.append(
+                            f"discoverable_skills ({len(old['discoverable_skills'])} skills from template)"
+                        )
+
+                        old["discoverable_mcps"] = template_config.get(
+                            "discoverable_mcps", []
+                        )
+                        changes_made.append(
+                            f"discoverable_mcps ({len(old['discoverable_mcps'])} MCPs from template)"
+                        )
+                    else:
+                        # Fallback: couldn't read template
+                        self.log(
+                            f"Warning: Could not read template for {wingman_name}, using discoverable defaults",
+                            warning=True,
+                        )
+                        old["discoverable_skills"] = (
+                            self._get_skills_discoverable_by_default()
+                        )
+                        old["discoverable_mcps"] = (
+                            self._get_mcps_discoverable_by_default()
+                        )
                 else:
-                    # Custom wingman has no disabled_skills - initialize with skills that have enabled_by_default=false
-                    # This ensures opt-in skills are disabled by default for custom wingmen
-                    default_disabled = self._get_skills_disabled_by_default()
-                    if default_disabled:
-                        old["disabled_skills"] = default_disabled
-                        changes_made.append(
-                            f"disabled_skills (custom wingman: {len(default_disabled)} opt-in skills disabled by default)"
-                        )
+                    # Fallback: couldn't find template
+                    self.log(
+                        f"Warning: Could not find template for {wingman_name}, using discoverable defaults",
+                        warning=True,
+                    )
+                    old["discoverable_skills"] = (
+                        self._get_skills_discoverable_by_default()
+                    )
+                    old["discoverable_mcps"] = self._get_mcps_discoverable_by_default()
+            else:
+                # Custom wingman: build discoverable lists from defaults
+                old["discoverable_skills"] = self._get_skills_discoverable_by_default()
+                changes_made.append(
+                    f"discoverable_skills (custom wingman: {len(old['discoverable_skills'])} skills discoverable by default)"
+                )
+
+                old["discoverable_mcps"] = self._get_mcps_discoverable_by_default()
+                changes_made.append(
+                    f"discoverable_mcps (custom wingman: {len(old['discoverable_mcps'])} MCPs discoverable by default)"
+                )
 
             # MCP servers are now centralized in mcp.yaml
             # Remove old per-wingman mcp array if it exists (shouldn't in 1.8.2, but clean up)
@@ -922,22 +915,11 @@ class ConfigMigrationService:
                 del old["mcp"]
                 changes_made.append("mcp (removed - now centralized in mcp.yaml)")
 
-            # For custom wingmen without disabled_mcps, disable all optional MCP servers
-            # wingman_date_time is always enabled for all wingmen (not in this list)
-            # This ensures migrated custom wingmen start with a clean slate
-            # Users can then enable specific MCPs as needed
-            # Template-based wingmen already have their disabled_mcps defined
-            if "disabled_mcps" not in old or old["disabled_mcps"] is None:
-                optional_mcp_servers = [
-                    "wingman_websearch",
-                    "wingman_perplexity",
-                    "wingman_starhead",
-                    "wingman_no_mans_sky",
-                ]  # All optional servers from mcp.template.yaml (excludes wingman_date_time)
-                old["disabled_mcps"] = optional_mcp_servers
-                changes_made.append(
-                    f"disabled_mcps (initialized with all {len(optional_mcp_servers)} optional MCPs disabled)"
-                )
+            # Remove old disabled_skills/disabled_mcps if they exist (from pre-1.9 or manual edits)
+            if "disabled_skills" in old:
+                del old["disabled_skills"]
+            if "disabled_mcps" in old:
+                del old["disabled_mcps"]
 
             if changes_made:
                 self.log(f"- cleared/updated: {', '.join(changes_made)}")
@@ -967,27 +949,150 @@ class ConfigMigrationService:
 
     # INTERNAL
 
-    def _get_skills_disabled_by_default(self) -> list[str]:
-        """Get list of skill names that have enabled_by_default=False.
+    def _is_valid_skill_directory(self, skill_path: str) -> bool:
+        """Check if a directory is a valid skill by verifying it has required files.
+
+        A valid skill must have:
+        - main.py (the skill implementation)
+        - default_config.yaml (the skill configuration)
+
+        Args:
+            skill_path: Absolute path to the skill directory
 
         Returns:
-            List of skill names that should be disabled by default
+            True if the directory contains both required files
         """
-        from services.module_manager import ModuleManager
+        if not path.isdir(skill_path):
+            return False
 
-        disabled_by_default = []
+        # Check for required files
+        has_main = path.exists(path.join(skill_path, "main.py"))
+        has_config = path.exists(path.join(skill_path, "default_config.yaml"))
+
+        return has_main and has_config
+
+    def _get_skills_discoverable_by_default(self) -> list[str]:
+        """Get list of BUILT-IN skill names that have discoverable_by_default=True (or unset).
+
+        Custom skills are excluded - they must be explicitly added by the user.
+
+        Returns:
+            List of built-in skill names that should be discoverable by default
+        """
+        from services.module_manager import (
+            ModuleManager,
+            get_bundled_skills_dir,
+            SKILLS_DIR,
+        )
+
+        # Get list of built-in skill directory names
+        builtin_skills = set()
+
+        # Check bundled skills directory
+        bundled_dir = get_bundled_skills_dir()
+        if bundled_dir and path.exists(bundled_dir):
+            for item in os.listdir(bundled_dir):
+                item_path = path.join(bundled_dir, item)
+                if self._is_valid_skill_directory(item_path):
+                    builtin_skills.add(item)
+
+        # Check source skills directory (dev mode)
+        if path.exists(SKILLS_DIR):
+            for item in os.listdir(SKILLS_DIR):
+                item_path = path.join(SKILLS_DIR, item)
+                if self._is_valid_skill_directory(item_path):
+                    builtin_skills.add(item)
+
+        discoverable_by_default = []
         try:
             all_skills = ModuleManager.read_available_skills()
             for skill in all_skills:
-                if skill.config.enabled_by_default is False:
-                    disabled_by_default.append(skill.name)
+                # Skip custom skills - only include built-in skills
+                skill_folder = (
+                    skill.config.module.split(".")[-2]
+                    if "." in skill.config.module
+                    else skill.name
+                )
+                if skill_folder not in builtin_skills:
+                    continue
+
+                # discoverable_by_default defaults to True, so check if it's not explicitly False
+                if skill.config.discoverable_by_default is not False:
+                    discoverable_by_default.append(skill.name)
         except Exception as e:
             self.log(
-                f"Warning: Could not read skills for disabled_by_default check: {e}",
+                f"Warning: Could not read skills for discoverable_by_default check: {e}",
                 warning=True,
             )
 
-        return disabled_by_default
+        return discoverable_by_default
+
+    def _get_all_skill_names(self) -> list[str]:
+        """Get list of all available skill names.
+
+        Returns:
+            List of all skill names
+        """
+        from services.module_manager import ModuleManager
+
+        all_names = []
+        try:
+            all_skills = ModuleManager.read_available_skills()
+            for skill in all_skills:
+                all_names.append(skill.name)
+        except Exception as e:
+            self.log(
+                f"Warning: Could not read skills for all skill names: {e}",
+                warning=True,
+            )
+
+        return all_names
+
+    def _get_mcps_discoverable_by_default(self) -> list[str]:
+        """Get list of MCP server names that have discoverable_by_default=True.
+
+        Returns:
+            List of MCP server names that should be discoverable by default
+        """
+        discoverable_by_default = []
+        mcp_config = self.config_manager.mcp_config
+        if mcp_config and mcp_config.servers:
+            for server in mcp_config.servers:
+                if server.discoverable_by_default:
+                    discoverable_by_default.append(server.name)
+
+        return discoverable_by_default
+
+    def _get_template_path(self, wingman_name: str) -> Optional[str]:
+        """Get the path to a template.yaml file for a known wingman.
+
+        Args:
+            wingman_name: Name of the wingman (ATC, Computer, Clippy)
+
+        Returns:
+            Path to the template file, or None if not found
+        """
+        # Check different possible locations
+        template_locations = [
+            path.join(
+                self.templates_dir,
+                "configs",
+                "_Star Citizen",
+                f"{wingman_name}.template.yaml",
+            ),
+            path.join(
+                self.templates_dir,
+                "configs",
+                "General",
+                f"{wingman_name}.template.yaml",
+            ),
+        ]
+
+        for template_path in template_locations:
+            if path.exists(template_path):
+                return template_path
+
+        return None
 
     def _get_skill_default_custom_properties(
         self, skill_module: str

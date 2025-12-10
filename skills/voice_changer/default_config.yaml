@@ -7,7 +7,7 @@ tags:
 description:
   en: Changes the voice of your Wingman automatically. Customize it to your liking.
   de: Wechselt die Stimme deines Wingman automatisch. Konfigurierbar nach eigenen Vorlieben.
-enabled_by_default: false
+discoverable_by_default: false
 custom_properties:
   - id: voice_changer_interval
     name: Switching Interval

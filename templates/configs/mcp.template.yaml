@@ -4,32 +4,32 @@ servers:
     description: Get current date and time. Convert between timezones. What time is it? What day is today?
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/time/mcp
-    enabled: true
+    discoverable_by_default: true
 
   - name: wingman_websearch
     display_name: Wingman Web Search
     description: Search the web with Brave or Tavily. Fetch and read web pages. Extract content from URLs.
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/mcp
-    enabled: false
+    discoverable_by_default: false
 
   - name: wingman_perplexity
     display_name: Perplexity Web Search
     description: Perplexity AI web search with citations. Deep internet research and fact-checking. Synthesized answers from multiple online sources.
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/perplexity/mcp
-    enabled: false
+    discoverable_by_default: false
 
   - name: wingman_starhead
     display_name: StarHead - Star Citizen
     description: Star Citizen game data. Ship info, trading routes, commodity prices. StarHead API for live SC data.
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/starhead/mcp
-    enabled: false
+    discoverable_by_default: false
 
   - name: wingman_no_mans_sky
     display_name: No Man's Sky Assistant
     description: No Man's Sky game data. Item lookup, refiner recipes, cooking recipes. Expeditions, community missions, patch notes.
     type: http
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/no-mans-sky-assistant/mcp
-    enabled: false
+    discoverable_by_default: false

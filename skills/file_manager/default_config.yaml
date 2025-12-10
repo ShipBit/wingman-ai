@@ -7,7 +7,7 @@ tags:
 description:
   en: Manage local files - save, load, create directories, and handle ZIP files. Read files or prompts aloud with text-to-speech.
   de: Verwalte lokale Dateien - speichern, laden, Verzeichnisse erstellen und ZIP-Dateien handhaben. Lies Dateien oder Aufforderungen mit Text-to-Speech vor.
-enabled_by_default: false
+discoverable_by_default: false
 hint:
   en: <ul><li>Provide an exact file path and name for where you want to create a directory or save or load a text file. <br />For example "save that text to a file called samplefile in my C drive in the directory called Documents."</li><li>If you do not, a directory called "files" in your Wingman config dir will be created and used.</li><li>To read a file with text to speech, specifically state you want it to read the file aloud or out loud. There may be issues with large files.</li><li>You can also manage zip files by creating them, adding files to them, listing their contents, and reading text files from within.</li></ul>
   de: <ul><li>Geben Sie einen genauen Dateipfad und -namen an, wo Sie ein Verzeichnis erstellen oder eine Textdatei speichern oder laden möchten.<br />Zum Beispiel "Speichere diesen Text in einer Datei namens 'samplefile' auf meinem C-Laufwerk im Verzeichnis 'Documents'."</li><li>Wenn Sie dies nicht tun, wird ein Verzeichnis namens "files" im Wingman-Konfigurationsordner erstellt und verwendet.</li><li>Um eine Datei mit Text-to-Speech vorzulesen, geben Sie ausdrücklich an, dass Sie möchten, dass die Datei laut vorgelesen wird. Bei großen Dateien kann es zu Problemen kommen.</li><li>Sie können auch Zip-Dateien verwalten, indem Sie sie erstellen, Dateien hinzufügen, ihren Inhalt auflisten und Textdateien daraus lesen.</li></ul>

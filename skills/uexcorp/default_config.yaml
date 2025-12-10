@@ -9,7 +9,7 @@ tags:
 description:
   en: Uses the UEXCorp API to get commodity routes and ship information for Star Citizen.
   de: Nutzt die UEXCorp API, um Handelsrouten und Schiffsinformationen für Star Citizen zu erhalten.
-enabled_by_default: false
+discoverable_by_default: false
 examples:
   - en: Please provide me a the best two trading routes for my Caterpillar, Im currently at Hurston.
     de: Bitte gib mir die zwei besten Handelsrouten für meine Caterpillar, ich bin gerade bei Hurston.

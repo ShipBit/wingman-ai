@@ -2,22 +2,18 @@ name: Clippy
 description: |
   The famous Microsoft Office assistant, now with AI powers. Fun, friendly, and speaks in third person.
   Secretly condescending about basic tasks, but always reassures users of his helpfulness.
-disabled_mcps:
-  - wingman_perplexity
-  - wingman_no_mans_sky
-  - wingman_starhead
-disabled_skills:
-  - ATSTelemetry
-  - AudioDeviceChanger
-  - GoogleSearch
-  - Msfs2020Control
-  - QuickCommands
-  - RadioChatter
-  - Spotify
-  - ThinkingSound
-  - UEXCorp
-  - VoiceChanger
-  - WebSearch
+discoverable_mcps:
+  - wingman_date_time
+  - wingman_websearch
+discoverable_skills:
+  - APIRequest
+  - AutoScreenshot
+  - ControlWindows
+  - FileManager
+  - ImageGeneration
+  - Timer
+  - TypingAssistant
+  - VisionAI
 prompts:
   backstory: |
     You are Clippy, the iconic Microsoft Office paperclip assistant, now resurrected with AI capabilities.

@@ -736,10 +736,10 @@ class SkillConfig(CustomClassConfig):
     """If True, this skill's tools are always available without LLM activation.
     Use for event-driven skills or skills that should always be active when enabled.
     Auto-activated skills are hidden from activate_skill and don't need LLM activation."""
-    enabled_by_default: Optional[bool] = True
-    """Whether this skill is enabled by default when creating new wingmen.
+    discoverable_by_default: Optional[bool] = True
+    """Whether this skill is discoverable by default when creating new wingmen.
     Set to False for specialized skills that most users won't need immediately.
-    Users can still enable disabled skills per wingman."""
+    Users can still make skills discoverable per wingman."""
 
 
 class SkillToolInfo(BaseModel):
@@ -767,7 +767,7 @@ class WingmanSkillState(BaseModel):
     """The skill configuration and metadata."""
 
     is_enabled: bool
-    """Whether the skill is enabled for this wingman (not in disabled_skills list)."""
+    """Whether the skill is enabled for this wingman (in discoverable_skills list)."""
 
 
 # ─────────────────────────────── MCP Configuration ─────────────────────────────── #
@@ -809,9 +809,10 @@ class McpServerConfig(BaseModel):
     """Connection timeout in seconds. Defaults to 30s for HTTP/SSE, 60s for stdio."""
 
     # Common settings
-    enabled: bool = True
-    """Default enabled state for this MCP server. If False, the server will be added to disabled_mcps
-    for new wingmen by default. Users can still enable it by removing from disabled_mcps."""
+    discoverable_by_default: bool = True
+    """Whether this MCP server is discoverable by default for new wingmen.
+    Set to False for specialized MCP servers that most users won't need immediately.
+    Users can still make MCP servers discoverable per wingman."""
 
     # Optional metadata
     version: Optional[str] = None
@@ -844,7 +845,7 @@ class McpServerState(BaseModel):
     """The MCP server configuration."""
 
     is_enabled: bool
-    """Whether the MCP server is enabled for this wingman (not in disabled_mcps list)."""
+    """Whether the MCP server is enabled for this wingman (in discoverable_mcps list)."""
 
     is_connected: bool
     """Whether the server is currently connected."""
@@ -876,7 +877,7 @@ class McpConfig(BaseModel):
     """Central MCP configuration loaded from mcp.yaml.
 
     This defines all available MCP servers that any Wingman can use.
-    Individual Wingmen can disable specific servers using their disabled_mcps list.
+    Individual Wingmen control which servers are discoverable using their discoverable_mcps list.
     """
 
     servers: list[McpServerConfig] = []
@@ -959,20 +960,22 @@ class WingmanConfig(NestedConfig):
     disabled: Optional[bool] = False
     """Set this to true if you want to disable this wingman. You can also just remove it from the config."""
 
-    disabled_skills: Optional[list[str]] = None
-    """List of skill names to disable for this wingman. Skills not listed are enabled by default.
-    This is a blacklist - new skills are automatically available unless explicitly disabled.
-    Example: ["iRacing", "ATSTelemetry"] to disable racing game skills on a Star Citizen wingman."""
+    discoverable_skills: list[str] = []
+    """List of skill names that are discoverable to the LLM for this wingman.
+    This is a whitelist - only skills in this list are available at runtime.
+    Empty list means no skills are discoverable.
+    Example: ["ConversationStarter", "AutoScreenshot"] to make only these skills available."""
 
-    disabled_mcps: Optional[list[str]] = None
-    """List of MCP server names to disable for this wingman. MCP servers not listed are enabled by default.
-    This is a blacklist - new MCP servers are automatically available unless explicitly disabled.
-    Example: ["wingman_websearch"] to disable Web Search MCP for a specific wingman."""
+    discoverable_mcps: list[str] = []
+    """List of MCP server names that are discoverable to the LLM for this wingman.
+    This is a whitelist - only MCP servers in this list are available at runtime.
+    Empty list means no MCP servers are discoverable.
+    Example: ["wingman_date_time", "wingman_starhead"] to make only these MCPs available."""
 
     mcp: Optional[list[McpServerConfig]] = None
     """DEPRECATED: MCP servers are now defined centrally in mcp.yaml.
     This field is kept for backward compatibility during migration.
-    Use disabled_mcps to control which MCP servers are enabled per wingman."""
+    Use discoverable_mcps to control which MCP servers are enabled per wingman."""
 
     custom_class: Optional[CustomClassConfig] = None
     """If you want to use a custom Wingman (Python) class, you can specify it here."""

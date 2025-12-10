@@ -252,8 +252,8 @@ class Wingman:
         # Get all available skill configs
         available_skills = ModuleManager.read_available_skill_configs()
 
-        # Get disabled skills list (blacklist)
-        disabled_skills = self.config.disabled_skills or []
+        # Get discoverable skills list (whitelist)
+        discoverable_skills = self.config.discoverable_skills
 
         for skill_folder_name, skill_config_path in available_skills:
             try:
@@ -279,8 +279,8 @@ class Wingman:
 
                 skill_config = SkillConfig(**skill_config_dict)
 
-                # Check if skill is disabled for this wingman (use display name from config)
-                if skill_config.name in disabled_skills:
+                # Check if skill is discoverable for this wingman (whitelist - must be in list)
+                if skill_config.name not in discoverable_skills:
                     continue
 
                 # Check platform compatibility BEFORE loading the module
@@ -326,11 +326,11 @@ class Wingman:
                     )
                 )
 
-        # Log summary of enabled skills for this wingman
+        # Log summary of discoverable skills for this wingman
         if self.skills:
             skill_names = [s.config.name for s in self.skills]
             printr.print(
-                f"[{self.name}] Enabled skills ({len(skill_names)}): {', '.join(skill_names)}",
+                f"[{self.name}] Discoverable skills ({len(skill_names)}): {', '.join(skill_names)}",
                 color=LogType.WINGMAN,
                 source=LogSource.WINGMAN,
                 source_name=self.name,
@@ -424,14 +424,14 @@ class Wingman:
                     await self.prepare_skill(skill)
 
                     printr.print(
-                        f"Skill '{skill_name}' enabled.",
+                        f"Skill '{skill_name}' activated (loaded and made discoverable).",
                         color=LogType.POSITIVE,
                         server_only=True,
                     )
-                    return True, f"Skill '{skill_name}' enabled successfully."
+                    return True, f"Skill '{skill_name}' activated successfully."
 
             except Exception as e:
-                error_msg = f"Error enabling skill '{skill_name}': {str(e)}"
+                error_msg = f"Error activating skill '{skill_name}': {str(e)}"
                 printr.print(error_msg, color=LogType.ERROR)
                 printr.print(
                     traceback.format_exc(), color=LogType.ERROR, server_only=True
@@ -457,7 +457,7 @@ class Wingman:
                 break
 
         if not skill_to_remove:
-            return True, f"Skill '{skill_name}' is already disabled."
+            return True, f"Skill '{skill_name}' is already deactivated."
 
         try:
             # Unload the skill (cleanup resources, unsubscribe events)
@@ -470,14 +470,14 @@ class Wingman:
             await self.unprepare_skill(skill_to_remove)
 
             printr.print(
-                f"Skill '{skill_name}' disabled.",
+                f"Skill '{skill_name}' deactivated (unloaded and removed from discoverable skills).",
                 color=LogType.WARNING,
                 server_only=True,
             )
-            return True, f"Skill '{skill_name}' disabled successfully."
+            return True, f"Skill '{skill_name}' deactivated successfully."
 
         except Exception as e:
-            error_msg = f"Error disabling skill '{skill_name}': {str(e)}"
+            error_msg = f"Error deactivating skill '{skill_name}': {str(e)}"
             printr.print(error_msg, color=LogType.ERROR)
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return False, error_msg

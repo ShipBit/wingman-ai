@@ -8,7 +8,7 @@ tags:
 description:
   en: Control Spotify using the the WebAPI. Play songs, artists playlists. Control playback, volume, and more. All powered by AI!
   de: Steuere Spotify mit der WebAPI. Spiele Lieder, Künstler und Playlists ab. Steuere die Wiedergabe, Lautstärke und mehr. Alles von KI gesteuert!
-enabled_by_default: false
+discoverable_by_default: false
 hint:
   en: <ul class="list-disc"><li>Create an app in the <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Select "Web API" and "Web Playback SDK" as APIs used</li><li>Add http://127.0.0.1:8082 as Redirect URI</li><li>Enter Client ID and Client secret here</li></ul>
   de: <ul class="list-disc"><li>Erstelle eine App im <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Wähle "Web API" und "Web Playback SDK" als verwendete APIs</li><li>Füge http://127.0.0.1:8082 as Redirect URI hinzu</li><li>Gib die Client ID and das Client Secret hier ein</li></ul>

@@ -8,7 +8,7 @@ auto_activate: true
 description:
   en: Automatically routes TTS output to a configured audio device per Wingman. Works automatically when enabled - no voice activation needed. Useful for VTubers, audio mixing etc.
   de: Leitet TTS-Ausgaben automatisch an ein konfiguriertes Audiogerät pro Wingman weiter. Funktioniert automatisch wenn aktiviert - keine Sprachaktivierung nötig. Nützlich für VTuber, Audio-Mixing usw.
-enabled_by_default: false
+discoverable_by_default: false
 custom_properties:
   - id: audio_changer_device
     name: Audio Device

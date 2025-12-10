@@ -2,27 +2,13 @@ name: Computer
 description: |
   Your ship's board computer. Controls all ship systems and executes commands.
   Connected to StarHead for real-time trading routes and ship information.
-disabled_skills:
-  - APIRequest
-  - ATSTelemetry
-  - AudioDeviceChanger
-  - ControlWindows
-  - FileManager
-  - GoogleSearch
-  - Msfs2020Control
-  - QuickCommands
-  - RadioChatter
-  - Spotify
-  - ThinkingSound
-  - TypingAssistant
-  - UEXCorp
-  - VoiceChanger
-  - WebSearch
-disabled_mcps:
-  - wingman_websearch
-  - wingman_perplexity
-  - wingman_no_mans_sky
-enabled_mcps:
+discoverable_skills:
+  - AutoScreenshot
+  - ImageGeneration
+  - Timer
+  - VisionAI
+discoverable_mcps:
+  - wingman_date_time
   - wingman_starhead
 prompts:
   backstory: |

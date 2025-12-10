@@ -8,7 +8,7 @@ tags:
 description:
   en: Plays back sounds while waiting on AI response.
   de: Spielt Sounds ab, während auf die Antwort der AI gewartet wird.
-enabled_by_default: false
+discoverable_by_default: false
 custom_properties:
   - id: audio_config
     name: Audio Configuration

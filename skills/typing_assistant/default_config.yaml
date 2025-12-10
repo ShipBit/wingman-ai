@@ -7,7 +7,7 @@ tags:
 description:
   en: Let your Wingman type text for you!
   de: Lass deinen Wingman Texte für dich tippen!
-enabled_by_default: false
+discoverable_by_default: false
 hint:
   en: Types what you say, either by transcribing your speech or the response to your input. You can use this in Office or messaging programs etc. Not meant for pressing keys or macros - use Wingman commands for that.
   de: Tippt, was du sagst, indem deine Spracheingabe oder die Antwort darauf transkribiert werden. Verwende den Skill in Office- oder Messaging-Programmen usw. Er ist nicht für das Drücken einzelner Tasten oder Makros gedacht - dafür kannst du Wingman-Befehle verwenden.

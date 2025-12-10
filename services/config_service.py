@@ -237,7 +237,7 @@ class ConfigService:
             # Get all available skills
             all_skills = ModuleManager.read_available_skills()
 
-            # Get the wingman's config to check disabled_skills
+            # Get the wingman's config to check discoverable_skills
             config_dir = self.config_manager.get_config_dir(config_name)
             wingman_files = self.config_manager.get_wingmen_configs(config_dir)
 
@@ -254,7 +254,7 @@ class ConfigService:
                 config_dir=config_dir, wingman_file=wingman_file
             )
 
-            disabled_skills = wingman_config.disabled_skills or []
+            discoverable_skills = wingman_config.discoverable_skills
 
             # Get current platform for filtering
             current_platform = sys.platform
@@ -271,7 +271,7 @@ class ConfigService:
                     skipped_platform.append(skill.name)
                     continue  # Skip platform-incompatible skills
 
-                is_enabled = skill.name not in disabled_skills
+                is_enabled = skill.name in discoverable_skills
                 result.append(WingmanSkillState(skill=skill, is_enabled=is_enabled))
 
             if skipped_platform:
@@ -306,21 +306,21 @@ class ConfigService:
                 config_dir=config_dir, wingman_file=wingman_file
             )
 
-            # Initialize disabled_skills if needed
-            if wingman_config.disabled_skills is None:
-                wingman_config.disabled_skills = []
+            # Initialize discoverable_skills if needed (should always be present as non-optional)
+            if (
+                not hasattr(wingman_config, "discoverable_skills")
+                or wingman_config.discoverable_skills is None
+            ):
+                wingman_config.discoverable_skills = []
 
             if enabled:
-                # Remove from disabled list (enable the skill)
-                if skill_name in wingman_config.disabled_skills:
-                    wingman_config.disabled_skills.remove(skill_name)
-                    # Clean up empty list
-                    if not wingman_config.disabled_skills:
-                        wingman_config.disabled_skills = None
+                # Add to discoverable list (enable the skill)
+                if skill_name not in wingman_config.discoverable_skills:
+                    wingman_config.discoverable_skills.append(skill_name)
             else:
-                # Add to disabled list (disable the skill)
-                if skill_name not in wingman_config.disabled_skills:
-                    wingman_config.disabled_skills.append(skill_name)
+                # Remove from discoverable list (disable the skill)
+                if skill_name in wingman_config.discoverable_skills:
+                    wingman_config.discoverable_skills.remove(skill_name)
 
             # Save the config WITHOUT reinitializing all skills
             await self.save_wingman_config(
@@ -386,7 +386,7 @@ class ConfigService:
             # Get MCP servers from central mcp.yaml
             mcp_config = self.config_manager.mcp_config
             mcp_servers = mcp_config.servers if mcp_config else []
-            disabled_mcps = wingman_config.disabled_mcps or []
+            discoverable_mcps = wingman_config.discoverable_mcps
 
             # Get connection state and tools from the active wingman if available
             wingman = (
@@ -404,10 +404,10 @@ class ConfigService:
             # Build response with enabled/connected state, tools, and errors
             result = []
             for mcp_server in mcp_servers:
-                # Determine if enabled: if in disabled_mcps blacklist, it's disabled
-                # Otherwise it's enabled (the server's default enabled state only affects
+                # Determine if enabled: if in discoverable_mcps whitelist, it's enabled
+                # Otherwise it's disabled (the server's default discoverable_by_default state only affects
                 # initial wingman creation, not runtime state)
-                is_enabled = mcp_server.name not in disabled_mcps
+                is_enabled = mcp_server.name in discoverable_mcps
 
                 is_connected = False
                 tools = None
@@ -457,21 +457,21 @@ class ConfigService:
                 config_dir=config_dir, wingman_file=wingman_file
             )
 
-            # Initialize disabled_mcps if needed
-            if wingman_config.disabled_mcps is None:
-                wingman_config.disabled_mcps = []
+            # Initialize discoverable_mcps if needed (should always be present as non-optional)
+            if (
+                not hasattr(wingman_config, "discoverable_mcps")
+                or wingman_config.discoverable_mcps is None
+            ):
+                wingman_config.discoverable_mcps = []
 
             if enabled:
-                # Remove from disabled list (enable the MCP)
-                if mcp_name in wingman_config.disabled_mcps:
-                    wingman_config.disabled_mcps.remove(mcp_name)
-                    # Clean up empty list
-                    if not wingman_config.disabled_mcps:
-                        wingman_config.disabled_mcps = None
+                # Add to discoverable list (enable the MCP)
+                if mcp_name not in wingman_config.discoverable_mcps:
+                    wingman_config.discoverable_mcps.append(mcp_name)
             else:
-                # Add to disabled list (disable the MCP)
-                if mcp_name not in wingman_config.disabled_mcps:
-                    wingman_config.disabled_mcps.append(mcp_name)
+                # Remove from discoverable list (disable the MCP)
+                if mcp_name in wingman_config.discoverable_mcps:
+                    wingman_config.discoverable_mcps.remove(mcp_name)
 
             # Save the config WITHOUT reinitializing all MCPs
             await self.save_wingman_config(

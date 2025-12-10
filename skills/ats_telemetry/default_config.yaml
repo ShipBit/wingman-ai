@@ -10,7 +10,7 @@ tags:
 description:
   en: Retrieve live game state information from American Truck Simulator/Euro Truck Simulator 2. Also includes a 'dispatch mode' that automatically observes key state changes and comments on them.
   de: Erhalte live Spielstatus-Informationen von American Truck Simulator/Euro Truck Simulator 2. Enthält auch einen 'Dispatch-Modus', der automatisch wichtige Statusänderungen beobachtet und diese kommentiert.
-enabled_by_default: false
+discoverable_by_default: false
 hint:
   en: Requires a DLL to in the /plugins directory of your game. If you enter the path to your ATS/ETS2 installation, the skill will move the DLL automatically.
   de: Erfordert eine DLL im /plugins Verzeichnis des Spiels. Wenn du den Pfad zu deiner ATS/ETS2-Installation angibst, wird die DLL automatisch dorthin kopiert.

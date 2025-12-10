@@ -8,7 +8,7 @@ tags:
 description:
   en: Randomly playback radio chatter over time. Customize the participants and their voices.
   de: Spielt zufällige Funkgespräche ab. Passe die Teilnehmer und ihre Stimmen an.
-enabled_by_default: false
+discoverable_by_default: false
 custom_properties:
   - id: prompt
     name: Prompt for message generation

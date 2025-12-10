@@ -293,25 +293,27 @@ class ConfigManager:
 
         parsed_config = self.read_default_config()
 
-        # Get disabled_mcps from servers that are disabled by default in mcp.yaml
-        disabled_mcps = []
+        # Get discoverable_mcps from servers that are discoverable by default in mcp.yaml
+        discoverable_mcps = []
         mcp_config = self.mcp_config
         if mcp_config and mcp_config.servers:
-            disabled_mcps = [
-                server.name for server in mcp_config.servers if not server.enabled
+            discoverable_mcps = [
+                server.name
+                for server in mcp_config.servers
+                if server.discoverable_by_default
             ]
 
-        # Get disabled_skills from skills where enabled_by_default is False
-        disabled_skills = []
+        # Get discoverable_skills from skills where discoverable_by_default is True
+        discoverable_skills = []
         try:
             all_skills = ModuleManager.read_available_skills()
             for skill in all_skills:
-                # Check if skill has enabled_by_default set to False
-                if skill.config.enabled_by_default is False:
-                    disabled_skills.append(skill.name)
+                # Check if skill has discoverable_by_default set to True (default)
+                if skill.config.discoverable_by_default is not False:
+                    discoverable_skills.append(skill.name)
         except Exception as e:
             self.printr.print(
-                f"Could not read skills for disabled_skills: {e}",
+                f"Could not read skills for discoverable_skills: {e}",
                 color=LogType.WARNING,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -326,8 +328,8 @@ class ConfigManager:
             "commands": [],
             "skills": [],
             "prompts": {"backstory": ""},
-            "disabled_mcps": disabled_mcps if disabled_mcps else None,
-            "disabled_skills": disabled_skills if disabled_skills else None,
+            "discoverable_mcps": discoverable_mcps,
+            "discoverable_skills": discoverable_skills,
         }
         validated_config = self.merge_configs(parsed_config, wingman_config)
         return NewWingmanTemplate(
@@ -937,7 +939,7 @@ class ConfigManager:
 
     def convert_to_dict(self, obj):
         if isinstance(obj, BaseModel):
-            # Use exclude_unset=False to preserve runtime-set fields like disabled_skills.
+            # Use exclude_unset=False to preserve runtime-set fields like discoverable_skills.
             # Without this, fields not in the original YAML get dropped during save,
             # causing them to revert to defaults on reload.
             json_obj = obj.model_dump_json(exclude_none=True, exclude_unset=False)
@@ -1210,8 +1212,8 @@ class ConfigManager:
         elif "skills" in default:
             merged["skills"] = default["skills"]
 
-        # disabled_mcps - inherit from default if not overridden in wingman config
-        if "disabled_mcps" not in wingman and "disabled_mcps" in default:
-            merged["disabled_mcps"] = default["disabled_mcps"]
+        # discoverable_mcps - inherit from default if not overridden in wingman config
+        if "discoverable_mcps" not in wingman and "discoverable_mcps" in default:
+            merged["discoverable_mcps"] = default["discoverable_mcps"]
 
         return WingmanConfig(**merged)

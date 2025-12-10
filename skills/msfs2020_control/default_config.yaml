@@ -10,7 +10,7 @@ tags:
 description:
   en: Control and retrieve data from MSFS2020 dynamically using SimConnect.
   de: Steuern und Abrufen von Daten aus MSFS2020 dynamisch mit SimConnect.
-enabled_by_default: false
+discoverable_by_default: false
 hint:
   en: This skill can retrieve data and perform actions in the MSFS2020 simulator based on dynamic inputs.
   de: Dieser Skill kann Daten abrufen und Aktionen im MSFS2020-Simulator basierend auf dynamischen Eingaben ausführen.

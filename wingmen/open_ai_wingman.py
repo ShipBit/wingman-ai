@@ -492,7 +492,7 @@ class OpenAiWingman(Wingman):
         """
         Initialize MCP (Model Context Protocol) server connections.
 
-        Loads MCP servers from central mcp.yaml config, skipping any in wingman's disabled_mcps.
+        Loads MCP servers from central mcp.yaml config, only connecting those in wingman's discoverable_mcps.
         MCP servers provide external tools similar to skills.
 
         Returns:
@@ -518,8 +518,8 @@ class OpenAiWingman(Wingman):
         if not mcp_configs:
             return errors
 
-        # Get disabled MCPs list (blacklist) from wingman config
-        disabled_mcps = self.config.disabled_mcps or []
+        # Get discoverable MCPs list (whitelist) from wingman config
+        discoverable_mcps = self.config.discoverable_mcps
 
         connected_count = 0
         connected_names = []
@@ -527,8 +527,8 @@ class OpenAiWingman(Wingman):
 
         for mcp_config in mcp_configs:
             try:
-                # Check if MCP is disabled for this wingman
-                if mcp_config.name in disabled_mcps:
+                # Check if MCP is discoverable for this wingman (whitelist - must be in list)
+                if mcp_config.name not in discoverable_mcps:
                     skipped_names.append(mcp_config.name)
                     continue
 
@@ -634,7 +634,7 @@ class OpenAiWingman(Wingman):
         # Log consolidated MCP status for this wingman
         if connected_count > 0:
             printr.print(
-                f"[{self.name}] MCP servers ({connected_count}): {', '.join(connected_names)}",
+                f"[{self.name}] Discoverable MCP servers connected ({connected_count}): {', '.join(connected_names)}",
                 color=LogType.WINGMAN,
                 source=LogSource.WINGMAN,
                 source_name=self.name,
