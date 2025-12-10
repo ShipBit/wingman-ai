@@ -525,11 +525,13 @@ class Skill:
         Returns:
             List of (tool_name, tool_definition) tuples
         """
-        warnings.warn(
-            "get_tools() is deprecated. Use the @tool decorator instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
+        # Only warn if get_tools is overridden in a subclass
+        if type(self).get_tools is not Skill.get_tools:
+            warnings.warn(
+                "get_tools() is deprecated. Use the @tool decorator instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         # Return tools from @tool decorated methods
         tools = []
         for tool_def in self._decorated_tools.values():
