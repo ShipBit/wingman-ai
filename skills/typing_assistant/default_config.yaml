@@ -7,6 +7,9 @@ tags:
 description:
   en: Let your Wingman type text for you!
   de: Lass deinen Wingman Texte für dich tippen!
+discovery_keywords:
+  en: type text, write, transcribe, dictation, keyboard input, automatic typing
+  de: Text tippen, schreiben, transkribieren, Diktat, Tastatureingabe, automatisches Tippen
 discoverable_by_default: false
 hint:
   en: Types what you say, either by transcribing your speech or the response to your input. You can use this in Office or messaging programs etc. Not meant for pressing keys or macros - use Wingman commands for that.

@@ -8,6 +8,9 @@ tags:
 description:
   en: Take screenshots on command or automatically when you show excitement.
   de: Mache Screenshots auf Befehl oder automatisch wenn du Aufregung zeigst.
+discovery_keywords:
+  en: screenshot, capture screen, take picture, screen capture, save image, automatic screenshot
+  de: Screenshot, Bildschirm aufnehmen, Bild machen, Bildschirmaufnahme, Bild speichern
 custom_properties:
   - hint: If you have multiple monitors, the display to capture if detecting the active game window fails
     id: display

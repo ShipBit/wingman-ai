@@ -7,6 +7,9 @@ tags:
 description:
   en: Automatically learns instant activation phrases for commands you use regularly, speeding up their execution time.
   de: Lernt automatisch Aktivierungsphrasen für Sofort-Befehle, die du regelmäßig verwendest und beschleunigt so die Ausführungszeit.
+discovery_keywords:
+  en: learn commands, instant activation, shortcuts, quick access, command learning, speed up
+  de: Befehle lernen, Sofortaktivierung, Shortcuts, schneller Zugriff, Befehlslernen, beschleunigen
 discoverable_by_default: false
 custom_properties:
   - id: quick_commands_learning_rule_count

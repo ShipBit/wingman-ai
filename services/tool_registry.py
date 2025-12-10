@@ -52,6 +52,9 @@ class SkillManifest:
     is_auto_activated: bool = False
     """If True, this skill is always active and hidden from progressive disclosure."""
 
+    discovery_keywords: str = ""
+    """Optional keywords to enhance discovery (English only)"""
+
     @classmethod
     def from_skill(cls, skill: "Skill") -> "SkillManifest":
         """Create a manifest from a Skill instance."""
@@ -69,6 +72,11 @@ class SkillManifest:
             else:
                 tool_summaries.append("No description")
 
+        # Extract discovery keywords (English only)
+        discovery_keywords = ""
+        if skill.config.discovery_keywords:
+            discovery_keywords = skill.config.discovery_keywords.en
+
         return cls(
             name=skill.name,
             display_name=skill.config.display_name,
@@ -77,6 +85,7 @@ class SkillManifest:
             tool_names=tool_names,
             tool_summaries=tool_summaries,
             is_auto_activated=skill.config.auto_activate or False,
+            discovery_keywords=discovery_keywords,
         )
 
     def get_short_description(self, max_length: int = 80) -> str:
@@ -84,6 +93,24 @@ class SkillManifest:
         if len(self.description) <= max_length:
             return self.description
         return self.description[: max_length - 3] + "..."
+
+    def get_discovery_description(self) -> str:
+        """Get enriched description for LLM discovery with keywords and tags.
+
+        No length limit - frontend can truncate if needed.
+        Combines description + optional keywords + tags for better semantic matching.
+        """
+        result = self.description
+
+        # Add optional discovery keywords if provided
+        if self.discovery_keywords:
+            result += f". Keywords: {self.discovery_keywords}"
+
+        # Add tags in brackets (helps domain/category matching)
+        if self.tags:
+            result += f" [{', '.join(self.tags)}]"
+
+        return result
 
     def to_summary(self) -> str:
         """Returns a compact string representation for LLM context."""
@@ -300,8 +327,8 @@ class SkillRegistry:
         # Build descriptions for the tool (helps LLM choose correctly)
         skill_descriptions = []
         for m in discoverable:
-            short_desc = m.get_short_description(60)
-            skill_descriptions.append(f"- {m.name}: {short_desc}")
+            discovery_desc = m.get_discovery_description()
+            skill_descriptions.append(f"- {m.name}: {discovery_desc}")
 
         descriptions_block = "\n".join(skill_descriptions)
 

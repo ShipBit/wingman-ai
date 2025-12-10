@@ -8,6 +8,9 @@ tags:
 description:
   en: Use Wingman AI to generate images based on your input. It uses DALL-E 3.
   de: Verwende Wingman AI, um Bilder basierend auf deinen Eingaben zu generieren. Es verwendet DALL-E 3.
+discovery_keywords:
+  en: create image, generate picture, DALL-E, draw, make image, AI art, image creation
+  de: Bild erstellen, Bild generieren, DALL-E, zeichnen, Bild machen, KI Kunst, Bilderstellung
 custom_properties:
   - hint: Whether generated images should be saved to disk.  Images will be saved in the skill folder in a folder called "generated_images."
     id: save_images

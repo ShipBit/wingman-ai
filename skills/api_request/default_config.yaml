@@ -8,6 +8,9 @@ tags:
 description:
   en: Send HTTP requests to APIs with methods like GET, POST, PUT, etc. Combine it with the WebSearch skill to fetch API specs on-the-fly, so that your Wingman can interact with any API.
   de: Sende API-Anfragen mit verschiedenen Methoden wie GET, POST, PUT etc. Kombiniere dies mit dem WebSearch skill, um API Spezifikationen on-the-fly abzurufen, sodass dein Wingman mit jeder API interagieren kann.
+discovery_keywords:
+  en: HTTP request, REST API, GET, POST, PUT, DELETE, endpoint, webhook, API call
+  de: HTTP Anfrage, REST API, GET, POST, PUT, DELETE, Endpunkt, Webhook, API Aufruf
 discoverable_by_default: false
 hint:
   en: Do not hardcode API keys in the skill context or your Wingman configuration. Enter them during a conversation (preferrably by text) or store them in `/files/api_request_key_holder.yaml`.

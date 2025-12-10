@@ -43,6 +43,9 @@ class McpServerManifest:
     is_connected: bool = False
     """Whether the server is currently connected"""
 
+    discovery_keywords: str = ""
+    """Optional keywords to enhance discovery (English only)"""
+
     @classmethod
     def from_connection(cls, connection: McpConnection) -> "McpServerManifest":
         """Create a manifest from an MCP connection."""
@@ -57,6 +60,7 @@ class McpServerManifest:
             tool_names=tool_names,
             tool_summaries=tool_summaries,
             is_connected=connection.is_connected,
+            discovery_keywords=connection.config.discovery_keywords or "",
         )
 
     def get_short_description(self, max_length: int = 80) -> str:
@@ -64,6 +68,20 @@ class McpServerManifest:
         if len(self.description) <= max_length:
             return self.description
         return self.description[: max_length - 3] + "..."
+
+    def get_discovery_description(self) -> str:
+        """Get enriched description for LLM discovery with optional keywords.
+
+        No length limit - frontend can truncate if needed.
+        Combines description + optional keywords for better semantic matching.
+        """
+        result = self.description
+
+        # Add optional discovery keywords if provided
+        if self.discovery_keywords:
+            result += f". Keywords: {self.discovery_keywords}"
+
+        return result
 
     def to_summary(self) -> str:
         """Returns a compact string representation for LLM context."""
@@ -335,8 +353,8 @@ class McpRegistry:
         # Build descriptions for the tool (helps LLM choose correctly)
         server_descriptions = []
         for m in connected:
-            short_desc = m.get_short_description(60)
-            server_descriptions.append(f"- {m.name}: {short_desc}")
+            discovery_desc = m.get_discovery_description()
+            server_descriptions.append(f"- {m.name}: {discovery_desc}")
 
         descriptions_block = "\n".join(server_descriptions)
 

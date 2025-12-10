@@ -10,6 +10,9 @@ tags:
 description:
   en: Control and retrieve data from MSFS2020 dynamically using SimConnect.
   de: Steuern und Abrufen von Daten aus MSFS2020 dynamisch mit SimConnect.
+discovery_keywords:
+  en: flight simulator, altitude, speed, autopilot, navigation, instruments, aircraft, altitude, heading
+  de: Flugsimulator, Höhe, Geschwindigkeit, Autopilot, Navigation, Instrumente, Flugzeug, Kurs
 discoverable_by_default: false
 hint:
   en: This skill can retrieve data and perform actions in the MSFS2020 simulator based on dynamic inputs.

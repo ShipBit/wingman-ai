@@ -9,6 +9,9 @@ tags:
 description:
   en: Launch applications and control your Windows computer. Utilize the clipboard of your computer.
   de: Starte Anwendungen und steuere deinen Windows-Computer. Nutze die Zwischenablage deines Computers.
+discovery_keywords:
+  en: launch app, open program, start application, clipboard, copy, paste, Windows control
+  de: App starten, Programm öffnen, Anwendung starten, Zwischenablage, kopieren, einfügen, Windows Steuerung
 discoverable_by_default: false
 hint:
   en: This skill looks for applications in your Start Menu directory (%APPDATA%/Microsoft/Windows/Start Menu/Programs), so if it tells you that it cannot find an application, create a shortcut in that directory.
