@@ -12,7 +12,7 @@ discovery_keywords:
   en: create image, generate picture, DALL-E, draw, make image, AI art, image creation
   de: Bild erstellen, Bild generieren, DALL-E, zeichnen, Bild machen, KI Kunst, Bilderstellung
 custom_properties:
-  - hint: Whether generated images should be saved to disk.  Images will be saved in the skill folder in a folder called "generated_images."
+  - hint: Whether generated images should be saved to disk. Images will be saved to your WingmanAI APPDATA directory in a subdirectory called "generated_files"
     id: save_images
     name: Save generated images
     property_type: boolean

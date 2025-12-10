@@ -21,33 +21,36 @@ class AutoScreenshot(Skill):
         wingman: "OpenAiWingman",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
-        self.default_directory = ""
-        self.display = 1
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        self.default_directory = self.retrieve_custom_property_value(
-            "default_directory", errors
-        )
-        if (
-            not self.default_directory
-            or self.default_directory == ""
-            or not os.path.isdir(self.default_directory)
-        ):
-            self.default_directory = self.get_default_directory()
-            if self.settings.debug_mode:
-                await self.printr.print_async(
-                    "User either did not enter default directory or entered directory is invalid.  Defaulting to wingman config directory / screenshots",
-                    color=LogType.INFO,
-                )
-
-        self.display = self.retrieve_custom_property_value("display", errors)
+        self.retrieve_custom_property_value("default_directory", errors)
+        self.retrieve_custom_property_value("display", errors)
 
         return errors
 
     def get_default_directory(self) -> str:
         return self.get_generated_files_dir()
+
+    def _get_default_directory(self) -> str:
+        """Get default_directory property value just-in-time."""
+        errors = []
+        default_directory = self.retrieve_custom_property_value(
+            "default_directory", errors
+        )
+        if (
+            not default_directory
+            or default_directory == ""
+            or not os.path.isdir(default_directory)
+        ):
+            return self.get_default_directory()
+        return default_directory
+
+    def _get_display(self) -> int:
+        """Get display property value just-in-time."""
+        errors = []
+        return self.retrieve_custom_property_value("display", errors)
 
     @tool(
         name="take_screenshot",
@@ -105,7 +108,7 @@ class AutoScreenshot(Skill):
             if window_bbox:
                 screenshot = sct.grab(window_bbox)
             else:
-                main_display = sct.monitors[self.display]
+                main_display = sct.monitors[self._get_display()]
                 screenshot = sct.grab(main_display)
 
             image = Image.frombytes(
@@ -114,7 +117,7 @@ class AutoScreenshot(Skill):
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             screenshot_file = os.path.join(
-                self.default_directory, f"{self.wingman.name}_{timestamp}.png"
+                self._get_default_directory(), f"{self.wingman.name}_{timestamp}.png"
             )
             image.save(screenshot_file)
 

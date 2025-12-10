@@ -24,9 +24,14 @@ class ImageGeneration(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        self.save_images = self.retrieve_custom_property_value("save_images", errors)
+        self.retrieve_custom_property_value("save_images", errors)
 
         return errors
+
+    def _get_save_images(self) -> bool:
+        """Get save_images property value just-in-time."""
+        errors = []
+        return self.retrieve_custom_property_value("save_images", errors)
 
     @tool(
         name="generate_image",
@@ -65,7 +70,7 @@ class ImageGeneration(Skill):
         if image:
             function_response = "Here is an image based on your prompt."
 
-            if self.save_images:
+            if self._get_save_images():
                 image_path = path.join(
                     self.image_path,
                     f"{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}_{prompt[:40]}.png",

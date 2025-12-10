@@ -18,7 +18,7 @@ custom_properties:
     property_type: number
     required: true
     value: 1
-  - hint: The default directory to put screenshots in. If left blank, it will default to your WingmanAI config directory in a subdirectory called "/screenshots".
+  - hint: The default directory to put screenshots in. If left blank, it will default to your WingmanAI APPDATA directory in a subdirectory called "generated_files".
     id: default_directory
     name: Default directory
     property_type: string

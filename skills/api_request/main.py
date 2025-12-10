@@ -63,11 +63,7 @@ class APIRequest(Skill):
         settings: SettingsConfig,
         wingman: "OpenAiWingman",
     ) -> None:
-        self.use_default_headers = False
         self.default_headers = DEFAULT_HEADERS
-        self.max_retries = 1
-        self.request_timeout = 5
-        self.retry_delay = 5
         self.api_keys_dictionary = self.get_api_keys()
 
         super().__init__(config=config, settings=settings, wingman=wingman)
@@ -75,17 +71,32 @@ class APIRequest(Skill):
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        self.use_default_headers = self.retrieve_custom_property_value(
-            "use_default_headers", errors
-        )
-
-        self.max_retries = self.retrieve_custom_property_value("max_retries", errors)
-        self.request_timeout = self.retrieve_custom_property_value(
-            "request_timeout", errors
-        )
-        self.retry_delay = self.retrieve_custom_property_value("retry_delay", errors)
+        self.retrieve_custom_property_value("use_default_headers", errors)
+        self.retrieve_custom_property_value("max_retries", errors)
+        self.retrieve_custom_property_value("request_timeout", errors)
+        self.retrieve_custom_property_value("retry_delay", errors)
 
         return errors
+
+    def _get_use_default_headers(self) -> bool:
+        """Get use_default_headers property value just-in-time."""
+        errors = []
+        return self.retrieve_custom_property_value("use_default_headers", errors)
+
+    def _get_max_retries(self) -> int:
+        """Get max_retries property value just-in-time."""
+        errors = []
+        return self.retrieve_custom_property_value("max_retries", errors)
+
+    def _get_request_timeout(self) -> int:
+        """Get request_timeout property value just-in-time."""
+        errors = []
+        return self.retrieve_custom_property_value("request_timeout", errors)
+
+    def _get_retry_delay(self) -> int:
+        """Get retry_delay property value just-in-time."""
+        errors = []
+        return self.retrieve_custom_property_value("retry_delay", errors)
 
     # Retrieve api key aliases in user api key file
     def get_api_keys(self) -> dict:
@@ -122,7 +133,7 @@ class APIRequest(Skill):
             headers = {}
 
         # Merge with default headers if configured
-        if self.use_default_headers:
+        if self._get_use_default_headers():
             merged_headers = {**headers, **self.default_headers}
             headers = merged_headers
             if self.settings.debug_mode:
@@ -163,7 +174,8 @@ class APIRequest(Skill):
             data = json.dumps({})
 
         # Try request up to max number of retries
-        for attempt in range(1, self.max_retries + 1):
+        max_retries = self._get_max_retries()
+        for attempt in range(1, max_retries + 1):
             try:
                 async with aiohttp.ClientSession() as session:
                     async with session.request(
@@ -172,26 +184,27 @@ class APIRequest(Skill):
                         headers=headers,
                         params=params,
                         data=data,
-                        timeout=self.request_timeout,
+                        timeout=self._get_request_timeout(),
                     ) as response:
                         response.raise_for_status()
                         return await self._process_response(response)
 
             except (ClientError, asyncio.TimeoutError) as e:
-                if attempt < self.max_retries:
+                if attempt < max_retries:
                     if self.settings.debug_mode:
                         await self.printr.print_async(
-                            f"Retrying API request (attempt {attempt}/{self.max_retries}) due to: {e}",
+                            f"Retrying API request (attempt {attempt}/{max_retries}) due to: {e}",
                             color=LogType.INFO,
                         )
-                    delay = self.retry_delay * (2 ** (attempt - 1)) + random.uniform(
-                        0, 0.1 * self.retry_delay
+                    retry_delay = self._get_retry_delay()
+                    delay = retry_delay * (2 ** (attempt - 1)) + random.uniform(
+                        0, 0.1 * retry_delay
                     )
                     await asyncio.sleep(delay)
                 else:
                     if self.settings.debug_mode:
                         await self.printr.print_async(
-                            f"API request failed after {self.max_retries} attempts: {e}",
+                            f"API request failed after {max_retries} attempts: {e}",
                             color=LogType.WARNING,
                         )
                     return f"Error, could not complete API request. Exception was: {e}."
