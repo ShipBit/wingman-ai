@@ -163,6 +163,8 @@ class VoiceChanger(Skill):
     async def _switch_voice(self, voices: list[VoiceSelection]) -> str:
         """Switch voice to the given voice setting."""
 
+        provider_name = None
+
         # choose voice
         while True:
             index = randrange(len(voices)) - 1
@@ -233,9 +235,8 @@ class VoiceChanger(Skill):
             return f"Voice switching failed due to an unknown voice provider/subprovider. Provider: {voice_provider.value}"
 
         self.wingman.config.features.tts_provider = voice_provider
-        provider_name = (
-            provider_name if "provider_name" in locals() else voice_provider.value
-        )
+        if not provider_name:
+            provider_name = voice_provider.value
 
         return f"Switched {self.wingman.name}'s voice to {voice_name} ({provider_name})"
 
