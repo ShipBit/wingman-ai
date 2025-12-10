@@ -4,7 +4,6 @@ import datetime
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from api.enums import LogType
-from services.file import get_writable_dir
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -22,7 +21,7 @@ class QuickCommands(Skill):
         super().__init__(config=config, settings=settings, wingman=wingman)
 
         # get file paths
-        self.data_path = get_writable_dir(path.join("skills", "quick_commands", "data"))
+        self.data_path = path.join(self.get_generated_files_dir(), "data")
         self.file_ipl = path.join(self.data_path, "instant_phrase_learning.json")
 
         # learning data

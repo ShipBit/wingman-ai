@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 from api.enums import LogSource, LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
-from services.file import get_writable_dir
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -20,9 +19,7 @@ class ImageGeneration(Skill):
         wingman: "OpenAiWingman",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
-        self.image_path = get_writable_dir(
-            path.join("skills", "image_generation", "generated_images")
-        )
+        self.image_path = self.get_generated_files_dir()
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()

@@ -8,7 +8,6 @@ from PIL import Image
 from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
 from skills.skill_base import Skill, tool
-from services.file import get_writable_dir
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -48,7 +47,7 @@ class AutoScreenshot(Skill):
         return errors
 
     def get_default_directory(self) -> str:
-        return get_writable_dir("screenshots")
+        return self.get_generated_files_dir()
 
     @tool(
         name="take_screenshot",

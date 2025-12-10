@@ -18,7 +18,6 @@ from api.enums import (
     WingmanProTtsProvider,
     SoundEffect,
 )
-from services.file import get_writable_dir
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
@@ -35,7 +34,7 @@ class RadioChatter(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
-        self.file_path = get_writable_dir(path.join("skills", "radio_chatter", "data"))
+        self.file_path = path.join(self.get_generated_files_dir(), "data")
 
         self.last_message = None
         self.radio_status = False

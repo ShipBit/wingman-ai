@@ -711,3 +711,21 @@ class Skill:
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
         pass
+
+    def get_generated_files_dir(self) -> str:
+        """Get the path to this skill's generated files directory.
+
+        Returns the absolute path to a directory where this skill can store generated files.
+        The directory is automatically created if it doesn't exist and persists across
+        Wingman AI updates (not versioned).
+
+        Example paths:
+        - macOS: /Users/username/Library/Application Support/WingmanAI/generated_files/AutoScreenshot
+        - Windows: C:\\Users\\username\\AppData\\Roaming\\ShipBit\\WingmanAI\\generated_files\\AutoScreenshot
+
+        Returns:
+            The absolute path to this skill's generated files directory
+        """
+        from services.file import get_generated_files_dir
+
+        return get_generated_files_dir(self.name)

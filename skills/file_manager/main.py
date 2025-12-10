@@ -6,7 +6,6 @@ from api.interface import SettingsConfig, SkillConfig, WingmanInitializationErro
 from api.enums import LogType
 from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
-from services.file import get_writable_dir
 from showinfm import show_in_file_manager
 from pdfminer.high_level import extract_text
 
@@ -517,4 +516,4 @@ class FileManager(Skill):
             return f"Failed to extract contents of {zip_file_path}, error was {e}."
 
     def get_default_directory(self) -> str:
-        return get_writable_dir("files")
+        return self.get_generated_files_dir()

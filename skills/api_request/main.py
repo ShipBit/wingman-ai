@@ -9,7 +9,6 @@ import aiohttp
 from aiohttp import ClientError
 from api.enums import LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from services.file import get_writable_dir
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
@@ -91,7 +90,7 @@ class APIRequest(Skill):
     # Retrieve api key aliases in user api key file
     def get_api_keys(self) -> dict:
         api_key_holder = os.path.join(
-            get_writable_dir("files"), "api_request_key_holder.yaml"
+            self.get_generated_files_dir(), "api_request_key_holder.yaml"
         )
         # If no key holder file is present yet, create it
         if not os.path.isfile(api_key_holder):
@@ -245,7 +244,7 @@ class APIRequest(Skill):
                 file_name = disposition.split("filename=")[1].strip('"')
 
         # Save file
-        files_directory = get_writable_dir("files")
+        files_directory = self.get_generated_files_dir()
         file_path = os.path.join(files_directory, file_name)
         with open(file_path, "wb") as file:
             file.write(file_content)
