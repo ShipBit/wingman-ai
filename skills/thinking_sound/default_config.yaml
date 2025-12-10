@@ -2,6 +2,7 @@ module: skills.thinking_sound.main
 name: ThinkingSound
 display_name: Thinking Sounds
 author: JayMatthew
+auto_activate: true
 tags:
   - Utility
   - Music
