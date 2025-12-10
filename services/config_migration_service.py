@@ -850,9 +850,6 @@ class ConfigMigrationService:
             # Set discoverable_skills and discoverable_mcps for wingmen
             wingman_name = old.get("name", "")
 
-            # Get all available skill names
-            all_skill_names = self._get_all_skill_names()
-
             # For template wingmen (ATC, Computer, Clippy), read from their template.yaml
             # For custom wingmen, build from skills with discoverable_by_default=True
             if wingman_name in ("ATC", "Computer", "Clippy"):
