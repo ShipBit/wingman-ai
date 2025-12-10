@@ -21,18 +21,23 @@ class VisionAI(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
-        self.display = 1
-        self.show_screenshots = False
-
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
-
-        self.display = self.retrieve_custom_property_value("display", errors)
-        self.show_screenshots = self.retrieve_custom_property_value(
-            "show_screenshots", errors
-        )
-
+        # Validate properties exist (don't cache values)
+        self.retrieve_custom_property_value("display", errors)
+        self.retrieve_custom_property_value("show_screenshots", errors)
         return errors
+
+    def _get_display(self) -> int:
+        """Retrieve fresh display number at runtime."""
+        errors: list[WingmanInitializationError] = []
+        display = self.retrieve_custom_property_value("display", errors)
+        return display if display else 1
+
+    def _get_show_screenshots(self) -> bool:
+        """Retrieve fresh show_screenshots setting at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return self.retrieve_custom_property_value("show_screenshots", errors) or False
 
     @tool(
         name="analyse_what_you_or_user_sees",
@@ -60,7 +65,8 @@ class VisionAI(Skill):
 
         # Take a screenshot
         with mss() as sct:
-            main_display = sct.monitors[self.display]
+            display = self._get_display()
+            main_display = sct.monitors[display]
             screenshot = sct.grab(main_display)
 
             # Create a PIL image from array
@@ -75,7 +81,7 @@ class VisionAI(Skill):
 
             png_base64 = self.pil_image_to_base64(resized_image)
 
-            if self.show_screenshots:
+            if self._get_show_screenshots():
                 await self.printr.print_async(
                     "Analyzing this image",
                     color=LogType.INFO,

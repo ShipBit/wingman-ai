@@ -108,20 +108,29 @@ class FileManager(Skill):
         self.allowed_file_extensions = SUPPORTED_FILE_EXTENSIONS
         self.default_file_extension = "txt"
         self.max_text_size = DEFAULT_MAX_TEXT_SIZE
-        self.default_directory = ""  # Set in validate
-        self.allow_overwrite_existing = False
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
-        self.default_directory = self.retrieve_custom_property_value(
-            "default_directory", errors
-        )
-        if not self.default_directory or self.default_directory == "":
-            self.default_directory = self.get_default_directory()
-        self.allow_overwrite_existing = self.retrieve_custom_property_value(
-            "allow_overwrite_existing", errors
-        )
+        # Validate properties exist (don't cache values)
+        self.retrieve_custom_property_value("default_directory", errors)
+        self.retrieve_custom_property_value("allow_overwrite_existing", errors)
         return errors
+
+    def _get_default_directory(self) -> str:
+        """Retrieve fresh default directory at runtime."""
+        errors: list[WingmanInitializationError] = []
+        directory = self.retrieve_custom_property_value("default_directory", errors)
+        if not directory or directory.strip() == "":
+            return self.get_default_directory()
+        return directory
+
+    def _get_allow_overwrite_existing(self) -> bool:
+        """Retrieve fresh allow_overwrite_existing setting at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return (
+            self.retrieve_custom_property_value("allow_overwrite_existing", errors)
+            or False
+        )
 
     def get_text_from_file(
         self, file_path: str, file_extension: str, pdf_page_number: int = None
@@ -154,9 +163,10 @@ class FileManager(Skill):
             directory_path: The path of the directory. Defaults to configured directory.
             pdf_page_number_to_load: The page number of a pdf to load.
         """
-        directory_path = directory_path or self.default_directory
+        default_dir = self._get_default_directory()
+        directory_path = directory_path or default_dir
         if directory_path == "" or directory_path == ".":
-            directory_path = self.default_directory
+            directory_path = default_dir
 
         if not file_name or file_name == "":
             return "File name not provided."
@@ -200,9 +210,10 @@ class FileManager(Skill):
             directory_path: The path of the directory. Defaults to configured directory.
             add_to_existing_file: Whether to add to an existing file.
         """
-        directory_path = directory_path or self.default_directory
+        default_dir = self._get_default_directory()
+        directory_path = directory_path or default_dir
         if directory_path == "" or directory_path == ".":
-            directory_path = self.default_directory
+            directory_path = default_dir
 
         if not file_name or not text_content or file_name == "":
             return "File name or text content not provided."
@@ -228,7 +239,7 @@ class FileManager(Skill):
         # If file already exists, and user does not have overwrite option on, and LLM did not detect an intent to add to the existing file, stop
         if (
             os.path.isfile(file_path)
-            and not self.allow_overwrite_existing
+            and not self._get_allow_overwrite_existing()
             and not add_to_existing_file
         ):
             return f"File '{file_name}' already exists at {directory_path} and overwrite is not allowed."
@@ -259,11 +270,12 @@ class FileManager(Skill):
             folder_name: The name of the folder to create.
             directory_path: The path of the directory. Defaults to configured directory.
         """
-        directory_path = directory_path or self.default_directory
+        default_dir = self._get_default_directory()
+        directory_path = directory_path or default_dir
         if directory_path == "" or directory_path == ".":
-            directory_path = self.default_directory
+            directory_path = default_dir
 
-        if not folder_name or folder_name == "":
+        if not file_name or file_name == "":
             return "Folder name not provided."
 
         full_path = os.path.join(directory_path, folder_name)
@@ -282,9 +294,10 @@ class FileManager(Skill):
             folder_name: The name of the folder to open.
             directory_path: The path of the directory. Defaults to configured directory.
         """
-        directory_path = directory_path or self.default_directory
+        default_dir = self._get_default_directory()
+        directory_path = directory_path or default_dir
         if directory_path == "" or directory_path == ".":
-            directory_path = self.default_directory
+            directory_path = default_dir
 
         if not folder_name or folder_name == "":
             return "Folder name not provided."
@@ -315,9 +328,10 @@ class FileManager(Skill):
             pdf_page_number_to_load: The page number of a PDF to read aloud.
             text_content: The content to read aloud.
         """
-        directory_path = directory_path or self.default_directory
+        default_dir = self._get_default_directory()
+        directory_path = directory_path or default_dir
         if directory_path == "" or directory_path == ".":
-            directory_path = self.default_directory
+            directory_path = default_dir
 
         # First check if there's text content, if so, just play that as the user just wants the AI to say something in its TTS voice
         if text_content:
@@ -410,9 +424,10 @@ class FileManager(Skill):
             files_to_compress: List of absolute file or folder paths to compress.
             directory_path: The path of the directory where the zip file should be created.
         """
-        directory_path = directory_path or self.default_directory
+        default_dir = self._get_default_directory()
+        directory_path = directory_path or default_dir
         if directory_path == "" or directory_path == ".":
-            directory_path = self.default_directory
+            directory_path = default_dir
 
         full_zip_path = os.path.join(directory_path, zip_file_name)
         try:
@@ -454,9 +469,10 @@ class FileManager(Skill):
             files_to_add: List of files to add to the existing zip.
             directory_path: The path of the directory where the zip file is located.
         """
-        directory_path = directory_path or self.default_directory
+        default_dir = self._get_default_directory()
+        directory_path = directory_path or default_dir
         if directory_path == "" or directory_path == ".":
-            directory_path = self.default_directory
+            directory_path = default_dir
 
         full_zip_path = os.path.join(directory_path, zip_file_name)
         try:

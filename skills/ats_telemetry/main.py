@@ -30,7 +30,6 @@ class ATSTelemetry(Skill):
     ) -> None:
         self.loaded = False
         self.already_initialized_telemetry = False
-        self.use_metric_system = False
         self.telemetry_loop_cached_data = {}
         self.telemetry_loop_data_points = [
             "onJob",
@@ -77,10 +76,6 @@ class ATSTelemetry(Skill):
             "cargoMass",
         ]
         self.telemetry_loop_running = False
-        self.ats_install_directory = ""
-        self.ets_install_directory = ""
-        self.dispatcher_backstory = ""
-        self.autostart_dispatch_mode = False
 
         # Define the ATS (American Truck Simulator) projection for use in converting in-game coordinates to real life
         self.ats_proj = Proj(
@@ -121,31 +116,50 @@ class ATSTelemetry(Skill):
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
-        self.use_metric_system = self.retrieve_custom_property_value(
-            "use_metric_system", errors
-        )
-        self.ats_install_directory = self.retrieve_custom_property_value(
-            "ats_install_directory", errors
-        )
-        self.ets_install_directory = self.retrieve_custom_property_value(
-            "ets_install_directory", errors
-        )
-        self.dispatcher_backstory = self.retrieve_custom_property_value(
-            "dispatcher_backstory", errors
-        )
-        # Default back to wingman backstory
-        if (
-            self.dispatcher_backstory == ""
-            or self.dispatcher_backstory == " "
-            or not self.dispatcher_backstory
-        ):
-            self.dispatcher_backstory = self.wingman.config.prompts.backstory
-
-        self.autostart_dispatch_mode = self.retrieve_custom_property_value(
-            "autostart_dispatch_mode", errors
-        )
+        # Validate properties exist (don't cache values)
+        self.retrieve_custom_property_value("use_metric_system", errors)
+        self.retrieve_custom_property_value("ats_install_directory", errors)
+        self.retrieve_custom_property_value("ets_install_directory", errors)
+        self.retrieve_custom_property_value("dispatcher_backstory", errors)
+        self.retrieve_custom_property_value("autostart_dispatch_mode", errors)
         await self.check_and_install_telemetry_dlls()
         return errors
+
+    def _get_use_metric_system(self) -> bool:
+        """Retrieve fresh use_metric_system at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return self.retrieve_custom_property_value("use_metric_system", errors) or False
+
+    def _get_ats_install_directory(self) -> str:
+        """Retrieve fresh ATS install directory at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return (
+            self.retrieve_custom_property_value("ats_install_directory", errors) or ""
+        )
+
+    def _get_ets_install_directory(self) -> str:
+        """Retrieve fresh ETS install directory at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return (
+            self.retrieve_custom_property_value("ets_install_directory", errors) or ""
+        )
+
+    def _get_dispatcher_backstory(self) -> str:
+        """Retrieve fresh dispatcher backstory at runtime."""
+        errors: list[WingmanInitializationError] = []
+        backstory = self.retrieve_custom_property_value("dispatcher_backstory", errors)
+        # Default back to wingman backstory
+        if not backstory or backstory.strip() == "":
+            return self.wingman.config.prompts.backstory
+        return backstory
+
+    def _get_autostart_dispatch_mode(self) -> bool:
+        """Retrieve fresh autostart_dispatch_mode at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return (
+            self.retrieve_custom_property_value("autostart_dispatch_mode", errors)
+            or False
+        )
 
     # Try to find existing telemetry dlls, if not found, attempt to install
     async def check_and_install_telemetry_dlls(self):
@@ -154,14 +168,13 @@ class ATSTelemetry(Skill):
         sdk_dll_filepath = os.path.join(
             ats_telemetry_skill_filepath, "scs-telemetry.dll"
         )
-        ats_plugins_dir = os.path.join(
-            self.ats_install_directory, "bin\\win_x64\\plugins"
-        )
-        ets_plugins_dir = os.path.join(
-            self.ets_install_directory, "bin\\win_x64\\plugins"
-        )
+        ats_install_dir = self._get_ats_install_directory()
+        ets_install_dir = self._get_ets_install_directory()
+
+        ats_plugins_dir = os.path.join(ats_install_dir, "bin\\win_x64\\plugins")
+        ets_plugins_dir = os.path.join(ets_install_dir, "bin\\win_x64\\plugins")
         # Check and copy dll for ATS if applicable
-        if os.path.exists(self.ats_install_directory):
+        if os.path.exists(ats_install_dir):
             ats_dll_path = os.path.join(ats_plugins_dir, "scs-telemetry.dll")
             if not os.path.exists(ats_dll_path):
                 try:
@@ -174,7 +187,7 @@ class ATSTelemetry(Skill):
                         color=LogType.ERROR,
                     )
         # Check and copy dll for ETS if applicable
-        if os.path.exists(self.ets_install_directory):
+        if os.path.exists(ets_install_dir):
             ets_dll_path = os.path.join(ets_plugins_dir, "scs-telemetry.dll")
             if not os.path.exists(ets_dll_path):
                 try:
@@ -296,15 +309,17 @@ class ATSTelemetry(Skill):
 
     # If telemetry data changed, get LLM to provide a verbal response to the user, without requiring the user to initiate a communication with the LLM
     async def initiate_llm_call_with_changed_data(self, changed_data):
+        use_metric = self._get_use_metric_system()
         units_phrase = "You are located in the US, so use US Customary Units, like feet, yards, miles, and pounds in your responses, and convert metric or imperial formats to these units.  All currency is in dollars."
-        if self.use_metric_system:
+        if use_metric:
             units_phrase = "Use the metric system like meters, kilometers, kilometers per hour, and kilograms in your responses."
+        backstory = self._get_dispatcher_backstory()
         user_content = f"{changed_data}"
         messages = [
             {
                 "role": "system",
                 "content": f"""
-                    {self.dispatcher_backstory}
+                    {backstory}
                     Acting in character at all times, react to the following changed information.
                     {units_phrase}
                 """,
@@ -478,7 +493,7 @@ class ATSTelemetry(Skill):
     async def prepare(self) -> None:
         await super().prepare()
         self.loaded = True
-        if self.autostart_dispatch_mode:
+        if self._get_autostart_dispatch_mode():
             self.threaded_execution(self.autostart_dispatcher_mode)
 
     # Unload telemetry module and stop any ongoing loop when config / program unloads
@@ -502,7 +517,8 @@ class ATSTelemetry(Skill):
             truck_speed_mph = data["speed"] * 2.23694
             truck_speed_kph = data["speed"] * 3.6
 
-            if self.use_metric_system:
+            use_metric = self._get_use_metric_system()
+            if use_metric:
                 enhanced_data["truckSpeed"] = (
                     str(abs(round(truck_speed_kph))) + " kilometers per hour"
                 )
@@ -568,7 +584,7 @@ class ATSTelemetry(Skill):
             days_hours_and_minutes = await self.convert_minutes_to_days_hours_minutes(
                 data["time_abs"]
             )
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["gameTime"] = await self.convert_to_clock_time(
                     days_hours_and_minutes, 24
                 )
@@ -582,7 +598,7 @@ class ATSTelemetry(Skill):
                     data["jobStartingTime"]
                 )
             )
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["jobStartingTime"] = await self.convert_to_clock_time(
                     job_start_days_hours_and_minutes, 24
                 )

@@ -41,63 +41,139 @@ class RadioChatter(Skill):
         self.radio_status = False
         self.loaded = False
 
-        self.prompt = None
-        self.voices = list[VoiceSelection]
-        self.interval_min = None
-        self.interval_max = None
-        self.messages_min = None
-        self.messages_max = None
-        self.participants_min = None
-        self.participants_max = None
-        self.force_radio_sound = False
-        self.radio_sounds = []
-        self.use_beeps = False
-        self.auto_start = False
-        self.volume = 1.0
-        self.print_chatter = False
-        self.radio_knowledge = False
-
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
 
-        self.prompt = self.retrieve_custom_property_value("prompt", errors)
+        # Validate properties (don't cache values)
+        self.retrieve_custom_property_value("prompt", errors)
+        self.retrieve_custom_property_value("force_radio_sound", errors)
+        self.retrieve_custom_property_value("auto_start", errors)
+        self.retrieve_custom_property_value("print_chatter", errors)
+        self.retrieve_custom_property_value("radio_knowledge", errors)
+        self.retrieve_custom_property_value("radio_sounds", errors)
+        self.retrieve_custom_property_value("use_beeps", errors)
 
-        # prepare voices
+        # Validate intervals
+        interval_min = self.retrieve_custom_property_value("interval_min", errors)
+        if interval_min is not None and interval_min < 1:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message="Invalid value for 'interval_min'. Expected a number of one or larger.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+        interval_max = self.retrieve_custom_property_value("interval_max", errors)
+        if (
+            interval_max is not None
+            and interval_max < 1
+            or (interval_min is not None and interval_max < interval_min)
+        ):
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message="Invalid value for 'interval_max'. Expected a number greater than or equal to 'interval_min'.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+
+        # Validate messages
+        messages_min = self.retrieve_custom_property_value("messages_min", errors)
+        if messages_min is not None and messages_min < 1:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message="Invalid value for 'messages_min'. Expected a number of one or larger.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+        messages_max = self.retrieve_custom_property_value("messages_max", errors)
+        if (
+            messages_max is not None
+            and messages_max < 1
+            or (messages_min is not None and messages_max < messages_min)
+        ):
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message="Invalid value for 'messages_max'. Expected a number greater than or equal to 'messages_min'.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+
+        # Validate participants
+        participants_min = self.retrieve_custom_property_value(
+            "participants_min", errors
+        )
+        if participants_min is not None and participants_min < 1:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message="Invalid value for 'participants_min'. Expected a number of one or larger.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+        participants_max = self.retrieve_custom_property_value(
+            "participants_max", errors
+        )
+        if (
+            participants_max is not None
+            and participants_max < 1
+            or (participants_min is not None and participants_max < participants_min)
+        ):
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message="Invalid value for 'participants_max'. Expected a number greater than or equal to 'participants_min'.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+
+        # Validate volume
+        volume = self.retrieve_custom_property_value("volume", errors) or 0.5
+        if volume < 0 or volume > 1:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message="Invalid value for 'volume'. Expected a number between 0 and 1.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                )
+            )
+
+        # Initialize providers for configured voices
         voices: list[VoiceSelection] = self.retrieve_custom_property_value(
             "voices", errors
         )
-        self.voices = []
         if voices:
-            # we have to initiate all providers here
-            # we do no longer check voice availability or validate the structure
+            # Check participants vs voices
+            if participants_max and participants_max > len(voices):
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.wingman.name,
+                        message="Not enough voices available for the configured number of max participants.",
+                        error_type=WingmanInitializationErrorType.INVALID_CONFIG,
+                    )
+                )
 
+            # Initialize all providers
             initiated_providers = []
-            initiate_provider_error = False
-
             for voice in voices:
                 voice_provider = voice.provider
                 if voice_provider not in initiated_providers:
                     initiated_providers.append(voice_provider)
 
-                    # initiate provider
                     if voice_provider == TtsProvider.OPENAI and not self.wingman.openai:
                         await self.wingman.validate_and_set_openai(errors)
-                        if len(errors) > 0:
-                            initiate_provider_error = True
                     elif (
                         voice_provider == TtsProvider.AZURE
                         and not self.wingman.openai_azure
                     ):
                         await self.wingman.validate_and_set_azure(errors)
-                        if len(errors) > 0:
-                            initiate_provider_error = True
                     elif (
                         voice_provider == TtsProvider.ELEVENLABS
                         and not self.wingman.elevenlabs
                     ):
                         await self.wingman.validate_and_set_elevenlabs(errors)
-                        if len(errors) > 0:
-                            initiate_provider_error = True
                     elif (
                         voice_provider == TtsProvider.WINGMAN_PRO
                         and not self.wingman.wingman_pro
@@ -108,136 +184,104 @@ class RadioChatter(Skill):
                         and not self.wingman.inworld
                     ):
                         await self.wingman.validate_and_set_inworld(errors)
-                        if len(errors) > 0:
-                            initiate_provider_error = True
 
-            if not initiate_provider_error:
-                self.voices = voices
+        return errors
 
-        self.interval_min = self.retrieve_custom_property_value("interval_min", errors)
-        if self.interval_min is not None and self.interval_min < 1:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Invalid value for 'interval_min'. Expected a number of one or larger.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
-        self.interval_max = self.retrieve_custom_property_value("interval_max", errors)
-        if (
-            self.interval_max is not None
-            and self.interval_max < 1
-            or (self.interval_min is not None and self.interval_max < self.interval_min)
-        ):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Invalid value for 'interval_max'. Expected a number greater than or equal to 'interval_min'.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
-        self.messages_min = self.retrieve_custom_property_value("messages_min", errors)
-        if self.messages_min is not None and self.messages_min < 1:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Invalid value for 'messages_min'. Expected a number of one or larger.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
-        self.messages_max = self.retrieve_custom_property_value("messages_max", errors)
-        if (
-            self.messages_max is not None
-            and self.messages_max < 1
-            or (self.messages_min is not None and self.messages_max < self.messages_min)
-        ):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Invalid value for 'messages_max'. Expected a number greater than or equal to 'messages_min'.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
-        self.participants_min = self.retrieve_custom_property_value(
-            "participants_min", errors
-        )
-        if self.participants_min is not None and self.participants_min < 1:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Invalid value for 'participants_min'. Expected a number of one or larger.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
-        self.participants_max = self.retrieve_custom_property_value(
-            "participants_max", errors
-        )
-        if (
-            self.participants_max is not None
-            and self.participants_max < 1
-            or (
-                self.participants_min is not None
-                and self.participants_max < self.participants_min
-            )
-        ):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Invalid value for 'participants_max'. Expected a number greater than or equal to 'participants_min'.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
+    def _get_voices(self) -> list[VoiceSelection]:
+        """Retrieve fresh voices list at runtime."""
+        errors: list[WingmanInitializationError] = []
+        voices = self.retrieve_custom_property_value("voices", errors)
+        return voices if voices else []
 
-        if not self.voices or self.participants_max > len(self.voices):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Not enough voices available for the configured number of max participants.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
+    def _get_prompt(self) -> str | None:
+        """Retrieve fresh prompt at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return self.retrieve_custom_property_value("prompt", errors)
 
-        self.force_radio_sound = self.retrieve_custom_property_value(
-            "force_radio_sound", errors
-        )
+    def _get_interval_min(self) -> int:
+        """Retrieve fresh interval_min at runtime."""
+        errors: list[WingmanInitializationError] = []
+        interval = self.retrieve_custom_property_value("interval_min", errors)
+        return interval if interval else 10
 
-        self.auto_start = self.retrieve_custom_property_value("auto_start", errors)
+    def _get_interval_max(self) -> int:
+        """Retrieve fresh interval_max at runtime."""
+        errors: list[WingmanInitializationError] = []
+        interval = self.retrieve_custom_property_value("interval_max", errors)
+        return interval if interval else 30
 
-        self.volume = self.retrieve_custom_property_value("volume", errors) or 0.5
-        if self.volume < 0 or self.volume > 1:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message="Invalid value for 'volume'. Expected a number between 0 and 1.",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG,
-                )
-            )
-        self.print_chatter = self.retrieve_custom_property_value(
-            "print_chatter", errors
-        )
-        self.radio_knowledge = self.retrieve_custom_property_value(
-            "radio_knowledge", errors
-        )
+    def _get_messages_min(self) -> int:
+        """Retrieve fresh messages_min at runtime."""
+        errors: list[WingmanInitializationError] = []
+        messages = self.retrieve_custom_property_value("messages_min", errors)
+        return messages if messages else 1
+
+    def _get_messages_max(self) -> int:
+        """Retrieve fresh messages_max at runtime."""
+        errors: list[WingmanInitializationError] = []
+        messages = self.retrieve_custom_property_value("messages_max", errors)
+        return messages if messages else 3
+
+    def _get_participants_min(self) -> int:
+        """Retrieve fresh participants_min at runtime."""
+        errors: list[WingmanInitializationError] = []
+        participants = self.retrieve_custom_property_value("participants_min", errors)
+        return participants if participants else 1
+
+    def _get_participants_max(self) -> int:
+        """Retrieve fresh participants_max at runtime."""
+        errors: list[WingmanInitializationError] = []
+        participants = self.retrieve_custom_property_value("participants_max", errors)
+        return participants if participants else 2
+
+    def _get_volume(self) -> float:
+        """Retrieve fresh volume at runtime."""
+        errors: list[WingmanInitializationError] = []
+        volume = self.retrieve_custom_property_value("volume", errors)
+        return volume if volume else 0.5
+
+    def _get_radio_sounds(self) -> list[SoundEffect]:
+        """Retrieve fresh radio sounds at runtime."""
+        errors: list[WingmanInitializationError] = []
         radio_sounds = self.retrieve_custom_property_value("radio_sounds", errors)
-        # split by comma
+        sounds = []
         if radio_sounds:
             radio_sounds = radio_sounds.lower().replace(" ", "").split(",")
             if "low" in radio_sounds:
-                self.radio_sounds.append(SoundEffect.LOW_QUALITY_RADIO)
+                sounds.append(SoundEffect.LOW_QUALITY_RADIO)
             if "medium" in radio_sounds:
-                self.radio_sounds.append(SoundEffect.MEDIUM_QUALITY_RADIO)
+                sounds.append(SoundEffect.MEDIUM_QUALITY_RADIO)
             if "high" in radio_sounds:
-                self.radio_sounds.append(SoundEffect.HIGH_END_RADIO)
-        if not self.radio_sounds:
-            self.force_radio_sound = False
-        self.use_beeps = self.retrieve_custom_property_value("use_beeps", errors)
+                sounds.append(SoundEffect.HIGH_END_RADIO)
+        return sounds
 
-        return errors
+    def _get_force_radio_sound(self) -> bool:
+        """Retrieve fresh force_radio_sound at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return self.retrieve_custom_property_value("force_radio_sound", errors) or False
+
+    def _get_use_beeps(self) -> bool:
+        """Retrieve fresh use_beeps at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return self.retrieve_custom_property_value("use_beeps", errors) or False
+
+    def _get_print_chatter(self) -> bool:
+        """Retrieve fresh print_chatter at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return self.retrieve_custom_property_value("print_chatter", errors) or False
+
+    def _get_radio_knowledge(self) -> bool:
+        """Retrieve fresh radio_knowledge at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return self.retrieve_custom_property_value("radio_knowledge", errors) or False
 
     async def prepare(self) -> None:
         await super().prepare()
         self.loaded = True
-        if self.auto_start:
+        # Check auto_start at runtime
+        errors: list[WingmanInitializationError] = []
+        auto_start = self.retrieve_custom_property_value("auto_start", errors)
+        if auto_start:
             self.threaded_execution(self._init_chatter)
 
     async def unload(self) -> None:
@@ -287,11 +331,14 @@ class RadioChatter(Skill):
         """Start the radio chatter."""
 
         self.radio_status = True
-        time.sleep(max(5, self.interval_min))  # sleep for min 5s else min interval
+        interval_min = self._get_interval_min()
+        time.sleep(max(5, interval_min))  # sleep for min 5s else min interval
 
         while self.is_active():
             await self._generate_chatter()
-            interval = self.randrange(self.interval_min, self.interval_max)
+            interval_min = self._get_interval_min()
+            interval_max = self._get_interval_max()
+            interval = self.randrange(interval_min, interval_max)
             time.sleep(interval)
 
     def is_active(self) -> bool:
@@ -301,10 +348,14 @@ class RadioChatter(Skill):
         if not self.is_active():
             return
 
-        count_message = self.randrange(self.messages_min, self.messages_max)
-        count_participants = self.randrange(
-            self.participants_min, self.participants_max
-        )
+        messages_min = self._get_messages_min()
+        messages_max = self._get_messages_max()
+        participants_min = self._get_participants_min()
+        participants_max = self._get_participants_max()
+        prompt = self._get_prompt()
+
+        count_message = self.randrange(messages_min, messages_max)
+        count_participants = self.randrange(participants_min, participants_max)
 
         messages = [
             {
@@ -335,7 +386,7 @@ class RadioChatter(Skill):
             },
             {
                 "role": "user",
-                "content": str(self.prompt),
+                "content": str(prompt),
             },
         ]
         completion = await self.llm_call(messages)
@@ -376,27 +427,36 @@ class RadioChatter(Skill):
 
             clean_messages.append(message)
 
+        voices = self._get_voices()
+        if not voices:
+            return
+
         original_voice_setting = await self._get_original_voice_setting()
         elevenlabs_streaming = self.wingman.config.elevenlabs.output_streaming
         inworld_streaming = self.wingman.config.inworld.output_streaming
         original_sound_config = copy.deepcopy(self.wingman.config.sound)
 
         # copy for volume and effects
+        volume = self._get_volume()
+        use_beeps = self._get_use_beeps()
         custom_sound_config = copy.deepcopy(self.wingman.config.sound)
-        custom_sound_config.play_beep = self.use_beeps
+        custom_sound_config.play_beep = use_beeps
         custom_sound_config.play_beep_apollo = False
-        custom_sound_config.volume = custom_sound_config.volume * self.volume
+        custom_sound_config.volume = custom_sound_config.volume * volume
 
-        voice_index = await self._get_random_voice_index(len(voice_participant_mapping))
+        voice_index = await self._get_random_voice_index(
+            len(voice_participant_mapping), voices
+        )
         if not voice_index:
             return
+
+        force_radio_sound = self._get_force_radio_sound()
+        radio_sounds = self._get_radio_sounds()
         for i, name in enumerate(voice_participant_mapping):
             sound_config = original_sound_config
-            if self.force_radio_sound:
+            if force_radio_sound and radio_sounds:
                 sound_config = copy.deepcopy(custom_sound_config)
-                sound_config.effects = [
-                    self.radio_sounds[self.randrange(len(self.radio_sounds))]
-                ]
+                sound_config.effects = [radio_sounds[self.randrange(len(radio_sounds))]]
 
             voice_participant_mapping[name] = (voice_index[i], sound_config)
 
@@ -415,17 +475,17 @@ class RadioChatter(Skill):
                 return
 
             voice_index, sound_config = voice_participant_mapping[name]
-            voice_setting = self.voices[voice_index]
+            voice_setting = voices[voice_index]
 
             await self._switch_voice(voice_setting)
-            if self.print_chatter:
+            if self._get_print_chatter():
                 await self.printr.print_async(
                     text=f"Background radio ({name}): {text}",
                     color=LogType.INFO,
                     source_name=self.wingman.name,
                 )
             self.threaded_execution(self.wingman.play_to_user, text, True, sound_config)
-            if self.radio_knowledge:
+            if self._get_radio_knowledge():
                 await self.wingman.add_assistant_message(
                     f"Background radio chatter: {text}"
                 )
@@ -440,19 +500,21 @@ class RadioChatter(Skill):
         while self.wingman.audio_player.is_playing:
             time.sleep(1)  # stay in function call until last message got played
 
-    async def _get_random_voice_index(self, count: int) -> list[int]:
+    async def _get_random_voice_index(
+        self, count: int, voices: list[VoiceSelection]
+    ) -> list[int]:
         """Switch voice to a random voice from the list."""
 
-        if count > len(self.voices):
+        if count > len(voices):
             return []
 
-        if count == len(self.voices):
-            return list(range(len(self.voices)))
+        if count == len(voices):
+            return list(range(len(voices)))
 
         voice_index = []
-        for i in range(count):
+        for _ in range(count):
             while True:
-                index = self.randrange(len(self.voices)) - 1
+                index = self.randrange(len(voices)) - 1
                 if index not in voice_index:
                     voice_index.append(index)
                     break

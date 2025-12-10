@@ -1,4 +1,3 @@
-import asyncio
 from typing import TYPE_CHECKING
 
 from api.enums import LogType
@@ -25,7 +24,6 @@ class ThinkingSound(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
-        self.audio_config: AudioFileConfig = None
         self.stop_duration = 1
         self.is_playing = False
 
@@ -39,16 +37,8 @@ class ThinkingSound(Skill):
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
-        self.audio_config = self.retrieve_custom_property_value("audio_config", errors)
-        if self.audio_config:
-            # Force no wait for this skill to work
-            self.audio_config.wait = False
-        else:
-            self.printr.print(
-                f"Thinking Sound: No audio configured for {self.wingman.name}.",
-                color=LogType.WARNING,
-                server_only=True,
-            )
+        # Validate that audio_config exists (don't cache it)
+        self.retrieve_custom_property_value("audio_config", errors)
         return errors
 
     async def unload(self) -> None:
@@ -83,13 +73,23 @@ class ThinkingSound(Skill):
         """Called when main TTS playback finishes."""
         pass
 
+    def _get_audio_config(self) -> AudioFileConfig | None:
+        """Retrieve fresh audio_config at runtime."""
+        errors: list[WingmanInitializationError] = []
+        audio_config = self.retrieve_custom_property_value("audio_config", errors)
+        if audio_config:
+            # Force no wait for this skill to work
+            audio_config.wait = False
+        return audio_config
+
     async def on_add_user_message(self, message: str) -> None:
         """Start playing thinking sound when user message is added."""
-        if not self.audio_config:
+        audio_config = self._get_audio_config()
+        if not audio_config:
             return
 
         # Stop any existing playback first
-        await self.wingman.audio_library.stop_playback(self.audio_config, 0)
+        await self.wingman.audio_library.stop_playback(audio_config, 0)
 
         self.printr.print(
             "Thinking Sound: Starting playback.",
@@ -101,20 +101,20 @@ class ThinkingSound(Skill):
 
     async def start_playback(self):
         """Start playing the thinking sound."""
-        if not self.audio_config or self.is_playing:
+        audio_config = self._get_audio_config()
+        if not audio_config or self.is_playing:
             return
 
         self.is_playing = True
         await self.wingman.audio_library.start_playback(
-            self.audio_config, self.wingman.config.sound.volume
+            audio_config, self.wingman.config.sound.volume
         )
 
     async def stop_playback(self):
         """Stop the thinking sound with fade out."""
-        if not self.audio_config or not self.is_playing:
+        audio_config = self._get_audio_config()
+        if not audio_config or not self.is_playing:
             return
 
-        await self.wingman.audio_library.stop_playback(
-            self.audio_config, self.stop_duration
-        )
+        await self.wingman.audio_library.stop_playback(audio_config, self.stop_duration)
         self.is_playing = False

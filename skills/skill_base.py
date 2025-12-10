@@ -12,6 +12,7 @@ from typing import (
     get_origin,
     get_args,
 )
+import warnings
 from api.enums import LogType, WingmanInitializationErrorType
 from api.interface import (
     SettingsConfig,
@@ -216,6 +217,21 @@ def tool(
     Inspired by FastMCP's @mcp.tool() decorator, this automatically generates
     the OpenAI tool schema from the function signature and type hints.
 
+    **This is the PREFERRED way to define tools in new skills.**
+
+    **Auto-Generation:**
+    - Tool name: Method name (or override with `name` parameter)
+    - Parameter types: From type hints (required: no default, optional: has default)
+    - Parameter descriptions: From docstring Args section or auto-generated
+    - Tool description: From method docstring (or override with `description` parameter)
+
+    **Requirements:**
+    - Method must have type hints for all parameters (except self)
+    - Method should return a string (the result shown to the LLM)
+    - For async operations, use async def
+
+    **Note:** Don't mix this decorator with legacy get_tools() override in the same skill.
+
     Args:
         name: Override the tool name (defaults to function name)
         description: Override the description (defaults to docstring)
@@ -307,18 +323,27 @@ class Skill:
         self._collect_decorated_tools()
 
     def needs_activation(self) -> bool:
-        """Check if this skill still needs validation and preparation."""
+        """Check if this skill still needs validation and preparation.
+
+        Returns True when:
+        - Skill is first loaded (initial state)
+        - After update_config() is called (validation reset)
+        - If validation or preparation previously failed
+
+        Returns False only when both validation and preparation have completed successfully.
+        """
         return not self.is_validated or not self.is_prepared
 
     async def update_config(self, new_config: SkillConfig) -> None:
-        """Update the skill's configuration.
+        """Update the skill's configuration at runtime.
 
         Called when the user changes skill settings at runtime (e.g., custom properties).
         By default, this updates self.config and invalidates validation state so the skill
         will be revalidated on next use.
 
-        Skills that cache config values in __init__ or validate() should override this
-        method to also update their cached values.
+        **Important:** Skills should NOT cache config values. Instead, retrieve properties
+        just-in-time when needed. This ensures runtime changes take effect immediately.
+        See the validate() method documentation for the recommended pattern.
 
         Args:
             new_config: The updated SkillConfig with new custom_properties or prompt.
@@ -365,7 +390,35 @@ class Skill:
                 pass
 
     async def validate(self) -> list[WingmanInitializationError]:
-        """Validates the skill configuration."""
+        """
+        Validates the skill configuration at startup and reload.
+
+        This method should:
+        1. Call retrieve_custom_property_value() for all custom properties to validate they exist
+           and are properly configured. This reports errors for missing or invalid properties.
+        2. Perform any initialization that requires the properties (e.g., provider setup).
+        3. NOT cache property values in instance variables for runtime use.
+
+        Property values should be retrieved fresh at runtime using helper methods that call
+        retrieve_custom_property_value() just-in-time. This ensures changes made in the UI
+        are immediately reflected without requiring skill reactivation.
+
+        Example pattern:
+            async def validate(self):
+                errors = await super().validate()
+                # Validate properties exist (don't cache)
+                self.retrieve_custom_property_value("audio_config", errors)
+                self.retrieve_custom_property_value("volume", errors)
+                return errors
+
+            def _get_audio_config(self):
+                # Retrieve fresh at runtime
+                errors = []
+                return self.retrieve_custom_property_value("audio_config", errors)
+
+        Returns:
+            List of initialization errors found during validation.
+        """
         return []
 
     async def ensure_activated(self) -> tuple[bool, str]:
@@ -453,13 +506,30 @@ class Skill:
         """
         Returns a list of tools available in the skill.
 
-        By default, returns tools from @tool decorated methods.
-        Override this method to provide tools using the legacy pattern,
-        or to combine legacy tools with decorated tools.
+        .. deprecated::
+            Use the @tool decorator instead. This method is maintained for backward
+            compatibility with existing skills but will be removed in a future version.
+
+        **For new skills:** Use the @tool decorator instead of overriding this method.
+        The @tool decorator provides automatic schema generation and cleaner code.
+
+        **Legacy pattern (for compatibility only):**
+        Override this method to manually provide tools. By default, returns tools from
+        @tool decorated methods.
+
+        **Migration guidance:**
+        - New skills: Use @tool decorator exclusively, don't override this method
+        - Existing skills: Can continue using this pattern or migrate to @tool decorator
+        - Mixed approach: NOT recommended - choose one pattern per skill
 
         Returns:
             List of (tool_name, tool_definition) tuples
         """
+        warnings.warn(
+            "get_tools() is deprecated. Use the @tool decorator instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Return tools from @tool decorated methods
         tools = []
         for tool_def in self._decorated_tools.values():

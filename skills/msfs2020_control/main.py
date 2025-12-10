@@ -28,36 +28,54 @@ class Msfs2020Control(Skill):
         self.aq = None  # Same
         self.ae = None  # Same
         self.data_monitoring_loop_running = False
-        self.autostart_data_monitoring_loop_mode = False
-        self.data_monitoring_backstory = ""
-        self.min_data_monitoring_seconds = 60
-        self.max_data_monitoring_seconds = 360
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
-        self.autostart_data_monitoring_loop_mode = self.retrieve_custom_property_value(
+        # Validate properties exist (don't cache values)
+        self.retrieve_custom_property_value(
             "autostart_data_monitoring_loop_mode", errors
         )
-        self.data_monitoring_backstory = self.retrieve_custom_property_value(
+        self.retrieve_custom_property_value("data_monitoring_backstory", errors)
+        self.retrieve_custom_property_value("min_data_monitoring_seconds", errors)
+        self.retrieve_custom_property_value("max_data_monitoring_seconds", errors)
+        return errors
+
+    def _get_data_monitoring_backstory(self) -> str:
+        """Retrieve fresh data monitoring backstory at runtime."""
+        errors: list[WingmanInitializationError] = []
+        backstory = self.retrieve_custom_property_value(
             "data_monitoring_backstory", errors
         )
         # If not available or not set, use default wingman's backstory
-        if (
-            not self.data_monitoring_backstory
-            or self.data_monitoring_backstory == ""
-            or self.data_monitoring_backstory == " "
-        ):
-            self.data_monitoring_backstory = self.wingman.config.prompts.backstory
+        if not backstory or backstory.strip() == "":
+            return self.wingman.config.prompts.backstory
+        return backstory
 
-        self.min_data_monitoring_seconds = self.retrieve_custom_property_value(
+    def _get_min_data_monitoring_seconds(self) -> int:
+        """Retrieve fresh min data monitoring seconds at runtime."""
+        errors: list[WingmanInitializationError] = []
+        seconds = self.retrieve_custom_property_value(
             "min_data_monitoring_seconds", errors
         )
+        return seconds if seconds else 60
 
-        self.max_data_monitoring_seconds = self.retrieve_custom_property_value(
+    def _get_max_data_monitoring_seconds(self) -> int:
+        """Retrieve fresh max data monitoring seconds at runtime."""
+        errors: list[WingmanInitializationError] = []
+        seconds = self.retrieve_custom_property_value(
             "max_data_monitoring_seconds", errors
         )
+        return seconds if seconds else 360
 
-        return errors
+    def _get_autostart_data_monitoring_loop_mode(self) -> bool:
+        """Retrieve fresh autostart mode at runtime."""
+        errors: list[WingmanInitializationError] = []
+        return (
+            self.retrieve_custom_property_value(
+                "autostart_data_monitoring_loop_mode", errors
+            )
+            or False
+        )
 
     @tool(
         description="Retrieve data from MSFS2020 via SimConnect. Examples: PLANE_ALTITUDE, AIRSPEED_INDICATED, FUEL_TOTAL_QUANTITY, GEAR_HANDLE_POSITION. Use :index suffix for multi-engine (e.g., GENERAL_ENG_RPM:1)."
@@ -163,7 +181,7 @@ class Msfs2020Control(Skill):
                         "Initialized SimConnect with MSFS2020.",
                         color=LogType.INFO,
                     )
-                if self.autostart_data_monitoring_loop_mode:
+                if self._get_autostart_data_monitoring_loop_mode():
                     await self.initialize_data_monitoring_loop()
             except Exception:
                 # Wait 30 seconds between connect attempts
@@ -186,10 +204,12 @@ class Msfs2020Control(Skill):
             self.data_monitoring_loop_running = True
 
             while self.data_monitoring_loop_running:
+                min_seconds = self._get_min_data_monitoring_seconds()
+                max_seconds = self._get_max_data_monitoring_seconds()
                 random_time = random.choice(
                     range(
-                        self.min_data_monitoring_seconds,
-                        self.max_data_monitoring_seconds,
+                        min_seconds,
+                        max_seconds,
                         15,
                     )
                 )  # Gets random number from min to max in increments of 15
@@ -285,12 +305,13 @@ class Msfs2020Control(Skill):
         on_ground_statement = "The plane is currently in the air."
         if on_ground:
             on_ground_statement = "The plane is currently on the ground."
+        backstory = self._get_data_monitoring_backstory()
         user_content = f"{on_ground_statement}  Information about the location: {data}"
         messages = [
             {
                 "role": "system",
                 "content": f"""
-                    {self.data_monitoring_backstory}
+                    {backstory}
                 """,
             },
             {
@@ -300,7 +321,7 @@ class Msfs2020Control(Skill):
         ]
         if self.settings.debug_mode:
             await self.printr.print_async(
-                f"Attempting LLM call with parameters: {self.data_monitoring_backstory}, {user_content}.",
+                f"Attempting LLM call with parameters: {backstory}, {user_content}.",
                 color=LogType.INFO,
             )
         completion = await self.llm_call(messages)
