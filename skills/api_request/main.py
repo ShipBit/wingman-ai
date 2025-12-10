@@ -64,9 +64,9 @@ class APIRequest(Skill):
         wingman: "OpenAiWingman",
     ) -> None:
         self.default_headers = DEFAULT_HEADERS
-        self.api_keys_dictionary = self.get_api_keys()
 
         super().__init__(config=config, settings=settings, wingman=wingman)
+        self.api_keys_dictionary = self.get_api_keys()
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
