@@ -8,8 +8,6 @@ The registry delegates all activation/execution to the underlying skill_registry
 and mcp_registry, preserving their separate logging, validation, and lifecycle logic.
 """
 
-from typing import Optional
-
 from services.mcp_registry import McpRegistry
 from services.tool_registry import SkillRegistry
 
