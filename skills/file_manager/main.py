@@ -274,7 +274,7 @@ class FileManager(Skill):
         if directory_path == "" or directory_path == ".":
             directory_path = default_dir
 
-        if not file_name or file_name == "":
+        if not folder_name or folder_name == "":
             return "Folder name not provided."
 
         full_path = os.path.join(directory_path, folder_name)
