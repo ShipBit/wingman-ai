@@ -186,7 +186,7 @@ class Timer(Skill):
 
         # if not valid it might be a command
         if not tool_call and self.wingman.get_command(function_name):
-            function_arguments_json = {"command_name": function_name}
+            function_arguments_json = json.dumps({"command_name": function_name})
             function_name = "execute_command"
             tool_call = True  # Mark as found
 
