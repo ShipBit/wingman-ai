@@ -1,3 +1,4 @@
+import json
 import random
 import string
 import asyncio
@@ -22,19 +23,19 @@ class ActualTimer:
         is_loop: bool,
         loops: int,
         silent: bool,
-        function: str,
-        parameters: dict[str, any],
+        function_name: str,
+        function_arguments: dict[str, any],
     ) -> None:
-        self.delay = delay
-        self.is_loop = is_loop
-        self.loops = loops
-        self.silent = silent
-        self.function = function
-        self.parameters = parameters
+        self._delay = delay
+        self._is_loop = is_loop
+        self._loops = loops
+        self._silent = silent
+        self._function_name = function_name
+        self._function_arguments = function_arguments
         letters_and_digits = string.ascii_letters + string.digits
-        self.id = "".join(random.choice(letters_and_digits) for _ in range(7))
-        self.last_run = self.update_last_run()
-        self.deleted = False
+        self._timer_id = "".join(random.choice(letters_and_digits) for _ in range(7))
+        self._last_run = self.update_last_run()
+        self._deleted = False
 
     @property
     def delay(self) -> int:
@@ -69,20 +70,20 @@ class ActualTimer:
         self._silent = value
 
     @property
-    def function(self) -> str:
-        return str(self._function)
+    def function_name(self) -> str:
+        return str(self._function_name)
 
-    @function.setter
-    def function(self, value: str) -> None:
-        self._function = value
+    @function_name.setter
+    def function_name(self, value: str) -> None:
+        self._function_name = value
 
     @property
-    def parameters(self) -> dict[str, any]:
-        return dict(self._parameters)
+    def function_arguments(self) -> dict[str, any]:
+        return dict(self._function_arguments)
 
-    @parameters.setter
-    def parameters(self, value: dict[str, any]) -> None:
-        self._parameters = value
+    @function_arguments.setter
+    def function_arguments(self, value: dict[str, any]) -> None:
+        self._function_arguments = value
 
     @property
     def id(self) -> str:
@@ -113,7 +114,7 @@ class ActualTimer:
         return self.last_run
 
     def __str__(self) -> str:
-        return f"Timer: {self.function} with parameters: {self.parameters} in {self.delay} seconds."
+        return f"Timer: {self.function_name} with parameters: {self.function_arguments} in {self.delay} seconds."
 
 
 class Timer(Skill):
@@ -145,15 +146,15 @@ class Timer(Skill):
         return prompt
 
     @tool(
-        description="Set a timer to execute a function after a delay. Use for scheduling future actions, recurring tasks, or delayed execution. Supports looping for periodic operations."
+        description="Set a timer to execute a function after a delay, in background or a loop. Use for scheduling future actions, recurring tasks, or delayed execution. Supports looping for periodic operations. Use silent for example in quick loops."
     )
     async def set_timer(
         self,
         delay: float,
-        function: str,
-        parameters: dict[str, any],
+        function_name: str,
+        function_arguments_json: str,
         is_loop: bool = False,
-        loops: int = 1,
+        loop_counts: int = -1,
         silent: bool = False,
     ) -> str:
         """
@@ -161,50 +162,55 @@ class Timer(Skill):
 
         Args:
             delay: The delay in seconds.
-            function: The name of the function to execute.
-            parameters: The parameters for the function.
+            function_name: The name of the function to execute.
+            function_arguments_json: The parameters for the function in json format.
             is_loop: Whether the timer should loop.
-            loops: Number of loops (-1 for infinite).
+            loop_counts: Number of loops (-1 for infinite).
             silent: Whether to suppress output.
         """
         if delay < 0:
             return "Error: Delay must be greater than 0."
 
-        if "." in function:
-            function = function.split(".")[1]
+        if "." in function_name:
+            function_name = function_name.split(".")[1]
 
         # check if tool call exists
         tool_call = next(
             (
                 tool
                 for tool in self.wingman.build_tools()
-                if tool.get("function", {}).get("name", False) == function
+                if tool.get("function", {}).get("name", False) == function_name
             ),
             None,
         )
 
         # if not valid it might be a command
-        if not tool_call and self.wingman.get_command(function):
-            parameters = {"command_name": function}
-            function = "execute_command"
+        if not tool_call and self.wingman.get_command(function_name):
+            function_arguments_json = {"command_name": function_name}
+            function_name = "execute_command"
             tool_call = True  # Mark as found
 
         if not tool_call:
-            return f"Error: Function '{function}' does not exist."
+            return f"Error: Function '{function_name}' does not exist."
+
+        try:
+            function_arguments = json.loads(function_arguments_json)
+        except json.JSONDecodeError:
+            return "Error: Invalid JSON in function_arguments_json."
 
         # set timer
         timer = ActualTimer(
             delay=int(delay),
             is_loop=is_loop,
-            loops=loops,
+            loops=loop_counts,
             silent=silent,
-            function=function,
-            parameters=parameters,
+            function_name=function_name,
+            function_arguments=function_arguments,
         )
         self.timers[timer.id] = timer
         return f"Timer set with id {timer.id}.\n\n{await self.get_timer_status()}"
 
-    @tool(description="Get a list of all running timers.")
+    @tool(description="Get a list of all running timers. Keep IDs to yourself.")
     async def get_timer_status(self) -> list[dict[str, any]]:
         """Get a list of all running timers and their remaining time and id."""
         timers = []
@@ -279,7 +285,7 @@ class Timer(Skill):
         return f"Timer with id '{id}' settings have been changed.\n\n{await self.get_timer_status()}"
 
     @tool(
-        description="Remind the user with a message. Use when user says 'remind me to...', 'don't let me forget...', or needs to be notified about something later."
+        description="Remind the user with a message. Use as 'function_name' in 'set_timer'-tool when user says 'remind me to...', 'don't let me forget...', or needs to be notified about something later."
     )
     async def remind_me(self, message: str) -> str:
         """
@@ -317,12 +323,12 @@ class Timer(Skill):
             return
 
         timer = self.timers[timer_id]
-
-        function_response, instant_response, used_skill = (
+        function_response, instant_response, used_skill, tool_label = (
             await self.wingman.execute_command_by_function_call(
-                timer.function, timer.parameters
+                timer.function_name, timer.function_arguments
             )
         )
+
         response = instant_response or function_response
         if response:
             summary = await self._summarize_timer_execution(timer, response)
@@ -338,7 +344,7 @@ class Timer(Skill):
                 await self.wingman.play_to_user(summary, True)
 
         if not timer.is_loop or timer.loops == 1:
-            # we cant delete it here, because we are iterating over the timers in a sepereate thread
+            # we cant delete it here, because we are iterating over the timers in a separate thread
             timer.deleted = True
             return
 
@@ -356,11 +362,11 @@ class Timer(Skill):
             {
                 "role": "user",
                 "content": f"""
-                    Timed "{timer.function}" with "{timer.parameters}" was executed.
+                    Timed "{timer.function_name}" with "{timer.function_arguments}" was executed.
                     Create a small summary of what was executed.
                     Dont mention it was a function call, go by the meaning.
                     For example dont say command 'LandingGearUp' was executed, say 'Landing gear retracted'.
-                    The summary should must be in the same message as the previous user message.
+                    The summary language must be in the same language as the previous user message.
                     The function response:
                     ```
                     {response}
