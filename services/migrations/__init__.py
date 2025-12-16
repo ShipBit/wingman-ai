@@ -44,18 +44,9 @@ def discover_migrations() -> List[Tuple[str, str, Type[BaseMigration]]]:
                     and hasattr(obj, "old_version")
                     and hasattr(obj, "new_version")
                 ):
-
-                    # Get version properties (they may be properties or class attributes)
-                    old_ver = (
-                        obj.old_version
-                        if isinstance(obj.old_version, str)
-                        else obj.old_version.fget(None)
-                    )
-                    new_ver = (
-                        obj.new_version
-                        if isinstance(obj.new_version, str)
-                        else obj.new_version.fget(None)
-                    )
+                    # Get version attributes (class attributes, not properties)
+                    old_ver = obj.old_version
+                    new_ver = obj.new_version
 
                     migrations.append((old_ver, new_ver, obj))
 

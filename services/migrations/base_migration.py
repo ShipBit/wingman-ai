@@ -66,17 +66,10 @@ class BaseMigration(ABC):
         self.system_manager = service.system_manager
         self.templates_dir = service.templates_dir
 
-    @property
-    @abstractmethod
-    def old_version(self) -> str:
-        """Source version for this migration (e.g., '1_8_0')."""
-        pass
-
-    @property
-    @abstractmethod
-    def new_version(self) -> str:
-        """Target version for this migration (e.g., '1_8_1')."""
-        pass
+    # Version identifiers - implement as class attributes in subclasses
+    # Example: old_version = "1_8_0"
+    old_version: str
+    new_version: str
 
     def migrate_settings(self, old: dict, new: dict) -> dict:
         """Transform settings.yaml from old to new version.
