@@ -5,7 +5,7 @@ import shutil
 from typing import Callable, Optional
 from pydantic import ValidationError
 from api.enums import LogType
-from api.interface import CustomProperty, NestedConfig, SettingsConfig
+from api.interface import NestedConfig, SettingsConfig
 from services.config_manager import (
     CONFIGS_DIR,
     DEFAULT_PREFIX,
@@ -13,7 +13,7 @@ from services.config_manager import (
     ConfigManager,
 )
 from services.file import get_users_dir, get_custom_skills_dir, get_audio_library_dir
-from services.module_manager import ModuleManager
+from services.migrations import discover_migrations
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
@@ -34,80 +34,95 @@ class ConfigMigrationService:
         self.log_message: str = datetime.now().strftime("%Y-%m-%d-%H-%M-%S") + "\n"
         self.users_dir = get_users_dir()
         self.templates_dir = config_manager.templates_dir
-        self.latest_version = MIGRATIONS[-1][1]
-        self.latest_config_path = path.join(
-            self.users_dir, self.latest_version, CONFIGS_DIR
+
+        # Auto-discover migrations from migrations/ directory
+        self.migrations = discover_migrations()
+        self.latest_version = self.migrations[-1][1] if self.migrations else None
+        self.latest_config_path = (
+            path.join(self.users_dir, self.latest_version, CONFIGS_DIR)
+            if self.latest_version
+            else None
         )
 
     def migrate_to_latest(self):
-
-        # Find the latest migratable version to start migration from
-        # (skips legacy versions and any intermediate versions the user already has)
-        start_version = self.find_latest_migratable_version(self.users_dir)
-
-        if not start_version:
-            self.log("No valid version directories found for migration.", True)
-            # Fresh install - apply CUDA auto-detection for FasterWhisper
-            self._apply_fresh_install_cuda_settings()
-            return
-
-        # Check if the latest version is already migrated
-
+        # Check if the latest version already exists with configs
         migration_file = path.join(self.latest_config_path, MIGRATION_LOG)
 
+        # If migration file exists, we're already migrated
         if path.exists(migration_file):
+            self.log(f"Found {self.latest_version} configs. No migrations needed.")
+            return
+
+        # Find the latest migratable version to start migration from
+        # Check this BEFORE checking if settings.yaml exists, because ConfigManager
+        # may have created fresh template files even though we should migrate
+        start_version = self.find_latest_migratable_version(self.users_dir)
+
+        # If we found an old version to migrate from, proceed with migration
+        if start_version:
+            self.log_highlight(
+                f"Starting migration from version {start_version.replace('_', '.')} to {self.latest_version.replace('_', '.')}"
+            )
+
+            # If the latest version directory already exists (e.g., created by ConfigManager),
+            # clean up any template configs that will be migrated from old versions
+            if path.exists(self.latest_config_path):
+                self.remove_duplicate_template_configs(
+                    start_version, self.latest_version
+                )
+
+            # Copy custom skills from the LATEST existing version to new version
+            # This ensures we get the most up-to-date custom skills
             self.log(
-                f"Found {self.latest_version} configs. No migrations needed.", False
+                f"Found latest existing version for custom skills: {start_version}"
+            )
+            custom_skills = []
+            if start_version != self.latest_version:
+                custom_skills = self.copy_custom_skills(
+                    start_version, self.latest_version
+                )
+
+            # Migrate audio library from versioned location to non-versioned location
+            # Only check 1.8.1 and 1.8.2 (most users come from 1.8.1, 1.8.2 was dev-only)
+            self.migrate_audio_library()
+
+            # Perform migrations
+            current_version = start_version
+            while current_version != self.latest_version:
+                next_version = self.find_next_version(current_version)
+                self.perform_migration(current_version, next_version)
+                current_version = next_version
+
+            # Warn about custom skills that need manual review
+            if custom_skills:
+                for skill_name in custom_skills:
+                    warning_message = f"Custom skill '{skill_name}' was copied from the old version and might need manual migration!"
+                    self.printr.print(
+                        warning_message,
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                    self.log_message += f"{warning_message}\n"
+
+            self.log_highlight(
+                f"Migration completed successfully. Current version: {self.latest_version.replace('_', '.')}"
             )
             return
 
-        self.log(
-            f"Starting migration from version {start_version.replace('_', '.')} to {self.latest_version.replace('_', '.')}",
-            True,
-        )
-
-        # If the latest version directory already exists (e.g., created by ConfigManager),
-        # clean up any template configs that will be migrated from old versions
-        if path.exists(self.latest_config_path) and start_version:
-            self.remove_duplicate_template_configs(start_version, self.latest_version)
-
-        # Copy custom skills from the LATEST existing version to new version
-        # This ensures we get the most up-to-date custom skills
-        self.log(f"Found latest existing version for custom skills: {start_version}")
-        custom_skills = []
-        if start_version and start_version != self.latest_version:
-            custom_skills = self.copy_custom_skills(start_version, self.latest_version)
-        else:
+        # No old version found - check if this is an existing installation or fresh install
+        settings_file = path.join(self.latest_config_path, "settings.yaml")
+        if path.exists(settings_file):
             self.log(
-                f"Skipping custom skills copy - start_version: {start_version}, latest_version: {self.latest_version}"
+                f"Found existing {self.latest_version} configs. No migrations needed."
             )
+            # Create migration marker to avoid this check on next startup
+            with open(migration_file, "w") as f:
+                f.write(f"Version {self.latest_version} - no migration required\n")
+            return
 
-        # Migrate audio library from versioned location to non-versioned location
-        # Only check 1.8.1 and 1.8.2 (most users come from 1.8.1, 1.8.2 was dev-only)
-        self.migrate_audio_library()
-
-        # Perform migrations
-        current_version = start_version
-        while current_version != self.latest_version:
-            next_version = self.find_next_version(current_version)
-            self.perform_migration(current_version, next_version)
-            current_version = next_version
-
-        # Warn about custom skills that need manual review
-        if custom_skills:
-            for skill_name in custom_skills:
-                warning_message = f"Custom skill '{skill_name}' was copied from the old version and might need manual migration!"
-                self.printr.print(
-                    warning_message,
-                    color=LogType.WARNING,
-                    server_only=True,
-                )
-                self.log_message += f"{warning_message}\n"
-
-        self.log(
-            f"Migration completed successfully. Current version: {self.latest_version.replace('_', '.')}",
-            True,
-        )
+        # No old version and no existing configs - fresh install
+        self.log_highlight("No valid version directories found for migration.")
+        self._apply_fresh_install_cuda_settings()
 
     def find_latest_migratable_version(self, users_dir):
         """Find the latest migratable version to start migration from.
@@ -140,23 +155,30 @@ class ConfigMigrationService:
         return None
 
     def find_next_version(self, current_version):
-        for old, new, _ in MIGRATIONS:
+        """Find the next version in the migration chain."""
+        for old, new, _ in self.migrations:
             if old == current_version:
                 return new
         return None
 
     def perform_migration(self, old_version, new_version):
-        migration_func = next(
-            (m[2] for m in MIGRATIONS if m[0] == old_version and m[1] == new_version),
+        """Execute a single migration step."""
+        migration_class = next(
+            (
+                m[2]
+                for m in self.migrations
+                if m[0] == old_version and m[1] == new_version
+            ),
             None,
         )
 
-        if migration_func:
-            self.log(
-                f"Migrating from {old_version.replace('_', '.')} to {new_version.replace('_', '.')}",
-                True,
+        if migration_class:
+            self.log_highlight(
+                f"Migrating from {old_version.replace('_', '.')} to {new_version.replace('_', '.')}"
             )
-            migration_func(self)
+            # Instantiate and execute the migration
+            migration = migration_class(self)
+            migration.execute()
         else:
             self.err(f"No migration path found from {old_version} to {new_version}")
             raise ValueError(
@@ -186,7 +208,8 @@ class ConfigMigrationService:
         )
 
     def is_valid_version(self, version):
-        return any(version in migration[:2] for migration in MIGRATIONS)
+        """Check if a version exists in the migration chain."""
+        return any(version in migration[:2] for migration in self.migrations)
 
     def is_version_too_old(self, version):
         """Check if a version is older than the minimum supported version."""
@@ -228,6 +251,12 @@ class ConfigMigrationService:
             settings.voice_activation.fasterwhisper.compute_type = compute_type
             self.config_manager.save_settings_config()
             self.log("- settings saved successfully")
+
+        # Create migration marker to prevent this check on next startup
+        migration_file = path.join(self.latest_config_path, MIGRATION_LOG)
+        with open(migration_file, "w") as f:
+            f.write(f"Fresh install - Version {self.latest_version}\n")
+        self.log("- migration marker created")
 
     def reset_to_fresh_configs(self):
         """Copy fresh configs from templates to the latest version directory.
@@ -271,7 +300,7 @@ class ConfigMigrationService:
             with open(migration_file, "w", encoding="UTF-8") as stream:
                 stream.write(self.log_message)
 
-            self.log("Fresh configs installed successfully!", True)
+            self.log_highlight("Fresh configs installed successfully!")
 
         except Exception as e:
             self.err(f"Failed to reset to fresh configs: {str(e)}")
@@ -311,9 +340,8 @@ class ConfigMigrationService:
             self.log("No audio library found in 1.8.1 or 1.8.2, skipping migration")
             return
 
-        self.log(
-            f"Found audio library in {source_version.replace('_', '.')}, migrating to non-versioned location",
-            highlight=True,
+        self.log_highlight(
+            f"Found audio library in {source_version.replace('_', '.')}, migrating to non-versioned location"
         )
 
         files_copied = 0
@@ -352,9 +380,8 @@ class ConfigMigrationService:
                 except Exception as e:
                     self.err(f"Failed to copy audio file '{file}': {str(e)}")
 
-        self.log(
-            f"Audio library migration complete: {files_copied} files copied, {files_skipped} files skipped (already exist)",
-            highlight=True,
+        self.log_highlight(
+            f"Audio library migration complete: {files_copied} files copied, {files_skipped} files skipped (already exist)"
         )
 
     def copy_custom_skills(self, old_version: str, new_version: str) -> list[str]:
@@ -390,16 +417,6 @@ class ConfigMigrationService:
         if path.exists(SKILLS_DIR):
             for item in os.listdir(SKILLS_DIR):
                 item_path = path.join(SKILLS_DIR, item)
-                if self._is_valid_skill_directory(item_path):
-                    builtin_skills.add(item)
-
-        # Also check migration template skills (for older version detection)
-        template_skills_dir = path.join(
-            self.templates_dir, "migration", new_version, "skills"
-        )
-        if path.exists(template_skills_dir):
-            for item in os.listdir(template_skills_dir):
-                item_path = path.join(template_skills_dir, item)
                 if self._is_valid_skill_directory(item_path):
                     builtin_skills.add(item)
 
@@ -445,7 +462,7 @@ class ConfigMigrationService:
 
             # If skill is not in built-in skills, it's a custom skill
             if is_custom:
-                self.log(f"Found custom skill: {skill_name}", warning=True)
+                self.log_warning(f"Found custom skill: {skill_name}")
                 new_skill_path = path.join(custom_skills_target_dir, skill_name)
 
                 try:
@@ -464,9 +481,8 @@ class ConfigMigrationService:
                         len(files) for _, _, files in os.walk(new_skill_path)
                     )
 
-                    self.log(
-                        f"Migrated CUSTOM skill '{skill_name}' to custom_skills/ ({file_count} files)",
-                        highlight=True,
+                    self.log_highlight(
+                        f"Migrated CUSTOM skill '{skill_name}' to custom_skills/ ({file_count} files)"
                     )
                     custom_skills_copied.append(skill_name)
                 except Exception as e:
@@ -474,477 +490,7 @@ class ConfigMigrationService:
 
         return custom_skills_copied
 
-    # MIGRATIONS
-
-    def migrate_170_to_180(self):
-        def migrate_settings(old: dict, new: dict) -> dict:
-            old_region = old["wingman_pro"]["region"]
-            if old_region == "europe":
-                old["wingman_pro"][
-                    "base_url"
-                ] = "https://wingman-api-europe.azurewebsites.net"
-            else:
-                old["wingman_pro"][
-                    "base_url"
-                ] = "https://wingman-api-usa.azurewebsites.net"
-
-            self.log(f"- set new base url based on region {old_region}")
-
-            old["voice_activation"]["fasterwhisper_config"]["hotwords"] = []
-            old["voice_activation"]["fasterwhisper_config"]["additional_hotwords"] = []
-            self.log("- reset Voice Activation hotwords")
-
-            old["cancel_tts_key"] = "Shift+y"
-            self.log("- set new 'Shut up key' to 'Shift+y'")
-            return old
-
-        def migrate_defaults(old: dict, new: dict) -> dict:
-            # openai tts
-            old["openai"]["tts_model"] = "tts-1"
-            old["openai"]["tts_speed"] = 1.0
-            self.log("- added new properties: openai.tts_model, openai.tts_speed")
-
-            old["hume"] = new["hume"]
-            self.log("- added new property: hume")
-
-            # openai-compatible tts
-            old["openai_compatible_tts"] = new["openai_compatible_tts"]
-            self.log("- added new property: openai_compatible_tts")
-
-            # perplexity model
-            old["perplexity"]["conversation_model"] = "sonar"
-            self.log(
-                "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
-            )
-
-            # FasterWhisper hotwords
-            old["fasterwhisper"]["hotwords"] = []
-            old["fasterwhisper"]["additional_hotwords"] = []
-            self.log("- reset FasterWhisper hotwords")
-
-            return old
-
-        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
-            # skill overrides
-            if old.get("skills", None):
-                for skill in old["skills"]:
-                    skill.pop("description", None)
-                    skill.pop("examples", None)
-                    skill.pop("category", None)
-                    skill.pop("hint", None)
-
-                    skill_module = skill.get("module", "")
-                    self.log(
-                        f"- Skill {skill_module}: removed property overrides: description, examples, category, hint"
-                    )
-
-            # perplexity model
-            if old.get("perplexity", {}).get("conversation_model", None):
-                # models got replaced
-                old["perplexity"]["conversation_model"] = "sonar"
-                self.log(
-                    "- migrated perplexity model to new default (sonar), previous models don't exist anymore"
-                )
-
-            if old.get("fasterwhisper", None):
-                old["fasterwhisper"]["hotwords"] = []
-                old["fasterwhisper"]["additional_hotwords"] = []
-            self.log("- reset FasterWhisper hotwords")
-
-            return old
-
-        self.migrate(
-            old_version="1_7_0",
-            new_version="1_8_0",
-            migrate_settings=migrate_settings,
-            migrate_defaults=migrate_defaults,
-            migrate_wingman=migrate_wingman,
-        )
-
-    def migrate_180_to_181(self):
-        def migrate_settings(old: dict, new: dict) -> dict:
-            return old
-
-        def migrate_defaults(old: dict, new: dict) -> dict:
-            return old
-
-        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
-            return old
-
-        self.migrate(
-            old_version="1_8_0",
-            new_version="1_8_1",
-            migrate_settings=migrate_settings,
-            migrate_defaults=migrate_defaults,
-            migrate_wingman=migrate_wingman,
-        )
-
-    def migrate_181_to_182(self):
-        def migrate_settings(old: dict, new: dict) -> dict:
-            return old
-
-        def migrate_defaults(old: dict, new: dict) -> dict:
-            old["inworld"] = new["inworld"]
-            self.log("- added new property: inworld")
-
-            old["elevenlabs"]["use_tts_prompt"] = False
-            old["elevenlabs"]["tts_prompt"] = new["elevenlabs"]["tts_prompt"]
-            self.log(
-                "- added new property: elevenlabs.use_tts_prompt, elevenlabs.tts_prompt"
-            )
-
-            old["openai"]["output_streaming"] = True
-            self.log("- added new property: openai.output_streaming")
-
-            old["openai_compatible_tts"]["output_streaming"] = True
-            self.log("- added new property: openai_compatible_tts.output_streaming")
-
-            return old
-
-        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
-            return old
-
-        self.migrate(
-            old_version="1_8_1",
-            new_version="1_8_2",
-            migrate_settings=migrate_settings,
-            migrate_defaults=migrate_defaults,
-            migrate_wingman=migrate_wingman,
-        )
-
-    def migrate_182_to_190(self):
-        def migrate_settings(old: dict, new: dict) -> dict:
-            # Auto-detect CUDA availability and set FasterWhisper device accordingly
-            cuda_available = self.system_manager.is_cuda_available()
-            gpu_name = self.system_manager.get_gpu_name()
-
-            device = "cuda" if cuda_available else "cpu"
-            compute_type = "auto"
-
-            # Ensure the structure exists
-            if "voice_activation" not in old:
-                old["voice_activation"] = {}
-            if "fasterwhisper" not in old["voice_activation"]:
-                old["voice_activation"]["fasterwhisper"] = {}
-
-            old["voice_activation"]["fasterwhisper"]["device"] = device
-            old["voice_activation"]["fasterwhisper"]["compute_type"] = compute_type
-
-            self.log(f"- detected GPU: {gpu_name or 'None'}")
-            self.log(
-                f"- set voice_activation.fasterwhisper.device to '{device}' (CUDA {'available' if cuda_available else 'not available'})"
-            )
-            self.log(
-                f"- set voice_activation.fasterwhisper.compute_type to '{compute_type}'"
-            )
-
-            return old
-
-        # Models removed from Wingman Pro - migrate to gpt-4o-mini
-        removed_wingman_pro_models = [
-            "gpt-4o",
-            "mistral-large-latest",
-            "llama3-8b",
-            "llama3-70b",
-        ]
-
-        def migrate_defaults(old: dict, new: dict) -> dict:
-            old["xai"] = new["xai"]
-            self.log("- added new property: xai")
-
-            # Disable AI instant responses (feature removed in 1.9)
-            if "features" not in old:
-                old["features"] = {}
-            old["features"]["use_generic_instant_responses"] = False
-            self.log(
-                "- disabled features.use_generic_instant_responses (feature removed)"
-            )
-
-            # Migrate deprecated Wingman Pro conversation models
-            if "wingman_pro" in old and "conversation_deployment" in old["wingman_pro"]:
-                current_model = old["wingman_pro"]["conversation_deployment"]
-                if current_model in removed_wingman_pro_models:
-                    old["wingman_pro"]["conversation_deployment"] = "gpt-4o-mini"
-                    self.log(
-                        f"- migrated wingman_pro.conversation_deployment from '{current_model}' to 'gpt-4o-mini' (model removed)"
-                    )
-
-            old["google"]["conversation_model"] = "gemini-flash-latest"
-            self.log("- set Google default model to gemini-flash-latest")
-            old["mistral"]["conversation_model"] = "mistral-medium-latest"
-            self.log("- set Mistral default model to mistral-medium-latest")
-            old["cerebras"]["conversation_model"] = "qwen-3-32b"
-            self.log("- set Cerebras default model to qwen-3-32b")
-            old["openrouter"]["conversation_model"] = "google/gemini-2.5-flash"
-            self.log("- set OpenRouter default model to google/gemini-2.5-flash")
-            old["groq"]["conversation_model"] = "qwen/qwen3-32b"
-            self.log("- set Groq default model to qwen/qwen3-32b")
-
-            # Force override prompts with new MCP-optimized versions
-            # These new prompts establish tool-first behavior and cleaner TTS instructions
-            if "prompts" not in old:
-                old["prompts"] = {}
-            old["prompts"]["system_prompt"] = new["prompts"]["system_prompt"]
-            self.log(
-                "- force updated prompts.system_prompt (MCP tool-first architecture)"
-            )
-
-            # Force update TTS prompts for ElevenLabs and Inworld
-            if "elevenlabs" in new:
-                old["elevenlabs"]["tts_prompt"] = new["elevenlabs"]["tts_prompt"]
-                self.log("- force updated elevenlabs.tts_prompt (new v3 audio tags)")
-
-            if "inworld" in new:
-                old["inworld"]["tts_prompt"] = new["inworld"]["tts_prompt"]
-                self.log("- force updated inworld.tts_prompt (new audio markup format)")
-                if "audio_config" in old["inworld"]:
-                    del old["inworld"]["audio_config"]["pitch"]
-                    self.log(
-                        "- removed inworld.audio_config.pitch (no longer supported)"
-                    )
-                    # Add streaming_sample_rate_hertz for better streaming quality
-                    old["inworld"]["audio_config"]["streaming_sample_rate_hertz"] = new[
-                        "inworld"
-                    ]["audio_config"]["streaming_sample_rate_hertz"]
-                    self.log("- added inworld.audio_config.streaming_sample_rate_hertz")
-
-            return old
-
-        def migrate_wingman(old: dict, new: Optional[dict]) -> dict:
-            # Clear prompt overrides so everyone uses the new defaults
-            # IMPORTANT: We keep 'backstory' - only clear system_prompt and tts_prompt
-            changes_made = []
-
-            # Migrate deprecated Wingman Pro conversation models
-            if "wingman_pro" in old and "conversation_deployment" in old["wingman_pro"]:
-                current_model = old["wingman_pro"]["conversation_deployment"]
-                if current_model in removed_wingman_pro_models:
-                    old["wingman_pro"]["conversation_deployment"] = "gpt-4o-mini"
-                    changes_made.append(
-                        f"wingman_pro.conversation_deployment ('{current_model}' -> 'gpt-4o-mini')"
-                    )
-
-            # Clear system_prompt override (force use of new default)
-            if "prompts" in old:
-                if "system_prompt" in old["prompts"]:
-                    del old["prompts"]["system_prompt"]
-                    changes_made.append("prompts.system_prompt")
-                # Remove prompts dict if empty
-                if not old["prompts"]:
-                    del old["prompts"]
-
-            # Clear ElevenLabs tts_prompt override
-            if "elevenlabs" in old and "tts_prompt" in old["elevenlabs"]:
-                del old["elevenlabs"]["tts_prompt"]
-                changes_made.append("elevenlabs.tts_prompt")
-                # Remove elevenlabs dict if empty
-                if not old["elevenlabs"]:
-                    del old["elevenlabs"]
-
-            # Clear Inworld tts_prompt override
-            if "inworld" in old and "tts_prompt" in old["inworld"]:
-                del old["inworld"]["tts_prompt"]
-                changes_made.append("inworld.tts_prompt")
-                # Remove inworld dict if empty
-                if not old["inworld"]:
-                    del old["inworld"]
-
-            # Skills removed in 1.9.0 (converted to MCP servers or deprecated)
-            # We must remove any config overrides for these skills
-            removed_skill_modules = {
-                "skills.google_search.main",
-                "skills.web_search.main",
-                "skills.time_and_date_retriever.main",
-                "skills.nms_assistant.main",
-                "skills.ask_perplexity.main",
-            }
-
-            # Clean up old skills array but PRESERVE custom property and prompt overrides
-            # Skills are now auto-loaded, but overrides per wingman still need to be saved
-            # Skip overrides for removed skills - they no longer exist
-            if "skills" in old:
-                skills_with_overrides = []
-                for skill in old["skills"]:
-                    skill_module = skill.get("module", "")
-
-                    # Skip removed skills entirely - don't preserve their overrides
-                    if skill_module in removed_skill_modules:
-                        changes_made.append(
-                            f"removed skill config for '{skill_module}' (skill deprecated)"
-                        )
-                        continue
-
-                    has_custom_props = skill.get("custom_properties")
-                    has_prompt = skill.get("prompt")
-
-                    if has_custom_props or has_prompt:
-                        stripped_skill = {"module": skill_module}
-
-                        # Keep prompt override if present
-                        if has_prompt:
-                            stripped_skill["prompt"] = has_prompt
-
-                        # Custom properties in wingman config are diffs - they only contain
-                        # the id and overridden values. We need to merge with the skill's
-                        # default_config.yaml to get complete valid CustomProperty objects.
-                        if has_custom_props:
-                            valid_props = []
-                            skill_module = skill.get("module", "")
-
-                            # Get the skill's default custom properties
-                            skill_default_props = (
-                                self._get_skill_default_custom_properties(skill_module)
-                            )
-
-                            for prop in has_custom_props:
-                                prop_id = prop.get("id")
-                                if not prop_id:
-                                    continue
-
-                                # Find the default property with this id
-                                default_prop = skill_default_props.get(prop_id)
-                                if default_prop:
-                                    # Merge: start with default, override with wingman values
-                                    merged_prop = default_prop.copy()
-                                    merged_prop.update(prop)
-                                    # Remove examples field if present (not needed in wingman config)
-                                    merged_prop.pop("examples", None)
-
-                                    try:
-                                        CustomProperty(**merged_prop)
-                                        valid_props.append(merged_prop)
-                                    except ValidationError as e:
-                                        self.log(
-                                            f"- skipped custom property '{prop_id}' in skill '{skill_module}': validation failed after merge",
-                                            warning=True,
-                                        )
-                                else:
-                                    # No default found - try to validate as-is (might be a custom skill prop)
-                                    try:
-                                        CustomProperty(**prop)
-                                        valid_props.append(prop)
-                                    except ValidationError:
-                                        self.log(
-                                            f"- skipped custom property '{prop_id}' in skill '{skill_module}': no default found and incomplete",
-                                            warning=True,
-                                        )
-
-                            if valid_props:
-                                stripped_skill["custom_properties"] = valid_props
-
-                        # Only add skill if it still has overrides
-                        if stripped_skill.get("prompt") or stripped_skill.get(
-                            "custom_properties"
-                        ):
-                            skills_with_overrides.append(stripped_skill)
-
-                if skills_with_overrides:
-                    old["skills"] = skills_with_overrides
-                    changes_made.append(
-                        f"skills (kept {len(skills_with_overrides)} skill(s) with overrides)"
-                    )
-                else:
-                    del old["skills"]
-                    changes_made.append("skills (removed - no overrides)")
-
-            # Set discoverable_skills and discoverable_mcps for wingmen
-            wingman_name = old.get("name", "")
-
-            # For template wingmen (ATC, Computer, Clippy), read from their template.yaml
-            # For custom wingmen, build from skills with discoverable_by_default=True
-            if wingman_name in ("ATC", "Computer", "Clippy"):
-                # Read discoverable skills/mcps from template
-                template_path = self._get_template_path(wingman_name)
-                if template_path and path.exists(template_path):
-                    template_config = ModuleManager.read_config(template_path)
-                    if template_config:
-                        # Template already has new 1.9.0 format with discoverable_skills/discoverable_mcps
-                        old["discoverable_skills"] = template_config.get(
-                            "discoverable_skills", []
-                        )
-                        changes_made.append(
-                            f"discoverable_skills ({len(old['discoverable_skills'])} skills from template)"
-                        )
-
-                        old["discoverable_mcps"] = template_config.get(
-                            "discoverable_mcps", []
-                        )
-                        changes_made.append(
-                            f"discoverable_mcps ({len(old['discoverable_mcps'])} MCPs from template)"
-                        )
-                    else:
-                        # Fallback: couldn't read template
-                        self.log(
-                            f"Warning: Could not read template for {wingman_name}, using discoverable defaults",
-                            warning=True,
-                        )
-                        old["discoverable_skills"] = (
-                            self._get_skills_discoverable_by_default()
-                        )
-                        old["discoverable_mcps"] = (
-                            self._get_mcps_discoverable_by_default()
-                        )
-                else:
-                    # Fallback: couldn't find template
-                    self.log(
-                        f"Warning: Could not find template for {wingman_name}, using discoverable defaults",
-                        warning=True,
-                    )
-                    old["discoverable_skills"] = (
-                        self._get_skills_discoverable_by_default()
-                    )
-                    old["discoverable_mcps"] = self._get_mcps_discoverable_by_default()
-            else:
-                # Custom wingman: build discoverable lists from defaults
-                old["discoverable_skills"] = self._get_skills_discoverable_by_default()
-                changes_made.append(
-                    f"discoverable_skills (custom wingman: {len(old['discoverable_skills'])} skills discoverable by default)"
-                )
-
-                old["discoverable_mcps"] = self._get_mcps_discoverable_by_default()
-                changes_made.append(
-                    f"discoverable_mcps (custom wingman: {len(old['discoverable_mcps'])} MCPs discoverable by default)"
-                )
-
-            # MCP servers are now centralized in mcp.yaml
-            # Remove old per-wingman mcp array if it exists (shouldn't in 1.8.2, but clean up)
-            if "mcp" in old:
-                del old["mcp"]
-                changes_made.append("mcp (removed - now centralized in mcp.yaml)")
-
-            # Remove old disabled_skills/disabled_mcps if they exist (from pre-1.9 or manual edits)
-            if "disabled_skills" in old:
-                del old["disabled_skills"]
-            if "disabled_mcps" in old:
-                del old["disabled_mcps"]
-
-            if changes_made:
-                self.log(f"- cleared/updated: {', '.join(changes_made)}")
-
-            return old
-
-        def migrate_mcp(old: dict, new: dict) -> dict:
-            # For 1.8.2 -> 1.9.0, we're creating mcp.yaml fresh from template
-            # Just use the new template values
-            return new
-
-        def migrate_secrets(old: dict) -> dict:
-            if "local_llm" not in old:
-                old["local_llm"] = "not-set"
-                self.log("- added new secret: local_llm")
-            return old
-
-        self.migrate(
-            old_version="1_8_2",
-            new_version="1_9_0",
-            migrate_settings=migrate_settings,
-            migrate_defaults=migrate_defaults,
-            migrate_wingman=migrate_wingman,
-            migrate_secrets=migrate_secrets,
-            migrate_mcp=migrate_mcp,
-        )
-
-    # INTERNAL
+    # INTERNAL - Helper methods that may be used by migrations
 
     def _is_valid_skill_directory(self, skill_path: str) -> bool:
         """Check if a directory is a valid skill by verifying it has required files.
@@ -1017,9 +563,8 @@ class ConfigMigrationService:
                 if skill.config.discoverable_by_default is not False:
                     discoverable_by_default.append(skill.name)
         except Exception as e:
-            self.log(
-                f"Warning: Could not read skills for discoverable_by_default check: {e}",
-                warning=True,
+            self.log_warning(
+                f"Warning: Could not read skills for discoverable_by_default check: {e}"
             )
 
         return discoverable_by_default
@@ -1038,10 +583,7 @@ class ConfigMigrationService:
             for skill in all_skills:
                 all_names.append(skill.name)
         except Exception as e:
-            self.log(
-                f"Warning: Could not read skills for all skill names: {e}",
-                warning=True,
-            )
+            self.log_warning(f"Warning: Could not read skills for all skill names: {e}")
 
         return all_names
 
@@ -1145,26 +687,25 @@ class ConfigMigrationService:
 
         return {}
 
-    def log(self, message: str, highlight: bool = False, warning: bool = False):
-        if warning:
-            color = LogType.WARNING
-        elif highlight:
-            color = LogType.STARTUP
-        else:
-            color = LogType.SYSTEM
-        self.printr.print(
-            message,
-            color=color,
-            server_only=True,
-        )
-        self.log_message += f"{message}\n"
+    def log(self, message: str):
+        """Log a normal message."""
+        self._log_with_color(message, LogType.SYSTEM)
+
+    def log_highlight(self, message: str):
+        """Log a highlighted message."""
+        self._log_with_color(message, LogType.STARTUP)
+
+    def log_warning(self, message: str):
+        """Log a warning message."""
+        self._log_with_color(message, LogType.WARNING)
 
     def err(self, message: str):
-        self.printr.print(
-            message,
-            color=LogType.ERROR,
-            server_only=True,
-        )
+        """Log an error message."""
+        self._log_with_color(message, LogType.ERROR)
+
+    def _log_with_color(self, message: str, color: LogType):
+        """Internal method to log with specified color."""
+        self.printr.print(message, color=color, server_only=True)
         self.log_message += f"{message}\n"
 
     def normalize_config_name(self, config_name: str) -> str:
@@ -1213,9 +754,8 @@ class ConfigMigrationService:
                 normalized = self.normalize_config_name(item)
                 if normalized in old_config_normalized:
                     shutil.rmtree(item_path)
-                    self.log(
-                        f"Removed template config '{item}' - will be migrated from old version (normalized: {normalized})",
-                        highlight=True,
+                    self.log_highlight(
+                        f"Removed template config '{item}' - will be migrated from old version (normalized: {normalized})"
                     )
                     # Also remove associated avatar if it exists
                     avatar_path = path.join(new_config_path, f"{item}.png")
@@ -1229,7 +769,7 @@ class ConfigMigrationService:
 
         shutil.copyfile(old_file, new_file)
 
-        self.log(f"Copied file: {path.basename(new_file)}", highlight=True)
+        self.log_highlight(f"Copied file: {path.basename(new_file)}")
 
     def migrate(
         self,
@@ -1288,9 +828,8 @@ class ConfigMigrationService:
                                 # Remove template to avoid duplicates - old version will be migrated
                                 if path.exists(new_item_path):
                                     shutil.rmtree(new_item_path)
-                                    self.log(
-                                        f"Skipped template config '{item}' - config exists in old version (normalized: {normalized})",
-                                        highlight=True,
+                                    self.log_highlight(
+                                        f"Skipped template config '{item}' - config exists in old version (normalized: {normalized})"
                                     )
                                 # Also remove associated avatar if it exists
                                 avatar_path = path.join(
@@ -1313,9 +852,8 @@ class ConfigMigrationService:
             )
             return
 
-        self.log(
-            f"Starting migration from {old_config_path} to {new_config_path}",
-            True,
+        self.log_highlight(
+            f"Starting migration from {old_config_path} to {new_config_path}"
         )
 
         for root, _dirs, files in walk(old_config_path):
@@ -1329,7 +867,7 @@ class ConfigMigrationService:
                 # secrets
                 if filename == "secrets.yaml":
                     if migrate_secrets:
-                        self.log("Migrating secrets.yaml...", True)
+                        self.log_highlight("Migrating secrets.yaml...")
                         old_secrets = self.config_manager.read_config(old_file) or {}
                         migrated_secrets = migrate_secrets(old_secrets)
                         # Write the migrated secrets
@@ -1337,7 +875,7 @@ class ConfigMigrationService:
                         if not path.exists(new_dir):
                             os.makedirs(new_dir)
                         self.config_manager.write_config(new_file, migrated_secrets)
-                        self.log("Migrated secrets.yaml", highlight=True)
+                        self.log_highlight("Migrated secrets.yaml")
                     else:
                         self.copy_file(old_file, new_file)
 
@@ -1346,7 +884,7 @@ class ConfigMigrationService:
                         secret_keeper.secrets = secret_keeper.load()
                 # settings
                 elif filename == "settings.yaml":
-                    self.log("Migrating settings.yaml...", True)
+                    self.log_highlight("Migrating settings.yaml...")
                     migrated_settings = migrate_settings(
                         old=self.config_manager.read_config(old_file),
                         new=self.config_manager.read_config(new_file),
@@ -1361,7 +899,7 @@ class ConfigMigrationService:
                         self.err(f"Unable to migrate settings.yaml:\n{str(e)}")
                 # defaults
                 elif filename == "defaults.yaml":
-                    self.log("Migrating defaults.yaml...", True)
+                    self.log_highlight("Migrating defaults.yaml...")
                     migrated_defaults = migrate_defaults(
                         old=self.config_manager.read_config(old_file),
                         new=self.config_manager.read_config(new_file),
@@ -1382,7 +920,7 @@ class ConfigMigrationService:
                         self.err(f"Unable to migrate defaults.yaml:\n{str(e)}")
                 # Wingmen
                 elif filename.endswith(".yaml"):
-                    self.log(f"Migrating Wingman {filename}...", True)
+                    self.log_highlight(f"Migrating Wingman {filename}...")
                     # defaults are already migrated because the Wingman config is in a subdirectory
                     try:
                         default_config = self.config_manager.read_default_config()
@@ -1426,10 +964,9 @@ class ConfigMigrationService:
                         # Likely a custom skill that doesn't have templates
                         error_str = str(e)
                         if "skills" in error_str and "default_config.yaml" in error_str:
-                            self.log(
+                            self.log_highlight(
                                 f"Warning: {filename} uses custom skill(s) without templates. "
-                                f"Custom skills have been copied but may need manual review.",
-                                True,
+                                f"Custom skills have been copied but may need manual review."
                             )
                         else:
                             self.err(f"Unable to migrate {filename}:\n{error_str}")
@@ -1478,12 +1015,14 @@ class ConfigMigrationService:
         if migrate_secrets:
             new_secrets_file = path.join(new_config_path, "secrets.yaml")
             if not path.exists(new_secrets_file):
-                self.log("Creating secrets.yaml (not found in old version)...", True)
+                self.log_highlight(
+                    "Creating secrets.yaml (not found in old version)..."
+                )
                 migrated_secrets = migrate_secrets({})
                 if not path.exists(new_config_path):
                     os.makedirs(new_config_path)
                 self.config_manager.write_config(new_secrets_file, migrated_secrets)
-                self.log("Created secrets.yaml with new secrets", highlight=True)
+                self.log_highlight("Created secrets.yaml with new secrets")
 
                 if new_config_path == self.latest_config_path:
                     secret_keeper = SecretKeeper()
@@ -1507,18 +1046,18 @@ class ConfigMigrationService:
 
             if path.exists(old_mcp_file):
                 # mcp.yaml exists in old version - migrate it
-                self.log("Migrating mcp.yaml...", True)
+                self.log_highlight("Migrating mcp.yaml...")
                 old_mcp_config = self.config_manager.read_config(old_mcp_file) or {}
                 migrated_mcp = migrate_mcp(old_mcp_config, new_mcp_config)
             else:
                 # mcp.yaml doesn't exist in old version - create from template
-                self.log("Creating mcp.yaml (not found in old version)...", True)
+                self.log_highlight("Creating mcp.yaml (not found in old version)...")
                 migrated_mcp = migrate_mcp({}, new_mcp_config)
 
             if not path.exists(new_config_path):
                 os.makedirs(new_config_path)
             self.config_manager.write_config(new_mcp_file, migrated_mcp)
-            self.log("Created/migrated mcp.yaml", highlight=True)
+            self.log_highlight("Created/migrated mcp.yaml")
 
             # Reload mcp config if this is the latest version
             if new_config_path == self.latest_config_path:
@@ -1541,12 +1080,3 @@ class ConfigMigrationService:
             path.join(new_config_path, MIGRATION_LOG), "w", encoding="UTF-8"
         ) as stream:
             stream.write(self.log_message)
-
-
-MIGRATIONS = [
-    ("1_7_0", "1_8_0", ConfigMigrationService.migrate_170_to_180),
-    ("1_8_0", "1_8_1", ConfigMigrationService.migrate_180_to_181),
-    ("1_8_1", "1_8_2", ConfigMigrationService.migrate_181_to_182),
-    ("1_8_2", "1_9_0", ConfigMigrationService.migrate_182_to_190),
-    # Add new migrations here in order
-]
