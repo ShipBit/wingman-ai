@@ -90,6 +90,11 @@ class ConfigMigrationService:
             current_version = start_version
             while current_version != self.latest_version:
                 next_version = self.find_next_version(current_version)
+                if next_version is None:
+                    self.err(
+                        f"No migration path found from version {current_version} to {self.latest_version}. Migration aborted."
+                    )
+                    break
                 self.perform_migration(current_version, next_version)
                 current_version = next_version
 
