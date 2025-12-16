@@ -7,16 +7,12 @@ from api.interface import (
     WingmanInitializationError,
     ConfigDirInfo,
 )
-from providers.faster_whisper import FasterWhisper
-from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.config_manager import ConfigManager
-from services.module_manager import ModuleManager
 from services.printr import Printr
-from wingmen.open_ai_wingman import OpenAiWingman
-from wingmen.wingman import Wingman
+from wingman import Wingman
 
 
 printr = Printr()
@@ -30,9 +26,9 @@ class Tower:
         config_manager: ConfigManager,
         audio_player: AudioPlayer,
         audio_library: AudioLibrary,
-        whispercpp: Whispercpp,
-        fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
+        app_root_path: str = None,
+        app_is_bundled: bool = False,
     ):
         self.audio_player = audio_player
         self.audio_library = audio_library
@@ -42,9 +38,9 @@ class Tower:
         self.wingmen: list[Wingman] = []
         self.disabled_wingmen: list[WingmanConfig] = []
         self.log_source_name = "Tower"
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
+        self.app_root_path = app_root_path
+        self.app_is_bundled = app_is_bundled
 
     async def instantiate_wingmen(self, settings: SettingsConfig):
         errors: list[WingmanInitializationError] = []
@@ -102,31 +98,18 @@ class Tower:
     ):
         wingman = None
         try:
-            # it's a custom Wingman
-            if wingman_config.custom_class:
-                wingman = ModuleManager.create_wingman_dynamically(
-                    name=wingman_name,
-                    config=wingman_config,
-                    settings=settings,
-                    audio_player=self.audio_player,
-                    audio_library=self.audio_library,
-                    whispercpp=self.whispercpp,
-                    fasterwhisper=self.fasterwhisper,
-                    xvasynth=self.xvasynth,
-                    tower=self,
-                )
-            else:
-                wingman = OpenAiWingman(
-                    name=wingman_name,
-                    config=wingman_config,
-                    settings=settings,
-                    audio_player=self.audio_player,
-                    audio_library=self.audio_library,
-                    whispercpp=self.whispercpp,
-                    fasterwhisper=self.fasterwhisper,
-                    xvasynth=self.xvasynth,
-                    tower=self,
-                )
+            # All wingmen use the unified Wingman class
+            wingman = Wingman(
+                name=wingman_name,
+                config=wingman_config,
+                settings=settings,
+                audio_player=self.audio_player,
+                audio_library=self.audio_library,
+                xvasynth=self.xvasynth,
+                tower=self,
+                app_root_path=self.app_root_path,
+                app_is_bundled=self.app_is_bundled,
+            )
         except FileNotFoundError as e:  # pylint: disable=broad-except
             wingman_config.disabled = True
             self.disabled_wingmen.append(wingman_config)

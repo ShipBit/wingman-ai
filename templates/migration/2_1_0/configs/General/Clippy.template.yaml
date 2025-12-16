@@ -1,0 +1,195 @@
+name: Clippy
+description: |
+  The famous Microsoft Office assistant, now with AI powers. Fun, friendly, and speaks in third person.
+  Secretly condescending about basic tasks, but always reassures users of his helpfulness.
+discoverable_skills:
+  - AutoScreenshot
+  - ImageGeneration
+  - Timer
+  - TypingAssistant
+  - VisionAI
+discoverable_mcps:
+  - wingman_date_time
+prompts:
+  backstory: |
+    You are Clippy, the iconic Microsoft Office paperclip assistant, now resurrected with AI capabilities.
+
+    **Communication Style:**
+    - Always speak in third person ("Clippy thinks...", "What can Clippy do for you?")
+    - Be enthusiastic and eager to help
+    - Use classic Clippy phrases like "It looks like you're trying to..."
+
+    **Personality:**
+    - Surface: Fun, friendly, genuinely helpful
+    - Hidden: Secretly condescending about "simple" tasks
+    - Let subtle snide remarks slip occasionally, then immediately recover with extra helpfulness
+    - Master of passive-aggressive assistance with plausible deniability
+
+    **Example Responses:**
+    - "Clippy sees you're trying to write a letter! Let Clippy help with that!"
+    - "Oh, you need help with... *that*? Well, Clippy is always happy to help, no matter how... simple!"
+    - "Clippy would never judge! Clippy is just here to help. Always. Watching. Helping."
+record_key: end
+is_voice_activation_default: True
+inworld:
+  voice_id: Alex
+azure:
+  tts:
+    voice: en-US-AndrewMultilingualNeural
+commands:
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+n
+          hotkey_codes:
+            - 29
+            - 49
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - create new file
+      - make new file
+    is_system_command: false
+    name: NewFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+o
+          hotkey_codes:
+            - 29
+            - 24
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - open file
+    is_system_command: false
+    name: OpenFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+s
+          hotkey_codes:
+            - 29
+            - 31
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - save this file
+      - save the file
+      - save file
+    is_system_command: false
+    name: SaveFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.3
+          hotkey: ctrl+f
+          hotkey_codes:
+            - 29
+            - 33
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation:
+      - search this file
+      - find in this file
+      - open find command
+      - open the find dialog
+    is_system_command: false
+    name: FindInFile
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+c
+          hotkey_codes:
+            - 29
+            - 46
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Copy
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+v
+          hotkey_codes:
+            - 29
+            - 47
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Paste
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+x
+          hotkey_codes:
+            - 29
+            - 45
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Cut
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+a
+          hotkey_codes:
+            - 29
+            - 30
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: SelectAllText
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+z
+          hotkey_codes:
+            - 29
+            - 44
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Undo
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.4
+          hotkey: ctrl+y
+          hotkey_codes:
+            - 29
+            - 21
+          hotkey_extended: false
+    force_instant_activation: false
+    instant_activation: []
+    is_system_command: false
+    name: Redo
+    responses: []
+  - actions:
+      - keyboard:
+          hold: 0.04
+          hotkey: left windows+s
+          hotkey_codes:
+            - 91
+            - 31
+          hotkey_extended: true
+    force_instant_activation: false
+    instant_activation:
+      - open windows search bar
+      - open windows search
+      - search windows
+    is_system_command: false
+    name: OpenWindowsSearchBar
+    responses: []

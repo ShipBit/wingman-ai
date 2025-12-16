@@ -16,9 +16,10 @@ from skills.uexcorp.uexcorp.api.llm import Llm
 
 if TYPE_CHECKING:
     from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingman import Wingman
 
 printr = Printr()
+
 
 class Helper:
 
@@ -41,7 +42,7 @@ class Helper:
     def __init__(self):
         self.__is_loaded = None
         self.__data_path: str = get_writable_dir(path.join("skills", "uexcorp", "data"))
-        self.__version_skill: str = 'v2.1.3-20251230'
+        self.__version_skill: str = "v2.1.3-20251230"
         self.__version_uex: str | None = None
         self.__debug: bool = True
         self.__default_thread = threading.get_ident()
@@ -66,7 +67,7 @@ class Helper:
         self.__request_while_not_ready = False
         self.__wingman = None
 
-    def prepare(self, threaded_execution: callable, wingman: "OpenAiWingman"):
+    def prepare(self, threaded_execution: callable, wingman: "Wingman"):
         from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
 
         self.__wingman = wingman
@@ -182,10 +183,12 @@ class Helper:
                 item_name = str(item).strip()
                 if item_name:
                     uex_hotwords.append(item_name)
-        uex_hotwords = list(set(uex_hotwords)) # remove duplicates
+        uex_hotwords = list(set(uex_hotwords))  # remove duplicates
 
         if unload:
-            wingman_hotwords = [word for word in wingman_hotwords if word not in uex_hotwords]
+            wingman_hotwords = [
+                word for word in wingman_hotwords if word not in uex_hotwords
+            ]
         else:
             wingman_hotwords.extend(uex_hotwords)
             wingman_hotwords = list(set(wingman_hotwords))
@@ -201,9 +204,7 @@ class Helper:
                 f"Synced {hotword_change} new hotwords with FasterWhisper."
             )
         else:
-            self.__handler_debug.write(
-                "No new hotwords synced with FasterWhisper."
-            )
+            self.__handler_debug.write("No new hotwords synced with FasterWhisper.")
 
     def wait(self, seconds: int):
         time.sleep(seconds)
@@ -325,7 +326,7 @@ class Helper:
     def get_default_thread_ident(self) -> int:
         return self.__default_thread
 
-    def get_wingmen(self) -> "OpenAiWingman":
+    def get_wingmen(self) -> "Wingman":
         return self.__wingman
 
     def toast(self, message: str):

@@ -8,7 +8,7 @@ from api.interface import SettingsConfig, SkillConfig, WingmanInitializationErro
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingman import Wingman
 
 
 class VisionAI(Skill):
@@ -17,7 +17,7 @@ class VisionAI(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "Wingman",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 

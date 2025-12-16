@@ -10,7 +10,7 @@ from api.interface import (
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingman import Wingman
 
 
 class ThinkingSound(Skill):
@@ -20,7 +20,7 @@ class ThinkingSound(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "Wingman",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 

@@ -7,12 +7,17 @@ import queue
 import time
 import requests
 import aiofiles
-from api.enums import LogType
 from api.interface import (
     SoundConfig,
     VoiceInfo,
     WingmanInitializationError,
     InworldConfig,
+)
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    TtsProvider,
 )
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
@@ -23,8 +28,12 @@ RECORDING_PATH = "audio_output"
 OUTPUT_FILE: str = "inworld.mp3"
 
 
-class Inworld:
-    def __init__(self, api_key: str, wingman_name: str):
+@capabilities(ProviderCapability.TTS)
+class Inworld(BaseProvider, TtsProvider):
+    """Inworld AI TTS provider with emotional expression and streaming."""
+
+    def __init__(self, config: InworldConfig, api_key: str, wingman_name: str):
+        BaseProvider.__init__(self, config=config, api_key=api_key)
         self.wingman_name = wingman_name
         self.secret_keeper = SecretKeeper()
         self.printr = Printr()
@@ -43,14 +52,29 @@ class Inworld:
         components = snake_str.split("_")
         return components[0] + "".join(x.title() for x in components[1:])
 
-    async def play_audio(
+    # Protocol implementation: TtsProvider
+    async def synthesize(
         self,
         text: str,
-        config: InworldConfig,
-        sound_config: SoundConfig,
         audio_player: AudioPlayer,
+        sound_config: SoundConfig,
         wingman_name: str,
-    ):  # Prepare audio config - override encoding for streaming
+        **kwargs,
+    ) -> None:
+        """Synthesize speech using Inworld AI with streaming support.
+
+        Args:
+            text: Text to convert to speech
+            audio_player: AudioPlayer instance for playback
+            sound_config: Sound configuration
+            wingman_name: Name of wingman
+            **kwargs: Unused (kept for protocol compatibility)
+
+        Returns:
+            None - Audio is played directly via audio_player
+        """
+        config = self.config
+        # Prepare audio config - override encoding for streaming
         # Convert snake_case keys to camelCase for the API
         audio_config = {
             self._to_camel_case(k): v

@@ -13,6 +13,12 @@ from api.interface import (
     VoiceInfo,
     WingmanInitializationError,
 )
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    TtsProvider,
+)
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -22,8 +28,12 @@ RECORDING_PATH = "audio_output"
 OUTPUT_FILE: str = "hume.mp3"
 
 
-class Hume:
-    def __init__(self, api_key: str, wingman_name: str):
+@capabilities(ProviderCapability.TTS)
+class Hume(BaseProvider, TtsProvider):
+    """Hume AI TTS provider with emotional expression."""
+
+    def __init__(self, config: HumeConfig, api_key: str, wingman_name: str):
+        BaseProvider.__init__(self, config=config, api_key=api_key)
         self.hume = AsyncHumeClient(api_key=api_key)
         self.wingman_name = wingman_name
         self.secret_keeper = SecretKeeper()
@@ -39,14 +49,28 @@ class Hume:
     ):
         return errors
 
-    async def play_audio(
+    # Protocol implementation: TtsProvider
+    async def synthesize(
         self,
         text: str,
-        config: HumeConfig,
-        sound_config: SoundConfig,
         audio_player: AudioPlayer,
+        sound_config: SoundConfig,
         wingman_name: str,
-    ):
+        **kwargs
+    ) -> None:
+        """Synthesize speech using Hume AI.
+
+        Args:
+            text: Text to convert to speech
+            audio_player: AudioPlayer instance for playback
+            sound_config: Sound configuration
+            wingman_name: Name of wingman
+            **kwargs: Unused (kept for protocol compatibility)
+
+        Returns:
+            None - Audio is played directly via audio_player
+        """
+        config = self.config
         speech = await self.hume.tts.synthesize_json(
             utterances=[
                 PostedUtterance(

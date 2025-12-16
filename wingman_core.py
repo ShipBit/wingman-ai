@@ -42,8 +42,7 @@ from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
-from wingmen.open_ai_wingman import OpenAiWingman
-from wingmen.wingman import Wingman
+from wingman import Wingman
 from services.file import get_writable_dir, get_audio_library_dir
 from services.voice_service import VoiceService
 from services.settings_service import SettingsService
@@ -69,6 +68,7 @@ class WingmanCore(WebSocketUser):
     ):
         self.printr = Printr()
         self.app_root_path = app_root_path
+        self.app_is_bundled = app_is_bundled
         self.system_manager = system_manager
         self.is_client_logged_in: bool = False
         self.client_plan: str = "Free"
@@ -360,18 +360,8 @@ class WingmanCore(WebSocketUser):
             "va_settings_changed", self.on_va_settings_changed
         )
 
-        self.whispercpp = Whispercpp(
-            settings=self.settings_service.settings.voice_activation.whispercpp,
-        )
-        self.fasterwhisper = FasterWhisper(
-            settings=self.settings_service.settings.voice_activation.fasterwhisper,
-            app_root_path=app_root_path,
-            app_is_bundled=app_is_bundled,
-        )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.settings_service.initialize(
-            whispercpp=self.whispercpp,
-            fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
         )
 
@@ -531,9 +521,9 @@ class WingmanCore(WebSocketUser):
             config_manager=self.config_manager,
             audio_player=self.audio_player,
             audio_library=self.audio_library,
-            whispercpp=self.whispercpp,
-            fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
+            app_root_path=self.app_root_path,
+            app_is_bundled=self.app_is_bundled,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -769,7 +759,9 @@ class WingmanCore(WebSocketUser):
                 api_key=self.secret_keeper.secrets["groq"],
                 base_url="https://api.groq.com/openai/v1/",
             )
-            transcription = groq.transcribe(filename=recording_file, model="whisper-large-v3-turbo")
+            transcription = groq.transcribe(
+                filename=recording_file, model="whisper-large-v3-turbo"
+            )
             text = transcription.text
         elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
             combined_hotwords: list[str] = []
@@ -967,12 +959,11 @@ class WingmanCore(WebSocketUser):
         wingman = self.tower.get_wingman_by_name(wingman_name)
 
         if wingman and text:
-            if isinstance(wingman, OpenAiWingman):
-                messages = [{"role": "user", "content": text}]
+            messages = [{"role": "user", "content": text}]
 
-                completion = await wingman.actual_llm_call(messages=messages)
+            completion = await wingman.actual_llm_call(messages=messages)
 
-                return completion.choices[0].message.content
+            return completion.choices[0].message.content
 
         return None
 
@@ -981,8 +972,7 @@ class WingmanCore(WebSocketUser):
         wingman = self.tower.get_wingman_by_name(wingman_name)
 
         if wingman and text:
-            if isinstance(wingman, OpenAiWingman):
-                return await wingman.generate_image(text=text)
+            return await wingman.generate_image(text=text)
 
         return None
 
@@ -1318,7 +1308,11 @@ class WingmanCore(WebSocketUser):
         google_api_key = await self.secret_keeper.retrieve(
             key="google", requester="Google"
         )
-        google = GoogleGenAI(api_key=google_api_key)
+        # Create minimal config for model listing (conversation_model not needed for listing)
+        from api.interface import GoogleConfig
+
+        config = GoogleConfig(conversation_model="")
+        google = GoogleGenAI(config=config, api_key=google_api_key)
         try:
             models = google.get_available_models()
             return models

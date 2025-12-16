@@ -1,21 +1,31 @@
 from abc import ABC, abstractmethod
 import json
 import re
-from typing import Literal, Mapping, Union
+from typing import Literal
 import httpx
-from openai import NOT_GIVEN, NotGiven, Omit, OpenAI, APIStatusError, AzureOpenAI
+from openai import NOT_GIVEN, OpenAI, APIStatusError, AzureOpenAI
+from openai.types.chat import ChatCompletion
 import azure.cognitiveservices.speech as speechsdk
 from api.enums import AzureRegion, LogType
+from services.openai_utils import get_minimal_reasoning_by_model
 
 from api.interface import (
     AzureInstanceConfig,
     AzureSttConfig,
     AzureTtsConfig,
+    OpenAiConfig,
     SoundConfig,
     VoiceInfo,
 )
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    SttProvider,
+    TtsProvider,
+    LlmProvider,
+)
 from services.audio_player import AudioPlayer
-from services.openai_utils import get_minimal_reasoning_by_model
 from services.printr import Printr
 
 printr = Printr()
@@ -66,37 +76,6 @@ class BaseOpenAi(ABC):
 
         return None
 
-    def get_minimal_reasoning_by_model(self, model_name: str) -> dict:
-        """
-        Returns the minimal reasoning effort setting based on the model name.
-        This helps reduce latency by setting the lowest supported reasoning effort.
-        See https://platform.openai.com/docs/api-reference/chat/create#chat_create-reasoning_effort
-
-        Args:
-            model_name: The name of the OpenAI model
-
-        Returns:
-            dict: Dictionary with reasoning_effort key if applicable, empty dict otherwise
-        """
-        # Models that don't support reasoning effort parameter
-        if model_name in ["o1-mini", "gpt-5.2-chat-latest"]:
-            return {}
-
-        # o-series models (o1, o3, etc.) support "low" as minimal
-        if model_name.startswith("o"):
-            return {"reasoning_effort": "low"}
-
-        # gpt-5.x models (5.1, 5.2, etc.) support "none" as minimal
-        if model_name.startswith("gpt-5."):
-            return {"reasoning_effort": "none"}
-
-        # gpt-5 base models support "minimal" as lowest effort
-        if model_name.startswith("gpt-5"):
-            return {"reasoning_effort": "minimal"}
-
-        # Other models don't support reasoning effort
-        return {}
-
     def _perform_ask(
         self,
         client: OpenAI | AzureOpenAI,
@@ -107,9 +86,7 @@ class BaseOpenAi(ABC):
     ):
         try:
             # Get minimal reasoning effort for the model to reduce latency
-            reasoning_params = (
-                self.get_minimal_reasoning_by_model(model) if model else {}
-            )
+            reasoning_params = get_minimal_reasoning_by_model(model) if model else {}
 
             if not tools:
                 completion = client.chat.completions.create(
@@ -136,15 +113,25 @@ class BaseOpenAi(ABC):
             return None
 
 
-class OpenAi(BaseOpenAi):
+@capabilities(ProviderCapability.STT, ProviderCapability.TTS, ProviderCapability.LLM)
+class OpenAi(BaseProvider, BaseOpenAi, SttProvider, TtsProvider, LlmProvider):
+    """OpenAI provider supporting STT (Whisper), TTS, and LLM (GPT models).
+
+    This provider implements all three capabilities using OpenAI's API.
+    """
+
     def __init__(
         self,
-        api_key: str = "",
-        organization: str | None = None,
+        config: OpenAiConfig,
+        api_key: str,
         base_url: str | None = None,
+        organization: str | None = None,
     ):
-        super().__init__()
-        self.api_key = api_key
+        # Initialize BaseProvider with config and api_key
+        BaseProvider.__init__(self, config=config, api_key=api_key)
+        # Initialize BaseOpenAi (no __init__ but needed for MRO)
+        BaseOpenAi.__init__(self)
+
         self.client = self._create_client(
             api_key=api_key,
             organization=organization,
@@ -164,18 +151,40 @@ class OpenAi(BaseOpenAi):
             base_url=base_url,
         )
 
-    def transcribe(self, filename: str, model: str = "whisper-1"):
-        return self._perform_transcription(
-            client=self.client, filename=filename, model=model
-        )
+    # Protocol implementation: SttProvider
+    async def transcribe(self, audio_input_wav: str, **kwargs) -> str:
+        """Transcribe audio file to text using Whisper.
 
-    def ask(
-        self,
-        messages: list[dict[str, str]],
-        model: str = None,
-        stream: bool = False,
-        tools: list[dict[str, any]] = None,
-    ):
+        Args:
+            audio_input_wav: Path to WAV audio file
+            **kwargs: Additional parameters (model, prompt, language)
+
+        Returns:
+            Transcribed text string or None on failure
+        """
+        model = kwargs.get("model", "whisper-1")
+        result = self._perform_transcription(
+            client=self.client, filename=audio_input_wav, model=model
+        )
+        return result.text if result else None
+
+    # Protocol implementation: LlmProvider
+    async def complete(
+        self, messages: list[dict], tools: list[dict] = None, **kwargs
+    ) -> ChatCompletion | None:
+        """Generate completion using GPT models.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            tools: Optional list of tool definitions for function calling
+            **kwargs: Additional parameters (model, temperature, stream, etc.)
+
+        Returns:
+            ChatCompletion object from OpenAI API, or None on error
+        """
+        model = kwargs.get("model", self.config.conversation_model)
+        stream = kwargs.get("stream", False)
+
         return self._perform_ask(
             client=self.client,
             messages=messages,
@@ -184,18 +193,32 @@ class OpenAi(BaseOpenAi):
             tools=tools,
         )
 
-    async def play_audio(
+    # Protocol implementation: TtsProvider
+    async def synthesize(
         self,
         text: str,
-        voice: str,
-        model: str,
-        speed: float,
-        sound_config: SoundConfig,
         audio_player: AudioPlayer,
+        sound_config: SoundConfig,
         wingman_name: str,
-        stream: bool,
-    ):
-        # instructions = config.instructions # Instructions are for gpt-4o-mini-tts model only
+        **kwargs,
+    ) -> None:
+        """Synthesize speech from text using OpenAI TTS.
+
+        Args:
+            text: Text to convert to speech
+            audio_player: AudioPlayer instance for playback
+            sound_config: Sound configuration with voice settings
+            wingman_name: Name of wingman (for audio file naming)
+            **kwargs: Additional parameters (voice, model, speed, stream)
+
+        Returns:
+            None - Audio is played directly via audio_player
+        """
+        voice = kwargs.get("voice", self.config.tts_voice)
+        model = kwargs.get("model", self.config.tts_model)
+        speed = kwargs.get("speed", self.config.tts_speed)
+        stream = kwargs.get("stream", self.config.output_streaming)
+
         try:
             if not stream:
                 # Non-streaming implementation
@@ -204,7 +227,6 @@ class OpenAi(BaseOpenAi):
                     model=model,
                     voice=voice,
                     speed=speed,
-                    # instructions=instructions,
                 )
                 if response is not None:
                     await audio_player.play_with_effects(
@@ -220,33 +242,18 @@ class OpenAi(BaseOpenAi):
                     voice=voice,
                     speed=speed,
                     response_format="pcm",
-                    # instructions=instructions,
                 ) as response:
-                    # Create an iterator for the audio chunks. We can set the chunk size here.
                     audio_stream_iterator = response.iter_bytes(chunk_size=1024)
 
-                    # This callback is passed to the audio_player and called repeatedly to fill its buffer.
                     def buffer_callback(audio_buffer):
-                        """
-                        Fetches the next chunk from the audio stream and loads it
-                        into the player's buffer.
-                        """
                         try:
-                            # Get the next chunk of audio data from the iterator
                             chunk = next(audio_stream_iterator)
                             chunk_size = len(chunk)
-
-                            # Copy the received audio data into the buffer provided by the audio player
                             audio_buffer[:chunk_size] = chunk
-
-                            # Return the number of bytes written
                             return chunk_size
                         except StopIteration:
-                            # When the iterator is exhausted, it raises StopIteration.
-                            # We catch it and return 0 to signal the end of the stream.
                             return 0
 
-                    # OpenAI's PCM output is 24kHz, 16-bit, single-channel.
                     await audio_player.stream_with_effects(
                         buffer_callback=buffer_callback,
                         config=sound_config,
@@ -256,14 +263,143 @@ class OpenAi(BaseOpenAi):
                         channels=1,
                         use_gain_boost=True,  # All streaming PCM TTS providers need this
                     )
-
         except APIStatusError as e:
             self._handle_api_error(e)
-        except UnicodeEncodeError:
-            self._handle_key_error()
 
 
-class OpenAiAzure(BaseOpenAi):
+@capabilities(ProviderCapability.LLM)
+class OpenRouter(OpenAi):
+    """OpenRouter provider extending OpenAi with tool support detection.
+
+    OpenRouter models have varying tool/function calling support. This provider
+    checks the model's capabilities during initialization and automatically
+    strips tools from requests when the model doesn't support them.
+    """
+
+    def __init__(
+        self,
+        config: OpenAiConfig,
+        api_key: str,
+        base_url: str | None = None,
+        organization: str | None = None,
+    ):
+        # Initialize parent OpenAi class
+        super().__init__(
+            config=config,
+            api_key=api_key,
+            base_url=base_url,
+            organization=organization,
+        )
+
+        # Check if the configured model supports tools
+        self.model_supports_tools = False
+        self._check_tool_support()
+
+    def _check_tool_support(self):
+        """Check if the configured OpenRouter model supports tools."""
+        import requests
+
+        model_id = self.config.conversation_model
+        if not model_id:
+            return
+
+        try:
+            response = requests.get(
+                url=f"https://openrouter.ai/api/v1/models/{model_id}/endpoints",
+                timeout=10,
+            )
+            response.raise_for_status()
+
+            # Parse the endpoint capabilities
+            from api.interface import OpenRouterEndpointResult
+
+            content = response.json()
+            result = OpenRouterEndpointResult(**content.get("data", {}))
+
+            # Check if any endpoint supports both tools and tool_choice parameters
+            self.model_supports_tools = any(
+                all(
+                    p in endpoint.supported_parameters for p in ["tools", "tool_choice"]
+                )
+                for endpoint in result.endpoints
+            )
+
+            if not self.model_supports_tools:
+                printr.print(
+                    f"OpenRouter model {model_id} does not support tools, they will be omitted from calls.",
+                    server_only=True,
+                )
+        except Exception as e:
+            printr.print(
+                f"Failed to check OpenRouter tool support: {str(e)}",
+                server_only=True,
+            )
+
+    async def complete(
+        self, messages: list[dict], tools: list[dict] = None, **kwargs
+    ) -> ChatCompletion | None:
+        """Generate completion, automatically stripping tools if model doesn't support them.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            tools: Optional list of tool definitions for function calling
+            **kwargs: Additional parameters (model, temperature, stream, etc.)
+
+        Returns:
+            ChatCompletion object from OpenAI API, or None on error
+        """
+        # Strip tools if model doesn't support them
+        if not self.model_supports_tools and tools:
+            tools = None
+
+        # Call parent implementation
+        return await super().complete(messages=messages, tools=tools, **kwargs)
+
+
+@capabilities(ProviderCapability.STT, ProviderCapability.TTS, ProviderCapability.LLM)
+class OpenAiAzure(BaseProvider, BaseOpenAi, SttProvider, TtsProvider, LlmProvider):
+    """Azure provider supporting STT (Whisper + Speech), TTS, and LLM.
+
+    Azure has multiple services that can use different API keys:
+    - Whisper STT (uses Azure OpenAI instance)
+    - Speech STT (uses Azure Cognitive Services)
+    - TTS (uses Azure Cognitive Services)
+    - LLM (uses Azure OpenAI instance)
+
+    This provider stores all configs and keys, selecting the appropriate one
+    based on which method is called.
+    """
+
+    def __init__(
+        self,
+        config,  # Can be AzureConfig or just the parent config object
+        whisper_api_key: str = None,
+        speech_api_key: str = None,
+        tts_api_key: str = None,
+        llm_api_key: str = None,
+    ):
+        # Initialize BaseProvider (config can be complex Azure config)
+        BaseProvider.__init__(self, config=config, api_key=None)
+        BaseOpenAi.__init__(self)
+
+        # Store individual service keys
+        self.whisper_api_key = whisper_api_key
+        self.speech_api_key = speech_api_key
+        self.tts_api_key = tts_api_key
+        self.llm_api_key = llm_api_key
+
+        # Extract Azure-specific configs if available
+        if hasattr(config, "azure") and config.azure:
+            self.instance_config = (
+                config.azure.instance if hasattr(config.azure, "instance") else None
+            )
+            self.stt_config = config.azure.stt if hasattr(config.azure, "stt") else None
+            self.tts_config = config.azure.tts if hasattr(config.azure, "tts") else None
+        else:
+            self.instance_config = None
+            self.stt_config = None
+            self.tts_config = None
+
     def _create_client(self, api_key: str, config: AzureInstanceConfig):
         """Create an AzureOpenAI client with the given parameters."""
         return AzureOpenAI(
@@ -273,82 +409,122 @@ class OpenAiAzure(BaseOpenAi):
             azure_deployment=config.deployment_name,
         )
 
-    def transcribe_whisper(
-        self,
-        filename: str,
-        api_key: str,
-        config: AzureInstanceConfig,
-        model: str = "whisper-1",
-    ):
-        azure_client = self._create_client(api_key=api_key, config=config)
-        return self._perform_transcription(
-            client=azure_client,
-            filename=filename,
-            model=model,
-        )
+    # Protocol implementation: SttProvider
+    async def transcribe(self, audio_input_wav: str, **kwargs) -> str:
+        """Transcribe audio using Azure Whisper or Speech service.
 
-    def transcribe_azure_speech(
-        self, filename: str, api_key: str, config: AzureSttConfig
-    ):
-        speech_config = speechsdk.SpeechConfig(
-            subscription=api_key,
-            region=config.region.value,
-        )
-        audio_config = speechsdk.AudioConfig(filename=filename)
+        Args:
+            audio_input_wav: Path to WAV audio file
+            **kwargs: Additional parameters
+                - use_speech: If True, use Azure Speech service instead of Whisper
+                - model: Model name for Whisper
 
-        auto_detect_source_language_config = (
-            (
-                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
-                    languages=config.languages
-                )
+        Returns:
+            Transcribed text string or None on failure
+        """
+        use_speech = kwargs.get("use_speech", False)
+
+        if use_speech and self.speech_api_key and self.stt_config:
+            # Use Azure Speech STT
+            speech_config = speechsdk.SpeechConfig(
+                subscription=self.speech_api_key,
+                region=self.stt_config.region.value,
             )
-            if len(config.languages) > 1
-            else None
-        )
+            audio_config = speechsdk.AudioConfig(filename=audio_input_wav)
 
-        language = config.languages[0] if len(config.languages) == 1 else None
+            auto_detect_source_language_config = (
+                speechsdk.languageconfig.AutoDetectSourceLanguageConfig(
+                    languages=self.stt_config.languages
+                )
+                if len(self.stt_config.languages) > 1
+                else None
+            )
 
-        speech_recognizer = speechsdk.SpeechRecognizer(
-            speech_config=speech_config,
-            audio_config=audio_config,
-            language=language,
-            auto_detect_source_language_config=auto_detect_source_language_config,
-        )
-        return speech_recognizer.recognize_once_async().get()
+            language = (
+                self.stt_config.languages[0]
+                if len(self.stt_config.languages) == 1
+                else None
+            )
 
-    def ask(
-        self,
-        messages: list[dict[str, str]],
-        api_key: str,
-        config: AzureInstanceConfig,
-        stream: bool = False,
-        tools: list[dict[str, any]] = None,
-    ):
-        azure_client = self._create_client(api_key=api_key, config=config)
-        return self._perform_ask(
-            client=azure_client,
-            messages=messages,
-            # Azure uses the deployment name as the model
-            model=config.deployment_name,
-            stream=stream,
-            tools=tools,
-        )
+            speech_recognizer = speechsdk.SpeechRecognizer(
+                speech_config=speech_config,
+                audio_config=audio_config,
+                language=language,
+                auto_detect_source_language_config=auto_detect_source_language_config,
+            )
+            result = speech_recognizer.recognize_once_async().get()
+            return result.text if result and hasattr(result, "text") else None
+        else:
+            # Use Azure Whisper STT
+            if self.whisper_api_key and self.instance_config:
+                model = kwargs.get("model", "whisper-1")
+                whisper_client = self._create_client(
+                    api_key=self.whisper_api_key, config=self.instance_config
+                )
+                result = self._perform_transcription(
+                    client=whisper_client,
+                    filename=audio_input_wav,
+                    model=model,
+                )
+                return result.text if result else None
+        return None
 
-    async def play_audio(
+    # Protocol implementation: LlmProvider
+    async def complete(
+        self, messages: list[dict], tools: list[dict] = None, **kwargs
+    ) -> ChatCompletion | None:
+        """Generate completion using Azure GPT models.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            tools: Optional list of tool definitions for function calling
+            **kwargs: Additional parameters (model, temperature, stream, etc.)
+
+        Returns:
+            ChatCompletion object from Azure OpenAI API, or None on error
+        """
+        stream = kwargs.get("stream", False)
+        if self.llm_api_key and self.instance_config:
+            azure_client = self._create_client(
+                api_key=self.llm_api_key, config=self.instance_config
+            )
+            return self._perform_ask(
+                client=azure_client,
+                messages=messages,
+                model=self.instance_config.deployment_name,
+                stream=stream,
+                tools=tools,
+            )
+        return None
+
+    # Protocol implementation: TtsProvider
+    async def synthesize(
         self,
         text: str,
-        api_key: str,
-        config: AzureTtsConfig,
-        sound_config: SoundConfig,
         audio_player: AudioPlayer,
+        sound_config: SoundConfig,
         wingman_name: str,
-    ):
-        speech_config = speechsdk.SpeechConfig(
-            subscription=api_key,
-            region=config.region.value,
-        )
+        **kwargs,
+    ) -> None:
+        """Synthesize speech from text using Azure TTS.
 
-        speech_config.speech_synthesis_voice_name = config.voice
+        Args:
+            text: Text to convert to speech
+            audio_player: AudioPlayer instance for playback
+            sound_config: Sound configuration with voice settings
+            wingman_name: Name of wingman (for audio file naming)
+
+        Returns:
+            None - Audio is played directly via audio_player
+        """
+        if not self.tts_api_key or not self.tts_config:
+            return
+
+        speech_config = speechsdk.SpeechConfig(
+            subscription=self.tts_api_key,
+            region=self.tts_config.region.value,
+        )
+        speech_config.speech_synthesis_voice_name = self.tts_config.voice
 
         speech_synthesizer = speechsdk.SpeechSynthesizer(
             speech_config=speech_config,
@@ -357,25 +533,25 @@ class OpenAiAzure(BaseOpenAi):
 
         result = (
             speech_synthesizer.start_speaking_text_async(text).get()
-            if config.output_streaming
+            if self.tts_config.output_streaming
             else speech_synthesizer.speak_text_async(text).get()
         )
 
-        def buffer_callback(audio_buffer):
-            buffer = bytes(2048)
-            size = audio_data_stream.read_data(buffer)
-            audio_buffer[:size] = buffer
-            return size
-
         if result is not None:
-            if config.output_streaming:
+            if self.tts_config.output_streaming:
                 audio_data_stream = speechsdk.AudioDataStream(result)
+
+                def buffer_callback(audio_buffer):
+                    buffer = bytes(2048)
+                    size = audio_data_stream.read_data(buffer)
+                    audio_buffer[:size] = buffer
+                    return size
 
                 await audio_player.stream_with_effects(
                     buffer_callback,
                     sound_config,
-                    wingman_name=wingman_name,
-                    use_gain_boost=True,  # "Azure Streaming" low gain workaround
+                    wingman_name,
+                    use_gain_boost=True,
                 )
             else:
                 await audio_player.play_with_effects(
@@ -400,7 +576,13 @@ class OpenAiAzure(BaseOpenAi):
         return None
 
 
-class OpenAiCompatibleTts:
+@capabilities(ProviderCapability.TTS)
+class OpenAiCompatibleTts(BaseProvider, TtsProvider):
+    """OpenAI-compatible TTS provider.
+
+    Works with any TTS API that follows OpenAI's speech endpoint format.
+    """
+
     def __init__(
         self,
         api_key: str,
@@ -409,6 +591,12 @@ class OpenAiCompatibleTts:
         super().__init__()
         self._api_key = api_key
         self._base_url = base_url
+        # Create a minimal config object for BaseProvider
+        from types import SimpleNamespace
+
+        config = SimpleNamespace(base_url=base_url)
+        BaseProvider.__init__(self, config=config, api_key=api_key)
+
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
@@ -480,24 +668,33 @@ class OpenAiCompatibleTts:
             )
             return []
 
-    async def play_audio(
+    # Protocol implementation: TtsProvider
+    async def synthesize(
         self,
         text: str,
-        voice: str,
-        model: str,
-        sound_config: SoundConfig,
         audio_player: AudioPlayer,
+        sound_config: SoundConfig,
         wingman_name: str,
-        stream: bool,
-        speed: float | NotGiven = NOT_GIVEN,
-        response_format: (
-            NotGiven | Literal["mp3", "opus", "aac", "flac", "wav", "pcm"]
-        ) = NOT_GIVEN,
-        extra_headers: Mapping[str, Union[str, Omit]] | None = None,
-    ):
-        # instructions = config.instructions # No current open source model supports this but adding for full compatibility
+        **kwargs,
+    ) -> None:
+        """Synthesize speech from text using OpenAI-compatible API.
 
-        # Should sample rate and response format be configurable in UI to ensure widest compatibilty?
+        Args:
+            text: Text to convert to speech
+            audio_player: AudioPlayer instance for playback
+            sound_config: Sound configuration with voice settings
+            wingman_name: Name of wingman (for audio file naming)
+            **kwargs: Additional parameters (voice, model, speed, stream, response_format, extra_headers)
+
+        Returns:
+            None - Audio is played directly via audio_player
+        """
+        voice = kwargs.get("voice", "alloy")
+        model = kwargs.get("model", "tts-1")
+        speed = kwargs.get("speed", NOT_GIVEN)
+        stream = kwargs.get("stream", False)
+        response_format = kwargs.get("response_format", NOT_GIVEN)
+        extra_headers = kwargs.get("extra_headers", None)
 
         try:
             if not stream:
@@ -508,7 +705,6 @@ class OpenAiCompatibleTts:
                     voice=voice,
                     speed=speed,
                     response_format=response_format,
-                    # instructions=instructions,
                     extra_headers=extra_headers,
                 )
                 if response is not None:
@@ -525,32 +721,17 @@ class OpenAiCompatibleTts:
                     voice=voice,
                     speed=speed,
                     response_format="pcm",
-                    # instructions=instructions,
                     extra_headers=extra_headers,
                 ) as response:
-                    # Create an iterator for the audio chunks. We can set the chunk size here.
                     audio_stream_iterator = response.iter_bytes(chunk_size=1024)
 
-                    # This callback is passed to the audio_player and called repeatedly
-                    # to fill its buffer.
                     def buffer_callback(audio_buffer):
-                        """
-                        Fetches the next chunk from the audio stream and loads it
-                        into the player's buffer.
-                        """
                         try:
-                            # Get the next chunk of audio data from the iterator
                             chunk = next(audio_stream_iterator)
                             chunk_size = len(chunk)
-
-                            # Copy the received audio data into the buffer provided by the audio player
                             audio_buffer[:chunk_size] = chunk
-
-                            # Return the number of bytes written
                             return chunk_size
                         except StopIteration:
-                            # When the iterator is exhausted, it raises StopIteration.
-                            # We catch it and return 0 to signal the end of the stream.
                             return 0
 
                     await audio_player.stream_with_effects(
@@ -562,7 +743,6 @@ class OpenAiCompatibleTts:
                         channels=1,
                         use_gain_boost=True,  # All streaming PCM TTS providers need this
                     )
-
         except APIStatusError as e:
             printr.toast_error(
                 f"OpenAI-compatible TTS error: {e.status_code} ({e.type})"

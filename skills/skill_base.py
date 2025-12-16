@@ -25,7 +25,7 @@ from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingman import Wingman
 
 
 # Type mapping from Python types to JSON Schema types
@@ -295,7 +295,7 @@ class Skill:
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "Wingman",
     ) -> None:
         self.config = config
         self.settings = settings
@@ -712,7 +712,11 @@ class Skill:
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
-        self.printr.print(f"[{self.__class__.__name__}] Threaded execution called before it was ready.", LogType.WARNING, server_only=True)
+        self.printr.print(
+            f"[{self.__class__.__name__}] Threaded execution called before it was ready.",
+            LogType.WARNING,
+            server_only=True,
+        )
         pass
 
     def get_generated_files_dir(self) -> str:

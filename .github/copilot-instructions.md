@@ -79,7 +79,7 @@ Always use type hints. Use `TYPE_CHECKING` guard for circular imports:
 ```python
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingman import Wingman
 ```
 
 ### Async/Await
@@ -128,7 +128,7 @@ api_key = await self.retrieve_secret(
 - `wingman_core.py` - FastAPI app, WebSocket server, REST endpoints
 - `Tower.py` - Wingman factory and lifecycle manager
 - `Wingman.py` - Base class for all Wingmen
-- `OpenAiWingman.py` - Primary LLM-powered Wingman implementation
+- `Wingman.py` - Unified Wingman class (formerly split into base Wingman and OpenAiWingman subclass)
 - `SkillRegistry` - Progressive tool disclosure for skills
 - `CapabilityRegistry` - Unified skills + MCP discovery
 - `SecretKeeper` - Secure API key management

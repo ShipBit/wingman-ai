@@ -9,20 +9,31 @@ from api.interface import (
     FasterWhisperSttConfig,
     WingmanInitializationError,
 )
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    SttProvider,
+)
 from services.printr import Printr
 
 MODELS_DIR = "faster-whisper-models"
 
 
-class FasterWhisper:
+@capabilities(ProviderCapability.STT)
+class FasterWhisper(BaseProvider, SttProvider):
     def __init__(
         self,
-        settings: FasterWhisperSettings,
-        app_root_path: str,
-        app_is_bundled: bool,
+        config: FasterWhisperSettings,
+        api_key: str = None,  # Not used but required by BaseProvider
+        app_root_path: str = None,
+        app_is_bundled: bool = False,
+        wingman_name: str = None,  # For hotword assembly
     ):
+        BaseProvider.__init__(self, config=config, api_key=api_key)
         self.printr = Printr()
-        self.settings = settings
+        self.settings = config  # Alias for backward compatibility
+        self.wingman_name = wingman_name
 
         self.is_windows = platform.system() == "Windows"
         if self.is_windows:
@@ -56,7 +67,66 @@ class FasterWhisper:
                 f"Failed to initialize FasterWhisper with model {model_file}. Error: {e}"
             )
 
-    def transcribe(
+    # Protocol implementation: SttProvider
+    async def transcribe(self, filename: str, **kwargs) -> str:
+        """Transcribe audio using FasterWhisper model.
+
+        Args:
+            filename: Path to audio file
+            **kwargs: May include 'config' (FasterWhisperSttConfig) and 'hotwords' (list[str])
+
+        Returns:
+            Transcribed text or None on error
+        """
+        # Get config from kwargs or use default from self.config
+        config = kwargs.get("config", self.config if hasattr(self, "config") else None)
+        if not isinstance(config, FasterWhisperSttConfig):
+            # If config is FasterWhisperSettings, use default values
+            config = FasterWhisperSttConfig(
+                beam_size=5,
+                best_of=5,
+                temperature=0.0,
+                no_speech_threshold=0.6,
+                language=None,
+                multilingual=True,
+                language_detection_threshold=0.5,
+                hotwords=[],
+                additional_hotwords=[],
+            )
+
+        # Assemble hotwords from multiple sources
+        hotwords: list[str] = []
+
+        # Add wingman name if available
+        if self.wingman_name:
+            hotwords.append(self.wingman_name)
+
+        # Add default hotwords from config
+        if hasattr(self.settings, "hotwords") and self.settings.hotwords:
+            hotwords.extend(self.settings.hotwords)
+
+        # Add additional hotwords from config
+        if (
+            hasattr(self.settings, "additional_hotwords")
+            and self.settings.additional_hotwords
+        ):
+            hotwords.extend(self.settings.additional_hotwords)
+
+        # Add any hotwords passed in kwargs (for backward compatibility)
+        if "hotwords" in kwargs and kwargs["hotwords"]:
+            hotwords.extend(kwargs["hotwords"])
+
+        # Remove duplicates
+        hotwords = list(set(hotwords))
+
+        result = self._transcribe_sync(
+            config=config,
+            filename=filename,
+            hotwords=hotwords,
+        )
+        return result.text if result else None
+
+    def _transcribe_sync(
         self,
         config: FasterWhisperSttConfig,
         filename: str,

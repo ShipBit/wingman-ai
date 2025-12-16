@@ -8,8 +8,6 @@ from api.interface import (
     AudioDeviceSettings,
     SettingsConfig,
 )
-from providers.faster_whisper import FasterWhisper
-from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.config_manager import ConfigManager
 from services.config_service import ConfigService
@@ -25,8 +23,6 @@ class SettingsService:
         self.converted_audio_settings = False
         self.settings = self.get_settings()
         self.settings_events = PubSub()
-        self.whispercpp: Whispercpp = None
-        self.fasterwhisper: FasterWhisper = None
         self.xvasynth: XVASynth = None
 
         self.router = APIRouter()
@@ -52,11 +48,7 @@ class SettingsService:
             tags=tags,
         )
 
-    def initialize(
-        self, whispercpp: Whispercpp, fasterwhisper: FasterWhisper, xvasynth: XVASynth
-    ):
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
+    def initialize(self, xvasynth: XVASynth):
         self.xvasynth = xvasynth
 
     # GET /settings
@@ -87,23 +79,8 @@ class SettingsService:
         ):
             await self.set_audio_devices(settings.audio.input, settings.audio.output)
 
-        # whispercpp
-        if not self.whispercpp:
-            self.printr.toast_error(
-                "Whispercpp is not initialized. Please run SettingsService.initialize()",
-            )
-            return
-        self.whispercpp.update_settings(settings=settings.voice_activation.whispercpp)
-
-        # FasterWhisper
-        if not self.fasterwhisper:
-            self.printr.toast_error(
-                "FasterWhisper is not initialized. Please run SettingsService.initialize()",
-            )
-            return
-        self.fasterwhisper.update_settings(
-            settings=settings.voice_activation.fasterwhisper
-        )
+        # Note: Whispercpp and FasterWhisper are now managed as singletons by ProviderFactory
+        # Settings changes will take effect when providers are next accessed
 
         # XVASynth
         if not self.xvasynth:

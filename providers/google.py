@@ -1,14 +1,31 @@
 import re
-from google import genai
+from typing import Any
+import google.genai as genai
 from google.genai import types
 from openai import APIStatusError, OpenAI
+from openai.types.chat import ChatCompletion
+from api.interface import GoogleConfig
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    LlmProvider,
+)
 from services.printr import Printr
 
 printr = Printr()
 
 
-class GoogleGenAI:
-    def __init__(self, api_key: str):
+@capabilities(ProviderCapability.LLM)
+class GoogleGenAI(BaseProvider, LlmProvider):
+    """Google Gemini provider supporting LLM capabilities.
+
+    Uses Google's Generative AI API with OpenAI-compatible interface.
+    """
+
+    def __init__(self, config: GoogleConfig, api_key: str):
+        BaseProvider.__init__(self, config=config, api_key=api_key)
+
         self.client = genai.Client(
             api_key=api_key,
             http_options=types.HttpOptions(api_version="v1alpha"),
@@ -80,13 +97,77 @@ class GoogleGenAI:
         # Don't send reasoning_effort unless we know it's supported.
         return {}
 
-    def ask(
-        self,
-        messages: list[dict[str, str]],
-        model: str,
-        stream: bool = False,
-        tools: list[dict[str, any]] = None,
-    ):
+    def _sanitize_messages(self, messages: list[Any]) -> list[dict[str, Any]]:
+        """Sanitize messages for Google Gemini OpenAI-compatible endpoint.
+
+        Google's OpenAI-compatible endpoint is stricter than OpenAI's:
+        - `content` must not be null (use empty string)
+        - tool-related fields should be preserved as-is
+
+        Wingman may pass either dicts or OpenAI message objects; normalize both.
+        """
+
+        sanitized: list[dict[str, Any]] = []
+        for msg in messages:
+            if isinstance(msg, dict):
+                msg_copy = msg.copy()
+                if msg_copy.get("content") is None:
+                    msg_copy["content"] = ""
+                sanitized.append(msg_copy)
+                continue
+
+            msg_dict: dict[str, Any] = {
+                "role": msg.role if hasattr(msg, "role") else msg.get("role"),
+                "content": (
+                    msg.content if hasattr(msg, "content") else msg.get("content")
+                ),
+            }
+
+            if msg_dict.get("content") is None:
+                msg_dict["content"] = ""
+
+            tool_calls = getattr(msg, "tool_calls", None)
+            if tool_calls:
+                msg_dict["tool_calls"] = tool_calls
+            elif isinstance(msg, dict) and "tool_calls" in msg:
+                msg_dict["tool_calls"] = msg["tool_calls"]
+
+            tool_call_id = getattr(msg, "tool_call_id", None)
+            if tool_call_id:
+                msg_dict["tool_call_id"] = tool_call_id
+            elif isinstance(msg, dict) and "tool_call_id" in msg:
+                msg_dict["tool_call_id"] = msg["tool_call_id"]
+
+            name = getattr(msg, "name", None)
+            if name:
+                msg_dict["name"] = name
+            elif isinstance(msg, dict) and "name" in msg:
+                msg_dict["name"] = msg["name"]
+
+            sanitized.append(msg_dict)
+
+        return sanitized
+
+    # Protocol implementation: LlmProvider
+    async def complete(
+        self, messages: list[dict], tools: list[dict] = None, **kwargs
+    ) -> ChatCompletion | None:
+        """Generate completion using Google Gemini.
+
+        Args:
+            messages: List of message dicts with 'role' and 'content'
+            tools: Optional list of tool definitions for function calling
+            **kwargs: Additional parameters (model, stream, etc.)
+
+        Returns:
+            ChatCompletion object from Google's OpenAI-compatible API, or None on error
+        """
+        model = kwargs.get("model", self.config.conversation_model)
+        stream = kwargs.get("stream", False)
+
+        messages = self._sanitize_messages(messages)
+
+        # Direct implementation - no legacy method needed
         try:
             reasoning_params = self.get_minimal_reasoning_by_model(model)
             if not tools:

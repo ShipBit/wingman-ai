@@ -2,29 +2,54 @@ from typing import Optional
 import openai
 import requests
 from openai.types.audio import Transcription
-from api.enums import CommandTag, LogType
+from openai.types.chat import ChatCompletion
+from api.enums import CommandTag, LogType, WingmanProSttProvider, WingmanProTtsProvider
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
     InworldConfig,
     SoundConfig,
     VoiceInfo,
+    WingmanConfig,
     WingmanProSettings,
+)
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    SttProvider,
+    TtsProvider,
+    LlmProvider,
 )
 from services.audio_player import AudioPlayer
 from services.openai_utils import get_minimal_reasoning_by_model
 from services.printr import Printr
-from services.secret_keeper import SecretKeeper
 
 
-class WingmanPro:
+@capabilities(
+    ProviderCapability.STT,
+    ProviderCapability.TTS,
+    ProviderCapability.LLM,
+    ProviderCapability.IMAGE_GEN,
+)
+class WingmanPro(BaseProvider, SttProvider, TtsProvider, LlmProvider):
     def __init__(
-        self, wingman_name: str, settings: WingmanProSettings, timeout: int = 120
+        self,
+        wingman_config: WingmanConfig,
+        provider_settings: WingmanProSettings,
+        api_key: str,
+        wingman_name: str,
+        timeout: int = 120,
     ):
+        BaseProvider.__init__(self, config=provider_settings, api_key=api_key)
+        self.wingman_config: WingmanConfig = (
+            wingman_config  # Full config for subprovider routing
+        )
         self.wingman_name: str = wingman_name
-        self.settings: WingmanProSettings = settings
+        self.settings: WingmanProSettings = (
+            provider_settings  # Alias for backward compatibility
+        )
         self.printr = Printr()
-        self.secret_keeper: SecretKeeper = SecretKeeper()
         self.timeout = timeout
 
     def send_unauthorized_error(self):
@@ -40,6 +65,111 @@ class WingmanPro:
             color=LogType.ERROR,
         )
 
+    # Protocol implementation: SttProvider
+    async def transcribe(self, audio_input_wav: str, **kwargs) -> str:
+        """Transcribe audio using WingmanPro backend.
+
+        Args:
+            audio_input_wav: Path to WAV audio file
+            **kwargs: Unused (kept for protocol compatibility)
+
+        Returns:
+            Transcribed text string
+        """
+        # Read subprovider selection from config
+        stt_provider = self.wingman_config.wingman_pro.stt_provider
+
+        if stt_provider == WingmanProSttProvider.WHISPER:
+            result = self.transcribe_whisper(audio_input_wav)
+            return result.text if result else None
+        elif stt_provider == WingmanProSttProvider.AZURE_SPEECH:
+            azure_config = self.wingman_config.azure.stt
+            result = self.transcribe_azure_speech(audio_input_wav, azure_config)
+            # Azure Speech returns a dict with "_text" key
+            return result.get("_text") if result else None
+        else:
+            raise ValueError(f"Unsupported WingmanPro STT provider: {stt_provider}")
+
+    # Protocol implementation: TtsProvider
+    async def synthesize(
+        self,
+        text: str,
+        audio_player: AudioPlayer,
+        sound_config: SoundConfig,
+        wingman_name: str,
+        **kwargs,
+    ) -> None:
+        """Synthesize speech using WingmanPro backend.
+
+        Args:
+            text: Text to convert to speech
+            audio_player: AudioPlayer instance for playback
+            sound_config: Sound configuration
+            wingman_name: Name of wingman
+            **kwargs: Unused (kept for protocol compatibility)
+
+        Returns:
+            None - Audio is played directly via audio_player
+        """
+        # Read subprovider selection from config
+        tts_provider = self.wingman_config.wingman_pro.tts_provider
+
+        if tts_provider == WingmanProTtsProvider.OPENAI:
+            await self.generate_openai_speech(
+                text=text,
+                voice=self.wingman_config.openai.tts_voice,
+                model=self.wingman_config.openai.tts_model,
+                speed=self.wingman_config.openai.tts_speed,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+            )
+        elif tts_provider == WingmanProTtsProvider.AZURE:
+            await self.generate_azure_speech(
+                text=text,
+                config=self.wingman_config.azure.tts,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+            )
+        elif tts_provider == WingmanProTtsProvider.INWORLD:
+            await self.generate_inworld_speech(
+                text=text,
+                config=self.wingman_config.inworld,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+            )
+        else:
+            raise ValueError(f"Unsupported WingmanPro TTS provider: {tts_provider}")
+
+    # Protocol implementation: LlmProvider
+    async def complete(
+        self, messages: list[dict], tools: list[dict] = None, **kwargs
+    ) -> ChatCompletion | None:
+        """Generate completion using WingmanPro backend.
+
+        Args:
+            messages: List of message dicts
+            tools: Optional tool definitions
+            **kwargs: Unused (kept for protocol compatibility)
+
+        Returns:
+            ChatCompletion object, or None on error
+        """
+        # Read deployment from config
+        deployment = self.wingman_config.wingman_pro.conversation_deployment
+        if not deployment:
+            raise ValueError("WingmanPro requires 'deployment' parameter in config")
+
+        return self.ask(
+            messages=messages,
+            deployment=deployment,
+            stream=kwargs.get("stream", False),
+            tools=tools,
+        )
+
+    # Legacy methods (keep for backward compatibility)
     def transcribe_whisper(self, filename: str):
         with open(filename, "rb") as audio_input:
             files = {"audio_file": (filename, audio_input)}
@@ -446,9 +576,8 @@ class WingmanPro:
         return voices
 
     def _get_headers(self):
-        token = self.secret_keeper.secrets.get("wingman_pro", "")
         return {
-            "Authorization": f"Bearer {token}",
+            "Authorization": f"Bearer {self.api_key}",
         }
 
     def __resolve_gender(self, enum_value: int):

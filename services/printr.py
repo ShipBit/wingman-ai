@@ -126,7 +126,7 @@ class Printr(WebSocketUser):
                         caller_instance_name = caller_instance.__class__.__name__
                         if (
                             caller_instance_name == "Wingman"
-                            or caller_instance_name == "OpenAiWingman"
+                            or caller_instance_name == "Wingman"
                         ):
                             wingman_name = caller_instance.name
                             break
@@ -232,6 +232,15 @@ class Printr(WebSocketUser):
 
     def toast_error(self, text: str):
         self.print(text, toast=ToastType.ERROR, color=LogType.ERROR)
+
+    async def broadcast(self, command):
+        """Public API for broadcasting commands to the UI.
+
+        Args:
+            command: Command object to broadcast (e.g., McpStateChangedCommand)
+        """
+        if self._connection_manager is not None:
+            await self._connection_manager.broadcast(command)
 
     # INTERNAL METHODS
 

@@ -22,6 +22,7 @@ from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.config_manager import ConfigManager
 from services.printr import Printr
+from services.secret_keeper import SecretKeeper
 
 
 class VoiceService:
@@ -35,6 +36,7 @@ class VoiceService:
         self.config_manager = config_manager
         self.audio_player = audio_player
         self.xvasynth = xvasynth
+        self.secret_keeper = SecretKeeper()
 
         self.router = APIRouter()
         tags = ["voice"]
@@ -225,9 +227,19 @@ class VoiceService:
         return result
 
     # GET /voices/azure/wingman-pro
-    def get_wingman_pro_azure_voices(self, locale: str = ""):
+    async def get_wingman_pro_azure_voices(self, locale: str = ""):
+        api_key = await self.secret_keeper.retrieve(
+            requester="VoiceService",
+            key="wingman_pro",
+            prompt_if_missing=False,
+        )
+        if not api_key:
+            return []
         wingman_pro = WingmanPro(
-            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
+            wingman_config=None,
+            provider_settings=self.config_manager.settings_config.wingman_pro,
+            api_key=api_key,
+            wingman_name="VoiceService",
         )
         voices = wingman_pro.get_available_voices(locale=locale)
         if not voices:
@@ -236,11 +248,21 @@ class VoiceService:
         return result
 
     # GET /voices/inworld/wingman-pro
-    def get_wingman_pro_inworld_voices(
+    async def get_wingman_pro_inworld_voices(
         self, filter_language: str = None
     ) -> list[VoiceInfo]:
+        api_key = await self.secret_keeper.retrieve(
+            requester="VoiceService",
+            key="wingman_pro",
+            prompt_if_missing=False,
+        )
+        if not api_key:
+            return []
         wingman_pro = WingmanPro(
-            wingman_name="", settings=self.config_manager.settings_config.wingman_pro
+            wingman_config=None,
+            provider_settings=self.config_manager.settings_config.wingman_pro,
+            api_key=api_key,
+            wingman_name="VoiceService",
         )
         voices = wingman_pro.get_available_inworld_voices(
             filter_language=filter_language
@@ -259,14 +281,14 @@ class VoiceService:
         stream: bool,
     ):
         openai = OpenAi(api_key=api_key)
-        await openai.play_audio(
+        await openai.synthesize(
             text=text,
+            audio_player=self.audio_player,
+            sound_config=sound_config,
+            wingman_name="system",
             voice=voice,
             model=model,
             speed=speed,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
             stream=stream,
         )
 
@@ -283,14 +305,14 @@ class VoiceService:
         stream: bool,
     ):
         openai = OpenAiCompatibleTts(api_key=api_key, base_url=base_url)
-        await openai.play_audio(
+        await openai.synthesize(
             text=text,
+            audio_player=self.audio_player,
+            sound_config=sound_config,
+            wingman_name="system",
             voice=voice,
             model=model,
             speed=speed,
-            sound_config=sound_config,
-            audio_player=self.audio_player,
-            wingman_name="system",
             stream=stream,
         )
 
@@ -298,13 +320,22 @@ class VoiceService:
     async def play_azure_tts(
         self, text: str, api_key: str, config: AzureTtsConfig, sound_config: SoundConfig
     ):
-        azure = OpenAiAzure()
-        await azure.play_audio(
+        # Create a minimal Azure instance for preview (tts_api_key only)
+        from types import SimpleNamespace
+
+        minimal_config = SimpleNamespace()
+        azure = OpenAiAzure(
+            config=minimal_config,
+            whisper_api_key=None,
+            speech_api_key=None,
+            tts_api_key=api_key,
+            llm_api_key=None,
+        )
+        azure.tts_config = config
+        await azure.synthesize(
             text=text,
-            api_key=api_key,
-            config=config,
-            sound_config=sound_config,
             audio_player=self.audio_player,
+            sound_config=sound_config,
             wingman_name="system",
         )
 
@@ -316,12 +347,11 @@ class VoiceService:
         config: ElevenlabsConfig,
         sound_config: SoundConfig,
     ):
-        elevenlabs = ElevenLabs(api_key=api_key, wingman_name="")
-        await elevenlabs.play_audio(
+        elevenlabs = ElevenLabs(config=config, api_key=api_key, wingman_name="")
+        await elevenlabs.synthesize(
             text=text,
-            config=config,
-            sound_config=sound_config,
             audio_player=self.audio_player,
+            sound_config=sound_config,
             wingman_name="system",
             stream=False,
         )
@@ -330,12 +360,11 @@ class VoiceService:
     async def play_edge_tts(
         self, text: str, config: EdgeTtsConfig, sound_config: SoundConfig
     ):
-        edge = Edge()
-        await edge.play_audio(
+        edge = Edge(config=config)
+        await edge.synthesize(
             text=text,
-            config=config,
-            sound_config=sound_config,
             audio_player=self.audio_player,
+            sound_config=sound_config,
             wingman_name="system",
         )
 
@@ -343,12 +372,11 @@ class VoiceService:
     async def play_hume(
         self, text: str, api_key: str, config: HumeConfig, sound_config: SoundConfig
     ):
-        hume = Hume(api_key=api_key, wingman_name="")
-        await hume.play_audio(
+        hume = Hume(config=config, api_key=api_key, wingman_name="")
+        await hume.synthesize(
             text=text,
-            config=config,
-            sound_config=sound_config,
             audio_player=self.audio_player,
+            sound_config=sound_config,
             wingman_name="system",
         )
 
@@ -356,12 +384,11 @@ class VoiceService:
     async def play_inworld(
         self, text: str, api_key: str, config: InworldConfig, sound_config: SoundConfig
     ):
-        inworld = Inworld(api_key=api_key, wingman_name="")
-        await inworld.play_audio(
+        inworld = Inworld(config=config, api_key=api_key, wingman_name="")
+        await inworld.synthesize(
             text=text,
-            config=config,
-            sound_config=sound_config,
             audio_player=self.audio_player,
+            sound_config=sound_config,
             wingman_name="system",
         )
 
@@ -381,9 +408,18 @@ class VoiceService:
     async def play_wingman_pro_azure(
         self, text: str, config: AzureTtsConfig, sound_config: SoundConfig
     ):
+        api_key = await self.secret_keeper.retrieve(
+            requester="VoiceService",
+            key="wingman_pro",
+            prompt_if_missing=False,
+        )
+        if not api_key:
+            return
         wingman_pro = WingmanPro(
-            wingman_name="system",
-            settings=self.config_manager.settings_config.wingman_pro,
+            wingman_config=None,
+            provider_settings=self.config_manager.settings_config.wingman_pro,
+            api_key=api_key,
+            wingman_name="VoiceService",
         )
         await wingman_pro.generate_azure_speech(
             text=text,
@@ -397,9 +433,18 @@ class VoiceService:
     async def play_wingman_pro_openai(
         self, text: str, voice: str, model: str, speed: float, sound_config: SoundConfig
     ):
+        api_key = await self.secret_keeper.retrieve(
+            requester="VoiceService",
+            key="wingman_pro",
+            prompt_if_missing=False,
+        )
+        if not api_key:
+            return
         wingman_pro = WingmanPro(
-            wingman_name="system",
-            settings=self.config_manager.settings_config.wingman_pro,
+            wingman_config=None,
+            provider_settings=self.config_manager.settings_config.wingman_pro,
+            api_key=api_key,
+            wingman_name="VoiceService",
         )
         await wingman_pro.generate_openai_speech(
             text=text,
@@ -418,9 +463,18 @@ class VoiceService:
         config: InworldConfig,
         sound_config: SoundConfig,
     ):
+        api_key = await self.secret_keeper.retrieve(
+            requester="VoiceService",
+            key="wingman_pro",
+            prompt_if_missing=False,
+        )
+        if not api_key:
+            return
         wingman_pro = WingmanPro(
-            wingman_name="system",
-            settings=self.config_manager.settings_config.wingman_pro,
+            wingman_config=None,
+            provider_settings=self.config_manager.settings_config.wingman_pro,
+            api_key=api_key,
+            wingman_name="VoiceService",
         )
         await wingman_pro.generate_inworld_speech(
             text=text,

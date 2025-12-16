@@ -13,13 +13,13 @@ from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingman import Wingman
 
 
 class Msfs2020Control(Skill):
 
     def __init__(
-        self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "Wingman"
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.already_initialized_simconnect = False

@@ -21,7 +21,7 @@ from api.enums import (
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingman import Wingman
 
 
 class RadioChatter(Skill):
@@ -30,7 +30,7 @@ class RadioChatter(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "Wingman",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
@@ -281,10 +281,7 @@ class RadioChatter(Skill):
     async def prepare(self) -> None:
         await super().prepare()
         self.loaded = True
-        if (
-                self._get_auto_start()
-                and not self.radio_status
-        ):
+        if self._get_auto_start() and not self.radio_status:
             self.threaded_execution(self._init_chatter)
 
     async def unload(self) -> None:

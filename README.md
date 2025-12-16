@@ -304,8 +304,7 @@ If you want to read some code first and understand how it all works, we recommen
 - `http://127.0.0.1:49111/docs` - The OpenAPI (ex: Swagger) spec
 - `wingman_core.py` - most of the public API endpoints that Wingman AI exposes
 - The config files in `%APP_DATA%\ShipBit\WingmanAI\[version]` to get an idea of what's configurable.
-- `Wingman.py` - the base class for all Wingmen
-- `OpenAIWingman.py` - derived from Wingman, using all the providers
+- `Wingman.py` - the unified Wingman class supporting all providers
 - `Tower.py` - the factory that creates Wingmen
 
 If you're planning to develop a major feature or new integration, please contact us on [Discord](https://www.shipbit.de/discord) first and let us know what you're up to. We'll be happy to help you get started and make sure your work isn't wasted because we're already working on something similar.

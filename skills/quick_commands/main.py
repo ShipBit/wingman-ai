@@ -7,7 +7,7 @@ from api.enums import LogType
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingman import Wingman
 
 
 class QuickCommands(Skill):
@@ -16,7 +16,7 @@ class QuickCommands(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "Wingman",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 

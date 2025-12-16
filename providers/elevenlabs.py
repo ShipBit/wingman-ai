@@ -3,13 +3,23 @@ from typing import Optional
 from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXOptions
 from api.enums import SoundEffect, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    TtsProvider,
+)
 from services.audio_player import AudioPlayer
 from services.sound_effects import get_sound_effects
 from services.websocket_user import WebSocketUser
 
 
-class ElevenLabs:
-    def __init__(self, api_key: str, wingman_name: str):
+@capabilities(ProviderCapability.TTS)
+class ElevenLabs(BaseProvider, TtsProvider):
+    """ElevenLabs TTS provider with high-quality voice synthesis."""
+
+    def __init__(self, config: ElevenlabsConfig, api_key: str, wingman_name: str):
+        BaseProvider.__init__(self, config=config, api_key=api_key)
         self.wingman_name = wingman_name
         self.user = User(api_key)
 
@@ -30,15 +40,29 @@ class ElevenLabs:
             )
         return errors
 
-    async def play_audio(
+    # Protocol implementation: TtsProvider
+    async def synthesize(
         self,
         text: str,
-        config: ElevenlabsConfig,
-        sound_config: SoundConfig,
         audio_player: AudioPlayer,
+        sound_config: SoundConfig,
         wingman_name: str,
-        stream: bool,
-    ):
+        **kwargs
+    ) -> None:
+        """Synthesize speech using ElevenLabs with streaming support.
+
+        Args:
+            text: Text to convert to speech
+            audio_player: AudioPlayer instance for playback
+            sound_config: Sound configuration
+            wingman_name: Name of wingman
+            **kwargs: Additional parameters (stream, etc.)
+
+        Returns:
+            None - Audio is played directly via audio_player
+        """
+        config = self.config
+        stream = kwargs.get("stream", False)
         voice = (
             self.user.get_voice_by_ID(config.voice.id)
             if config.voice.id

@@ -923,8 +923,11 @@ class ConfigMigrationService:
                             )
                     except ValidationError as e:
                         self.err(f"Unable to migrate defaults.yaml:\n{str(e)}")
-                # Wingmen
-                elif filename.endswith(".yaml"):
+                # Wingmen (excluding mcp.yaml which is handled separately)
+                elif filename.endswith(".yaml") and filename not in [
+                    "mcp.yaml",
+                    "mcp.template.yaml",
+                ]:
                     self.log_highlight(f"Migrating Wingman {filename}...")
                     # defaults are already migrated because the Wingman config is in a subdirectory
                     try:
@@ -1035,6 +1038,8 @@ class ConfigMigrationService:
 
         # Handle mcp.yaml - this is a new file in 2.0.0
         if migrate_mcp:
+            self.log_highlight("Migrating mcp.yaml...")
+
             new_mcp_file = path.join(new_config_path, "mcp.yaml")
             old_mcp_file = path.join(old_config_path, "mcp.yaml")
 
@@ -1051,18 +1056,15 @@ class ConfigMigrationService:
 
             if path.exists(old_mcp_file):
                 # mcp.yaml exists in old version - migrate it
-                self.log_highlight("Migrating mcp.yaml...")
                 old_mcp_config = self.config_manager.read_config(old_mcp_file) or {}
                 migrated_mcp = migrate_mcp(old_mcp_config, new_mcp_config)
             else:
                 # mcp.yaml doesn't exist in old version - create from template
-                self.log_highlight("Creating mcp.yaml (not found in old version)...")
                 migrated_mcp = migrate_mcp({}, new_mcp_config)
 
             if not path.exists(new_config_path):
                 os.makedirs(new_config_path)
             self.config_manager.write_config(new_mcp_file, migrated_mcp)
-            self.log_highlight("Created/migrated mcp.yaml")
 
             # Reload mcp config if this is the latest version
             if new_config_path == self.latest_config_path:

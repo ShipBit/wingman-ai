@@ -1,6 +1,12 @@
 from os import path
 from edge_tts import Communicate
 from api.interface import EdgeTtsConfig, SoundConfig
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    TtsProvider,
+)
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
@@ -11,20 +17,37 @@ OUTPUT_FILE: str = "edge_tts.mp3"
 printr = Printr()
 
 
-class Edge:
-    def __init__(self):
+@capabilities(ProviderCapability.TTS)
+class Edge(BaseProvider, TtsProvider):
+    """Edge TTS provider using Microsoft Edge's free text-to-speech."""
+
+    def __init__(self, config: EdgeTtsConfig):
+        BaseProvider.__init__(self, config=config, api_key=None)
         self.random_voices = {}
 
-    async def play_audio(
+    # Protocol implementation: TtsProvider
+    async def synthesize(
         self,
         text: str,
-        config: EdgeTtsConfig,
-        sound_config: SoundConfig,
         audio_player: AudioPlayer,
+        sound_config: SoundConfig,
         wingman_name: str,
-    ):
+        **kwargs
+    ) -> None:
+        """Synthesize speech using Edge TTS.
+
+        Args:
+            text: Text to convert to speech
+            audio_player: AudioPlayer instance for playback
+            sound_config: Sound configuration
+            wingman_name: Name of wingman
+            **kwargs: Unused (kept for protocol compatibility)
+
+        Returns:
+            None - Audio is played directly via audio_player
+        """
         communicate, output_file = await self.__generate_speech(
-            text=text, voice=config.voice
+            text=text, voice=self.config.voice
         )
         audio, sample_rate = audio_player.get_audio_from_file(output_file)
 

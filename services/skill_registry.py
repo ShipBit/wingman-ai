@@ -389,7 +389,7 @@ class SkillRegistry:
             skill_name = parameters.get("skill_name", "")
             success, message, _ = await self.activate_skill(skill_name)
             # Return success status and whether tools changed
-            # Note: needs_validation is handled async in OpenAiWingman
+            # Note: needs_validation is handled async in Wingman
             return message, success
 
         elif tool_name == "list_active_skills":

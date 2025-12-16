@@ -6,18 +6,52 @@ from api.interface import (
     WhispercppTranscript,
     WingmanInitializationError,
 )
+from providers.provider_base import (
+    BaseProvider,
+    ProviderCapability,
+    capabilities,
+    SttProvider,
+)
 from services.printr import Printr
 
 
-class Whispercpp:
+@capabilities(ProviderCapability.STT)
+class Whispercpp(BaseProvider, SttProvider):
     def __init__(
         self,
-        settings: WhispercppSettings,
+        config: WhispercppSettings,
+        api_key: str = None,  # Not used but required by BaseProvider
     ):
-        self.settings = settings
+        BaseProvider.__init__(self, config=config, api_key=api_key)
+        self.settings = config  # Alias for backward compatibility
         self.printr = Printr()
 
-    def transcribe(
+    # Protocol implementation: SttProvider
+    async def transcribe(self, filename: str, **kwargs) -> str:
+        """Transcribe audio using whispercpp server.
+
+        Args:
+            filename: Path to audio file
+            **kwargs: May include 'config' (WhispercppSttConfig)
+
+        Returns:
+            Transcribed text or None on error
+        """
+        # Get config from kwargs or use default
+        config = kwargs.get("config")
+        if not config:
+            # Use default config if not provided
+            config = WhispercppSttConfig(temperature=0.0)
+
+        result = self._transcribe_sync(
+            filename=filename,
+            config=config,
+            response_format="json",
+            timeout=10,
+        )
+        return result.text if result else None
+
+    def _transcribe_sync(
         self,
         filename: str,
         config: WhispercppSttConfig,

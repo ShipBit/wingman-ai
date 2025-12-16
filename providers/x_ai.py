@@ -1,4 +1,6 @@
 from openai import OpenAI, APIStatusError
+from openai.types.chat import ChatCompletion
+
 from providers.open_ai import OpenAi
 
 
@@ -10,7 +12,7 @@ class XAi(OpenAi):
         stream: bool,
         tools: list[dict[str, any]],
         model: str = None,
-    ):
+    ) -> ChatCompletion | None:
         try:
             if not tools:
                 completion = client.chat.completions.create(

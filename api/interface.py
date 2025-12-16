@@ -528,7 +528,7 @@ class FeaturesConfig(BaseModel):
     conversation_provider: ConversationProvider
     remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
-    use_generic_instant_responses: bool
+    # use_generic_instant_responses removed in v2.1.0
 
 
 class AudioFile(BaseModel):
@@ -960,14 +960,9 @@ class WingmanConfig(NestedConfig):
     def __setitem__(self, key, value):
         self.extra_properties[key] = value
 
-    custom_properties: Optional[list[CustomProperty]] = None
-    """You can add custom properties here to use in your custom wingman class."""
-
     disabled: Optional[bool] = False
     """Set this to true if you want to disable this wingman. You can also just remove it from the config."""
 
-    custom_class: Optional[CustomClassConfig] = None
-    """If you want to use a custom Wingman (Python) class, you can specify it here."""
     name: str
     """The "friendly" name of this Wingman. Can be changed by the user."""
     description: Optional[str] = None
