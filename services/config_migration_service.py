@@ -415,14 +415,14 @@ class ConfigMigrationService:
         if bundled_dir and path.exists(bundled_dir):
             for item in os.listdir(bundled_dir):
                 item_path = path.join(bundled_dir, item)
-                if self._is_valid_skill_directory(item_path):
+                if self.is_valid_skill_directory(item_path):
                     builtin_skills.add(item)
 
         # Check source skills directory (dev mode)
         if path.exists(SKILLS_DIR):
             for item in os.listdir(SKILLS_DIR):
                 item_path = path.join(SKILLS_DIR, item)
-                if self._is_valid_skill_directory(item_path):
+                if self.is_valid_skill_directory(item_path):
                     builtin_skills.add(item)
 
         # Legacy: Also check old templates/skills location
@@ -430,7 +430,7 @@ class ConfigMigrationService:
         if path.exists(legacy_template_skills):
             for item in os.listdir(legacy_template_skills):
                 item_path = path.join(legacy_template_skills, item)
-                if self._is_valid_skill_directory(item_path):
+                if self.is_valid_skill_directory(item_path):
                     builtin_skills.add(item)
 
         # Skills that were removed in 1.9.0 (converted to MCP servers)
@@ -495,9 +495,9 @@ class ConfigMigrationService:
 
         return custom_skills_copied
 
-    # INTERNAL - Helper methods that may be used by migrations
+    # Helper methods for migrations
 
-    def _is_valid_skill_directory(self, skill_path: str) -> bool:
+    def is_valid_skill_directory(self, skill_path: str) -> bool:
         """Check if a directory is a valid skill by verifying it has required files.
 
         A valid skill must have:
@@ -519,7 +519,7 @@ class ConfigMigrationService:
 
         return has_main and has_config
 
-    def _get_skills_discoverable_by_default(self) -> list[str]:
+    def get_skills_discoverable_by_default(self) -> list[str]:
         """Get list of BUILT-IN skill names that have discoverable_by_default=True (or unset).
 
         Custom skills are excluded - they must be explicitly added by the user.
@@ -541,14 +541,14 @@ class ConfigMigrationService:
         if bundled_dir and path.exists(bundled_dir):
             for item in os.listdir(bundled_dir):
                 item_path = path.join(bundled_dir, item)
-                if self._is_valid_skill_directory(item_path):
+                if self.is_valid_skill_directory(item_path):
                     builtin_skills.add(item)
 
         # Check source skills directory (dev mode)
         if path.exists(SKILLS_DIR):
             for item in os.listdir(SKILLS_DIR):
                 item_path = path.join(SKILLS_DIR, item)
-                if self._is_valid_skill_directory(item_path):
+                if self.is_valid_skill_directory(item_path):
                     builtin_skills.add(item)
 
         discoverable_by_default = []
@@ -592,7 +592,7 @@ class ConfigMigrationService:
 
         return all_names
 
-    def _get_mcps_discoverable_by_default(self) -> list[str]:
+    def get_mcps_discoverable_by_default(self) -> list[str]:
         """Get list of MCP server names that have discoverable_by_default=True.
 
         Returns:
@@ -607,7 +607,7 @@ class ConfigMigrationService:
 
         return discoverable_by_default
 
-    def _get_template_path(self, wingman_name: str) -> Optional[str]:
+    def get_template_path(self, wingman_name: str) -> Optional[str]:
         """Get the path to a template.yaml file for a known wingman.
 
         Args:
@@ -638,9 +638,7 @@ class ConfigMigrationService:
 
         return None
 
-    def _get_skill_default_custom_properties(
-        self, skill_module: str
-    ) -> dict[str, dict]:
+    def get_skill_default_custom_properties(self, skill_module: str) -> dict[str, dict]:
         """Get the default custom properties from a skill's default_config.yaml.
 
         Args:
@@ -687,8 +685,10 @@ class ConfigMigrationService:
                             for prop in config["custom_properties"]
                             if "id" in prop
                         }
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.log_warning(
+                        f"Failed to read or parse skill config '{config_path}': {e}"
+                    )
 
         return {}
 

@@ -261,128 +261,26 @@ class Migration182To190(BaseMigration):
     # Helper methods specific to this migration
 
     def _is_valid_skill_directory(self, skill_path: str) -> bool:
-        """Check if a directory is a valid skill."""
-        if not path.isdir(skill_path):
-            return False
-        has_main = path.exists(path.join(skill_path, "main.py"))
-        has_config = path.exists(path.join(skill_path, "default_config.yaml"))
-        return has_main and has_config
+        """Delegate to ConfigMigrationService for skill directory validation."""
+        return self.service.is_valid_skill_directory(skill_path)
 
     def _get_skills_discoverable_by_default(self) -> list[str]:
-        """Get list of built-in skill names that are discoverable by default."""
-        from services.module_manager import (
-            ModuleManager,
-            get_bundled_skills_dir,
-            SKILLS_DIR,
-        )
-
-        # Get list of built-in skill directory names
-        builtin_skills = set()
-
-        bundled_dir = get_bundled_skills_dir()
-        if bundled_dir and path.exists(bundled_dir):
-            for item in os.listdir(bundled_dir):
-                item_path = path.join(bundled_dir, item)
-                if self._is_valid_skill_directory(item_path):
-                    builtin_skills.add(item)
-
-        if path.exists(SKILLS_DIR):
-            for item in os.listdir(SKILLS_DIR):
-                item_path = path.join(SKILLS_DIR, item)
-                if self._is_valid_skill_directory(item_path):
-                    builtin_skills.add(item)
-
-        discoverable_by_default = []
-        try:
-            all_skills = ModuleManager.read_available_skills()
-            for skill in all_skills:
-                skill_folder = (
-                    skill.config.module.split(".")[-2]
-                    if "." in skill.config.module
-                    else skill.name
-                )
-                if skill_folder not in builtin_skills:
-                    continue
-
-                if skill.config.discoverable_by_default is not False:
-                    discoverable_by_default.append(skill.name)
-        except Exception as e:
-            self.log_warning(
-                f"Could not read skills for discoverable_by_default check: {e}"
-            )
-
-        return discoverable_by_default
+        """Delegate to ConfigMigrationService for skills discoverable by default."""
+        return self.service.get_skills_discoverable_by_default()
 
     def _get_mcps_discoverable_by_default(self) -> list[str]:
-        """Get list of MCP server names that are discoverable by default."""
-        discoverable_by_default = []
-        mcp_config = self.config_manager.mcp_config
-        if mcp_config and mcp_config.servers:
-            for server in mcp_config.servers:
-                if server.discoverable_by_default:
-                    discoverable_by_default.append(server.name)
-        return discoverable_by_default
+        """Delegate to ConfigMigrationService for MCPs discoverable by default."""
+        return self.service.get_mcps_discoverable_by_default()
 
     def _get_template_path(self, wingman_name: str) -> Optional[str]:
-        """Get the path to a template.yaml file for a known wingman."""
-        template_locations = [
-            path.join(
-                self.templates_dir,
-                "configs",
-                "_Star Citizen",
-                f"{wingman_name}.template.yaml",
-            ),
-            path.join(
-                self.templates_dir,
-                "configs",
-                "General",
-                f"{wingman_name}.template.yaml",
-            ),
-        ]
-
-        for template_path in template_locations:
-            if path.exists(template_path):
-                return template_path
-        return None
+        """Delegate to ConfigMigrationService for template path lookup."""
+        return self.service.get_template_path(wingman_name)
 
     def _get_skill_default_custom_properties(
         self, skill_module: str
     ) -> dict[str, dict]:
-        """Get the default custom properties from a skill's default_config.yaml."""
-        from services.module_manager import get_bundled_skills_dir, SKILLS_DIR
-
-        # Extract skill directory name from module path
-        skill_dir = skill_module.replace(".main", "").replace(".", "/").split("/")[-1]
-
-        # Search for default_config.yaml in multiple locations
-        search_paths = []
-
-        bundled_dir = get_bundled_skills_dir()
-        if bundled_dir:
-            search_paths.append(
-                path.join(bundled_dir, skill_dir, "default_config.yaml")
-            )
-
-        search_paths.append(path.join(SKILLS_DIR, skill_dir, "default_config.yaml"))
-        search_paths.append(
-            path.join(get_custom_skills_dir(), skill_dir, "default_config.yaml")
-        )
-
-        # Find and read the default_config.yaml
-        for config_path in search_paths:
-            if path.exists(config_path):
-                try:
-                    config = self.config_manager.read_config(config_path)
-                    if config and "custom_properties" in config:
-                        return {
-                            prop["id"]: prop
-                            for prop in config["custom_properties"]
-                            if "id" in prop
-                        }
-                except Exception:
-                    pass
-
-        return {}
+        """Delegate to ConfigMigrationService for skill default custom properties."""
+        return self.service.get_skill_default_custom_properties(skill_module)
 
     def _process_custom_properties(self, skill_module: str, custom_props: list) -> list:
         """Merge wingman custom property overrides with skill defaults and validate."""
