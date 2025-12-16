@@ -8,7 +8,9 @@ import inspect
 from pathlib import Path
 from typing import List, Tuple, Type
 
+from api.enums import LogType
 from services.migrations.base_migration import BaseMigration
+from services.printr import Printr
 
 
 def discover_migrations() -> List[Tuple[str, str, Type[BaseMigration]]]:
@@ -23,6 +25,8 @@ def discover_migrations() -> List[Tuple[str, str, Type[BaseMigration]]]:
     """
     migrations = []
     migrations_dir = Path(__file__).parent
+    printr = Printr()
+    failed_migrations = []
 
     # Find all migration_*.py files (excluding __init__.py and base_migration.py)
     for migration_file in sorted(migrations_dir.glob("migration_*.py")):
@@ -56,10 +60,30 @@ def discover_migrations() -> List[Tuple[str, str, Type[BaseMigration]]]:
                     migrations.append((old_ver, new_ver, obj))
 
         except Exception as e:
-            # Log warning but don't fail - allows graceful degradation
-            print(f"Warning: Failed to load migration {migration_file}: {e}")
+            error_msg = f"Failed to load migration {migration_file.stem}: {e}"
+            printr.print(error_msg, color=LogType.WARNING)
+            failed_migrations.append(migration_file.stem)
 
     # Sort by old_version to maintain proper migration order
     migrations.sort(key=lambda m: [int(n) for n in m[0].split("_")])
+
+    # Validate migration chain integrity
+    if failed_migrations:
+        if migrations:
+            # We have some migrations but some failed - check for broken chains
+            printr.print(
+                f"Migration chain may be incomplete. Failed migrations: {', '.join(failed_migrations)}",
+                color=LogType.ERROR,
+            )
+            printr.print(
+                "User configs may not migrate correctly if they span versions with failed migrations.",
+                color=LogType.WARNING,
+            )
+        else:
+            # All migrations failed - critical error
+            printr.print(
+                f"Critical: All migrations failed to load. Application may not function correctly.",
+                color=LogType.ERROR,
+            )
 
     return migrations
