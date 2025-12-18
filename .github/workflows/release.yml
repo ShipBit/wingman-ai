@@ -8,7 +8,7 @@ on:
 jobs:
   build-windows:
     name: Build Windows Executable
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +41,7 @@ jobs:
 
   sign-windows-executable:
     needs: build-windows
-    runs-on: windows-2022
+    runs-on: blacksmith-4vcpu-windows-2025
     steps:
       - uses: actions/checkout@v4 # for the action
       - uses: actions/download-artifact@v4
@@ -68,7 +68,7 @@ jobs:
 
   release:
     needs: [sign-windows-executable]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/download-artifact@v4
         with:
