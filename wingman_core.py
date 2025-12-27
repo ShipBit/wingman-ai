@@ -763,6 +763,14 @@ class WingmanCore(WebSocketUser):
             openai = OpenAi(api_key=self.secret_keeper.secrets["openai"])
             transcription = openai.transcribe(filename=recording_file)
             text = transcription.text
+        elif provider == VoiceActivationSttProvider.GROQ:
+            # TODO: can't await secret_keeper.retrieve here, so just assume the secret is there...
+            groq = OpenAi(
+                api_key=self.secret_keeper.secrets["groq"],
+                base_url="https://api.groq.com/openai/v1/",
+            )
+            transcription = groq.transcribe(filename=recording_file, model="whisper-large-v3-turbo")
+            text = transcription.text
         elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
             combined_hotwords: list[str] = []
 

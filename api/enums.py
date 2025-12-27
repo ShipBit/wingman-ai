@@ -143,6 +143,7 @@ class SttProvider(Enum):
     WHISPERCPP = "whispercpp"
     FASTER_WHISPER = "fasterwhisper"
     WINGMAN_PRO = "wingman_pro"
+    GROQ = "groq"
 
 
 class VoiceActivationSttProvider(Enum):
@@ -151,6 +152,7 @@ class VoiceActivationSttProvider(Enum):
     WHISPERCPP = "whispercpp"
     FASTER_WHISPER = "fasterwhisper"
     WINGMAN_PRO = "wingman_pro"
+    GROQ = "groq"
 
 
 class ConversationProvider(Enum):

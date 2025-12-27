@@ -231,6 +231,7 @@ class OpenAiWingman(Wingman):
                 [
                     self.config.features.conversation_provider
                     == ConversationProvider.GROQ,
+                    self.config.features.stt_provider == SttProvider.GROQ,
                 ]
             )
         elif provider_type == "cerebras":
@@ -967,6 +968,8 @@ class OpenAiWingman(Wingman):
                     )
             elif self.config.features.stt_provider == SttProvider.OPENAI:
                 transcript = self.openai.transcribe(filename=audio_input_wav)
+            elif self.config.features.stt_provider == SttProvider.GROQ:
+                transcript = self.groq.transcribe(filename=audio_input_wav, model="whisper-large-v3-turbo")
         except Exception as e:
             await printr.print_async(
                 f"Error during transcription using '{self.config.features.stt_provider}': {str(e)}",
