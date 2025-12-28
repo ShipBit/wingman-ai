@@ -612,7 +612,7 @@ class ATSTelemetry(Skill):
                     data["jobFinishedTime"]
                 )
             )
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["jobFinishedTime"] = await self.convert_to_clock_time(
                     job_finish_days_hours_and_minutes, 24
                 )
@@ -681,7 +681,7 @@ class ATSTelemetry(Skill):
             enhanced_data["cargoMassInTons"] = (
                 str(tons) + " t" if data["trailer"][0]["attached"] else ""
             )
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["cargoMass"] = (
                     str(round(data["cargoMass"])) + " kg"
                     if data["trailer"][0]["attached"]
@@ -698,7 +698,7 @@ class ATSTelemetry(Skill):
             route_distance_km = data["routeDistance"] / 1000
             route_distance_miles = route_distance_km * 0.621371
 
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["routeDistance"] = (
                     str(math.floor(route_distance_km)) + " kilometers"
                 )
@@ -751,7 +751,7 @@ class ATSTelemetry(Skill):
             )
 
             # Convert temperatures
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["brakeTemperature"] = (
                     str(round(data["brakeTemperature"])) + " degrees Celsius"
                 )
@@ -776,7 +776,7 @@ class ATSTelemetry(Skill):
                 )
 
             # Convert volumes
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["fuelTankSize"] = (
                     "Fuel tank can hold " + str(round(data["fuelCapacity"])) + " liters"
                 )
@@ -991,7 +991,8 @@ class ATSTelemetry(Skill):
         )  # If external in job type means world of trucks contract
 
     async def get_currency(self, money):
-        currency_code = "EUR" if self.use_metric_system else "USD"
+        use_metric = self._get_use_metric_system()
+        currency_code = "EUR" if use_metric else "USD"
 
         if currency_code == "EUR":
             return f"€{money}"
