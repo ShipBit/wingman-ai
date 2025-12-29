@@ -712,6 +712,7 @@ class Skill:
 
     def threaded_execution(self, function, *args) -> threading.Thread:
         """Execute a function in a separate thread."""
+        self.printr.print(f"[{self.__class__.__name__}] Threaded execution called before it was ready.", LogType.WARNING, server_only=True)
         pass
 
     def get_generated_files_dir(self) -> str:
