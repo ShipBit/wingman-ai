@@ -303,5 +303,8 @@ class QuickCommands(Skill):
             "learning_learned": self.learning_learned,
         }
 
+        dirpath = path.dirname(self.file_ipl)
+        if dirpath and not path.exists(dirpath):
+            __import__("os").makedirs(dirpath, exist_ok=True)
         with open(self.file_ipl, "w", encoding="utf-8") as file:
             json.dump(learning_data, file, indent=4)
