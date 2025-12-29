@@ -941,41 +941,6 @@ class NestedConfig(BaseModel):
     """User's skill configuration overrides. Skills not listed here use defaults."""
 
 
-class BasicWingmanConfig(BaseModel):
-    """All configuration options that can be save in the "Basic" config in the client"""
-
-    name: str
-    disabled: Optional[bool] = False
-    record_key: Optional[str] = None
-    record_key_codes: Optional[list[int]] = None
-    record_mouse_button: Optional[str] = None
-    record_joystick_button: Optional[CommandJoystickConfig] = None
-    sound: SoundConfig
-    voice: str
-    prompts: PromptConfig
-
-    features: FeaturesConfig
-    openai: OpenAiConfig
-    mistral: MistralConfig
-    groq: GroqConfig
-    cerebras: CerebrasConfig
-    google: GoogleConfig
-    openrouter: OpenRouterConfig
-    local_llm: LocalLlmConfig
-    edge_tts: EdgeTtsConfig
-    elevenlabs: ElevenlabsConfig
-    hume: HumeConfig
-    inworld: InworldConfig
-    azure: AzureConfig
-    xvasynth: XVASynthTtsConfig
-    whispercpp: WhispercppSttConfig
-    fasterwhisper: FasterWhisperSttConfig
-    wingman_pro: WingmanProConfig
-    perplexity: PerplexityConfig
-    xai: XaiConfig
-    openai_compatible_tts: OpenAiCompatibleTtsConfig
-
-
 class WingmanConfig(NestedConfig):
     def __getitem__(self, item):
         return self.extra_properties.get(item)

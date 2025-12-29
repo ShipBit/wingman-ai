@@ -5,7 +5,7 @@ edge-tts==7.2.7
 elevenlabslib==0.32.1
 fastapi==0.115.7
 faster_whisper==1.2.1
-google-genai==1.55.0
+google-genai==1.56.0
 
 # setuptools vendored dependencies - required for PyInstaller bundling
 jaraco-context>=6.0.0

@@ -1,3 +1,4 @@
+import asyncio
 from api.enums import LogSource, LogType, WingmanInitializationErrorType
 from api.interface import (
     Config,
@@ -51,9 +52,13 @@ class Tower:
         if not self.config.wingmen:
             return errors
 
+        # Prepare wingman instantiation tasks for parallel execution
+        tasks = []
+        disabled_wingmen = []
+
         for wingman_name, wingman_config in self.config.wingmen.items():
             if wingman_config.disabled is True:
-                self.disabled_wingmen.append(wingman_config)
+                disabled_wingmen.append(wingman_config)
                 printr.print(
                     f"Skipped instantiating disabled wingman {wingman_config.name}.",
                     color=LogType.WARNING,
@@ -63,12 +68,21 @@ class Tower:
                 )
                 continue
 
-            _wingman = await self.__instantiate_wingman(
+            # Create task for this wingman
+            task = self.__instantiate_wingman(
                 wingman_name=wingman_name,
                 wingman_config=wingman_config,
                 settings=settings,
                 errors=errors,
             )
+            tasks.append(task)
+
+        # Instantiate all wingmen in parallel
+        if tasks:
+            await asyncio.gather(*tasks)
+
+        # Add disabled wingmen to the list
+        self.disabled_wingmen.extend(disabled_wingmen)
 
         printr.print(
             f"Instantiated wingmen: {', '.join([w.name for w in self.wingmen])}.",

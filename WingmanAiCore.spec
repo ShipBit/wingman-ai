@@ -46,6 +46,18 @@ datas = [
     ('LICENSE', '.'),
 ]
 
+# Automatically bundle all contents from explicit_deps/
+# Add any dependencies that need manual bundling to explicit_deps/ and they'll be copied to _internal/
+if os.path.exists('explicit_deps'):
+    for item in os.listdir('explicit_deps'):
+        item_path = os.path.join('explicit_deps', item)
+        if os.path.isdir(item_path):
+            datas.append((item_path, item))
+            print(f"Adding explicit dependency: {item}")
+        elif os.path.isfile(item_path):
+            datas.append((item_path, '.'))
+            print(f"Adding explicit file: {item}")
+
 # Add python3.dll if it exists (Windows only)
 if os.path.exists('lib/python3.dll'):
     datas.append(('lib/python3.dll', '.'))

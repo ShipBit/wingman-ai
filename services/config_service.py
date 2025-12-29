@@ -3,7 +3,6 @@ from typing import Optional
 from fastapi import APIRouter
 from api.enums import LogType
 from api.interface import (
-    BasicWingmanConfig,
     ConfigDirInfo,
     ConfigWithDirInfo,
     ConfigsInfo,
@@ -13,6 +12,7 @@ from api.interface import (
     McpServerState,
     NestedConfig,
     NewWingmanTemplate,
+    SkillConfig,
     SkillBase,
     WingmanConfig,
     WingmanConfigFileInfo,
@@ -130,12 +130,6 @@ class ConfigService:
             methods=["POST"],
             path="/config/save-wingman",
             endpoint=self.save_wingman_config,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/config/save-wingman-basic",
-            endpoint=self.save_basic_wingman_config,
             tags=tags,
         )
         self.router.add_api_route(
@@ -328,8 +322,6 @@ class ConfigService:
                 wingman_file=wingman_file,
                 wingman_config=wingman_config,
                 silent=True,  # We'll show our own message
-                validate=False,
-                update_skills=False,  # Don't reload all skills
             )
 
             # Incrementally toggle just this skill on the active wingman
@@ -479,7 +471,6 @@ class ConfigService:
                 wingman_file=wingman_file,
                 wingman_config=wingman_config,
                 silent=True,  # We'll show our own message
-                validate=False,
             )
 
             # Incrementally toggle just this MCP on the active wingman
@@ -841,22 +832,30 @@ class ConfigService:
         wingman_file: WingmanConfigFileInfo,
         wingman_config: WingmanConfig,
         silent: bool = False,
-        validate: bool = False,
-        update_skills: bool = False,
+        skip_config_validation: bool = True,
     ):
         """Save wingman configuration and optionally update the active wingman.
+
+        This is the single authoritative save path for Wingman configuration.
+
+        IMPORTANT:
+        - Skill + MCP activation state is controlled via dedicated toggle endpoints
+          and stored in `discoverable_skills` / `discoverable_mcps`.
+        - Some client flows (e.g. saving Skill custom properties) may send a partial
+          WingmanConfig payload. Since `discoverable_*` default to an empty list,
+          persisting the raw payload can unintentionally deactivate skills/MCPs.
+                - To protect against partial payloads, activation state is preserved from the
+                    on-disk config ONLY when the incoming payload omits `discoverable_skills`
+                    and/or `discoverable_mcps`.
 
         Args:
             config_dir: The config directory info
             wingman_file: The wingman file info
             wingman_config: The wingman configuration to save
             silent: If True, don't show toast notification
-            validate: If True, validate the config before applying
-            update_skills: DEPRECATED - No longer used. Skill toggling now uses
-                incremental enable_skill()/disable_skill() methods instead of
-                full reinitialization. This parameter is kept for backwards
-                compatibility but has no effect.
+            skip_config_validation: If False, validate the config before applying
         """
+
         # Check if tower is available
         if not self.tower:
             self.printr.toast_error(
@@ -864,16 +863,52 @@ class ConfigService:
             )
             return
 
+        # Load current on-disk config for merge/preservation
+        existing_config: WingmanConfig | None = None
+        try:
+            existing_config = self.config_manager.load_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+            )
+        except Exception:
+            # Fallback to trusting the incoming config if disk read fails
+            existing_config = None
+
+        merged_config = wingman_config
+        if existing_config:
+            # Merge partial payloads: prefer incoming values, but keep existing values
+            # for fields that are omitted from the request.
+            merged_data = existing_config.model_dump()
+            merged_data.update(wingman_config.model_dump(exclude_unset=True))
+            merged_config = WingmanConfig(**merged_data)
+
+            # Special-case merge for Skill overrides: clients may send only a subset
+            # (e.g. when editing custom properties of a single skill). Replacing the
+            # entire list would drop unrelated overrides.
+            if "skills" in wingman_config.model_fields_set:
+                merged_config.skills = self._merge_skill_configs(
+                    existing=existing_config.skills,
+                    incoming=wingman_config.skills,
+                )
+
+            # Protect against partial client payloads inadvertently deactivating
+            # skills/MCPs. Preserve from disk only when the incoming payload omitted
+            # these fields entirely.
+            if "discoverable_skills" not in wingman_config.model_fields_set:
+                merged_config.discoverable_skills = existing_config.discoverable_skills
+            if "discoverable_mcps" not in wingman_config.model_fields_set:
+                merged_config.discoverable_mcps = existing_config.discoverable_mcps
+
         # update the wingman
         wingman = self.tower.get_wingman_by_name(wingman_file.name)
         if not wingman:
             # try to enable a previously disabled wingman
             disabled_config = self.tower.get_disabled_wingman_by_name(
-                wingman_config.name
+                merged_config.name
             )
-            if disabled_config and not wingman_config.disabled:
+            if disabled_config and not merged_config.disabled:
                 enabled = await self.tower.enable_wingman(
-                    wingman_name=wingman_config.name,
+                    wingman_name=merged_config.name,
                     settings=self.config_manager.settings_config,
                 )
                 if enabled:
@@ -885,12 +920,13 @@ class ConfigService:
                 return
 
         updated = await wingman.update_config(
-            config=wingman_config, validate=validate, update_skills=update_skills
+            config=merged_config,
+            skip_config_validation=skip_config_validation,
         )
 
         if not updated:
             self.printr.toast_error(
-                f"New config for Wingman '{wingman_config.name}' is invalid."
+                f"New config for Wingman '{merged_config.name}' is invalid."
             )
             return
 
@@ -898,14 +934,46 @@ class ConfigService:
         self.config_manager.save_wingman_config(
             config_dir=config_dir,
             wingman_file=wingman_file,
-            wingman_config=wingman_config,
+            wingman_config=merged_config,
         )
 
-        message = f"Wingman {wingman_config.name}'s config changed."
+        message = f"Wingman {merged_config.name}'s config changed."
         if not silent:
             self.printr.toast(message)
         else:
             self.printr.print(text=message, server_only=True)
+
+    @staticmethod
+    def _merge_skill_configs(
+        existing: list[SkillConfig] | None,
+        incoming: list[SkillConfig] | None,
+    ) -> list[SkillConfig] | None:
+        if incoming is None:
+            return existing
+        if existing is None:
+            return incoming
+
+        def _key(skill_cfg: SkillConfig) -> str:
+            return f"{skill_cfg.module}:{skill_cfg.name}"
+
+        merged_by_key: dict[str, SkillConfig] = {_key(s): s for s in existing}
+        for skill_cfg in incoming:
+            merged_by_key[_key(skill_cfg)] = skill_cfg
+
+        # Preserve existing order, then append new incoming entries
+        ordered: list[SkillConfig] = []
+        seen: set[str] = set()
+        for skill_cfg in existing:
+            k = _key(skill_cfg)
+            ordered.append(merged_by_key[k])
+            seen.add(k)
+        for skill_cfg in incoming:
+            k = _key(skill_cfg)
+            if k not in seen:
+                ordered.append(skill_cfg)
+                seen.add(k)
+
+        return ordered
 
     # POST config/save-commands
     async def save_commands(
@@ -953,94 +1021,6 @@ class ConfigService:
         )
 
         message = f"Commands saved for {wingman_name}."
-        if not silent:
-            self.printr.toast(message)
-        else:
-            self.printr.print(text=message, server_only=True)
-
-    # POST config/save-wingman-basic
-    async def save_basic_wingman_config(
-        self,
-        config_dir: ConfigDirInfo,
-        wingman_file: WingmanConfigFileInfo,
-        basic_config: BasicWingmanConfig,
-        silent: bool = False,
-        validate: bool = False,
-    ):
-        # update the wingman
-        wingman = self.tower.get_wingman_by_name(wingman_file.name)
-        if not wingman:
-            # try to enable a previously disabled wingman
-            disabled_config = self.tower.get_disabled_wingman_by_name(basic_config.name)
-            if disabled_config and not basic_config.disabled:
-                enabled = await self.tower.enable_wingman(
-                    wingman_name=basic_config.name,
-                    settings=self.config_manager.settings_config,
-                )
-                if enabled:
-                    # now this should work
-                    wingman = self.tower.get_wingman_by_name(wingman_file.name)
-            # else fail
-            if not wingman:
-                self.printr.toast_error(f"Wingman '{wingman_file.name}' not found.")
-                return
-
-        wingman_config = wingman.config
-        wingman_config.name = basic_config.name
-        wingman_config.disabled = basic_config.disabled
-        wingman_config.record_key = basic_config.record_key
-        wingman_config.record_key_codes = basic_config.record_key_codes
-        wingman_config.sound = basic_config.sound
-        wingman_config.prompts = basic_config.prompts
-
-        reload_config = (
-            wingman_config.record_joystick_button != basic_config.record_joystick_button
-            or wingman_config.record_mouse_button != basic_config.record_mouse_button
-            or wingman_file.name != wingman_config.name
-        )
-
-        wingman_config.record_joystick_button = basic_config.record_joystick_button
-        wingman_config.record_mouse_button = basic_config.record_mouse_button
-
-        wingman_config.features = basic_config.features
-        wingman_config.openai = basic_config.openai
-        wingman_config.mistral = basic_config.mistral
-        wingman_config.groq = basic_config.groq
-        wingman_config.cerebras = basic_config.cerebras
-        wingman_config.google = basic_config.google
-        wingman_config.openrouter = basic_config.openrouter
-        wingman_config.local_llm = basic_config.local_llm
-        wingman_config.edge_tts = basic_config.edge_tts
-        wingman_config.elevenlabs = basic_config.elevenlabs
-        wingman_config.azure = basic_config.azure
-        wingman_config.xvasynth = basic_config.xvasynth
-        wingman_config.hume = basic_config.hume
-        wingman_config.inworld = basic_config.inworld
-        wingman_config.whispercpp = basic_config.whispercpp
-        wingman_config.fasterwhisper = basic_config.fasterwhisper
-        wingman_config.wingman_pro = basic_config.wingman_pro
-        wingman_config.perplexity = basic_config.perplexity
-        wingman_config.openai_compatible_tts = basic_config.openai_compatible_tts
-
-        updated = await wingman.update_config(config=wingman_config, validate=validate)
-
-        if not updated:
-            self.printr.toast_error(
-                f"New config for Wingman '{wingman_config.name}' is invalid."
-            )
-            return
-
-        # save the config file
-        self.config_manager.save_wingman_config(
-            config_dir=config_dir,
-            wingman_file=wingman_file,
-            wingman_config=wingman_config,
-        )
-
-        if reload_config:
-            await self.load_config(config_dir=config_dir)
-
-        message = f"Wingman {wingman_config.name}'s basic config changed."
         if not silent:
             self.printr.toast(message)
         else:
@@ -1100,7 +1080,7 @@ class ConfigService:
         self,
         config: NestedConfig,
         silent: bool = False,
-        validate: bool = False,
+        skip_config_validation: bool = True,
     ):
         # save the defaults config file
         self.config_manager.default_config = config
@@ -1133,7 +1113,7 @@ class ConfigService:
                         wingman_file=wingman_file,
                         wingman_config=wingman_config,
                         silent=silent,
-                        validate=validate,
+                        skip_config_validation=skip_config_validation,
                     )
 
                 else:

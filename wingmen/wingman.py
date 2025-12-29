@@ -850,7 +850,7 @@ class Wingman:
             return None
 
     async def update_config(
-        self, config: WingmanConfig, validate=False, update_skills=False
+        self, config: WingmanConfig, skip_config_validation: bool = True
     ) -> bool:
         """Update the config of the Wingman.
 
@@ -858,17 +858,13 @@ class Wingman:
 
         Args:
             config: The new wingman configuration
-            validate: If True, validate the config and rollback on error
-            update_skills: DEPRECATED - No longer used. Skill toggling now uses
-                incremental enable_skill()/disable_skill() methods instead of
-                full reinitialization. This parameter is kept for backwards
-                compatibility but has no effect.
+            skip_config_validation: If False, validate the config and rollback on error
 
         Returns:
             True if config was updated successfully, False otherwise
         """
         try:
-            if validate:
+            if not skip_config_validation:
                 old_config = deepcopy(self.config)
 
             self.config = config
@@ -876,7 +872,7 @@ class Wingman:
             # Propagate skill config changes to loaded skills
             await self._update_skill_configs(config)
 
-            if validate:
+            if not skip_config_validation:
                 errors = await self.validate()
 
                 for error in errors:
@@ -908,23 +904,47 @@ class Wingman:
         # Build lookup of new skill configs by folder name
         new_skill_configs: dict[str, "SkillConfig"] = {}
         for skill_config in wingman_config.skills:
-            folder_name = _get_skill_folder_from_module(skill_config.module)
+            try:
+                folder_name = _get_skill_folder_from_module(skill_config.module)
+            except Exception:
+                printr.print(
+                    f"Skipping skill config override with unexpected module format: '{skill_config.module}'",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                continue
             new_skill_configs[folder_name] = skill_config
 
         # Update each loaded skill if its config changed
         for skill in self.skills:
             # Get the folder name for this skill
-            skill_folder = _get_skill_folder_from_module(skill.config.module)
+            try:
+                skill_folder = _get_skill_folder_from_module(skill.config.module)
+            except Exception:
+                printr.print(
+                    f"Skipping loaded skill with unexpected module format: '{skill.config.module}'",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                continue
 
             if skill_folder in new_skill_configs:
                 user_override = new_skill_configs[skill_folder]
 
+                fields_set = getattr(user_override, "model_fields_set", None)
+                if fields_set is None:
+                    # Pydantic v1 fallback
+                    fields_set = getattr(user_override, "__fields_set__", set())
+
                 # Create updated config by copying current and applying overrides
                 # This preserves all default values while applying user overrides
                 updated_config = deepcopy(skill.config)
-                if user_override.custom_properties:
+
+                # Apply overrides even if they're explicitly empty.
+                # This allows users to clear custom properties/prompt in the UI.
+                if "custom_properties" in fields_set:
                     updated_config.custom_properties = user_override.custom_properties
-                if user_override.prompt:
+                if "prompt" in fields_set:
                     updated_config.prompt = user_override.prompt
 
                 # Let the skill handle the config update (will compare old vs new)

@@ -29,6 +29,8 @@ prompts:
     - Calm under pressure
     - Occasional dry humor befitting a seasoned controller
 record_key: delete
+inworld:
+  voice_id: Clive
 sound:
   effects: [LOW_QUALITY_RADIO]
   play_beep_apollo: true

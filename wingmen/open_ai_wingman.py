@@ -528,17 +528,17 @@ class OpenAiWingman(Wingman):
         # Get discoverable MCPs list (whitelist) from wingman config
         discoverable_mcps = self.config.discoverable_mcps
 
-        connected_count = 0
-        connected_names = []
-        skipped_names = []
+        # Filter to only discoverable MCPs
+        mcps_to_connect = [mcp for mcp in mcp_configs if mcp.name in discoverable_mcps]
 
-        for mcp_config in mcp_configs:
+        if not mcps_to_connect:
+            return errors
+
+        # Prepare connection tasks for parallel execution
+        async def connect_mcp(mcp_config):
+            """Connect to a single MCP server. Returns (success, connection_info, errors)."""
+            local_errors = []
             try:
-                # Check if MCP is discoverable for this wingman (whitelist - must be in list)
-                if mcp_config.name not in discoverable_mcps:
-                    skipped_names.append(mcp_config.name)
-                    continue
-
                 # Build headers with secrets
                 headers = {}
                 if mcp_config.headers:
@@ -549,9 +549,8 @@ class OpenAiWingman(Wingman):
                 api_key = await self.secret_keeper.retrieve(
                     requester=self.name,
                     key=secret_key,
-                    prompt_if_missing=False,  # Don't prompt, just check
+                    prompt_if_missing=False,
                 )
-                # Debug: Log whether secret was found (without revealing the actual key)
                 if api_key:
                     printr.print(
                         f"MCP secret '{secret_key}' found ({len(api_key)} chars)",
@@ -559,17 +558,13 @@ class OpenAiWingman(Wingman):
                         source_name=self.name,
                         server_only=True,
                     )
-                    # Add to headers - common header names for API keys
-                    # The config.headers should specify the actual header name
-                    # If not, we'll add it as Authorization
                     if not any(
                         k.lower() in ["authorization", "api-key", "x-api-key"]
                         for k in headers.keys()
                     ):
                         headers["Authorization"] = f"Bearer {api_key}"
 
-                # Connect to the MCP server with timeout
-                # Default: 30s for HTTP/SSE, 60s for stdio (may need to pull images)
+                # Connect with timeout
                 default_timeout = 60.0 if mcp_config.type.value == "stdio" else 30.0
                 timeout = (
                     float(mcp_config.timeout) if mcp_config.timeout else default_timeout
@@ -591,31 +586,31 @@ class OpenAiWingman(Wingman):
                         source_name=self.name,
                         server_only=True,
                     )
-                    errors.append(
+                    local_errors.append(
                         WingmanInitializationError(
                             wingman_name=self.name,
                             message=error_msg,
                             error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
                         )
                     )
-                    continue
+                    return (False, None, local_errors)
 
                 if connection.is_connected:
-                    connected_count += 1
-                    connected_names.append(
-                        f"{mcp_config.display_name} ({len(connection.tools)} tools)"
+                    return (
+                        True,
+                        f"{mcp_config.display_name} ({len(connection.tools)} tools)",
+                        local_errors,
                     )
                 else:
-                    # Error already logged in mcp_client.py with clear message
                     error_msg = f"MCP '{mcp_config.display_name}' failed to connect: {connection.error}"
-                    errors.append(
+                    local_errors.append(
                         WingmanInitializationError(
                             wingman_name=self.name,
                             message=error_msg,
                             error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
                         )
                     )
-                    # Non-fatal error - continue with other MCPs
+                    return (False, None, local_errors)
 
             except Exception as e:
                 error_msg = f"MCP '{mcp_config.name}' initialization error: {str(e)}"
@@ -628,13 +623,27 @@ class OpenAiWingman(Wingman):
                 printr.print(
                     traceback.format_exc(), color=LogType.ERROR, server_only=True
                 )
-                errors.append(
+                local_errors.append(
                     WingmanInitializationError(
                         wingman_name=self.name,
                         message=error_msg,
                         error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
                     )
                 )
+                return (False, None, local_errors)
+
+        # Connect to all MCPs in parallel
+        connection_tasks = [connect_mcp(mcp) for mcp in mcps_to_connect]
+        results = await asyncio.gather(*connection_tasks)
+
+        # Collect results
+        connected_count = 0
+        connected_names = []
+        for success, connection_info, mcp_errors in results:
+            if success:
+                connected_count += 1
+                connected_names.append(connection_info)
+            errors.extend(mcp_errors)
 
         # Log consolidated MCP status for this wingman
         if connected_count > 0:
@@ -969,7 +978,9 @@ class OpenAiWingman(Wingman):
             elif self.config.features.stt_provider == SttProvider.OPENAI:
                 transcript = self.openai.transcribe(filename=audio_input_wav)
             elif self.config.features.stt_provider == SttProvider.GROQ:
-                transcript = self.groq.transcribe(filename=audio_input_wav, model="whisper-large-v3-turbo")
+                transcript = self.groq.transcribe(
+                    filename=audio_input_wav, model="whisper-large-v3-turbo"
+                )
         except Exception as e:
             await printr.print_async(
                 f"Error during transcription using '{self.config.features.stt_provider}': {str(e)}",

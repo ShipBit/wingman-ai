@@ -154,8 +154,8 @@ class ConfigManager:
                     .replace("/", path.sep)
                 )
                 config_dir = self.get_config_dir(config_dir_name)
-                if not force and config_dir:
-                    # skip logically deleted and default (renamed) config dirs
+                if not force and config_dir and config_dir.is_deleted:
+                    # skip logically deleted config dirs
                     continue
 
             # Create the same relative path in the target directory

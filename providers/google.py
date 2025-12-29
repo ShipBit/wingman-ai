@@ -39,6 +39,47 @@ class GoogleGenAI:
         else:
             printr.toast_error("The API did not provide further information.")
 
+    def get_minimal_reasoning_by_model(self, model_name: str) -> dict:
+        """Return minimal allowed OpenAI `reasoning_effort` for Gemini models.
+
+        Gemini models support thinking controls that map to OpenAI's `reasoning_effort`.
+        We always send the lowest allowed value to minimize latency.
+
+                Rules (practical constraints from Gemini's OpenAI-compatible endpoint):
+                - Gemini 2.5 Flash-family: supports `reasoning_effort="none"` (fastest).
+                - Gemini 2.5 Pro-family: do not disable thinking; use the lowest supported value.
+                - Gemini 3-family: does NOT accept `"minimal"` (e.g. gemini-3-flash-preview).
+                    The lowest supported value is `"low"`.
+
+                For non-Gemini models and unknown/legacy Gemini aliases, we omit the parameter
+                to avoid sending unsupported values.
+        """
+
+        if not model_name:
+            return {}
+
+        normalized = model_name.lower()
+
+        # Only apply to Gemini models; don't risk sending unknown params to other providers.
+        if "gemini" not in normalized:
+            return {}
+
+        # Gemini 2.5 models
+        if "2.5" in normalized:
+            # Reasoning cannot be turned off for 2.5 Pro.
+            if "pro" in normalized:
+                return {"reasoning_effort": "low"}
+            # Flash and other non-Pro 2.5 variants allow disabling thinking.
+            return {"reasoning_effort": "none"}
+
+        # Gemini 3 models: minimal is not a valid value; use the lowest supported value.
+        if re.search(r"(^|[^0-9])3([^0-9]|$)", normalized):
+            return {"reasoning_effort": "low"}
+
+        # Other Gemini aliases (e.g. gemini-flash-latest / gemini-pro-latest) may vary.
+        # Don't send reasoning_effort unless we know it's supported.
+        return {}
+
     def ask(
         self,
         messages: list[dict[str, str]],
@@ -47,11 +88,13 @@ class GoogleGenAI:
         tools: list[dict[str, any]] = None,
     ):
         try:
+            reasoning_params = self.get_minimal_reasoning_by_model(model)
             if not tools:
                 completion = self.openai_client.chat.completions.create(
                     stream=stream,
                     messages=messages,
                     model=model,
+                    **reasoning_params,
                 )
             else:
                 completion = self.openai_client.chat.completions.create(
@@ -60,6 +103,7 @@ class GoogleGenAI:
                     model=model,
                     tools=tools,
                     tool_choice="auto",
+                    **reasoning_params,
                 )
             return completion
         except APIStatusError as e:

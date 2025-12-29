@@ -1,0 +1,220 @@
+Metadata-Version: 2.1
+Name: SimConnect
+Version: 0.4.26
+Summary: Adds a pythonic wrapper for SimConnect SDK.
+Home-page: https://github.com/odwdinc/Python-SimConnect
+Author: Anthony Pray
+Author-email: anthony.pray@gmail.com
+Maintainer: Anthony Pray
+Maintainer-email: anthony.pray@gmail.com
+License: AGPL 3.0
+Keywords: ctypes,FlightSim,SimConnect,Flight,Simulator
+Classifier: Development Status :: 2 - Pre-Alpha
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
+[![PyPI version](https://badge.fury.io/py/SimConnect.svg)](https://badge.fury.io/py/SimConnect)
+# Python-SimConnect
+
+Python interface for Microsoft Flight Simulator 2020 (MSFS2020) using SimConnect
+
+This library allows Python scripts to read and set variables within MSFS2020 and trigger events within the simulation.
+
+It also includes, as an example, "Cockpit Companion", a flask mini http server which runs locally. It provides a web UI with a moving map and simulation variables. It also provides simulation data in JSON format in response to REST API requests.
+
+Full documentation for this example can be found at [https://msfs2020.cc](https://msfs2020.cc) and it is included in a standalone repo here on Github as [MSFS2020-cockpit-companion](https://github.com/hankhank10/MSFS2020-cockpit-companion).
+
+
+## Mobiflight Simconnect events:
+
+Yes this supports the new [SimConnect commands that DocMoebiuz](https://forums.flightsimulator.com/t/full-g1000-control-now-with-mobiflight/348509) of [MobiFlight](https://www.mobiflight.com/en/index.html) developed. 
+A full list of [commands and install instructions](https://pastebin.com/fMdB7at2)
+
+At this time MobiFlight SimConnect commands are not include in the AircraftEvents class and as so the AircraftEvents.find() and AircraftEvents.get() will not work. You will need to pass the Event ID to a new Event class as the Example below shows.
+
+
+```py
+from SimConnect import *
+# Create SimConnect link
+sm = SimConnect()
+# Creat a function to call the MobiFlight AS1000_MFD_SOFTKEYS_3 event.
+Sk3 = Event(b'MobiFlight.AS1000_MFD_SOFTKEYS_3', sm)
+# Call the Event.
+Sk3()
+sm.exit()
+quit()
+```
+
+## Python interface example
+
+```py
+from SimConnect import *
+
+# Create SimConnect link
+sm = SimConnect()
+# Note the default _time is 2000 to be refreshed every 2 seconds
+aq = AircraftRequests(sm, _time=2000)
+# Use _time=ms where ms is the time in milliseconds to cache the data.
+# Setting ms to 0 will disable data caching and always pull new data from the sim.
+# There is still a timeout of 4 tries with a 10ms delay between checks.
+# If no data is received in 40ms the value will be set to None
+# Each request can be fine tuned by setting the time param.
+
+# To find and set timeout of cached data to 200ms:
+altitude = aq.find("PLANE_ALTITUDE")
+altitude.time = 200
+
+# Get the aircraft's current altitude
+altitude = aq.get("PLANE_ALTITUDE")
+altitude = altitude + 1000
+
+# Set the aircraft's current altitude
+aq.set("PLANE_ALTITUDE", altitude)
+
+ae = AircraftEvents(sm)
+# Trigger a simple event
+event_to_trigger = ae.find("AP_MASTER")  # Toggles autopilot on or off
+event_to_trigger()
+
+# Trigger an event while passing a variable
+target_altitude = 15000
+event_to_trigger = ae.find("AP_ALT_VAR_SET_ENGLISH")  # Sets AP autopilot hold level
+event_to_trigger(target_altitude)
+sm.exit()
+quit()
+```
+
+## HTTP interface example
+
+Run `glass_server.py` using Python 3.
+
+#### `http://localhost:5000`
+Method: GET
+
+Variables: None
+
+Output: Web interface with moving map and aircraft information
+
+#### `http://localhost:5000/dataset/<dataset_name>`
+Method: GET
+
+Arguments to pass:
+
+|Argument|Location|Description|
+|---|---|---|
+|dataset_name|in path|can be navigation, airspeed compass, vertical_speed, fuel, flaps, throttle, gear, trim, autopilot, cabin|
+
+Description: Returns set of variables from simulator in JSON format
+
+
+#### `http://localhost:5000/datapoint/<datapoint_name>/get`
+Method: GET
+
+Arguments to pass:
+
+|Argument|Location|Description|
+|---|---|---|
+|datapoint_name|in path|any variable name from MS SimConnect documentation|
+
+Description: Returns individual variable from simulator in JSON format
+
+
+#### `http://localhost:5000/datapoint/<datapoint_name>/set`
+Method: POST
+
+Arguments to pass:
+
+|Argument|Location|Description|
+|---|---|---|
+|datapoint_name|in path|any variable name from MS SimConnect documentation|
+|index (optional)|form or json|the relevant index if required (eg engine number) - if not passed defaults to None|
+|value_to_use (optional)|value to set variable to - if not passed defaults to 0|
+
+Description: Sets datapoint in the simulator
+
+#### `http://localhost:5000/event/<event_name>/trigger`
+Method: POST
+
+Arguments to pass:
+
+|Argument|Location|Description|
+|---|---|---|
+|event_name|in path|any event name from MS SimConnect documentation|
+|value_to_use (optional)|value to pass to the event|
+
+Description: Triggers an event in the simulator
+
+## Running SimConnect on a separate system.
+
+#### Note: At this time SimConnect can only run on Windows hosts.
+
+Create a file called SimConnect.cfg in the same folder as your script.
+#### Sample SimConnect.cfg:
+```ini
+; Example SimConnect client configurations
+[SimConnect]
+Protocol=IPv4
+Address=<ip of server>
+Port=500
+```
+To enable the host running the sim to share over network,
+
+add \<Address\>0.0.0.0\</Address\>
+
+under the \<Port\>500\</Port\> in SimConnect.xml
+
+SimConnect.xml can be located at
+#### `%AppData%\Microsoft Flight Simulator\SimConnect.xml`
+
+#### Sample SimConnect.xml:
+```xml
+<?xml version="1.0" encoding="Windows-1252"?>
+
+<SimBase.Document Type="SimConnect" version="1,0">
+    <Descr>SimConnect Server Configuration</Descr>
+    <Filename>SimConnect.xml</Filename>
+    <SimConnect.Comm>
+        <Descr>Static IP4 port</Descr>
+        <Protocol>IPv4</Protocol>
+        <Scope>local</Scope>
+        <Port>500</Port>
+        <Address>0.0.0.0</Address>
+        <MaxClients>64</MaxClients>
+        <MaxRecvSize>41088</MaxRecvSize>
+    </SimConnect.Comm>
+...
+```
+## Notes:
+
+Python 64-bit is needed. You may see this Error if running 32-bit python:
+
+```OSError: [WinError 193] %1 is not a valid Win32 application```
+
+Per mracko on COM_RADIO_SET:
+
+    MSFS uses the European COM frequency spacing of 8.33kHz for all default aircraft. 
+    This means that in practice, you increment the frequency by 0.005 MHz and 
+    skip x.x20, x.x45, x.x70, and x.x95 MHz frequencies. 
+    Have a look here http://g3asr.co.uk/calculators/833kHz.htm
+
+
+## Events and Variables
+
+Below are links to the Microsoft documentation
+
+[Function](https://docs.microsoft.com/en-us/previous-versions/microsoft-esp/cc526983(v=msdn.10))
+
+[Event IDs](https://docs.microsoft.com/en-us/previous-versions/microsoft-esp/cc526980(v=msdn.10))
+
+[Simulation Variables](https://docs.flightsimulator.com/html/Programming_Tools/SimVars/Simulation_Variables.htm)

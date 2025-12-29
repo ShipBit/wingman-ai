@@ -167,7 +167,7 @@ hume:
 inworld:
   tts_endpoint: https://api.inworld.ai/tts/v1/voice
   model_id: inworld-tts-1
-  voice_id: Hades
+  voice_id: Deborah
   temperature: 1.1
   output_streaming: true
   audio_config:
