@@ -39,7 +39,6 @@ class RadioChatter(Skill):
         self.last_message = None
         self.radio_status = False
         self.loaded = False
-        self._chatter_starting = False  # Track if chatter initialization is in progress
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -49,7 +48,7 @@ class RadioChatter(Skill):
         self.retrieve_custom_property_value("force_radio_sound", errors)
         self.retrieve_custom_property_value("auto_start", errors)
         self.retrieve_custom_property_value("print_chatter", errors)
-        self.retrieve_custom_property_value("radio_knowledge", errors)
+        # self.retrieve_custom_property_value("radio_knowledge", errors)
         self.retrieve_custom_property_value("radio_sounds", errors)
         self.retrieve_custom_property_value("use_beeps", errors)
 
@@ -272,6 +271,7 @@ class RadioChatter(Skill):
 
     def _get_radio_knowledge(self) -> bool:
         """Retrieve fresh radio_knowledge at runtime."""
+        return False # disabled for now
         errors: list[WingmanInitializationError] = []
         return self.retrieve_custom_property_value("radio_knowledge", errors) or False
 
@@ -283,14 +283,16 @@ class RadioChatter(Skill):
     async def prepare(self) -> None:
         await super().prepare()
         self.loaded = True
-        # Start monitoring loop that will auto-start if enabled
-        self.threaded_execution(self._monitor_auto_start)
+        if (
+                self._get_auto_start()
+                and not self.radio_status
+        ):
+            self.threaded_execution(self._init_chatter)
 
     async def unload(self) -> None:
         await super().unload()
         self.loaded = False
         self.radio_status = False
-        self._chatter_starting = False
 
     def randrange(self, start, stop=None):
         if start == stop:
@@ -304,7 +306,7 @@ class RadioChatter(Skill):
     )
     def turn_on_radio(self) -> str:
         """Turn the radio on."""
-        if self.radio_status or self._chatter_starting:
+        if self.radio_status:
             return "Radio is already on."
         else:
             self.threaded_execution(self._init_chatter)
@@ -330,26 +332,12 @@ class RadioChatter(Skill):
         else:
             return "Radio is off."
 
-    async def _monitor_auto_start(self) -> None:
-        """Monitor auto_start setting and start radio when enabled."""
-        while self.loaded:
-            if (
-                self._get_auto_start()
-                and not self.radio_status
-                and not self._chatter_starting
-            ):
-                # auto_start is enabled and radio is off and not already starting - start it
-                self.threaded_execution(self._init_chatter)
-            time.sleep(5)  # Check every 5 seconds
-
     async def _init_chatter(self) -> None:
         """Start the radio chatter."""
 
-        self._chatter_starting = True
         self.radio_status = True
         interval_min = self._get_interval_min()
         time.sleep(max(5, interval_min))  # sleep for min 5s else min interval
-        self._chatter_starting = False
 
         while self.is_active():
             await self._generate_chatter()

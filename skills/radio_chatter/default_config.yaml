@@ -99,12 +99,13 @@ custom_properties:
     value: True
     required: false
     property_type: boolean
-  - id: radio_knowledge
-    name: Radio knowledge
-    hint: If enabled, the radio chatter messages will be added to the Wingman conversation. This way you can talk with your Wingman about the radio chatter.
-    value: False
-    required: false
-    property_type: boolean
+#  disable knowledge integration for now
+#  - id: radio_knowledge
+#    name: Radio knowledge
+#    hint: If enabled, the radio chatter messages will be added to the Wingman conversation. This way you can talk with your Wingman about the radio chatter.
+#    value: False
+#    required: false
+#    property_type: boolean
   - id: use_beeps
     name: Use beeps
     hint: Use beeps to indicate the start and end of a radio chatter messages.
