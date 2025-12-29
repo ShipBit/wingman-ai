@@ -1,4 +1,5 @@
 import inspect
+import asyncio
 from typing import TYPE_CHECKING
 from skills.uexcorp.uexcorp.tool.vehicle_information import VehicleInformation
 from skills.uexcorp.uexcorp.tool.commodity_route import CommodityRoute
@@ -47,11 +48,23 @@ class ToolHandler:
                     await self.__helper.get_handler_debug().write_async(
                         f"UEX skill is currently loading: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Please wait a moment.", True
                     )
-                    function_response = (
-                        f"UEX skill is currently loading: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Please wait a moment and try again."
-                    )
-                    self.__helper.set_request_while_not_loaded(True)
-                    return function_response, instant_response
+                    await asyncio.sleep(2)
+                    if not self.__helper.is_ready():
+                        await self.__helper.get_handler_debug().write_async(
+                            f"UEX skill is still loading after 2s: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Giving back loading status to llm.",
+                            True
+                        )
+                        function_response = (
+                            f"UEX skill is currently loading: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Inform user, this will take a moment. User should initiate request again in a moment."
+                        )
+                        self.__helper.set_request_while_not_loaded(True)
+                        return function_response, instant_response
+                    else:
+                        await self.__helper.get_handler_debug().write_async(
+                            f"UEX skill has finished loading after waiting 2 additional seconds: Import is at {self.__helper.get_handler_import().get_imported_percent()}%. Continuing with request.",
+                            True
+                        )
+                        self.__helper.set_request_while_not_loaded(False)
 
                 self.__helper.start_timer(tool_name)
                 tool = self.__functions[tool_name]()

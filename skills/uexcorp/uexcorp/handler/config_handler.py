@@ -77,6 +77,7 @@ class ConfigHandler:
         self.__cache_lifetime_long: int = 14 * 24 * 60 * 60 # 14 days
 
         tools, needs_authentication = get_tools()
+        self.__property_retriever = None
         self.__behavior_enabled_tools: list[str] = tools
         self.__behavior_enabled_tools_need_authentication: bool = needs_authentication
         self.__behavior_commodity_route_default_count: int = 1
@@ -85,6 +86,7 @@ class ConfigHandler:
         self.__behavior_use_fasterwhisper_hotwords: bool = False
 
     async def validate(self, errors: list[WingmanInitializationError], retrieve_custom_property_value: callable) -> list[WingmanInitializationError]:
+        self.__property_retriever = retrieve_custom_property_value
         try:
             self.set_behavior_update_fasterwhisper_hotwords(
                 retrieve_custom_property_value("add_fasterwhisper_hotwords", errors)
@@ -283,24 +285,40 @@ class ConfigHandler:
         self.__cache_lifetime_long = cache_timeout_commodities
 
     def get_behavior_commodity_route_default_count(self) -> int:
+        errors = []
+        value = self.__property_retriever("commodity_route_default_count", errors)
+        if not errors:
+            self.set_behavior_commodity_route_default_count(value)
         return self.__behavior_commodity_route_default_count
 
     def set_behavior_commodity_route_default_count(self, default_count: int):
         self.__behavior_commodity_route_default_count = default_count
 
     def get_behavior_commodity_route_use_estimated_availability(self) -> bool:
+        errors = []
+        value = self.__property_retriever("commodity_route_use_estimated_availability", errors)
+        if not errors:
+            self.set_behavior_commodity_route_use_estimated_availability(value)
         return self.__behavior_commodity_route_use_estimated_availability
 
     def set_behavior_commodity_route_use_estimated_availability(self, use_estimated_availability: bool):
         self.__behavior_commodity_route_use_estimated_availability = use_estimated_availability
 
     def get_behavior_commodity_route_advanced_info(self) -> bool:
+        errors = []
+        value = self.__property_retriever("commodity_route_advanced_info", errors)
+        if not errors:
+            self.set_behavior_commodity_route_advanced_info(value)
         return self.__behavior_commodity_route_advanced_info
 
     def set_behavior_commodity_route_advanced_info(self, advanced_info: bool):
         self.__behavior_commodity_route_advanced_info = advanced_info
 
     def get_behavior_use_fasterwhisper_hotwords(self) -> bool:
+        errors = []
+        value = self.__property_retriever("add_fasterwhisper_hotwords", errors)
+        if not errors:
+            self.set_behavior_update_fasterwhisper_hotwords(value)
         return self.__behavior_use_fasterwhisper_hotwords
 
     def set_behavior_update_fasterwhisper_hotwords(self, update: bool):

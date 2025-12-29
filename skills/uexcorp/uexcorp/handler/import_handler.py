@@ -53,9 +53,9 @@ class ImportHandler:
 
         self.generate_import_session()
 
-    def prepare(self):
+    def prepare(self, preload: bool = False) -> None:
         self.__helper.ensure_version_parity(True)
-        self.import_data(True)
+        self.import_data(True, preload)
 
     def generate_import_session(self) -> int:
         self.__common_data["last_import_run_id"] = self.__helper.get_timestamp()
@@ -64,7 +64,7 @@ class ImportHandler:
         )
         return self.__common_data["last_import_run_id"]
 
-    def import_data(self, force: bool = False):
+    def import_data(self, force: bool = False, preload: bool = False) -> None:
         if not force and self.get_imported_percent() < 100:
             self.__helper.get_handler_debug().write(
                 "Blocked new import as previous import wasn't finished"
@@ -77,14 +77,18 @@ class ImportHandler:
             "Importing UEX api data (may take a while) ..."
         )
         self.__helper.start_timer("import_total")
-        self.__helper.sync_fasterwhisper_hotwords(unload=True)
+        if not preload:
+            self.__helper.sync_fasterwhisper_hotwords(unload=True)
         total_count = self.__import_data()
-        self.__helper.sync_fasterwhisper_hotwords()
-        self.__helper.get_handler_debug().write(
-            f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s",
-            total_count > 0,
-        )
-        self.__helper.on_import_completed(total_count)
+        if not preload:
+            self.__helper.sync_fasterwhisper_hotwords()
+        if self.__helper.get_wingmen().settings.debug_mode:
+            self.__helper.get_handler_debug().write(
+                f"UEX api data imported: {total_count} record(s) in {self.__helper.end_timer('import_total')}s",
+                total_count > 0,
+            )
+        if not preload:
+            self.__helper.on_import_completed(total_count)
 
     def get_common_data(self) -> dict[str, any]:
         return self.__common_data

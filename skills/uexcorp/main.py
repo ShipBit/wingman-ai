@@ -32,6 +32,7 @@ class UEXCorp(Skill):
         self.__helper.prepare(self.threaded_execution, self.wingman)
         self.__invalid_session = False
         self.__initialized = False
+        wingman.threaded_execution(self.threaded_prepare, True)
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -98,8 +99,8 @@ class UEXCorp(Skill):
             self.__helper.wait(cycle)
         self.__helper.get_handler_debug().write("Stopping master loop")
 
-    def threaded_prepare(self):
-        self.__helper.get_handler_import().prepare()
+    def threaded_prepare(self, preload: bool = False) -> None:
+        self.__helper.get_handler_import().prepare(preload)
 
     def get_tools(self) -> list[tuple[str, dict]]:
         if not self.__helper:
