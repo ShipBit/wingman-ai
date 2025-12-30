@@ -70,7 +70,13 @@ class UEXCorp(Skill):
         if self.__invalid_session or not self.__helper:
             return
         self.__helper.set_loaded()
-        self.threaded_execution(self.threaded_prepare)
+        if self.__helper.get_handler_import().get_imported_percent() not in [0, 100]:
+            self.__helper.get_handler_import().is_preload = False
+            self.__helper.get_handler_debug().write(
+                "Skill is still in preload phase, skipping initial import on load and removing preload flag.",
+            )
+        else:
+            self.threaded_execution(self.threaded_prepare)
         self.threaded_execution(self.loop_master)
 
     async def unload(self) -> None:
@@ -100,6 +106,9 @@ class UEXCorp(Skill):
         self.__helper.get_handler_debug().write("Stopping master loop")
 
     def threaded_prepare(self, preload: bool = False) -> None:
+        self.__helper.get_handler_debug().write(
+            "Threaded prepare started | Preload: " + str(preload),
+        )
         self.__helper.get_handler_import().prepare(preload)
 
     def get_tools(self) -> list[tuple[str, dict]]:

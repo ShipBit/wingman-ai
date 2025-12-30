@@ -121,9 +121,17 @@ class Database:
             self.helper.get_handler_debug().write(
                 f"Skipped SQL: {sql} with parameters: {parameters}. No active cursor found. Probably old instance."
             )
+            self.__inuse = False
             return False
         else:
-            self.get_cursor().execute(sql, parameters)
+            try:
+                self.get_cursor().execute(sql, parameters)
+            except Exception as e:
+                self.helper.get_handler_error().write(
+                    "database.execute", [sql, parameters], e
+                )
+                self.__inuse = False
+                raise e
         self.__inuse = False
         return True
 
@@ -131,7 +139,14 @@ class Database:
         self.__wait_for_database_capacity()
 
         self.__inuse = True
-        self.get_cursor().executescript(sql)
+        try:
+            self.get_cursor().executescript(sql)
+        except Exception as e:
+            self.helper.get_handler_error().write(
+                "database.executescript", [sql], e
+            )
+            self.__inuse = False
+            raise e
         self.__inuse = False
         return True
 
