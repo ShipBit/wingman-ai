@@ -27,8 +27,8 @@ class FuelPrice(DataModel):
             "id": id,
             "id_commodity": id_commodity,
             "id_terminal": id_terminal,
-            "price_buy": price_buy,
-            "price_buy_avg": price_buy_avg,
+            "price_buy_from_terminal": price_buy,
+            "price_buy_from_terminal_avg": price_buy_avg,
             "date_added": date_added,
             "date_modified": date_modified,
             "commodity_name": commodity_name,
@@ -54,15 +54,15 @@ class FuelPrice(DataModel):
         return {
             "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
             "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
-            "price_buy": self.get_price_buy(),
-            "price_buy_avg": self.get_price_buy_avg(),
+            "price_buy_from_terminal": self.get_price_buy(),
+            "price_buy_from_terminal_avg": self.get_price_buy_avg(),
         }
 
     def get_data_for_ai_minimal(self) -> dict:
         return {
             "commodity": self.get_commodity_name(),
             "terminal": self.get_terminal_name(),
-            "price_buy": self.get_price_buy(),
+            "price_buy_from_terminal": self.get_price_buy(),
         }
 
     def get_id(self) -> int:

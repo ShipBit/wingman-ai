@@ -78,8 +78,8 @@ class CommodityPrice(DataModel):
         return {
             "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
             "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
-            "price_buy": self.get_price_buy(),
-            "price_sell": self.get_price_sell(),
+            "price_buy_from_terminal": self.get_price_buy(),
+            "price_sell_to_terminal": self.get_price_sell(),
             "status_buy": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
             "status_sell": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
             "scu_buy": self.get_scu_buy(),
@@ -109,7 +109,7 @@ class CommodityPrice(DataModel):
 
         if self.get_price_buy():
             information.update({
-                "buy_price": self.get_price_buy() or "unknown",
+                "buy_price_from_terminal": self.get_price_buy() or "unknown",
                 "buy_status": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else "unknown",
                 "buy_stock_in_scu": self.get_scu_buy() or "unknown",
                 "buy_stock_in_scu_avg": self.get_scu_buy_avg() or "unknown",
@@ -117,7 +117,7 @@ class CommodityPrice(DataModel):
 
         if self.get_price_sell():
             information.update({
-                "sell_price": self.get_price_sell() or "unknown",
+                "sell_price_to_terminal": self.get_price_sell() or "unknown",
                 "sell_status": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else "unknown",
                 "sell_demand_in_scu": self.get_scu_sell_stock() or "unknown",
                 "sell_demand_in_scu_avg": self.get_scu_sell_stock_avg() or "unknown",
@@ -202,6 +202,6 @@ class CommodityPrice(DataModel):
 
     def __str__(self):
         if self.get_price_sell():
-            return f"Sell {self.get_commodity_name()} at {self.get_terminal_name()} for {self.get_price_sell()}"
+            return f"Sell {self.get_commodity_name()} to {self.get_terminal_name()} for {self.get_price_sell()}"
         else:
-            return f"Buy {self.get_commodity_name()} at {self.get_terminal_name()} for {self.get_price_buy()}"
+            return f"Buy {self.get_commodity_name()} from {self.get_terminal_name()} for {self.get_price_buy()}"

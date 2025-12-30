@@ -43,7 +43,7 @@ class VehiclePurchasePrice(DataModel):
 
         information = {
             "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
-            "price_buy": self.get_price_buy(),
+            "price_buy_from_terminal": self.get_price_buy(),
         }
 
         if show_vehicle_data:
@@ -58,7 +58,7 @@ class VehiclePurchasePrice(DataModel):
         return {
             "terminal": self.get_terminal_name(),
             "vehicle": self.get_vehicle_name(),
-            "price_buy": self.get_price_buy(),
+            "price_buy_from_terminal": self.get_price_buy(),
         }
 
     def get_id(self) -> int:

@@ -50,7 +50,7 @@ class ItemPrice(DataModel):
         return {
             "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
             "item": item.get_data_for_ai_minimal() if item else None,
-            "price_buy": self.get_price_buy(),
+            "price_buy_from_terminal": self.get_price_buy(),
             "price_sell": self.get_price_sell(),
         }
 
@@ -58,7 +58,7 @@ class ItemPrice(DataModel):
         return {
             "terminal": self.get_terminal_name(),
             "item_name": self.get_item_name(),
-            "price_buy": self.get_price_buy(),
+            "price_buy_from_terminal": self.get_price_buy(),
             "price_sell": self.get_price_sell(),
         }
 
@@ -102,4 +102,4 @@ class ItemPrice(DataModel):
         return self.data["terminal_name"]
 
     def __str__(self):
-        return f"{self.data['item_name']} at {self.data['terminal_name']}: Buy {self.data['price_buy']}, Sell {self.data['price_sell']}"
+        return f"{self.data['item_name']} at {self.data['terminal_name']}: Buy from for {self.data['price_buy']}, Sell to for {self.data['price_sell']}"

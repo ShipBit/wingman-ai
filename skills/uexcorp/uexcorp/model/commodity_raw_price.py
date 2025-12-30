@@ -53,7 +53,7 @@ class CommodityRawPrice(DataModel):
         return {
             "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
             "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
-            "price_sell": self.get_price_sell(),
+            "price_sell_to_terminal": self.get_price_sell(),
         }
 
     def get_data_for_ai_minimal(self) -> dict:
@@ -99,4 +99,4 @@ class CommodityRawPrice(DataModel):
         return self.data["terminal_slug"]
 
     def __str__(self):
-        return f"Sell {self.get_commodity_name()} at {self.get_terminal_name()} for {self.get_price_sell()}"
+        return f"Sell {self.get_commodity_name()} to {self.get_terminal_name()} for {self.get_price_sell()}"
