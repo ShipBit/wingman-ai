@@ -22,11 +22,6 @@ discovery_keywords:
   - profit
   - terminals
 discoverable_by_default: false
-examples:
-  - en: Please provide me a the best two trading routes for my Caterpillar, Im currently at Hurston.
-    de: Bitte gib mir die zwei besten Handelsrouten für meine Caterpillar, ich bin gerade bei Hurston.
-  - en: What can you tell me about the Hull-C?
-    de: Was kannst du mir über den Hull-C erzählen?
 prompt: |
   ### UEXCORP API ACCESS
   You have comprehensive access to the UEXCorp API for live Star Citizen market data, commodity prices, ship information, and trading routes.
