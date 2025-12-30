@@ -271,9 +271,7 @@ class RadioChatter(Skill):
 
     def _get_radio_knowledge(self) -> bool:
         """Retrieve fresh radio_knowledge at runtime."""
-        return False # disabled for now
-        errors: list[WingmanInitializationError] = []
-        return self.retrieve_custom_property_value("radio_knowledge", errors) or False
+        return False  # disabled for now
 
     def _get_auto_start(self) -> bool:
         """Retrieve fresh auto_start at runtime."""
