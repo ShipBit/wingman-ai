@@ -260,7 +260,7 @@ class QuickCommands(Skill):
         """Load the learning data file."""
 
         # create the file if it does not exist
-        if not path.exists(self.file_ipl):
+        if not os.path.exists(self.file_ipl):
             return
 
         # load the learning data
