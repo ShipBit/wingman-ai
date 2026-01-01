@@ -21,8 +21,8 @@ discovery_keywords:
   - shuffle
 discoverable_by_default: false
 hint:
-  en: <ul class="list-disc"><li>Create an app in the <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Select "Web API" and "Web Playback SDK" as APIs used</li><li>Add http://127.0.0.1:8082 as Redirect URI</li><li>Enter Client ID and Client secret here</li></ul>
-  de: <ul class="list-disc"><li>Erstelle eine App im <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Wähle "Web API" und "Web Playback SDK" als verwendete APIs</li><li>Füge http://127.0.0.1:8082 as Redirect URI hinzu</li><li>Gib die Client ID and das Client Secret hier ein</li></ul>
+  en: <ul class="list-disc"><li>Create an app in the <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Select "Web API" and "Web Playback SDK" as APIs used.</li><li>Add the same Redirect URL as configured here.</li><li>Enter Client ID and Client secret here.</li><li>In the Spotify Dashboard, add your Spotify Email adress as user for the Spotify app (Tab 'User Management').</li><li>Authorize Wingman AI with Spotify in the browser.</li></ul>
+  de: <ul class="list-disc"><li>Erstelle eine App im <a class="anchor" target="_blank" href="https://developer.spotify.com/dashboard">Spotify Dashboard</a>.</li><li>Wähle "Web API" und "Web Playback SDK" als verwendete APIs.</li><li>Füge die gleiche Redirect URL wie hier hinzu.</li><li>Gib die Client ID and das Client Secret hier ein.</li><li>Füge deine Spotify E-Mail Adresse als Benutzer für die Spotify app hinzu (Tab 'User Management').</li><li>Gib der Wingman AI app Zugriff auf Spotify im Browser</li></ul>
 custom_properties:
   - hint: Create an app in the Spotify Dashboard at https://developer.spotify.com/dashboard. You'll find the Client ID in the Settings of that app.
     id: spotify_client_id

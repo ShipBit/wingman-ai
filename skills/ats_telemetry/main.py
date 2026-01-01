@@ -2,6 +2,7 @@ import os
 import shutil
 import math
 import copy
+from pathlib import Path
 from datetime import datetime, timedelta
 import requests
 import truck_telemetry
@@ -16,7 +17,6 @@ from api.interface import (
 )
 from api.enums import LogType
 from skills.skill_base import Skill, tool
-from services.file import get_writable_dir
 
 
 if TYPE_CHECKING:
@@ -163,42 +163,42 @@ class ATSTelemetry(Skill):
 
     # Try to find existing telemetry dlls, if not found, attempt to install
     async def check_and_install_telemetry_dlls(self):
-        skills_filepath = get_writable_dir("skills")
-        ats_telemetry_skill_filepath = os.path.join(skills_filepath, "ats_telemetry")
-        sdk_dll_filepath = os.path.join(
-            ats_telemetry_skill_filepath, "scs-telemetry.dll"
-        )
-        ats_install_dir = self._get_ats_install_directory()
-        ets_install_dir = self._get_ets_install_directory()
+        # The telemetry SDK DLL is shipped with this skill.
+        # - Dev: loaded from ./skills/ats_telemetry/scs-telemetry.dll
+        # - Release: loaded from _internal/skills/ats_telemetry/scs-telemetry.dll
+        sdk_dll_filepath = Path(__file__).resolve().parent / "scs-telemetry.dll"
+        if not sdk_dll_filepath.exists():
+            await self.printr.print_async(
+                f"Missing scs telemetry dll at '{sdk_dll_filepath}'. Cannot auto-install telemetry plugin.",
+                color=LogType.ERROR,
+            )
+            return
 
-        ats_plugins_dir = os.path.join(ats_install_dir, "bin\\win_x64\\plugins")
-        ets_plugins_dir = os.path.join(ets_install_dir, "bin\\win_x64\\plugins")
-        # Check and copy dll for ATS if applicable
-        if os.path.exists(ats_install_dir):
-            ats_dll_path = os.path.join(ats_plugins_dir, "scs-telemetry.dll")
-            if not os.path.exists(ats_dll_path):
-                try:
-                    if not os.path.exists(ats_plugins_dir):
-                        os.makedirs(ats_plugins_dir)
-                    shutil.copy2(sdk_dll_filepath, ats_plugins_dir)
-                except Exception:
-                    await self.printr.print_async(
-                        f"Could not install scs telemetry dll to {ats_plugins_dir}.",
-                        color=LogType.ERROR,
-                    )
-        # Check and copy dll for ETS if applicable
-        if os.path.exists(ets_install_dir):
-            ets_dll_path = os.path.join(ets_plugins_dir, "scs-telemetry.dll")
-            if not os.path.exists(ets_dll_path):
-                try:
-                    if not os.path.exists(ets_plugins_dir):
-                        os.makedirs(ets_plugins_dir)
-                    shutil.copy2(sdk_dll_filepath, ets_plugins_dir)
-                except Exception:
-                    await self.printr.print_async(
-                        f"Could not install scs telemetry dll to {ets_plugins_dir}.",
-                        color=LogType.ERROR,
-                    )
+        ats_install_dir = (self._get_ats_install_directory() or "").strip()
+        ets_install_dir = (self._get_ets_install_directory() or "").strip()
+
+        installs: list[tuple[str, str]] = [
+            (ats_install_dir, "ATS"),
+            (ets_install_dir, "ETS2"),
+        ]
+
+        for install_dir, label in installs:
+            if not install_dir or not os.path.exists(install_dir):
+                continue
+
+            plugins_dir = os.path.join(install_dir, "bin", "win_x64", "plugins")
+            target_dll_path = os.path.join(plugins_dir, "scs-telemetry.dll")
+            if os.path.exists(target_dll_path):
+                continue
+
+            try:
+                os.makedirs(plugins_dir, exist_ok=True)
+                shutil.copy2(str(sdk_dll_filepath), plugins_dir)
+            except OSError as exc:
+                await self.printr.print_async(
+                    f"Could not install scs telemetry dll to {label} plugins directory: {plugins_dir}. Error: {exc}",
+                    color=LogType.ERROR,
+                )
 
     # Start telemetry module connection with in-game telemetry SDK
     async def initialize_telemetry(self) -> bool:
@@ -612,7 +612,7 @@ class ATSTelemetry(Skill):
                     data["jobFinishedTime"]
                 )
             )
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["jobFinishedTime"] = await self.convert_to_clock_time(
                     job_finish_days_hours_and_minutes, 24
                 )
@@ -681,7 +681,7 @@ class ATSTelemetry(Skill):
             enhanced_data["cargoMassInTons"] = (
                 str(tons) + " t" if data["trailer"][0]["attached"] else ""
             )
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["cargoMass"] = (
                     str(round(data["cargoMass"])) + " kg"
                     if data["trailer"][0]["attached"]
@@ -698,7 +698,7 @@ class ATSTelemetry(Skill):
             route_distance_km = data["routeDistance"] / 1000
             route_distance_miles = route_distance_km * 0.621371
 
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["routeDistance"] = (
                     str(math.floor(route_distance_km)) + " kilometers"
                 )
@@ -751,7 +751,7 @@ class ATSTelemetry(Skill):
             )
 
             # Convert temperatures
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["brakeTemperature"] = (
                     str(round(data["brakeTemperature"])) + " degrees Celsius"
                 )
@@ -776,7 +776,7 @@ class ATSTelemetry(Skill):
                 )
 
             # Convert volumes
-            if self.use_metric_system:
+            if use_metric:
                 enhanced_data["fuelTankSize"] = (
                     "Fuel tank can hold " + str(round(data["fuelCapacity"])) + " liters"
                 )
@@ -991,7 +991,8 @@ class ATSTelemetry(Skill):
         )  # If external in job type means world of trucks contract
 
     async def get_currency(self, money):
-        currency_code = "EUR" if self.use_metric_system else "USD"
+        use_metric = self._get_use_metric_system()
+        currency_code = "EUR" if use_metric else "USD"
 
         if currency_code == "EUR":
             return f"€{money}"

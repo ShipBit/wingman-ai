@@ -940,6 +940,18 @@ class NestedConfig(BaseModel):
     skills: Optional[list[SkillConfig]] = None
     """User's skill configuration overrides. Skills not listed here use defaults."""
 
+    discoverable_skills: list[str] = []
+    """List of skill names that are discoverable to the LLM for this wingman.
+    This is a whitelist - only skills in this list are available at runtime.
+    Empty list means no skills are discoverable.
+    Example: ["ConversationStarter", "AutoScreenshot"] to make only these skills available."""
+
+    discoverable_mcps: list[str] = []
+    """List of MCP server names that are discoverable to the LLM for this wingman.
+    This is a whitelist - only MCP servers in this list are available at runtime.
+    Empty list means no MCP servers are discoverable.
+    Example: ["wingman_date_time", "wingman_starhead"] to make only these MCPs available."""
+
 
 class WingmanConfig(NestedConfig):
     def __getitem__(self, item):
@@ -953,18 +965,6 @@ class WingmanConfig(NestedConfig):
 
     disabled: Optional[bool] = False
     """Set this to true if you want to disable this wingman. You can also just remove it from the config."""
-
-    discoverable_skills: list[str] = []
-    """List of skill names that are discoverable to the LLM for this wingman.
-    This is a whitelist - only skills in this list are available at runtime.
-    Empty list means no skills are discoverable.
-    Example: ["ConversationStarter", "AutoScreenshot"] to make only these skills available."""
-
-    discoverable_mcps: list[str] = []
-    """List of MCP server names that are discoverable to the LLM for this wingman.
-    This is a whitelist - only MCP servers in this list are available at runtime.
-    Empty list means no MCP servers are discoverable.
-    Example: ["wingman_date_time", "wingman_starhead"] to make only these MCPs available."""
 
     custom_class: Optional[CustomClassConfig] = None
     """If you want to use a custom Wingman (Python) class, you can specify it here."""

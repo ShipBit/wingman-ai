@@ -18,12 +18,14 @@ Major changes:
 - Adds local_llm secret
 """
 
+import re
 from os import path
 from typing import Optional
 
 from pydantic import ValidationError
 
 from api.interface import CustomProperty
+from services.config_manager import CONFIGS_DIR
 from services.migrations.base_migration import BaseMigration
 
 # Models removed from Wingman Pro - migrate to gpt-4o-mini
@@ -44,11 +46,28 @@ REMOVED_SKILL_MODULES = {
 }
 
 
+WINGMAN_PRO_RC_BASE_URL = (
+    "https://wingman-api-test-c5hke6cthsevgvam.germanywestcentral-01.azurewebsites.net"
+)
+WINGMAN_PRO_PROD_BASE_URL_EUROPE = "https://wingman-api-europe.azurewebsites.net"
+WINGMAN_PRO_RC_TODO_COMMENT = "TODO: UNDO THIS CHANGE BEFORE 2.0 RELEASE!!!"
+
+
 class Migration182To200(BaseMigration):
     """Migration from 1.8.2 to 2.0.0."""
 
     old_version = "1_8_2"
     new_version = "2_0_0"
+
+    def execute(self) -> None:
+        """Execute migration and patch settings.yaml comments.
+
+        Note: configs are written with PyYAML, which does not preserve comments.
+        For this release-candidate-only change, we inject the TODO + commented prod
+        URL into the migrated settings.yaml after writing.
+        """
+        super().execute()
+        self._inject_wingman_pro_rc_base_url_comment()
 
     def migrate_settings(self, old: dict, new: dict) -> dict:
         """Migrate settings.yaml from 1.8.2 to 2.0.0."""
@@ -76,7 +95,120 @@ class Migration182To200(BaseMigration):
             f"- set voice_activation.fasterwhisper.compute_type to '{compute_type}'"
         )
 
+        # RC builds: force Wingman Pro base_url to test instance
+        if "wingman_pro" not in old or not isinstance(old.get("wingman_pro"), dict):
+            old["wingman_pro"] = {}
+
+        previous_base_url = old["wingman_pro"].get("base_url")
+        old["wingman_pro"]["base_url"] = WINGMAN_PRO_RC_BASE_URL
+        self.log(
+            "- set wingman_pro.base_url to RC test instance "
+            f"('{previous_base_url}' -> '{WINGMAN_PRO_RC_BASE_URL}')"
+        )
+
         return old
+
+    def _inject_wingman_pro_rc_base_url_comment(self) -> None:
+        settings_path = path.join(
+            self.service.users_dir, self.new_version, CONFIGS_DIR, "settings.yaml"
+        )
+
+        if not path.exists(settings_path):
+            self.log_warning(
+                f"- could not inject Wingman Pro RC base_url comment: settings.yaml not found at {settings_path}"
+            )
+            return
+
+        try:
+            with open(settings_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except OSError as e:
+            self.log_warning(
+                f"- could not read settings.yaml for comment injection: {e.strerror}"
+            )
+            return
+
+        wingman_pro_line_idx = None
+        for idx, line in enumerate(lines):
+            if re.match(r"^wingman_pro:\s*$", line):
+                wingman_pro_line_idx = idx
+                break
+
+        # If there's no wingman_pro block at all, append one at EOF.
+        if wingman_pro_line_idx is None:
+            if lines and not lines[-1].endswith("\n"):
+                lines[-1] += "\n"
+            lines.extend(
+                [
+                    "\n" if lines and lines[-1].strip() else "",
+                    "wingman_pro:\n",
+                    f"  # {WINGMAN_PRO_RC_TODO_COMMENT}\n",
+                    f"  # base_url: {WINGMAN_PRO_PROD_BASE_URL_EUROPE}\n",
+                    f"  base_url: {WINGMAN_PRO_RC_BASE_URL}\n",
+                ]
+            )
+            self._write_settings_lines(settings_path, lines)
+            self.log("- injected Wingman Pro RC base_url comment block")
+            return
+
+        # Identify wingman_pro block range (until next top-level key)
+        block_start = wingman_pro_line_idx + 1
+        block_end = len(lines)
+        for idx in range(block_start, len(lines)):
+            # next top-level key (non-empty, no indentation)
+            if re.match(r"^[^\s#][^:]*:\s*.*$", lines[idx]):
+                block_end = idx
+                break
+
+        # Find base_url within the wingman_pro block
+        base_url_idx = None
+        for idx in range(block_start, block_end):
+            if re.match(r"^\s*base_url:\s*", lines[idx]):
+                base_url_idx = idx
+                break
+
+        indent = "  "
+        if base_url_idx is not None:
+            indent_match = re.match(r"^(\s*)base_url:\s*", lines[base_url_idx])
+            if indent_match:
+                indent = indent_match.group(1)
+
+            # Force the base_url value
+            lines[base_url_idx] = f"{indent}base_url: {WINGMAN_PRO_RC_BASE_URL}\n"
+
+            # Ensure the TODO + commented prod URL exist immediately above base_url
+            wanted_line_1 = f"{indent}# {WINGMAN_PRO_RC_TODO_COMMENT}\n"
+            wanted_line_2 = f"{indent}# base_url: {WINGMAN_PRO_PROD_BASE_URL_EUROPE}\n"
+
+            existing_1 = lines[base_url_idx - 1] if base_url_idx - 1 >= 0 else ""
+            existing_2 = lines[base_url_idx - 2] if base_url_idx - 2 >= 0 else ""
+
+            if existing_1 != wanted_line_2 or existing_2 != wanted_line_1:
+                insert_at = base_url_idx
+                lines[insert_at:insert_at] = [wanted_line_1, wanted_line_2]
+                self.log("- injected Wingman Pro RC TODO comment above base_url")
+            else:
+                self.log("- Wingman Pro RC TODO comment already present")
+        else:
+            # No base_url in block: insert it near the start of the block
+            insert_at = block_start
+            lines[insert_at:insert_at] = [
+                f"{indent}# {WINGMAN_PRO_RC_TODO_COMMENT}\n",
+                f"{indent}# base_url: {WINGMAN_PRO_PROD_BASE_URL_EUROPE}\n",
+                f"{indent}base_url: {WINGMAN_PRO_RC_BASE_URL}\n",
+            ]
+            self.log("- added Wingman Pro base_url + RC TODO comment")
+
+        self._write_settings_lines(settings_path, lines)
+
+    def _write_settings_lines(self, settings_path: str, lines: list[str]) -> None:
+        try:
+            with open(settings_path, "w", encoding="utf-8") as f:
+                f.writelines(lines)
+        except OSError as e:
+            self.log_warning(
+                f"- could not write settings.yaml for comment injection: {e.strerror}"
+            )
 
     def migrate_defaults(self, old: dict, new: dict) -> dict:
         """Migrate defaults.yaml from 1.8.2 to 2.0.0."""

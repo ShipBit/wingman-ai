@@ -53,6 +53,20 @@ servers:
     url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/starhead/mcp
     discoverable_by_default: false
 
+  - name: wingman_versetime
+    display_name: VerseTime - Star Citizen Time
+    description: Star Citizen local time and day/night for locations (e.g., Orison on Crusader). Sunrise and sunset timing.
+    discovery_keywords:
+      - verse time
+      - star citizen time
+      - sunrise
+      - sunset
+      - day or night
+      - daylight
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/versetime/mcp
+    discoverable_by_default: false
+
   - name: wingman_no_mans_sky
     display_name: No Man's Sky Assistant
     description: No Man's Sky game data. Item lookup, refiner recipes, cooking recipes. Expeditions, community missions, patch notes.

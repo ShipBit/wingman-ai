@@ -32,7 +32,9 @@ voice_activation:
     hotwords: []
     additional_hotwords: []
 wingman_pro:
-  base_url: https://wingman-api-europe.azurewebsites.net
+  # TODO: UNDO THIS CHANGE BEFORE 2.0 RELEASE!!!
+  # base_url: https://wingman-api-europe.azurewebsites.net
+  base_url: https://wingman-api-test-c5hke6cthsevgvam.germanywestcentral-01.azurewebsites.net
   region: europe
 xvasynth:
   enable: false

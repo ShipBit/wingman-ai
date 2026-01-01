@@ -1,12 +1,11 @@
-from os import path
 from typing import TYPE_CHECKING, Literal, Optional
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth
+from spotipy.oauth2 import SpotifyOauthError, SpotifyOAuth, SpotifyStateError
 from services.benchmark import Benchmark
-from api.enums import LogType
+from api.enums import LogSource, LogType
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from services.file import get_writable_dir
 from skills.skill_base import Skill, tool
+from services.file import get_generated_files_dir
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -22,10 +21,11 @@ class Spotify(Skill):
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
-        self.data_path = get_writable_dir(path.join("skills", "spotify", "data"))
+        self.data_path = get_generated_files_dir(self.name)
         self.spotify: spotipy.Spotify = None
         self.available_devices = []
         self.secret: str = None
+        self._last_auth_url: str | None = None
 
     async def secret_changed(self, secrets: dict[str, any]):
         await super().secret_changed(secrets)
@@ -48,23 +48,50 @@ class Spotify(Skill):
             cache_handler = spotipy.cache_handler.CacheFileHandler(
                 cache_path=f"{self.data_path}/.cache"
             )
-            self.spotify = spotipy.Spotify(
-                auth_manager=SpotifyOAuth(
-                    client_id=client_id,
-                    client_secret=self.secret,
-                    redirect_uri=redirect_url,
-                    scope=[
-                        "user-library-read",
-                        "user-read-currently-playing",
-                        "user-read-playback-state",
-                        "user-modify-playback-state",
-                        "streaming",
-                        "playlist-read-private",
-                        "user-library-modify",
-                    ],
-                    cache_handler=cache_handler,
-                )
+            auth_manager = SpotifyOAuth(
+                client_id=client_id,
+                client_secret=self.secret,
+                redirect_uri=redirect_url,
+                scope=[
+                    "user-library-read",
+                    "user-read-currently-playing",
+                    "user-read-playback-state",
+                    "user-modify-playback-state",
+                    "streaming",
+                    "playlist-read-private",
+                    "user-library-modify",
+                ],
+                cache_handler=cache_handler,
             )
+
+            try:
+                token_info = cache_handler.get_cached_token()
+                has_valid_token = bool(
+                    token_info and auth_manager.validate_token(token_info)
+                )
+            except (OSError, ValueError, SpotifyOauthError, SpotifyStateError):
+                has_valid_token = False
+
+            if not has_valid_token:
+                try:
+                    auth_url = auth_manager.get_authorize_url()
+                except (ValueError, SpotifyOauthError, SpotifyStateError):
+                    auth_url = ""
+
+                if auth_url and auth_url != self._last_auth_url:
+                    self._last_auth_url = auth_url
+                    await self.printr.print_async(
+                        text=(
+                            "Spotify authentication required. If no browser window opened, "
+                            f"open [this URL]({auth_url}) to authorize Wingman AI."
+                        ),
+                        color=LogType.INFO,
+                        source=LogSource.WINGMAN,
+                        source_name=(self.wingman.name if self.wingman else self.name),
+                        skill_name=self.name,
+                    )
+
+            self.spotify = spotipy.Spotify(auth_manager=auth_manager)
 
         return errors
 
