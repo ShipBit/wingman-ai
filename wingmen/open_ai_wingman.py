@@ -1462,6 +1462,18 @@ class OpenAiWingman(Wingman):
                 self.config.features.conversation_provider
                 == ConversationProvider.GOOGLE
             ):
+                if self.config.google.conversation_model.startswith("gemini-3"):
+                    # gemini 3 needs a thought signature like this, but we cant fake it:
+                    # {
+                    #     'model_extra': {
+                    #         'extra_content': {
+                    #             'google': {
+                    #                 'thought_signature': 'EjQKMgFyyNp8mNe4bQmQhOua7gGMH0C9RubFWewy6BzYZJs5f4RqDb8CaiR4gjLxoM1iQqP4'
+                    #             }
+                    #         }
+                    #     }
+                    # }
+                    return
                 tool_id = f"function-call-{''.join(random.choices('0123456789', k=20))}"
 
             # early exit for unsupported providers/models
