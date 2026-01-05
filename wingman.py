@@ -1182,11 +1182,14 @@ class Wingman:
 
         # Check if tools need follow-up LLM call (summarization)
         is_summarize_needed = False
+        unique_tools: dict[str, bool] = {}
         if tool_calls:
             for tool_call in tool_calls:
                 if not tool_call.id:
                     continue
                 function_name = tool_call.function.name
+
+                unique_tools[function_name] = True
 
                 # Meta-tools (activate_capability, etc.) always need follow-up LLM call
                 # so the LLM can use the newly activated tools
@@ -1196,6 +1199,11 @@ class Wingman:
                     skill = self.tool_skills[function_name]
                     if await skill.is_summarize_needed(function_name):
                         is_summarize_needed = True
+
+            # If the LLM only called execute_command (no assistant text), we still
+            # want a follow-up response like on develop.
+            if len(unique_tools) == 1 and "execute_command" in unique_tools:
+                is_summarize_needed = True
 
         # Tool execution loop
         while tool_calls:
@@ -1654,7 +1662,42 @@ class Wingman:
         """
         commands = await self._execute_instant_activation_command(transcript)
         if commands:
-            return ".", True  # "." = silent response (no UI output)
+            # Keep conversation history consistent with progressive tool disclosure by
+            # faking assistant tool calls for the executed commands (like develop).
+            await self.conversation.add_forced_tool_calls(
+                commands=commands,
+                conversation_provider=self.config.features.conversation_provider,
+                wingman_pro_deployment=getattr(
+                    getattr(self.config, "wingman_pro", None),
+                    "conversation_deployment",
+                    None,
+                ),
+            )
+
+            responses: list[str] = []
+            for command in commands:
+                if command.responses:
+                    responses.append(self._select_command_response(command))
+
+            # If all executed commands have configured responses, return a combined
+            # response and stop further processing.
+            if len(responses) == len(commands):
+                # De-dupe while preserving order
+                responses = list(dict.fromkeys(responses))
+                responses = [
+                    (
+                        response + "."
+                        if response and not response.endswith(".")
+                        else response
+                    )
+                    for response in responses
+                ]
+                return " ".join(responses), True
+
+            # No configured responses (or not for all commands): mark command executed
+            # but allow the normal LLM response flow to continue (with tool calls disabled).
+            return None, True
+
         return None, False
 
     # ========== TTS Methods ==========

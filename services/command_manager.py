@@ -206,37 +206,48 @@ class CommandManager:
             for action in command.actions:
                 # Keyboard actions
                 if action.keyboard:
-                    if action.keyboard.press == action.keyboard.release:
-                        # Single key press
-                        self.__press_keys(action.keyboard.press)
-                        if action.keyboard.hotkey is not None:
-                            keyboard.read_event()  # Wait for key up
-                    elif action.keyboard.press:
-                        for key in action.keyboard.press:
-                            keyboard.press(key)
-                    elif action.keyboard.release:
-                        for key in action.keyboard.release:
-                            keyboard.release(key)
+                    hotkey = action.keyboard.hotkey
+                    do_press = bool(action.keyboard.press)
+                    do_release = bool(action.keyboard.release)
+
+                    if do_press and do_release:
+                        keyboard.press_and_release(hotkey)
+                    elif do_press:
+                        keyboard.press(hotkey)
+                    elif do_release:
+                        keyboard.release(hotkey)
+                    elif action.keyboard.hold:
+                        keyboard.press(hotkey)
+                        await asyncio.sleep(action.keyboard.hold)
+                        keyboard.release(hotkey)
+                    else:
+                        keyboard.press_and_release(hotkey)
 
                 # Mouse actions
                 if action.mouse:
-                    if action.mouse.click:
-                        mouse.click(button=action.mouse.click)
-                    elif action.mouse.press:
-                        mouse.press(button=action.mouse.press)
-                    elif action.mouse.release:
-                        mouse.release(button=action.mouse.release)
-                    elif action.mouse.hold:
-                        mouse.hold(button=action.mouse.hold)
+                    if action.mouse.scroll is not None:
+                        mouse.wheel(delta=action.mouse.scroll)
                     elif action.mouse.move:
                         mouse.move(
-                            action.mouse.move.x_offset,
-                            action.mouse.move.y_offset,
+                            action.mouse.move[0],
+                            action.mouse.move[1],
                             absolute=False,
                             duration=0.2,
                         )
-                    elif action.mouse.scroll:
-                        mouse.wheel(delta=action.mouse.scroll.clicks)
+                    elif action.mouse.move_to:
+                        mouse.move(
+                            action.mouse.move_to[0],
+                            action.mouse.move_to[1],
+                            absolute=True,
+                            duration=0.2,
+                        )
+                    elif action.mouse.button:
+                        if action.mouse.hold:
+                            mouse.press(button=action.mouse.button)
+                            await asyncio.sleep(action.mouse.hold)
+                            mouse.release(button=action.mouse.button)
+                        else:
+                            mouse.click(button=action.mouse.button)
 
                 # Joystick actions
                 if action.joystick:
@@ -248,15 +259,15 @@ class CommandManager:
 
                 # Audio playback actions
                 if action.audio:
-                    await self.audio_library.play_from_library(action.audio)
+                    await self.audio_library.handle_action(action.audio)
 
                 # Write text actions
                 if action.write:
-                    keyboard.write(action.write.text, delay=action.write.delay or 0)
+                    keyboard.write(action.write)
 
                 # Wait/delay actions
                 if action.wait:
-                    await asyncio.sleep(action.wait.seconds)
+                    await asyncio.sleep(action.wait)
 
         except Exception as e:
             await printr.print_async(
@@ -265,14 +276,6 @@ class CommandManager:
                 source_name=self.wingman_name,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-
-    def __press_keys(self, keys: list[str]):
-        """Press multiple keys as a hotkey combination.
-
-        Args:
-            keys: List of keys to press together
-        """
-        keyboard.press_and_release("+".join(keys))
 
     def get_executable_commands(self, commands: list[CommandConfig]) -> list[str]:
         """Get list of command names that can be executed by the AI.
