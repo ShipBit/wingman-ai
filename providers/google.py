@@ -97,7 +97,9 @@ class GoogleGenAI(BaseProvider, LlmProvider):
         # Don't send reasoning_effort unless we know it's supported.
         return {}
 
-    def _sanitize_messages(self, messages: list[Any]) -> list[dict[str, Any]]:
+    def _sanitize_messages(
+        self, messages: list[Any], model_name: str | None
+    ) -> list[dict[str, Any]]:
         """Sanitize messages for Google Gemini OpenAI-compatible endpoint.
 
         Google's OpenAI-compatible endpoint is stricter than OpenAI's:
@@ -107,12 +109,72 @@ class GoogleGenAI(BaseProvider, LlmProvider):
         Wingman may pass either dicts or OpenAI message objects; normalize both.
         """
 
+        # Gemini 3 models reject certain synthetic tool-call structures we use
+        # to emulate "instant activation" command executions in history.
+        # We strip ONLY the forced execute_command tool-call messages that
+        # are immediately completed with an "OK" tool response.
+        strip_forced_instant_tool_calls = bool(
+            model_name
+            and model_name.lower().startswith("gemini-3")
+            and "gemini" in model_name.lower()
+        )
+
+        forced_tool_call_ids: set[str] = set()
         sanitized: list[dict[str, Any]] = []
         for msg in messages:
             if isinstance(msg, dict):
                 msg_copy = msg.copy()
                 if msg_copy.get("content") is None:
                     msg_copy["content"] = ""
+
+                # Identify forced instant tool-calls to strip for Gemini 3
+                if strip_forced_instant_tool_calls:
+                    tool_calls = msg_copy.get("tool_calls")
+                    if (
+                        msg_copy.get("role") == "assistant"
+                        and (
+                            msg_copy.get("content") == ""
+                            or msg_copy.get("content") is None
+                        )
+                        and tool_calls
+                    ):
+                        try:
+                            is_execute_command_only = True
+                            for tc in tool_calls:
+                                fn = (
+                                    tc.get("function")
+                                    if isinstance(tc, dict)
+                                    else getattr(tc, "function", None)
+                                )
+                                fn_name = None
+                                if isinstance(fn, dict):
+                                    fn_name = fn.get("name")
+                                else:
+                                    fn_name = getattr(fn, "name", None)
+                                if fn_name != "execute_command":
+                                    is_execute_command_only = False
+                                    break
+                            if is_execute_command_only:
+                                # collect ids from all tool calls
+                                for tc in tool_calls:
+                                    tc_id = (
+                                        tc.get("id")
+                                        if isinstance(tc, dict)
+                                        else getattr(tc, "id", None)
+                                    )
+                                    if tc_id:
+                                        forced_tool_call_ids.add(str(tc_id))
+                                continue
+                        except (TypeError, AttributeError, ValueError):
+                            pass
+
+                    if (
+                        msg_copy.get("role") == "tool"
+                        and msg_copy.get("content") == "OK"
+                        and msg_copy.get("tool_call_id") in forced_tool_call_ids
+                    ):
+                        continue
+
                 sanitized.append(msg_copy)
                 continue
 
@@ -132,11 +194,50 @@ class GoogleGenAI(BaseProvider, LlmProvider):
             elif isinstance(msg, dict) and "tool_calls" in msg:
                 msg_dict["tool_calls"] = msg["tool_calls"]
 
+            if strip_forced_instant_tool_calls and msg_dict.get("role") == "assistant":
+                # Skip assistant forced tool-call messages entirely
+                if msg_dict.get("tool_calls") and msg_dict.get("content") == "":
+                    try:
+                        is_execute_command_only = True
+                        for tc in msg_dict["tool_calls"]:
+                            fn = (
+                                tc.get("function")
+                                if isinstance(tc, dict)
+                                else getattr(tc, "function", None)
+                            )
+                            fn_name = None
+                            if isinstance(fn, dict):
+                                fn_name = fn.get("name")
+                            else:
+                                fn_name = getattr(fn, "name", None)
+                            if fn_name != "execute_command":
+                                is_execute_command_only = False
+                                break
+                        if is_execute_command_only:
+                            for tc in msg_dict["tool_calls"]:
+                                tc_id = (
+                                    tc.get("id")
+                                    if isinstance(tc, dict)
+                                    else getattr(tc, "id", None)
+                                )
+                                if tc_id:
+                                    forced_tool_call_ids.add(str(tc_id))
+                            continue
+                    except (TypeError, AttributeError, ValueError):
+                        pass
+
             tool_call_id = getattr(msg, "tool_call_id", None)
             if tool_call_id:
                 msg_dict["tool_call_id"] = tool_call_id
             elif isinstance(msg, dict) and "tool_call_id" in msg:
                 msg_dict["tool_call_id"] = msg["tool_call_id"]
+
+            if strip_forced_instant_tool_calls and msg_dict.get("role") == "tool":
+                if (
+                    msg_dict.get("content") == "OK"
+                    and msg_dict.get("tool_call_id") in forced_tool_call_ids
+                ):
+                    continue
 
             name = getattr(msg, "name", None)
             if name:
@@ -165,7 +266,7 @@ class GoogleGenAI(BaseProvider, LlmProvider):
         model = kwargs.get("model", self.config.conversation_model)
         stream = kwargs.get("stream", False)
 
-        messages = self._sanitize_messages(messages)
+        messages = self._sanitize_messages(messages, model)
 
         # Direct implementation - no legacy method needed
         try:
