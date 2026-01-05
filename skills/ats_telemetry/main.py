@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import requests
 import truck_telemetry
+from rapidfuzz import process, fuzz
 
 from pyproj import Proj, transform
 import time
@@ -374,7 +375,7 @@ class ATSTelemetry(Skill):
                 f"Received telemetry data: {filtered_data}",
                 color=LogType.INFO,
             )
-
+        # Try exact match first
         if variable in filtered_data:
             value = filtered_data[variable]
             try:
@@ -394,6 +395,36 @@ class ATSTelemetry(Skill):
                     f"Could not locate variable result in telemetry for {variable}.",
                     color=LogType.INFO,
                 )
+            # Try fuzzy match as fallback before failing
+            MATCH_THRESHOLD = 60 
+            choices = list(filtered_data.keys())
+            
+            # process.extract returns a list of tuples: [(string, score, index), ...]
+            matches = process.extract(
+                variable, 
+                choices, 
+                scorer=fuzz.WRatio, 
+                limit=3, 
+                score_cutoff=MATCH_THRESHOLD
+            )
+
+            if matches:
+                results_list = []
+                for match_str, score, _ in matches:
+                    val = filtered_data.get(match_str, "N/A")
+                    results_list.append(f"'{match_str}' (Value: {val})")
+                
+                # Format the output for the AI
+                matches_formatted = ", ".join(results_list)
+                
+                if self.settings.debug_mode:
+                    await self.printr.print_async(
+                        f"Fuzzy matches for '{variable}': {matches_formatted}",
+                        color=LogType.INFO,
+                    )
+
+                return (f"Exact variable '{variable}' not found. "
+                        f"Found the following close matches instead {matches_formatted}")
             return f"Variable '{variable}' not found."
 
     @tool(
