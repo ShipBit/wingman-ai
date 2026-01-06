@@ -1017,6 +1017,7 @@ class SettingsConfig(BaseModel):
     streamer_mode: bool
     cancel_tts_key: Optional[str] = None
     cancel_tts_key_codes: Optional[list[int]] = None
+    cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None
     user_name: Optional[str] = None
 
 

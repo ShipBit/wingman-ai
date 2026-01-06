@@ -434,29 +434,46 @@ class WingmanCore(WebSocketUser):
         )
 
     def is_joystick_configured(self, config: Config) -> bool:
-        return any(
+        is_any_wingman_joystick_configured = any(
             config.wingmen[wingman].record_joystick_button for wingman in config.wingmen
         )
 
+        cancel_tts_joystick_button = getattr(
+            self.settings_service.settings,
+            "cancel_tts_joystick_button",
+            None,
+        )
+
+        is_cancel_tts_joystick_configured = (
+            cancel_tts_joystick_button is not None
+            and cancel_tts_joystick_button.guid is not None
+        )
+
+        return is_any_wingman_joystick_configured or is_cancel_tts_joystick_configured
+
     async def start_joysticks(self, config: Config):
         pygame.init()
-
         # Get all joystick configs
-        joystick_configs = [
+        joystick_configs: list[CommandJoystickConfig] = [
             config.wingmen[wingman].record_joystick_button
             for wingman in config.wingmen
             if config.wingmen[wingman].record_joystick_button
         ]
+
+        cancel_tts_joystick_button = getattr(
+            self.settings_service.settings, "cancel_tts_joystick_button", None
+        )
+        if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
+            joystick_configs.append(cancel_tts_joystick_button)
 
         joysticks = [
             pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())
         ]
         for joystick in joysticks:
             if any(
-                [
-                    joystick.get_guid() == joystick_config.guid
-                    for joystick_config in joystick_configs
-                ]
+                joystick.get_guid() == joystick_config.guid
+                for joystick_config in joystick_configs
+                if joystick_config is not None and joystick_config.guid is not None
             ):
                 joystick.init()
 
@@ -598,6 +615,19 @@ class WingmanCore(WebSocketUser):
             or self.settings_service.settings.cancel_tts_key
         )
         if is_cancel_tts_hotkey_pressed:
+            self.ensure_async(self.stop_playback())
+
+        cancel_tts_joystick_button = getattr(
+            self.settings_service.settings, "cancel_tts_joystick_button", None
+        )
+        if (
+            joystick_config
+            and cancel_tts_joystick_button is not None
+            and cancel_tts_joystick_button.guid is not None
+            and cancel_tts_joystick_button.button is not None
+            and joystick_config.guid == cancel_tts_joystick_button.guid
+            and joystick_config.button == cancel_tts_joystick_button.button
+        ):
             self.ensure_async(self.stop_playback())
 
         if self.tower and self.active_recording["key"] == "":
@@ -769,7 +799,9 @@ class WingmanCore(WebSocketUser):
                 api_key=self.secret_keeper.secrets["groq"],
                 base_url="https://api.groq.com/openai/v1/",
             )
-            transcription = groq.transcribe(filename=recording_file, model="whisper-large-v3-turbo")
+            transcription = groq.transcribe(
+                filename=recording_file, model="whisper-large-v3-turbo"
+            )
             text = transcription.text
         elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
             combined_hotwords: list[str] = []

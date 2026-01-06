@@ -2,6 +2,7 @@ debug_mode: false
 audio: {}
 streamer_mode: false
 cancel_tts_key: "shift+y"
+cancel_tts_joystick_button: null
 voice_activation:
   enabled: false
   mute_toggle_key: "shift+x"

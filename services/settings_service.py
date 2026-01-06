@@ -142,6 +142,15 @@ class SettingsService:
         self.config_manager.settings_config.debug_mode = settings.debug_mode
         self.config_manager.settings_config.streamer_mode = settings.streamer_mode
 
+        # cancel TTS ("shut up") bindings
+        self.config_manager.settings_config.cancel_tts_key = settings.cancel_tts_key
+        self.config_manager.settings_config.cancel_tts_key_codes = (
+            settings.cancel_tts_key_codes
+        )
+        self.config_manager.settings_config.cancel_tts_joystick_button = (
+            settings.cancel_tts_joystick_button
+        )
+
         # save the config file
         self.config_manager.save_settings_config()
 
