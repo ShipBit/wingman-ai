@@ -645,6 +645,8 @@ class ConfigManager:
             )
 
         source_config_raw = self.read_config(source_config_path)
+        if source_config_raw is None:
+            raise ValueError("Failed to read source Wingman configuration.")
         if not isinstance(source_config_raw, dict):
             raise ValueError("Invalid Wingman config format; expected a YAML mapping.")
 
@@ -671,9 +673,7 @@ class ConfigManager:
             name=cleaned_name,
             file=f"{cleaned_name}.yaml",
             is_deleted=False,
-            avatar=self.__load_image_as_base64(
-                self.get_wingman_avatar_path(target_config_dir, cleaned_name)
-            ),
+            avatar=source_wingman_file.avatar,
         )
 
         # Always create the duplicated avatar file from the source avatar (base64 data URI).
@@ -684,14 +684,21 @@ class ConfigManager:
             )
 
             avatar_str = source_wingman_file.avatar
-            avatar_b64 = (
-                avatar_str.split("base64,", 1)[1]
-                if "base64," in avatar_str
-                else avatar_str
-            )
-            image_data = base64.b64decode(avatar_b64)
-            with open(target_avatar_path, "wb") as file:
-                file.write(image_data)
+            if not avatar_str:
+                # Extremely defensive fallback: write the default avatar.
+                default_avatar_path = self.get_wingman_avatar_path(
+                    target_config_dir, cleaned_name
+                )
+                shutil.copyfile(default_avatar_path, target_avatar_path)
+            else:
+                avatar_b64 = (
+                    avatar_str.split("base64,", 1)[1]
+                    if "base64," in avatar_str
+                    else avatar_str
+                )
+                image_data = base64.b64decode(avatar_b64)
+                with open(target_avatar_path, "wb") as file:
+                    file.write(image_data)
         except Exception as e:
             self.printr.print(
                 f"Failed to copy duplicated avatar for '{cleaned_name}': {e}",
