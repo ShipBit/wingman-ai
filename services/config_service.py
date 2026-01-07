@@ -1,11 +1,13 @@
 import asyncio
 from typing import Optional
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from api.enums import LogType
 from api.interface import (
     ConfigDirInfo,
     ConfigWithDirInfo,
     ConfigsInfo,
+    DuplicateWingmanRequest,
+    DuplicateWingmanResult,
     McpConfig,
     McpConnectResult,
     McpServerConfig,
@@ -106,6 +108,13 @@ class ConfigService:
             methods=["DELETE"],
             path="/config/wingman",
             endpoint=self.delete_wingman_config,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/wingman/duplicate",
+            endpoint=self.duplicate_wingman,
+            response_model=DuplicateWingmanResult,
             tags=tags,
         )
         self.router.add_api_route(
@@ -824,6 +833,41 @@ class ConfigService:
             wingman_config=wingman_config,
         )
         await self.load_config(config_dir)
+
+    # POST /config/wingman/duplicate
+    async def duplicate_wingman(self, request: DuplicateWingmanRequest):
+        """Duplicate a Wingman into a chosen target config/context.
+
+        Server-side responsibilities:
+        - Validate name with the same constraints as the client
+        - Ensure the new name does not exist in the target context
+        - Copy all settings from the source Wingman
+        - Ensure YAML filename stem matches wingman_config.name
+        - Reload the selected target config so the copy is available immediately
+        """
+
+        try:
+            new_wingman_file = self.config_manager.duplicate_wingman_config(
+                source_config_dir=request.source_config_dir,
+                source_wingman_file=request.source_wingman_file,
+                target_config_dir=request.target_config_dir,
+                new_name=request.new_name,
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except FileExistsError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:
+            # Keep unexpected errors visible
+            raise HTTPException(status_code=500, detail=str(e)) from e
+
+        await self.load_config(request.target_config_dir)
+        return DuplicateWingmanResult(
+            config_dir=request.target_config_dir,
+            wingman_file=new_wingman_file,
+        )
 
     # POST config/save-wingman
     async def save_wingman_config(

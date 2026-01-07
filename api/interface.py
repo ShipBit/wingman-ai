@@ -1008,6 +1008,22 @@ class NewWingmanTemplate(BaseModel):
     avatar: Annotated[str, Base64Str]
 
 
+class DuplicateWingmanRequest(BaseModel):
+    """Request payload for duplicating a Wingman into a target config/context."""
+
+    source_config_dir: ConfigDirInfo
+    source_wingman_file: WingmanConfigFileInfo
+    target_config_dir: ConfigDirInfo
+    new_name: str
+
+
+class DuplicateWingmanResult(BaseModel):
+    """Result of a Wingman duplication request."""
+
+    config_dir: ConfigDirInfo
+    wingman_file: WingmanConfigFileInfo
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     voice_activation: VoiceActivationSettings

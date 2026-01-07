@@ -4,6 +4,7 @@ import json
 from os import makedirs, path, remove, walk
 import copy
 import shutil
+import re
 from typing import Optional, Tuple
 from pydantic import BaseModel, ValidationError
 import yaml
@@ -34,6 +35,9 @@ DEFAULT_SKILLS_CONFIG = "default_config.yaml"
 
 DELETED_PREFIX = "."
 DEFAULT_PREFIX = "_"
+
+
+_WINGMAN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 -]*$")
 
 
 class ConfigManager:
@@ -560,6 +564,149 @@ class ConfigManager:
                     )
                     wingmen.append(wingman_file)
         return wingmen
+
+    def _validate_wingman_name(self, name: str) -> str:
+        """Validate Wingman name using the same constraints as the client.
+
+        Client pattern: ^[a-zA-Z0-9][a-zA-Z0-9 -]*$
+        """
+
+        if name is None:
+            raise ValueError("Wingman name is required.")
+
+        cleaned = name.strip()
+        if not cleaned:
+            raise ValueError("Wingman name is required.")
+
+        if not _WINGMAN_NAME_PATTERN.fullmatch(cleaned):
+            raise ValueError(
+                "Invalid Wingman name. Use letters, numbers, spaces, and '-' only; must start with a letter or number."
+            )
+
+        return cleaned
+
+    def _wingman_name_exists_in_config_dir(
+        self, config_dir: ConfigDirInfo, name: str
+    ) -> bool:
+        """Check whether a wingman name already exists in the target context.
+
+        Treats case-insensitive collisions as existing (important on macOS/Windows).
+        Also treats logically-deleted '.Name.yaml' as existing.
+        """
+
+        target_path = path.join(self.config_dir, config_dir.directory)
+        wanted = name.casefold()
+
+        for _, _, files in walk(target_path):
+            for filename in files:
+                if not filename.endswith(".yaml"):
+                    continue
+
+                base_file_name = filename.replace(".yaml", "")
+                if base_file_name.startswith(DELETED_PREFIX):
+                    base_file_name = base_file_name.replace(DELETED_PREFIX, "", 1)
+                if base_file_name.casefold() == wanted:
+                    return True
+
+        return False
+
+    def duplicate_wingman_config(
+        self,
+        source_config_dir: ConfigDirInfo,
+        source_wingman_file: WingmanConfigFileInfo,
+        target_config_dir: ConfigDirInfo,
+        new_name: str,
+    ) -> WingmanConfigFileInfo:
+        """Duplicate an existing Wingman configuration into another context.
+
+        Copies all settings from the source Wingman (via merged/validated WingmanConfig),
+        but writes them under a new filename and sets the internal 'name' field to match.
+        Also copies the avatar PNG if present.
+        """
+
+        if source_wingman_file.is_deleted or source_wingman_file.file.startswith(
+            DELETED_PREFIX
+        ):
+            raise ValueError("Cannot duplicate a deleted/hidden Wingman.")
+
+        cleaned_name = self._validate_wingman_name(new_name)
+
+        if self._wingman_name_exists_in_config_dir(target_config_dir, cleaned_name):
+            raise FileExistsError(
+                f"Wingman '{cleaned_name}' already exists in '{target_config_dir.name}'."
+            )
+
+        source_config_path = path.join(
+            self.config_dir, source_config_dir.directory, source_wingman_file.file
+        )
+        if not path.exists(source_config_path):
+            raise FileNotFoundError(
+                f"Source Wingman config not found: '{source_wingman_file.file}' in '{source_config_dir.name}'."
+            )
+
+        source_config_raw = self.read_config(source_config_path)
+        if not isinstance(source_config_raw, dict):
+            raise ValueError("Invalid Wingman config format; expected a YAML mapping.")
+
+        # Ensure the internal name matches the filename stem.
+        source_config_raw["name"] = cleaned_name
+
+        # Clear push-to-talk binding in the duplicate so the user can rebind.
+        source_config_raw["record_key"] = ""
+        source_config_raw["record_key_codes"] = None
+        source_config_raw["record_mouse_button"] = ""
+        source_config_raw["record_joystick_button"] = None
+        source_config_raw["is_voice_activation_default"] = False
+
+        target_config_path = path.join(
+            self.config_dir, target_config_dir.directory, f"{cleaned_name}.yaml"
+        )
+        written = self.write_config(target_config_path, source_config_raw)
+        if not written:
+            raise OSError(
+                f"Failed to write duplicated Wingman config to '{target_config_path}'."
+            )
+
+        new_wingman_file = WingmanConfigFileInfo(
+            name=cleaned_name,
+            file=f"{cleaned_name}.yaml",
+            is_deleted=False,
+            avatar=self.__load_image_as_base64(
+                self.get_wingman_avatar_path(target_config_dir, cleaned_name)
+            ),
+        )
+
+        # Always create the duplicated avatar file from the source avatar (base64 data URI).
+        # This avoids relying on a physical source .png being present on disk.
+        try:
+            target_avatar_path = path.join(
+                self.config_dir, target_config_dir.directory, f"{cleaned_name}.png"
+            )
+
+            avatar_str = source_wingman_file.avatar
+            avatar_b64 = (
+                avatar_str.split("base64,", 1)[1]
+                if "base64," in avatar_str
+                else avatar_str
+            )
+            image_data = base64.b64decode(avatar_b64)
+            with open(target_avatar_path, "wb") as file:
+                file.write(image_data)
+        except Exception as e:
+            self.printr.print(
+                f"Failed to copy duplicated avatar for '{cleaned_name}': {e}",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+
+        # Return the canonical file info as it will appear to the client.
+        wingmen = self.get_wingmen_configs(target_config_dir)
+        created = next(
+            (w for w in wingmen if w.name == cleaned_name and not w.is_deleted), None
+        )
+        return created if created else new_wingman_file
 
     def save_last_wingman_message(
         self,
