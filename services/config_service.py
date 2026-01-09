@@ -14,6 +14,7 @@ from api.interface import (
     McpServerState,
     NestedConfig,
     NewWingmanTemplate,
+    CommandCategoryConfig,
     SkillConfig,
     SkillBase,
     WingmanConfig,
@@ -211,6 +212,24 @@ class ConfigService:
             methods=["POST"],
             path="/config/defaults",
             endpoint=self.save_defaults_config,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/wingman/command-category",
+            endpoint=self.add_command_category,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["PATCH"],
+            path="/config/wingman/command-category",
+            endpoint=self.update_command_category,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/config/wingman/command-category",
+            endpoint=self.delete_command_category,
             tags=tags,
         )
 
@@ -1069,6 +1088,140 @@ class ConfigService:
             self.printr.toast(message)
         else:
             self.printr.print(text=message, server_only=True)
+
+    # POST /config/wingman/command-category
+    async def add_command_category(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        category: CommandCategoryConfig,
+    ):
+        """Add a new command category to a wingman."""
+        try:
+            # Load config
+            wingman_config = self.config_manager.load_wingman_config(
+                config_dir=config_dir, wingman_file=wingman_file
+            )
+
+            # Initialize categories if needed
+            if wingman_config.command_categories is None:
+                wingman_config.command_categories = []
+
+            # Check if ID exists
+            if any(c.id == category.id for c in wingman_config.command_categories):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Category with ID {category.id} already exists.",
+                )
+
+            wingman_config.command_categories.append(category)
+
+            # Save
+            await self.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+                wingman_config=wingman_config,
+                silent=True,
+            )
+            self.printr.print(
+                f"Added category '{category.name}' to {wingman_file.name}",
+                server_only=True,
+            )
+
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # PATCH /config/wingman/command-category
+    async def update_command_category(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        category: CommandCategoryConfig,
+    ):
+        """Update an existing command category (rename)."""
+        try:
+            # Load config
+            wingman_config = self.config_manager.load_wingman_config(
+                config_dir=config_dir, wingman_file=wingman_file
+            )
+
+            if not wingman_config.command_categories:
+                raise HTTPException(status_code=404, detail="Category not found.")
+
+            found = False
+            for c in wingman_config.command_categories:
+                if c.id == category.id:
+                    c.name = category.name
+                    found = True
+                    break
+
+            if not found:
+                raise HTTPException(status_code=404, detail="Category not found.")
+
+            # Save
+            await self.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+                wingman_config=wingman_config,
+                silent=True,
+            )
+            self.printr.print(
+                f"Updated category '{category.name}' in {wingman_file.name}",
+                server_only=True,
+            )
+
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # DELETE /config/wingman/command-category
+    async def delete_command_category(
+        self,
+        config_dir: ConfigDirInfo,
+        wingman_file: WingmanConfigFileInfo,
+        category_id: str,
+    ):
+        """Delete a command category and un-assign commands."""
+        try:
+            # Load config
+            wingman_config = self.config_manager.load_wingman_config(
+                config_dir=config_dir, wingman_file=wingman_file
+            )
+
+            if not wingman_config.command_categories:
+                raise HTTPException(status_code=404, detail="Category not found.")
+
+            # Remove category
+            original_len = len(wingman_config.command_categories)
+            wingman_config.command_categories = [
+                c for c in wingman_config.command_categories if c.id != category_id
+            ]
+
+            if len(wingman_config.command_categories) == original_len:
+                raise HTTPException(status_code=404, detail="Category not found.")
+
+            # Un-assign commands
+            if wingman_config.commands:
+                for cmd in wingman_config.commands:
+                    if cmd.category_id == category_id:
+                        cmd.category_id = None
+
+            # Save
+            await self.save_wingman_config(
+                config_dir=config_dir,
+                wingman_file=wingman_file,
+                wingman_config=wingman_config,
+                silent=True,
+            )
+            self.printr.print(
+                f"Deleted category {category_id} from {wingman_file.name}",
+                server_only=True,
+            )
+
+        except Exception as e:
+            self.printr.toast_error(str(e))
+            raise HTTPException(status_code=500, detail=str(e))
 
     # POST config/wingman/default
     async def set_default_wingman(

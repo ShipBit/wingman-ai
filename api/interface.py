@@ -624,6 +624,16 @@ class CommandActionConfig(BaseModel):
     """The joystick configuration for this action. Optional."""
 
 
+class CommandCategoryConfig(BaseModel):
+    """Configuration for a command category."""
+
+    id: str
+    """Unique identifier for the category (UUID)."""
+
+    name: str
+    """Display name of the category."""
+
+
 class CommandConfig(BaseModel):
     name: str
     """This is where the magic happens!
@@ -631,6 +641,8 @@ class CommandConfig(BaseModel):
     We use "DeployLandingGear" here but a number of lines like "I want to land", "Get ready to land" etc. will also work.
     If the Wingman doesn't call your command, try to rephrase the name here.
     """
+    category_id: Optional[str] = None
+    """Optional category ID to group commands."""
     is_system_command: Optional[bool] = False
     """Whether this is a system command that cannot be deleted or edited by the user."""
     instant_activation: Optional[list[str]] = None
@@ -937,6 +949,7 @@ class NestedConfig(BaseModel):
     perplexity: PerplexityConfig
     xai: XaiConfig
     commands: Optional[list[CommandConfig]] = None
+    command_categories: Optional[list[CommandCategoryConfig]] = None
     skills: Optional[list[SkillConfig]] = None
     """User's skill configuration overrides. Skills not listed here use defaults."""
 
