@@ -1,3 +1,4 @@
+numba==0.63.1
 aiofiles==24.1.0
 azure-cognitiveservices-speech==1.47.0
 backports-tarfile>=1.0.0
@@ -22,7 +23,7 @@ httptools==0.6.4
 hume==0.13.5
 markdown==3.10
 mcp==1.22.0
-numpy==1.26.4
+numpy==2.3
 openai==2.14.0
 packaging==24.2
 pedalboard==0.9.19
@@ -32,7 +33,7 @@ pydantic==2.11.4
 pydirectinput-rgx==2.1.2
 pyinstaller==6.17.0
 pygame==2.6.1
-python-multipart==0.0.20
+python-multipart==0.0.21
 rapidfuzz==3.10.1
 PyYAML==6.0.2
 requests==2.32.3
@@ -46,10 +47,9 @@ typing_extensions==4.12.2
 uvicorn==0.34.0
 # New for Pocket-TTS Server
 Flask==3.1.2
-torch<=2.8.0
-torchaudio<=2.8.0
+torch==2.8.0
+torchaudio==2.8.0
 pocket-tts==1.0.3 # needs to move to 1.0.4 when available as that one will have my local model support PR
-scipy==1.17.0
 
 
 # =============================================================================
