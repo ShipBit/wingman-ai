@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pocket TTS - Local Streaming</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <img src="/static/images/pocket-tts-logo.png" alt="Pocket TTS Logo" class="logo">
+        <h1>Pocket TTS</h1>
+        <p class="subtitle">Real-time local speech synthesis & voice cloning</p>
+    </header>
+
+    <div class="content">
+        <div class="control-group">
+            <label for="text-input">Text Prompt</label>
+            <textarea id="text-input" placeholder="Enter text to generate speech...">Hello! I am Pocket TTS, running locally on your machine. I can clone voices and stream audio in real-time.</textarea>
+        </div>
+
+        <div class="control-group">
+            <label for="voice-select">Voice Selection</label>
+            <select id="voice-select">
+                <!-- Populated by JS -->
+                <option value="custom">Custom (Upload .wav, .mp3, or .flac)...</option>
+            </select>
+        </div>
+
+        <div class="control-group hidden" id="custom-voice-group">
+             <label for="voice-file">Upload Reference Audio (WAV, MP3, FLAC)</label>
+             <input type="file" id="voice-file" accept=".wav,.mp3,.flac">
+        </div>
+
+        <div class="control-group">
+             <label for="stream-toggle" style="display:inline-flex; align-items:center; cursor:pointer;">
+                 <input type="checkbox" id="stream-toggle" style="width:auto; margin-right:8px;"> Enable Streaming Response
+             </label>
+        </div>
+
+        <button id="generate-btn" class="btn-primary">
+            <span>Generate Speech</span>
+            <div class="spinner"></div>
+        </button>
+
+        <div class="output-section" id="output-section">
+            <audio id="audio-player" controls></audio>
+            <br>
+            <a href="#" id="download-btn" class="download-link">Download Audio</a>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
