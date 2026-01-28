@@ -72,8 +72,8 @@ openai:
 openai_compatible_tts:
   api_key: "probably-not-needed"
   voice: ""
-  model: ""
-  base_url: ""
+  model: "pocket-tts"
+  base_url: "http://localhost:5002/v1"
   speed: 1.0
   output_streaming: true
   voices_endpoint: "/voices"

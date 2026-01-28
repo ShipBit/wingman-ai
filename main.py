@@ -119,7 +119,6 @@ def run_pocket_tts_server():
     server_kwargs = {
         "port": 5002,
         "stream": True,
-        "voices_dir": "C:/OtherPrograms/Github/pocket-tts-openai_streaming_server/voices"
     }
 
     # 2. Create the process
