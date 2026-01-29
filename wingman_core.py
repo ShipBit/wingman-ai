@@ -57,7 +57,27 @@ from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
 from services.tower import Tower
 from services.websocket_user import WebSocketUser
+from pocket_tts_server.pocket_tts_openai_server import start_server
+from pocket_tts_server.pocket_tts_openai_server import threaded_execution
 
+def run_pocket_tts_server():
+    # 1. Configure your parameters
+    server_kwargs = {
+        "port": 5002,
+        "stream": True,
+    }
+
+    # 2. Create the process
+    # We use multiprocessing because Flask/Torch need their own memory space
+    server_process = multiprocessing.Process(
+        target=start_server, 
+        kwargs=server_kwargs,
+        daemon=True # This ensures it dies when main.py dies!
+    )
+
+    # 3. Start it
+    print("Launching TTS Server...")
+    server_process.start()
 
 class WingmanCore(WebSocketUser):
     def __init__(
@@ -405,6 +425,11 @@ class WingmanCore(WebSocketUser):
     async def startup(self):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
+        
+        try: 
+            threaded_execution(start_server)
+        except Exception as e:
+            print(f"Could not start pocket_tts server, error: {e}.")
 
     async def set_core_state(self, state: CoreState) -> None:
         """Update the core state and broadcast to all connected clients.

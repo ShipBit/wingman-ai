@@ -52,8 +52,6 @@ from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.system_manager import SystemManager
 from wingman_core import WingmanCore
-from pocket_tts_server.pocket_tts_openai_server import start_server
-import multiprocessing
 port = None
 host = None
 
@@ -113,25 +111,6 @@ core = WingmanCore(
 core.set_connection_manager(connection_manager)
 
 keyboard.hook(core.on_key)
-
-def run_pocket_tts_server():
-    # 1. Configure your parameters
-    server_kwargs = {
-        "port": 5002,
-        "stream": True,
-    }
-
-    # 2. Create the process
-    # We use multiprocessing because Flask/Torch need their own memory space
-    server_process = multiprocessing.Process(
-        target=start_server, 
-        kwargs=server_kwargs,
-        daemon=True # This ensures it dies when main.py dies!
-    )
-
-    # 3. Start it
-    print("Launching TTS Server...")
-    server_process.start()
 
 def custom_generate_unique_id(route: APIRoute):
     return f"{route.tags[0]}-{route.name}"
@@ -507,8 +486,6 @@ async def async_main(host: str, port: int, sidecar: bool):
 
 
 if __name__ == "__main__":
-    #multiprocessing.freeze_support()
-    run_pocket_tts_server()
     
     parser = argparse.ArgumentParser(description="Run the FastAPI server.")
     parser.add_argument(

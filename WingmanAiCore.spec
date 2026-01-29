@@ -18,7 +18,7 @@ These libraries enable GPU acceleration without requiring users to install CUDA 
 
 import os
 import sys
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules, collect_all
 
 # Determine the venv site-packages path based on the platform
 if sys.platform == 'win32':
@@ -44,6 +44,7 @@ datas = [
     ('templates/migration', 'templates/migration'),
     ('audio_samples', 'audio_samples'),
     ('LICENSE', '.'),
+	('pocket_tts_server', 'pocket_tts_server'),
 ]
 
 # Automatically bundle all contents from explicit_deps/
@@ -186,6 +187,13 @@ hiddenimports = [
 
     # ctranslate2 for FasterWhisper
     'ctranslate2',
+	
+	# for pocket-tts
+	'engineio.async_drivers.threading',
+    'flask',
+    'torch',
+    'torchaudio',
+    'soundfile',
 ]
 
 # Ensure Pillow (PIL) is fully bundled.
@@ -205,6 +213,13 @@ try:
     binaries += collect_dynamic_libs('PIL')
 except Exception as e:
     print(f"Warning: Could not collect PIL dynamic libs: {e}")
+
+
+# Collect all pocket-tts
+ptts_datas, ptts_binaries, ptts_hidden = collect_all('pocket_tts')
+datas += ptts_datas
+binaries += ptts_binaries
+hiddenimports += ptts_hidden
 
 # ============================================================================
 # ANALYSIS
