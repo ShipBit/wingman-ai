@@ -348,6 +348,10 @@ class WingmanCore(WebSocketUser):
 
         self.key_events = {}
 
+        # Joystick thread management
+        self._joystick_thread: Optional[threading.Thread] = None
+        self._joystick_loop: Optional[asyncio.AbstractEventLoop] = None
+
         self.settings_service = SettingsService(
             config_manager=config_manager, config_service=self.config_service
         )
@@ -506,10 +510,13 @@ class WingmanCore(WebSocketUser):
             await asyncio.sleep(0.01)
 
     def init_joystick(self, config: Config):
+        # Stop any existing joystick thread first to prevent thread accumulation
+        self._stop_joystick_thread()
 
         def run_async_process():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
+            self._joystick_loop = loop  # Store reference for cleanup
             try:
                 # Create a task for start_joysticks instead of running it directly
                 loop.create_task(self.start_joysticks(config))
@@ -518,8 +525,30 @@ class WingmanCore(WebSocketUser):
             finally:
                 loop.close()
 
-        play_thread = threading.Thread(target=run_async_process)
-        play_thread.start()
+        self._joystick_thread = threading.Thread(target=run_async_process, daemon=True)
+        self._joystick_thread.name = "JoystickEventLoop"
+        self._joystick_thread.start()
+
+    def _stop_joystick_thread(self):
+        """Stop the joystick event loop and thread."""
+        if self._joystick_loop and self._joystick_loop.is_running():
+            # Schedule the loop to stop from another thread
+            try:
+                self._joystick_loop.call_soon_threadsafe(self._joystick_loop.stop)
+            except RuntimeError:
+                pass  # Loop may already be closed
+
+        if self._joystick_thread and self._joystick_thread.is_alive():
+            self._joystick_thread.join(timeout=1.0)
+            if self._joystick_thread.is_alive():
+                self.printr.print(
+                    "WARNING: Joystick thread did not stop in time",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+
+        self._joystick_thread = None
+        self._joystick_loop = None
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         if not self.is_client_logged_in:
@@ -578,6 +607,16 @@ class WingmanCore(WebSocketUser):
                 await wingman.unload()
             self.tower = None
             self.config_service.set_tower(None)
+
+            # Stop joystick thread to prevent thread accumulation on reload
+            self._stop_joystick_thread()
+
+            # Unhook mouse to prevent duplicate hooks
+            try:
+                mouse.unhook_all()
+            except Exception:
+                pass  # May fail if no hooks are registered
+
             self.printr.print(
                 "Tower unloaded.",
                 server_only=True,

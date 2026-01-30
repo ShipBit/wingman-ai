@@ -840,6 +840,7 @@ class Wingman:
 
             thread = threading.Thread(target=start_thread, args=(function, *args))
             thread.name = function.__name__
+            thread.daemon = True  # Mark as daemon so it dies when main process exits
             thread.start()
             return thread
         except Exception as e:
@@ -973,11 +974,12 @@ class Wingman:
         self.tower.save_wingman_commands(self.name)
 
     async def update_settings(self, settings: SettingsConfig):
-        """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
+        """Update the settings of the Wingman. This method should always be called when the user Settings have changed.
+        """
         self.settings = settings
-        await self.init_skills()
-        # Also reload MCPs if the wingman supports them
-        if hasattr(self, "init_mcps"):
-            await self.init_mcps()
+
+        # Propagate settings changes to already-loaded skills
+        for skill in self.skills:
+            skill.settings = settings
 
         printr.print(f"Wingman {self.name}'s settings changed", server_only=True)

@@ -208,8 +208,13 @@ class McpRegistry:
 
         return connection
 
-    async def unregister_server(self, server_name: str) -> None:
-        """Disconnect and remove an MCP server."""
+    async def unregister_server(self, server_name: str, notify: bool = True) -> None:
+        """Disconnect and remove an MCP server.
+
+        Args:
+            server_name: Name of the server to unregister
+            notify: Whether to notify UI of state change (set False during batch operations)
+        """
         connection = self._connections.get(server_name)
         if connection:
             # Remove tool mappings
@@ -222,14 +227,24 @@ class McpRegistry:
             self._manifests.pop(server_name, None)
             self._active_servers.discard(server_name)
 
-            # Notify UI that MCP state has changed
-            await self._notify_state_changed()
+            # Notify UI that MCP state has changed (skip during batch operations)
+            if notify:
+                await self._notify_state_changed()
 
     async def clear(self) -> None:
-        """Disconnect from all servers and clear the registry."""
+        """Disconnect from all servers and clear the registry.
+
+        This batches disconnections and only sends a single UI notification at the end.
+        """
         server_names = list(self._connections.keys())
-        for server_name in server_names:
-            await self.unregister_server(server_name)
+        if not server_names:
+            return
+
+        # Disconnect all servers in parallel without individual notifications
+        await asyncio.gather(*[self.unregister_server(name, notify=False) for name in server_names])
+
+        # Send a single notification after all disconnections complete
+        await self._notify_state_changed()
 
     def get_connected_servers(self) -> list[McpServerManifest]:
         """Get all connected MCP server manifests."""

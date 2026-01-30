@@ -1,5 +1,6 @@
 from os import path
 import platform
+import gc
 from typing import Optional
 from faster_whisper import WhisperModel
 from api.enums import LogType
@@ -23,6 +24,7 @@ class FasterWhisper:
     ):
         self.printr = Printr()
         self.settings = settings
+        self.model: Optional[WhisperModel] = None
 
         self.is_windows = platform.system() == "Windows"
         if self.is_windows:
@@ -32,7 +34,32 @@ class FasterWhisper:
 
         self.__update_model()
 
+    def __unload_model(self):
+        """Unload the current model to free VRAM."""
+        if self.model is not None:
+            self.printr.print(
+                "FasterWhisper: Unloading current model to free VRAM...",
+                server_only=True,
+            )
+            del self.model
+            self.model = None
+
+            # Force garbage collection to release memory
+            gc.collect()
+
+            # Clear CUDA cache if using GPU
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+            except ImportError:
+                pass  # torch not available, skip CUDA cleanup
+
     def __update_model(self):
+        # Unload existing model first to free VRAM
+        self.__unload_model()
+
         if self.is_windows:
             model_file = path.join(self.models_dir, (self.settings.model_size))
             model = model_file if path.exists(model_file) else self.settings.model_size
@@ -100,6 +127,10 @@ class FasterWhisper:
         return None
 
     def update_settings(self, settings: FasterWhisperSettings):
+        if self.settings == settings:
+            self.printr.print("FasterWhisper settings updated.", server_only=True)
+            return
+        self.printr.print(f"FasterWhisper settings updated, reloading model..", server_only=True)
         self.settings = settings
         self.__update_model()
 

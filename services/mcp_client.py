@@ -9,14 +9,26 @@ MCP servers expose tools that can be used by the LLM, similar to skills.
 ARCHITECTURE NOTE:
 The MCP SDK uses anyio task groups internally for its transports. The context
 managers (streamablehttp_client, etc.) spawn background tasks for reading/writing.
-These tasks must remain active while the session is in use. We use two strategies:
+These tasks must remain active while the session is in use.
 
-1. For HTTP transport: Make per-call connections since HTTP is stateless anyway
-2. For STDIO/SSE: Keep a background task running that manages the session lifecycle
+For SSE transport specifically:
+- The SSE client runs an anyio task group with a reader task that continuously
+  listens for server-sent events. This can interfere with the main event loop
+  if not properly isolated.
+- We run SSE connections in a dedicated background thread with its own event loop
+  to completely isolate them from the main application event loop (keyboard, etc.)
+- Tool calls are executed via thread-safe communication with the SSE thread
+
+For HTTP/STDIO:
+- HTTP: Per-call connections (stateless)
+- STDIO: Persistent connections (local process, minimal overhead)
 """
 
 import asyncio
+import concurrent.futures
 import json
+import logging
+import threading
 import traceback
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -35,6 +47,13 @@ try:
     from mcp.client.sse import sse_client
 
     MCP_AVAILABLE = True
+
+    # Suppress verbose INFO logs from MCP SDK and its dependencies
+    logging.getLogger("mcp").setLevel(logging.WARNING)
+    logging.getLogger("mcp.client.sse").setLevel(logging.WARNING)
+    logging.getLogger("mcp.client.streamable_http").setLevel(logging.WARNING)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 except ImportError:
     MCP_AVAILABLE = False
     printr.print(
@@ -49,19 +68,26 @@ class McpConnection:
     """Represents an active connection to an MCP server."""
 
     config: McpServerConfig
-    session: Optional[Any] = None  # ClientSession when connected (not used for HTTP)
+    session: Optional[Any] = None  # ClientSession when connected (STDIO/SSE)
     tools: list[McpToolInfo] = field(default_factory=list)
     is_connected: bool = False
     error: Optional[str] = None
 
-    # HTTP connections store merged headers for per-call connections
-    _merged_headers: dict[str, str] = field(default_factory=dict)
+    # HTTP/SSE connections store merged headers for per-call connections
+    merged_headers: dict[str, str] = field(default_factory=dict)
 
-    # Connection resources that need cleanup (for STDIO/SSE only)
-    _read_stream: Any = None
-    _write_stream: Any = None
-    _context_manager: Any = None
-    _session_context: Any = None
+    # Connection resources that need cleanup (for STDIO only - HTTP uses per-call)
+    read_stream: Any = None
+    write_stream: Any = None
+    context_manager: Any = None
+    session_context: Any = None
+
+    # SSE-specific: dedicated thread with its own event loop
+    sse_thread: Optional[threading.Thread] = None
+    sse_loop: Optional[asyncio.AbstractEventLoop] = None
+    sse_shutdown_event: Optional[threading.Event] = None
+    sse_ready_event: Optional[threading.Event] = None
+    sse_error: Optional[str] = None
 
 
 class McpClient:
@@ -71,8 +97,11 @@ class McpClient:
     Supports three transport types:
     - HTTP: For hosted MCP servers (like Context7, Svelte MCP)
       Uses per-call connections since HTTP is stateless.
-    - STDIO: For local processes (like Docker MCP)
     - SSE: For Server-Sent Events based servers
+      Runs in a dedicated background thread with its own event loop to avoid
+      blocking the main event loop (keyboard handling, etc.)
+    - STDIO: For local processes (like Docker MCP)
+      Maintains persistent connections since local process overhead is minimal.
 
     Usage:
         client = McpClient(wingman_name="MyWingman")
@@ -237,7 +266,7 @@ class McpClient:
             return
 
         # Store headers for later use in tool calls
-        connection._merged_headers = headers
+        connection.merged_headers = headers
 
         try:
             # Use proper async with context to verify connection and get tools
@@ -305,14 +334,14 @@ class McpClient:
             streams = await context_manager.__aenter__()
             read_stream, write_stream = streams
 
-            connection._context_manager = context_manager
-            connection._read_stream = read_stream
-            connection._write_stream = write_stream
+            connection.context_manager = context_manager
+            connection.read_stream = read_stream
+            connection.write_stream = write_stream
 
             # Create and initialize session
             session = ClientSession(read_stream, write_stream)
             session_context = await session.__aenter__()
-            connection._session_context = session
+            connection.session_context = session
 
             await session.initialize()
             connection.session = session
@@ -328,45 +357,118 @@ class McpClient:
     async def _connect_sse(
         self, connection: McpConnection, headers: dict[str, str]
     ) -> None:
-        """Connect using SSE (Server-Sent Events) transport."""
+        """
+        Connect using SSE (Server-Sent Events) transport.
+
+        SSE connections run in a dedicated background thread with their own event loop.
+        This completely isolates them from the main event loop, preventing any
+        interference with keyboard handling and other async operations.
+
+        The thread maintains a persistent connection and handles tool calls via
+        thread-safe futures.
+        """
         config = connection.config
         if not config.url:
             connection.error = "URL is required for SSE transport"
             return
 
-        # Store headers for later use in tool calls
-        connection._merged_headers = headers
+        # Store headers for later use
+        connection.merged_headers = headers
 
-        try:
-            # Create the SSE client context
-            context_manager = sse_client(
-                url=config.url,
-                headers=headers if headers else None,
-            )
+        # Create thread synchronization primitives
+        connection.sse_shutdown_event = threading.Event()
+        connection.sse_ready_event = threading.Event()
+        connection.sse_error = None
 
-            # Enter the context to get streams
-            streams = await context_manager.__aenter__()
-            read_stream, write_stream = streams
+        # Storage for the session (will be set by the SSE thread)
+        sse_session_holder: dict[str, Any] = {"session": None, "loop": None}
 
-            connection._context_manager = context_manager
-            connection._read_stream = read_stream
-            connection._write_stream = write_stream
+        def run_sse_event_loop():
+            """Run SSE connection in a dedicated thread with its own event loop."""
 
-            # Create and initialize session
-            session = ClientSession(read_stream, write_stream)
-            session_context = await session.__aenter__()
-            connection._session_context = session
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            connection.sse_loop = loop
 
-            await session.initialize()
-            connection.session = session
-            connection.is_connected = True
+            async def maintain_sse_connection():
+                try:
+                    async with sse_client(
+                        url=config.url,
+                        headers=headers if headers else None,
+                        timeout=30,
+                        sse_read_timeout=300,  # 5 min keep-alive
+                    ) as (read_stream, write_stream):
+                        async with ClientSession(read_stream, write_stream) as session:
+                            await session.initialize()
 
-            # Fetch available tools
-            await self._fetch_tools(connection)
+                            # Fetch tools
+                            tools_response = await session.list_tools()
+                            connection.tools = []
 
-        except Exception as e:
-            await self._cleanup_connection(connection)
-            raise
+                            for tool in tools_response.tools:
+                                prefixed_name = f"mcp_{connection.config.name}_{tool.name}"
+                                input_schema = None
+                                if tool.inputSchema:
+                                    input_schema = (
+                                        dict(tool.inputSchema)
+                                        if hasattr(tool.inputSchema, "items")
+                                        else tool.inputSchema
+                                    )
+
+                                tool_info = McpToolInfo(
+                                    name=tool.name,
+                                    prefixed_name=prefixed_name,
+                                    description=tool.description
+                                    or f"Tool from {connection.config.display_name}",
+                                    server_name=connection.config.name,
+                                    input_schema=input_schema,
+                                )
+                                connection.tools.append(tool_info)
+
+                            # Store session reference for tool calls
+                            sse_session_holder["session"] = session
+                            sse_session_holder["loop"] = loop
+                            connection.session = session
+                            connection.is_connected = True
+
+                            # Signal that we're ready
+                            connection.sse_ready_event.set()
+
+                            # Keep the connection alive until shutdown is requested
+                            while not connection.sse_shutdown_event.is_set():
+                                await asyncio.sleep(1.0)
+
+                except Exception as e:
+                    connection.sse_error = str(e)
+                    connection.is_connected = False
+                finally:
+                    connection.sse_ready_event.set()  # Unblock waiting caller
+                    sse_session_holder["session"] = None
+                    connection.session = None
+
+            try:
+                loop.run_until_complete(maintain_sse_connection())
+            finally:
+                loop.close()
+                connection.sse_loop = None
+
+        # Start the SSE thread
+        connection.sse_thread = threading.Thread(
+            target=run_sse_event_loop,
+            name=f"MCP-SSE-{config.name}",
+            daemon=True,
+        )
+        connection.sse_thread.start()
+
+        # Wait for the connection to be ready (with timeout)
+        ready = connection.sse_ready_event.wait(timeout=35)
+        if not ready:
+            connection.sse_shutdown_event.set()
+            connection.error = "SSE connection timeout"
+            raise TimeoutError("SSE connection timeout")
+
+        if connection.sse_error:
+            raise Exception(connection.sse_error)
 
     async def _fetch_tools(self, connection: McpConnection) -> None:
         """Fetch and store available tools from the connected server."""
@@ -424,35 +526,60 @@ class McpClient:
             # Note: State change notification is handled by McpRegistry
 
     async def disconnect_all(self) -> None:
-        """Disconnect from all MCP servers."""
+        """Disconnect from all MCP servers in parallel."""
         connections = list(self._connections.values())
-        for connection in connections:
-            await self.disconnect(connection)
+        if connections:
+            await asyncio.gather(*[self.disconnect(conn) for conn in connections])
 
     async def _cleanup_connection(self, connection: McpConnection) -> None:
-        """Clean up connection resources."""
+        """Clean up connection resources with timeouts to prevent blocking."""
         connection.is_connected = False
 
-        # Close session
-        if connection._session_context:
+        # Handle SSE thread cleanup
+        if connection.sse_shutdown_event:
+            connection.sse_shutdown_event.set()
+
+        if connection.sse_thread and connection.sse_thread.is_alive():
+            # Run thread.join in executor to avoid blocking the event loop
+            def join_thread():
+                if connection.sse_thread:
+                    connection.sse_thread.join(timeout=3.0)
+
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, join_thread)
+            connection.sse_thread = None
+
+        connection.sse_loop = None
+        connection.sse_shutdown_event = None
+        connection.sse_ready_event = None
+        connection.sse_error = None
+
+        # Close session with timeout (for STDIO)
+        if connection.session_context:
             try:
-                await connection._session_context.__aexit__(None, None, None)
-            except Exception:
+                await asyncio.wait_for(
+                    connection.session_context.__aexit__(None, None, None),
+                    timeout=5.0,
+                )
+            except (asyncio.TimeoutError, Exception):
                 pass
-            connection._session_context = None
+            connection.session_context = None
 
         connection.session = None
 
-        # Close transport context
-        if connection._context_manager:
+        # Close transport context with timeout (for STDIO)
+        if connection.context_manager:
             try:
-                await connection._context_manager.__aexit__(None, None, None)
-            except Exception:
+                await asyncio.wait_for(
+                    connection.context_manager.__aexit__(None, None, None),
+                    timeout=5.0,
+                )
+            except (asyncio.TimeoutError, Exception):
                 pass
-            connection._context_manager = None
+            connection.context_manager = None
 
-        connection._read_stream = None
-        connection._write_stream = None
+        connection.read_stream = None
+        connection.write_stream = None
 
     async def _call_tool_http(
         self,
@@ -473,7 +600,7 @@ class McpClient:
 
         async with streamablehttp_client(
             url=config.url,
-            headers=connection._merged_headers if connection._merged_headers else None,
+            headers=connection.merged_headers if connection.merged_headers else None,
             timeout=timeout,
             sse_read_timeout=timeout,
         ) as (read_stream, write_stream, _):
@@ -517,23 +644,38 @@ class McpClient:
         timeout: float = 60.0,
     ) -> str:
         """
-        Call a tool on an SSE MCP server using a fresh connection per call.
+        Call a tool on an SSE MCP server using the persistent connection.
 
-        SSE transport uses per-call connections because:
-        1. The MCP SDK's anyio task groups require proper context manager usage
-        2. Fresh connections avoid blocking issues with persistent connections
+        The SSE connection runs in a dedicated thread. We submit the tool call
+        to that thread's event loop and wait for the result via a thread-safe
+        future.
         """
-        config = connection.config
+        if not connection.sse_loop or not connection.session:
+            raise RuntimeError("SSE connection is not active")
 
-        async with sse_client(
-            url=config.url,
-            headers=connection._merged_headers if connection._merged_headers else None,
-            timeout=timeout,
-        ) as (read_stream, write_stream):
-            async with ClientSession(read_stream, write_stream) as session:
-                await session.initialize()
-                result = await session.call_tool(tool_name, arguments)
-                return self._parse_tool_result(result)
+        # Create a future to get the result from the SSE thread
+        loop = asyncio.get_event_loop()
+
+        async def call_in_sse_thread():
+            result = await connection.session.call_tool(tool_name, arguments)
+            return self._parse_tool_result(result)
+
+        # Schedule the coroutine in the SSE thread's event loop
+        future = asyncio.run_coroutine_threadsafe(
+            call_in_sse_thread(),
+            connection.sse_loop,
+        )
+
+        try:
+            # Wait for the result with timeout
+            result = await asyncio.wait_for(
+                loop.run_in_executor(None, future.result, timeout),
+                timeout=timeout + 5,
+            )
+            return result
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            raise asyncio.TimeoutError(f"SSE tool call timed out: {tool_name}")
 
     def _parse_tool_result(self, result) -> str:
         """Parse a tool result into a string."""
@@ -578,8 +720,8 @@ class McpClient:
             return f"Error: Not connected to MCP server {connection.config.name}"
 
         try:
-            # Use per-call connections for HTTP, STDIO, and SSE to avoid
-            # anyio task group blocking issues
+            # HTTP/STDIO: per-call connections to avoid anyio task group issues
+            # SSE: uses persistent connection in dedicated thread (thread-safe)
             if connection.config.type == McpTransportType.HTTP:
                 result_str = await asyncio.wait_for(
                     self._call_tool_http(connection, tool_name, arguments, timeout),
@@ -650,6 +792,6 @@ class McpClient:
         if connection.is_connected:
             if connection.config.type == McpTransportType.HTTP:
                 # For HTTP, reconnect to refresh tools
-                await self._connect_http(connection, connection._merged_headers)
+                await self._connect_http(connection, connection.merged_headers)
             else:
                 await self._fetch_tools(connection)
