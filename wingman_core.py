@@ -320,6 +320,9 @@ class WingmanCore(WebSocketUser):
         self.config_service.config_events.subscribe(
             "config_loaded", self.initialize_tower
         )
+        self.config_service.config_events.subscribe(
+            "wingman_config_saved", self.on_wingman_config_saved
+        )
 
         self.secret_keeper: SecretKeeper = SecretKeeper()
 
@@ -351,6 +354,7 @@ class WingmanCore(WebSocketUser):
         # Joystick thread management
         self._joystick_thread: Optional[threading.Thread] = None
         self._joystick_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._mouse_hook_registered: bool = False
 
         self.settings_service = SettingsService(
             config_manager=config_manager, config_service=self.config_service
@@ -509,9 +513,9 @@ class WingmanCore(WebSocketUser):
             # Add a small sleep to prevent the loop from consuming too much CPU
             await asyncio.sleep(0.01)
 
-    def init_joystick(self, config: Config):
+    async def init_joystick(self, config: Config):
         # Stop any existing joystick thread first to prevent thread accumulation
-        self._stop_joystick_thread()
+        await self._stop_joystick_thread()
 
         def run_async_process():
             loop = asyncio.new_event_loop()
@@ -529,7 +533,7 @@ class WingmanCore(WebSocketUser):
         self._joystick_thread.name = "JoystickEventLoop"
         self._joystick_thread.start()
 
-    def _stop_joystick_thread(self):
+    async def _stop_joystick_thread(self):
         """Stop the joystick event loop and thread."""
         if self._joystick_loop and self._joystick_loop.is_running():
             # Schedule the loop to stop from another thread
@@ -539,7 +543,7 @@ class WingmanCore(WebSocketUser):
                 pass  # Loop may already be closed
 
         if self._joystick_thread and self._joystick_thread.is_alive():
-            self._joystick_thread.join(timeout=1.0)
+            await asyncio.to_thread(self._joystick_thread.join, 1.0)
             if self._joystick_thread.is_alive():
                 self.printr.print(
                     "WARNING: Joystick thread did not stop in time",
@@ -547,8 +551,78 @@ class WingmanCore(WebSocketUser):
                     server_only=True,
                 )
 
+        # Clean up pygame to allow fresh initialization later
+        if pygame.get_init():
+            try:
+                pygame.quit()
+            except Exception:
+                pass  # May fail if pygame is in an inconsistent state
+
         self._joystick_thread = None
         self._joystick_loop = None
+
+    async def refresh_input_hooks(self):
+        """Refresh mouse and joystick hooks based on current wingman configurations.
+
+        This method should be called when a wingman's activation key (mouse button or
+        joystick button) configuration changes to ensure the new keys take effect immediately.
+
+        Note: The on_press handler already dynamically checks tower.wingmen for activation keys,
+        so we only need to ensure the hooks are registered and joystick thread has latest config.
+        """
+        if not self.tower:
+            return
+
+        # Check if any wingman has a mouse button configured
+        needs_mouse = any(
+            wingman.get_record_mouse_button() for wingman in self.tower.wingmen
+        )
+
+        # Register mouse hook if needed and not already registered
+        if needs_mouse and not self._mouse_hook_registered:
+            mouse.hook(self.on_mouse)
+            self._mouse_hook_registered = True
+            self.printr.print(
+                "Mouse hook registered for new activation key.",
+                color=LogType.INFO,
+                server_only=True,
+            )
+
+        # Check if any wingman has a joystick button configured
+        needs_joystick = any(
+            wingman.get_record_joystick_button() for wingman in self.tower.wingmen
+        )
+
+        # Also check for cancel TTS joystick button in settings
+        cancel_tts_joystick_button = getattr(
+            self.settings_service.settings, "cancel_tts_joystick_button", None
+        )
+        if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
+            needs_joystick = True
+
+        joystick_running = self._joystick_thread is not None and self._joystick_thread.is_alive()
+
+        if needs_joystick:
+            # Restart joystick thread to pick up new button configurations
+            # The joystick loop uses a static list of configs, so we must restart it
+            # Build current config from tower wingmen since tower.config may be stale
+            current_wingmen = {
+                wingman.name: wingman.config for wingman in self.tower.wingmen
+            }
+            current_config = self.tower.config.model_copy(update={"wingmen": current_wingmen})
+            await self.init_joystick(current_config)
+            self.printr.print(
+                "Joystick hooks refreshed for new activation key.",
+                color=LogType.INFO,
+                server_only=True,
+            )
+        elif joystick_running and not needs_joystick:
+            # No joystick needed anymore, stop the thread
+            await self._stop_joystick_thread()
+
+    async def on_wingman_config_saved(self, wingman_config):
+        """Called when a wingman config is saved. Refreshes input hooks if needed."""
+        await self.refresh_input_hooks()
 
     async def initialize_tower(self, config_dir_info: ConfigWithDirInfo):
         if not self.is_client_logged_in:
@@ -569,8 +643,9 @@ class WingmanCore(WebSocketUser):
         # Register hooks
         if self.is_mouse_configured(config):
             mouse.hook(self.on_mouse)
+            self._mouse_hook_registered = True
         if self.is_joystick_configured(config):
-            self.init_joystick(config)
+            await self.init_joystick(config)
 
         self.tower = Tower(
             config=config,
@@ -609,11 +684,12 @@ class WingmanCore(WebSocketUser):
             self.config_service.set_tower(None)
 
             # Stop joystick thread to prevent thread accumulation on reload
-            self._stop_joystick_thread()
+            await self._stop_joystick_thread()
 
             # Unhook mouse to prevent duplicate hooks
             try:
                 mouse.unhook_all()
+                self._mouse_hook_registered = False
             except Exception:
                 pass  # May fail if no hooks are registered
 
