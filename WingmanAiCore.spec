@@ -44,7 +44,6 @@ datas = [
     ('templates/migration', 'templates/migration'),
     ('audio_samples', 'audio_samples'),
     ('LICENSE', '.'),
-	('pocket_tts_server', 'pocket_tts_server'),
 ]
 
 # Automatically bundle all contents from explicit_deps/

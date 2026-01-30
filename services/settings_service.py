@@ -11,6 +11,7 @@ from api.interface import (
 from providers.faster_whisper import FasterWhisper
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
+from providers.pocket_tts import PocketTTS
 from services.config_manager import ConfigManager
 from services.config_service import ConfigService
 from services.printr import Printr
@@ -28,6 +29,7 @@ class SettingsService:
         self.whispercpp: Whispercpp = None
         self.fasterwhisper: FasterWhisper = None
         self.xvasynth: XVASynth = None
+        self.pocket_tts: PocketTTS = None
 
         self.router = APIRouter()
         tags = ["settings"]
@@ -53,11 +55,12 @@ class SettingsService:
         )
 
     def initialize(
-        self, whispercpp: Whispercpp, fasterwhisper: FasterWhisper, xvasynth: XVASynth
+        self, whispercpp: Whispercpp, fasterwhisper: FasterWhisper, xvasynth: XVASynth, pocket_tts: PocketTTS,
     ):
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
+        self.pocket_tts = pocket_tts
 
     # GET /settings
     def get_settings(self):
@@ -113,6 +116,15 @@ class SettingsService:
             return
         self.xvasynth.update_settings(settings=settings.xvasynth)
         self.config_manager.settings_config.xvasynth = settings.xvasynth
+        
+        # PocketTTS
+        if not self.pocket_tts:
+            self.printr.toast_error(
+                "PocketTTS is not initialized. Please run SettingsService.initialize()",
+            )
+            return
+        self.pocket_tts.update_settings(settings=settings.xvasynth)
+        self.config_manager.settings_config.pocket_tts = settings.pocket_tts
 
         # voice activation
         self.config_manager.settings_config.voice_activation = settings.voice_activation

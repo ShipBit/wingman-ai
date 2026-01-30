@@ -73,16 +73,10 @@ def get_voice_state(voice_id_or_path):
 
     # 2. Check cache using the resolved key
     if resolved_key in voice_cache:
-        logger.info(f"Using cached voice state for {resolved_key}")
         return voice_cache[resolved_key]
     
     # 3. If not cached, load it
     try:
-        if os.path.exists(resolved_key):
-            logger.info(f"Loading new voice state from file: {resolved_key}")
-        else:
-            logger.info(f"Loading new voice state from ID/URL: {resolved_key}")
-            
         state = model.get_state_for_audio_prompt(resolved_key)
         
         # 4. Store in cache using the same resolved key
@@ -97,8 +91,7 @@ def get_voice_state(voice_id_or_path):
 
 @app.route('/')
 def home():
-    """Serve the simple web interface."""
-    return render_template('index.html')
+    return jsonify(status="online", message="PocketTTS Server is running"), 200
 
 @app.route('/v1/voices', methods=['GET'])
 def list_voices():
@@ -221,7 +214,6 @@ def generate_file(voice_state, text, fmt):
     t0 = time.time()
     audio_tensor = model.generate_audio(voice_state, text)
     generation_time = time.time() - t0
-    logger.info(f"Generated {len(text)} chars in {generation_time:.2f}s")
     
     # Convert
     audio_buffer = convert_audio(audio_tensor, model.sample_rate, fmt)
@@ -318,7 +310,7 @@ def threaded_execution(function, *args) -> threading.Thread | None:
 
 
 def start_server(model_path=None, host="0.0.0.0", port=5002, stream=True, voices_dir=None):
-    logger.info("Attempting to start server...")
+    logger.info("Attempting to start PocketTTS server...")
     try:
         """Programmatic entry point to start the server."""
         global model, VOICES_DIR
@@ -354,64 +346,28 @@ def start_server(model_path=None, host="0.0.0.0", port=5002, stream=True, voices
         if VOICES_DIR:
             logger.info(f"Scanning voices from: {VOICES_DIR}")
             
-        logger.info(f"Starting server on {host}:{port}")
+        logger.info(f"Starting PocketTTS server on {host}:{port}")
         # We set use_reloader=False because it doesn't play well with multiprocessing
         app.run(host=host, port=port, debug=False, threaded=True, use_reloader=False)
     except Exception as e:
         logger.info(f"PocketTTS-Server start failed, error: {e}...")
-def main():
-    # 1. Cleanup on start
-    cleanup_uploads()
-    # 2. Register cleanup on exit
-    atexit.register(cleanup_uploads)
 
-    parser = argparse.ArgumentParser(description="Pocket TTS OpenAI Compatible Server")
-    parser.add_argument("--model_path", type=str, default=None, help="Path to model file or variant name")
-    parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to run server")
-    parser.add_argument("--port", type=int, default=5002, help="Port to run server")
-    parser.add_argument("--stream", action="store_true", help="Enable streaming by default")
-    parser.add_argument("--voices_dir", type=str, default=None, help="Directory containing local voice .wav, .mp3 or .flac files")
-    
-    args = parser.parse_args()
-    
-    # Config
-    app.config['CLI_STREAM_DEFAULT'] = args.stream
-    global VOICES_DIR
-    if args.voices_dir:
-        VOICES_DIR = args.voices_dir
-    elif getattr(sys, 'frozen', False) and BUNDLE_VOICES_DIR and os.path.isdir(BUNDLE_VOICES_DIR):
-        VOICES_DIR = BUNDLE_VOICES_DIR
-    else:
-        VOICES_DIR = None
-    
-    global model
-    logger.info("Loading Pocket TTS Model...")
-    
-    # Use model_path as variant if provided, otherwise default
-    if args.model_path:
-        logger.info(f"Using custom model variant/path: {args.model_path}")
-        model = TTSModel.load_model(variant=args.model_path)
-    elif getattr(sys, 'frozen', False):
-        # Check if model is bundled in 'model' dir
-        if os.path.isfile(BUNDLE_MODEL_PATH):
-            logger.info(f"Using bundled model from: {BUNDLE_MODEL_PATH}")
-            try:
-                model = TTSModel.load_model(variant=BUNDLE_MODEL_PATH)
-            except Exception as e:
-                logging.error(f"Error trying to load models bundled with .exe: {e}. Returning to default model load.")
-                model = TTSModel.load_model()
-        else:
-            model = TTSModel.load_model()
-    else:
-        model = TTSModel.load_model()
-        
-    logger.info(f"Model loaded. Device: {model.device}, Sample Rate: {model.sample_rate}")
-    
-    if VOICES_DIR:
-        logger.info(f"Scanning voices from: {VOICES_DIR}")
-        
-    logger.info(f"Starting server on {args.host}:{args.port}")
-    app.run(host=args.host, port=args.port, debug=False, threaded=True)
+    def update_settings(self, settings: PocketTTSSettings):
+        requires_restart = (
+            self.settings.enable != settings.enable
+            or self.settings.host != settings.host
+            or self.settings.port != settings.port
+            or self.settings.custom_voice_dir != settings.settings.custom_voice_dir
+            or self.settings.custom_model_path != settings.custom_model_path
+        )
 
-if __name__ == "__main__":
-    main()
+        self.settings = settings
+
+        if self.settings.enable and self.__validate():
+            if requires_restart:
+                self.stop_server()
+                self.start_server()
+        elif not self.settings.enable:
+            self.stop_server()
+
+        self.printr.print("PocketTTS settings updated.", server_only=True)

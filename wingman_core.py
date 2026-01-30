@@ -57,27 +57,8 @@ from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
 from services.tower import Tower
 from services.websocket_user import WebSocketUser
-from pocket_tts_server.pocket_tts_openai_server import start_server
-from pocket_tts_server.pocket_tts_openai_server import threaded_execution
-
-def run_pocket_tts_server():
-    # 1. Configure your parameters
-    server_kwargs = {
-        "port": 5002,
-        "stream": True,
-    }
-
-    # 2. Create the process
-    # We use multiprocessing because Flask/Torch need their own memory space
-    server_process = multiprocessing.Process(
-        target=start_server, 
-        kwargs=server_kwargs,
-        daemon=True # This ensures it dies when main.py dies!
-    )
-
-    # 3. Start it
-    print("Launching TTS Server...")
-    server_process.start()
+from pocket_tts_server.pocket_tts_openai_server import start_server # Will need to be changed to providers location
+from pocket_tts_server.pocket_tts_openai_server import threaded_execution # Will need to be changed to providers location
 
 class WingmanCore(WebSocketUser):
     def __init__(
@@ -197,6 +178,18 @@ class WingmanCore(WebSocketUser):
             path="/xvsynth/voices",
             response_model=list[str],
             endpoint=self.get_xvasynth_voices,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/pocket_tts/start",
+            endpoint=self.start_pocket_tts,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/pocket_tts/stop",
+            endpoint=self.stop_pocket_tts,
             tags=tags,
         )
         self.router.add_api_route(
@@ -398,10 +391,12 @@ class WingmanCore(WebSocketUser):
             app_is_bundled=app_is_bundled,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
+        self.pocket_tts = PocketTTS(settings=self.settings_service.settings.pocket_tts)
         self.settings_service.initialize(
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
+            pocket_tts=self.pocket_tts
         )
 
         self.voice_service = VoiceService(
@@ -426,6 +421,7 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
         
+        # PocketTTS - will need either here or somewhere else to start server from self.start_pocket_tts(); maybe start here by default and then in provider say if not enabled, shut down server
         try: 
             threaded_execution(start_server)
         except Exception as e:
@@ -681,6 +677,7 @@ class WingmanCore(WebSocketUser):
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
+            pocket_tts=self.pocket_tts
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -1271,6 +1268,17 @@ class WingmanCore(WebSocketUser):
             devices.append("cuda")
         return devices
 
+    # POST /pocket_tts/start
+    def start_pocket_tts(self):
+        self.pocket_tts.start_server()
+        
+    # Post /pocket_tts/stop
+    def stop_pocket_tts(self):
+        try:
+            self.pocket_tts.stop_server()
+        except Exception:
+            pass
+            
     # POST /xvasynth/start
     def start_xvasynth(self):
         self.xvasynth.start_server()
@@ -1582,7 +1590,9 @@ class WingmanCore(WebSocketUser):
         await self.set_core_state(CoreState.SHUTTING_DOWN)
 
         if self.settings_service.settings.xvasynth.enable:
-            await self.stop_xvasynth()
+            await self.stop_xvasynth() # Should this really be await? not an async function
+        if self.settings_service.settings.pocket_tts.enable:
+            await self.stop_pocket_tts() # Should this really be await? not an async function
         await self.unload_tower()
 
         self.printr.print(
