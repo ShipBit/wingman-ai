@@ -21,7 +21,7 @@ For SSE transport specifically:
 
 For HTTP/STDIO:
 - HTTP: Per-call connections (stateless)
-- STDIO: Persistent connections (local process, minimal overhead)
+- STDIO: Per-call connections (local process, to avoid anyio task group issues)
 """
 
 import asyncio
@@ -465,9 +465,11 @@ class McpClient:
         if not ready:
             connection.sse_shutdown_event.set()
             connection.error = "SSE connection timeout"
+            await self._cleanup_connection(connection)
             raise TimeoutError("SSE connection timeout")
 
         if connection.sse_error:
+            await self._cleanup_connection(connection)
             raise Exception(connection.sse_error)
 
     async def _fetch_tools(self, connection: McpConnection) -> None:
@@ -547,6 +549,15 @@ class McpClient:
 
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, join_thread)
+
+            # if the thread is still alive after join timeout, we will issue a warning
+            if connection.sse_thread and connection.sse_thread.is_alive():
+                printr.print(
+                    f"SSE thread for {connection.config.name} did not stop within timeout",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+
             connection.sse_thread = None
 
         connection.sse_loop = None
@@ -562,6 +573,7 @@ class McpClient:
                     timeout=5.0,
                 )
             except (asyncio.TimeoutError, Exception):
+                # the error during session cleanup is ignored - connection will be closed anyway
                 pass
             connection.session_context = None
 
@@ -574,8 +586,20 @@ class McpClient:
                     connection.context_manager.__aexit__(None, None, None),
                     timeout=5.0,
                 )
-            except (asyncio.TimeoutError, Exception):
-                pass
+            except asyncio.TimeoutError:
+                # Timeout is acceptable during cleanup - the process will still be terminated
+                printr.print(
+                    f"Timeout closing STDIO connection for {connection.config.name}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+            except Exception as e:
+                # Log other errors during cleanup but do not propagate
+                printr.print(
+                    f"Error closing STDIO connection for {connection.config.name}: {e}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
             connection.context_manager = None
 
         connection.read_stream = None

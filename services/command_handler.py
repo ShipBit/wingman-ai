@@ -167,8 +167,11 @@ class CommandHandler:
             server_only=True,
         )
 
+        # Stop the joystick thread in wingman_core to prevent event conflicts
+        # Both loops would otherwise compete for pygame events
+        await self.core._stop_joystick_thread()
+
         self.recorded_keys = []
-        was_init = pygame.get_init()
         pygame.init()
         joysticks = [
             pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())
@@ -200,8 +203,12 @@ class CommandHandler:
 
         await self.handle_stop_recording(stop_command, None)
 
-        if not was_init:
+        # Always quit pygame to ensure clean state - refresh_input_hooks will restart it if needed
+        if pygame.get_init():
             pygame.quit()
+
+        # Restart joystick thread if there are configured joystick buttons
+        await self.core.refresh_input_hooks()
 
     async def handle_record_keyboard_actions(
         self, command: RecordKeyboardActionsCommand, websocket: WebSocket

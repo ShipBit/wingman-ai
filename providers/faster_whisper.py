@@ -55,9 +55,16 @@ class FasterWhisper:
                     torch.cuda.synchronize()
             except ImportError:
                 pass  # torch not available, skip CUDA cleanup
+            except Exception as e:
+                # any other CUDA-related cleanup error should not crash model reload
+                self.printr.print(
+                    f"FasterWhisper: CUDA cleanup failed during model unload: {e}",
+                    server_only=True,
+                    color=LogType.WARNING,
+                )
 
     def __update_model(self):
-        # Unload existing model first to free VRAM
+        # Unload the existing model first to free VRAM
         self.__unload_model()
 
         if self.is_windows:

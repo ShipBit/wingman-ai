@@ -1054,6 +1054,9 @@ class ConfigService:
         else:
             self.printr.print(text=message, server_only=True)
 
+        # Notify listeners that a wingman config was saved (for input hook refresh)
+        await self.config_events.publish("wingman_config_saved", merged_config)
+
     @staticmethod
     def _merge_skill_configs(
         existing: list[SkillConfig] | None,
