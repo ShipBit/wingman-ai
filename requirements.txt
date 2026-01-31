@@ -45,11 +45,10 @@ soundfile==0.13.1
 SpeechRecognition==3.14.4
 typing_extensions==4.12.2
 uvicorn==0.34.0
-# New for Pocket-TTS Server
-Flask==3.1.2
+# Pocket-TTS
 torch==2.8.0
 torchaudio==2.8.0
-pocket-tts==1.0.3 # needs to move to 1.0.4 when available as that one will have my local model support PR
+pocket-tts==1.0.3 # needs to move to 1.0.4 when available as that one will have local model support
 
 
 # =============================================================================

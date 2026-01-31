@@ -189,7 +189,6 @@ hiddenimports = [
 	
 	# for pocket-tts
 	'engineio.async_drivers.threading',
-    'flask',
     'torch',
     'torchaudio',
     'soundfile',
