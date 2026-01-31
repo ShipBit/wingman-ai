@@ -65,11 +65,14 @@ class PocketTTS:
                 self.printr.print(
                     "Loading default PocketTTS model...", color=LogType.INFO
                 )
-                self.model = TTSModel.load_model(self._get_default_model_path())
+                try:
+                    self.model = TTSModel.load_model(variant=self._get_default_model_path())
+                except:
+                    self.model = TTSModel.load_model()
 
             self.printr.print(
                 f"PocketTTS Model loaded.",
-                color=LogType.SUCCESS,
+                color=LogType.INFO,
             )
         except Exception as e:
             self.printr.print(

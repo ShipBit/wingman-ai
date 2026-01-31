@@ -243,6 +243,10 @@ xvasynth:
   pace: 1.0
   use_super_resolution: false
   use_cleanup: false
+pocket_tts:
+  voice: alba
+  speed: 1.0
+  output_streaming: true
 wingman_pro:
   stt_provider: azure_speech
   tts_provider: azure

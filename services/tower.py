@@ -8,6 +8,7 @@ from api.interface import (
     ConfigDirInfo,
 )
 from providers.faster_whisper import FasterWhisper
+from providers.pocket_tts import PocketTTS
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
@@ -33,6 +34,7 @@ class Tower:
         whispercpp: Whispercpp,
         fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
+        pocket_tts: PocketTTS,
     ):
         self.audio_player = audio_player
         self.audio_library = audio_library
@@ -45,6 +47,7 @@ class Tower:
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
+        self.pocket_tts = pocket_tts
 
     async def instantiate_wingmen(self, settings: SettingsConfig):
         errors: list[WingmanInitializationError] = []
@@ -113,6 +116,7 @@ class Tower:
                     whispercpp=self.whispercpp,
                     fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
+                    pocket_tts=self.pocket_tts,
                     tower=self,
                 )
             else:
@@ -125,6 +129,7 @@ class Tower:
                     whispercpp=self.whispercpp,
                     fasterwhisper=self.fasterwhisper,
                     xvasynth=self.xvasynth,
+                    pocket_tts=self.pocket_tts,
                     tower=self,
                 )
         except FileNotFoundError as e:  # pylint: disable=broad-except

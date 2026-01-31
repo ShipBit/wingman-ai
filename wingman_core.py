@@ -42,6 +42,7 @@ from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
 from providers.xvasynth import XVASynth
+from providers.pocket_tts import PocketTTS
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
 from services.file import get_writable_dir, get_audio_library_dir
@@ -57,8 +58,6 @@ from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
 from services.tower import Tower
 from services.websocket_user import WebSocketUser
-from pocket_tts_server.pocket_tts_openai_server import start_server # Will need to be changed to providers location
-from pocket_tts_server.pocket_tts_openai_server import threaded_execution # Will need to be changed to providers location
 
 class WingmanCore(WebSocketUser):
     def __init__(
@@ -422,10 +421,10 @@ class WingmanCore(WebSocketUser):
             await self.set_voice_activation(is_enabled=True)
         
         # PocketTTS - will need either here or somewhere else to start server from self.start_pocket_tts(); maybe start here by default and then in provider say if not enabled, shut down server
-        try: 
-            threaded_execution(start_server)
-        except Exception as e:
-            print(f"Could not start pocket_tts server, error: {e}.")
+        #try: 
+            #self.pocket_tts.load_model()
+        #except Exception as e:
+            #print(f"Could not start pocket_tts server, error: {e}.")
 
     async def set_core_state(self, state: CoreState) -> None:
         """Update the core state and broadcast to all connected clients.
@@ -1270,12 +1269,12 @@ class WingmanCore(WebSocketUser):
 
     # POST /pocket_tts/start
     def start_pocket_tts(self):
-        self.pocket_tts.start_server()
+        self.pocket_tts.load_model()
         
     # Post /pocket_tts/stop
     def stop_pocket_tts(self):
         try:
-            self.pocket_tts.stop_server()
+            self.pocket_tts.unload_model()
         except Exception:
             pass
             

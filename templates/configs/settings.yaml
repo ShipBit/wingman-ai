@@ -41,3 +41,6 @@ xvasynth:
   port: 8008
   install_dir: C:\Program Files (x86)\Steam\steamapps\common\xVASynth
   process_device: cpu
+pocket_tts:
+  enable: true
+  custom_model_path: ""

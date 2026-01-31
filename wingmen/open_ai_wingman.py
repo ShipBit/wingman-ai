@@ -280,6 +280,8 @@ class OpenAiWingman(Wingman):
             return self.config.features.tts_provider == TtsProvider.ELEVENLABS
         elif provider_type == "openai_compatible":
             return self.config.features.tts_provider == TtsProvider.OPENAI_COMPATIBLE
+        elif provider_type == "pocket_tts":
+            return self.config.features.tts_provider == TtsProvider.POCKET_TTS
         elif provider_type == "hume":
             return self.config.features.tts_provider == TtsProvider.HUME
         elif provider_type == "inworld":
@@ -2326,6 +2328,14 @@ class OpenAiWingman(Wingman):
                     wingman_name=self.name,
                     stream=self.config.openai_compatible_tts.output_streaming,
                 )
+            elif self.config.features.tts_provider == TtsProvider.POCKET_TTS:
+                await self.pocket_tts.play_audio(
+                    text=text,
+                    config=self.config.pocket_tts,
+                    sound_config=sound_config,
+                    audio_player=self.audio_player,
+                    wingman_name=self.name,
+                )
             elif self.config.features.tts_provider == TtsProvider.WINGMAN_PRO:
                 if self.config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
                     await self.wingman_pro.generate_openai_speech(
@@ -2354,6 +2364,16 @@ class OpenAiWingman(Wingman):
                     await self.wingman_pro.generate_inworld_speech(
                         text=text,
                         config=self.config.inworld,
+                        sound_config=sound_config,
+                        audio_player=self.audio_player,
+                        wingman_name=self.name,
+                    )
+                elif (self.config.wingman_pro.tts_provider 
+                    == WingmanProTtsProvider.POCKET_TTS
+                ):
+                    await self.pocket_tts.play_audio(
+                        text=text,
+                        config=self.config.pocket_tts,
                         sound_config=sound_config,
                         audio_player=self.audio_player,
                         wingman_name=self.name,
