@@ -217,6 +217,8 @@ class OpenAiWingman(Wingman):
                     self.config.features.stt_provider == SttProvider.OPENAI,
                     self.config.features.conversation_provider
                     == ConversationProvider.OPENAI,
+                    self.config.features.image_generation_provider
+                    == ImageGenerationProvider.OPENAI,
                 ]
             )
         elif provider_type == "mistral":
@@ -295,6 +297,8 @@ class OpenAiWingman(Wingman):
                     == ConversationProvider.WINGMAN_PRO,
                     self.config.features.tts_provider == TtsProvider.WINGMAN_PRO,
                     self.config.features.stt_provider == SttProvider.WINGMAN_PRO,
+                    self.config.features.image_generation_provider
+                    == ImageGenerationProvider.WINGMAN_PRO,
                 ]
             )
         elif provider_type == "perplexity":
