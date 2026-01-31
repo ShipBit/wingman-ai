@@ -123,7 +123,7 @@ class SettingsService:
                 "PocketTTS is not initialized. Please run SettingsService.initialize()",
             )
             return
-        self.pocket_tts.update_settings(settings=settings.xvasynth)
+        self.pocket_tts.update_settings(settings=settings.pocket_tts)
         self.config_manager.settings_config.pocket_tts = settings.pocket_tts
 
         # voice activation

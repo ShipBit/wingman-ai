@@ -63,15 +63,15 @@ class PocketTTS:
                 self.model = TTSModel.load_model(variant=model_path)
             else:
                 try:
+                    default_model_path = self._get_default_model_path()
                     self.printr.print(
                          f"Loading default PocketTTS model from path: {default_model_path}...", 
                          color=LogType.INFO,
                     )
-                    default_model_path = self._get_default_model_path()
                     self.model = TTSModel.load_model(variant=default_model_path)
                 except:
                     self.printr.print(
-                         "Loading backup default PocketTTS model...", 
+                         "Loading backup default PocketTTS model (voice cloning may not be available)...", 
                          color=LogType.INFO,
                     )
                     self.model = TTSModel.load_model()
