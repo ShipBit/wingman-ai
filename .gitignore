@@ -173,5 +173,6 @@ whispercpp/
 whispercpp-cuda/
 whispercpp-models/
 faster-whisper-models/
+pocket-tts-models/
 
 wingman-ai.code-workspace

@@ -17,4 +17,18 @@ class Migration200To210(BaseMigration):
             old["hardware_scan_performed"] = False
             self.log("- added new property: hardware_scan_performed (set to False)")
 
+        # Add PocketTTS Global Settings
+        if "pocket_tts" not in old and "pocket_tts" in new:
+            old["pocket_tts"] = new["pocket_tts"]
+            self.log("- added new setting: pocket_tts")
+
+        return old
+
+    def migrate_defaults(self, old: dict, new: dict) -> dict:
+        """Migrate defaults.yaml from 2.0.0 to 2.1.0."""
+        # Add PocketTTS Provider Defaults
+        if "pocket_tts" not in old and "pocket_tts" in new:
+            old["pocket_tts"] = new["pocket_tts"]
+            self.log("- added new provider default: pocket_tts")
+
         return old
