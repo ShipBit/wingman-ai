@@ -57,22 +57,28 @@ class PocketTTS:
             model_path = self.settings.custom_model_path
             if model_path and os.path.exists(model_path):
                 self.printr.print(
-                    f"Loading PocketTTS model from: {model_path}",
+                    f"Loading PocketTTS model from custom model path: {model_path}",
                     color=LogType.INFO,
                 )
                 self.model = TTSModel.load_model(variant=model_path)
             else:
-                self.printr.print(
-                    "Loading default PocketTTS model...", color=LogType.INFO
-                )
                 try:
-                    self.model = TTSModel.load_model(variant=self._get_default_model_path())
+                    self.printr.print(
+                         f"Loading default PocketTTS model from path: {default_model_path}...", 
+                         color=LogType.INFO,
+                    )
+                    default_model_path = self._get_default_model_path()
+                    self.model = TTSModel.load_model(variant=default_model_path)
                 except:
+                    self.printr.print(
+                         "Loading backup default PocketTTS model...", 
+                         color=LogType.INFO,
+                    )
                     self.model = TTSModel.load_model()
 
             self.printr.print(
                 f"PocketTTS Model loaded.",
-                color=LogType.INFO,
+                color=LogType.POSITIVE,
             )
         except Exception as e:
             self.printr.print(
