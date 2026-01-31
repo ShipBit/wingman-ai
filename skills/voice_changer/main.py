@@ -78,6 +78,13 @@ class VoiceChanger(Skill):
                         and not self.wingman.inworld
                     ):
                         await self.wingman.validate_and_set_inworld(errors)
+                    elif (
+                        voice_provider == TtsProvider.OPENAI_COMPATIBLE
+                        and not self.wingman.openai_compatible_tts
+                    ):
+                        await self.wingman.validate_and_set_openai_compatible_tts(
+                            errors
+                        )
 
         return errors
 
@@ -203,6 +210,11 @@ class VoiceChanger(Skill):
                 provider_name = "Wingman Pro / Inworld"
                 self.wingman.config.inworld.voice_id = voice
                 self.wingman.config.inworld.output_streaming = False
+            elif voice_setting.subprovider == WingmanProTtsProvider.POCKET_TTS:
+                voice_name = voice
+                provider_name = "Wingman Pro / Pocket TTS"
+                self.wingman.config.pocket_tts.voice = voice
+                self.wingman.config.pocket_tts.output_streaming = False
         elif voice_provider == TtsProvider.OPENAI:
             voice_name = voice.value
             provider_name = "OpenAI"
@@ -229,6 +241,16 @@ class VoiceChanger(Skill):
             self.wingman.config.inworld.voice_id = voice
             self.wingman.config.inworld.output_streaming = False
             provider_name = "InWorld"
+        elif voice_provider == TtsProvider.POCKET_TTS:
+            voice_name = voice
+            self.wingman.config.pocket_tts.voice = voice
+            self.wingman.config.pocket_tts.output_streaming = False
+            provider_name = "PocketTTS"
+        elif voice_provider == TtsProvider.OPENAI_COMPATIBLE:
+            voice_name = voice
+            self.wingman.config.openai_compatible_tts.voice = voice
+            self.wingman.config.openai_compatible_tts.output_streaming = False
+            provider_name = "OpenAI Compatible"
         else:
             error = True
 

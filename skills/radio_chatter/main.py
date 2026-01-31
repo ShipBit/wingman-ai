@@ -183,6 +183,13 @@ class RadioChatter(Skill):
                         and not self.wingman.inworld
                     ):
                         await self.wingman.validate_and_set_inworld(errors)
+                    elif (
+                        voice_provider == TtsProvider.OPENAI_COMPATIBLE
+                        and not self.wingman.openai_compatible_tts
+                    ):
+                        await self.wingman.validate_and_set_openai_compatible_tts(
+                            errors
+                        )
 
         return errors
 
@@ -281,10 +288,7 @@ class RadioChatter(Skill):
     async def prepare(self) -> None:
         await super().prepare()
         self.loaded = True
-        if (
-                self._get_auto_start()
-                and not self.radio_status
-        ):
+        if self._get_auto_start() and not self.radio_status:
             self.threaded_execution(self._init_chatter)
 
     async def unload(self) -> None:
@@ -437,6 +441,10 @@ class RadioChatter(Skill):
         original_voice_setting = await self._get_original_voice_setting()
         elevenlabs_streaming = self.wingman.config.elevenlabs.output_streaming
         inworld_streaming = self.wingman.config.inworld.output_streaming
+        pocket_tts_streaming = self.wingman.config.pocket_tts.output_streaming
+        openai_compatible_streaming = (
+            self.wingman.config.openai_compatible_tts.output_streaming
+        )
         original_sound_config = copy.deepcopy(self.wingman.config.sound)
 
         # copy for volume and effects
@@ -497,7 +505,11 @@ class RadioChatter(Skill):
                 time.sleep(0.1)
                 max_wait -= 0.1
             await self._switch_voice(
-                original_voice_setting, elevenlabs_streaming, inworld_streaming
+                original_voice_setting,
+                elevenlabs_streaming,
+                inworld_streaming,
+                pocket_tts_streaming,
+                openai_compatible_streaming,
             )
 
         while self.wingman.audio_player.is_playing:
@@ -529,6 +541,8 @@ class RadioChatter(Skill):
         voice_setting: VoiceSelection = None,
         elevenlabs_streaming: bool = False,
         inworld_streaming: bool = False,
+        pocket_tts_streaming: bool = False,
+        openai_compatible_streaming: bool = False,
     ) -> None:
         """Switch voice to the given voice setting."""
 
@@ -551,6 +565,10 @@ class RadioChatter(Skill):
                 voice_name = voice
                 self.wingman.config.inworld.voice_id = voice
                 self.wingman.config.inworld.output_streaming = inworld_streaming
+            elif voice_setting.subprovider == WingmanProTtsProvider.POCKET_TTS:
+                voice_name = voice
+                self.wingman.config.pocket_tts.voice = voice
+                self.wingman.config.pocket_tts.output_streaming = pocket_tts_streaming
         elif voice_provider == TtsProvider.OPENAI:
             voice_name = voice.value
             self.wingman.config.openai.tts_voice = voice
@@ -584,6 +602,16 @@ class RadioChatter(Skill):
             voice_name = voice
             self.wingman.config.inworld.voice_id = voice
             self.wingman.config.inworld.output_streaming = inworld_streaming
+        elif voice_provider == TtsProvider.POCKET_TTS:
+            voice_name = voice
+            self.wingman.config.pocket_tts.voice = voice
+            self.wingman.config.pocket_tts.output_streaming = pocket_tts_streaming
+        elif voice_provider == TtsProvider.OPENAI_COMPATIBLE:
+            voice_name = voice
+            self.wingman.config.openai_compatible_tts.voice = voice
+            self.wingman.config.openai_compatible_tts.output_streaming = (
+                openai_compatible_streaming
+            )
         else:
             error = True
 
@@ -630,6 +658,10 @@ class RadioChatter(Skill):
                 voice = self.wingman.config.azure.tts.voice
         elif voice_provider == TtsProvider.INWORLD:
             voice = self.wingman.config.inworld.voice_id
+        elif voice_provider == TtsProvider.POCKET_TTS:
+            voice = self.wingman.config.pocket_tts.voice
+        elif voice_provider == TtsProvider.OPENAI_COMPATIBLE:
+            voice = self.wingman.config.openai_compatible_tts.voice
         else:
             return None
 
