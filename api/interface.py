@@ -143,6 +143,11 @@ class XVASynthSettings(BaseModel):
     """Can be cpu or gpu. You may need to take additional steps to have XVASynth run on your GPU."""
 
 
+class PocketTTSSettings(BaseModel):
+    enable: bool
+    custom_model_path: Optional[str] = None
+
+
 class WhispercppSttConfig(BaseModel):
     temperature: float
 
@@ -329,6 +334,12 @@ class EdgeTtsConfig(BaseModel):
     Voice samples: https://speech.microsoft.com/portal/voicegallery
     """
 
+
+class PocketTTSConfig(BaseModel):
+    voice: Optional[str] = None
+    speed: float
+    output_streaming: bool
+    
 
 class OpenAiCompatibleTtsConfig(BaseModel):
     api_key: str
@@ -1042,6 +1053,7 @@ class SettingsConfig(BaseModel):
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
+    pocket_tts: PocketTTSSettings
     debug_mode: bool
     streamer_mode: bool
     cancel_tts_key: Optional[str] = None

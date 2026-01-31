@@ -1,373 +1,314 @@
 import os
-import argparse
-import sys
-import logging
 import io
 import time
-import json
 import glob
-from pathlib import Path
-from flask import Flask, request, jsonify, send_file, render_template, Response, stream_with_context
 import torch
 import torchaudio
-import atexit
-import shutil
 import asyncio
-import threading
-from services.printr import Printr
-printr = Printr()
+from typing import Optional
 from pocket_tts import TTSModel
-from .utils import validate_format, convert_audio, write_wav_header
-
-# Configure Logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger("PocketTTS-Server")
-
-app = Flask(__name__)
-
-# Global Variables
-model = None
-voice_cache = {} # Cache for voice states
-VOICES_DIR = None
-
-# --- PyInstaller Support ---
-if getattr(sys, 'frozen', False):
-    # If the application is run as a bundle, the PyInstaller bootloader
-    # extends the sys module by a flag frozen=True.
-    if hasattr(sys, '_MEIPASS'):
-        # One-file mode
-        base_path = sys._MEIPASS
-    else:
-        # One-dir mode
-        base_path = os.path.dirname(os.path.abspath(sys.executable))
-        
-    template_folder = os.path.join(base_path, 'templates')
-    static_folder = os.path.join(base_path, 'static')
-    app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
-    
-    # Default Voices Dir when frozen (bundled)
-    # We will assume 'voices' is bundled into the root of the executable
-    BUNDLE_VOICES_DIR = os.path.join(base_path, 'voices')
-    BUNDLE_MODEL_PATH = os.path.join(base_path, 'model', 'b6369a24.yaml')
-else:
-    app = Flask(__name__)
-    base_path = os.path.dirname(os.path.abspath(__file__))
-    BUNDLE_VOICES_DIR = None
-    BUNDLE_MODEL_PATH = None
-
-# --- Helpers ---
-def get_voice_state(voice_id_or_path):
-    """
-    Resolve voice ID to a model state with caching.
-    """
-    global voice_cache
-    
-    # 1. Normalize/Resolve the ID to its final path/form first
-    resolved_key = voice_id_or_path
-    if VOICES_DIR:
-        possible_path = os.path.join(VOICES_DIR, voice_id_or_path)
-        if os.path.exists(possible_path):
-            resolved_key = os.path.abspath(possible_path) # Use absolute path for consistency
-    elif os.path.exists(voice_id_or_path):
-        resolved_key = os.path.abspath(voice_id_or_path)
-
-    # 2. Check cache using the resolved key
-    if resolved_key in voice_cache:
-        return voice_cache[resolved_key]
-    
-    # 3. If not cached, load it
-    try:
-        state = model.get_state_for_audio_prompt(resolved_key)
-        
-        # 4. Store in cache using the same resolved key
-        voice_cache[resolved_key] = state
-        return state
-        
-    except Exception as e:
-        logger.error(f"Failed to load voice {resolved_key}: {e}")
-        raise ValueError(f"Voice '{voice_id_or_path}' could not be loaded.")
-
-# --- Routes ---
-
-@app.route('/')
-def home():
-    return jsonify(status="online", message="PocketTTS Server is running"), 200
-
-@app.route('/v1/voices', methods=['GET'])
-def list_voices():
-    """List available voices: Built-ins + Scanned Directory."""
-    
-    # 1. Built-in defaults
-    # User requested specific voices: alba, marius, javert, jean, fantine, cosette, eponine, azelma
-    # We map them to potential IDs. Since we don't have exact URLs for all, we assume they are either
-    # resolved by pocket-tts or the user has these files/IDs.
-    
-    builtin_map = {
-       "alba": "alba",
-       "marius": "marius", 
-       "javert": "javert",
-       "jean": "jean",
-       "fantine": "fantine",
-       "cosette": "cosette",
-       "eponine": "eponine",
-       "azelma": "azelma"
-    }
-
-    voices = []
-    for name_id in ["alba", "marius", "javert", "jean", "fantine", "cosette", "eponine", "azelma"]:
-        # If we have a known mapping (like for alba), use it as ID? 
-        # Or just use the name as ID and let get_voice_state handle it?
-        # Specifying ID as the lookup key.
-        voices.append({
-            "id": builtin_map.get(name_id, name_id),
-            "name": name_id.capitalize()
-        })
-    
-    # 2. Scan Directory if configured
-    if VOICES_DIR and os.path.isdir(VOICES_DIR):
-        # Define supported extensions
-        extensions = ("*.wav", "*.mp3", "*.flac")
-        
-        # Gather all matching files
-        audio_files = []
-        for ext in extensions:
-            audio_files.extend(glob.glob(os.path.join(VOICES_DIR, ext)))
-
-        for f in audio_files:
-            name = os.path.basename(f)
-            # ID is the full path so the server can access it, or just filename if we handle resolution
-            # Using filename for UI consistency as per original logic
-            voices.append({
-                "id": name, 
-                "name": f"Local: {name}"
-            })
-
-    return jsonify({
-        "object": "list",
-        "data": [{"id": v["id"], "name": v["name"], "object": "voice"} for v in voices]
-    })
-
-@app.route('/upload_voice', methods=['POST'])
-def upload_voice():
-    """Upload a custom voice file temporarily."""
-    if 'file' not in request.files:
-        return jsonify({"error": "No file part"}), 400
-    
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({"error": "No selected file"}), 400
-        
-    if file:
-        # Create uploads dir if not exists
-        upload_dir = os.path.join(base_path, 'uploads')
-        os.makedirs(upload_dir, exist_ok=True)
-        
-        # Save file with a safe unique name
-        filename = f"custom_voice_{int(time.time())}_{file.filename}"
-        filepath = os.path.join(upload_dir, filename)
-        file.save(filepath)
-        
-        logger.info(f"Uploaded custom voice to: {filepath}")
-        return jsonify({"path": filepath})
+from api.interface import PocketTTSConfig, SoundConfig, PocketTTSSettings
+from services.audio_player import AudioPlayer
+from services.printr import Printr
+from api.enums import LogType
 
 
-@app.route('/v1/audio/speech', methods=['POST'])
-def generate_speech():
-    """OpenAI-compatible speech generation endpoint."""
-    data = request.json
-    
-    if not data:
-        return jsonify({"error": "Missing JSON body"}), 400
-        
-    text = data.get('input')
-    voice = data.get('voice', 'hf://kyutai/tts-voices/alba-mackenna/casual.wav')
-    
-    # Check stream flag
-    stream_request = data.get('stream', False)
-    
-    if stream_request:
-        response_format = data.get('response_format', 'pcm')
-    else:
-        response_format = data.get('response_format', 'mp3')
+class PocketTTS:
+    def __init__(self, settings: Optional[PocketTTSSettings] = None):
+        if settings is None:
+            settings = PocketTTSSettings(enable=False)
+        self.settings = settings
+        self.printr = Printr()
+        self.model: Optional[TTSModel] = None
+        self.voices_dir = settings.custom_voice_dir
+        self.voice_cache = {}
 
-    if not text:
-        return jsonify({"error": "Missing 'input' text"}), 400
-
-    target_format = validate_format(response_format)
-    
-    try:
-        # Load Voice (with cache)
-        voice_state = get_voice_state(voice)
-        
-        # Determine Generation Mode
-        if stream_request or app.config.get('CLI_STREAM_DEFAULT'):
-            return stream_audio(voice_state, text, target_format)
-        else:
-            return generate_file(voice_state, text, target_format)
-            
-    except Exception as e:
-        logger.exception("Generation failed")
-        return jsonify({"error": str(e)}), 500
-
-def generate_file(voice_state, text, fmt):
-    """Generate full audio and return as file."""
-    t0 = time.time()
-    audio_tensor = model.generate_audio(voice_state, text)
-    generation_time = time.time() - t0
-    
-    # Convert
-    audio_buffer = convert_audio(audio_tensor, model.sample_rate, fmt)
-    
-    mimetype = f"audio/{fmt}"
-    if fmt == 'wav': mimetype = 'audio/wav'
-    elif fmt == 'mp3': mimetype = 'audio/mpeg'
-    
-    return send_file(
-        audio_buffer,
-        mimetype=mimetype,
-        as_attachment=True,
-        download_name=f"speech.{fmt}"
-    )
-
-def stream_audio(voice_state, text, fmt):
-    """Stream audio chunks as WAV or raw PCM."""
-    
-    def generate():
-        # pocket-tts native streaming
-        stream = model.generate_audio_stream(voice_state, text)
-        
-        for chunk_tensor in stream:
-            if chunk_tensor.is_cuda: 
-                chunk_tensor = chunk_tensor.cpu()
-            if chunk_tensor.dim() == 1: 
-                chunk_tensor = chunk_tensor.unsqueeze(0)
-            
-            # Convert to 16-bit PCM
-            c = (chunk_tensor * 32767).clamp(-32768, 32767).to(torch.int16)
-            yield c.numpy().tobytes()
-
-    def stream_with_header():
-        # ONLY yield header if format is WAV
-        if fmt == 'wav':
-            yield write_wav_header(model.sample_rate, num_channels=1, bits_per_sample=16, num_frames=0)
-             
-        yield from generate()
-
-    # Match the MIME types
-    if fmt == 'pcm':
-        mimetype = "audio/L16"
-    elif fmt == 'wav':
-        mimetype = "audio/wav"
-    else:
-        mimetype = f"audio/{fmt}"
-    
-    return Response(stream_with_context(stream_with_header()), mimetype=mimetype)
-
-
-# --- startup ---
-def cleanup_uploads():
-    """Delete all files in the uploads directory."""
-    upload_dir = os.path.join(base_path, 'uploads')
-    if os.path.exists(upload_dir):
-        logger.info(f"Cleaning up uploads directory: {upload_dir}")
-        try:
-            # Iterate and remove files
-            for filename in os.listdir(upload_dir):
-                file_path = os.path.join(upload_dir, filename)
-                try:
-                    if os.path.isfile(file_path) or os.path.islink(file_path):
-                        os.unlink(file_path)
-                    elif os.path.isdir(file_path):
-                        shutil.rmtree(file_path)
-                except Exception as e:
-                    logger.warning(f"Failed to delete {file_path}. Reason: {e}")
-        except Exception as e:
-            logger.error(f"Error checking uploads directory: {e}")
-
-def threaded_execution(function, *args) -> threading.Thread | None:
-    """Execute a function in a separate thread."""
-    try:
-
-        def start_thread(function, *args):
-            if asyncio.iscoroutinefunction(function):
-                new_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(new_loop)
-                new_loop.run_until_complete(function(*args))
-                new_loop.close()
-            else:
-                function(*args)
-
-        thread = threading.Thread(target=start_thread, args=(function, *args))
-        thread.name = function.__name__
-        thread.start()
-        return thread
-    except Exception as e:
-        printr.print(
-            f"Error starting threaded execution: {str(e)}", color=LogType.ERROR
-        )
-        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-        return None
-
-
-def start_server(model_path=None, host="0.0.0.0", port=5002, stream=True, voices_dir=None):
-    logger.info("Attempting to start PocketTTS server...")
-    try:
-        """Programmatic entry point to start the server."""
-        global model, VOICES_DIR
-        
-        app.config['CLI_STREAM_DEFAULT'] = stream
-        VOICES_DIR = voices_dir
-        
-        cleanup_uploads()
-        atexit.register(cleanup_uploads)
-
-        logger.info("Loading Pocket TTS Model...")
-        
-        # Use model_path as variant if provided, otherwise default
-        if model_path:
-            logger.info(f"Using custom model variant/path: {model_path}")
-            model = TTSModel.load_model(variant=model_path)
-        elif getattr(sys, 'frozen', False):
-            # Check if model is bundled in 'model' dir
-            if os.path.isfile(BUNDLE_MODEL_PATH):
-                logger.info(f"Using bundled model from: {BUNDLE_MODEL_PATH}")
-                try:
-                    model = TTSModel.load_model(variant=BUNDLE_MODEL_PATH)
-                except Exception as e:
-                    logging.error(f"Error trying to load models bundled with .exe: {e}. Returning to default model load.")
-                    model = TTSModel.load_model()
-            else:
-                model = TTSModel.load_model()
-        else:
-            model = TTSModel.load_model()
-            
-        logger.info(f"Model loaded. Device: {model.device}, Sample Rate: {model.sample_rate}")
-        
-        if VOICES_DIR:
-            logger.info(f"Scanning voices from: {VOICES_DIR}")
-            
-        logger.info(f"Starting PocketTTS server on {host}:{port}")
-        # We set use_reloader=False because it doesn't play well with multiprocessing
-        app.run(host=host, port=port, debug=False, threaded=True, use_reloader=False)
-    except Exception as e:
-        logger.info(f"PocketTTS-Server start failed, error: {e}...")
+        # Initialize the model
+        if self.settings.enable:
+            self._load_model()
 
     def update_settings(self, settings: PocketTTSSettings):
+        requires_reload = self.settings.custom_model_path != settings.custom_model_path
         requires_restart = (
             self.settings.enable != settings.enable
-            or self.settings.host != settings.host
-            or self.settings.port != settings.port
-            or self.settings.custom_voice_dir != settings.settings.custom_voice_dir
-            or self.settings.custom_model_path != settings.custom_model_path
+            or self.settings.custom_voice_dir != settings.custom_voice_dir
+            or requires_reload
         )
 
         self.settings = settings
+        self.voices_dir = settings.custom_voice_dir
 
-        if self.settings.enable and self.__validate():
+        if self.settings.enable:
             if requires_restart:
-                self.stop_server()
-                self.start_server()
-        elif not self.settings.enable:
-            self.stop_server()
+                self.unload_model()  # Clean up old model if any
+                self._load_model()
+        else:
+            self.unload_model()
 
         self.printr.print("PocketTTS settings updated.", server_only=True)
+
+    def _load_model(self):
+        """Load the PocketTTS model."""
+        try:
+            model_path = self.settings.custom_model_path
+            if model_path and os.path.exists(model_path):
+                self.printr.print(
+                    f"Loading PocketTTS model from: {model_path}",
+                    color=LogType.INFO,
+                )
+                self.model = TTSModel.load_model(variant=model_path)
+            else:
+                self.printr.print(
+                    "Loading default PocketTTS model...", color=LogType.INFO
+                )
+                self.model = TTSModel.load_model()
+
+            self.printr.print(
+                f"PocketTTS Model loaded. Device: {self.model.device}",
+                color=LogType.SUCCESS,
+            )
+        except Exception as e:
+            self.printr.print(
+                f"Failed to load PocketTTS model: {e}", color=LogType.ERROR
+            )
+
+    def unload_model(self):
+        """Unload the model to free resources."""
+        if self.model:
+            del self.model
+            self.model = None
+
+        self.voice_cache.clear()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+
+        self.printr.print("PocketTTS Model unloaded.", color=LogType.INFO)
+
+    def list_voices(self):
+        """List available voices: Built-ins + Scanned Directory."""
+        builtin_map = {
+            "alba": "alba",
+            "marius": "marius",
+            "javert": "javert",
+            "jean": "jean",
+            "fantine": "fantine",
+            "cosette": "cosette",
+            "eponine": "eponine",
+            "azelma": "azelma",
+        }
+
+        voices = []
+        for name_id, _ in builtin_map.items():
+            voices.append({"id": name_id, "name": name_id.capitalize()})
+
+        if self.voices_dir and os.path.isdir(self.voices_dir):
+            extensions = ("*.wav", "*.mp3", "*.flac")
+            audio_files = []
+            for ext in extensions:
+                audio_files.extend(glob.glob(os.path.join(self.voices_dir, ext)))
+
+            for f in audio_files:
+                name = os.path.basename(f)
+                stem = os.path.splitext(name)[0]
+                voices.append({"id": stem, "name": f"Local: {stem}"})
+
+        return voices
+
+    def get_voice_state(self, voice_id_or_path):
+        """Resolve voice ID to a model state with caching."""
+        if not self.model:
+            raise RuntimeError("PocketTTS Model is not loaded.")
+
+        # 1. Normalize/Resolve the ID to its final path/form first
+        resolved_key = voice_id_or_path
+        if self.voices_dir:
+            possible_path = os.path.join(self.voices_dir, voice_id_or_path)
+            if os.path.exists(possible_path):
+                resolved_key = os.path.abspath(possible_path)
+            else:
+                # Try finding file with supported extensions
+                for ext in [".wav", ".mp3", ".flac"]:
+                    p = possible_path + ext
+                    if os.path.exists(p):
+                        resolved_key = os.path.abspath(p)
+                        break
+        elif os.path.exists(voice_id_or_path):
+            resolved_key = os.path.abspath(voice_id_or_path)
+
+        # 2. Check cache
+        if resolved_key in self.voice_cache:
+            return self.voice_cache[resolved_key]
+
+        # 3. Load
+        try:
+            state = self.model.get_state_for_audio_prompt(resolved_key)
+            self.voice_cache[resolved_key] = state
+            return state
+        except Exception as e:
+            self.printr.print(
+                f"Failed to load voice {resolved_key}: {e}", color=LogType.ERROR
+            )
+            raise ValueError(f"Voice '{voice_id_or_path}' could not be loaded.")
+
+    async def play_audio(
+        self,
+        text: str,
+        config: PocketTTSConfig,
+        sound_config: SoundConfig,
+        audio_player: AudioPlayer,
+        wingman_name: str,
+    ):
+        if not text:
+            return
+
+        if not self.model:
+            self.printr.toast_error("PocketTTS model not loaded.")
+            return
+
+        try:
+            # We assume config.voice holds the voice ID or path
+            voice_id = config.voice if config.voice else "alba"
+            voice_state = self.get_voice_state(voice_id)
+
+            if config.output_streaming:
+                await self._stream_audio(
+                    text, voice_state, sound_config, audio_player, wingman_name
+                )
+            else:
+                await self._generate_and_play(
+                    text, voice_state, sound_config, audio_player, wingman_name
+                )
+
+        except Exception as e:
+            self.printr.toast_error(f"PocketTTS Synthesis failed: {str(e)}")
+            self.printr.print(f"PocketTTS Generation failed: {e}", color=LogType.ERROR)
+
+    async def _generate_and_play(
+        self, text, voice_state, sound_config, audio_player, wingman_name
+    ):
+        """Generate full audio and play it."""
+        # Run generation in a thread to avoid blocking asyncio loop
+        loop = asyncio.get_event_loop()
+        audio_tensor = await loop.run_in_executor(
+            None, self.model.generate_audio, voice_state, text
+        )
+
+        # Convert to bytes (wav)
+        # Note: AudioPlayer play_with_effects might handle raw numpy, let's try to match its expectation
+        # It calls get_audio_from_stream(input_data) if bytes.
+
+        audio_buffer = self._convert_audio(audio_tensor, self.model.sample_rate, "wav")
+
+        # Convert buffer to bytes
+        audio_bytes = audio_buffer.getvalue()
+
+        await audio_player.play_with_effects(
+            input_data=audio_bytes,
+            config=sound_config,
+            wingman_name=wingman_name,
+        )
+
+    async def _stream_audio(
+        self, text, voice_state, sound_config, audio_player, wingman_name
+    ):
+        """Stream generation."""
+        # Initialize the stream generator
+        stream = self.model.generate_audio_stream(voice_state, text)
+        iterator = iter(stream)
+
+        # Internal buffer to store excess data from generator
+        self._playback_buffer = bytearray()
+
+        def buffer_callback(out_buffer: bytearray) -> int:
+            """
+            Callback for AudioPlayer to pull data.
+            It fills `out_buffer` and returns number of bytes written.
+            """
+            out_capacity = len(out_buffer)
+            written = 0
+
+            # 1. Fill from internal buffer first
+            if len(self._playback_buffer) > 0:
+                to_copy = min(len(self._playback_buffer), out_capacity)
+                out_buffer[:to_copy] = self._playback_buffer[:to_copy]
+                self._playback_buffer[:] = self._playback_buffer[
+                    to_copy:
+                ]  # Remove copied data
+                written += to_copy
+
+                if written == out_capacity:
+                    return written
+
+            # 2. If we need more, fetch from generator
+            try:
+                # Keep fetching chunks until we fill the buffer or run out
+                while written < out_capacity:
+                    # Note: next(iterator) blocks. We accept this for now
+                    # as true async processing requires substantial AudioPlayer changes.
+                    chunk_tensor = next(iterator)
+
+                    if chunk_tensor.is_cuda:
+                        chunk_tensor = chunk_tensor.cpu()
+                    if chunk_tensor.dim() == 1:
+                        chunk_tensor = chunk_tensor.unsqueeze(0)
+
+                    # Convert to int16 PCM bytes
+                    c = (chunk_tensor * 32767).clamp(-32768, 32767).to(torch.int16)
+                    chunk_bytes = c.numpy().tobytes()
+
+                    # Determine how much fits
+                    space_left = out_capacity - written
+                    to_copy = min(len(chunk_bytes), space_left)
+
+                    data_to_write = chunk_bytes[:to_copy]
+                    out_buffer[written : written + len(data_to_write)] = data_to_write
+                    written += len(data_to_write)
+
+                    # Store excess
+                    if len(chunk_bytes) > to_copy:
+                        self._playback_buffer.extend(chunk_bytes[to_copy:])
+
+            except StopIteration:
+                pass  # End of stream
+            except Exception as e:
+                self.printr.print(f"PocketTTS stream error: {e}", color=LogType.ERROR)
+
+            return written
+
+        await audio_player.stream_with_effects(
+            buffer_callback=buffer_callback,
+            config=sound_config,
+            wingman_name=wingman_name,
+            sample_rate=self.model.sample_rate,
+            dtype="int16",
+        )
+
+    # --- Utilities (Migrated) ---
+    def _convert_audio(
+        self, audio_tensor: torch.Tensor, sample_rate: int, target_format: str = "wav"
+    ) -> io.BytesIO:
+        buffer = io.BytesIO()
+        if audio_tensor.is_cuda:
+            audio_tensor = audio_tensor.cpu()
+        if audio_tensor.dim() == 1:
+            audio_tensor = audio_tensor.unsqueeze(0)
+
+        try:
+            torchaudio.save(buffer, audio_tensor, sample_rate, format=target_format)
+            buffer.seek(0)
+            return buffer
+        except Exception as e:
+            self.printr.print(
+                f"Error converting audio to {target_format}: {e}", color=LogType.ERROR
+            )
+            raise e
+
+    def _validate_format(self, fmt: str) -> str:
+        fmt = fmt.lower()
+        valid_formats = {"mp3", "wav", "opus", "aac", "flac", "pcm"}
+        if fmt == "mpeg":
+            return "mp3"
+        if fmt not in valid_formats:
+            return "wav"
+        return fmt
