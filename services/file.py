@@ -91,3 +91,20 @@ def get_generated_files_dir(skill_name: str) -> str:
     if not path.exists(generated_files_path):
         makedirs(generated_files_path)
     return generated_files_path
+
+def get_custom_voices_dir() -> str:
+    """Get the path to the custom voices directory used for PocketTTS or future cloning providers.
+
+    Unlike get_writable_dir(), this is NOT versioned - custom voices persist
+    across Wingman AI updates. Location: APPDATA/WingmanAI/custom_voices/
+    """
+    dirs = PlatformDirs(
+        appname=APP_NAME,
+        appauthor=APP_AUTHOR,
+        ensure_exists=True,
+        roaming=True,
+    )
+    custom_voices_path = path.join(dirs.user_data_dir, "custom_voices")
+    if not path.exists(custom_voices_path):
+        makedirs(custom_voices_path)
+    return custom_voices_path

@@ -1,5 +1,7 @@
 import os
 import io
+import sys
+import platform
 import time
 import glob
 import torch
@@ -8,10 +10,12 @@ import asyncio
 from typing import Optional
 from pocket_tts import TTSModel
 from api.interface import PocketTTSConfig, SoundConfig, PocketTTSSettings
+from services.file import get_custom_voices_dir
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 from api.enums import LogType
 
+MODELS_DIR = "pocket-tts-models"
 
 class PocketTTS:
     def __init__(self, settings: Optional[PocketTTSSettings] = None):
@@ -20,34 +24,34 @@ class PocketTTS:
         self.settings = settings
         self.printr = Printr()
         self.model: Optional[TTSModel] = None
-        self.voices_dir = settings.custom_voice_dir
+        self.voices_dir = get_custom_voices_dir()
         self.voice_cache = {}
 
         # Initialize the model
         if self.settings.enable:
-            self._load_model()
+            self.load_model()
 
     def update_settings(self, settings: PocketTTSSettings):
         requires_reload = self.settings.custom_model_path != settings.custom_model_path
         requires_restart = (
             self.settings.enable != settings.enable
-            or self.settings.custom_voice_dir != settings.custom_voice_dir
+            or self.settings.custom_model_path != settings.custom_model_path
             or requires_reload
         )
 
         self.settings = settings
-        self.voices_dir = settings.custom_voice_dir
+        self.voices_dir = get_custom_voices_dir()
 
         if self.settings.enable:
             if requires_restart:
                 self.unload_model()  # Clean up old model if any
-                self._load_model()
+                self.load_model()
         else:
             self.unload_model()
 
         self.printr.print("PocketTTS settings updated.", server_only=True)
 
-    def _load_model(self):
+    def load_model(self):
         """Load the PocketTTS model."""
         try:
             model_path = self.settings.custom_model_path
@@ -61,10 +65,10 @@ class PocketTTS:
                 self.printr.print(
                     "Loading default PocketTTS model...", color=LogType.INFO
                 )
-                self.model = TTSModel.load_model()
+                self.model = TTSModel.load_model(self._get_default_model_path())
 
             self.printr.print(
-                f"PocketTTS Model loaded. Device: {self.model.device}",
+                f"PocketTTS Model loaded.",
                 color=LogType.SUCCESS,
             )
         except Exception as e:
@@ -79,9 +83,6 @@ class PocketTTS:
             self.model = None
 
         self.voice_cache.clear()
-
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
 
         self.printr.print("PocketTTS Model unloaded.", color=LogType.INFO)
 
@@ -284,7 +285,7 @@ class PocketTTS:
             dtype="int16",
         )
 
-    # --- Utilities (Migrated) ---
+    # --- Utilities ---
     def _convert_audio(
         self, audio_tensor: torch.Tensor, sample_rate: int, target_format: str = "wav"
     ) -> io.BytesIO:
@@ -312,3 +313,15 @@ class PocketTTS:
         if fmt not in valid_formats:
             return "wav"
         return fmt
+
+    def _get_default_model_path(self) -> str:
+        is_windows = platform.system() == "Windows"
+        if is_windows:
+            # move one dir up, out of _internal (if bundled)
+            app_is_bundled = getattr(sys, "frozen", False)
+            app_root_path = sys._MEIPASS if app_is_bundled else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            app_dir = os.path.dirname(app_root_path) if app_is_bundled else app_root_path
+            model_path = os.path.join(app_dir, MODELS_DIR, "b6369a24.yaml")
+        else:
+            model_path = "b6369a24"
+        return model_path
