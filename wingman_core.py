@@ -402,6 +402,7 @@ class WingmanCore(WebSocketUser):
             config_manager=self.config_manager,
             audio_player=self.audio_player,
             xvasynth=self.xvasynth,
+            pocket_tts=self.pocket_tts,
         )
 
         # restore settings
@@ -419,12 +420,7 @@ class WingmanCore(WebSocketUser):
     async def startup(self):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
-        
-        # PocketTTS - will need either here or somewhere else to start server from self.start_pocket_tts(); maybe start here by default and then in provider say if not enabled, shut down server
-        #try: 
-            #self.pocket_tts.load_model()
-        #except Exception as e:
-            #print(f"Could not start pocket_tts server, error: {e}.")
+
 
     async def set_core_state(self, state: CoreState) -> None:
         """Update the core state and broadcast to all connected clients.
@@ -1589,9 +1585,9 @@ class WingmanCore(WebSocketUser):
         await self.set_core_state(CoreState.SHUTTING_DOWN)
 
         if self.settings_service.settings.xvasynth.enable:
-            await self.stop_xvasynth() # Should this really be await? not an async function
+            await self.stop_xvasynth()
         if self.settings_service.settings.pocket_tts.enable:
-            await self.stop_pocket_tts() # Should this really be await? not an async function
+            await self.stop_pocket_tts()
         await self.unload_tower()
 
         self.printr.print(

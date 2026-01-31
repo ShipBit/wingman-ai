@@ -9,13 +9,15 @@ import torchaudio
 import asyncio
 from typing import Optional
 from pocket_tts import TTSModel
-from api.interface import PocketTTSConfig, SoundConfig, PocketTTSSettings
+from api.interface import PocketTTSConfig, SoundConfig, PocketTTSSettings, WingmanInitializationError, VoiceInfo
 from services.file import get_custom_voices_dir
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 from api.enums import LogType
 
+
 MODELS_DIR = "pocket-tts-models"
+
 
 class PocketTTS:
     def __init__(self, settings: Optional[PocketTTSSettings] = None):
@@ -31,6 +33,9 @@ class PocketTTS:
         if self.settings.enable:
             self.load_model()
 
+    def validate(self, errors: list[WingmanInitializationError]):
+        pass
+    
     def update_settings(self, settings: PocketTTSSettings):
         requires_reload = self.settings.custom_model_path != settings.custom_model_path
         requires_restart = (
@@ -65,14 +70,14 @@ class PocketTTS:
                 try:
                     default_model_path = self._get_default_model_path()
                     self.printr.print(
-                         f"Loading default PocketTTS model from path: {default_model_path}...", 
-                         color=LogType.INFO,
+                        f"Loading default PocketTTS model from path: {default_model_path}...",
+                        color=LogType.INFO,
                     )
                     self.model = TTSModel.load_model(variant=default_model_path)
                 except:
                     self.printr.print(
-                         "Loading backup default PocketTTS model (voice cloning may not be available)...", 
-                         color=LogType.INFO,
+                        "Loading backup default PocketTTS model (voice cloning may not be available)...",
+                        color=LogType.INFO,
                     )
                     self.model = TTSModel.load_model()
 
@@ -95,6 +100,7 @@ class PocketTTS:
 
         self.printr.print("PocketTTS Model unloaded.", color=LogType.INFO)
 
+    # Probably can delete after testing
     def list_voices(self):
         """List available voices: Built-ins + Scanned Directory."""
         builtin_map = {
@@ -122,6 +128,42 @@ class PocketTTS:
                 name = os.path.basename(f)
                 stem = os.path.splitext(name)[0]
                 voices.append({"id": stem, "name": f"Local: {stem}"})
+
+        return voices
+
+    async def get_available_voices(self) -> list[VoiceInfo]:
+        """List available voices for API: Built-ins (provider: pocket_tts) + Custom (provider: custom_voices)."""
+        builtin_map = {
+            "alba": "alba",
+            "marius": "marius",
+            "javert": "javert",
+            "jean": "jean",
+            "fantine": "fantine",
+            "cosette": "cosette",
+            "eponine": "eponine",
+            "azelma": "azelma",
+        }
+
+        voices: list[VoiceInfo] = []
+        # Built-in voices
+        for name_id, _ in builtin_map.items():
+            voices.append(
+                VoiceInfo(id=name_id, name=f"PocketTTS: {name_id}", provider="pocket_tts")
+            )
+
+        # Custom voices
+        if self.voices_dir and os.path.isdir(self.voices_dir):
+            extensions = ("*.wav", "*.mp3", "*.flac")
+            audio_files = []
+            for ext in extensions:
+                audio_files.extend(glob.glob(os.path.join(self.voices_dir, ext)))
+
+            for f in audio_files:
+                name = os.path.basename(f)
+                stem = os.path.splitext(name)[0]
+                voices.append(
+                    VoiceInfo(id=stem, name=f"Local: {stem}", provider="custom_voices")
+                )
 
         return voices
 
@@ -328,8 +370,14 @@ class PocketTTS:
         if is_windows:
             # move one dir up, out of _internal (if bundled)
             app_is_bundled = getattr(sys, "frozen", False)
-            app_root_path = sys._MEIPASS if app_is_bundled else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            app_dir = os.path.dirname(app_root_path) if app_is_bundled else app_root_path
+            app_root_path = (
+                sys._MEIPASS
+                if app_is_bundled
+                else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            app_dir = (
+                os.path.dirname(app_root_path) if app_is_bundled else app_root_path
+            )
             model_path = os.path.join(app_dir, MODELS_DIR, "b6369a24.yaml")
         else:
             model_path = "b6369a24"

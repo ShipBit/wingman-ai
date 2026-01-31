@@ -146,6 +146,9 @@ class OpenAiWingman(Wingman):
 
             if self.uses_provider("fasterwhisper"):
                 self.fasterwhisper.validate(errors)
+            
+            if self.uses_provider("pocket_tts"):
+                self.pocket_tts.validate(errors)
 
             if self.uses_provider("openai"):
                 await self.validate_and_set_openai(errors)
