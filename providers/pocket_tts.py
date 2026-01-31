@@ -334,6 +334,8 @@ class PocketTTS:
             wingman_name=wingman_name,
             sample_rate=self.model.sample_rate,
             dtype="int16",
+            channels=1,
+            use_gain_boost=True,
         )
 
     # --- Utilities ---
