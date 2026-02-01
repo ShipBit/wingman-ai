@@ -565,10 +565,6 @@ class RadioChatter(Skill):
                 voice_name = voice
                 self.wingman.config.inworld.voice_id = voice
                 self.wingman.config.inworld.output_streaming = inworld_streaming
-            elif voice_setting.subprovider == WingmanProTtsProvider.POCKET_TTS:
-                voice_name = voice
-                self.wingman.config.pocket_tts.voice = voice
-                self.wingman.config.pocket_tts.output_streaming = pocket_tts_streaming
         elif voice_provider == TtsProvider.OPENAI:
             voice_name = voice.value
             self.wingman.config.openai.tts_voice = voice

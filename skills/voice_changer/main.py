@@ -210,11 +210,6 @@ class VoiceChanger(Skill):
                 provider_name = "Wingman Pro / Inworld"
                 self.wingman.config.inworld.voice_id = voice
                 self.wingman.config.inworld.output_streaming = False
-            elif voice_setting.subprovider == WingmanProTtsProvider.POCKET_TTS:
-                voice_name = voice
-                provider_name = "Wingman Pro / Pocket TTS"
-                self.wingman.config.pocket_tts.voice = voice
-                self.wingman.config.pocket_tts.output_streaming = False
         elif voice_provider == TtsProvider.OPENAI:
             voice_name = voice.value
             provider_name = "OpenAI"

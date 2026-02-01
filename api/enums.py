@@ -196,7 +196,6 @@ class WingmanProTtsProvider(Enum):
     AZURE = "azure"
     OPENAI = "openai"
     INWORLD = "inworld"
-    POCKET_TTS = "pocket_tts"
 
 
 class McpTransportType(Enum):

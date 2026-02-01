@@ -2371,16 +2371,6 @@ class OpenAiWingman(Wingman):
                         audio_player=self.audio_player,
                         wingman_name=self.name,
                     )
-                elif (self.config.wingman_pro.tts_provider 
-                    == WingmanProTtsProvider.POCKET_TTS
-                ):
-                    await self.pocket_tts.play_audio(
-                        text=text,
-                        config=self.config.pocket_tts,
-                        sound_config=sound_config,
-                        audio_player=self.audio_player,
-                        wingman_name=self.name,
-                    )
             else:
                 printr.toast_error(
                     f"Unsupported TTS provider: {self.config.features.tts_provider}"
