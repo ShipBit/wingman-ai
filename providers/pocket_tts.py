@@ -2,18 +2,23 @@ import os
 import io
 import sys
 import platform
-import time
 import glob
-import torch
-import torchaudio
 import asyncio
 from typing import Optional
+import torch
+import torchaudio
 from pocket_tts import TTSModel
-from api.interface import PocketTTSConfig, SoundConfig, PocketTTSSettings, WingmanInitializationError, VoiceInfo
+from api.enums import LogType
+from api.interface import (
+    PocketTTSConfig,
+    SoundConfig,
+    PocketTTSSettings,
+    WingmanInitializationError,
+    VoiceInfo,
+)
 from services.file import get_custom_voices_dir
 from services.audio_player import AudioPlayer
 from services.printr import Printr
-from api.enums import LogType
 
 
 MODELS_DIR = "pocket-tts-models"
@@ -28,6 +33,7 @@ class PocketTTS:
         self.model: Optional[TTSModel] = None
         self.voices_dir = get_custom_voices_dir()
         self.voice_cache = {}
+        self._playback_buffer = bytearray()
 
         # Initialize the model
         if self.settings.enable:
@@ -35,7 +41,7 @@ class PocketTTS:
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass
-    
+
     def update_settings(self, settings: PocketTTSSettings):
         requires_reload = self.settings.custom_model_path != settings.custom_model_path
         requires_restart = (
@@ -74,7 +80,7 @@ class PocketTTS:
                         color=LogType.INFO,
                     )
                     self.model = TTSModel.load_model(variant=default_model_path)
-                except:
+                except Exception:
                     self.printr.print(
                         "Loading backup default PocketTTS model (voice cloning may not be available)...",
                         color=LogType.INFO,
@@ -82,7 +88,7 @@ class PocketTTS:
                     self.model = TTSModel.load_model()
 
             self.printr.print(
-                f"PocketTTS Model loaded.",
+                "PocketTTS Model loaded.",
                 color=LogType.POSITIVE,
             )
         except Exception as e:
@@ -95,6 +101,10 @@ class PocketTTS:
         if self.model:
             del self.model
             self.model = None
+
+        # Explicitly clear CUDA cache if using GPU to free GPU memory
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         self.voice_cache.clear()
 
@@ -148,7 +158,9 @@ class PocketTTS:
         # Built-in voices
         for name_id, _ in builtin_map.items():
             voices.append(
-                VoiceInfo(id=name_id, name=f"PocketTTS: {name_id}", provider="pocket_tts")
+                VoiceInfo(
+                    id=name_id, name=f"PocketTTS: {name_id}", provider="pocket_tts"
+                )
             )
 
         # Custom voices
@@ -201,7 +213,7 @@ class PocketTTS:
             self.printr.print(
                 f"Failed to load voice {resolved_key}: {e}", color=LogType.ERROR
             )
-            raise ValueError(f"Voice '{voice_id_or_path}' could not be loaded.")
+            raise ValueError(f"Voice '{voice_id_or_path}' could not be loaded.") from e
 
     async def play_audio(
         self,
