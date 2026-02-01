@@ -55,7 +55,11 @@ class SettingsService:
         )
 
     def initialize(
-        self, whispercpp: Whispercpp, fasterwhisper: FasterWhisper, xvasynth: XVASynth, pocket_tts: PocketTTS,
+        self,
+        whispercpp: Whispercpp,
+        fasterwhisper: FasterWhisper,
+        xvasynth: XVASynth,
+        pocket_tts: PocketTTS,
     ):
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
@@ -116,7 +120,7 @@ class SettingsService:
             return
         self.xvasynth.update_settings(settings=settings.xvasynth)
         self.config_manager.settings_config.xvasynth = settings.xvasynth
-        
+
         # PocketTTS
         if not self.pocket_tts:
             self.printr.toast_error(

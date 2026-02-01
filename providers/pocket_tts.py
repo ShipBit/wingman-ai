@@ -70,6 +70,7 @@ class PocketTTS:
                 self.printr.print(
                     f"Loading PocketTTS model from custom model path: {model_path}",
                     color=LogType.INFO,
+                    server_only=True,
                 )
                 self.model = TTSModel.load_model(variant=model_path)
             else:
@@ -78,22 +79,27 @@ class PocketTTS:
                     self.printr.print(
                         f"Loading default PocketTTS model from path: {default_model_path}...",
                         color=LogType.INFO,
+                        server_only=True,
                     )
                     self.model = TTSModel.load_model(variant=default_model_path)
                 except Exception:
                     self.printr.print(
                         "Loading backup default PocketTTS model (voice cloning may not be available)...",
                         color=LogType.INFO,
+                        server_only=True,
                     )
                     self.model = TTSModel.load_model()
 
             self.printr.print(
                 "PocketTTS Model loaded.",
                 color=LogType.POSITIVE,
+                server_only=True,
             )
         except Exception as e:
             self.printr.print(
-                f"Failed to load PocketTTS model: {e}", color=LogType.ERROR
+                f"Failed to load PocketTTS model: {e}",
+                color=LogType.ERROR,
+                server_only=True,
             )
 
     def unload_model(self):
@@ -108,7 +114,9 @@ class PocketTTS:
 
         self.voice_cache.clear()
 
-        self.printr.print("PocketTTS Model unloaded.", color=LogType.INFO)
+        self.printr.print(
+            "PocketTTS Model unloaded.", color=LogType.INFO, server_only=True
+        )
 
     # Probably can delete after testing
     def list_voices(self):

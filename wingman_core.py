@@ -59,6 +59,7 @@ from services.system_manager import SystemManager
 from services.tower import Tower
 from services.websocket_user import WebSocketUser
 
+
 class WingmanCore(WebSocketUser):
     def __init__(
         self,
@@ -395,7 +396,7 @@ class WingmanCore(WebSocketUser):
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
-            pocket_tts=self.pocket_tts
+            pocket_tts=self.pocket_tts,
         )
 
         self.voice_service = VoiceService(
@@ -420,7 +421,6 @@ class WingmanCore(WebSocketUser):
     async def startup(self):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
-
 
     async def set_core_state(self, state: CoreState) -> None:
         """Update the core state and broadcast to all connected clients.
@@ -616,7 +616,9 @@ class WingmanCore(WebSocketUser):
         if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
             needs_joystick = True
 
-        joystick_running = self._joystick_thread is not None and self._joystick_thread.is_alive()
+        joystick_running = (
+            self._joystick_thread is not None and self._joystick_thread.is_alive()
+        )
 
         if needs_joystick:
             # Restart joystick thread to pick up new button configurations
@@ -625,7 +627,9 @@ class WingmanCore(WebSocketUser):
             current_wingmen = {
                 wingman.name: wingman.config for wingman in self.tower.wingmen
             }
-            current_config = self.tower.config.model_copy(update={"wingmen": current_wingmen})
+            current_config = self.tower.config.model_copy(
+                update={"wingmen": current_wingmen}
+            )
             await self.init_joystick(current_config)
             self.printr.print(
                 "Joystick hooks refreshed for new activation key.",
@@ -672,7 +676,7 @@ class WingmanCore(WebSocketUser):
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
-            pocket_tts=self.pocket_tts
+            pocket_tts=self.pocket_tts,
         )
         self.tower_errors = await self.tower.instantiate_wingmen(
             self.config_manager.settings_config
@@ -1266,14 +1270,16 @@ class WingmanCore(WebSocketUser):
     # POST /pocket_tts/start
     def start_pocket_tts(self):
         self.pocket_tts.load_model()
-        
+
     # Post /pocket_tts/stop
     def stop_pocket_tts(self):
         try:
             self.pocket_tts.unload_model()
-        except Exception:
-            pass
-            
+        except Exception as e:
+            self.printr.print(
+                f"Error stopping PocketTTS: {e}", color=LogType.ERROR, server_only=True
+            )
+
     # POST /xvasynth/start
     def start_xvasynth(self):
         self.xvasynth.start_server()
@@ -1282,8 +1288,10 @@ class WingmanCore(WebSocketUser):
     def stop_xvasynth(self):
         try:
             self.xvasynth.stop_server()
-        except Exception:
-            pass
+        except Exception as e:
+            self.printr.print(
+                f"Error stopping XVASynth: {e}", color=LogType.ERROR, server_only=True
+            )
 
     def get_xvasynth_model_dirs(self):
         subfolders = []
