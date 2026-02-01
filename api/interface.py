@@ -339,7 +339,7 @@ class PocketTTSConfig(BaseModel):
     voice: Optional[str] = None
     speed: float
     output_streaming: bool
-    
+
 
 class OpenAiCompatibleTtsConfig(BaseModel):
     api_key: str
@@ -954,7 +954,7 @@ class NestedConfig(BaseModel):
     inworld: InworldConfig
     azure: AzureConfig
     xvasynth: XVASynthTtsConfig
-    pocket_tts: Optional[PocketTTSConfig] = None # TODO Will need to make mandatory later for final
+    pocket_tts: PocketTTSConfig
     whispercpp: WhispercppSttConfig
     fasterwhisper: FasterWhisperSttConfig
     wingman_pro: WingmanProConfig

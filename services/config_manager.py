@@ -1548,6 +1548,7 @@ class ConfigManager:
             "whispercpp",
             "fasterwhisper",
             "xvasynth",
+            "pocket_tts",
             "wingman_pro",
             "perplexity",
             "xai",
