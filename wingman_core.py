@@ -58,6 +58,7 @@ from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
 from services.tower import Tower
 from services.websocket_user import WebSocketUser
+from hud_server.server import HudServer
 
 
 class WingmanCore(WebSocketUser):
@@ -349,6 +350,9 @@ class WingmanCore(WebSocketUser):
 
         self.tower: Tower = None
 
+        # HUD Server
+        self._hud_server: Optional[HudServer] = None
+
         self.active_recording = {"key": "", "wingman": None}
 
         self.is_started = False
@@ -421,6 +425,44 @@ class WingmanCore(WebSocketUser):
     async def startup(self):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
+
+        # Start HUD Server if enabled
+        await self._start_hud_server_if_enabled()
+
+    async def _start_hud_server_if_enabled(self):
+        """Start the HUD server if enabled in settings."""
+        hud_settings = getattr(self.settings_service.settings, 'hud_server', None)
+        if not hud_settings or not hud_settings.enabled:
+            return
+
+        try:
+            self._hud_server = HudServer()
+            if not self._hud_server.start(
+                host=hud_settings.host,
+                port=hud_settings.port,
+                framerate=getattr(hud_settings, 'framerate', 60),
+                layout_margin=getattr(hud_settings, 'layout_margin', 20),
+                layout_spacing=getattr(hud_settings, 'layout_spacing', 15),
+            ):
+                self.printr.print(
+                    f"HUD Server failed to start on port {hud_settings.port}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+                self._hud_server = None
+        except Exception as e:
+            self.printr.print(
+                f"HUD Server error: {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            self._hud_server = None
+
+    async def _stop_hud_server(self):
+        """Stop the HUD server if running."""
+        if self._hud_server and self._hud_server.is_running:
+            await self._hud_server.stop()
+            self._hud_server = None
 
     async def set_core_state(self, state: CoreState) -> None:
         """Update the core state and broadcast to all connected clients.
@@ -1591,6 +1633,9 @@ class WingmanCore(WebSocketUser):
 
     async def shutdown(self):
         await self.set_core_state(CoreState.SHUTTING_DOWN)
+
+        # Stop HUD Server
+        await self._stop_hud_server()
 
         if self.settings_service.settings.xvasynth.enable:
             await self.stop_xvasynth()

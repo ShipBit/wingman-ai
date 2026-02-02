@@ -1,0 +1,161 @@
+module: skills.hud.main
+name: HUD
+display_name: HUD Overlay
+auto_activate: true
+author: JayMatthew
+tags:
+  - Utility
+  - Overlay
+description:
+  en: Display messages, information panels, progress bars, and timers on a transparent HUD overlay. The HUD server must be enabled in global settings for this skill to work.
+  de: Zeige Nachrichten, Informationspanels, Fortschrittsbalken und Timer auf einem transparenten HUD-Overlay an. Der HUD-Server muss in den globalen Einstellungen aktiviert sein.
+hint:
+  en: Please make sure the HUD server in the global settings is enabled.
+  de: Bitte stelle sicher, dass der HUD-Server in den globalen Einstellungen aktiviert ist.
+custom_properties:
+  - id: user_color
+    name: User Color
+    hint: Color for user name in messages (hex format).
+    property_type: string
+    value: "#4cd964"
+    required: false
+
+  - id: accent_color
+    name: Accent Color
+    hint: Accent color for assistant messages and highlights (hex format).
+    property_type: string
+    value: "#00aaff"
+    required: false
+
+  - id: bg_color
+    name: Background Color
+    hint: Background color of HUD elements (hex format).
+    property_type: string
+    value: "#1e212b"
+    required: false
+
+  - id: text_color
+    name: Text Color
+    hint: Main text color (hex format).
+    property_type: string
+    value: "#f0f0f0"
+    required: false
+
+  - id: chat_anchor
+    name: Chat Window Position
+    hint: Screen position for the chat window. Options are top_left, top_center, top_right, left_center, center, right_center, bottom_left, bottom_center, bottom_right.
+    property_type: string
+    value: "top_left"
+    required: false
+
+  - id: chat_priority
+    name: Chat Window Priority
+    hint: Stacking priority for the chat window. Higher values appear closer to the anchor point.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: hud_width
+    name: Chat Window Width
+    hint: Width of the chat window in pixels.
+    property_type: number
+    value: 400
+    required: false
+
+  - id: hud_max_height
+    name: Chat Window Max Height
+    hint: Maximum height of the chat window in pixels.
+    property_type: number
+    value: 600
+    required: false
+
+  - id: persistent_anchor
+    name: Info Panel Position
+    hint: Screen position for persistent info panels. Options are top_left, top_center, top_right, left_center, center, right_center, bottom_left, bottom_center, bottom_right.
+    property_type: string
+    value: "top_left"
+    required: false
+
+  - id: persistent_priority
+    name: Info Panel Priority
+    hint: Stacking priority for info panels. Higher values appear closer to the anchor point.
+    property_type: number
+    value: 10
+    required: false
+
+  - id: persistent_width
+    name: Info Panel Width
+    hint: Width of persistent info panels in pixels.
+    property_type: number
+    value: 400
+    required: false
+
+  - id: opacity
+    name: Opacity
+    hint: Transparency of HUD elements (0.0 to 1.0).
+    property_type: number
+    value: 0.85
+    required: false
+
+  - id: border_radius
+    name: Border Radius
+    hint: Corner roundness of HUD elements in pixels.
+    property_type: number
+    value: 12
+    required: false
+
+  - id: content_padding
+    name: Content Padding
+    hint: Padding inside HUD elements in pixels.
+    property_type: number
+    value: 16
+    required: false
+
+  - id: font_size
+    name: Font Size
+    hint: Text font size in pixels.
+    property_type: number
+    value: 16
+    required: false
+
+  - id: font_family
+    name: Font Family
+    hint: Font family for HUD text.
+    property_type: string
+    value: "Segoe UI"
+    required: false
+
+  - id: max_display_time
+    name: Audio Wait Time
+    hint: Maximum time in seconds to wait for audio playback before auto-hiding messages. If audio doesn't start within this time, the message will be hidden.
+    property_type: number
+    value: 5
+    required: false
+
+  - id: typewriter_effect
+    name: Typewriter Effect
+    hint: Animate text appearing character by character.
+    property_type: boolean
+    value: true
+    required: false
+
+  - id: restore_persistent_items
+    name: Restore Persistent Items
+    hint: Restore info panels and progress bars after restart.
+    property_type: boolean
+    value: true
+    required: false
+
+  - id: show_chat_messages
+    name: Show Chat Messages
+    hint: When enabled, conversations will appear on the HUD.
+    property_type: boolean
+    value: true
+    required: false
+
+  - id: display_tool_names
+    name: Display Tool Names
+    hint: Show the actual tool function names instead of skill/source names.
+    property_type: boolean
+    value: false
+    required: false
