@@ -441,37 +441,6 @@ class HudServer:
                 raise HTTPException(status_code=404, detail=f"Chat window '{name}' not found")
             return OperationResponse(status="ok")
 
-        # ─────────────────────────────── Legacy Compatibility ─────────────────────────────── #
-        # These endpoints provide compatibility with the old WebSocket-based commands
-
-        @app.post("/legacy/draw", response_model=OperationResponse, tags=["legacy"])
-        async def legacy_draw(cmd: dict[str, Any]):
-            """Legacy draw command (WebSocket compatibility)."""
-            group = cmd.get("group", "default")
-            self.manager.show_message(
-                group_name=group,
-                title=cmd.get("title", ""),
-                content=cmd.get("message", ""),
-                color=cmd.get("color"),
-                tools=cmd.get("tools"),
-                props=cmd.get("props"),
-                duration=cmd.get("duration")
-            )
-            return OperationResponse(status="ok")
-
-        @app.post("/legacy/hide", response_model=OperationResponse, tags=["legacy"])
-        async def legacy_hide(cmd: dict[str, Any]):
-            """Legacy hide command (WebSocket compatibility)."""
-            group = cmd.get("group", "default")
-            self.manager.hide_message(group)
-            return OperationResponse(status="ok")
-
-        @app.post("/legacy/loading", response_model=OperationResponse, tags=["legacy"])
-        async def legacy_loading(cmd: dict[str, Any]):
-            """Legacy loading command (WebSocket compatibility)."""
-            group = cmd.get("group", "default")
-            self.manager.set_loader(group, cmd.get("state", True), cmd.get("color"))
-            return OperationResponse(status="ok")
 
     # ─────────────────────────────── Overlay Support ─────────────────────────────── #
 

@@ -18,24 +18,18 @@ Usage:
 import asyncio
 import threading
 import time
+import httpx
 from typing import Optional, Any
 from urllib.parse import quote
+from services.printr import Printr
 
-try:
-    import httpx
-    HTTPX_AVAILABLE = True
-except ImportError:
-    HTTPX_AVAILABLE = False
-    httpx = None
+printr = Printr()
 
 
 class HudHttpClient:
     """Async HTTP client for the HUD Server."""
 
     def __init__(self, base_url: str = "http://127.0.0.1:7862"):
-        if not HTTPX_AVAILABLE:
-            raise ImportError("httpx library not installed. Run: pip install httpx")
-
         self.base_url = base_url.rstrip("/")
         self._client: Optional[httpx.AsyncClient] = None
         self._connected = False
@@ -46,7 +40,6 @@ class HudHttpClient:
 
     async def connect(self, timeout: float = 5.0) -> bool:
         """Connect to the HUD server."""
-        import sys
         try:
             # Close existing client if any - ignore all errors since the loop might be closed
             if self._client:
@@ -70,7 +63,7 @@ class HudHttpClient:
                 self._connected = True
                 return True
             return False
-        except Exception as e:
+        except Exception:
             self._connected = False
             return False
 
@@ -95,29 +88,30 @@ class HudHttpClient:
         json: Optional[dict] = None
     ) -> Optional[dict]:
         """Make an HTTP request to the server."""
-        import sys
 
         # Reconnect if not connected (either no client or marked as disconnected)
         if not self._client or not self._connected:
             if not await self.connect():
                 return None
 
-        try:
+        async def _execute_request():
+            """Execute the HTTP request with the given method."""
             if method == "GET":
-                response = await self._client.get(path)
+                return await self._client.get(path)
             elif method == "POST":
-                response = await self._client.post(path, json=json)
+                return await self._client.post(path, json=json)
             elif method == "PUT":
-                response = await self._client.put(path, json=json)
+                return await self._client.put(path, json=json)
             elif method == "DELETE":
-                response = await self._client.delete(path)
+                return await self._client.delete(path)
             else:
                 return None
 
-            if response.status_code >= 200 and response.status_code < 300:
+        try:
+            response = await _execute_request()
+            if response and 200 <= response.status_code < 300:
                 return response.json()
-            else:
-                return None
+            return None
         except RuntimeError as e:
             # Handle "Event loop is closed" error by reconnecting
             if "loop" in str(e).lower() or "closed" in str(e).lower():
@@ -126,25 +120,21 @@ class HudHttpClient:
                 # Try to reconnect and retry once
                 if await self.connect():
                     try:
-                        if method == "GET":
-                            response = await self._client.get(path)
-                        elif method == "POST":
-                            response = await self._client.post(path, json=json)
-                        elif method == "PUT":
-                            response = await self._client.put(path, json=json)
-                        elif method == "DELETE":
-                            response = await self._client.delete(path)
-                        else:
-                            return None
-
-                        if response.status_code >= 200 and response.status_code < 300:
+                        response = await _execute_request()
+                        if response and 200 <= response.status_code < 300:
                             return response.json()
                     except Exception as retry_e:
-                        sys.stderr.write(f"[HUD HTTP] _request: retry failed: {retry_e}\n")
+                        printr.print(
+                            f"[HUD HTTP] _request: retry failed: {retry_e}",
+                            server_only=True
+                        )
             self._connected = False
             return None
         except Exception as e:
-            sys.stderr.write(f"[HUD HTTP] _request: {method} {path} exception: {e}\n")
+            printr.print(
+                f"[HUD HTTP] _request: {method} {path} exception: {e}",
+                server_only=True
+            )
             self._connected = False
             return None
 
@@ -462,46 +452,6 @@ class HudHttpClient:
         encoded_name = quote(name, safe='')
         return await self._request("POST", f"/chat/hide/{encoded_name}")
 
-    # ─────────────────────────────── Legacy ─────────────────────────────── #
-
-    async def legacy_draw(
-        self,
-        title: str,
-        message: str,
-        color: Optional[str] = None,
-        tools: Optional[list] = None,
-        props: Optional[dict] = None,
-        group: str = "default",
-        duration: Optional[float] = None
-    ) -> Optional[dict]:
-        """Legacy draw command for backwards compatibility."""
-        data = {
-            "group": group,
-            "title": title,
-            "message": message,
-            "color": color,
-            "tools": tools,
-            "props": props,
-            "duration": duration
-        }
-        return await self._request("POST", "/legacy/draw", data)
-
-    async def legacy_hide(self, group: str = "default") -> Optional[dict]:
-        """Legacy hide command for backwards compatibility."""
-        return await self._request("POST", "/legacy/hide", {"group": group})
-
-    async def legacy_loading(
-        self,
-        state: bool,
-        color: Optional[str] = None,
-        group: str = "default"
-    ) -> Optional[dict]:
-        """Legacy loading command for backwards compatibility."""
-        return await self._request("POST", "/legacy/loading", {
-            "group": group,
-            "state": state,
-            "color": color
-        })
 
 
 class HudHttpClientSync:
@@ -721,24 +671,4 @@ class HudHttpClientSync:
     def hide_chat_window(self, name: str):
         return self._run_coro(self._client.hide_chat_window(name)) if self._client else None
 
-    # Legacy methods
-    def legacy_draw(
-        self,
-        title: str,
-        message: str,
-        color: Optional[str] = None,
-        tools: Optional[list] = None,
-        props: Optional[dict] = None,
-        group: str = "default",
-        duration: Optional[float] = None
-    ):
-        return self._run_coro(self._client.legacy_draw(
-            title, message, color, tools, props, group, duration
-        )) if self._client else None
-
-    def legacy_hide(self, group: str = "default"):
-        return self._run_coro(self._client.legacy_hide(group)) if self._client else None
-
-    def legacy_loading(self, state: bool, color: Optional[str] = None, group: str = "default"):
-        return self._run_coro(self._client.legacy_loading(state, color, group)) if self._client else None
 
