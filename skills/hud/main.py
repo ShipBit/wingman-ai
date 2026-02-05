@@ -396,25 +396,9 @@ class HUD(Skill):
         await super().update_config(new_config)
 
         if old_config.custom_properties == new_config.custom_properties:
-            await printr.print_async(
-                "[HUD] update_config: custom_properties unchanged, skipping",
-                color=LogType.INFO,
-                server_only=True
-            )
             return
 
-        await printr.print_async(
-            "[HUD] update_config: custom_properties CHANGED, recreating groups...",
-            color=LogType.INFO,
-            server_only=True
-        )
-
         if not await self._ensure_connected():
-            await printr.print_async(
-                "[HUD] update_config: failed to connect, aborting",
-                color=LogType.WARNING,
-                server_only=True
-            )
             return
 
         # Get new props
@@ -422,31 +406,16 @@ class HUD(Skill):
         pers_props = self._get_persistent_props()
 
         # Delete and recreate message group
-        await printr.print_async(
-            f"[HUD] update_config: recreating messages group '{self._messages_group}'",
-            color=LogType.INFO,
-            server_only=True
-        )
         await self._client.delete_group(self._messages_group)
         await self._client.create_group(self._messages_group, props=msg_props)
 
         # Delete and recreate persistent group, then restore items
-        await printr.print_async(
-            f"[HUD] update_config: recreating persistent group '{self._persistent_group}'",
-            color=LogType.INFO,
-            server_only=True
-        )
         await self._client.delete_group(self._persistent_group)
         await self._client.create_group(self._persistent_group, props=pers_props)
 
         # Re-add all persistent items with the new group settings
         if self._persistent_items:
             await self._restore_persistent_items()
-            await printr.print_async(
-                f"[HUD] update_config: restoring {len(self._persistent_items)} persistent item(s)",
-                color=LogType.INFO,
-                server_only=True
-            )
 
     async def _ensure_connected(self) -> bool:
         """Ensure the HUD client is connected. Create client and connect if needed."""
@@ -683,20 +652,10 @@ class HUD(Skill):
 
                 # Audio just started - reset expecting flag
                 if is_playing and not was_playing:
-                    await printr.print_async(
-                        f"[HUD] Audio started playing, resetting expecting_audio flag",
-                        color=LogType.INFO,
-                        server_only=True
-                    )
                     self.expecting_audio = False
 
                 # Hide message when audio stops
                 if was_playing and not is_playing:
-                    await printr.print_async(
-                        f"[HUD] Audio stopped playing, waiting 0.5s before hiding",
-                        color=LogType.INFO,
-                        server_only=True
-                    )
                     await asyncio.sleep(0.5)  # Brief delay for readability
 
                     # Re-check if audio started during the delay
@@ -708,18 +667,7 @@ class HUD(Skill):
                         pass
 
                     if still_not_playing:
-                        await printr.print_async(
-                            f"[HUD] Audio still not playing, calling hide_message",
-                            color=LogType.INFO,
-                            server_only=True
-                        )
                         await self._hide_message()
-                    else:
-                        await printr.print_async(
-                            f"[HUD] Audio started again during delay, NOT hiding",
-                            color=LogType.INFO,
-                            server_only=True
-                        )
                     self.expecting_audio = False
 
                 was_playing = is_playing
@@ -729,11 +677,6 @@ class HUD(Skill):
                     max_display_time = float(self._get_prop("max_display_time", 5))
                     elapsed = time.time() - self.audio_expect_start_time
                     if elapsed > max_display_time:
-                        await printr.print_async(
-                            f"[HUD] Audio timeout ({elapsed:.1f}s > {max_display_time}s), hiding message",
-                            color=LogType.INFO,
-                            server_only=True
-                        )
                         self.expecting_audio = False
                         await self._hide_message()
 
@@ -785,31 +728,9 @@ class HUD(Skill):
     async def _hide_message(self):
         """Hide the current message."""
         if not await self._ensure_connected():
-            await printr.print_async(
-                "[HUD] _hide_message called but no client connected",
-                color=LogType.WARNING,
-                server_only=True
-            )
             return
 
-        await printr.print_async(
-            f"[HUD] Sending hide_message request to server for group '{self._messages_group}'",
-            color=LogType.INFO,
-            server_only=True
-        )
-        result = await self._client.hide_message(group_name=self._messages_group)
-        if result is None:
-            await printr.print_async(
-                f"[HUD] hide_message returned None (possible error or group not found)",
-                color=LogType.WARNING,
-                server_only=True
-            )
-        else:
-            await printr.print_async(
-                f"[HUD] hide_message successful: {result}",
-                color=LogType.INFO,
-                server_only=True
-            )
+        await self._client.hide_message(group_name=self._messages_group)
 
     async def _show_loader(self, show: bool, color: str = None):
         """Show or hide the loading animation."""
@@ -960,11 +881,6 @@ class HUD(Skill):
         # Build tool info
         tools_data = []
         if tool_calls:
-            await printr.print_async(
-                f"[HUD] Processing {len(tool_calls)} tool call(s)",
-                color=LogType.INFO,
-                server_only=True
-            )
             for tc in tool_calls:
                 tool_name = tc.function.name
                 source = "System"
@@ -1000,12 +916,6 @@ class HUD(Skill):
                 # Use tool name if configured
                 if display_tool_names:
                     source = tool_name
-
-                await printr.print_async(
-                    f"[HUD] Tool: {tool_name} -> source='{source}', type={source_type}",
-                    color=LogType.INFO,
-                    server_only=True
-                )
 
                 tools_data.append({
                     'name': tool_name,

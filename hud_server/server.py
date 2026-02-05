@@ -139,13 +139,15 @@ class HudServer:
         @app.exception_handler(HTTPException)
         async def http_exception_handler(request: Request, exc: HTTPException):
             """Log HTTP exceptions (404, etc.)."""
-            path = request.url.path
-            method = request.method
-            printr.print(
-                f"[HUD Server] {exc.status_code} on {method} {path}: {exc.detail}",
-                color=LogType.WARNING,
-                server_only=True
-            )
+            # Reduce noise for 404s
+            if exc.status_code != 404:
+                path = request.url.path
+                method = request.method
+                printr.print(
+                    f"[HUD Server] {exc.status_code} on {method} {path}: {exc.detail}",
+                    color=LogType.WARNING,
+                    server_only=True
+                )
             return JSONResponse(
                 status_code=exc.status_code,
                 content={"status": "error", "message": exc.detail}
@@ -208,23 +210,7 @@ class HudServer:
         @app.patch("/groups/{group_name}", response_model=OperationResponse, tags=["groups"])
         async def patch_group(group_name: str, request: UpdateGroupRequest):
             """Update properties of an existing group (PATCH)."""
-            printr.print(
-                f"[HUD Server] PATCH /groups/{group_name}: props keys={list(request.props.keys()) if request.props else []}",
-                color=LogType.INFO,
-                server_only=True
-            )
-            if request.props and 'width' in request.props:
-                printr.print(
-                    f"[HUD Server] PATCH /groups/{group_name}: width={request.props['width']}",
-                    color=LogType.INFO,
-                    server_only=True
-                )
             result = self.manager.update_group(group_name, request.props)
-            printr.print(
-                f"[HUD Server] PATCH /groups/{group_name}: manager.update_group returned {result}",
-                color=LogType.INFO,
-                server_only=True
-            )
             if not result:
                 raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok", message=f"Group '{group_name}' updated")
@@ -262,11 +248,6 @@ class HudServer:
         @app.post("/message", response_model=OperationResponse, tags=["messages"])
         async def show_message(request: MessageRequest):
             """Show a message in a HUD group."""
-            printr.print(
-                f"[HUD Server] show_message called for group '{request.group_name}'",
-                color=LogType.INFO,
-                server_only=True
-            )
             self.manager.show_message(
                 group_name=request.group_name,
                 title=request.title,
@@ -289,13 +270,6 @@ class HudServer:
         async def hide_message(group_name: str):
             """Hide the current message in a group."""
             if not self.manager.hide_message(group_name):
-                available_groups = self.manager.get_groups()
-                printr.print(
-                    f"[HUD Server] hide_message failed: group '{group_name}' not found. "
-                    f"Available groups: {available_groups}",
-                    color=LogType.WARNING,
-                    server_only=True
-                )
                 raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok")
 
@@ -495,26 +469,6 @@ class HudServer:
 
     def _send_to_overlay(self, command: dict[str, Any]):
         """Send a command to the overlay renderer."""
-        cmd_type = command.get('type', 'unknown')
-        group = command.get('group', 'unknown')
-        printr.print(
-            f"[HUD Server] _send_to_overlay: type='{cmd_type}', group='{group}'",
-            color=LogType.INFO,
-            server_only=True
-        )
-        if cmd_type == 'update_group':
-            props = command.get('props', {})
-            printr.print(
-                f"[HUD Server] _send_to_overlay: update_group props keys={list(props.keys())}",
-                color=LogType.INFO,
-                server_only=True
-            )
-            if 'width' in props:
-                printr.print(
-                    f"[HUD Server] _send_to_overlay: width={props['width']}",
-                    color=LogType.INFO,
-                    server_only=True
-                )
         if self._command_queue:
             try:
                 self._command_queue.put(command)
@@ -524,12 +478,6 @@ class HudServer:
                     color=LogType.ERROR,
                     server_only=True
                 )
-        else:
-            printr.print(
-                f"[HUD Server] _send_to_overlay: NO command queue!",
-                color=LogType.WARNING,
-                server_only=True
-            )
 
     # ─────────────────────────────── Server Lifecycle ─────────────────────────────── #
 
@@ -658,4 +606,3 @@ if __name__ == "__main__":
         port=args.port,
         reload=False
     )
-

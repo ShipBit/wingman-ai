@@ -123,18 +123,11 @@ class HudHttpClient:
                         response = await _execute_request()
                         if response and 200 <= response.status_code < 300:
                             return response.json()
-                    except Exception as retry_e:
-                        printr.print(
-                            f"[HUD HTTP] _request: retry failed: {retry_e}",
-                            server_only=True
-                        )
+                    except Exception:
+                        pass
             self._connected = False
             return None
-        except Exception as e:
-            printr.print(
-                f"[HUD HTTP] _request: {method} {path} exception: {e}",
-                server_only=True
-            )
+        except Exception:
             self._connected = False
             return None
 
@@ -670,5 +663,3 @@ class HudHttpClientSync:
 
     def hide_chat_window(self, name: str):
         return self._run_coro(self._client.hide_chat_window(name)) if self._client else None
-
-

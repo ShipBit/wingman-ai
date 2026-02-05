@@ -198,12 +198,6 @@ class HudManager:
 
     def _notify_callbacks(self, command: dict[str, Any]):
         """Notify all registered callbacks of a command."""
-        cmd_type = command.get('type', 'unknown')
-        printr.print(
-            f"[HUD Manager] _notify_callbacks: command type='{cmd_type}', {len(self._command_callbacks)} callback(s)",
-            color=LogType.INFO,
-            server_only=True
-        )
         for i, callback in enumerate(self._command_callbacks):
             try:
                 callback(command)
@@ -236,31 +230,10 @@ class HudManager:
 
     def update_group(self, group_name: str, props: dict[str, Any]) -> bool:
         """Update properties of an existing group."""
-        printr.print(
-            f"[HUD Manager] update_group called: group='{group_name}', props keys={list(props.keys())}",
-            color=LogType.INFO,
-            server_only=True
-        )
-        if 'width' in props:
-            printr.print(
-                f"[HUD Manager] update_group: width={props['width']}",
-                color=LogType.INFO,
-                server_only=True
-            )
         with self._lock:
             if group_name not in self._groups:
-                printr.print(
-                    f"[HUD Manager] update_group: group '{group_name}' NOT FOUND in groups: {list(self._groups.keys())}",
-                    color=LogType.WARNING,
-                    server_only=True
-                )
                 return False
 
-            printr.print(
-                f"[HUD Manager] update_group: group '{group_name}' found, updating props",
-                color=LogType.INFO,
-                server_only=True
-            )
             self._groups[group_name].props.update(props)
 
             self._notify_callbacks({
@@ -324,12 +297,9 @@ class HudManager:
         duration: Optional[float] = None
     ) -> bool:
         """Show a message in a group."""
-        import sys
         with self._lock:
             if group_name not in self._groups:
                 self.create_group(group_name)
-            else:
-                sys.stderr.write(f"[HUD Manager] show_message: using existing group '{group_name}'\n")
 
             self._groups[group_name].current_message = HudMessage(
                 title=title,
@@ -730,4 +700,3 @@ class HudManager:
             self._notify_callbacks({
                 "type": "clear_all"
             })
-

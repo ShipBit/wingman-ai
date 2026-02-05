@@ -469,7 +469,7 @@ class HeadsUpOverlay:
                 # Note: Chat windows use the legacy system for now
 
             except Exception as e:
-                sys.stderr.write(f"[HUD] Window {name} update error: {e}\n")
+                self._report_exception(f"update_window_{name}", e)
 
         # Second pass: check collisions and update persistent windows
         for group, pers_win in persistent_windows.items():
@@ -479,7 +479,7 @@ class HeadsUpOverlay:
                 self._update_persistent_fade(pers_win, collision)
                 self._blit_window(self._get_window_name(self.WINDOW_TYPE_PERSISTENT, group), pers_win)
             except Exception as e:
-                sys.stderr.write(f"[HUD] Persistent window {group} collision error: {e}\n")
+                self._report_exception(f"persistent_collision_{group}", e)
 
         # Third pass: Update ALL window positions from layout manager
         # This ensures windows reposition when others hide/show/resize
@@ -1478,7 +1478,7 @@ class HeadsUpOverlay:
             props_hash
         )
 
-        # Skip render if state hasn't changed
+        # Skip render if state unchanged
         if self.last_render_state == current_state and self.canvas:
             return
 
@@ -2101,7 +2101,7 @@ class HeadsUpOverlay:
                             self._update_chat_windows()
                             self._draw_chat_windows()
                         except Exception as e:
-                            sys.stderr.write(f"Draw chat windows error: {e}\n")
+                            self._report_exception("draw_chat_windows", e)
 
                     now = time.time()
                     if now - last_z > 0.1:
@@ -3184,7 +3184,7 @@ class HeadsUpOverlay:
             try:
                 self._draw_chat_frame(chat_name, chat)
             except Exception as e:
-                sys.stderr.write(f"Draw chat window error: {e}\n")
+                self._report_exception("draw_chat_windows", e)
 
     def _draw_chat_frame(self, chat_name: str, chat: Dict):
         """Draw a single chat window frame with full markdown support."""
