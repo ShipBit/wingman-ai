@@ -54,12 +54,16 @@ class LayoutMode(Enum):
     """Layout modes for window positioning."""
     AUTO = "auto"        # Automatic stacking based on anchor
     MANUAL = "manual"    # User-specified x, y (no auto-adjustment)
-    HYBRID = "hybrid"    # Auto-stack but allow offset adjustments
+    HYBRID = "hybrid"    # Reserved for future use (currently behaves like AUTO)
 
 
 @dataclass
 class WindowInfo:
-    """Information about a window for layout calculations."""
+    """
+    Information about a window for layout calculations.
+
+    Note: The 'group' field is reserved for future collision grouping features.
+    """
     name: str
     anchor: Anchor = Anchor.TOP_LEFT
     mode: LayoutMode = LayoutMode.AUTO
@@ -70,7 +74,7 @@ class WindowInfo:
     margin_y: int = 20
     spacing: int = 10  # Spacing between stacked windows
     visible: bool = True
-    group: Optional[str] = None  # Group name for collision grouping
+    group: Optional[str] = None  # Reserved for future use
 
     # For manual/hybrid mode - user-specified offsets
     manual_x: Optional[int] = None
@@ -299,108 +303,89 @@ class LayoutManager:
         if anchor == Anchor.CENTER:
             # Center mode: each window is centered, no stacking
             for window in windows:
-                if window.mode == LayoutMode.MANUAL:
-                    x = window.manual_x if window.manual_x is not None else self._screen_width // 2 - window.width // 2
-                    y = window.manual_y if window.manual_y is not None else self._screen_height // 2 - window.height // 2
+                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
+                    x, y = window.manual_x, window.manual_y
                 else:
                     x = self._screen_width // 2 - window.width // 2
                     y = self._screen_height // 2 - window.height // 2
                 positions[window.name] = (x, y)
             return positions
 
+        # Helper to handle manual positioning
+        def get_position(window: WindowInfo, auto_x: int, auto_y: int) -> Tuple[int, int]:
+            if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
+                return (window.manual_x, window.manual_y)
+            return (auto_x, auto_y)
+
         # Calculate starting position based on anchor
         if anchor == Anchor.TOP_LEFT:
             # Stack downward from top-left
             current_y = windows[0].margin_y if windows else self._default_margin
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    positions[window.name] = (window.manual_x, window.manual_y)
-                else:
-                    x = window.margin_x
-                    positions[window.name] = (x, current_y)
-                    current_y += window.height + window.spacing
+                x = window.margin_x
+                positions[window.name] = get_position(window, x, current_y)
+                current_y += window.height + window.spacing
 
         elif anchor == Anchor.TOP_RIGHT:
             # Stack downward from top-right
             current_y = windows[0].margin_y if windows else self._default_margin
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    positions[window.name] = (window.manual_x, window.manual_y)
-                else:
-                    x = self._screen_width - window.width - window.margin_x
-                    positions[window.name] = (x, current_y)
-                    current_y += window.height + window.spacing
+                x = self._screen_width - window.width - window.margin_x
+                positions[window.name] = get_position(window, x, current_y)
+                current_y += window.height + window.spacing
 
         elif anchor == Anchor.BOTTOM_LEFT:
             # Stack upward from bottom-left
             current_y = self._screen_height - windows[0].margin_y if windows else self._screen_height - self._default_margin
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    positions[window.name] = (window.manual_x, window.manual_y)
-                else:
-                    x = window.margin_x
-                    y = current_y - window.height
-                    positions[window.name] = (x, y)
-                    current_y = y - window.spacing
+                x = window.margin_x
+                y = current_y - window.height
+                positions[window.name] = get_position(window, x, y)
+                current_y = y - window.spacing
 
         elif anchor == Anchor.BOTTOM_RIGHT:
             # Stack upward from bottom-right
             current_y = self._screen_height - windows[0].margin_y if windows else self._screen_height - self._default_margin
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    positions[window.name] = (window.manual_x, window.manual_y)
-                else:
-                    x = self._screen_width - window.width - window.margin_x
-                    y = current_y - window.height
-                    positions[window.name] = (x, y)
-                    current_y = y - window.spacing
+                x = self._screen_width - window.width - window.margin_x
+                y = current_y - window.height
+                positions[window.name] = get_position(window, x, y)
+                current_y = y - window.spacing
 
         elif anchor == Anchor.TOP_CENTER:
             # Stack downward from top-center
             current_y = windows[0].margin_y if windows else self._default_margin
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    positions[window.name] = (window.manual_x, window.manual_y)
-                else:
-                    x = self._screen_width // 2 - window.width // 2
-                    positions[window.name] = (x, current_y)
-                    current_y += window.height + window.spacing
+                x = self._screen_width // 2 - window.width // 2
+                positions[window.name] = get_position(window, x, current_y)
+                current_y += window.height + window.spacing
 
         elif anchor == Anchor.BOTTOM_CENTER:
             # Stack upward from bottom-center
             current_y = self._screen_height - windows[0].margin_y if windows else self._screen_height - self._default_margin
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    positions[window.name] = (window.manual_x, window.manual_y)
-                else:
-                    x = self._screen_width // 2 - window.width // 2
-                    y = current_y - window.height
-                    positions[window.name] = (x, y)
-                    current_y = y - window.spacing
+                x = self._screen_width // 2 - window.width // 2
+                y = current_y - window.height
+                positions[window.name] = get_position(window, x, y)
+                current_y = y - window.spacing
 
         elif anchor == Anchor.LEFT_CENTER:
             # Stack downward from left-center (starting at vertical middle)
             total_height = sum(w.height + w.spacing for w in windows) - (windows[-1].spacing if windows else 0)
             current_y = (self._screen_height - total_height) // 2
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    positions[window.name] = (window.manual_x, window.manual_y)
-                else:
-                    x = window.margin_x
-                    positions[window.name] = (x, current_y)
-                    current_y += window.height + window.spacing
+                x = window.margin_x
+                positions[window.name] = get_position(window, x, current_y)
+                current_y += window.height + window.spacing
 
         elif anchor == Anchor.RIGHT_CENTER:
             # Stack downward from right-center (starting at vertical middle)
             total_height = sum(w.height + w.spacing for w in windows) - (windows[-1].spacing if windows else 0)
             current_y = (self._screen_height - total_height) // 2
             for window in windows:
-                if window.mode == LayoutMode.MANUAL and window.manual_x is not None and window.manual_y is not None:
-                    positions[window.name] = (window.manual_x, window.manual_y)
-                else:
-                    x = self._screen_width - window.width - window.margin_x
-                    positions[window.name] = (x, current_y)
-                    current_y += window.height + window.spacing
+                x = self._screen_width - window.width - window.margin_x
+                positions[window.name] = get_position(window, x, current_y)
+                current_y += window.height + window.spacing
 
         return positions
 
@@ -477,7 +462,12 @@ class LayoutManager:
             return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, dict], screen_width: int = 1920, screen_height: int = 1080) -> "LayoutManager":
+    def from_dict(
+        cls,
+        data: Dict[str, dict],
+        screen_width: int = 1920,
+        screen_height: int = 1080
+    ) -> "LayoutManager":
         """Create layout manager from dictionary."""
         manager = cls(screen_width=screen_width, screen_height=screen_height)
         for name, window_data in data.items():
