@@ -843,9 +843,13 @@ class HeadsUpOverlay:
             self._draw_loading(draw, temp, padding, y, width - padding * 2, loading_color)
             y += 24
 
-        # Calculate final height
+        # Calculate final height - use fixed height if specified
+        fixed_height = props.get('height')
         bottom_padding = padding - 4
-        final_h = min(max(60, y + bottom_padding), max_height)
+        if fixed_height is not None:
+            final_h = int(fixed_height)
+        else:
+            final_h = min(max(60, y + bottom_padding), max_height)
 
         # Create final canvas - ALWAYS create fresh to prevent ghosting
         old_canvas = win.get('canvas')

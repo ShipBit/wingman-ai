@@ -11,6 +11,7 @@ Usage:
     python -m hud_server.tests.run_tests --unicode    # Run Unicode/emoji stress tests
     python -m hud_server.tests.run_tests --layout     # Run layout manager unit tests (no server needed)
     python -m hud_server.tests.run_tests --layout-visual  # Run visual layout tests with actual HUD windows
+    python -m hud_server.tests.run_tests --snake      # Run the Snake game (interactive, 2 min)
 """
 import sys
 import asyncio
@@ -134,6 +135,10 @@ def main():
             # Visual layout tests need the full server
             from hud_server.tests.test_layout_visual import main as layout_visual_main
             asyncio.run(layout_visual_main())
+        elif arg == "snake":
+            # Snake game - interactive fun test
+            from hud_server.tests.test_snake import run_snake_test
+            asyncio.run(run_snake_test())
         elif arg in ["messages", "progress", "persistent", "chat", "unicode", "all"]:
             asyncio.run(run_test_suite(arg))
         elif arg == "help":

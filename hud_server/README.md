@@ -491,6 +491,7 @@ python -m hud_server.tests.run_tests --chat             # Run chat tests
 python -m hud_server.tests.run_tests --unicode          # Run Unicode/emoji stress tests
 python -m hud_server.tests.run_tests --layout           # Run layout manager unit tests (no server needed)
 python -m hud_server.tests.run_tests --layout-visual    # Run visual layout tests with actual HUD windows
+python -m hud_server.tests.run_tests --snake            # You know this one ...
 ```
 
 ## Troubleshooting

@@ -50,8 +50,10 @@ class HudGroupProps(BaseModel):
     # Position & Size
     x: int = Field(default=20, ge=-5000, le=10000)
     y: int = Field(default=20, ge=-5000, le=10000)
-    width: int = Field(default=400, ge=100, le=3840)
-    max_height: int = Field(default=600, ge=100, le=2160)
+    width: int = Field(default=400, ge=10, le=3840)
+    height: Optional[int] = Field(default=None, ge=10, le=2160)
+    """Fixed height in pixels. If set, overrides dynamic height calculation."""
+    max_height: int = Field(default=600, ge=10, le=2160)
 
     # Colors (hex format)
     bg_color: str = Field(default="#1e212b", pattern=r"^#[0-9a-fA-F]{6}$")
