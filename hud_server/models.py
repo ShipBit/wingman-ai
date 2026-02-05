@@ -1,9 +1,11 @@
 """
 Pydantic Models for HUD Server API.
+
+Defines all request/response models and configuration schemas for the HUD Server.
 """
 
 from typing import Optional, Any
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 # ─────────────────────────────── Configuration ─────────────────────────────── #
@@ -15,20 +17,28 @@ class HudServerSettings(BaseModel):
     enabled: bool = False
     """Whether the HUD server should auto-start with Wingman AI Core."""
 
-    host: str = "127.0.0.1"
+    host: str = Field(default="127.0.0.1", pattern=r"^(\d{1,3}\.){3}\d{1,3}$|^localhost$|^0\.0\.0\.0$")
     """The interface to listen on. Use '127.0.0.1' for local only, '0.0.0.0' for LAN access."""
 
-    port: int = 7862
-    """The port to listen on."""
+    port: int = Field(default=7862, ge=1024, le=65535)
+    """The port to listen on. Must be between 1024 and 65535."""
 
-    framerate: int = 60
-    """HUD overlay rendering framerate. Minimum 1."""
+    framerate: int = Field(default=60, ge=1, le=240)
+    """HUD overlay rendering framerate. Between 1 and 240 FPS."""
 
-    layout_margin: int = 20
-    """Margin from screen edges in pixels for HUD elements."""
+    layout_margin: int = Field(default=20, ge=0, le=200)
+    """Margin from screen edges in pixels for HUD elements. Between 0 and 200."""
 
-    layout_spacing: int = 15
-    """Spacing between stacked HUD windows in pixels."""
+    layout_spacing: int = Field(default=15, ge=0, le=100)
+    """Spacing between stacked HUD windows in pixels. Between 0 and 100."""
+
+    @field_validator('host')
+    @classmethod
+    def validate_host(cls, v: str) -> str:
+        """Validate host is a valid IP address or hostname."""
+        if v not in ['localhost', '0.0.0.0'] and not all(0 <= int(part) <= 255 for part in v.split('.')):
+            raise ValueError('Invalid IP address format')
+        return v
 
 
 # ─────────────────────────────── Group Properties ─────────────────────────────── #
@@ -38,43 +48,43 @@ class HudGroupProps(BaseModel):
     """Properties for a HUD group. All properties are optional when updating."""
 
     # Position & Size
-    x: int = 20
-    y: int = 20
-    width: int = 400
-    max_height: int = 600
+    x: int = Field(default=20, ge=-5000, le=10000)
+    y: int = Field(default=20, ge=-5000, le=10000)
+    width: int = Field(default=400, ge=100, le=3840)
+    max_height: int = Field(default=600, ge=100, le=2160)
 
-    # Colors
-    bg_color: str = "#1e212b"
-    text_color: str = "#f0f0f0"
-    accent_color: str = "#00aaff"
-    title_color: Optional[str] = None
+    # Colors (hex format)
+    bg_color: str = Field(default="#1e212b", pattern=r"^#[0-9a-fA-F]{6}$")
+    text_color: str = Field(default="#f0f0f0", pattern=r"^#[0-9a-fA-F]{6}$")
+    accent_color: str = Field(default="#00aaff", pattern=r"^#[0-9a-fA-F]{6}$")
+    title_color: Optional[str] = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
 
     # Visual
-    opacity: float = 0.85
-    border_radius: int = 12
-    font_size: int = 16
+    opacity: float = Field(default=0.85, ge=0.0, le=1.0)
+    border_radius: int = Field(default=12, ge=0, le=50)
+    font_size: int = Field(default=16, ge=8, le=72)
     font_family: str = "Segoe UI"
-    content_padding: int = 16
+    content_padding: int = Field(default=16, ge=0, le=100)
 
     # Behavior
     typewriter_effect: bool = True
-    typewriter_speed: int = 200
+    typewriter_speed: int = Field(default=200, ge=1, le=1000)
     show_loader: bool = True
     auto_fade: bool = True
-    fade_delay: float = 8.0
-    fade_duration: float = 0.5
+    fade_delay: float = Field(default=8.0, ge=0.0, le=300.0)
+    fade_duration: float = Field(default=0.5, ge=0.1, le=10.0)
 
     # Rendering
-    z_order: int = 0
+    z_order: int = Field(default=0, ge=-1000, le=1000)
 
     # Layout Management
-    layout_mode: str = "auto"
+    layout_mode: str = Field(default="auto", pattern=r"^(auto|manual|hybrid)$")
     """Layout mode: 'auto' (automatic stacking), 'manual' (fixed x,y), 'hybrid' (auto with offset)."""
 
-    anchor: str = "top_left"
+    anchor: str = Field(default="top_left", pattern=r"^(top_left|top_right|bottom_left|bottom_right|center)$")
     """Screen anchor for auto layout: 'top_left', 'top_right', 'bottom_left', 'bottom_right', 'center'."""
 
-    priority: int = 10
+    priority: int = Field(default=10, ge=0, le=100)
     """Stacking priority within anchor zone. Higher = closer to anchor point."""
 
 
@@ -137,16 +147,16 @@ class UpdateGroupRequest(BaseModel):
 class MessageRequest(BaseModel):
     """Request to show a message in a group."""
 
-    group_name: str
+    group_name: str = Field(..., min_length=1, max_length=100)
     """Name of the HUD group."""
 
-    title: str
+    title: str = Field(..., min_length=1, max_length=200)
     """Message title."""
 
-    content: str
+    content: str = Field(..., max_length=50000)
     """Message content (supports Markdown)."""
 
-    color: Optional[str] = None
+    color: Optional[str] = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
     """Optional title/accent color override."""
 
     tools: Optional[list[dict[str, Any]]] = None
@@ -155,8 +165,8 @@ class MessageRequest(BaseModel):
     props: Optional[dict[str, Any]] = None
     """Optional property overrides for this message."""
 
-    duration: Optional[float] = None
-    """Optional duration in seconds before auto-hide."""
+    duration: Optional[float] = Field(default=None, ge=0.1, le=3600.0)
+    """Optional duration in seconds before auto-hide (0.1 to 3600)."""
 
 
 class AppendMessageRequest(BaseModel):

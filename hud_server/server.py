@@ -8,6 +8,7 @@ It runs in its own thread with its own event loop.
 import asyncio
 import threading
 import queue
+import time
 from typing import Optional, Any
 from contextlib import asynccontextmanager
 
@@ -23,6 +24,7 @@ from starlette.responses import JSONResponse
 from api.enums import LogType
 from services.printr import Printr
 from hud_server.hud_manager import HudManager
+from hud_server import constants as hud_const
 from hud_server.models import (
     CreateGroupRequest,
     UpdateGroupRequest,
@@ -52,7 +54,8 @@ try:
     HeadsUpOverlay = _HeadsUpOverlay
     PIL_AVAILABLE = _PIL_AVAILABLE
 except ImportError:
-    pass
+    _HeadsUpOverlay = None
+    _PIL_AVAILABLE = False
 
 printr = Printr()
 
@@ -68,16 +71,27 @@ class HudServer:
 
     VERSION = "1.0.0"
 
+    # Default configuration constants (from constants module)
+    DEFAULT_HOST = hud_const.DEFAULT_HOST
+    DEFAULT_PORT = hud_const.DEFAULT_PORT
+    DEFAULT_FRAMERATE = hud_const.DEFAULT_FRAMERATE
+    DEFAULT_LAYOUT_MARGIN = hud_const.DEFAULT_LAYOUT_MARGIN
+    DEFAULT_LAYOUT_SPACING = hud_const.DEFAULT_LAYOUT_SPACING
+
+    # Server startup timeout
+    STARTUP_TIMEOUT_SECONDS = hud_const.SERVER_STARTUP_TIMEOUT
+    STARTUP_CHECK_INTERVAL = hud_const.SERVER_STARTUP_CHECK_INTERVAL
+
     def __init__(self):
         self._thread: Optional[threading.Thread] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._server: Optional[Server] = None
         self._running = False
-        self._host = "127.0.0.1"
-        self._port = 7862
-        self._framerate = 60
-        self._layout_margin = 20
-        self._layout_spacing = 15
+        self._host = self.DEFAULT_HOST
+        self._port = self.DEFAULT_PORT
+        self._framerate = self.DEFAULT_FRAMERATE
+        self._layout_margin = self.DEFAULT_LAYOUT_MARGIN
+        self._layout_spacing = self.DEFAULT_LAYOUT_SPACING
 
         # HUD state manager
         self.manager = HudManager()
@@ -421,9 +435,19 @@ class HudServer:
     def _start_overlay(self):
         """Start the overlay renderer in a background thread (if available)."""
         if not OVERLAY_AVAILABLE or HeadsUpOverlay is None:
+            printr.print(
+                hud_const.LOG_OVERLAY_NOT_AVAILABLE,
+                color=LogType.WARNING,
+                server_only=True
+            )
             return
 
         if self._overlay_thread and self._overlay_thread.is_alive():
+            printr.print(
+                hud_const.LOG_OVERLAY_ALREADY_RUNNING,
+                color=LogType.WARNING,
+                server_only=True
+            )
             return
 
         try:
@@ -444,28 +468,66 @@ class HudServer:
             self._overlay_thread = threading.Thread(
                 target=self._overlay.run,
                 daemon=True,
-                name="HUDOverlayThread"
+                name=hud_const.THREAD_NAME_OVERLAY
             )
             self._overlay_thread.start()
 
-        except Exception:
-            pass  # Overlay is optional
+            printr.print(
+                hud_const.LOG_OVERLAY_STARTED,
+                color=LogType.INFO,
+                server_only=True
+            )
+
+        except Exception as e:
+            printr.print(
+                f"[HUD Server] Failed to start overlay: {type(e).__name__}: {e}",
+                color=LogType.ERROR,
+                server_only=True
+            )
+            # Overlay is optional, so we continue without it
 
     def _stop_overlay(self):
         """Stop the overlay renderer."""
-        if self._command_queue:
-            try:
-                self._command_queue.put({"type": "quit"})
-            except Exception:
-                pass
+        if not self._command_queue and not self._overlay_thread:
+            return
 
-        if self._overlay_thread:
-            self._overlay_thread.join(timeout=2.0)
-            self._overlay_thread = None
+        try:
+            if self._command_queue:
+                try:
+                    self._command_queue.put({"type": "quit"}, timeout=1.0)
+                except Exception as e:
+                    printr.print(
+                        f"[HUD Server] Failed to send quit command to overlay: {e}",
+                        color=LogType.WARNING,
+                        server_only=True
+                    )
 
-        self._overlay = None
-        self._command_queue = None
-        self.manager.unregister_command_callback(self._send_to_overlay)
+            if self._overlay_thread:
+                self._overlay_thread.join(timeout=hud_const.OVERLAY_SHUTDOWN_TIMEOUT)
+                if self._overlay_thread.is_alive():
+                    printr.print(
+                        "[HUD Server] Overlay thread did not stop gracefully",
+                        color=LogType.WARNING,
+                        server_only=True
+                    )
+                self._overlay_thread = None
+
+            self._overlay = None
+            self._command_queue = None
+            self.manager.unregister_command_callback(self._send_to_overlay)
+
+            printr.print(
+                hud_const.LOG_OVERLAY_STOPPED,
+                color=LogType.INFO,
+                server_only=True
+            )
+
+        except Exception as e:
+            printr.print(
+                f"[HUD Server] Error stopping overlay: {type(e).__name__}: {e}",
+                color=LogType.ERROR,
+                server_only=True
+            )
 
     def _send_to_overlay(self, command: dict[str, Any]):
         """Send a command to the overlay renderer."""
@@ -481,8 +543,8 @@ class HudServer:
 
     # ─────────────────────────────── Server Lifecycle ─────────────────────────────── #
 
-    def start(self, host: str = "127.0.0.1", port: int = 7862, framerate: int = 60,
-               layout_margin: int = 20, layout_spacing: int = 15) -> bool:
+    def start(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, framerate: int = DEFAULT_FRAMERATE,
+               layout_margin: int = DEFAULT_LAYOUT_MARGIN, layout_spacing: int = DEFAULT_LAYOUT_SPACING) -> bool:
         """
         Start the HUD server in a background thread.
 
@@ -497,6 +559,11 @@ class HudServer:
             True if server started successfully
         """
         if self._running:
+            printr.print(
+                hud_const.LOG_SERVER_ALREADY_RUNNING,
+                color=LogType.WARNING,
+                server_only=True
+            )
             return True
 
         self._host = host
@@ -508,46 +575,60 @@ class HudServer:
         self._thread = threading.Thread(
             target=self._run_server,
             daemon=True,
-            name="HUDServerThread"
+            name=hud_const.THREAD_NAME_SERVER
         )
         self._thread.start()
 
-        # Wait briefly for server to start
-        import time
-        for _ in range(50):  # 5 seconds max
-            time.sleep(0.1)
+        # Wait for server to start
+        max_checks = int(self.STARTUP_TIMEOUT_SECONDS / self.STARTUP_CHECK_INTERVAL)
+        for _ in range(max_checks):
+            time.sleep(self.STARTUP_CHECK_INTERVAL)
             if self._running:
                 printr.print(
-                    f"HUD Server started on http://{self._host}:{self._port}",
+                    hud_const.LOG_SERVER_STARTED.format(self._host, self._port),
                     color=LogType.INFO,
                     server_only=True
                 )
                 return True
 
+        printr.print(
+            hud_const.LOG_SERVER_STARTUP_TIMEOUT.format(self.STARTUP_TIMEOUT_SECONDS),
+            color=LogType.ERROR,
+            server_only=True
+        )
         return False
 
     def _run_server(self):
         """Run the server in its own thread with its own event loop."""
-        self._loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self._loop)
-
-        config = Config(
-            app=self.app,
-            host=self._host,
-            port=self._port,
-            log_level="warning",
-            access_log=False,
-        )
-        self._server = Server(config)
-
-        self._running = True
-
         try:
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+
+            config = Config(
+                app=self.app,
+                host=self._host,
+                port=self._port,
+                log_level="warning",
+                access_log=False,
+            )
+            self._server = Server(config)
+
+            self._running = True
+
             self._loop.run_until_complete(self._server.serve())
-        except Exception:
-            pass
+        except Exception as e:
+            printr.print(
+                f"[HUD Server] Server error: {type(e).__name__}: {e}",
+                color=LogType.ERROR,
+                server_only=True
+            )
         finally:
             self._running = False
+            printr.print(
+                "[HUD Server] Server loop exited",
+                color=LogType.INFO,
+                server_only=True
+            )
 
     async def stop(self):
         """Stop the HUD server."""
@@ -565,14 +646,14 @@ class HudServer:
 
         # Wait for thread to finish
         if self._thread:
-            self._thread.join(timeout=5.0)
+            self._thread.join(timeout=hud_const.SERVER_SHUTDOWN_TIMEOUT)
             self._thread = None
 
         self._server = None
         self._loop = None
 
         printr.print(
-            "HUD Server stopped",
+            hud_const.LOG_SERVER_STOPPED,
             color=LogType.INFO,
             server_only=True
         )

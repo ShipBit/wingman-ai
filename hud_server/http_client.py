@@ -21,7 +21,9 @@ import time
 import httpx
 from typing import Optional, Any
 from urllib.parse import quote
+from api.enums import LogType
 from services.printr import Printr
+from hud_server import constants as hud_const
 
 printr = Printr()
 
@@ -29,7 +31,12 @@ printr = Printr()
 class HudHttpClient:
     """Async HTTP client for the HUD Server."""
 
-    def __init__(self, base_url: str = "http://127.0.0.1:7862"):
+    # Timeout constants
+    DEFAULT_CONNECT_TIMEOUT = hud_const.HTTP_CONNECT_TIMEOUT
+    DEFAULT_REQUEST_TIMEOUT = hud_const.HTTP_REQUEST_TIMEOUT
+    RECONNECT_ATTEMPTS = 1
+
+    def __init__(self, base_url: str = f"http://{hud_const.DEFAULT_HOST}:{hud_const.DEFAULT_PORT}"):
         self.base_url = base_url.rstrip("/")
         self._client: Optional[httpx.AsyncClient] = None
         self._connected = False
@@ -38,15 +45,23 @@ class HudHttpClient:
     def connected(self) -> bool:
         return self._connected
 
-    async def connect(self, timeout: float = 5.0) -> bool:
-        """Connect to the HUD server."""
+    async def connect(self, timeout: float = DEFAULT_CONNECT_TIMEOUT) -> bool:
+        """
+        Connect to the HUD server.
+
+        Args:
+            timeout: Connection timeout in seconds
+
+        Returns:
+            True if connection successful, False otherwise
+        """
         try:
             # Close existing client if any - ignore all errors since the loop might be closed
             if self._client:
                 try:
                     await self._client.aclose()
                 except Exception:
-                    pass
+                    pass  # Expected during cleanup
                 self._client = None
 
             self._client = httpx.AsyncClient(
@@ -63,7 +78,17 @@ class HudHttpClient:
                 self._connected = True
                 return True
             return False
-        except Exception:
+        except httpx.ConnectError:
+            # Server not reachable - expected during startup/shutdown
+            self._connected = False
+            return False
+        except Exception as e:
+            # Unexpected error - log it
+            printr.print(
+                f"[HUD HTTP Client] Unexpected connection error: {type(e).__name__}: {e}",
+                color=LogType.WARNING,
+                server_only=True
+            )
             self._connected = False
             return False
 
@@ -87,7 +112,17 @@ class HudHttpClient:
         path: str,
         json: Optional[dict] = None
     ) -> Optional[dict]:
-        """Make an HTTP request to the server."""
+        """
+        Make an HTTP request to the server.
+
+        Args:
+            method: HTTP method (GET, POST, PUT, DELETE)
+            path: URL path
+            json: Optional JSON payload
+
+        Returns:
+            Response JSON dict if successful, None otherwise
+        """
 
         # Reconnect if not connected (either no client or marked as disconnected)
         if not self._client or not self._connected:
@@ -105,12 +140,24 @@ class HudHttpClient:
             elif method == "DELETE":
                 return await self._client.delete(path)
             else:
+                printr.print(
+                    f"[HUD HTTP Client] Unsupported HTTP method: {method}",
+                    color=LogType.ERROR,
+                    server_only=True
+                )
                 return None
 
         try:
             response = await _execute_request()
             if response and 200 <= response.status_code < 300:
                 return response.json()
+            elif response:
+                # Log non-2xx responses for debugging
+                printr.print(
+                    f"[HUD HTTP Client] Request {method} {path} failed with status {response.status_code}",
+                    color=LogType.WARNING,
+                    server_only=True
+                )
             return None
         except RuntimeError as e:
             # Handle "Event loop is closed" error by reconnecting
@@ -124,10 +171,19 @@ class HudHttpClient:
                         if response and 200 <= response.status_code < 300:
                             return response.json()
                     except Exception:
-                        pass
+                        pass  # Give up after retry
             self._connected = False
             return None
-        except Exception:
+        except httpx.ConnectError:
+            # Server not reachable - don't spam logs
+            self._connected = False
+            return None
+        except Exception as e:
+            printr.print(
+                f"[HUD HTTP Client] Request {method} {path} error: {type(e).__name__}: {e}",
+                color=LogType.WARNING,
+                server_only=True
+            )
             self._connected = False
             return None
 
@@ -452,49 +508,112 @@ class HudHttpClientSync:
     Synchronous wrapper for HudHttpClient.
 
     Useful for non-async code that needs to interact with the HUD server.
+    Uses a background event loop in a dedicated thread for async operations.
     """
 
-    def __init__(self, base_url: str = "http://127.0.0.1:7862"):
+    # Timeout for synchronous operations
+    SYNC_OPERATION_TIMEOUT = hud_const.SYNC_OPERATION_TIMEOUT
+
+    def __init__(self, base_url: str = f"http://{hud_const.DEFAULT_HOST}:{hud_const.DEFAULT_PORT}"):
         self._base_url = base_url
         self._client: Optional[HudHttpClient] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
+        self._loop_started = threading.Event()
 
-    def _ensure_loop(self):
+    def _ensure_loop(self) -> None:
         """Ensure event loop is running in background thread."""
-        if self._loop is None or not self._loop.is_running():
-            self._loop = asyncio.new_event_loop()
-            self._thread = threading.Thread(target=self._run_loop, daemon=True)
-            self._thread.start()
-            time.sleep(0.1)
+        with self._lock:
+            if self._loop is None or not self._loop.is_running():
+                self._loop_started.clear()
+                self._loop = asyncio.new_event_loop()
+                self._thread = threading.Thread(
+                    target=self._run_loop,
+                    daemon=True,
+                    name=hud_const.THREAD_NAME_CLIENT_LOOP
+                )
+                self._thread.start()
+                # Wait for loop to start
+                if not self._loop_started.wait(timeout=5.0):
+                    printr.print(
+                        "[HUD HTTP Client Sync] Event loop failed to start",
+                        color=LogType.ERROR,
+                        server_only=True
+                    )
 
-    def _run_loop(self):
+    def _run_loop(self) -> None:
         """Run event loop in background thread."""
         asyncio.set_event_loop(self._loop)
-        self._loop.run_forever()
+        self._loop_started.set()
+        try:
+            self._loop.run_forever()
+        except Exception as e:
+            printr.print(
+                f"[HUD HTTP Client Sync] Event loop error: {type(e).__name__}: {e}",
+                color=LogType.ERROR,
+                server_only=True
+            )
 
     def _run_coro(self, coro):
         """Run a coroutine in the background event loop."""
         self._ensure_loop()
-        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-        return future.result(timeout=10.0)
+        try:
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+            return future.result(timeout=self.SYNC_OPERATION_TIMEOUT)
+        except TimeoutError:
+            printr.print(
+                f"[HUD HTTP Client Sync] Operation timed out after {self.SYNC_OPERATION_TIMEOUT}s",
+                color=LogType.WARNING,
+                server_only=True
+            )
+            return None
+        except Exception as e:
+            printr.print(
+                f"[HUD HTTP Client Sync] Operation error: {type(e).__name__}: {e}",
+                color=LogType.WARNING,
+                server_only=True
+            )
+            return None
 
     @property
     def connected(self) -> bool:
+        """Check if client is connected to server."""
         return self._client is not None and self._client.connected
 
-    def connect(self, timeout: float = 5.0) -> bool:
+    def connect(self, timeout: float = HudHttpClient.DEFAULT_CONNECT_TIMEOUT) -> bool:
+        """
+        Connect to the HUD server.
+
+        Args:
+            timeout: Connection timeout in seconds
+
+        Returns:
+            True if connection successful
+        """
         with self._lock:
             self._ensure_loop()
             self._client = HudHttpClient(self._base_url)
-            return self._run_coro(self._client.connect(timeout))
+            result = self._run_coro(self._client.connect(timeout))
+            return result if result is not None else False
 
-    def disconnect(self):
+    def disconnect(self) -> None:
+        """Disconnect from the HUD server and cleanup resources."""
         with self._lock:
             if self._client:
                 self._run_coro(self._client.disconnect())
                 self._client = None
+
+            # Stop the event loop
+            if self._loop and self._loop.is_running():
+                self._loop.call_soon_threadsafe(self._loop.stop)
+
+            # Wait for thread to finish
+            if self._thread and self._thread.is_alive():
+                self._thread.join(timeout=2.0)
+                self._thread = None
+
+            self._loop = None
 
     def __enter__(self):
         self.connect()

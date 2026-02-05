@@ -3,10 +3,14 @@ Layout Manager - Automatic positioning and stacking for HUD elements.
 
 This module provides intelligent layout management to prevent HUD element overlap:
 
-1. **Anchor System**: Elements anchor to screen corners (top-left, top-right, bottom-left, bottom-right)
+1. **Anchor System**: Elements anchor to screen corners and edges (9 anchor points)
 2. **Automatic Stacking**: Elements at the same anchor stack vertically with configurable spacing
 3. **Dynamic Reflow**: When element heights change, others reposition automatically
 4. **Priority Ordering**: Elements can be ordered by priority within an anchor zone
+5. **Visibility Awareness**: Hidden elements don't occupy space
+
+For complete documentation including visual diagrams and examples, see:
+    hud_server/README.md - Layout System section
 
 Usage:
     from hud_server.layout import LayoutManager, Anchor
@@ -200,7 +204,6 @@ class LayoutManager:
 
         Returns True if window exists and was updated.
         """
-        import sys
         with self._lock:
             window = self._windows.get(name)
             if not window:

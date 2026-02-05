@@ -177,6 +177,7 @@ class HudManager:
     Manages all HUD groups and their state.
 
     Thread-safe for concurrent access from multiple clients.
+    Supports callbacks for real-time overlay integration.
     """
 
     def __init__(self):
@@ -184,26 +185,37 @@ class HudManager:
         self._lock = threading.RLock()
         self._command_callbacks: list = []  # Callbacks for overlay integration
 
-    def register_command_callback(self, callback):
-        """Register a callback to receive commands for overlay rendering."""
+    def register_command_callback(self, callback) -> None:
+        """
+        Register a callback to receive commands for overlay rendering.
+
+        Args:
+            callback: Callable that accepts a dict command parameter
+        """
         with self._lock:
             if callback not in self._command_callbacks:
                 self._command_callbacks.append(callback)
 
-    def unregister_command_callback(self, callback):
-        """Unregister a command callback."""
+    def unregister_command_callback(self, callback) -> None:
+        """
+        Unregister a command callback.
+
+        Args:
+            callback: Previously registered callback to remove
+        """
         with self._lock:
             if callback in self._command_callbacks:
                 self._command_callbacks.remove(callback)
 
-    def _notify_callbacks(self, command: dict[str, Any]):
+    def _notify_callbacks(self, command: dict[str, Any]) -> None:
         """Notify all registered callbacks of a command."""
         for i, callback in enumerate(self._command_callbacks):
             try:
                 callback(command)
             except Exception as e:
                 printr.print(
-                    f"[HUD Manager] _notify_callbacks: callback {i} FAILED: {e}",
+                    f"[HUD Manager] Callback {i} failed for command '{command.get('type', 'unknown')}': "
+                    f"{type(e).__name__}: {e}",
                     color=LogType.ERROR,
                     server_only=True
                 )
@@ -692,8 +704,12 @@ class HudManager:
 
             return True
 
-    def clear_all(self):
-        """Clear all groups (fresh start)."""
+    def clear_all(self) -> None:
+        """
+        Clear all groups and reset state (fresh start).
+
+        Useful for resetting the HUD system without restarting the server.
+        """
         with self._lock:
             self._groups.clear()
 
