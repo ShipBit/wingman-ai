@@ -5,6 +5,7 @@ Tests the chat window HUD type with:
 - Natural conversation flow with realistic timing
 - Full markdown support in messages
 - Multiple participants with custom colors
+- Consecutive same-sender message merging
 - Auto-hide and manual show/hide
 - Message overflow with fade effect
 """
@@ -231,12 +232,15 @@ async def test_chat_markdown(session: TestSession):
     )
     await asyncio.sleep(0.5)
 
-    # Test various markdown features
+    # Test various markdown features (alternate senders so each renders separately)
     await session.send_chat_message(chat_name, "User", "Show me markdown features")
     await asyncio.sleep(1.5)
 
     await session.send_chat_message(chat_name, session.name,
         "**Bold**, *italic*, `code`, ~~strike~~")
+    await asyncio.sleep(1.5)
+
+    await session.send_chat_message(chat_name, "User", "How about lists?")
     await asyncio.sleep(1.5)
 
     await session.send_chat_message(chat_name, session.name, """Here's a list:
@@ -246,11 +250,17 @@ async def test_chat_markdown(session: TestSession):
 - Third item""")
     await asyncio.sleep(2)
 
+    await session.send_chat_message(chat_name, "User", "And code?")
+    await asyncio.sleep(1.5)
+
     await session.send_chat_message(chat_name, session.name, """Code block:
 ```python
 print("Hello!")
 ```""")
     await asyncio.sleep(2)
+
+    await session.send_chat_message(chat_name, "User", "Tables?")
+    await asyncio.sleep(1.5)
 
     await session.send_chat_message(chat_name, session.name, """| Col1 | Col2 |
 |------|------|
@@ -326,7 +336,7 @@ async def test_chat_auto_hide(session: TestSession):
 
     await session.send_chat_message(chat_name, "Test", "This will auto-hide in 3 seconds...")
     await asyncio.sleep(1)
-    await session.send_chat_message(chat_name, "Test", "Timer resets with each message")
+    await session.send_chat_message(chat_name, "Info", "Timer resets with each message")
     await asyncio.sleep(4)  # Wait for auto-hide
 
     # Should be hidden now, send new message to show again
@@ -354,14 +364,57 @@ async def test_chat_overflow(session: TestSession):
     )
     await asyncio.sleep(0.5)
 
-    # Send many messages to overflow
+    # Send many messages to overflow (unique senders per message to prevent merging)
     for i in range(15):
-        await session.send_chat_message(chat_name, f"User{i%3}", f"Message #{i+1}: Testing overflow behavior")
+        await session.send_chat_message(chat_name, f"User{i}", f"Message #{i+1}: Testing overflow behavior")
         await asyncio.sleep(0.4)
 
     await asyncio.sleep(2)
     await session.delete_chat_window(chat_name)
     print(f"[{session.name}] Overflow test complete")
+
+
+async def test_chat_message_merging(session: TestSession):
+    """Test that consecutive messages from the same sender are merged."""
+    print(f"[{session.name}] Testing message merging...")
+
+    chat_name = f"merge_{session.session_id}"
+
+    await session.create_chat_window(
+        name=chat_name,
+        anchor=session.config.get("anchor", "top_left"),
+        priority=45,
+        layout_mode="auto",
+        width=400,
+        max_height=300,
+        auto_hide=False,
+        sender_colors={
+            "Alice": "#4cd964",
+            "Bob": "#00aaff",
+        },
+    )
+    await asyncio.sleep(0.5)
+
+    # Same sender consecutive - should merge into one block
+    await session.send_chat_message(chat_name, "Alice", "Hello!")
+    await asyncio.sleep(0.8)
+    await session.send_chat_message(chat_name, "Alice", "How are you?")
+    await asyncio.sleep(0.8)
+    await session.send_chat_message(chat_name, "Alice", "I have a question.")
+    await asyncio.sleep(1.5)
+
+    # Different sender - should start a new block
+    await session.send_chat_message(chat_name, "Bob", "Hi Alice!")
+    await asyncio.sleep(0.8)
+    await session.send_chat_message(chat_name, "Bob", "I'm doing great.")
+    await asyncio.sleep(1.5)
+
+    # Switch back - new block for Alice again
+    await session.send_chat_message(chat_name, "Alice", "Glad to hear it!")
+    await asyncio.sleep(2)
+
+    await session.delete_chat_window(chat_name)
+    print(f"[{session.name}] Message merging test complete")
 
 
 async def test_chat_wingman(session: TestSession):
@@ -388,6 +441,8 @@ async def run_all_chat_tests(session: TestSession):
     await test_chat_basic(session)
     await asyncio.sleep(1)
     await test_chat_markdown(session)
+    await asyncio.sleep(1)
+    await test_chat_message_merging(session)
     await asyncio.sleep(1)
     await test_chat_auto_hide(session)
     await asyncio.sleep(1)

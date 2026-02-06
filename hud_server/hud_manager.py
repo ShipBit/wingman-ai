@@ -638,11 +638,19 @@ class HudManager:
                 return False
 
             state = self._groups[window_name]
-            state.chat_messages.append(ChatMessage(
-                sender=sender,
-                text=text,
-                color=color
-            ))
+
+            # Append to last message if same sender
+            if (
+                state.chat_messages
+                and state.chat_messages[-1].sender == sender
+            ):
+                state.chat_messages[-1].text += " " + text
+            else:
+                state.chat_messages.append(ChatMessage(
+                    sender=sender,
+                    text=text,
+                    color=color
+                ))
 
             # Limit chat history
             max_messages = state.props.get("max_messages", 50)

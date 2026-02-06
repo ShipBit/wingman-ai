@@ -2444,14 +2444,25 @@ class HeadsUpOverlay:
                 window_name = f"chat_{chat_name}"
                 if chat_name and window_name in self._windows:
                     now = time.time()
-                    message = {
-                        'sender': msg.get('sender', ''),
-                        'text': msg.get('text', ''),
-                        'color': msg.get('color'),
-                        'timestamp': now,
-                    }
                     win = self._windows[window_name]
-                    win['messages'].append(message)
+                    sender = msg.get('sender', '')
+
+                    # Append to last message if same sender
+                    if (
+                        win['messages']
+                        and win['messages'][-1]['sender'] == sender
+                    ):
+                        win['messages'][-1]['text'] += " " + msg.get('text', '')
+                        win['messages'][-1]['timestamp'] = now
+                    else:
+                        message = {
+                            'sender': sender,
+                            'text': msg.get('text', ''),
+                            'color': msg.get('color'),
+                            'timestamp': now,
+                        }
+                        win['messages'].append(message)
+
                     win['last_message_time'] = now
 
                     # Trim old messages if over limit
