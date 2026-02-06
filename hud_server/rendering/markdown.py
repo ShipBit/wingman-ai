@@ -6,6 +6,7 @@ This implementation uses ONLY:
 - Win32 API for window management
 """
 
+import copy
 import os
 import re
 from typing import Tuple, Dict, List
@@ -24,9 +25,27 @@ except ImportError:
     ImageFont = None
     ImageChops = None
 
+# Import cache size constants (with fallback defaults for standalone usage)
+try:
+    from hud_server.constants import (
+        MAX_IMAGE_CACHE_SIZE,
+        MAX_INLINE_TOKEN_CACHE_SIZE,
+        MAX_TEXT_WRAP_CACHE_SIZE,
+        MAX_TEXT_SIZE_CACHE_SIZE,
+    )
+except ImportError:
+    # Fallback defaults for standalone testing
+    MAX_IMAGE_CACHE_SIZE = 20
+    MAX_INLINE_TOKEN_CACHE_SIZE = 100
+    MAX_TEXT_WRAP_CACHE_SIZE = 200
+    MAX_TEXT_SIZE_CACHE_SIZE = 2000
+
 
 class MarkdownRenderer:
-    """Full-featured Markdown renderer with typewriter support."""
+    """Full-featured Markdown renderer with typewriter support.
+
+    OPTIMIZED: Includes LRU caching for parsed inline tokens and text sizes.
+    """
 
     def __init__(self, fonts: Dict, colors: Dict, color_emojis: bool = True):
         self.fonts = fonts
@@ -36,8 +55,44 @@ class MarkdownRenderer:
         self.letter_spacing = 0  # No letter spacing
         self.char_count = 0  # For typewriter tracking
         self._text_size_cache = {}
+        self._text_size_cache_max = MAX_TEXT_SIZE_CACHE_SIZE
         self._image_cache = {}  # Cache for loaded images
+        self._image_cache_max = MAX_IMAGE_CACHE_SIZE
         self._image_load_failures = set()  # Track failed URLs to avoid retrying
+
+        # LRU cache for parsed inline tokens (expensive to compute)
+        # Key: text -> List[Dict] of tokens
+        self._inline_token_cache = {}
+        self._max_token_cache_size = MAX_INLINE_TOKEN_CACHE_SIZE
+
+        # LRU cache for wrapped text lines
+        # Key: (text, font_id, max_width) -> List[str]
+        self._wrap_cache = {}
+        self._max_wrap_cache_size = MAX_TEXT_WRAP_CACHE_SIZE
+
+        # Cache statistics for monitoring
+        self._cache_stats = {
+            'text_size_hits': 0,
+            'text_size_misses': 0,
+            'token_cache_hits': 0,
+            'token_cache_misses': 0,
+            'wrap_cache_hits': 0,
+            'wrap_cache_misses': 0,
+        }
+
+    def get_cache_stats(self) -> Dict[str, int]:
+        """Get cache statistics for performance monitoring."""
+        return dict(self._cache_stats)
+
+    def clear_caches(self):
+        """Clear all caches. Call when memory pressure is high."""
+        self._text_size_cache.clear()
+        self._image_cache.clear()
+        self._inline_token_cache.clear()
+        self._wrap_cache.clear()
+        # Reset stats
+        for key in self._cache_stats:
+            self._cache_stats[key] = 0
 
     def set_colors(self, text: Tuple, accent: Tuple, bg: Tuple):
         self.colors = {'text': text, 'accent': accent, 'bg': bg}
@@ -90,7 +145,7 @@ class MarkdownRenderer:
                 img = img.resize((max_width, new_height), Image.Resampling.LANCZOS)
 
             # Cache the result (limit cache size)
-            if len(self._image_cache) > 20:
+            if len(self._image_cache) >= self._image_cache_max:
                 # Remove oldest entry
                 oldest_key = next(iter(self._image_cache))
                 del self._image_cache[oldest_key]
@@ -104,11 +159,17 @@ class MarkdownRenderer:
             return None
 
     def _get_text_size(self, text: str, font) -> Tuple[int, int]:
-        """Get text size with caching."""
+        """Get text size with caching.
+
+        OPTIMIZED: Uses LRU-style cache with statistics tracking.
+        """
         # Use id(font) because font objects are not hashable but are persistent in this app
         key = (text, id(font))
         if key in self._text_size_cache:
+            self._cache_stats['text_size_hits'] += 1
             return self._text_size_cache[key]
+
+        self._cache_stats['text_size_misses'] += 1
 
         try:
             bbox = font.getbbox(text)
@@ -117,7 +178,7 @@ class MarkdownRenderer:
             size = (len(text) * 8, 16)
 
         # Limit cache size to prevent memory leaks (simple eviction)
-        if len(self._text_size_cache) > 2000:
+        if len(self._text_size_cache) > self._text_size_cache_max:
             self._text_size_cache.clear()
 
         self._text_size_cache[key] = size
@@ -282,6 +343,18 @@ class MarkdownRenderer:
         return length
 
     def _wrap_text(self, text: str, font, max_width: int) -> List[str]:
+        """Wrap text to fit within max_width.
+
+        OPTIMIZED: Uses caching for repeated wrap calculations.
+        """
+        # Check cache first
+        cache_key = (text, id(font), max_width)
+        if cache_key in self._wrap_cache:
+            self._cache_stats['wrap_cache_hits'] += 1
+            return self._wrap_cache[cache_key]
+
+        self._cache_stats['wrap_cache_misses'] += 1
+
         words = text.split(' ')
         lines, current = [], []
         for word in words:
@@ -295,7 +368,16 @@ class MarkdownRenderer:
                 current = [word]
         if current:
             lines.append(' '.join(current))
-        return lines or ['']
+        result = lines or ['']
+
+        # Cache result with size limit
+        if len(self._wrap_cache) >= self._max_wrap_cache_size:
+            # Simple FIFO eviction
+            oldest_key = next(iter(self._wrap_cache))
+            del self._wrap_cache[oldest_key]
+
+        self._wrap_cache[cache_key] = result
+        return result
 
     # =========================================================================
     # INLINE TOKENIZER - supports all inline markdown
@@ -303,6 +385,8 @@ class MarkdownRenderer:
 
     def tokenize_inline(self, text: str) -> List[Dict]:
         """Parse inline markdown into tokens.
+
+        OPTIMIZED: Uses LRU caching for repeated tokenization of the same text.
 
         Each token includes:
         - 'type': The token type (text, bold, italic, code, link, etc.)
@@ -314,6 +398,28 @@ class MarkdownRenderer:
 
         This allows the typewriter effect to correctly track position in the original text.
         """
+        # Check cache first - tokens are immutable once parsed
+        if text in self._inline_token_cache:
+            self._cache_stats['token_cache_hits'] += 1
+            # Deep copy required: callers modify token positions for typewriter effect
+            return copy.deepcopy(self._inline_token_cache[text])
+
+        self._cache_stats['token_cache_misses'] += 1
+
+        tokens = self._tokenize_inline_uncached(text)
+
+        # Cache the result
+        if len(self._inline_token_cache) >= self._max_token_cache_size:
+            # Simple FIFO eviction
+            oldest_key = next(iter(self._inline_token_cache))
+            del self._inline_token_cache[oldest_key]
+
+        # Cache a deep copy, return the original (saves one copy on cache miss)
+        self._inline_token_cache[text] = copy.deepcopy(tokens)
+        return tokens
+
+    def _tokenize_inline_uncached(self, text: str) -> List[Dict]:
+        """Internal tokenization without caching. Called by tokenize_inline."""
         tokens = []
         i = 0
 
@@ -378,9 +484,35 @@ class MarkdownRenderer:
                 end = text.find('**', i + 2)
                 if end != -1:
                     content = text[i+2:end]
+
+                    # Parse content for emojis to support emoji rendering in bold text
+                    sub_tokens = []
+                    j = 0
+                    while j < len(content):
+                        emoji_len = self._get_emoji_length(content, j)
+                        if emoji_len > 0:
+                            # Found an emoji - add it as a sub-token
+                            emoji_text = content[j:j+emoji_len]
+                            sub_tokens.append({
+                                'type': 'emoji',
+                                'text': emoji_text
+                            })
+                            j += emoji_len
+                        else:
+                            # Regular text
+                            if sub_tokens and sub_tokens[-1].get('type') == 'text':
+                                sub_tokens[-1]['text'] += content[j]
+                            else:
+                                sub_tokens.append({
+                                    'type': 'text',
+                                    'text': content[j]
+                                })
+                            j += 1
+
                     tokens.append({
                         'type': 'bold',
                         'text': content,
+                        'sub_tokens': sub_tokens if len(sub_tokens) > 1 else None,  # Only include if there are mixed tokens
                         'start': start_pos,
                         'end': end + 2,
                         'content_start': start_pos + 2,  # After **
@@ -1550,6 +1682,71 @@ class MarkdownRenderer:
             else:
                 display_text = token.get('text', '')
 
+            # Check if this token has sub-tokens (e.g., bold with emojis inside)
+            sub_tokens = token.get('sub_tokens')
+            if sub_tokens and ttype == 'bold':
+                # Render sub-tokens with bold font for text and emoji font for emojis
+                bold_font = tfont
+                emoji_font = self.fonts.get('emoji', base_font)
+                space_w, _ = self._get_text_size(' ', bold_font)
+
+                for sub_idx, sub_token in enumerate(sub_tokens):
+                    sub_type = sub_token.get('type')
+                    sub_text = sub_token.get('text', '')
+
+                    if not sub_text:
+                        continue
+
+                    # Choose font based on sub-token type
+                    if sub_type == 'emoji':
+                        sub_font = emoji_font
+                        is_emoji_token = True
+                    else:
+                        sub_font = bold_font
+                        is_emoji_token = False
+
+                    # Render word by word
+                    words = sub_text.split(' ')
+                    for i, word in enumerate(words):
+                        if not word and i > 0:
+                            render_x += space_w
+                            continue
+
+                        # Handle space before word
+                        if i > 0:
+                            if render_x + space_w > x + max_width and render_x > x:
+                                render_y += line_h + 4
+                                render_x = x
+                            else:
+                                render_x += space_w
+
+                        word_w, word_h = self._get_text_size(word, sub_font)
+
+                        # Check if word fits on current line
+                        if render_x + word_w > x + max_width and render_x > x:
+                            render_y += line_h + 4
+                            render_x = x
+
+                        # Draw word with emoji support
+                        emoji_y_offset = 7 if is_emoji_token else 0
+                        if is_emoji_token and self.color_emojis:
+                            draw.text((render_x, render_y + emoji_y_offset), word, fill=tcolor, font=sub_font, embedded_color=True)
+                        else:
+                            draw.text((render_x, render_y), word, fill=tcolor, font=sub_font)
+
+                        render_x += word_w
+
+                        # Add automatic space after emoji if next sub-token is text and doesn't start with space
+                        if is_emoji_token and sub_idx + 1 < len(sub_tokens):
+                            next_token = sub_tokens[sub_idx + 1]
+                            next_text = next_token.get('text', '')
+                            if next_token.get('type') == 'text' and next_text and not next_text.startswith(' '):
+                                render_x += space_w
+
+                continue  # Skip the normal rendering below
+
+            # Normal rendering for tokens without sub-tokens
+
             # Calculate visible portion
             visible_chars = len(display_text)
             if typewriter_pos != float('inf'):
@@ -1614,6 +1811,18 @@ class MarkdownRenderer:
                     draw.line([(render_x, sy), (render_x + word_w, sy)], fill=tcolor, width=1)
 
                 render_x += word_w
+
+                # Add automatic space after emoji to maintain consistent spacing
+                # Only if this is the last word in the emoji token and there are more tokens to render
+                if is_emoji and i == len(words) - 1:
+                    # Check if there's a next token that's not whitespace-only
+                    token_idx = tokens.index(token) if token in tokens else -1
+                    if token_idx >= 0 and token_idx + 1 < len(tokens):
+                        next_token = tokens[token_idx + 1]
+                        next_text = next_token.get('text', '')
+                        # Add space only if next token is not already whitespace-only
+                        if next_text and not next_text.isspace():
+                            render_x += space_w
 
     def _count_wrapped_lines_breaking(self, text: str, font, max_width: int) -> int:
         """Count lines needed when breaking mid-word is allowed but word-wrap is preferred."""

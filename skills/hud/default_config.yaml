@@ -29,7 +29,7 @@ custom_properties:
 
   - id: bg_color
     name: Background Color
-    hint: Background color of HUD elements (hex format).
+    hint: Background color of HUD elements (hex format, e.g. #1e212b or #1e212b80 for 50% transparent).
     property_type: string
     value: "#1e212b"
     required: false

@@ -100,14 +100,14 @@ class HUD(Skill):
             "bottom_left", "bottom_center", "bottom_right"
         ]
 
-        # Color validation helper
+        # Color validation helper - supports #RGB, #RRGGBB, or #RRGGBBAA formats
         def is_valid_hex_color(color: str) -> bool:
             if not isinstance(color, str):
                 return False
             if not color.startswith('#'):
                 return False
             hex_part = color[1:]
-            if len(hex_part) not in (3, 6):
+            if len(hex_part) not in (3, 6, 8):  # 3, 6, or 8 hex chars (with alpha)
                 return False
             try:
                 int(hex_part, 16)

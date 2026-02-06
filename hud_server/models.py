@@ -55,11 +55,11 @@ class HudGroupProps(BaseModel):
     """Fixed height in pixels. If set, overrides dynamic height calculation."""
     max_height: int = Field(default=600, ge=10, le=2160)
 
-    # Colors (hex format)
-    bg_color: str = Field(default="#1e212b", pattern=r"^#[0-9a-fA-F]{6}$")
-    text_color: str = Field(default="#f0f0f0", pattern=r"^#[0-9a-fA-F]{6}$")
-    accent_color: str = Field(default="#00aaff", pattern=r"^#[0-9a-fA-F]{6}$")
-    title_color: Optional[str] = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    # Colors (hex format - supports #RRGGBB or #RRGGBBAA with alpha channel)
+    bg_color: str = Field(default="#1e212b", pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
+    text_color: str = Field(default="#f0f0f0", pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
+    accent_color: str = Field(default="#00aaff", pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
+    title_color: Optional[str] = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$")
 
     # Visual
     opacity: float = Field(default=0.85, ge=0.0, le=1.0)

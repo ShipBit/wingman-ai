@@ -383,40 +383,19 @@ async def test_chat_game(session: TestSession):
 # Run All Tests
 # =============================================================================
 
-async def cleanup_all_chats(session: TestSession):
-    """Clean up all chat windows created during tests."""
-    chat_names = [
-        f"chat_{session.session_id}",
-        f"md_chat_{session.session_id}",
-        f"conv_{session.session_id}",
-        f"autohide_{session.session_id}",
-        f"overflow_{session.session_id}",
-    ]
-    for chat_name in chat_names:
-        try:
-            await session.delete_chat_window(chat_name)
-        except Exception:
-            pass  # Ignore errors - window may not exist
-
-
 async def run_all_chat_tests(session: TestSession):
     """Run all chat tests."""
-    try:
-        await test_chat_basic(session)
-        await asyncio.sleep(1)
-        await test_chat_markdown(session)
-        await asyncio.sleep(1)
-        await test_chat_auto_hide(session)
-        await asyncio.sleep(1)
-        await test_chat_overflow(session)
-        await asyncio.sleep(1)
-        await test_chat_wingman(session)
-    finally:
-        # Always clean up chats when finished
-        await cleanup_all_chats(session)
+    await test_chat_basic(session)
+    await asyncio.sleep(1)
+    await test_chat_markdown(session)
+    await asyncio.sleep(1)
+    await test_chat_auto_hide(session)
+    await asyncio.sleep(1)
+    await test_chat_overflow(session)
+    await asyncio.sleep(1)
+    await test_chat_wingman(session)
 
 
 if __name__ == "__main__":
     from hud_server.tests.test_runner import run_interactive_test
     run_interactive_test(run_all_chat_tests)
-

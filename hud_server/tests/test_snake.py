@@ -2,13 +2,21 @@
 """
 Test Snake - Interactive Snake game using the HUD Server.
 
-A fun Snake game implementation that uses:
+An advanced Snake game implementation featuring:
 - Each grid cell is its own HUD window positioned across the screen
 - HUDs are created on-demand (only for snake and food, not empty cells)
 - Manual window placement to create a full-screen grid
 - Keyboard controls (arrow keys)
 - HUD messages for start/game over screens and stats
-- Auto-ends after 2 minutes
+
+Features:
+- 🌈 Snake body gradient (head to tail color fade)
+- ∞ Endless mode (no time limit)
+- 🔥 Combo system for eating quickly (2s window)
+- 🍎 Multiple foods on screen simultaneously
+- 🌟 Rare golden apples worth +5 points
+- 🎨 Animated border colors that change with score
+- 📊 Real-time stats with combo display
 
 Usage:
     python -m hud_server.tests.test_snake
@@ -57,16 +65,27 @@ SCREEN_OFFSET_X = MARGIN_LEFT
 SCREEN_OFFSET_Y = MARGIN_TOP
 
 # Game timing
-GAME_DURATION = 120  # 2 minutes
-INITIAL_SPEED = 0.15  # seconds between moves
-SPEED_INCREMENT = 0.005  # speed increase per food eaten
-MIN_SPEED = 0.05  # fastest possible speed
+GAME_DURATION = None  # None = endless mode, no time limit
+INITIAL_SPEED = 0.125  # seconds between moves
+SPEED_INCREMENT = 0.0025  # speed increase per food eaten
+MIN_SPEED = 0.035  # fastest possible speed (faster for endless mode)
+
+# Multi-food system
+MAX_FOODS = 1  # Maximum number of regular foods on screen
+GOLDEN_APPLE_CHANCE = 0.15  # 15% chance for golden apple
+GOLDEN_APPLE_POINTS = 5
+GOLDEN_APPLE_DURATION = 10  # seconds before it disappears
+
+# Combo system
+COMBO_TIME_WINDOW = 2.0  # seconds to maintain combo
+COMBO_MULTIPLIER = 0.5  # bonus points per combo level
 
 # Cell types for display
 CELL_EMPTY = "empty"
 CELL_SNAKE_HEAD = "snake_head"
 CELL_SNAKE_BODY = "snake_body"
 CELL_FOOD = "food"
+CELL_GOLDEN_FOOD = "golden_food"
 CELL_BORDER = "border"
 
 # Colors for different cell types
@@ -75,12 +94,60 @@ COLORS = {
     CELL_SNAKE_HEAD: "#00ff00",
     CELL_SNAKE_BODY: "#00aa00",
     CELL_FOOD: "#ff3333",
+    CELL_GOLDEN_FOOD: "#ffd700",  # Gold
     CELL_BORDER: "#0066cc",
 }
+
+# Border color progression based on speed/score (extended for endless mode)
+BORDER_COLORS = [
+    "#0066cc",  # 0 - Initial blue
+    "#0088ff",  # 2 - Light blue
+    "#00aaff",  # 4 - Cyan
+    "#00cccc",  # 6 - Turquoise
+    "#00cc88",  # 8 - Teal
+    "#00cc44",  # 10 - Green-blue
+    "#44cc00",  # 12 - Green
+    "#88cc00",  # 14 - Yellow-green
+    "#cccc00",  # 16 - Yellow
+    "#cc8800",  # 18 - Orange
+    "#cc4400",  # 20 - Red-orange
+    "#cc0000",  # 22 - Red
+    "#cc0044",  # 24 - Pink-red
+    "#cc0088",  # 26 - Magenta
+    "#8800cc",  # 28 - Purple
+    "#4400cc",  # 30 - Blue-purple
+    "#0044cc",  # 32 - Deep blue
+    "#00ccaa",  # 34 - Aqua
+    "#ccaa00",  # 36 - Gold
+    "#cc00cc",  # 38 - Fuchsia
+    "#00ffff",  # 40 - Bright cyan
+    "#ff00ff",  # 42 - Bright magenta
+    "#ffff00",  # 44 - Bright yellow
+    "#ff6600",  # 46 - Bright orange
+    "#ff0066",  # 48 - Hot pink
+    "#6600ff",  # 50+ - Electric purple
+]
+
+# Snake body gradient colors (head to tail)
+def get_snake_body_color(index: int, total_length: int) -> str:
+    """Calculate gradient color for snake body segment."""
+    if index == 0:
+        return COLORS[CELL_SNAKE_HEAD]  # Head is always bright green
+
+    # Gradient from bright to dark green
+    ratio = index / max(total_length - 1, 1)
+    # Start: #00ff00 (bright green), End: #003300 (dark green)
+    r = 0
+    g = int(255 * (1 - ratio * 0.8))  # 255 -> 51
+    b = 0
+    return f"#{r:02x}{g:02x}{b:02x}"
 
 # Colors
 COLOR_GAME = "#00ff00"
 COLOR_GAME_OVER = "#ff0000"
+
+# Current border color index
+_current_border_color_index = 0
 
 
 # =============================================================================
@@ -109,18 +176,63 @@ class SnakeGame:
         self.snake = [(start_x, start_y), (start_x - 1, start_y), (start_x - 2, start_y)]
         self.direction = Direction.RIGHT
         self.next_direction = Direction.RIGHT
-        self.food = self._spawn_food()
+
+        # Multi-food system
+        self.foods = []  # List of regular food positions
+        self.golden_food = None  # Golden apple position (if any)
+        self.golden_food_spawn_time = None  # When golden apple spawned
+
+        # Spawn initial foods
+        for _ in range(MAX_FOODS):
+            self.foods.append(self._spawn_food())
+
+        # Combo system
+        self.combo = 0
+        self.combo_last_time = None
+
         self.score = 0
         self.game_over = False
         self.game_over_reason = ""
 
-    def _spawn_food(self) -> tuple[int, int]:
+    def _spawn_food(self, force_golden: bool = False) -> tuple[int, int]:
         """Spawn food at a random empty location."""
         while True:
             x = random.randint(0, self.width - 1)
             y = random.randint(0, self.height - 1)
-            if (x, y) not in self.snake:
+            # Check if position is empty (not snake, not other food, not golden food)
+            if (x, y) not in self.snake and \
+               (x, y) not in self.foods and \
+               (x, y) != self.golden_food:
                 return (x, y)
+
+    def _spawn_golden_food(self):
+        """Try to spawn a golden apple."""
+        if self.golden_food is None and random.random() < GOLDEN_APPLE_CHANCE:
+            self.golden_food = self._spawn_food(force_golden=True)
+            self.golden_food_spawn_time = time.time()
+
+    def _check_golden_food_timeout(self):
+        """Remove golden food if it's been too long."""
+        if self.golden_food and self.golden_food_spawn_time:
+            if time.time() - self.golden_food_spawn_time > GOLDEN_APPLE_DURATION:
+                self.golden_food = None
+                self.golden_food_spawn_time = None
+
+    def _update_combo(self):
+        """Update combo counter."""
+        current_time = time.time()
+        if self.combo_last_time and current_time - self.combo_last_time <= COMBO_TIME_WINDOW:
+            self.combo += 1
+        else:
+            self.combo = 1
+        self.combo_last_time = current_time
+
+    def _reset_combo(self):
+        """Reset combo when window expires."""
+        if self.combo_last_time:
+            if time.time() - self.combo_last_time > COMBO_TIME_WINDOW:
+                self.combo = 0
+                self.combo_last_time = None
 
     def set_direction(self, direction: Direction):
         """Set the next direction (will be applied on next update)."""
@@ -135,6 +247,12 @@ class SnakeGame:
         """Update the game state (move snake, check collisions, etc.)."""
         if self.game_over:
             return
+
+        # Check combo timeout
+        self._reset_combo()
+
+        # Check golden food timeout
+        self._check_golden_food_timeout()
 
         self.direction = self.next_direction
         head_x, head_y = self.snake[0]
@@ -156,11 +274,35 @@ class SnakeGame:
 
         self.snake.insert(0, new_head)
 
-        if new_head == self.food:
-            self.score += 1
-            self.food = self._spawn_food()
-        else:
+        ate_food = False
+
+        # Check golden food collision
+        if new_head == self.golden_food:
+            ate_food = True
+            self._update_combo()
+            bonus = GOLDEN_APPLE_POINTS + int(self.combo * COMBO_MULTIPLIER)
+            self.score += bonus
+            self.golden_food = None
+            self.golden_food_spawn_time = None
+            # Keep snake growing for all points
+            for _ in range(GOLDEN_APPLE_POINTS - 1):
+                pass  # Snake will grow by not popping tail
+        # Check regular food collision
+        elif new_head in self.foods:
+            ate_food = True
+            self._update_combo()
+            bonus = 1 + int(self.combo * COMBO_MULTIPLIER)
+            self.score += bonus
+            self.foods.remove(new_head)
+            # Spawn new food
+            self.foods.append(self._spawn_food())
+            # Try to spawn golden apple
+            self._spawn_golden_food()
+
+        if not ate_food:
             self.snake.pop()
+
+        return ate_food  # Return whether food was eaten
 
 
 # =============================================================================
@@ -185,8 +327,67 @@ def get_cell_group_name(x: int, y: int) -> str:
 # Track which cells currently have HUDs
 _active_cell_huds: set = set()
 
+# Track border positions for color animation
+_border_positions: list = []
 
-async def show_cell(session: TestSession, x: int, y: int, cell_type: str):
+
+def get_border_positions(game: SnakeGame) -> list[tuple[int, int]]:
+    """Get all border cell positions in clockwise order starting from top-left."""
+    positions = []
+
+    # Top border (left to right, including both corners)
+    for x in range(-1, game.width + 1):
+        positions.append((x, -1))
+
+    # Right border (top to bottom, skip top corner but include bottom corner)
+    for y in range(0, game.height + 1):
+        positions.append((game.width, y))
+
+    # Bottom border (right to left, skip right corner but include left corner)
+    for x in range(game.width - 1, -2, -1):
+        positions.append((x, game.height))
+
+    # Left border (bottom to top, skip bottom corner but include top)
+    for y in range(game.height - 1, -1, -1):
+        positions.append((-1, y))
+
+    return positions
+
+
+async def animate_border_color_change(session: TestSession, game: SnakeGame, new_color_index: int):
+    """Animate the border color change by updating cells one by one in a wave."""
+    global _current_border_color_index
+
+    if new_color_index >= len(BORDER_COLORS):
+        new_color_index = len(BORDER_COLORS) - 1
+
+    new_color = BORDER_COLORS[new_color_index]
+    _current_border_color_index = new_color_index
+
+    # Update COLORS dict for future border cells
+    COLORS[CELL_BORDER] = new_color
+
+    # Get all border positions if not already cached
+    global _border_positions
+    if not _border_positions:
+        _border_positions = get_border_positions(game)
+
+    # Animate border with pulsating effect
+    # Update each border cell with a small delay to create wave effect
+    delay_per_cell = 0.003  # 3ms delay between each cell update
+
+    # For higher scores, add rotation effect by starting from different positions
+    start_offset = (new_color_index * 5) % len(_border_positions)
+
+    for i in range(len(_border_positions)):
+        idx = (i + start_offset) % len(_border_positions)
+        x, y = _border_positions[idx]
+        await show_cell(session, x, y, CELL_BORDER, color_override=new_color)
+        if i % 5 == 0:  # Every 5 cells, add a small delay
+            await asyncio.sleep(delay_per_cell)
+
+
+async def show_cell(session: TestSession, x: int, y: int, cell_type: str, color_override: str = None, pulsate: bool = False):
     """Show or update a cell HUD. Creates it if it doesn't exist."""
     if not session._client:
         return
@@ -194,26 +395,32 @@ async def show_cell(session: TestSession, x: int, y: int, cell_type: str):
     group_name = get_cell_group_name(x, y)
     screen_x, screen_y = get_cell_position(x, y)
 
+    # Use override color if provided, otherwise use default color for cell type
+    cell_color = color_override if color_override else COLORS[cell_type]
+
+    # Special properties for golden food (pulsating effect)
+    props = {
+        "layout_mode": "manual",
+        "x": screen_x,
+        "y": screen_y,
+        "width": CELL_SIZE,
+        "height": CELL_SIZE,
+        "bg_color": cell_color,
+        "opacity": 1.0,
+        "border_radius": 4,
+        "font_size": 1,
+        "content_padding": 0,
+        "disable_animations": not pulsate,
+        "disable_transitions": not pulsate,
+        "duration": 999999,  # Endless mode - very long duration
+    }
+
     await session._client.show_message(
         group_name=group_name,
         title=" ",
         content=" ",  # Need non-empty content to keep HUD visible
-        color=COLORS[cell_type],
-        props={
-            "layout_mode": "manual",
-            "x": screen_x,
-            "y": screen_y,
-            "width": CELL_SIZE,
-            "height": CELL_SIZE,
-            "bg_color": COLORS[cell_type],
-            "opacity": 1.0,
-            "border_radius": 4,
-            "font_size": 1,
-            "content_padding": 0,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 120,  # 2 minutes - same as game duration
-        }
+        color=cell_color,
+        props=props
     )
     _active_cell_huds.add((x, y))
 
@@ -249,15 +456,21 @@ async def render_initial_state(session: TestSession, game: SnakeGame):
     # Show borders first
     await render_borders(session, game)
 
-    # Show snake head
-    await show_cell(session, game.snake[0][0], game.snake[0][1], CELL_SNAKE_HEAD)
+    # Show snake with gradient
+    for i, pos in enumerate(game.snake):
+        if i == 0:
+            await show_cell(session, pos[0], pos[1], CELL_SNAKE_HEAD)
+        else:
+            color = get_snake_body_color(i, len(game.snake))
+            await show_cell(session, pos[0], pos[1], CELL_SNAKE_BODY, color_override=color)
 
-    # Show snake body
-    for pos in game.snake[1:]:
-        await show_cell(session, pos[0], pos[1], CELL_SNAKE_BODY)
+    # Show all regular foods
+    for food_pos in game.foods:
+        await show_cell(session, food_pos[0], food_pos[1], CELL_FOOD)
 
-    # Show food
-    await show_cell(session, game.food[0], game.food[1], CELL_FOOD)
+    # Show golden food if exists
+    if game.golden_food:
+        await show_cell(session, game.golden_food[0], game.golden_food[1], CELL_GOLDEN_FOOD, pulsate=True)
 
 
 async def render_borders(session: TestSession, game: SnakeGame):
@@ -279,7 +492,7 @@ async def render_borders(session: TestSession, game: SnakeGame):
         await show_cell(session, game.width, y, CELL_BORDER)
 
 
-async def update_display(session: TestSession, old_states: dict, new_states: dict):
+async def update_display(session: TestSession, game: SnakeGame, old_states: dict, new_states: dict):
     """Update only the cells that changed."""
     all_positions = set(old_states.keys()) | set(new_states.keys())
 
@@ -293,18 +506,92 @@ async def update_display(session: TestSession, old_states: dict, new_states: dic
                 await hide_cell(session, pos[0], pos[1])
             else:
                 # Cell has content - show/update it
-                await show_cell(session, pos[0], pos[1], new_type)
+                cell_type, extra_data = new_type if isinstance(new_type, tuple) else (new_type, None)
+
+                if cell_type == CELL_SNAKE_BODY and extra_data:
+                    # Use gradient color for snake body
+                    await show_cell(session, pos[0], pos[1], cell_type, color_override=extra_data)
+                elif cell_type == CELL_GOLDEN_FOOD:
+                    # Golden food with pulsating effect
+                    await show_cell(session, pos[0], pos[1], cell_type, pulsate=True)
+                else:
+                    await show_cell(session, pos[0], pos[1], cell_type)
 
 
 def get_game_state(game: SnakeGame) -> dict:
     """Get current state of all non-empty cells."""
     states = {}
+
+    # Snake with gradient
     if game.snake:
         states[game.snake[0]] = CELL_SNAKE_HEAD
-        for pos in game.snake[1:]:
-            states[pos] = CELL_SNAKE_BODY
-    states[game.food] = CELL_FOOD
+        for i, pos in enumerate(game.snake[1:], start=1):
+            color = get_snake_body_color(i, len(game.snake))
+            states[pos] = (CELL_SNAKE_BODY, color)  # Store type and color
+
+    # Regular foods
+    for food_pos in game.foods:
+        states[food_pos] = CELL_FOOD
+
+    # Golden food
+    if game.golden_food:
+        states[game.golden_food] = CELL_GOLDEN_FOOD
+
     return states
+
+
+# =============================================================================
+# Combo Display
+# =============================================================================
+
+async def show_combo_flash(session: TestSession, combo: int):
+    """Show a flashy combo notification in the center of the screen."""
+    if not session._client or combo < 2:
+        return
+
+    # Different messages for different combo levels
+    if combo >= 10:
+        emoji = "🔥💥"
+        message = f"**INSANE COMBO x{combo}!**"
+        color = "#ff0066"
+    elif combo >= 5:
+        emoji = "🔥"
+        message = f"**MEGA COMBO x{combo}!**"
+        color = "#ff6600"
+    elif combo >= 3:
+        emoji = "⚡"
+        message = f"**COMBO x{combo}!**"
+        color = "#ffaa00"
+    else:
+        emoji = "✨"
+        message = f"**x{combo} Combo**"
+        color = "#00ff00"
+
+    combo_text = f"{emoji} {message} {emoji}"
+
+    await session._client.show_message(
+        group_name="snake_combo_flash",
+        title=" ",
+        content=combo_text,
+        color=color,
+        props={
+            "anchor": "center",
+            "priority": 150,
+            "layout_mode": "auto",
+            "width": 400,
+            "bg_color": "#000000",
+            "text_color": color,
+            "accent_color": color,
+            "opacity": 0.95,
+            "border_radius": 20,
+            "font_size": 24,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": False,
+            "disable_transitions": False,
+            "duration": 1.5,  # Show for 1.5 seconds
+        }
+    )
 
 
 # =============================================================================
@@ -312,24 +599,147 @@ def get_game_state(game: SnakeGame) -> dict:
 # =============================================================================
 
 async def show_start_screen(session: TestSession):
-    """Display the game start screen."""
-    start_message = f"""# 🐍 FULL-SCREEN SNAKE GAME 🐍
+    """Display the game start screen as individual HUD elements."""
+    if not session._client:
+        return
 
-## How to Play
+    # Title HUD - Highest priority
+    await session._client.show_message(
+        group_name="snake_menu_title",
+        title=" ",  # Space to pass validation
+        content="# 🐍 ENDLESS SNAKE GAME 🐍",
+        color=COLOR_GAME,
+        props={
+            "anchor": "top_left",
+            "priority": 250,
+            "layout_mode": "auto",
+            "width": 600,
+            "bg_color": "#0a0e14",
+            "text_color": "#f0f0f0",
+            "accent_color": COLOR_GAME,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 16,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
+
+    # How to Play HUD
+    await session._client.show_message(
+        group_name="snake_menu_howto",
+        title=" ",
+        content="""## How to Play
 - Use **Arrow Keys** to control the snake
-- Eat 🍎 to grow longer and score points
-- Avoid hitting the blue borders and yourself
-- Game lasts **2 minutes**
+- Eat 🍎 red apples to grow and score **+1 point**
+- Eat 🌟 **GOLDEN APPLES** for **+5 points** (rare!)
+- Build **COMBOS** by eating quickly (2s window)
+- Avoid hitting the borders and yourself
+- **ENDLESS MODE** - No time limit, play until you lose!""",
+        color=COLOR_GAME,
+        props={
+            "anchor": "top_left",
+            "priority": 240,
+            "layout_mode": "auto",
+            "width": 600,
+            "bg_color": "#0a0e14",
+            "text_color": "#f0f0f0",
+            "accent_color": COLOR_GAME,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 14,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
 
-## Controls
+    # Features HUD
+    await session._client.show_message(
+        group_name="snake_menu_features",
+        title=" ",
+        content="""## Features
+- 🌈 Snake body gradient (head to tail)
+- 🎨 Border colors change with your score
+- 🔥 Combo system for bonus points
+- ⚡ Multiple foods on screen
+- 🌟 Golden apples (disappear after 10s)""",
+        color=COLOR_GAME,
+        props={
+            "anchor": "top_left",
+            "priority": 230,
+            "layout_mode": "auto",
+            "width": 600,
+            "bg_color": "#0a0e14",
+            "text_color": "#f0f0f0",
+            "accent_color": COLOR_GAME,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 14,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
+
+    # Controls HUD
+    await session._client.show_message(
+        group_name="snake_menu_controls",
+        title=" ",
+        content=f"""## Controls
 - **↑ ↓ ← →** : Move snake
-- **SPACE** : Start game
+- **Grid Size:** {GRID_WIDTH} x {GRID_HEIGHT}""",
+        color=COLOR_GAME,
+        props={
+            "anchor": "top_left",
+            "priority": 220,
+            "layout_mode": "auto",
+            "width": 600,
+            "bg_color": "#0a0e14",
+            "text_color": "#f0f0f0",
+            "accent_color": COLOR_GAME,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 14,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
 
-## Grid Size: {GRID_WIDTH} x {GRID_HEIGHT}
-
-**Press SPACE to begin!**"""
-
-    await session.draw_assistant_message(start_message)
+    # Start Button HUD
+    await session._client.show_message(
+        group_name="snake_menu_start",
+        title=" ",
+        content="🎮 **Press SPACE to begin your endless journey!** 🎮",
+        color=COLOR_GAME,
+        props={
+            "anchor": "top_left",
+            "priority": 210,
+            "layout_mode": "auto",
+            "width": 600,
+            "bg_color": "#1a4d1a",
+            "text_color": "#ffffff",
+            "accent_color": COLOR_GAME,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 16,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
 
 
 async def show_stats(session: TestSession, game: SnakeGame, elapsed: float, speed: float, force: bool = False):
@@ -337,13 +747,22 @@ async def show_stats(session: TestSession, game: SnakeGame, elapsed: float, spee
     if not session._client:
         return
 
-    time_left = int(GAME_DURATION - elapsed)
+    # Format elapsed time (endless mode)
+    minutes = int(elapsed // 60)
+    seconds = int(elapsed % 60)
+    time_str = f"{minutes}:{seconds:02d}"
 
-    stats_message = f"""**Score:** {game.score}  |  **Length:** {len(game.snake)}  |  **Time:** {time_left}s"""
+    # Combo display
+    combo_str = ""
+    if game.combo > 1:
+        combo_str = f"\n🔥 **COMBO x{game.combo}** 🔥"
+
+    stats_message = f"""**Score:** {game.score}  |  **Length:** {len(game.snake)}
+**Time:** {time_str}  |  **Speed:** {1/speed:.1f}/s{combo_str}"""
 
     await session._client.show_message(
         group_name="snake_stats",
-        title="🎮 Snake",
+        title="🎮 Endless Snake",
         content=stats_message,
         color=COLOR_GAME,
         props={
@@ -361,39 +780,167 @@ async def show_stats(session: TestSession, game: SnakeGame, elapsed: float, spee
             "typewriter_effect": False,
             "disable_animations": True,
             "disable_transitions": True,
-            "duration": 120,  # 2 minutes - same as game duration
+            "duration": 999999,  # Endless mode
         }
     )
 
 
 async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: float):
-    """Display the game over screen."""
-    if game.score >= 30:
+    """Display the game over screen as individual HUD elements."""
+    if not session._client:
+        return
+
+    # Better score ratings for endless mode
+    if game.score >= 100:
+        result_emoji, rating = "👑", "GODLIKE!"
+    elif game.score >= 75:
         result_emoji, rating = "🏆", "LEGENDARY!"
-    elif game.score >= 20:
+    elif game.score >= 50:
+        result_emoji, rating = "💎", "MASTER!"
+    elif game.score >= 30:
         result_emoji, rating = "🌟", "AMAZING!"
-    elif game.score >= 10:
+    elif game.score >= 20:
         result_emoji, rating = "🎉", "GREAT!"
-    elif game.score >= 5:
+    elif game.score >= 10:
         result_emoji, rating = "👍", "GOOD!"
+    elif game.score >= 5:
+        result_emoji, rating = "😊", "NICE!"
     else:
-        result_emoji, rating = "😅", "NICE TRY!"
+        result_emoji, rating = "😅", "KEEP TRYING!"
 
-    game_over_message = f"""# {result_emoji} GAME OVER {result_emoji}
+    # Format time
+    minutes = int(elapsed // 60)
+    seconds = int(elapsed % 60)
+    time_str = f"{minutes}:{seconds:02d}"
 
-## {rating}
+    # Game Over Title HUD
+    await session._client.show_message(
+        group_name="snake_gameover_title",
+        title=" ",
+        content=f"# {result_emoji} GAME OVER {result_emoji}",
+        color=COLOR_GAME_OVER,
+        props={
+            "anchor": "top_left",
+            "priority": 250,
+            "layout_mode": "auto",
+            "width": 500,
+            "bg_color": "#1a0a0a",
+            "text_color": "#ff6666",
+            "accent_color": COLOR_GAME_OVER,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 18,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
 
-### Final Stats
+    # Rating HUD
+    await session._client.show_message(
+        group_name="snake_gameover_rating",
+        title=" ",
+        content=f"## {rating}",
+        color=COLOR_GAME_OVER,
+        props={
+            "anchor": "top_left",
+            "priority": 240,
+            "layout_mode": "auto",
+            "width": 500,
+            "bg_color": "#0a0e14",
+            "text_color": "#ffaa00",
+            "accent_color": COLOR_GAME_OVER,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 16,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
+
+    # Stats HUD
+    await session._client.show_message(
+        group_name="snake_gameover_stats",
+        title=" ",
+        content=f"""### Final Stats
 - **Score:** {game.score}
 - **Final Length:** {len(game.snake)}
-- **Time Played:** {int(elapsed)}s / {GAME_DURATION}s
-- **Reason:** {game.game_over_reason}
+- **Survival Time:** {time_str}
+- **Reason:** {game.game_over_reason}""",
+        color=COLOR_GAME_OVER,
+        props={
+            "anchor": "top_left",
+            "priority": 230,
+            "layout_mode": "auto",
+            "width": 500,
+            "bg_color": "#0a0e14",
+            "text_color": "#f0f0f0",
+            "accent_color": COLOR_GAME_OVER,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 14,
+            "content_padding": 20,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
 
----
+    # Play Again Button HUD
+    await session._client.show_message(
+        group_name="snake_gameover_playagain",
+        title=" ",
+        content="🔄 **Press SPACE to play again**",
+        color=COLOR_GAME,
+        props={
+            "anchor": "top_left",
+            "priority": 220,
+            "layout_mode": "auto",
+            "width": 500,
+            "bg_color": "#1a4d1a",
+            "text_color": "#ffffff",
+            "accent_color": COLOR_GAME,
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 15,
+            "content_padding": 18,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
 
-*Press any key to exit*"""
-
-    await session.draw_assistant_message(game_over_message)
+    # Exit Button HUD
+    await session._client.show_message(
+        group_name="snake_gameover_exit",
+        title=" ",
+        content="👋 **Press ESC to exit**",
+        color="#888888",
+        props={
+            "anchor": "top_left",
+            "priority": 210,
+            "layout_mode": "auto",
+            "width": 500,
+            "bg_color": "#1a1a1a",
+            "text_color": "#cccccc",
+            "accent_color": "#888888",
+            "opacity": 0.98,
+            "border_radius": 12,
+            "font_size": 15,
+            "content_padding": 18,
+            "typewriter_effect": False,
+            "disable_animations": True,
+            "disable_transitions": True,
+            "duration": 3600,
+        }
+    )
 
 
 # =============================================================================
@@ -402,6 +949,13 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
 
 async def test_snake_game(session: TestSession):
     """Run the interactive Snake game."""
+    global _current_border_color_index, _border_positions, _active_cell_huds
+
+    # Reset global state for new game
+    _current_border_color_index = 0
+    _border_positions = []
+    _active_cell_huds = set()
+
     print(f"[{session.name}] Starting Full-Screen Snake Game...")
 
     game = SnakeGame()
@@ -413,10 +967,19 @@ async def test_snake_game(session: TestSession):
     while not keyboard.is_pressed('space'):
         await asyncio.sleep(0.1)
 
+    # Wait for key release to avoid double-triggering
+    await asyncio.sleep(0.2)
+
+    # Hide start menu before game starts
+    if session._client:
+        await session._client.delete_group("snake_menu_title")
+        await session._client.delete_group("snake_menu_howto")
+        await session._client.delete_group("snake_menu_features")
+        await session._client.delete_group("snake_menu_controls")
+        await session._client.delete_group("snake_menu_start")
+
     print(f"[{session.name}] Game started!")
 
-    # Hide start screen
-    await session.hide()
 
     # Render initial game state (just snake + food)
     await render_initial_state(session, game)
@@ -451,26 +1014,22 @@ async def test_snake_game(session: TestSession):
     start_time = time.time()
     current_speed = INITIAL_SPEED
     last_update = start_time
-    last_stats = {"score": -1, "time": -1}
+    last_stats = {"score": -1, "time": -1, "combo": -1}
     elapsed = 0.0
+    last_combo_shown = 0
 
     try:
         while game_running:
             current_time = time.time()
             elapsed = current_time - start_time
 
-            # Check time limit
-            if elapsed >= GAME_DURATION:
-                game.game_over = True
-                game.game_over_reason = "Time's up!"
-                break
-
             # Update game at current speed
             if current_time - last_update >= current_speed:
                 old_states = get_game_state(game)
                 old_score = game.score
+                old_combo = game.combo
 
-                game.update()
+                ate_food = game.update()
                 last_update = current_time
 
                 if game.game_over:
@@ -479,15 +1038,27 @@ async def test_snake_game(session: TestSession):
 
                 new_states = get_game_state(game)
 
-                # Speed up on food eaten
+                # Speed up on food eaten and animate border color change
                 if game.score > old_score:
                     current_speed = max(MIN_SPEED, INITIAL_SPEED - (game.score * SPEED_INCREMENT))
 
-                # Update only changed cells
-                await update_display(session, old_states, new_states)
+                    # Trigger border color animation based on score
+                    # Change color every 2 points to make it more visible
+                    new_color_index = min(game.score // 2, len(BORDER_COLORS) - 1)
+                    if new_color_index != _current_border_color_index:
+                        # Start animation in background (non-blocking)
+                        asyncio.create_task(animate_border_color_change(session, game, new_color_index))
 
-            # Update stats only when changed
-            current_stats = {"score": game.score, "time": int(GAME_DURATION - elapsed)}
+                    # Show combo flash when reaching combo milestones
+                    if game.combo >= 2 and game.combo != old_combo:
+                        asyncio.create_task(show_combo_flash(session, game.combo))
+
+                # Update only changed cells
+                await update_display(session, game, old_states, new_states)
+
+            # Update stats when score, time, or combo changes
+            current_minute = int(elapsed // 60)
+            current_stats = {"score": game.score, "time": current_minute, "combo": game.combo}
             if current_stats != last_stats:
                 await show_stats(session, game, elapsed, current_speed)
                 last_stats = current_stats.copy()
@@ -497,12 +1068,56 @@ async def test_snake_game(session: TestSession):
         # Cleanup and show game over
         await cleanup_all_cells(session)
         await show_game_over_screen(session, game, elapsed)
-        await asyncio.sleep(5)
 
-    finally:
+        # Wait for player decision: SPACE to play again, ESC to exit
+        print(f"[{session.name}] Game Over! Press SPACE to play again or ESC to exit...")
+        play_again = False
+
+        while True:
+            if keyboard.is_pressed('space'):
+                play_again = True
+                print(f"[{session.name}] Restarting game...")
+                break
+            elif keyboard.is_pressed('esc'):
+                play_again = False
+                print(f"[{session.name}] Exiting game...")
+                break
+            await asyncio.sleep(0.1)
+
+        # Wait for key release before continuing
+        await asyncio.sleep(0.3)
+
+        # Hide game over menu
+        if session._client:
+            await session._client.delete_group("snake_gameover_title")
+            await session._client.delete_group("snake_gameover_rating")
+            await session._client.delete_group("snake_gameover_stats")
+            await session._client.delete_group("snake_gameover_playagain")
+            await session._client.delete_group("snake_gameover_exit")
+
+        # Cleanup keyboard hooks before returning
         keyboard.unhook_all()
-        await session.hide()
-        print(f"[{session.name}] Snake game ended. Final score: {game.score}")
+
+        return play_again
+
+    except Exception as e:
+        print(f"[{session.name}] Error in game: {e}")
+        keyboard.unhook_all()
+        # Cleanup all menu HUDs
+        if session._client:
+            # Start menu
+            await session._client.delete_group("snake_menu_title")
+            await session._client.delete_group("snake_menu_howto")
+            await session._client.delete_group("snake_menu_features")
+            await session._client.delete_group("snake_menu_controls")
+            await session._client.delete_group("snake_menu_start")
+            # Game over menu
+            await session._client.delete_group("snake_gameover_title")
+            await session._client.delete_group("snake_gameover_rating")
+            await session._client.delete_group("snake_gameover_stats")
+            await session._client.delete_group("snake_gameover_playagain")
+            await session._client.delete_group("snake_gameover_exit")
+        return False
 
 
 # =============================================================================
@@ -510,11 +1125,13 @@ async def test_snake_game(session: TestSession):
 # =============================================================================
 
 async def run_snake_test():
-    """Run the Snake game test."""
+    """Run the enhanced endless Snake game test with advanced features."""
     from hud_server.tests.test_runner import TestContext
 
     print("=" * 60)
-    print("SNAKE GAME TEST")
+    print("ENDLESS SNAKE GAME - ENHANCED EDITION")
+    print("=" * 60)
+    print("Features: Gradient Snake | Combos | Golden Apples | Animated Borders")
     print("=" * 60)
 
     session_config = {
@@ -543,8 +1160,20 @@ async def run_snake_test():
         session.config = session_config
         session.name = "Snake"
 
-        print("HUD Server started. Get ready to play Snake! 🐍\n")
-        await test_snake_game(session)
+        print("HUD Server started. Get ready for ENDLESS Snake! 🐍✨\n")
+        print("🌈 Gradient Snake | 🔥 Combos | 🌟 Golden Apples | 🎨 Animated Borders\n")
+
+        # Play again loop
+        while True:
+            play_again = await test_snake_game(session)
+            if not play_again:
+                print("Thanks for playing! 🐍✨")
+                break
+            else:
+                print("\n" + "=" * 60)
+                print("Starting new game...")
+                print("=" * 60 + "\n")
+                await asyncio.sleep(0.5)  # Small delay before restart
 
 
 if __name__ == "__main__":
