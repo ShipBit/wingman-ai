@@ -432,6 +432,82 @@ async def test_chat_game(session: TestSession):
     await test_chat_conversation(session, CONVERSATION_GAME)
 
 
+async def test_chat_message_update(session: TestSession):
+    """Test updating existing chat messages by ID.
+
+    Demonstrates:
+    - Sending a message and getting back its ID
+    - Updating a recent message's content
+    - Updating an older (past) message's content
+    - Verifying that message IDs are returned for merged messages too
+    """
+    print(f"[{session.name}] Testing message update...")
+
+    chat_name = f"update_{session.session_id}"
+
+    await session.create_chat_window(
+        name=chat_name,
+        anchor=session.config.get("anchor", "top_left"),
+        priority=35,
+        layout_mode="auto",
+        width=400,
+        max_height=300,
+        auto_hide=False,
+        sender_colors={
+            "Alice": "#4cd964",
+            "Bob": "#00aaff",
+        },
+    )
+    await asyncio.sleep(0.5)
+
+    # Send a message and get its ID
+    msg1_id = await session.send_chat_message(chat_name, "Alice", "Hello! This is my first message.")
+    assert msg1_id is not None, "Expected a message ID back from send_chat_message"
+    print(f"  Message 1 ID: {msg1_id}")
+    await asyncio.sleep(1)
+
+    # Send another message from a different sender
+    msg2_id = await session.send_chat_message(chat_name, "Bob", "Hey Alice, how are you?")
+    assert msg2_id is not None, "Expected a message ID back from send_chat_message"
+    assert msg2_id != msg1_id, "Different senders should produce different message IDs"
+    print(f"  Message 2 ID: {msg2_id}")
+    await asyncio.sleep(1)
+
+    # Update the most recent message (current)
+    await session.update_chat_message(chat_name, msg2_id, "Hey Alice, how are you doing today?")
+    print(f"  Updated message 2 (current)")
+    await asyncio.sleep(1.5)
+
+    # Update the older message (past) — should also work
+    await session.update_chat_message(chat_name, msg1_id, "Hello! This message was **updated** after the fact.")
+    print(f"  Updated message 1 (past)")
+    await asyncio.sleep(1.5)
+
+    # Test that merged messages return the existing ID
+    msg3_id = await session.send_chat_message(chat_name, "Alice", "I'm adding to my updated message.")
+    # Bob was the last sender, so this creates a new message for Alice
+    assert msg3_id is not None, "Expected a message ID back"
+    print(f"  Message 3 ID: {msg3_id}")
+    await asyncio.sleep(0.8)
+
+    # Now send another from Alice — should merge and return same ID
+    msg3_merged_id = await session.send_chat_message(chat_name, "Alice", "This should merge!")
+    assert msg3_merged_id == msg3_id, "Consecutive same-sender messages should return the same ID"
+    print(f"  Merged message ID matches: {msg3_merged_id == msg3_id}")
+    await asyncio.sleep(1.5)
+
+    # Update the merged message
+    await session.update_chat_message(
+        chat_name, msg3_id,
+        "Merged and then **updated** — all via the same ID!"
+    )
+    print(f"  Updated merged message")
+    await asyncio.sleep(2)
+
+    await session.delete_chat_window(chat_name)
+    print(f"[{session.name}] Message update test complete")
+
+
 # =============================================================================
 # Run All Tests
 # =============================================================================
@@ -443,6 +519,8 @@ async def run_all_chat_tests(session: TestSession):
     await test_chat_markdown(session)
     await asyncio.sleep(1)
     await test_chat_message_merging(session)
+    await asyncio.sleep(1)
+    await test_chat_message_update(session)
     await asyncio.sleep(1)
     await test_chat_auto_hide(session)
     await asyncio.sleep(1)

@@ -264,6 +264,19 @@ class ChatMessageRequest(BaseModel):
     """Optional sender color override."""
 
 
+class ChatMessageUpdateRequest(BaseModel):
+    """Request to update an existing chat message."""
+
+    window_name: str
+    """Name of the chat window containing the message."""
+
+    message_id: str
+    """ID of the message to update (returned by send_chat_message)."""
+
+    text: str
+    """New message text to replace the existing content."""
+
+
 class CreateChatWindowRequest(BaseModel):
     """Request to create a chat window."""
 
@@ -315,6 +328,14 @@ class OperationResponse(BaseModel):
 
     status: str = "ok"
     message: Optional[str] = None
+
+
+class ChatMessageResponse(BaseModel):
+    """Response from sending a chat message, includes the message ID."""
+
+    status: str = "ok"
+    message_id: str
+    """The unique ID of the message (new or merged)."""
 
 
 class ErrorResponse(BaseModel):

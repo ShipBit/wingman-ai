@@ -2446,6 +2446,7 @@ class HeadsUpOverlay:
                     now = time.time()
                     win = self._windows[window_name]
                     sender = msg.get('sender', '')
+                    message_id = msg.get('id', '')
 
                     # Append to last message if same sender
                     if (
@@ -2456,6 +2457,7 @@ class HeadsUpOverlay:
                         win['messages'][-1]['timestamp'] = now
                     else:
                         message = {
+                            'id': message_id,
                             'sender': sender,
                             'text': msg.get('text', ''),
                             'color': msg.get('color'),
@@ -2478,6 +2480,19 @@ class HeadsUpOverlay:
                         self._layout_manager.set_window_visible(window_name, True)
 
                     win['canvas_dirty'] = True
+
+            elif t == 'update_chat_message':
+                chat_name = msg.get('name')
+                window_name = f"chat_{chat_name}"
+                if chat_name and window_name in self._windows:
+                    win = self._windows[window_name]
+                    message_id = msg.get('id', '')
+                    new_text = msg.get('text', '')
+                    for m in win['messages']:
+                        if m.get('id') == message_id:
+                            m['text'] = new_text
+                            win['canvas_dirty'] = True
+                            break
 
             elif t == 'clear_chat_window':
                 chat_name = msg.get('name')

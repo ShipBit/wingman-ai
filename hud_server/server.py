@@ -36,11 +36,13 @@ from hud_server.models import (
     ProgressRequest,
     TimerRequest,
     ChatMessageRequest,
+    ChatMessageUpdateRequest,
     CreateChatWindowRequest,
     StateRestoreRequest,
     HealthResponse,
     GroupStateResponse,
     OperationResponse,
+    ChatMessageResponse,
 )
 
 # Try to import overlay support (bundled with hud_server)
@@ -396,16 +398,28 @@ class HudServer:
                 raise HTTPException(status_code=404, detail=f"Chat window '{name}' not found")
             return OperationResponse(status="ok")
 
-        @app.post("/chat/message", response_model=OperationResponse, tags=["chat"])
+        @app.post("/chat/message", response_model=ChatMessageResponse, tags=["chat"])
         async def send_chat_message(request: ChatMessageRequest):
-            """Send a message to a chat window."""
-            if not self.manager.send_chat_message(
+            """Send a message to a chat window. Returns the message ID."""
+            message_id = self.manager.send_chat_message(
                 window_name=request.window_name,
                 sender=request.sender,
                 text=request.text,
                 color=request.color
-            ):
+            )
+            if message_id is None:
                 raise HTTPException(status_code=404, detail=f"Chat window '{request.window_name}' not found")
+            return ChatMessageResponse(status="ok", message_id=message_id)
+
+        @app.put("/chat/message", response_model=OperationResponse, tags=["chat"])
+        async def update_chat_message(request: ChatMessageUpdateRequest):
+            """Update an existing chat message's text content by its ID."""
+            if not self.manager.update_chat_message(
+                window_name=request.window_name,
+                message_id=request.message_id,
+                text=request.text
+            ):
+                raise HTTPException(status_code=404, detail=f"Message '{request.message_id}' not found in window '{request.window_name}'")
             return OperationResponse(status="ok")
 
         @app.delete("/chat/messages/{window_name}", response_model=OperationResponse, tags=["chat"])

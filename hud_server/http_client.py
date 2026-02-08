@@ -475,7 +475,7 @@ class HudHttpClient:
         text: str,
         color: Optional[str] = None
     ) -> Optional[dict]:
-        """Send a message to a chat window."""
+        """Send a message to a chat window. Returns response with message_id."""
         data = {
             "window_name": window_name,
             "sender": sender,
@@ -485,6 +485,20 @@ class HudHttpClient:
             data["color"] = color
 
         return await self._request("POST", "/chat/message", data)
+
+    async def update_chat_message(
+        self,
+        window_name: str,
+        message_id: str,
+        text: str
+    ) -> Optional[dict]:
+        """Update an existing chat message's text content by its ID."""
+        data = {
+            "window_name": window_name,
+            "message_id": message_id,
+            "text": text
+        }
+        return await self._request("PUT", "/chat/message", data)
 
     async def clear_chat_window(self, name: str) -> Optional[dict]:
         """Clear all messages from a chat window."""
@@ -772,6 +786,11 @@ class HudHttpClientSync:
     def send_chat_message(self, window_name: str, sender: str, text: str, color: Optional[str] = None):
         return self._run_coro(self._client.send_chat_message(
             window_name, sender, text, color
+        )) if self._client else None
+
+    def update_chat_message(self, window_name: str, message_id: str, text: str):
+        return self._run_coro(self._client.update_chat_message(
+            window_name, message_id, text
         )) if self._client else None
 
     def clear_chat_window(self, name: str):

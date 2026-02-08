@@ -289,15 +289,28 @@ class TestSession:
         await self._client.create_chat_window(name=name, **props)
 
     async def send_chat_message(self, window_name: str, sender: str, text: str,
-                                color: Optional[str] = None):
-        """Send a message to a chat window."""
+                                color: Optional[str] = None) -> Optional[str]:
+        """Send a message to a chat window. Returns the message ID."""
         if not self._client:
-            return
-        await self._client.send_chat_message(
+            return None
+        result = await self._client.send_chat_message(
             window_name=window_name,
             sender=sender,
             text=text,
             color=color,
+        )
+        if result:
+            return result.get("message_id")
+        return None
+
+    async def update_chat_message(self, window_name: str, message_id: str, text: str):
+        """Update an existing chat message's text content by its ID."""
+        if not self._client:
+            return
+        await self._client.update_chat_message(
+            window_name=window_name,
+            message_id=message_id,
+            text=text,
         )
 
     async def clear_chat_window(self, name: str):

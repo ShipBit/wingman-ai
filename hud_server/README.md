@@ -141,10 +141,38 @@ with HudHttpClientSync() as client:
 
 - `POST /chat/window` - Create a chat window
 - `DELETE /chat/window/{name}` - Delete a chat window
-- `POST /chat/message` - Send a chat message
+- `POST /chat/message` - Send a chat message (returns `message_id`)
+- `PUT /chat/message` - Update an existing message by ID
 - `DELETE /chat/messages/{name}` - Clear chat history
 - `POST /chat/show/{name}` - Show a hidden chat window
 - `POST /chat/hide/{name}` - Hide a chat window
+
+#### Message Updates
+
+When sending a chat message via `POST /chat/message`, the response includes a `message_id` that uniquely identifies the message. This ID can be used to update the message content later via `PUT /chat/message`.
+
+If consecutive messages are sent by the same sender, they are automatically merged into a single message. In this case, `POST /chat/message` returns the existing merged message's ID, so updates will apply to the combined message.
+
+**Send a message:**
+```python
+response = await client.send_chat_message(
+    window_name="my_chat",
+    sender="Assistant",
+    text="Processing your request..."
+)
+message_id = response["message_id"]
+```
+
+**Update the message later:**
+```python
+await client.update_chat_message(
+    window_name="my_chat",
+    message_id=message_id,
+    text="Done! Here are your results: ..."
+)
+```
+
+This works for both the most recent message and any past message still in the chat history.
 
 ### State Management
 

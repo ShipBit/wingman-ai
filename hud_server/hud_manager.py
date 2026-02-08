@@ -9,6 +9,7 @@ Manages the state of all HUD groups, supporting:
 
 import threading
 import time
+import uuid
 from typing import Any, Optional
 from dataclasses import dataclass, field
 
@@ -57,6 +58,7 @@ class ChatMessage:
     """A chat message."""
     sender: str
     text: str
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
     color: Optional[str] = None
     timestamp: float = field(default_factory=time.time)
 
@@ -106,6 +108,7 @@ class GroupState:
             },
             "chat_messages": [
                 {
+                    "id": msg.id,
                     "sender": msg.sender,
                     "text": msg.text,
                     "color": msg.color,
@@ -163,6 +166,7 @@ class GroupState:
         # Restore chat messages
         for msg_data in data.get("chat_messages", []):
             state.chat_messages.append(ChatMessage(
+                id=msg_data.get("id", str(uuid.uuid4())),
                 sender=msg_data.get("sender", ""),
                 text=msg_data.get("text", ""),
                 color=msg_data.get("color"),
@@ -631,11 +635,16 @@ class HudManager:
         sender: str,
         text: str,
         color: Optional[str] = None
-    ) -> bool:
-        """Send a message to a chat window."""
+    ) -> Optional[str]:
+        """Send a message to a chat window.
+
+        Returns the message ID if successful, None if the window was not found.
+        If the message is merged with the previous message from the same sender,
+        the existing message's ID is returned.
+        """
         with self._lock:
             if window_name not in self._groups:
-                return False
+                return None
 
             state = self._groups[window_name]
 
@@ -645,12 +654,15 @@ class HudManager:
                 and state.chat_messages[-1].sender == sender
             ):
                 state.chat_messages[-1].text += " " + text
+                message_id = state.chat_messages[-1].id
             else:
-                state.chat_messages.append(ChatMessage(
+                msg = ChatMessage(
                     sender=sender,
                     text=text,
                     color=color
-                ))
+                )
+                state.chat_messages.append(msg)
+                message_id = msg.id
 
             # Limit chat history
             max_messages = state.props.get("max_messages", 50)
@@ -660,12 +672,45 @@ class HudManager:
             self._notify_callbacks({
                 "type": "chat_message",
                 "name": window_name,
+                "id": message_id,
                 "sender": sender,
                 "text": text,
                 "color": color
             })
 
-            return True
+            return message_id
+
+    def update_chat_message(
+        self,
+        window_name: str,
+        message_id: str,
+        text: str
+    ) -> bool:
+        """Update an existing chat message's text content.
+
+        Finds the message by ID in the specified chat window and replaces its text.
+        Works for both current and past messages in the chat history.
+
+        Returns True if the message was found and updated, False otherwise.
+        """
+        with self._lock:
+            if window_name not in self._groups:
+                return False
+
+            state = self._groups[window_name]
+
+            for msg in state.chat_messages:
+                if msg.id == message_id:
+                    msg.text = text
+                    self._notify_callbacks({
+                        "type": "update_chat_message",
+                        "name": window_name,
+                        "id": message_id,
+                        "text": text
+                    })
+                    return True
+
+            return False
 
     def clear_chat_window(self, name: str) -> bool:
         """Clear all messages from a chat window."""
