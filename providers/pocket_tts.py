@@ -22,7 +22,7 @@ from services.printr import Printr
 
 
 MODELS_DIR = "pocket-tts-models"
-
+INCLUDED_VOICES_DIR = "pocket-tts-voices"
 
 class PocketTTS:
     def __init__(self, settings: Optional[PocketTTSSettings] = None):
@@ -32,6 +32,7 @@ class PocketTTS:
         self.printr = Printr()
         self.model: Optional[TTSModel] = None
         self.voices_dir = get_custom_voices_dir()
+        self.wingman_included_voices_dir = self._get_wingman_included_voices_dir()
         self.voice_cache = {}
         self._playback_buffer = bytearray()
 
@@ -52,6 +53,7 @@ class PocketTTS:
 
         self.settings = settings
         self.voices_dir = get_custom_voices_dir()
+        self.wingman_included_voices_dir = self._get_wingman_included_voices_dir()
 
         if self.settings.enable:
             if requires_restart:
@@ -170,10 +172,28 @@ class PocketTTS:
                     id=name_id, name=f"PocketTTS: {name_id}", provider="pocket_tts"
                 )
             )
+        # Wingman included cc0 voices
+        if self.wingman_included_voices_dir and os.path.isdir(self.wingman_included_voices_dir):
+            extensions = ("*.wav", "*.mp3", "*.flac", "*.safetensors")
+            audio_files = []
+            for ext in extensions:
+                audio_files.extend(
+                    glob.glob(os.path.join(self.wingman_included_voices_dir, ext))
+                )
 
+            for f in audio_files:
+                name = os.path.basename(f)
+                stem = os.path.splitext(name)[0]
+                voices.append(
+                    VoiceInfo(
+                        id=stem,
+                        name=f"Wingman Included: {stem}",
+                        provider="wingman_included",
+                    )
+                )
         # Custom voices
         if self.voices_dir and os.path.isdir(self.voices_dir):
-            extensions = ("*.wav", "*.mp3", "*.flac")
+            extensions = ("*.wav", "*.mp3", "*.flac", "*.safetensors")
             audio_files = []
             for ext in extensions:
                 audio_files.extend(glob.glob(os.path.join(self.voices_dir, ext)))
@@ -194,13 +214,26 @@ class PocketTTS:
 
         # 1. Normalize/Resolve the ID to its final path/form first
         resolved_key = voice_id_or_path
+        # Check WingmanAI included voices
+        if self.wingman_included_voices_dir:
+            possible_path = os.path.join(self.wingman_included_voices_dir, voice_id_or_path)
+            if os.path.exists(possible_path):
+                resolved_key = os.path.abspath(possible_path)
+            else:
+                # Try finding file with supported extensions
+                for ext in [".wav", ".mp3", ".flac", ".safetensors"]:
+                    p = possible_path + ext
+                    if os.path.exists(p):
+                        resolved_key = os.path.abspath(p)
+                        break
+        # Check custom voices directory
         if self.voices_dir:
             possible_path = os.path.join(self.voices_dir, voice_id_or_path)
             if os.path.exists(possible_path):
                 resolved_key = os.path.abspath(possible_path)
             else:
                 # Try finding file with supported extensions
-                for ext in [".wav", ".mp3", ".flac"]:
+                for ext in [".wav", ".mp3", ".flac", ".safetensors"]:
                     p = possible_path + ext
                     if os.path.exists(p):
                         resolved_key = os.path.abspath(p)
@@ -404,3 +437,25 @@ class PocketTTS:
         else:
             model_path = "b6369a24"
         return model_path
+
+    def _get_wingman_included_voices_dir(self):
+        # Determine path to wingman included voices directory
+        is_windows = platform.system() == "Windows"
+        if is_windows:
+            # move one dir up, out of _internal (if bundled)
+            app_is_bundled = getattr(sys, "frozen", False)
+            app_root_path = (
+                sys._MEIPASS
+                if app_is_bundled
+                else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            app_dir = (
+                os.path.dirname(app_root_path) if app_is_bundled else app_root_path
+            )
+            wingmanai_voices_dir = os.path.join(app_dir, INCLUDED_VOICES_DIR)
+
+        else:
+            # Return included directory
+            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            wingmanai_voices_dir = os.path.join(app_dir, INCLUDED_VOICES_DIR)   
+        return wingmanai_voices_dir
