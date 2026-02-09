@@ -100,6 +100,38 @@ user32.DispatchMessageW.restype = LRESULT
 
 PM_REMOVE = 0x0001
 
+# WinEvent hook constants for reactive foreground monitoring
+EVENT_SYSTEM_FOREGROUND = 0x0003
+WINEVENT_OUTOFCONTEXT = 0x0000
+WINEVENT_SKIPOWNPROCESS = 0x0002
+
+# Callback type for SetWinEventHook
+WINEVENTPROC = ctypes.WINFUNCTYPE(
+    None,  # void return
+    wintypes.HANDLE,  # hWinEventHook
+    wintypes.DWORD,   # event
+    wintypes.HWND,    # hwnd
+    ctypes.c_long,    # idObject
+    ctypes.c_long,    # idChild
+    wintypes.DWORD,   # idEventThread
+    wintypes.DWORD,   # dwmsEventTime
+)
+
+# SetWinEventHook / UnhookWinEvent prototypes
+user32.SetWinEventHook.argtypes = [
+    wintypes.DWORD,   # eventMin
+    wintypes.DWORD,   # eventMax
+    wintypes.HMODULE, # hmodWinEventProc
+    WINEVENTPROC,     # lpfnWinEventProc
+    wintypes.DWORD,   # idProcess
+    wintypes.DWORD,   # idThread
+    wintypes.DWORD,   # dwFlags
+]
+user32.SetWinEventHook.restype = wintypes.HANDLE
+
+user32.UnhookWinEvent.argtypes = [wintypes.HANDLE]
+user32.UnhookWinEvent.restype = wintypes.BOOL
+
 def _wnd_proc(hwnd, msg, wparam, lparam):
     """Window procedure callback - must handle all message types safely."""
     try:

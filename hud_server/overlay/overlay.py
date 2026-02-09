@@ -35,9 +35,11 @@ from hud_server.platform.win32 import (
     BITMAPINFOHEADER, BITMAPINFO, MSG,
     WS_POPUP, WS_EX_LAYERED, WS_EX_TRANSPARENT, WS_EX_TOPMOST, WS_EX_TOOLWINDOW,
     WS_EX_NOACTIVATE, LWA_ALPHA, LWA_COLORKEY, SWP_SHOWWINDOW,
-    SWP_NOACTIVATE, SRCCOPY, DIB_RGB_COLORS, BI_RGB,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SRCCOPY, DIB_RGB_COLORS, BI_RGB,
     SW_SHOWNOACTIVATE, HWND_TOPMOST, PM_REMOVE,
-    _ensure_window_class, _class_name
+    _ensure_window_class, _class_name,
+    force_on_top, WINEVENTPROC,
+    EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
 )
 from hud_server.layout import LayoutManager, Anchor, LayoutMode
 from hud_server.constants import (
@@ -74,6 +76,11 @@ class HeadsUpOverlay:
         self._global_framerate = max(1, framerate)
         self._layout_margin = layout_margin
         self._layout_spacing = layout_spacing
+
+        # Reactive foreground management
+        self._foreground_changed = threading.Event()
+        self._win_event_hook = None
+        self._win_event_proc = None  # prevent GC of the callback
 
         # =====================================================================
         # UNIFIED WINDOW SYSTEM
@@ -1902,8 +1909,12 @@ class HeadsUpOverlay:
 
             self._init_fonts()
 
-            # Note: Removed last_z tracking since we no longer repeatedly bring windows to front
             self.last_update_time = time.time()
+
+            # Install WinEvent hook for reactive foreground monitoring.
+            # The callback fires only when a different window becomes the foreground
+            # window, so we re-apply topmost to all HUD windows only when needed.
+            self._install_foreground_hook()
 
             # Signal successful start
             self._emit_heartbeat()
@@ -1937,8 +1948,12 @@ class HeadsUpOverlay:
                     # =========================================================
                     self._update_all_windows()
 
-                    # Note: Removed repeated z-order updates (bringing windows to front every 0.1s)
-                    # HUD windows are set to topmost once during creation and when properties change
+                    # Re-apply topmost to all HUD windows when the foreground
+                    # window changed (event-driven, not polled).
+                    if self._foreground_changed.is_set():
+                        self._foreground_changed.clear()
+                        self._reapply_topmost()
+                        print("[HUD] Foreground change detected - moved HUD to absolute foreground")
 
                     self._emit_heartbeat()
 
@@ -1953,9 +1968,54 @@ class HeadsUpOverlay:
         except Exception as e:
             self._report_exception("run_crash", e)
         finally:
+            self._uninstall_foreground_hook()
             # Cleanup unified windows (including chat windows)
             for name in list(self._windows.keys()):
                 self._destroy_window(name)
+
+    def _install_foreground_hook(self):
+        """Install a WinEvent hook to detect foreground window changes.
+
+        Uses EVENT_SYSTEM_FOREGROUND which fires whenever a different window
+        becomes the foreground window. WINEVENT_OUTOFCONTEXT means the callback
+        runs in our own process/thread context (no DLL injection needed).
+        WINEVENT_SKIPOWNPROCESS avoids firing for our own HUD windows.
+        """
+        def _on_foreground_change(hook, event, hwnd, id_object, id_child,
+                                  event_thread, event_time):
+            self._foreground_changed.set()
+
+        # Must keep a reference to prevent garbage collection of the ctypes callback
+        self._win_event_proc = WINEVENTPROC(_on_foreground_change)
+        self._win_event_hook = user32.SetWinEventHook(
+            EVENT_SYSTEM_FOREGROUND,   # eventMin
+            EVENT_SYSTEM_FOREGROUND,   # eventMax
+            None,                      # hmodWinEventProc (None for out-of-context)
+            self._win_event_proc,      # callback
+            0,                         # idProcess (0 = all processes)
+            0,                         # idThread (0 = all threads)
+            WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+        )
+
+    def _uninstall_foreground_hook(self):
+        """Remove the WinEvent hook on shutdown."""
+        if self._win_event_hook:
+            try:
+                user32.UnhookWinEvent(self._win_event_hook)
+            except Exception:
+                pass
+            self._win_event_hook = None
+            self._win_event_proc = None
+
+    def _reapply_topmost(self):
+        """Re-apply topmost z-order to all visible HUD windows."""
+        for win in self._windows.values():
+            hwnd = win.get('hwnd')
+            if not hwnd:
+                continue
+            # Only re-apply to windows that are visible or fading in
+            if win.get('fade_state', 0) in (1, 2, 3):
+                force_on_top(hwnd)
 
     def _handle_message(self, msg):
         try:
