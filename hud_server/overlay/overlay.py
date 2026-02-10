@@ -129,10 +129,10 @@ class HeadsUpOverlay:
             'width': 400, 'x': 20, 'y': 20,
             'bg_color': '#1e212b', 'text_color': '#f0f0f0', 'accent_color': '#00aaff',
             'opacity': 0.85, 'duration': 8.0, 'border_radius': 12, 'content_padding': 16,
-            'max_height': 600, 'font_size': 16, 'color_emojis': True,
+            'max_height': 600, 'font_size': 16, 'font_family': 'Segoe UI', 'color_emojis': True,
             'typewriter_effect': True,
             # Persistent window defaults
-            'persistent_x': 20, 'persistent_y': 300, 'persistent_width': 300,
+            'persistent_x': 20, 'persistent_y': 300,
         }
 
         # Per-group props storage (set via create_group/update_group)
@@ -147,6 +147,10 @@ class HeadsUpOverlay:
         self.fonts = {}
         self.image_cache = {}
         self.md_renderer = None
+
+        # Font cache: stores font sets by (family, size) to avoid reloading
+        # Key: (family, size) -> {font_dict with font objects}
+        self._font_cache: Dict[tuple, Dict] = {}
 
         # =====================================================================
         # RENDER CACHING SYSTEM
@@ -259,9 +263,9 @@ class HeadsUpOverlay:
         # Adjust defaults based on window type
         if window_type == self.WINDOW_TYPE_PERSISTENT:
             # Use persistent_* props for position
-            props['x'] = props.get('persistent_x', 20)
-            props['y'] = props.get('persistent_y', 300)
-            props['width'] = props.get('persistent_width', 300)
+            props['x'] = props.get('x', 20)
+            props['y'] = props.get('y', 300)
+            props['width'] = props.get('width', 300)
 
         return props
 
@@ -772,11 +776,15 @@ class HeadsUpOverlay:
         win['last_render_state'] = current_state
         win['canvas_dirty'] = True
 
-        # Ensure renderer exists
-        if not self.md_renderer:
-            self._init_fonts()
-            colors = {'text': text_color, 'accent': accent, 'bg': bg}
-            self.md_renderer = MarkdownRenderer(self.fonts, colors, props.get('color_emojis', True))
+        # Ensure fonts for this window's font_family are loaded
+        font_size = int(props.get('font_size', 16))
+        font_family = props.get('font_family', 'Segoe UI')
+        window_fonts = self._load_fonts_for_size_and_family(font_size, font_family)
+
+        # Always ensure renderer uses window's correct fonts (each window may have different font settings)
+        colors = {'text': text_color, 'accent': accent, 'bg': bg}
+        self.fonts = window_fonts  # Update global fonts to match window
+        self.md_renderer = MarkdownRenderer(window_fonts, colors, props.get('color_emojis', True))
 
         # Update renderer colors
         self.md_renderer.set_colors(text_color, accent, bg)
@@ -992,11 +1000,15 @@ class HeadsUpOverlay:
         win['last_render_state'] = current_state
         win['canvas_dirty'] = True
 
-        # Ensure renderer
-        if not self.md_renderer:
-            self._init_fonts()
-            colors = {'text': text_color, 'accent': accent, 'bg': bg}
-            self.md_renderer = MarkdownRenderer(self.fonts, colors, props.get('color_emojis', True))
+        # Ensure fonts for this window's font_family are loaded
+        font_size = int(props.get('font_size', 16))
+        font_family = props.get('font_family', 'Segoe UI')
+        window_fonts = self._load_fonts_for_size_and_family(font_size, font_family)
+
+        # Always ensure renderer uses window's correct fonts (each window may have different font settings)
+        colors = {'text': text_color, 'accent': accent, 'bg': bg}
+        self.fonts = window_fonts  # Update global fonts to match window
+        self.md_renderer = MarkdownRenderer(window_fonts, colors, props.get('color_emojis', True))
 
         self.md_renderer.set_colors(text_color, accent, bg)
 
@@ -1070,7 +1082,16 @@ class HeadsUpOverlay:
             max_title_w = width - (padding * 2) - timer_w
             if font_bold:
                 self._render_text_with_emoji(draw, title_text, padding, y, accent + (255,), font_bold, emoji_y_offset=3)
-            y += 22
+                # Calculate proper spacing based on font height instead of hardcoded value
+                try:
+                    bbox = font_bold.getbbox(title_text)
+                    title_h = bbox[3] - bbox[1]
+                except:
+                    title_h = font_size
+                # Add spacing: title height + padding (0.625x of title height for adequate breathing room)
+                y += title_h + max(10, int(title_h * 0.625))
+            else:
+                y += 22  # Fallback if no font
 
             # Progress bar
             if info.get('is_progress'):
@@ -1102,11 +1123,14 @@ class HeadsUpOverlay:
                     try:
                         bbox = font_normal.getbbox(pct_text)
                         pct_w = bbox[2] - bbox[0]
+                        pct_h = bbox[3] - bbox[1]
                     except:
                         pct_w = len(pct_text) * 7
+                        pct_h = font_size
                     pct_x = padding + (bar_width - pct_w) // 2
                     draw.text((pct_x, y), pct_text, fill=text_color + (200,), font=font_normal)
-                y += 18
+                    # Scale spacing based on font size (1.25x for spacing) plus small additional padding
+                    y += int(pct_h * 1.25) + 4
 
             # Description
             desc = info.get('description', '')
@@ -1222,13 +1246,19 @@ class HeadsUpOverlay:
         win['last_render_state'] = current_state
         win['canvas_dirty'] = True
 
+        # Ensure fonts for this window's font_family are loaded
+        font_size = int(props.get('font_size', 14))
+        font_family = props.get('font_family', 'Segoe UI')
+        window_fonts = self._load_fonts_for_size_and_family(font_size, font_family)
+
+        # Always ensure renderer uses window's correct fonts
+        colors = {'text': text_color, 'accent': accent, 'bg': bg}
+        self.fonts = window_fonts  # Update global fonts to match window
+        self.md_renderer = MarkdownRenderer(window_fonts, colors, color_emojis)
+
         # Get fonts
         font_bold = self.fonts.get('bold', self.fonts.get('normal', self.fonts.get('regular')))
         font_normal = self.fonts.get('normal', self.fonts.get('regular'))
-
-        # Update markdown renderer colors
-        if self.md_renderer:
-            self.md_renderer.set_colors(text_color, accent, bg)
 
         # Render messages to temp canvas
         temp_h = max(2000, max_height * 3)
@@ -1535,15 +1565,23 @@ class HeadsUpOverlay:
 
         return text
 
-    def _init_fonts(self, font_size: int = None, font_family: str = None):
-        """Initialize fonts for rendering.
+    def _load_fonts_for_size_and_family(self, size: int, family: str) -> Dict:
+        """Load fonts for a specific size and family combination.
+
+        Uses cache to avoid reloading the same font set multiple times.
 
         Args:
-            font_size: Font size in pixels. Defaults to value from _default_props (16).
-            font_family: Font family name. Defaults to value from _default_props ('Segoe UI').
+            size: Font size in pixels
+            family: Font family name
+
+        Returns:
+            Dictionary of font objects for the given size and family
         """
-        size = font_size if font_size is not None else int(self._default_props.get('font_size', 16))
-        family = font_family if font_family is not None else self._default_props.get('font_family', 'Segoe UI')
+        cache_key = (family.lower(), size)
+
+        # Return cached fonts if available
+        if cache_key in self._font_cache:
+            return self._font_cache[cache_key]
 
         # Map font family names to Windows font files
         font_map = {
@@ -1555,24 +1593,20 @@ class HeadsUpOverlay:
             'calibri': {'normal': 'calibri.ttf', 'bold': 'calibrib.ttf', 'italic': 'calibrii.ttf', 'bold_italic': 'calibriz.ttf'},
             'consolas': {'normal': 'consola.ttf', 'bold': 'consolab.ttf', 'italic': 'consolai.ttf', 'bold_italic': 'consolaz.ttf'},
             'courier new': {'normal': 'cour.ttf', 'bold': 'courbd.ttf', 'italic': 'couri.ttf', 'bold_italic': 'courbi.ttf'},
-            'roboto': {'normal': 'Roboto-Regular.ttf', 'bold': 'Roboto-Bold.ttf', 'italic': 'Roboto-Italic.ttf', 'bold_italic': 'Roboto-BoldItalic.ttf'},
         }
 
-        # Get font files for the specified family (case-insensitive)
         family_lower = family.lower()
         font_files = font_map.get(family_lower, font_map['segoe ui'])
-
         fonts_dir = "C:/Windows/Fonts/"
 
-        # Use configured font size directly
         pil_size = size
-        pil_code_size = size - 1  # Code font slightly smaller
+        pil_code_size = max(1, size - 1)  # Code font slightly smaller, but at least 1
 
-        # Load emoji font separately (may fail on some systems)
+        # Load emoji fonts
         emoji_font = None
         emoji_font_paths = [
-            fonts_dir + "seguiemj.ttf",  # Windows 10/11 Segoe UI Emoji
-            fonts_dir + "seguisym.ttf",  # Fallback to Segoe UI Symbol
+            fonts_dir + "seguiemj.ttf",
+            fonts_dir + "seguisym.ttf",
         ]
         for emoji_path in emoji_font_paths:
             try:
@@ -1581,7 +1615,6 @@ class HeadsUpOverlay:
             except:
                 pass
 
-        # Load emoji fonts at different sizes for headers
         emoji_fonts = {'emoji': emoji_font}
         emoji_font_path = None
         for path in emoji_font_paths:
@@ -1603,34 +1636,35 @@ class HeadsUpOverlay:
             except:
                 pass
 
+        # Try to load fonts from Windows fonts directory
         try:
-            self.fonts = {
+            fonts_dict = {
                 'normal': ImageFont.truetype(fonts_dir + font_files['normal'], pil_size),
                 'bold': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size),
                 'italic': ImageFont.truetype(fonts_dir + font_files['italic'], pil_size),
                 'bold_italic': ImageFont.truetype(fonts_dir + font_files['bold_italic'], pil_size),
                 'code': ImageFont.truetype(fonts_dir + "consola.ttf", pil_code_size),
-                # Header fonts H1-H6 with decreasing sizes
-                'h1': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size + 10),  # Largest
+                'h1': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size + 10),
                 'h2': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size + 6),
                 'h3': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size + 3),
                 'h4': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size + 1),
                 'h5': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size),
-                'h6': ImageFont.truetype(fonts_dir + font_files['bold_italic'], pil_size - 1),  # Smallest, italic
-                'header': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size + 4),  # Legacy
+                'h6': ImageFont.truetype(fonts_dir + font_files['bold_italic'], pil_size - 1),
+                'header': ImageFont.truetype(fonts_dir + font_files['bold'], pil_size + 4),
                 'emoji': emoji_font if emoji_font else ImageFont.truetype(fonts_dir + font_files['normal'], pil_size),
-                # Emoji fonts for headers
                 'emoji_h1': emoji_fonts.get('emoji_h1', emoji_font),
                 'emoji_h2': emoji_fonts.get('emoji_h2', emoji_font),
                 'emoji_h3': emoji_fonts.get('emoji_h3', emoji_font),
                 'emoji_h4': emoji_fonts.get('emoji_h4', emoji_font),
                 'emoji_h5': emoji_fonts.get('emoji_h5', emoji_font),
                 'emoji_h6': emoji_fonts.get('emoji_h6', emoji_font),
+                '_font_size': size,
+                '_font_family': family,
             }
-        except Exception as e:
-            # Fallback: try loading font by name directly (for custom fonts)
+        except Exception:
+            # Fallback: try loading by family name directly
             try:
-                self.fonts = {
+                fonts_dict = {
                     'normal': ImageFont.truetype(family, pil_size),
                     'bold': ImageFont.truetype(family, pil_size),
                     'italic': ImageFont.truetype(family, pil_size),
@@ -1644,11 +1678,40 @@ class HeadsUpOverlay:
                     'h6': ImageFont.truetype(family, pil_size - 1),
                     'header': ImageFont.truetype(family, pil_size + 4),
                     'emoji': emoji_font if emoji_font else ImageFont.truetype(family, pil_size),
+                    '_font_size': size,
+                    '_font_family': family,
                 }
             except:
                 # Final fallback to default
                 default = ImageFont.load_default()
-                self.fonts = {k: default for k in ['normal', 'bold', 'italic', 'bold_italic', 'code', 'header', 'emoji']}
+                fonts_dict = {k: default for k in ['normal', 'bold', 'italic', 'bold_italic', 'code', 'header', 'emoji']}
+                fonts_dict.update({
+                    'h1': default,
+                    'h2': default,
+                    'h3': default,
+                    'h4': default,
+                    'h5': default,
+                    'h6': default,
+                })
+                fonts_dict['_font_size'] = size
+                fonts_dict['_font_family'] = family
+
+        # Cache the fonts
+        self._font_cache[cache_key] = fonts_dict
+        return fonts_dict
+
+    def _init_fonts(self, font_size: int = None, font_family: str = None):
+        """Initialize fonts for rendering.
+
+        Args:
+            font_size: Font size in pixels. Defaults to value from _default_props (16).
+            font_family: Font family name. Defaults to value from _default_props ('Segoe UI').
+        """
+        size = font_size if font_size is not None else int(self._default_props.get('font_size', 16))
+        family = font_family if font_family is not None else self._default_props.get('font_family', 'Segoe UI')
+
+        # Load fonts using the cache
+        self.fonts = self._load_fonts_for_size_and_family(size, family)
 
         colors = {
             'text': self._hex_to_rgb(self._default_props.get('text_color', '#f0f0f0')),
@@ -1867,9 +1930,9 @@ class HeadsUpOverlay:
 
         # Get persistent window rect
         pers_props = pers_win.get('props', {})
-        pers_x = int(pers_props.get('x', pers_props.get('persistent_x', 20)))
-        pers_y = int(pers_props.get('y', pers_props.get('persistent_y', 300)))
-        pers_w = int(pers_props.get('width', pers_props.get('persistent_width', 300)))
+        pers_x = int(pers_props.get('x', pers_props.get('x', 20)))
+        pers_y = int(pers_props.get('y', pers_props.get('y', 300)))
+        pers_w = int(pers_props.get('width', pers_props.get('width', 400)))
         pers_canvas = pers_win.get('canvas')
         pers_h = pers_canvas.height if pers_canvas else 200
 
@@ -2097,7 +2160,9 @@ class HeadsUpOverlay:
                 new_size = props.get('font_size')
                 new_family = props.get('font_family')
                 if (new_size is not None and new_size != old_size) or (new_family is not None and new_family != old_family):
-                    self._init_fonts()
+                    font_size = int(new_size) if new_size is not None else old_size
+                    font_family = new_family if new_family is not None else old_family
+                    self._init_fonts(font_size, font_family)
                     # Rebuild markdown renderer with new fonts
                     text_color = self._hex_to_rgb(props.get('text_color', '#f0f0f0'))
                     accent_color = self._hex_to_rgb(props.get('accent_color', '#00aaff'))
@@ -2157,7 +2222,9 @@ class HeadsUpOverlay:
 
                     # Re-init fonts if size or family changed
                     if old_size != new_size or old_family != new_family:
-                        self._init_fonts()
+                        font_size = int(new_size) if new_size is not None else int(old_size) if old_size is not None else 16
+                        font_family = new_family if new_family is not None else old_family if old_family is not None else 'Segoe UI'
+                        self._init_fonts(font_size, font_family)
                         colors = {
                             'text': self._hex_to_rgb(win['props'].get('text_color', '#f0f0f0')),
                             'accent': self._hex_to_rgb(win['props'].get('accent_color', '#00aaff')),

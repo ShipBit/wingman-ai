@@ -27,6 +27,7 @@ from services.file import get_writable_dir
 from services.printr import Printr
 from skills.skill_base import Skill, tool
 from hud_server.http_client import HudHttpClient
+from hud_server.types import Anchor, HudColor, FontFamily, LayoutMode, MessageProps, PersistentProps
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -40,6 +41,9 @@ class HUD(Skill):
 
     Uses the integrated HUD Server which must be enabled in global settings.
     """
+
+    # Valid anchor values from the Anchor enum
+    VALID_ANCHORS = [a.value for a in Anchor]
 
     def __init__(
         self,
@@ -92,13 +96,6 @@ class HUD(Skill):
                     error_type=WingmanInitializationErrorType.UNKNOWN
                 )
             )
-
-        # Validate custom properties
-        valid_anchors = [
-            "top_left", "top_center", "top_right",
-            "left_center", "center", "right_center",
-            "bottom_left", "bottom_center", "bottom_right"
-        ]
 
         # Color validation helper - supports #RGB, #RRGGBB, or #RRGGBBAA formats
         def is_valid_hex_color(color: str) -> bool:
@@ -161,11 +158,11 @@ class HUD(Skill):
 
         # Validate chat_anchor
         chat_anchor = self.retrieve_custom_property_value("chat_anchor", errors)
-        if chat_anchor not in valid_anchors:
+        if chat_anchor not in self.VALID_ANCHORS:
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
-                    message=f"Invalid chat_anchor: '{chat_anchor}'. Must be one of: {', '.join(valid_anchors)}.",
+                    message=f"Invalid chat_anchor: '{chat_anchor}'. Must be one of: {', '.join(self.VALID_ANCHORS)}.",
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG
                 )
             )
@@ -205,11 +202,11 @@ class HUD(Skill):
 
         # Validate persistent_anchor
         persistent_anchor = self.retrieve_custom_property_value("persistent_anchor", errors)
-        if persistent_anchor not in valid_anchors:
+        if persistent_anchor not in self.VALID_ANCHORS:
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
-                    message=f"Invalid persistent_anchor: '{persistent_anchor}'. Must be one of: {', '.join(valid_anchors)}.",
+                    message=f"Invalid persistent_anchor: '{persistent_anchor}'. Must be one of: {', '.join(self.VALID_ANCHORS)}.",
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG
                 )
             )
@@ -353,41 +350,41 @@ class HUD(Skill):
         val = self.retrieve_custom_property_value(key, [])
         return val if val is not None else default
 
-    def _get_hud_props(self) -> dict:
+    def _get_hud_props(self) -> MessageProps:
         """Get all HUD visual properties as a dictionary."""
-        return {
-            'anchor': str(self._get_prop("chat_anchor", "top_left")),
-            'priority': int(self._get_prop("chat_priority", 20)),
-            'layout_mode': 'auto',
-            'width': int(self._get_prop("hud_width", 400)),
-            'max_height': int(self._get_prop("hud_max_height", 600)),
-            'bg_color': str(self._get_prop("bg_color", "#1e212b")),
-            'text_color': str(self._get_prop("text_color", "#f0f0f0")),
-            'accent_color': str(self._get_prop("accent_color", "#00aaff")),
-            'opacity': float(self._get_prop("opacity", 0.85)),
-            'border_radius': int(self._get_prop("border_radius", 12)),
-            'font_size': int(self._get_prop("font_size", 16)),
-            'content_padding': int(self._get_prop("content_padding", 16)),
-            'font_family': str(self._get_prop("font_family", "Segoe UI")),
-            'typewriter_effect': bool(self._get_prop("typewriter_effect", True)),
-        }
+        return MessageProps(
+            anchor=str(self._get_prop("chat_anchor", Anchor.TOP_LEFT)),
+            priority=int(self._get_prop("chat_priority", 20)),
+            layout_mode=LayoutMode.AUTO,
+            width=int(self._get_prop("hud_width", 400)),
+            max_height=int(self._get_prop("hud_max_height", 600)),
+            bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
+            text_color=str(self._get_prop("text_color", HudColor.TEXT_PRIMARY)),
+            accent_color=str(self._get_prop("accent_color", HudColor.ACCENT_BLUE)),
+            opacity=float(self._get_prop("opacity", 0.85)),
+            border_radius=int(self._get_prop("border_radius", 12)),
+            font_size=int(self._get_prop("font_size", 16)),
+            content_padding=int(self._get_prop("content_padding", 16)),
+            font_family=str(self._get_prop("font_family", FontFamily.SEGOE_UI)),
+            typewriter_effect=bool(self._get_prop("typewriter_effect", True)),
+        )
 
-    def _get_persistent_props(self) -> dict:
+    def _get_persistent_props(self) -> PersistentProps:
         """Get properties for persistent info panels."""
-        return {
-            'anchor': str(self._get_prop("persistent_anchor", "top_left")),
-            'priority': int(self._get_prop("persistent_priority", 10)),
-            'layout_mode': 'auto',
-            'persistent_width': int(self._get_prop("persistent_width", 400)),
-            'bg_color': str(self._get_prop("bg_color", "#1e212b")),
-            'text_color': str(self._get_prop("text_color", "#f0f0f0")),
-            'accent_color': str(self._get_prop("accent_color", "#00aaff")),
-            'opacity': float(self._get_prop("opacity", 0.85)),
-            'border_radius': int(self._get_prop("border_radius", 12)),
-            'font_size': int(self._get_prop("font_size", 16)),
-            'content_padding': int(self._get_prop("content_padding", 16)),
-            'font_family': str(self._get_prop("font_family", "Segoe UI")),
-        }
+        return PersistentProps(
+            anchor=str(self._get_prop("persistent_anchor", Anchor.TOP_LEFT)),
+            priority=int(self._get_prop("persistent_priority", 10)),
+            layout_mode=LayoutMode.AUTO,
+            width=int(self._get_prop("persistent_width", 400)),
+            bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
+            text_color=str(self._get_prop("text_color", HudColor.TEXT_PRIMARY)),
+            accent_color=str(self._get_prop("accent_color", HudColor.ACCENT_BLUE)),
+            opacity=float(self._get_prop("opacity", 0.85)),
+            border_radius=int(self._get_prop("border_radius", 12)),
+            font_size=int(self._get_prop("font_size", 16)),
+            content_padding=int(self._get_prop("content_padding", 16)),
+            font_family=str(self._get_prop("font_family", FontFamily.SEGOE_UI))
+        )
 
     async def update_config(self, new_config) -> None:
         """Handle configuration updates - recreate HUD groups with new settings."""
@@ -700,14 +697,14 @@ class HUD(Skill):
         message: str,
         color: str,
         tools: list = None,
-        duration: float = 60.0
+        duration: float = 180.0
     ):
         """Show a message on the HUD."""
         if not await self._ensure_connected():
             return
 
         props = self._get_hud_props()
-        props['duration'] = duration
+        props.fade_delay = duration
 
         result = await self._client.show_message(
             group_name=self._messages_group,

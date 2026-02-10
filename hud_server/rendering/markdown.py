@@ -51,7 +51,9 @@ class MarkdownRenderer:
         self.fonts = fonts
         self.colors = colors
         self.color_emojis = color_emojis  # Enable colored emoji rendering
-        self.line_height = 26  # Good line height for readability
+        # Calculate line height based on font size (1.625x for good readability)
+        font_size = fonts.get('_font_size', 16)
+        self.line_height = int(font_size * 1.625)
         self.letter_spacing = 0  # No letter spacing
         self.char_count = 0  # For typewriter tracking
         self._text_size_cache = {}
@@ -984,14 +986,18 @@ class MarkdownRenderer:
         text = block['text']
         content_start = block.get('content_start', block.get('start', 0))
 
-        # Header styling for H1-H6
+        # Get base font size for spacing calculations
+        base_font_size = self.fonts.get('_font_size', 16)
+
+        # Header styling for H1-H6 with spacing scaled to font size
+        # Increased spacing multipliers to prevent overlap with content below (0.75x, 0.5x, 0.375x)
         header_styles = {
-            1: {'font': 'h1', 'color': self.colors['accent'], 'spacing': 8},
-            2: {'font': 'h2', 'color': self.colors['accent'], 'spacing': 6},
-            3: {'font': 'h3', 'color': self.colors['accent'], 'spacing': 4},
-            4: {'font': 'h4', 'color': self.colors['text'], 'spacing': 4},
-            5: {'font': 'h5', 'color': self.colors['text'], 'spacing': 4},
-            6: {'font': 'h6', 'color': (160, 168, 180), 'spacing': 4},
+            1: {'font': 'h1', 'color': self.colors['accent'], 'spacing': int(base_font_size * 0.75)},
+            2: {'font': 'h2', 'color': self.colors['accent'], 'spacing': int(base_font_size * 0.5)},
+            3: {'font': 'h3', 'color': self.colors['accent'], 'spacing': int(base_font_size * 0.375)},
+            4: {'font': 'h4', 'color': self.colors['text'], 'spacing': int(base_font_size * 0.375)},
+            5: {'font': 'h5', 'color': self.colors['text'], 'spacing': int(base_font_size * 0.375)},
+            6: {'font': 'h6', 'color': (160, 168, 180), 'spacing': int(base_font_size * 0.375)},
         }
 
         # Get style for this level (default to H6 style for levels > 6)
@@ -2529,7 +2535,7 @@ class MarkdownRenderer:
 
                 current_x += fcw
 
-        # Return Y position after the last line of text (not adding full line_h again)
+        # Return Y position after the last line of text
         return current_y + line_h + 10
 
 

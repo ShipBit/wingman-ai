@@ -6,26 +6,77 @@ Provides both async and sync APIs for controlling HUD groups via HTTP.
 This replaces the WebSocket-based client for the integrated HUD server.
 
 Usage:
-    # Async usage
+    from hud_server.http_client import HudHttpClient
+    from hud_server.types import Anchor, HudColor, FontFamily, message_props
+
+    # Async usage with type-safe props
     async with HudHttpClient() as client:
-        await client.show_message("group1", "Title", "Content")
+        # Using convenience constructors
+        props = message_props(
+            anchor=Anchor.TOP_RIGHT,
+            accent_color=HudColor.ACCENT_ORANGE,
+            font_family=FontFamily.CONSOLAS
+        )
+        await client.create_group("notifications", props=props)
+        await client.show_message("notifications", "Alert", "Something happened!")
+
+        # Using enums directly (auto-converted to values)
+        await client.create_chat_window(
+            "chat",
+            anchor=Anchor.BOTTOM_LEFT,
+            width=500
+        )
 
     # Sync usage
     client = HudHttpClientSync()
-    client.show_message("group1", "Title", "Content")
+    client.connect()
+    client.show_message("group1", "Title", "Content", color=HudColor.SUCCESS)
+    client.disconnect()
+
+For available property types and values, see:
+    - hud_server.types - Enums and typed property classes
+    - Anchor, LayoutMode - Position/layout options
+    - HudColor - Predefined color palette
+    - FontFamily - Available fonts
+    - MessageProps, ChatWindowProps, PersistentProps - Typed property containers
 """
 
 import asyncio
 import threading
-import time
 import httpx
-from typing import Optional, Any
+from typing import Optional, Any, Union
 from urllib.parse import quote
 from api.enums import LogType
+from hud_server.constants import PATH_GROUPS, PATH_STATE, PATH_STATE_RESTORE, PATH_HEALTH, PATH_MESSAGE, \
+    PATH_MESSAGE_APPEND, PATH_MESSAGE_HIDE, PATH_LOADER, PATH_ITEMS, PATH_PROGRESS, PATH_TIMER, PATH_CHAT_WINDOW, \
+    PATH_CHAT_MESSAGE, PATH_CHAT_SHOW, PATH_CHAT_HIDE
 from services.printr import Printr
 from hud_server import constants as hud_const
+from hud_server.types import (
+    Anchor,
+    LayoutMode,
+    HudColor,
+    FontFamily,
+    BaseProps
+)
 
 printr = Printr()
+
+
+def _resolve_enum(value: Any) -> Any:
+    """Convert enum values to their string representation."""
+    if isinstance(value, (Anchor, LayoutMode, HudColor, FontFamily)):
+        return value.value
+    return value
+
+
+def _resolve_props(props: Optional[BaseProps]) -> Optional[dict]:
+    """Resolve all enum values in a props dictionary or BaseProps instance."""
+    if props is None:
+        return None
+    # Convert BaseProps to dict if needed
+    props_dict = props.to_dict() if isinstance(props, BaseProps) else props
+    return {k: _resolve_enum(v) for k, v in props_dict.items()}
 
 
 class HudHttpClient:
@@ -73,7 +124,7 @@ class HudHttpClient:
                 }
             )
             # Test connection
-            response = await self._client.get("/health")
+            response = await self._client.get(PATH_HEALTH)
             if response.status_code == 200:
                 self._connected = True
                 return True
@@ -191,61 +242,95 @@ class HudHttpClient:
 
     async def health_check(self) -> bool:
         """Check if server is responsive."""
-        result = await self._request("GET", "/health")
+        result = await self._request("GET", PATH_HEALTH)
         return result is not None and result.get("status") == "healthy"
 
     async def get_status(self) -> Optional[dict]:
         """Get server status including all groups."""
-        return await self._request("GET", "/health")
+        return await self._request("GET", PATH_HEALTH)
 
     # ─────────────────────────────── Groups ─────────────────────────────── #
 
     async def create_group(
         self,
         group_name: str,
-        props: Optional[dict] = None
+        props: Optional[BaseProps] = None
     ) -> Optional[dict]:
-        """Create or update a HUD group."""
-        return await self._request("POST", "/groups", {
+        """Create or update a HUD group.
+
+        Args:
+            group_name: Unique identifier for the group
+            props: Optional group properties (use types module for type-safe construction)
+
+        Properties can include (see types.py for full list):
+            - anchor: Screen anchor point (use Anchor enum)
+            - layout_mode: 'auto', 'manual', 'hybrid' (use LayoutMode enum)
+            - priority: Stacking priority (0-100)
+            - width, max_height: Size in pixels
+            - bg_color, text_color, accent_color: Colors (use HudColor enum)
+            - opacity: Window opacity (0.0-1.0)
+            - font_size, font_family: Typography (use FontFamily enum)
+            - border_radius, content_padding: Visual styling
+
+        Returns:
+            Server response dict or None if failed
+
+        Example:
+            from hud_server.types import Anchor, HudColor, message_props
+
+            props = message_props(
+                anchor=Anchor.TOP_RIGHT,
+                accent_color=HudColor.ACCENT_ORANGE
+            )
+            await client.create_group("alerts", props=props)
+        """
+        return await self._request("POST", PATH_GROUPS, {
             "group_name": group_name,
-            "props": props
+            "props": _resolve_props(props)
         })
 
     async def update_group(
         self,
         group_name: str,
-        props: dict
+        props: BaseProps
     ) -> bool:
-        """
-        Update properties of an existing group.
+        """Update properties of an existing group.
+
         The server will broadcast the updated props to the overlay for real-time updates.
-        Returns True if successful, False otherwise.
+        Props can contain enum values (Anchor, HudColor, etc.) which will be auto-resolved.
+
+        Args:
+            group_name: Name of the group to update
+            props: Properties to update (use types module for type-safe construction)
+
+        Returns:
+            True if successful, False otherwise
         """
         encoded_group = quote(group_name, safe='')
-        result = await self._request("PATCH", f"/groups/{encoded_group}", {
-            "props": props
+        result = await self._request("PATCH", f"{PATH_GROUPS}/{encoded_group}", {
+            "props": _resolve_props(props)
         })
         return result is not None
 
     async def delete_group(self, group_name: str) -> Optional[dict]:
         """Delete a HUD group."""
         encoded_group = quote(group_name, safe='')
-        return await self._request("DELETE", f"/groups/{encoded_group}")
+        return await self._request("DELETE", f"{PATH_GROUPS}/{encoded_group}")
 
     async def get_groups(self) -> Optional[dict]:
         """Get list of all group names."""
-        return await self._request("GET", "/groups")
+        return await self._request("GET", PATH_GROUPS)
 
     # ─────────────────────────────── State ─────────────────────────────── #
 
     async def get_state(self, group_name: str) -> Optional[dict]:
         """Get the current state of a group for persistence."""
         encoded_group = quote(group_name, safe='')
-        return await self._request("GET", f"/state/{encoded_group}")
+        return await self._request("GET", f"{PATH_STATE}/{encoded_group}")
 
     async def restore_state(self, group_name: str, state: dict) -> Optional[dict]:
         """Restore a group's state from a previous snapshot."""
-        return await self._request("POST", "/state/restore", {
+        return await self._request("POST", PATH_STATE_RESTORE, {
             "group_name": group_name,
             "state": state
         })
@@ -257,27 +342,49 @@ class HudHttpClient:
         group_name: str,
         title: str,
         content: str,
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         tools: Optional[list] = None,
-        props: Optional[dict] = None,
+        props: Optional[BaseProps] = None,
         duration: Optional[float] = None
     ) -> Optional[dict]:
-        """Show a message in a HUD group."""
+        """Show a message in a HUD group.
+
+        Args:
+            group_name: Name of the HUD group
+            title: Message title (displayed prominently)
+            content: Message content (supports Markdown)
+            color: Optional accent color override (use HudColor enum or hex string)
+            tools: Optional list of tool information for display
+            props: Optional MessageProps to override group defaults
+            duration: Optional display duration in seconds (0.1-3600)
+
+        Returns:
+            Server response dict or None if failed
+
+        Example:
+            await client.show_message(
+                "notifications",
+                "Alert",
+                "Something **important** happened!",
+                color=HudColor.WARNING,
+                duration=10.0
+            )
+        """
         data: dict[str, Any] = {
             "group_name": group_name,
             "title": title,
             "content": content
         }
         if color:
-            data["color"] = color
+            data["color"] = _resolve_enum(color)
         if tools:
             data["tools"] = tools
         if props:
-            data["props"] = props
+            data["props"] = _resolve_props(props)
         if duration is not None:
             data["duration"] = duration
 
-        return await self._request("POST", "/message", data)
+        return await self._request("POST", PATH_MESSAGE, data)
 
     async def append_message(
         self,
@@ -285,7 +392,7 @@ class HudHttpClient:
         content: str
     ) -> Optional[dict]:
         """Append content to the current message (for streaming)."""
-        return await self._request("POST", "/message/append", {
+        return await self._request("POST", PATH_MESSAGE_APPEND, {
             "group_name": group_name,
             "content": content
         })
@@ -293,7 +400,7 @@ class HudHttpClient:
     async def hide_message(self, group_name: str) -> Optional[dict]:
         """Hide the current message in a group."""
         encoded_group = quote(group_name, safe='')
-        return await self._request("POST", f"/message/hide/{encoded_group}")
+        return await self._request("POST", f"{PATH_MESSAGE_HIDE}/{encoded_group}")
 
     # ─────────────────────────────── Loader ─────────────────────────────── #
 
@@ -301,13 +408,22 @@ class HudHttpClient:
         self,
         group_name: str,
         show: bool = True,
-        color: Optional[str] = None
+        color: Optional[Union[str, HudColor]] = None
     ) -> Optional[dict]:
-        """Show or hide the loader animation."""
+        """Show or hide the loader animation.
+
+        Args:
+            group_name: Name of the HUD group
+            show: True to show, False to hide
+            color: Optional loader color (use HudColor enum or hex string)
+
+        Returns:
+            Server response dict or None if failed
+        """
         data = {"group_name": group_name, "show": show}
         if color:
-            data["color"] = color
-        return await self._request("POST", "/loader", data)
+            data["color"] = _resolve_enum(color)
+        return await self._request("POST", PATH_LOADER, data)
 
     # ─────────────────────────────── Items ─────────────────────────────── #
 
@@ -316,50 +432,80 @@ class HudHttpClient:
         group_name: str,
         title: str,
         description: str = "",
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         duration: Optional[float] = None
     ) -> Optional[dict]:
-        """Add a persistent item to a group."""
+        """Add a persistent item to a group.
+
+        Args:
+            group_name: Name of the HUD group
+            title: Item title (unique identifier within group)
+            description: Item description text
+            color: Optional item color (use HudColor enum or hex string)
+            duration: Optional auto-remove duration in seconds
+
+        Returns:
+            Server response dict or None if failed
+
+        Example:
+            await client.add_item(
+                "status",
+                "Shield Status",
+                "Shields at 100%",
+                color=HudColor.SHIELD
+            )
+        """
         data: dict[str, Any] = {
             "group_name": group_name,
             "title": title,
             "description": description
         }
         if color:
-            data["color"] = color
+            data["color"] = _resolve_enum(color)
         if duration is not None:
             data["duration"] = duration
 
-        return await self._request("POST", "/items", data)
+        return await self._request("POST", PATH_ITEMS, data)
 
     async def update_item(
         self,
         group_name: str,
         title: str,
         description: Optional[str] = None,
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         duration: Optional[float] = None
     ) -> Optional[dict]:
-        """Update an existing item."""
+        """Update an existing item.
+
+        Args:
+            group_name: Name of the HUD group
+            title: Item title to update
+            description: New description (None to keep current)
+            color: New color (use HudColor enum or hex string, None to keep current)
+            duration: New auto-remove duration (None to keep current)
+
+        Returns:
+            Server response dict or None if failed
+        """
         data: dict[str, Any] = {"group_name": group_name, "title": title}
         if description is not None:
             data["description"] = description
         if color is not None:
-            data["color"] = color
+            data["color"] = _resolve_enum(color)
         if duration is not None:
             data["duration"] = duration
 
-        return await self._request("PUT", "/items", data)
+        return await self._request("PUT", PATH_ITEMS, data)
 
     async def remove_item(self, group_name: str, title: str) -> Optional[dict]:
         """Remove an item from a group."""
         encoded_title = quote(title, safe='')
-        return await self._request("DELETE", f"/items/{group_name}/{encoded_title}")
+        return await self._request("DELETE", f"{PATH_ITEMS}/{group_name}/{encoded_title}")
 
     async def clear_items(self, group_name: str) -> Optional[dict]:
         """Clear all items from a group."""
         encoded_group = quote(group_name, safe='')
-        return await self._request("DELETE", f"/items/{encoded_group}")
+        return await self._request("DELETE", f"{PATH_ITEMS}/{encoded_group}")
 
     # ─────────────────────────────── Progress ─────────────────────────────── #
 
@@ -370,11 +516,35 @@ class HudHttpClient:
         current: float,
         maximum: float = 100,
         description: str = "",
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = False,
         props: Optional[dict] = None
     ) -> Optional[dict]:
-        """Show or update a progress bar."""
+        """Show or update a progress bar.
+
+        Args:
+            group_name: Name of the HUD group
+            title: Progress bar title
+            current: Current progress value
+            maximum: Maximum progress value (default: 100)
+            description: Optional description text
+            color: Progress bar color (use HudColor enum or hex string)
+            auto_close: Automatically close when progress reaches maximum
+            props: Optional ProgressProps for styling
+
+        Returns:
+            Server response dict or None if failed
+
+        Example:
+            await client.show_progress(
+                "downloads",
+                "Downloading...",
+                current=45,
+                maximum=100,
+                color=HudColor.INFO,
+                auto_close=True
+            )
+        """
         data: dict[str, Any] = {
             "group_name": group_name,
             "title": title,
@@ -384,11 +554,11 @@ class HudHttpClient:
             "auto_close": auto_close
         }
         if color:
-            data["color"] = color
+            data["color"] = _resolve_enum(color)
         if props:
-            data["props"] = props
+            data["props"] = _resolve_props(props)
 
-        return await self._request("POST", "/progress", data)
+        return await self._request("POST", PATH_PROGRESS, data)
 
     async def show_timer(
         self,
@@ -396,12 +566,35 @@ class HudHttpClient:
         title: str,
         duration: float,
         description: str = "",
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = True,
         initial_progress: float = 0,
         props: Optional[dict] = None
     ) -> Optional[dict]:
-        """Show a timer-based progress bar."""
+        """Show a timer-based progress bar.
+
+        Args:
+            group_name: Name of the HUD group
+            title: Timer title
+            duration: Timer duration in seconds
+            description: Optional description text
+            color: Timer color (use HudColor enum or hex string)
+            auto_close: Automatically close when timer completes (default: True)
+            initial_progress: Starting progress value (0-100)
+            props: Optional TimerProps for styling
+
+        Returns:
+            Server response dict or None if failed
+
+        Example:
+            await client.show_timer(
+                "cooldowns",
+                "Quantum Cooldown",
+                duration=30.0,
+                color=HudColor.QUANTUM,
+                auto_close=True
+            )
+        """
         data: dict[str, Any] = {
             "group_name": group_name,
             "title": title,
@@ -411,11 +604,11 @@ class HudHttpClient:
             "initial_progress": initial_progress
         }
         if color:
-            data["color"] = color
+            data["color"] = _resolve_enum(color)
         if props:
-            data["props"] = props
+            data["props"] = _resolve_props(props)
 
-        return await self._request("POST", "/timer", data)
+        return await self._request("POST", PATH_TIMER, data)
 
     # ─────────────────────────────── Chat Window ─────────────────────────────── #
 
@@ -423,30 +616,95 @@ class HudHttpClient:
         self,
         name: str,
         # Layout (anchor-based) - preferred
-        anchor: str = "top_left",
+        anchor: Union[str, Anchor] = Anchor.TOP_LEFT,
         priority: int = 5,
-        layout_mode: str = "auto",
+        layout_mode: Union[str, LayoutMode] = LayoutMode.AUTO,
         # Legacy position - only used if layout_mode='manual'
         x: int = 20,
         y: int = 20,
         # Size
         width: int = 400,
         max_height: int = 400,
+        # Colors
+        bg_color: Optional[Union[str, HudColor]] = None,
+        text_color: Optional[Union[str, HudColor]] = None,
+        accent_color: Optional[Union[str, HudColor]] = None,
         # Behavior
         auto_hide: bool = False,
         auto_hide_delay: float = 10.0,
         max_messages: int = 50,
         sender_colors: Optional[dict[str, str]] = None,
         fade_old_messages: bool = True,
-        **props
+        # Additional props
+        opacity: Optional[float] = None,
+        font_size: Optional[int] = None,
+        font_family: Optional[Union[str, FontFamily]] = None,
+        border_radius: Optional[int] = None,
+        **extra_props
     ) -> Optional[dict]:
-        """Create a new chat window."""
+        """Create a new chat window.
+
+        Args:
+            name: Unique name for the chat window
+            anchor: Screen anchor point (use Anchor enum)
+            priority: Stacking priority within anchor zone (0-100)
+            layout_mode: Layout mode (use LayoutMode enum)
+            x, y: Manual position (only used if layout_mode='manual')
+            width: Window width in pixels
+            max_height: Maximum height before scrolling
+            bg_color: Background color (use HudColor enum or hex string)
+            text_color: Text color (use HudColor enum or hex string)
+            accent_color: Accent color (use HudColor enum or hex string)
+            auto_hide: Automatically hide after inactivity
+            auto_hide_delay: Seconds before auto-hide
+            max_messages: Maximum messages to keep in history
+            sender_colors: Dict mapping sender names to colors
+            fade_old_messages: Fade older messages for visual distinction
+            opacity: Window opacity (0.0-1.0)
+            font_size: Font size in pixels (8-72)
+            font_family: Font family (use FontFamily enum)
+            border_radius: Corner radius in pixels (0-50)
+            **extra_props: Additional props passed to the window
+
+        Returns:
+            Server response dict or None if failed
+
+        Example:
+            await client.create_chat_window(
+                "game_chat",
+                anchor=Anchor.BOTTOM_LEFT,
+                width=500,
+                max_messages=100,
+                sender_colors={
+                    "Player": HudColor.ACCENT_GREEN.value,
+                    "AI": HudColor.ACCENT_BLUE.value
+                }
+            )
+        """
+        # Build props dict with type resolution
+        props = {}
+        if bg_color is not None:
+            props["bg_color"] = _resolve_enum(bg_color)
+        if text_color is not None:
+            props["text_color"] = _resolve_enum(text_color)
+        if accent_color is not None:
+            props["accent_color"] = _resolve_enum(accent_color)
+        if opacity is not None:
+            props["opacity"] = opacity
+        if font_size is not None:
+            props["font_size"] = font_size
+        if font_family is not None:
+            props["font_family"] = _resolve_enum(font_family)
+        if border_radius is not None:
+            props["border_radius"] = border_radius
+        props.update(extra_props)
+
         data = {
             "name": name,
             # Layout
-            "anchor": anchor,
+            "anchor": _resolve_enum(anchor),
             "priority": priority,
-            "layout_mode": layout_mode,
+            "layout_mode": _resolve_enum(layout_mode),
             # Legacy (for manual mode)
             "x": x,
             "y": y,
@@ -461,30 +719,49 @@ class HudHttpClient:
             "fade_old_messages": fade_old_messages,
             "props": props if props else None
         }
-        return await self._request("POST", "/chat/window", data)
+        return await self._request("POST", PATH_CHAT_WINDOW, data)
 
     async def delete_chat_window(self, name: str) -> Optional[dict]:
         """Delete a chat window."""
         encoded_name = quote(name, safe='')
-        return await self._request("DELETE", f"/chat/window/{encoded_name}")
+        return await self._request("DELETE", f"{PATH_CHAT_WINDOW}/{encoded_name}")
 
     async def send_chat_message(
         self,
         window_name: str,
         sender: str,
         text: str,
-        color: Optional[str] = None
+        color: Optional[Union[str, HudColor]] = None
     ) -> Optional[dict]:
-        """Send a message to a chat window. Returns response with message_id."""
+        """Send a message to a chat window.
+
+        Args:
+            window_name: Name of the chat window
+            sender: Sender name displayed with the message
+            text: Message text content
+            color: Optional sender color override (use HudColor enum or hex string)
+
+        Returns:
+            Server response dict with message_id or None if failed
+
+        Example:
+            result = await client.send_chat_message(
+                "game_chat",
+                "Player",
+                "Hello world!",
+                color=HudColor.ACCENT_GREEN
+            )
+            message_id = result["message_id"]  # For later updates
+        """
         data = {
             "window_name": window_name,
             "sender": sender,
             "text": text
         }
         if color:
-            data["color"] = color
+            data["color"] = _resolve_enum(color)
 
-        return await self._request("POST", "/chat/message", data)
+        return await self._request("POST", PATH_CHAT_MESSAGE, data)
 
     async def update_chat_message(
         self,
@@ -498,22 +775,22 @@ class HudHttpClient:
             "message_id": message_id,
             "text": text
         }
-        return await self._request("PUT", "/chat/message", data)
+        return await self._request("PUT", PATH_CHAT_MESSAGE, data)
 
     async def clear_chat_window(self, name: str) -> Optional[dict]:
         """Clear all messages from a chat window."""
         encoded_name = quote(name, safe='')
-        return await self._request("DELETE", f"/chat/messages/{encoded_name}")
+        return await self._request("DELETE", f"{PATH_CHAT_MESSAGE}/{encoded_name}")
 
     async def show_chat_window(self, name: str) -> Optional[dict]:
         """Show a hidden chat window."""
         encoded_name = quote(name, safe='')
-        return await self._request("POST", f"/chat/show/{encoded_name}")
+        return await self._request("POST", f"{PATH_CHAT_SHOW}/{encoded_name}")
 
     async def hide_chat_window(self, name: str) -> Optional[dict]:
         """Hide a chat window."""
         encoded_name = quote(name, safe='')
-        return await self._request("POST", f"/chat/hide/{encoded_name}")
+        return await self._request("POST", f"{PATH_CHAT_HIDE}/{encoded_name}")
 
 
 
@@ -643,11 +920,12 @@ class HudHttpClientSync:
     def get_status(self) -> Optional[dict]:
         return self._run_coro(self._client.get_status()) if self._client else None
 
-    def create_group(self, group_name: str, props: Optional[dict] = None):
+    def create_group(self, group_name: str, props: Optional[BaseProps] = None):
+        """Create or update a HUD group. Props can contain enum values."""
         return self._run_coro(self._client.create_group(group_name, props)) if self._client else None
 
-    def update_group(self, group_name: str, props: dict) -> bool:
-        """Update properties for an existing group for real-time updates."""
+    def update_group(self, group_name: str, props: BaseProps) -> bool:
+        """Update properties for an existing group. Props can contain enum values."""
         return self._run_coro(self._client.update_group(group_name, props)) if self._client else False
 
     def delete_group(self, group_name: str):
@@ -667,11 +945,12 @@ class HudHttpClientSync:
         group_name: str,
         title: str,
         content: str,
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         tools: Optional[list] = None,
         props: Optional[dict] = None,
         duration: Optional[float] = None
     ):
+        """Show a message. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.show_message(
             group_name, title, content, color, tools, props, duration
         )) if self._client else None
@@ -682,7 +961,13 @@ class HudHttpClientSync:
     def hide_message(self, group_name: str):
         return self._run_coro(self._client.hide_message(group_name)) if self._client else None
 
-    def show_loader(self, group_name: str, show: bool = True, color: Optional[str] = None):
+    def show_loader(
+        self,
+        group_name: str,
+        show: bool = True,
+        color: Optional[Union[str, HudColor]] = None
+    ):
+        """Show/hide loader. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.show_loader(group_name, show, color)) if self._client else None
 
     def add_item(
@@ -690,9 +975,10 @@ class HudHttpClientSync:
         group_name: str,
         title: str,
         description: str = "",
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         duration: Optional[float] = None
     ):
+        """Add persistent item. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.add_item(
             group_name, title, description, color, duration
         )) if self._client else None
@@ -702,9 +988,10 @@ class HudHttpClientSync:
         group_name: str,
         title: str,
         description: Optional[str] = None,
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         duration: Optional[float] = None
     ):
+        """Update item. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.update_item(
             group_name, title, description, color, duration
         )) if self._client else None
@@ -722,10 +1009,11 @@ class HudHttpClientSync:
         current: float,
         maximum: float = 100,
         description: str = "",
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = False,
         props: Optional[dict] = None
     ):
+        """Show progress bar. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.show_progress(
             group_name, title, current, maximum, description, color, auto_close, props
         )) if self._client else None
@@ -736,11 +1024,12 @@ class HudHttpClientSync:
         title: str,
         duration: float,
         description: str = "",
-        color: Optional[str] = None,
+        color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = True,
         initial_progress: float = 0,
         props: Optional[dict] = None
     ):
+        """Show timer. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.show_timer(
             group_name, title, duration, description, color, auto_close, initial_progress, props
         )) if self._client else None
@@ -749,23 +1038,33 @@ class HudHttpClientSync:
         self,
         name: str,
         # Layout (anchor-based) - preferred
-        anchor: str = "top_left",
+        anchor: Union[str, Anchor] = Anchor.TOP_LEFT,
         priority: int = 5,
-        layout_mode: str = "auto",
+        layout_mode: Union[str, LayoutMode] = LayoutMode.AUTO,
         # Legacy position - only used if layout_mode='manual'
         x: int = 20,
         y: int = 20,
         # Size
         width: int = 400,
         max_height: int = 400,
+        # Colors
+        bg_color: Optional[Union[str, HudColor]] = None,
+        text_color: Optional[Union[str, HudColor]] = None,
+        accent_color: Optional[Union[str, HudColor]] = None,
         # Behavior
         auto_hide: bool = False,
         auto_hide_delay: float = 10.0,
         max_messages: int = 50,
         sender_colors: Optional[dict[str, str]] = None,
         fade_old_messages: bool = True,
-        **props
+        # Additional props
+        opacity: Optional[float] = None,
+        font_size: Optional[int] = None,
+        font_family: Optional[Union[str, FontFamily]] = None,
+        border_radius: Optional[int] = None,
+        **extra_props
     ):
+        """Create chat window. Accepts Anchor, LayoutMode, HudColor, FontFamily enums."""
         return self._run_coro(self._client.create_chat_window(
             name=name,
             anchor=anchor,
@@ -773,17 +1072,31 @@ class HudHttpClientSync:
             layout_mode=layout_mode,
             x=x, y=y,
             width=width, max_height=max_height,
+            bg_color=bg_color,
+            text_color=text_color,
+            accent_color=accent_color,
             auto_hide=auto_hide, auto_hide_delay=auto_hide_delay,
             max_messages=max_messages,
             sender_colors=sender_colors,
             fade_old_messages=fade_old_messages,
-            **props
+            opacity=opacity,
+            font_size=font_size,
+            font_family=font_family,
+            border_radius=border_radius,
+            **extra_props
         )) if self._client else None
 
     def delete_chat_window(self, name: str):
         return self._run_coro(self._client.delete_chat_window(name)) if self._client else None
 
-    def send_chat_message(self, window_name: str, sender: str, text: str, color: Optional[str] = None):
+    def send_chat_message(
+        self,
+        window_name: str,
+        sender: str,
+        text: str,
+        color: Optional[Union[str, HudColor]] = None
+    ):
+        """Send chat message. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.send_chat_message(
             window_name, sender, text, color
         )) if self._client else None

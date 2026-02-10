@@ -97,6 +97,8 @@ PATH_PROGRESS = "/progress"
 PATH_TIMER = "/timer"
 PATH_CHAT_WINDOW = "/chat/window"
 PATH_CHAT_MESSAGE = "/chat/message"
+PATH_CHAT_SHOW = "/chat/message/show"
+PATH_CHAT_HIDE = "/chat/message/show"
 PATH_STATE = "/state"
 PATH_STATE_RESTORE = "/state/restore"
 

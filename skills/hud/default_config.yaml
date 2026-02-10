@@ -120,7 +120,7 @@ custom_properties:
 
   - id: font_family
     name: Font Family
-    hint: Font family for HUD text.
+    hint: "Font family for HUD text. Available options: Segoe UI, Arial, Verdana, Tahoma, Trebuchet MS, Calibri, Consolas, Courier New, Open Sans."
     property_type: string
     value: "Segoe UI"
     required: false
