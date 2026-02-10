@@ -124,7 +124,6 @@ edge_tts:
 elevenlabs:
   model: eleven_multilingual_v2
   output_streaming: true
-  latency: 2
   voice:
     name: Adam
   voice_settings:

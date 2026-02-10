@@ -278,9 +278,6 @@ class ElevenlabsConfig(BaseModel):
     model: str
     """see https://elevenlabs.io/docs/speech-synthesis/models"""
 
-    latency: Annotated[int, Field(strict=True, ge=0, le=4)]
-    """Optimization - Higher values are faster but can produce audio stuttering. 0 - 4"""
-
     voice: ElevenlabsVoiceConfig
     voice_settings: ElevenlabsVoiceSettingsConfig
     output_streaming: bool

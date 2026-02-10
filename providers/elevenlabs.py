@@ -102,7 +102,6 @@ class ElevenLabs:
 
         generation_options = GenerationOptions(
             model=config.model,
-            latencyOptimizationLevel=config.latency,
             use_speaker_boost=config.voice_settings.use_speaker_boost,
             stability=config.voice_settings.stability,
             similarity_boost=config.voice_settings.similarity_boost,

@@ -31,4 +31,17 @@ class Migration200To210(BaseMigration):
             old["pocket_tts"] = new["pocket_tts"]
             self.log("- added new provider default: pocket_tts")
 
+        # Remove deprecated ElevenLabs latency optimization
+        if "elevenlabs" in old and "latency" in old["elevenlabs"]:
+            del old["elevenlabs"]["latency"]
+            self.log("- removed elevenlabs.latency (deprecated)")
+
+        return old
+
+    def migrate_wingman(self, old: dict, new: dict) -> dict:
+        """Migrate wingman configs from 2.0.0 to 2.1.0."""
+        if "elevenlabs" in old and "latency" in old["elevenlabs"]:
+            del old["elevenlabs"]["latency"]
+            self.log("- removed elevenlabs.latency from wingman config")
+
         return old
