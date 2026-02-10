@@ -195,6 +195,14 @@ class ElevenLabs:
                     audio_player.raw_stream = None
                 audio_player.is_playing = False
                 audio_player.playback_events.unsubscribe("finished", stop_stream)
+                try:
+                    response.close()
+                except Exception as exc:
+                    self.printr.print(
+                        f"Failed to close ElevenLabs streaming response: {exc}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
                 on_playback_finished()
 
         Thread(target=stream_audio, daemon=True).start()
