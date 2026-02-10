@@ -1638,9 +1638,9 @@ class WingmanCore(WebSocketUser):
         await self._stop_hud_server()
 
         if self.settings_service.settings.xvasynth.enable:
-            await self.stop_xvasynth()
+            self.stop_xvasynth()
         if self.settings_service.settings.pocket_tts.enable:
-            await self.stop_pocket_tts()
+            self.stop_pocket_tts()
         await self.unload_tower()
 
         self.printr.print(
