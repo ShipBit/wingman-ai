@@ -1,5 +1,5 @@
 import asyncio
-from typing import Optional
+from typing import Callable, Optional
 import requests
 from threading import Event, Thread
 import numpy as np
@@ -20,6 +20,13 @@ class ElevenLabs:
         self.printr = Printr()
         self.api_key = api_key
 
+    def _quantize_stability(self, stability: float) -> float:
+        if stability <= 0.25:
+            return 0.0
+        if stability <= 0.75:
+            return 0.5
+        return 1.0
+
     def _get_voice_id(self, voice, config: ElevenlabsConfig) -> str:
         if config.voice.id:
             return config.voice.id
@@ -36,13 +43,7 @@ class ElevenLabs:
         config: ElevenlabsConfig,
         voice_id: str,
     ) -> bytes:
-        stability = config.voice_settings.stability
-        if stability <= 0.25:
-            stability = 0.0
-        elif stability <= 0.75:
-            stability = 0.5
-        else:
-            stability = 1.0
+        stability = self._quantize_stability(config.voice_settings.stability)
 
         payload = {
             "text": text,
@@ -89,16 +90,10 @@ class ElevenLabs:
         audio_player: AudioPlayer,
         wingman_name: str,
         sound_effects: list,
-        on_playback_started: callable,
-        on_playback_finished: callable,
+        on_playback_started: Callable[[], None],
+        on_playback_finished: Callable[[Optional[Callable]], None],
     ) -> bool:
-        stability = config.voice_settings.stability
-        if stability <= 0.25:
-            stability = 0.0
-        elif stability <= 0.75:
-            stability = 0.5
-        else:
-            stability = 1.0
+        stability = self._quantize_stability(config.voice_settings.stability)
 
         payload = {
             "text": text,
@@ -144,6 +139,7 @@ class ElevenLabs:
                     color=LogType.WARNING,
                     server_only=True,
                 )
+                response.close()
                 return False
         response.raise_for_status()
 
@@ -153,12 +149,12 @@ class ElevenLabs:
             stop_event.set()
 
         audio_player.playback_events.subscribe("finished", stop_stream)
-        on_playback_started()
         audio_player.is_playing = True
         audio_player.wingman_name = wingman_name
 
         def stream_audio():
             try:
+                on_playback_started()
                 audio_player.raw_stream = sd.RawOutputStream(
                     samplerate=44100,
                     channels=1,
@@ -166,26 +162,26 @@ class ElevenLabs:
                 )
                 audio_player.raw_stream.start()
 
+                volume = sound_config.volume
                 for chunk in response.iter_content(chunk_size=4096):
                     if stop_event.is_set():
                         break
                     if not chunk:
                         continue
 
-                    if sound_effects:
-                        audio_chunk = (
-                            np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
-                            / 32768.0
-                        )
-                        audio_chunk = audio_chunk.reshape(-1, 1)
-                        for sound_effect in sound_effects:
-                            audio_chunk = sound_effect(audio_chunk, 44100, reset=False)
-                        audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
-                        chunk = (
-                            (audio_chunk.reshape(-1) * 32767.0)
-                            .astype(np.int16)
-                            .tobytes()
-                        )
+                    audio_chunk = (
+                        np.frombuffer(chunk, dtype=np.int16).astype(np.float32)
+                        / 32768.0
+                    )
+                    audio_chunk = audio_chunk.reshape(-1, 1)
+                    for sound_effect in sound_effects:
+                        audio_chunk = sound_effect(audio_chunk, 44100, reset=False)
+                    if volume != 1.0:
+                        audio_chunk = audio_chunk * volume
+                    audio_chunk = np.clip(audio_chunk, -1.0, 1.0)
+                    chunk = (
+                        (audio_chunk.reshape(-1) * 32767.0).astype(np.int16).tobytes()
+                    )
 
                     audio_player.raw_stream.write(chunk)
             finally:
