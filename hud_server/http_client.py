@@ -518,7 +518,7 @@ class HudHttpClient:
         description: str = "",
         color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = False,
-        props: Optional[dict] = None
+        props: Optional[BaseProps] = None
     ) -> Optional[dict]:
         """Show or update a progress bar.
 
@@ -569,7 +569,7 @@ class HudHttpClient:
         color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = True,
         initial_progress: float = 0,
-        props: Optional[dict] = None
+        props: Optional[BaseProps] = None
     ) -> Optional[dict]:
         """Show a timer-based progress bar.
 
@@ -947,7 +947,7 @@ class HudHttpClientSync:
         content: str,
         color: Optional[Union[str, HudColor]] = None,
         tools: Optional[list] = None,
-        props: Optional[dict] = None,
+        props: Optional[BaseProps] = None,
         duration: Optional[float] = None
     ):
         """Show a message. Color accepts HudColor enum or hex string."""
@@ -1011,7 +1011,7 @@ class HudHttpClientSync:
         description: str = "",
         color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = False,
-        props: Optional[dict] = None
+        props: Optional[BaseProps] = None
     ):
         """Show progress bar. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.show_progress(
@@ -1027,7 +1027,7 @@ class HudHttpClientSync:
         color: Optional[Union[str, HudColor]] = None,
         auto_close: bool = True,
         initial_progress: float = 0,
-        props: Optional[dict] = None
+        props: Optional[BaseProps] = None
     ):
         """Show timer. Color accepts HudColor enum or hex string."""
         return self._run_coro(self._client.show_timer(

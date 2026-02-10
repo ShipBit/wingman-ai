@@ -12,6 +12,7 @@ Tests the chat window HUD type with:
 
 import asyncio
 from hud_server.tests.test_session import TestSession
+from hud_server.types import Anchor, LayoutMode, HudColor, ChatWindowProps
 
 # Emoji constants using Unicode escape sequences (avoids file encoding issues)
 EMOJI_ROCKET = "\U0001F680"     # 🚀
@@ -182,19 +183,23 @@ async def test_chat_basic(session: TestSession):
 
     chat_name = f"chat_{session.session_id}"
 
-    await session.create_chat_window(
-        name=chat_name,
-        anchor=session.config.get("anchor", "top_left"),
+    # Get the anchor value from config
+    anchor = session.config.get("anchor", Anchor.TOP_LEFT)
+    anchor_value = anchor.value if hasattr(anchor, 'value') else anchor
+
+    props = ChatWindowProps(
+        anchor=anchor_value,
         priority=50,  # High priority - appears first
-        layout_mode="auto",
+        layout_mode=LayoutMode.AUTO.value,
         width=session.config["hud_width"],
         max_height=300,
         auto_hide=False,
-        bg_color=session.config["bg_color"],
-        text_color=session.config["text_color"],
-        accent_color=session.config["accent_color"],
+        bg_color=session._get_color_value(session.config["bg_color"]),
+        text_color=session._get_color_value(session.config["text_color"]),
+        accent_color=session._get_color_value(session.config["accent_color"]),
         opacity=session.config["opacity"],
     )
+    await session.create_chat_window(name=chat_name, **props.to_dict())
     await asyncio.sleep(0.5)
 
     await session.send_chat_message(chat_name, "User", "Hello!")
@@ -216,20 +221,23 @@ async def test_chat_markdown(session: TestSession):
 
     chat_name = f"md_chat_{session.session_id}"
 
-    await session.create_chat_window(
-        name=chat_name,
-        anchor=session.config.get("anchor", "top_left"),
+    anchor = session.config.get("anchor", Anchor.TOP_LEFT)
+    anchor_value = anchor.value if hasattr(anchor, 'value') else anchor
+
+    props = ChatWindowProps(
+        anchor=anchor_value,
         priority=40,  # Second priority
-        layout_mode="auto",
+        layout_mode=LayoutMode.AUTO.value,
         width=450,
         max_height=400,
         auto_hide=False,
         sender_colors={
-            "User": session.config["user_color"],
-            session.name: session.config["accent_color"],
-            "System": "#888888",
+            "User": session._get_color_value(session.config["user_color"]),
+            session.name: session._get_color_value(session.config["accent_color"]),
+            "System": HudColor.GRAY.value,
         },
     )
+    await session.create_chat_window(name=chat_name, **props.to_dict())
     await asyncio.sleep(0.5)
 
     # Test various markdown features (alternate senders so each renders separately)
@@ -286,23 +294,26 @@ async def test_chat_conversation(session: TestSession, conversation: list = None
 
     # Determine unique senders for colors
     senders = list(set(msg[0] for msg in conversation))
-    colors = ["#4cd964", "#00aaff", "#ff9500", "#9b59b6", "#888888"]
+    colors = [HudColor.SUCCESS.value, HudColor.ACCENT_BLUE.value, HudColor.ACCENT_ORANGE.value, HudColor.ACCENT_PURPLE.value, HudColor.GRAY.value]
     sender_colors = {s: colors[i % len(colors)] for i, s in enumerate(senders)}
 
-    await session.create_chat_window(
-        name=chat_name,
-        anchor=session.config.get("anchor", "top_left"),
+    anchor = session.config.get("anchor", Anchor.TOP_LEFT)
+    anchor_value = anchor.value if hasattr(anchor, 'value') else anchor
+
+    props = ChatWindowProps(
+        anchor=anchor_value,
         priority=30,  # Third priority
-        layout_mode="auto",
+        layout_mode=LayoutMode.AUTO.value,
         width=450,
         max_height=400,
         auto_hide=True,
         auto_hide_delay=10.0,
         fade_old_messages=True,
         sender_colors=sender_colors,
-        bg_color=session.config["bg_color"],
+        bg_color=session._get_color_value(session.config["bg_color"]),
         opacity=0.92,
     )
+    await session.create_chat_window(name=chat_name, **props.to_dict())
     await asyncio.sleep(0.5)
 
     for sender, message, delay in conversation:
@@ -322,16 +333,19 @@ async def test_chat_auto_hide(session: TestSession):
 
     chat_name = f"autohide_{session.session_id}"
 
-    await session.create_chat_window(
-        name=chat_name,
-        anchor=session.config.get("anchor", "top_left"),
+    anchor = session.config.get("anchor", Anchor.TOP_LEFT)
+    anchor_value = anchor.value if hasattr(anchor, 'value') else anchor
+
+    props = ChatWindowProps(
+        anchor=anchor_value,
         priority=20,  # Fourth priority
-        layout_mode="auto",
+        layout_mode=LayoutMode.AUTO.value,
         width=350,
         max_height=250,
         auto_hide=True,
         auto_hide_delay=3.0,  # Short delay for testing
     )
+    await session.create_chat_window(name=chat_name, **props.to_dict())
     await asyncio.sleep(0.5)
 
     await session.send_chat_message(chat_name, "Test", "This will auto-hide in 3 seconds...")
@@ -353,15 +367,18 @@ async def test_chat_overflow(session: TestSession):
 
     chat_name = f"overflow_{session.session_id}"
 
-    await session.create_chat_window(
-        name=chat_name,
-        anchor=session.config.get("anchor", "top_left"),
+    anchor = session.config.get("anchor", Anchor.TOP_LEFT)
+    anchor_value = anchor.value if hasattr(anchor, 'value') else anchor
+
+    props = ChatWindowProps(
+        anchor=anchor_value,
         priority=10,  # Fifth priority
-        layout_mode="auto",
+        layout_mode=LayoutMode.AUTO.value,
         width=400,
         max_height=200,  # Small height to trigger overflow
         fade_old_messages=True,
     )
+    await session.create_chat_window(name=chat_name, **props.to_dict())
     await asyncio.sleep(0.5)
 
     # Send many messages to overflow (unique senders per message to prevent merging)
@@ -380,19 +397,22 @@ async def test_chat_message_merging(session: TestSession):
 
     chat_name = f"merge_{session.session_id}"
 
-    await session.create_chat_window(
-        name=chat_name,
-        anchor=session.config.get("anchor", "top_left"),
+    anchor = session.config.get("anchor", Anchor.TOP_LEFT)
+    anchor_value = anchor.value if hasattr(anchor, 'value') else anchor
+
+    props = ChatWindowProps(
+        anchor=anchor_value,
         priority=45,
-        layout_mode="auto",
+        layout_mode=LayoutMode.AUTO.value,
         width=400,
         max_height=300,
         auto_hide=False,
         sender_colors={
-            "Alice": "#4cd964",
-            "Bob": "#00aaff",
+            "Alice": HudColor.SUCCESS.value,
+            "Bob": HudColor.ACCENT_BLUE.value,
         },
     )
+    await session.create_chat_window(name=chat_name, **props.to_dict())
     await asyncio.sleep(0.5)
 
     # Same sender consecutive - should merge into one block
@@ -445,19 +465,22 @@ async def test_chat_message_update(session: TestSession):
 
     chat_name = f"update_{session.session_id}"
 
-    await session.create_chat_window(
-        name=chat_name,
-        anchor=session.config.get("anchor", "top_left"),
+    anchor = session.config.get("anchor", Anchor.TOP_LEFT)
+    anchor_value = anchor.value if hasattr(anchor, 'value') else anchor
+
+    props = ChatWindowProps(
+        anchor=anchor_value,
         priority=35,
-        layout_mode="auto",
+        layout_mode=LayoutMode.AUTO.value,
         width=400,
         max_height=300,
         auto_hide=False,
         sender_colors={
-            "Alice": "#4cd964",
-            "Bob": "#00aaff",
+            "Alice": HudColor.SUCCESS.value,
+            "Bob": HudColor.ACCENT_BLUE.value,
         },
     )
+    await session.create_chat_window(name=chat_name, **props.to_dict())
     await asyncio.sleep(0.5)
 
     # Send a message and get its ID

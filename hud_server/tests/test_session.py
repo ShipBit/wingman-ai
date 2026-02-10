@@ -8,6 +8,10 @@ to the HUD server and overlay.
 from typing import Optional, Any
 
 from hud_server.http_client import HudHttpClient
+from hud_server.types import (
+    Anchor, LayoutMode, HudColor, FontFamily,
+    MessageProps, PersistentProps, ChatWindowProps
+)
 
 
 # =============================================================================
@@ -18,20 +22,20 @@ SESSION_CONFIGS = {
     1: {
         "name": "Atlas",
         # Layout (anchor-based)
-        "anchor": "top_left",
+        "anchor": Anchor.TOP_LEFT,
         "priority": 20,
-        "persistent_anchor": "top_left",
+        "persistent_anchor": Anchor.TOP_LEFT,
         "persistent_priority": 10,
-        "layout_mode": "auto",
+        "layout_mode": LayoutMode.AUTO,
         # Sizes
         "hud_width": 450,
         "persistent_width": 350,
         "hud_max_height": 500,
         # Visual
-        "bg_color": "#1e212b",
-        "text_color": "#f0f0f0",
-        "accent_color": "#00aaff",
-        "user_color": "#4cd964",
+        "bg_color": HudColor.BG_DARK,
+        "text_color": HudColor.TEXT_PRIMARY,
+        "accent_color": HudColor.ACCENT_BLUE,
+        "user_color": HudColor.SUCCESS,
         "opacity": 0.9,
         "border_radius": 12,
         "font_size": 16,
@@ -41,11 +45,11 @@ SESSION_CONFIGS = {
     2: {
         "name": "Nova",
         # Layout (anchor-based)
-        "anchor": "top_right",
+        "anchor": Anchor.TOP_RIGHT,
         "priority": 20,
-        "persistent_anchor": "top_right",
+        "persistent_anchor": Anchor.TOP_RIGHT,
         "persistent_priority": 10,
-        "layout_mode": "auto",
+        "layout_mode": LayoutMode.AUTO,
         # Sizes
         "hud_width": 400,
         "persistent_width": 320,
@@ -53,7 +57,7 @@ SESSION_CONFIGS = {
         # Visual
         "bg_color": "#1a1f2e",
         "text_color": "#e8e8e8",
-        "accent_color": "#ff6b35",
+        "accent_color": HudColor.ACCENT_ORANGE,
         "user_color": "#ffd700",
         "opacity": 0.85,
         "border_radius": 8,
@@ -64,11 +68,11 @@ SESSION_CONFIGS = {
     3: {
         "name": "Orion",
         # Layout (anchor-based)
-        "anchor": "bottom_left",
+        "anchor": Anchor.BOTTOM_LEFT,
         "priority": 20,
-        "persistent_anchor": "bottom_left",
+        "persistent_anchor": Anchor.BOTTOM_LEFT,
         "persistent_priority": 10,
-        "layout_mode": "auto",
+        "layout_mode": LayoutMode.AUTO,
         # Sizes
         "hud_width": 380,
         "persistent_width": 300,
@@ -76,8 +80,8 @@ SESSION_CONFIGS = {
         # Visual
         "bg_color": "#12161f",
         "text_color": "#d0d0d0",
-        "accent_color": "#9b59b6",
-        "user_color": "#2ecc71",
+        "accent_color": HudColor.ACCENT_PURPLE,
+        "user_color": HudColor.ACCENT_GREEN,
         "opacity": 0.88,
         "border_radius": 16,
         "font_size": 15,
@@ -124,46 +128,52 @@ class TestSession:
         self.running = False
         print(f"[Session {self.session_id} - {self.name}] Disconnected")
 
-    def _get_props(self) -> dict:
-        """Get display properties from config."""
-        return {
+    def _get_props(self) -> MessageProps:
+        """Get display properties from config as MessageProps."""
+        return MessageProps(
             # Layout (anchor-based)
-            "anchor": self.config.get("anchor", "top_left"),
-            "priority": self.config.get("priority", 20),
-            "layout_mode": self.config.get("layout_mode", "auto"),
+            anchor=self._get_color_value(self.config.get("anchor", Anchor.TOP_LEFT)),
+            priority=self.config.get("priority", 20),
+            layout_mode=self._get_color_value(self.config.get("layout_mode", LayoutMode.AUTO)),
             # Size
-            "width": self.config["hud_width"],
-            "max_height": self.config["hud_max_height"],
+            width=self.config["hud_width"],
+            max_height=self.config["hud_max_height"],
             # Visual
-            "bg_color": self.config["bg_color"],
-            "text_color": self.config["text_color"],
-            "accent_color": self.config["accent_color"],
-            "opacity": self.config["opacity"],
-            "border_radius": self.config["border_radius"],
-            "font_size": self.config["font_size"],
-            "content_padding": self.config["content_padding"],
-            "typewriter_effect": self.config["typewriter_effect"],
-            "duration": 8.0,
-        }
+            bg_color=self._get_color_value(self.config["bg_color"]),
+            text_color=self._get_color_value(self.config["text_color"]),
+            accent_color=self._get_color_value(self.config["accent_color"]),
+            opacity=self.config["opacity"],
+            border_radius=self.config["border_radius"],
+            font_size=self.config["font_size"],
+            content_padding=self.config["content_padding"],
+            typewriter_effect=self.config["typewriter_effect"],
+            fade_delay=8.0,
+        )
 
-    def _get_persistent_props(self) -> dict:
-        """Get persistent panel properties from config."""
-        return {
+    def _get_persistent_props(self) -> PersistentProps:
+        """Get persistent panel properties from config as PersistentProps."""
+        return PersistentProps(
             # Layout (anchor-based)
-            "anchor": self.config.get("persistent_anchor", "top_left"),
-            "priority": self.config.get("persistent_priority", 10),
-            "layout_mode": self.config.get("layout_mode", "auto"),
+            anchor=self._get_color_value(self.config.get("persistent_anchor", Anchor.TOP_LEFT)),
+            priority=self.config.get("persistent_priority", 10),
+            layout_mode=self._get_color_value(self.config.get("layout_mode", LayoutMode.AUTO)),
             # Size
-            "width": self.config["persistent_width"],
+            width=self.config["persistent_width"],
             # Visual
-            "bg_color": self.config["bg_color"],
-            "text_color": self.config["text_color"],
-            "accent_color": self.config["accent_color"],
-            "opacity": self.config["opacity"],
-            "border_radius": self.config["border_radius"],
-            "font_size": self.config["font_size"],
-            "content_padding": self.config["content_padding"],
-        }
+            bg_color=self._get_color_value(self.config["bg_color"]),
+            text_color=self._get_color_value(self.config["text_color"]),
+            accent_color=self._get_color_value(self.config["accent_color"]),
+            opacity=self.config["opacity"],
+            border_radius=self.config["border_radius"],
+            font_size=self.config["font_size"],
+            content_padding=self.config["content_padding"],
+        )
+
+    def _get_color_value(self, value: Any) -> str:
+        """Get the string value from a color/enum or return as-is."""
+        if hasattr(value, 'value'):
+            return value.value
+        return value
 
     # =========================================================================
     # Message Commands
@@ -174,22 +184,31 @@ class TestSession:
         """Draw a message on the overlay."""
         if not self._client:
             return
+        color_value = color or self.config["accent_color"]
+        if hasattr(color_value, 'value'):
+            color_value = color_value.value
         await self._client.show_message(
             group_name=self.group_name,
             title=title,
             content=message,
-            color=color or self.config["accent_color"],
+            color=color_value,
             tools=tools,
-            props=self._get_props(),
+            props=self._get_props().to_dict(),
         )
 
     async def draw_user_message(self, message: str):
         """Draw a user message."""
-        await self.draw_message("USER", message, self.config["user_color"])
+        color_value = self.config["user_color"]
+        if hasattr(color_value, 'value'):
+            color_value = color_value.value
+        await self.draw_message("USER", message, color_value)
 
     async def draw_assistant_message(self, message: str, tools: Optional[list[dict]] = None):
         """Draw an assistant message."""
-        await self.draw_message(self.name, message, self.config["accent_color"], tools)
+        color_value = self.config["accent_color"]
+        if hasattr(color_value, 'value'):
+            color_value = color_value.value
+        await self.draw_message(self.name, message, color_value, tools)
 
     async def hide(self):
         """Hide the current message."""
@@ -201,10 +220,13 @@ class TestSession:
         """Set loading indicator state."""
         if not self._client:
             return
+        color_value = self.config["accent_color"]
+        if hasattr(color_value, 'value'):
+            color_value = color_value.value
         await self._client.show_loader(
             group_name=self.group_name,
             show=state,
-            color=self.config["accent_color"],
+            color=color_value,
         )
 
     # =========================================================================

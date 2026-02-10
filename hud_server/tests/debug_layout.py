@@ -7,6 +7,7 @@ import asyncio
 sys.path.insert(0, ".")
 
 from hud_server.tests.test_runner import TestContext
+from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps
 
 
 async def debug_layout_test(session):
@@ -19,22 +20,21 @@ async def debug_layout_test(session):
 
     # Create three groups with different priorities
     groups_config = [
-        ("debug_red", 30, "#ff0000", "RED - Priority 30"),
-        ("debug_green", 20, "#00ff00", "GREEN - Priority 20"),
-        ("debug_blue", 10, "#0000ff", "BLUE - Priority 10"),
+        ("debug_red", 30, HudColor.RED, "RED - Priority 30"),
+        ("debug_green", 20, HudColor.GREEN, "GREEN - Priority 20"),
+        ("debug_blue", 10, HudColor.BLUE, "BLUE - Priority 10"),
     ]
 
     print("\n1. Creating groups...")
     for name, priority, color, label in groups_config:
-        await client.create_group(name, props={
-            "anchor": "top_left",
-            "priority": priority,
-            "layout_mode": "auto",
-            "margin": 20,
-            "spacing": 15,
-            "width": 400,
-            "accent_color": color,
-        })
+        props = MessageProps(
+            anchor=Anchor.TOP_LEFT.value,
+            priority=priority,
+            layout_mode=LayoutMode.AUTO.value,
+            width=400,
+            accent_color=color.value,
+        )
+        await client.create_group(name, props=props)
         print(f"   Created: {name} (priority={priority})")
 
     await asyncio.sleep(0.5)

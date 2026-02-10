@@ -17,6 +17,7 @@ import asyncio
 sys.path.insert(0, ".")
 
 from hud_server.tests.test_runner import TestContext
+from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps
 
 
 # =============================================================================
@@ -24,52 +25,57 @@ from hud_server.tests.test_runner import TestContext
 # =============================================================================
 
 ANCHOR_CONFIG = {
-    "top_left": {
+    Anchor.TOP_LEFT: {
         "label": "TOP LEFT",
-        "color": "#ff5555",
+        "color": HudColor.ERROR,
         "emoji_fallback": "[TL]",
     },
-    "top_center": {
+    Anchor.TOP_CENTER: {
         "label": "TOP CENTER",
-        "color": "#ffaa00",
+        "color": HudColor.ACCENT_ORANGE,
         "emoji_fallback": "[TC]",
     },
-    "top_right": {
+    Anchor.TOP_RIGHT: {
         "label": "TOP RIGHT",
-        "color": "#55ff55",
+        "color": HudColor.ACCENT_GREEN,
         "emoji_fallback": "[TR]",
     },
-    "right_center": {
+    Anchor.RIGHT_CENTER: {
         "label": "RIGHT CENTER",
-        "color": "#55ffff",
+        "color": HudColor.CYAN,
         "emoji_fallback": "[RC]",
     },
-    "bottom_right": {
+    Anchor.BOTTOM_RIGHT: {
         "label": "BOTTOM RIGHT",
-        "color": "#5555ff",
+        "color": HudColor.BLUE,
         "emoji_fallback": "[BR]",
     },
-    "bottom_center": {
+    Anchor.BOTTOM_CENTER: {
         "label": "BOTTOM CENTER",
-        "color": "#ff55ff",
+        "color": HudColor.MAGENTA,
         "emoji_fallback": "[BC]",
     },
-    "bottom_left": {
+    Anchor.BOTTOM_LEFT: {
         "label": "BOTTOM LEFT",
-        "color": "#ffff55",
+        "color": HudColor.YELLOW,
         "emoji_fallback": "[BL]",
     },
-    "left_center": {
+    Anchor.LEFT_CENTER: {
         "label": "LEFT CENTER",
         "color": "#ff8855",
         "emoji_fallback": "[LC]",
     },
-    "center": {
+    Anchor.CENTER: {
         "label": "CENTER",
-        "color": "#ffffff",
+        "color": HudColor.WHITE,
         "emoji_fallback": "[C]",
     },
 }
+
+
+def _get_value(val):
+    """Get the string value from an enum or return as-is."""
+    return val.value if hasattr(val, 'value') else val
 
 
 async def cleanup_groups(client, group_names):
@@ -93,23 +99,22 @@ async def test_all_nine_anchors(session):
     groups = []
 
     for anchor, config in ANCHOR_CONFIG.items():
-        group_name = f"anchor_{anchor}"
+        group_name = f"anchor_{_get_value(anchor)}"
         groups.append(group_name)
 
-        await client.create_group(group_name, props={
-            "anchor": anchor,
-            "priority": 10,
-            "layout_mode": "auto",
-            "margin": 25,
-            "spacing": 10,
-            "width": 280,
-            "accent_color": config["color"],
-        })
+        props = MessageProps(
+            anchor=_get_value(anchor),
+            priority=10,
+            layout_mode=LayoutMode.AUTO.value,
+            width=280,
+            accent_color=_get_value(config["color"]),
+        )
+        await client.create_group(group_name, props=props)
 
         await client.show_message(
             group_name,
             title=f"{config['emoji_fallback']} {config['label']}",
-            content=f"Anchor: **{anchor}**\n\nThis window is positioned at the {config['label'].lower()} of the screen.",
+            content=f"Anchor: **{_get_value(anchor)}**\n\nThis window is positioned at the {config['label'].lower()} of the screen.",
             duration=30.0
         )
         await asyncio.sleep(0.15)
@@ -136,24 +141,23 @@ async def test_priority_stacking(session):
 
     # Test stacking at TOP_LEFT with 3 priority levels
     priorities = [
-        ("stack_high", 30, "#ff3333", "HIGH Priority (30)"),
-        ("stack_med", 20, "#33ff33", "MEDIUM Priority (20)"),
-        ("stack_low", 10, "#3333ff", "LOW Priority (10)"),
+        ("stack_high", 30, HudColor.ERROR, "HIGH Priority (30)"),
+        ("stack_med", 20, HudColor.ACCENT_GREEN, "MEDIUM Priority (20)"),
+        ("stack_low", 10, HudColor.INFO, "LOW Priority (10)"),
     ]
 
     print("Creating 3 windows at TOP_LEFT with different priorities...")
 
     for name, priority, color, label in priorities:
         groups.append(name)
-        await client.create_group(name, props={
-            "anchor": "top_left",
-            "priority": priority,
-            "layout_mode": "auto",
-            "margin": 20,
-            "spacing": 12,
-            "width": 380,
-            "accent_color": color,
-        })
+        props = MessageProps(
+            anchor=Anchor.TOP_LEFT.value,
+            priority=priority,
+            layout_mode=LayoutMode.AUTO.value,
+            width=380,
+            accent_color=_get_value(color),
+        )
+        await client.create_group(name, props=props)
 
         await client.show_message(
             name,
@@ -173,17 +177,16 @@ async def test_priority_stacking(session):
     # Now add windows to TOP_RIGHT to show parallel stacking
     print("\nAdding 2 windows to TOP_RIGHT...")
 
-    for name, priority, color in [("right_a", 25, "#ff9900"), ("right_b", 15, "#9900ff")]:
+    for name, priority, color in [("right_a", 25, HudColor.ACCENT_ORANGE), ("right_b", 15, HudColor.ACCENT_PURPLE)]:
         groups.append(name)
-        await client.create_group(name, props={
-            "anchor": "top_right",
-            "priority": priority,
-            "layout_mode": "auto",
-            "margin": 20,
-            "spacing": 12,
-            "width": 320,
-            "accent_color": color,
-        })
+        props = MessageProps(
+            anchor=Anchor.TOP_RIGHT.value,
+            priority=priority,
+            layout_mode=LayoutMode.AUTO.value,
+            width=320,
+            accent_color=_get_value(color),
+        )
+        await client.create_group(name, props=props)
 
         await client.show_message(
             name,
@@ -210,25 +213,23 @@ async def test_dynamic_height_changes(session):
     groups = ["dyn_top", "dyn_bottom"]
 
     # Create two stacked windows
-    await client.create_group("dyn_top", props={
-        "anchor": "top_left",
-        "priority": 20,
-        "layout_mode": "auto",
-        "margin": 20,
-        "spacing": 15,
-        "width": 420,
-        "accent_color": "#ff6600",
-    })
+    top_props = MessageProps(
+        anchor=Anchor.TOP_LEFT.value,
+        priority=20,
+        layout_mode=LayoutMode.AUTO.value,
+        width=420,
+        accent_color=HudColor.ACCENT_ORANGE.value,
+    )
+    await client.create_group("dyn_top", props=top_props)
 
-    await client.create_group("dyn_bottom", props={
-        "anchor": "top_left",
-        "priority": 10,
-        "layout_mode": "auto",
-        "margin": 20,
-        "spacing": 15,
-        "width": 420,
-        "accent_color": "#0066ff",
-    })
+    bottom_props = MessageProps(
+        anchor=Anchor.TOP_LEFT.value,
+        priority=10,
+        layout_mode=LayoutMode.AUTO.value,
+        width=420,
+        accent_color=HudColor.ACCENT_BLUE.value,
+    )
+    await client.create_group("dyn_bottom", props=bottom_props)
 
     # Phase 1: Short top window
     print("Phase 1: Top window is SHORT")
@@ -310,19 +311,18 @@ async def test_visibility_reflow(session):
     client = session._client
     groups = ["vis_1", "vis_2", "vis_3"]
 
-    colors = ["#ff0000", "#00ff00", "#0000ff"]
+    colors = [HudColor.RED, HudColor.GREEN, HudColor.BLUE]
     labels = ["First (Red)", "Second (Green)", "Third (Blue)"]
 
     for i, (name, color, label) in enumerate(zip(groups, colors, labels)):
-        await client.create_group(name, props={
-            "anchor": "top_left",
-            "priority": 30 - (i * 10),
-            "layout_mode": "auto",
-            "margin": 20,
-            "spacing": 12,
-            "width": 380,
-            "accent_color": color,
-        })
+        props = MessageProps(
+            anchor=Anchor.TOP_LEFT.value,
+            priority=30 - (i * 10),
+            layout_mode=LayoutMode.AUTO.value,
+            width=380,
+            accent_color=_get_value(color),
+        )
+        await client.create_group(name, props=props)
 
     # Show all three
     print("Phase 1: All 3 windows visible")
@@ -365,29 +365,29 @@ async def test_opposite_anchors(session):
     groups = []
 
     pairs = [
-        ("diag_tl", "top_left", "#ff0000", "TOP-LEFT Corner"),
-        ("diag_br", "bottom_right", "#00ff00", "BOTTOM-RIGHT Corner"),
-        ("diag_tr", "top_right", "#0000ff", "TOP-RIGHT Corner"),
-        ("diag_bl", "bottom_left", "#ffff00", "BOTTOM-LEFT Corner"),
+        ("diag_tl", Anchor.TOP_LEFT, HudColor.RED, "TOP-LEFT Corner"),
+        ("diag_br", Anchor.BOTTOM_RIGHT, HudColor.GREEN, "BOTTOM-RIGHT Corner"),
+        ("diag_tr", Anchor.TOP_RIGHT, HudColor.BLUE, "TOP-RIGHT Corner"),
+        ("diag_bl", Anchor.BOTTOM_LEFT, HudColor.YELLOW, "BOTTOM-LEFT Corner"),
     ]
 
     print("Creating windows at all 4 corners...")
 
     for name, anchor, color, label in pairs:
         groups.append(name)
-        await client.create_group(name, props={
-            "anchor": anchor,
-            "priority": 10,
-            "layout_mode": "auto",
-            "margin": 20,
-            "width": 320,
-            "accent_color": color,
-        })
+        props = MessageProps(
+            anchor=_get_value(anchor),
+            priority=10,
+            layout_mode=LayoutMode.AUTO.value,
+            width=320,
+            accent_color=_get_value(color),
+        )
+        await client.create_group(name, props=props)
 
         await client.show_message(
             name,
             title=label,
-            content=f"Anchor: **{anchor}**\n\nDiagonal positioning test.",
+            content=f"Anchor: **{_get_value(anchor)}**\n\nDiagonal positioning test.",
             duration=15.0
         )
         await asyncio.sleep(0.15)
@@ -410,13 +410,14 @@ async def test_center_anchors(session):
 
     # First show center
     groups.append("center_main")
-    await client.create_group("center_main", props={
-        "anchor": "center",
-        "priority": 10,
-        "layout_mode": "auto",
-        "width": 350,
-        "accent_color": "#ffffff",
-    })
+    center_props = MessageProps(
+        anchor=Anchor.CENTER.value,
+        priority=10,
+        layout_mode=LayoutMode.AUTO.value,
+        width=350,
+        accent_color=HudColor.WHITE.value,
+    )
+    await client.create_group("center_main", props=center_props)
 
     await client.show_message(
         "center_main",
@@ -430,29 +431,29 @@ async def test_center_anchors(session):
 
     # Add edge centers
     edge_centers = [
-        ("edge_top", "top_center", "#ff9900", "TOP CENTER EDGE"),
-        ("edge_bottom", "bottom_center", "#9900ff", "BOTTOM CENTER EDGE"),
-        ("edge_left", "left_center", "#00ff99", "LEFT CENTER EDGE"),
-        ("edge_right", "right_center", "#ff0099", "RIGHT CENTER EDGE"),
+        ("edge_top", Anchor.TOP_CENTER, HudColor.ACCENT_ORANGE, "TOP CENTER EDGE"),
+        ("edge_bottom", Anchor.BOTTOM_CENTER, HudColor.ACCENT_PURPLE, "BOTTOM CENTER EDGE"),
+        ("edge_left", Anchor.LEFT_CENTER, HudColor.ACCENT_GREEN, "LEFT CENTER EDGE"),
+        ("edge_right", Anchor.RIGHT_CENTER, HudColor.ACCENT_PINK, "RIGHT CENTER EDGE"),
     ]
 
     print("Adding edge-center windows...")
 
     for name, anchor, color, label in edge_centers:
         groups.append(name)
-        await client.create_group(name, props={
-            "anchor": anchor,
-            "priority": 10,
-            "layout_mode": "auto",
-            "margin": 20,
-            "width": 260,
-            "accent_color": color,
-        })
+        props = MessageProps(
+            anchor=_get_value(anchor),
+            priority=10,
+            layout_mode=LayoutMode.AUTO.value,
+            width=260,
+            accent_color=_get_value(color),
+        )
+        await client.create_group(name, props=props)
 
         await client.show_message(
             name,
             title=label,
-            content=f"Positioned at the {anchor.replace('_', ' ')}.",
+            content=f"Positioned at the {_get_value(anchor).replace('_', ' ')}.",
             duration=15.0
         )
         await asyncio.sleep(0.2)
@@ -477,19 +478,18 @@ async def test_stacking_at_edge_centers(session):
     # Stack 3 windows at left_center
     print("Stacking 3 windows at LEFT_CENTER...")
 
-    for i, (priority, color) in enumerate([(30, "#ff5555"), (20, "#55ff55"), (10, "#5555ff")]):
+    for i, (priority, color) in enumerate([(30, HudColor.ERROR), (20, HudColor.SUCCESS), (10, HudColor.INFO)]):
         name = f"left_stack_{i}"
         groups.append(name)
 
-        await client.create_group(name, props={
-            "anchor": "left_center",
-            "priority": priority,
-            "layout_mode": "auto",
-            "margin": 20,
-            "spacing": 10,
-            "width": 280,
-            "accent_color": color,
-        })
+        props = MessageProps(
+            anchor=Anchor.LEFT_CENTER.value,
+            priority=priority,
+            layout_mode=LayoutMode.AUTO.value,
+            width=280,
+            accent_color=_get_value(color),
+        )
+        await client.create_group(name, props=props)
 
         await client.show_message(
             name,
@@ -502,19 +502,18 @@ async def test_stacking_at_edge_centers(session):
     # Stack 2 windows at right_center
     print("Stacking 2 windows at RIGHT_CENTER...")
 
-    for i, (priority, color) in enumerate([(25, "#ff9900"), (15, "#9900ff")]):
+    for i, (priority, color) in enumerate([(25, HudColor.ACCENT_ORANGE), (15, HudColor.ACCENT_PURPLE)]):
         name = f"right_stack_{i}"
         groups.append(name)
 
-        await client.create_group(name, props={
-            "anchor": "right_center",
-            "priority": priority,
-            "layout_mode": "auto",
-            "margin": 20,
-            "spacing": 10,
-            "width": 280,
-            "accent_color": color,
-        })
+        props = MessageProps(
+            anchor=Anchor.RIGHT_CENTER.value,
+            priority=priority,
+            layout_mode=LayoutMode.AUTO.value,
+            width=280,
+            accent_color=_get_value(color),
+        )
+        await client.create_group(name, props=props)
 
         await client.show_message(
             name,
@@ -541,15 +540,14 @@ async def test_mixed_content_with_progress(session):
     groups = ["msg_group", "progress_group"]
 
     # Message window at top
-    await client.create_group("msg_group", props={
-        "anchor": "top_left",
-        "priority": 20,
-        "layout_mode": "auto",
-        "margin": 20,
-        "spacing": 15,
-        "width": 400,
-        "accent_color": "#00aaff",
-    })
+    msg_props = MessageProps(
+        anchor=Anchor.TOP_LEFT.value,
+        priority=20,
+        layout_mode=LayoutMode.AUTO.value,
+        width=400,
+        accent_color=HudColor.ACCENT_BLUE.value,
+    )
+    await client.create_group("msg_group", props=msg_props)
 
     await client.show_message(
         "msg_group",
@@ -559,15 +557,14 @@ async def test_mixed_content_with_progress(session):
     )
 
     # Progress window below
-    await client.create_group("progress_group", props={
-        "anchor": "top_left",
-        "priority": 10,
-        "layout_mode": "auto",
-        "margin": 20,
-        "spacing": 15,
-        "width": 380,
-        "accent_color": "#ffaa00",
-    })
+    progress_props = MessageProps(
+        anchor=Anchor.TOP_LEFT.value,
+        priority=10,
+        layout_mode=LayoutMode.AUTO.value,
+        width=380,
+        accent_color=HudColor.ACCENT_ORANGE.value,
+    )
+    await client.create_group("progress_group", props=progress_props)
 
     # Add progress bar
     await client.show_progress(
@@ -608,17 +605,17 @@ async def test_rapid_show_hide(session):
 
     client = session._client
     groups = ["rapid_1", "rapid_2", "rapid_3"]
+    colors = [HudColor.RED, HudColor.GREEN, HudColor.BLUE]
 
     for i, name in enumerate(groups):
-        await client.create_group(name, props={
-            "anchor": "top_left",
-            "priority": 30 - (i * 10),
-            "layout_mode": "auto",
-            "margin": 20,
-            "spacing": 10,
-            "width": 350,
-            "accent_color": ["#ff0000", "#00ff00", "#0000ff"][i],
-        })
+        props = MessageProps(
+            anchor=Anchor.TOP_LEFT.value,
+            priority=30 - (i * 10),
+            layout_mode=LayoutMode.AUTO.value,
+            width=350,
+            accent_color=colors[i].value,
+        )
+        await client.create_group(name, props=props)
 
     print("Performing 5 rapid show/hide cycles...")
 

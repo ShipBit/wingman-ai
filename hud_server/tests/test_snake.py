@@ -27,6 +27,7 @@ import time
 import random
 from enum import Enum
 from hud_server.tests.test_session import TestSession
+from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps
 
 try:
     import keyboard.keyboard as keyboard
@@ -148,6 +149,43 @@ COLOR_GAME_OVER = "#ff0000"
 
 # Current border color index
 _current_border_color_index = 0
+
+
+def _menu_props(priority: int, accent_color: str = COLOR_GAME, bg_color: str = "#0a0e14",
+                width: int = 600, font_size: int = 14) -> MessageProps:
+    """Create MessageProps for menu screens."""
+    return MessageProps(
+        anchor=Anchor.TOP_LEFT.value,
+        priority=priority,
+        layout_mode=LayoutMode.AUTO.value,
+        width=width,
+        bg_color=bg_color,
+        text_color="#f0f0f0",
+        accent_color=accent_color,
+        opacity=0.98,
+        border_radius=12,
+        font_size=font_size,
+        content_padding=20,
+        typewriter_effect=False,
+    )
+
+
+def _stats_props() -> MessageProps:
+    """Create MessageProps for stats display."""
+    return MessageProps(
+        anchor=Anchor.TOP_RIGHT.value,
+        priority=100,
+        layout_mode=LayoutMode.AUTO.value,
+        width=350,
+        bg_color="#0a0e14",
+        text_color="#f0f0f0",
+        accent_color=COLOR_GAME,
+        opacity=0.95,
+        border_radius=8,
+        font_size=14,
+        content_padding=12,
+        typewriter_effect=False,
+    )
 
 
 # =============================================================================
@@ -399,28 +437,26 @@ async def show_cell(session: TestSession, x: int, y: int, cell_type: str, color_
     cell_color = color_override if color_override else COLORS[cell_type]
 
     # Special properties for golden food (pulsating effect)
-    props = {
-        "layout_mode": "manual",
-        "x": screen_x,
-        "y": screen_y,
-        "width": CELL_SIZE,
-        "height": CELL_SIZE,
-        "bg_color": cell_color,
-        "opacity": 1.0,
-        "border_radius": 4,
-        "font_size": 1,
-        "content_padding": 0,
-        "disable_animations": not pulsate,
-        "disable_transitions": not pulsate,
-        "duration": 999999,  # Endless mode - very long duration
-    }
+    props = MessageProps(
+        layout_mode=LayoutMode.MANUAL.value,
+        x=screen_x,
+        y=screen_y,
+        width=CELL_SIZE,
+        max_height=CELL_SIZE,
+        bg_color=cell_color,
+        opacity=1.0,
+        border_radius=4,
+        font_size=1,
+        content_padding=0,
+    )
 
     await session._client.show_message(
         group_name=group_name,
         title=" ",
         content=" ",  # Need non-empty content to keep HUD visible
         color=cell_color,
-        props=props
+        props=props,
+        duration=3600  # Max allowed duration
     )
     _active_cell_huds.add((x, y))
 
@@ -569,28 +605,27 @@ async def show_combo_flash(session: TestSession, combo: int):
 
     combo_text = f"{emoji} {message} {emoji}"
 
+    props = MessageProps(
+        anchor=Anchor.CENTER.value,
+        priority=150,
+        layout_mode=LayoutMode.AUTO.value,
+        width=400,
+        bg_color=HudColor.BLACK.value,
+        text_color=color,
+        accent_color=color,
+        opacity=0.95,
+        border_radius=20,
+        font_size=24,
+        content_padding=20,
+        typewriter_effect=False,
+    )
     await session._client.show_message(
         group_name="snake_combo_flash",
         title=" ",
         content=combo_text,
         color=color,
-        props={
-            "anchor": "center",
-            "priority": 150,
-            "layout_mode": "auto",
-            "width": 400,
-            "bg_color": "#000000",
-            "text_color": color,
-            "accent_color": color,
-            "opacity": 0.95,
-            "border_radius": 20,
-            "font_size": 24,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": False,
-            "disable_transitions": False,
-            "duration": 1.5,  # Show for 1.5 seconds
-        }
+        props=props,
+        duration=1.5  # Show for 1.5 seconds
     )
 
 
@@ -609,23 +644,8 @@ async def show_start_screen(session: TestSession):
         title=" ",  # Space to pass validation
         content="# 🐍 ENDLESS SNAKE GAME 🐍",
         color=COLOR_GAME,
-        props={
-            "anchor": "top_left",
-            "priority": 250,
-            "layout_mode": "auto",
-            "width": 600,
-            "bg_color": "#0a0e14",
-            "text_color": "#f0f0f0",
-            "accent_color": COLOR_GAME,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 16,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(250, font_size=16),
+        duration=3600,
     )
 
     # How to Play HUD
@@ -640,23 +660,8 @@ async def show_start_screen(session: TestSession):
 - Avoid hitting the borders and yourself
 - **ENDLESS MODE** - No time limit, play until you lose!""",
         color=COLOR_GAME,
-        props={
-            "anchor": "top_left",
-            "priority": 240,
-            "layout_mode": "auto",
-            "width": 600,
-            "bg_color": "#0a0e14",
-            "text_color": "#f0f0f0",
-            "accent_color": COLOR_GAME,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 14,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(240),
+        duration=3600,
     )
 
     # Features HUD
@@ -670,23 +675,8 @@ async def show_start_screen(session: TestSession):
 - ⚡ Multiple foods on screen
 - 🌟 Golden apples (disappear after 10s)""",
         color=COLOR_GAME,
-        props={
-            "anchor": "top_left",
-            "priority": 230,
-            "layout_mode": "auto",
-            "width": 600,
-            "bg_color": "#0a0e14",
-            "text_color": "#f0f0f0",
-            "accent_color": COLOR_GAME,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 14,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(230),
+        duration=3600,
     )
 
     # Controls HUD
@@ -697,23 +687,8 @@ async def show_start_screen(session: TestSession):
 - **↑ ↓ ← →** : Move snake
 - **Grid Size:** {GRID_WIDTH} x {GRID_HEIGHT}""",
         color=COLOR_GAME,
-        props={
-            "anchor": "top_left",
-            "priority": 220,
-            "layout_mode": "auto",
-            "width": 600,
-            "bg_color": "#0a0e14",
-            "text_color": "#f0f0f0",
-            "accent_color": COLOR_GAME,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 14,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(220),
+        duration=3600,
     )
 
     # Start Button HUD
@@ -722,23 +697,8 @@ async def show_start_screen(session: TestSession):
         title=" ",
         content="🎮 **Press SPACE to begin your endless journey!** 🎮",
         color=COLOR_GAME,
-        props={
-            "anchor": "top_left",
-            "priority": 210,
-            "layout_mode": "auto",
-            "width": 600,
-            "bg_color": "#1a4d1a",
-            "text_color": "#ffffff",
-            "accent_color": COLOR_GAME,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 16,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(210, bg_color="#1a4d1a", font_size=16),
+        duration=3600,
     )
 
 
@@ -765,23 +725,8 @@ async def show_stats(session: TestSession, game: SnakeGame, elapsed: float, spee
         title="🎮 Endless Snake",
         content=stats_message,
         color=COLOR_GAME,
-        props={
-            "anchor": "top_right",
-            "priority": 100,
-            "layout_mode": "auto",
-            "width": 350,
-            "bg_color": "#0a0e14",
-            "text_color": "#f0f0f0",
-            "accent_color": COLOR_GAME,
-            "opacity": 0.95,
-            "border_radius": 8,
-            "font_size": 14,
-            "content_padding": 12,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 999999,  # Endless mode
-        }
+        props=_stats_props(),
+        duration=3600,  # Max allowed duration
     )
 
 
@@ -819,23 +764,8 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
         title=" ",
         content=f"# {result_emoji} GAME OVER {result_emoji}",
         color=COLOR_GAME_OVER,
-        props={
-            "anchor": "top_left",
-            "priority": 250,
-            "layout_mode": "auto",
-            "width": 500,
-            "bg_color": "#1a0a0a",
-            "text_color": "#ff6666",
-            "accent_color": COLOR_GAME_OVER,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 18,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(250, accent_color=COLOR_GAME_OVER, bg_color="#1a0a0a", width=500, font_size=18),
+        duration=3600,
     )
 
     # Rating HUD
@@ -844,23 +774,8 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
         title=" ",
         content=f"## {rating}",
         color=COLOR_GAME_OVER,
-        props={
-            "anchor": "top_left",
-            "priority": 240,
-            "layout_mode": "auto",
-            "width": 500,
-            "bg_color": "#0a0e14",
-            "text_color": "#ffaa00",
-            "accent_color": COLOR_GAME_OVER,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 16,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(240, accent_color=COLOR_GAME_OVER, width=500, font_size=16),
+        duration=3600,
     )
 
     # Stats HUD
@@ -873,23 +788,8 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
 - **Survival Time:** {time_str}
 - **Reason:** {game.game_over_reason}""",
         color=COLOR_GAME_OVER,
-        props={
-            "anchor": "top_left",
-            "priority": 230,
-            "layout_mode": "auto",
-            "width": 500,
-            "bg_color": "#0a0e14",
-            "text_color": "#f0f0f0",
-            "accent_color": COLOR_GAME_OVER,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 14,
-            "content_padding": 20,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(230, accent_color=COLOR_GAME_OVER, width=500),
+        duration=3600,
     )
 
     # Play Again Button HUD
@@ -898,23 +798,8 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
         title=" ",
         content="🔄 **Press SPACE to play again**",
         color=COLOR_GAME,
-        props={
-            "anchor": "top_left",
-            "priority": 220,
-            "layout_mode": "auto",
-            "width": 500,
-            "bg_color": "#1a4d1a",
-            "text_color": "#ffffff",
-            "accent_color": COLOR_GAME,
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 15,
-            "content_padding": 18,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(220, bg_color="#1a4d1a", width=500, font_size=15),
+        duration=3600,
     )
 
     # Exit Button HUD
@@ -923,23 +808,8 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
         title=" ",
         content="👋 **Press ESC to exit**",
         color="#888888",
-        props={
-            "anchor": "top_left",
-            "priority": 210,
-            "layout_mode": "auto",
-            "width": 500,
-            "bg_color": "#1a1a1a",
-            "text_color": "#cccccc",
-            "accent_color": "#888888",
-            "opacity": 0.98,
-            "border_radius": 12,
-            "font_size": 15,
-            "content_padding": 18,
-            "typewriter_effect": False,
-            "disable_animations": True,
-            "disable_transitions": True,
-            "duration": 3600,
-        }
+        props=_menu_props(210, accent_color="#888888", bg_color="#1a1a1a", width=500, font_size=15),
+        duration=3600,
     )
 
 

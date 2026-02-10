@@ -18,6 +18,10 @@ from typing import Any, Optional
 from dataclasses import dataclass, field
 
 from hud_server.http_client import HudHttpClient
+from hud_server.types import (
+    HudColor, LayoutMode,
+    MessageProps, PersistentProps, ChatWindowProps
+)
 
 
 # =============================================================================
@@ -29,13 +33,14 @@ USER_CONFIGS = {
         "display_name": "Alice",
         # Private HUD - top-left corner (blue theme)
         "private_hud": {
+            "layout_mode": LayoutMode.MANUAL.value,
             "x": 20,
             "y": 20,
             "width": 380,
             "max_height": 350,
             "bg_color": "#1a2332",
             "text_color": "#e8f4ff",
-            "accent_color": "#00aaff",
+            "accent_color": HudColor.ACCENT_BLUE.value,
             "opacity": 0.92,
             "border_radius": 10,
             "font_size": 15,
@@ -45,13 +50,14 @@ USER_CONFIGS = {
         },
         # Private persistent panel - below main HUD
         "private_persistent": {
+            "layout_mode": LayoutMode.MANUAL.value,
             "x": 20,
             "y": 390,
             "width": 320,
             "max_height": 300,
             "bg_color": "#1a2332",
             "text_color": "#e8f4ff",
-            "accent_color": "#00d4aa",
+            "accent_color": HudColor.ACCENT_GREEN.value,
             "opacity": 0.85,
             "border_radius": 8,
             "font_size": 14,
@@ -63,13 +69,14 @@ USER_CONFIGS = {
         "display_name": "Bob",
         # Private HUD - top-right corner (orange theme)
         "private_hud": {
+            "layout_mode": LayoutMode.MANUAL.value,
             "x": 1500,
             "y": 20,
             "width": 400,
             "max_height": 380,
             "bg_color": "#2a1f1a",
             "text_color": "#fff5e8",
-            "accent_color": "#ff8c42",
+            "accent_color": HudColor.ACCENT_ORANGE.value,
             "opacity": 0.90,
             "border_radius": 14,
             "font_size": 16,
@@ -79,13 +86,14 @@ USER_CONFIGS = {
         },
         # Private persistent panel - right side
         "private_persistent": {
+            "layout_mode": LayoutMode.MANUAL.value,
             "x": 1520,
             "y": 420,
             "width": 340,
             "max_height": 280,
             "bg_color": "#2a1f1a",
             "text_color": "#fff5e8",
-            "accent_color": "#ffa500",
+            "accent_color": HudColor.WARNING.value,
             "opacity": 0.82,
             "border_radius": 10,
             "font_size": 13,
@@ -97,13 +105,14 @@ USER_CONFIGS = {
         "display_name": "Charlie",
         # Private HUD - bottom-left corner (purple theme)
         "private_hud": {
+            "layout_mode": LayoutMode.MANUAL.value,
             "x": 20,
             "y": 720,
             "width": 420,
             "max_height": 320,
             "bg_color": "#1f1a2a",
             "text_color": "#f0e8ff",
-            "accent_color": "#9b59b6",
+            "accent_color": HudColor.ACCENT_PURPLE.value,
             "opacity": 0.88,
             "border_radius": 16,
             "font_size": 15,
@@ -113,6 +122,7 @@ USER_CONFIGS = {
         },
         # Private persistent panel - bottom area
         "private_persistent": {
+            "layout_mode": LayoutMode.MANUAL.value,
             "x": 460,
             "y": 800,
             "width": 350,
@@ -133,13 +143,14 @@ USER_CONFIGS = {
 SHARED_CONFIGS = {
     "team_notifications": {
         "name": "Team Notifications",
+        "layout_mode": LayoutMode.MANUAL.value,
         "x": 800,
         "y": 20,
         "width": 450,
         "max_height": 400,
         "bg_color": "#1a1a2e",
-        "text_color": "#ffffff",
-        "accent_color": "#e74c3c",
+        "text_color": HudColor.WHITE.value,
+        "accent_color": HudColor.ERROR.value,
         "opacity": 0.95,
         "border_radius": 12,
         "font_size": 16,
@@ -148,13 +159,14 @@ SHARED_CONFIGS = {
     },
     "team_chat": {
         "name": "Team Chat",
+        "layout_mode": LayoutMode.MANUAL.value,
         "x": 800,
         "y": 440,
         "width": 480,
         "max_height": 450,
         "bg_color": "#16213e",
         "text_color": "#e8e8e8",
-        "accent_color": "#3498db",
+        "accent_color": HudColor.INFO.value,
         "opacity": 0.90,
         "border_radius": 10,
         "font_size": 14,
@@ -163,22 +175,23 @@ SHARED_CONFIGS = {
         "max_messages": 100,
         "fade_old_messages": True,
         "sender_colors": {
-            "Alice": "#00aaff",
-            "Bob": "#ff8c42",
-            "Charlie": "#9b59b6",
-            "System": "#95a5a6",
+            "Alice": HudColor.ACCENT_BLUE.value,
+            "Bob": HudColor.ACCENT_ORANGE.value,
+            "Charlie": HudColor.ACCENT_PURPLE.value,
+            "System": HudColor.GRAY.value,
         },
         "z_order": 15,
     },
     "shared_status": {
         "name": "Shared Status",
+        "layout_mode": LayoutMode.MANUAL.value,
         "x": 1300,
         "y": 720,
         "width": 360,
         "max_height": 300,
         "bg_color": "#0d1b2a",
         "text_color": "#d0d0d0",
-        "accent_color": "#2ecc71",
+        "accent_color": HudColor.SUCCESS.value,
         "opacity": 0.85,
         "border_radius": 8,
         "font_size": 14,
@@ -236,6 +249,25 @@ class UserClient:
         self.connected = False
         print(f"[{self.display_name}] Disconnected")
 
+    def _config_to_props(self, config: dict) -> MessageProps:
+        """Convert a config dict to MessageProps."""
+        return MessageProps(
+            layout_mode=config.get("layout_mode"),
+            x=config.get("x"),
+            y=config.get("y"),
+            width=config.get("width"),
+            max_height=config.get("max_height"),
+            bg_color=config.get("bg_color"),
+            text_color=config.get("text_color"),
+            accent_color=config.get("accent_color"),
+            opacity=config.get("opacity"),
+            border_radius=config.get("border_radius"),
+            font_size=config.get("font_size"),
+            typewriter_effect=config.get("typewriter_effect"),
+            fade_delay=config.get("fade_delay"),
+            z_order=config.get("z_order"),
+        )
+
     async def setup_private_groups(self):
         """Create the user's private HUD groups."""
         if not self._client:
@@ -244,14 +276,14 @@ class UserClient:
         # Create private HUD
         await self._client.create_group(
             self.private_hud_group,
-            props=self.config["private_hud"]
+            props=self._config_to_props(self.config["private_hud"])
         )
         print(f"[{self.display_name}] Created private HUD group")
 
         # Create private persistent panel
         await self._client.create_group(
             self.private_persistent_group,
-            props=self.config["private_persistent"]
+            props=self._config_to_props(self.config["private_persistent"])
         )
         print(f"[{self.display_name}] Created private persistent group")
 
@@ -420,7 +452,23 @@ class SharedGroupManager:
                     fade_old_messages=config.get("fade_old_messages", True),
                 )
             else:
-                await self._client.create_group(group_id, props=config)
+                # Convert config dict to MessageProps
+                props = MessageProps(
+                    layout_mode=config.get("layout_mode"),
+                    x=config.get("x"),
+                    y=config.get("y"),
+                    width=config.get("width"),
+                    max_height=config.get("max_height"),
+                    bg_color=config.get("bg_color"),
+                    text_color=config.get("text_color"),
+                    accent_color=config.get("accent_color"),
+                    opacity=config.get("opacity"),
+                    border_radius=config.get("border_radius"),
+                    font_size=config.get("font_size"),
+                    typewriter_effect=config.get("typewriter_effect"),
+                    z_order=config.get("z_order"),
+                )
+                await self._client.create_group(group_id, props=props)
             print(f"[SharedGroupManager] Created shared group: {config['name']}")
 
     async def cleanup_shared_groups(self):
