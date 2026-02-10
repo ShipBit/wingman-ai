@@ -967,6 +967,7 @@ class HeadsUpOverlay:
         accent = self._hex_to_rgb(props.get('accent_color', '#00aaff'))
 
         width = int(props.get('width', 300))
+        max_height = int(props.get('max_height', 600))
         radius = int(props.get('border_radius', 12))
         padding = int(props.get('content_padding', 16))
 
@@ -983,7 +984,7 @@ class HeadsUpOverlay:
 
         # Include visual props in state hash for real-time config updates
         visual_props_hash = (
-            width, radius, padding,
+            width, max_height, radius, padding,
             bg, bg_alpha, text_color, accent,
             props.get('opacity', 0.85),
             props.get('font_size', 16),
@@ -1143,7 +1144,9 @@ class HeadsUpOverlay:
 
         # Finalize canvas
         bottom_padding = padding - 4
-        final_h = max(60, y + bottom_padding)
+        # Calculate final height - constrain to max_height if content exceeds it
+        calculated_height = max(60, y + bottom_padding)
+        final_h = min(calculated_height, max_height)
 
         # Create final canvas - ALWAYS create fresh to prevent ghosting
         old_canvas = win.get('canvas')

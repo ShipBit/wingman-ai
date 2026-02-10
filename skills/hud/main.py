@@ -233,6 +233,17 @@ class HUD(Skill):
                 )
             )
 
+        # Validate persistent_max_height
+        persistent_max_height = self.retrieve_custom_property_value("persistent_max_height", errors)
+        if not isinstance(persistent_max_height, (int, float)) or persistent_max_height <= 0:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.wingman.name,
+                    message=f"Invalid persistent_max_height: '{persistent_max_height}'. Must be a positive number.",
+                    error_type=WingmanInitializationErrorType.INVALID_CONFIG
+                )
+            )
+
         # Validate opacity
         opacity = self.retrieve_custom_property_value("opacity", errors)
         if not isinstance(opacity, (int, float)) or not (0.0 <= opacity <= 1.0):
@@ -376,6 +387,7 @@ class HUD(Skill):
             priority=int(self._get_prop("persistent_priority", 10)),
             layout_mode=LayoutMode.AUTO,
             width=int(self._get_prop("persistent_width", 400)),
+            max_height=int(self._get_prop("persistent_max_height", 600)),
             bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
             text_color=str(self._get_prop("text_color", HudColor.TEXT_PRIMARY)),
             accent_color=str(self._get_prop("accent_color", HudColor.ACCENT_BLUE)),
@@ -613,7 +625,9 @@ class HUD(Skill):
 
         # Save state
         self._save_persistent_items()
-        self._persistent_items.clear()
+        self.hud_clear_all(False)
+        await self._client.delete_group(self._messages_group)
+        await self._client.delete_group(self._persistent_group)
 
         # Disconnect client
         if self._client:
@@ -624,12 +638,6 @@ class HUD(Skill):
             self._client = None
 
         self.active = False
-
-        # Reset prepared state so skill can be reactivated
-        # (base class doesn't do this, so we need to do it explicitly)
-        self.is_prepared = False
-        self.is_validated = False
-        self.is_unloaded = False  # Allow unload to be called again on next deactivation
 
     # ─────────────────────────────── Audio Monitor ─────────────────────────────── #
 
@@ -1026,7 +1034,7 @@ class HUD(Skill):
         return json.dumps(active_items, indent=2)
 
     @tool()
-    def hud_clear_all(self) -> str:
+    def hud_clear_all(self, save: bool = True) -> str:
         """
         Remove all information panels and progress bars from the HUD.
         """
@@ -1041,7 +1049,8 @@ class HUD(Skill):
                     self._client.remove_item(group_name=self._persistent_group, title=title)
                 )
 
-        self._save_persistent_items()
+        if save:
+            self._save_persistent_items()
 
         return f"Cleared {cleared_count} item(s) from HUD."
 

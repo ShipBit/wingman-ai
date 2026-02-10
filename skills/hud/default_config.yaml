@@ -90,6 +90,13 @@ custom_properties:
     value: 400
     required: false
 
+  - id: persistent_max_height
+    name: Info Panel Max Height
+    hint: Maximum height of persistent info panels in pixels. Content will be clipped if it exceeds this height.
+    property_type: number
+    value: 600
+    required: false
+
   - id: opacity
     name: Opacity
     hint: Transparency of HUD elements (0.0 to 1.0).
