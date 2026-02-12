@@ -88,6 +88,7 @@ class McpConnection:
     sse_shutdown_event: Optional[threading.Event] = None
     sse_ready_event: Optional[threading.Event] = None
     sse_error: Optional[str] = None
+    sse_connection_alive: bool = False  # True when SSE stream is actually open
 
 
 class McpClient:
@@ -379,6 +380,7 @@ class McpClient:
         connection.sse_shutdown_event = threading.Event()
         connection.sse_ready_event = threading.Event()
         connection.sse_error = None
+        connection.sse_connection_alive = False
 
         # Storage for the session (will be set by the SSE thread)
         sse_session_holder: dict[str, Any] = {"session": None, "loop": None}
@@ -430,6 +432,7 @@ class McpClient:
                             sse_session_holder["loop"] = loop
                             connection.session = session
                             connection.is_connected = True
+                            connection.sse_connection_alive = True
 
                             # Signal that we're ready
                             connection.sse_ready_event.set()
@@ -442,6 +445,9 @@ class McpClient:
                     connection.sse_error = str(e)
                     connection.is_connected = False
                 finally:
+                    # Mark connection as no longer alive when SSE stream closes
+                    connection.sse_connection_alive = False
+                    connection.is_connected = False
                     connection.sse_ready_event.set()  # Unblock waiting caller
                     sse_session_holder["session"] = None
                     connection.session = None
@@ -564,6 +570,7 @@ class McpClient:
         connection.sse_shutdown_event = None
         connection.sse_ready_event = None
         connection.sse_error = None
+        connection.sse_connection_alive = False
 
         # Close session with timeout (for STDIO)
         if connection.session_context:
@@ -666,6 +673,7 @@ class McpClient:
         tool_name: str,
         arguments: dict[str, Any],
         timeout: float = 60.0,
+        _retry_on_closed: bool = True,
     ) -> str:
         """
         Call a tool on an SSE MCP server using the persistent connection.
@@ -673,9 +681,36 @@ class McpClient:
         The SSE connection runs in a dedicated thread. We submit the tool call
         to that thread's event loop and wait for the result via a thread-safe
         future.
+
+        If the connection has been closed (e.g., due to inactivity timeout),
+        we automatically attempt to reconnect before making the call.
         """
-        if not connection.sse_loop or not connection.session:
-            raise RuntimeError("SSE connection is not active")
+        # Proactive check: if the SSE thread has exited, the connection is dead
+        if connection.sse_thread and not connection.sse_thread.is_alive():
+            connection.sse_connection_alive = False
+            connection.is_connected = False
+
+        # Check if SSE connection is still alive, attempt reconnect if not
+        if not connection.sse_connection_alive or not connection.sse_loop or not connection.session:
+            printr.print(
+                f"SSE connection to {connection.config.display_name} was closed, attempting reconnect...",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            # Clean up the old connection
+            await self._cleanup_connection(connection)
+            # Reconnect
+            await self._connect_sse(connection, connection.merged_headers)
+
+            if not connection.sse_connection_alive or not connection.sse_loop or not connection.session:
+                raise RuntimeError(
+                    f"Failed to reconnect SSE connection to {connection.config.display_name}"
+                )
+            printr.print(
+                f"SSE connection to {connection.config.display_name} reconnected successfully",
+                color=LogType.INFO,
+                server_only=True,
+            )
 
         # Create a future to get the result from the SSE thread
         loop = asyncio.get_event_loop()
@@ -700,6 +735,29 @@ class McpClient:
         except concurrent.futures.TimeoutError:
             future.cancel()
             raise asyncio.TimeoutError(f"SSE tool call timed out: {tool_name}")
+        except Exception as e:
+            # Check if this is a ClosedResourceError or similar connection issue.
+            # Note: anyio.ClosedResourceError has an empty str() representation,
+            # so we must also check the exception type name.
+            error_str = str(e).lower()
+            error_type = type(e).__name__.lower()
+            if "closedresource" in error_type or "closed" in error_str:
+                # Mark connection as no longer alive
+                connection.sse_connection_alive = False
+                connection.is_connected = False
+
+                # Retry once after reconnect if enabled
+                if _retry_on_closed:
+                    printr.print(
+                        f"SSE connection closed during tool call, will reconnect and retry...",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                    # Recursive call with retry disabled to avoid infinite loops
+                    return await self._call_tool_sse(
+                        connection, tool_name, arguments, timeout, _retry_on_closed=False
+                    )
+            raise
 
     def _parse_tool_result(self, result) -> str:
         """Parse a tool result into a string."""
@@ -740,7 +798,8 @@ class McpClient:
         Returns:
             The tool result as a string
         """
-        if not connection.is_connected:
+        # SSE has its own reconnection logic in _call_tool_sse, so let it through
+        if not connection.is_connected and connection.config.type != McpTransportType.SSE:
             return f"Error: Not connected to MCP server {connection.config.name}"
 
         try:
