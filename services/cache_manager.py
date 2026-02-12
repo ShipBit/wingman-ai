@@ -99,33 +99,47 @@ class CacheManager:
                     console_only=True,
                 )
 
+            # Trim disk cache to max_memory_size (keep most recently used by timestamp)
+            if self.max_memory_size > 0 and len(self.disk_data) > self.max_memory_size:
+                sorted_keys = sorted(
+                    self.disk_data.keys(),
+                    key=lambda k: self.disk_data[k][2],
+                    reverse=True,
+                )
+                keys_to_remove = sorted_keys[self.max_memory_size:]
+                for key in keys_to_remove:
+                    self._remove_entry(key)
+                printr.print(
+                    f"Trimmed cache metadata to {self.max_memory_size} items from {len(sorted_keys)}",
+                    tags="info",
+                    console_only=True,
+                )
+
             # --- Clean up orphaned files in the cache data directory ---
             if self.cache_data_path.exists():
+                referenced_files = set()
+                for meta in self.disk_data.values():
+                    if meta[3] == "bytes":
+                        try:
+                            referenced_files.add(Path(meta[0]).resolve())
+                        except Exception:
+                            pass
+
                 for file in self.cache_data_path.iterdir():
                     if file.is_file():
-                        found = False
-                        # Check if file is referenced by any disk_data entry in bytes mode.
-                        for meta in self.disk_data.values():
-                            if meta[3] == "bytes":
-                                try:
-                                    if file.resolve() == Path(meta[0]).resolve():
-                                        found = True
-                                        break
-                                except Exception:
-                                    pass
-                        if not found:
-                            try:
+                        try:
+                            if file.resolve() not in referenced_files:
                                 file.unlink(missing_ok=True)
                                 printr.print(
                                     f"Deleted orphaned cache file: {file}",
                                     tags="info",
                                     console_only=True,
                                 )
-                            except Exception as e:
-                                printr.print_err(
-                                    f"Error deleting orphaned file {file}: {e}",
-                                    console_only=True,
-                                )
+                        except Exception as e:
+                            printr.print_err(
+                                f"Error deleting orphaned file {file}: {e}",
+                                console_only=True,
+                            )
         except (json.JSONDecodeError, IOError, TypeError, ValueError, IndexError) as e:
             printr.print_err(
                 f"Error loading or parsing cache metadata file {self.cache_metadata_file}: {e}. Starting fresh.",
