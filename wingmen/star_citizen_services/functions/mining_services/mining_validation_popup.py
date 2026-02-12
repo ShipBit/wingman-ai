@@ -1,6 +1,7 @@
 import copy
 import json
 import re
+import sys
 from pathlib import Path
 import tkinter as tk
 import tkinter.font as tkfont
@@ -260,6 +261,8 @@ class MiningValidationPopup(tk.Toplevel):
         # Countdown ist aus, aber Buttons bleiben gesperrt bis nach dem ersten Klick-Release.
 
     def _move_cursor_to_abort_button(self):
+        # Block mouse input briefly so the warp does not nudge the game camera.
+        unblock_mouse = self._temporarily_block_mouse_input()
         # Kurz den Fokus auf das Popup holen, Cursor bewegen, danach Fokus zurückgeben
         self.focus_force()
         self.update_idletasks()
@@ -268,6 +271,7 @@ class MiningValidationPopup(tk.Toplevel):
         target_x = self.abort_button.winfo_rootx() - window_x + self.abort_button.winfo_width() // 2
         target_y = self.abort_button.winfo_rooty() - window_y + self.abort_button.winfo_height() // 2
         self.event_generate("<Motion>", warp=True, x=target_x, y=target_y)
+        self.after(60, unblock_mouse)
         self.after(50, self._restore_foreground_window)
 
     def _get_foreground_window(self):
@@ -285,6 +289,32 @@ class MiningValidationPopup(tk.Toplevel):
             ctypes.windll.user32.SetForegroundWindow(self.foreground_window_before_cursor_move)
         except Exception:
             pass
+
+    def _temporarily_block_mouse_input(self, duration_ms=150):
+        if sys.platform != "win32":
+            return lambda: None
+        try:
+            import ctypes
+            success = bool(ctypes.windll.user32.BlockInput(True))
+            if not success:
+                return lambda: None
+        except Exception as exc:
+            print_debug(f"BlockInput failed: {exc}")
+            return lambda: None
+
+        released = {"done": False}
+
+        def unblock():
+            if released["done"]:
+                return
+            released["done"] = True
+            try:
+                ctypes.windll.user32.BlockInput(False)
+            except Exception as unblock_exc:
+                print_debug(f"BlockInput release failed: {unblock_exc}")
+
+        self.after(duration_ms, unblock)
+        return unblock
 
     def _on_first_mouse_press(self, _event):
         if not self._buttons_locked:
