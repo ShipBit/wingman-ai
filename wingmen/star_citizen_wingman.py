@@ -485,8 +485,12 @@ class StarCitizenWingman(OpenAiWingman):
         sc_activation_mode = command.get("activationMode")
         
         # we check, if the command is overwritten in the config
-        overwrite_commands = self.config["sc-keybind-mappings"].get("overwrite_sc_command_execution",{})
+        overwrite_commands = self.config["sc-keybind-mappings"].get("overwrite_sc_command_execution", {})
         overwrite_command = overwrite_commands.get(command_name)
+        if not overwrite_command:
+            fallback_name = command.get("actionname")
+            if fallback_name:
+                overwrite_command = overwrite_commands.get(fallback_name)
         if overwrite_command and overwrite_command.get("hold"):
             old_sc_activation_mode = sc_activation_mode
             sc_activation_mode = overwrite_command.get("hold")
