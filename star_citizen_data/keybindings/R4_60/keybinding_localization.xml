@@ -93,10 +93,23 @@
     <Key name="slash" localizationString="@cc_slash" shortLocString="" iconName="" />
     <Key name="space" localizationString="@input_key_keyboard_space" shortLocString="@input_key_keyboard_space_short" iconName="" />
     <Key name="oem_102" localizationString="@cc_oem_102" shortLocString="" iconName="" />
+    <Key name="maxis_x" localizationString="@input_key_mouse_xAxis" shortLocString="" iconName="Mouse_xaxis" />
+    <Key name="maxis_y" localizationString="@input_key_mouse_yAxis" shortLocString="" iconName="Mouse_yaxis" />
+    <Key name="maxis_z" localizationString="@input_key_mouse_zAxis" shortLocString="" iconName="Mouse_zaxis" />
+    <Key name="maxis_xy" localizationString="@input_key_mouse_xyAxis" shortLocString="" iconName="Mouse_xyaxis" />
     <Key name="mouse1" localizationString="@input_key_mouse_button1" shortLocString="" iconName="Mouse_Left_Click" />
     <Key name="mouse2" localizationString="@input_key_mouse_button2" shortLocString="" iconName="Mouse_Right_Click" />
+    <Key name="mouse3" localizationString="@input_key_mouse_button3" shortLocString="" iconName="Mouse_Wheel" />
+    <Key name="mouse4" localizationString="@input_key_mouse_button4" shortLocString="" iconName="" />
+    <Key name="mouse5" localizationString="@input_key_mouse_button5" shortLocString="" iconName="" />
+    <Key name="mouse6" localizationString="@input_key_mouse_button6" shortLocString="" iconName="" />
+    <Key name="mouse7" localizationString="@input_key_mouse_button7" shortLocString="" iconName="" />
+    <Key name="mouse8" localizationString="@input_key_mouse_button8" shortLocString="" iconName="" />
+    <Key name="mouse9" localizationString="@input_key_mouse_button9" shortLocString="" iconName="" />
+    <Key name="mouse10" localizationString="@input_key_mouse_button10" shortLocString="" iconName="" />
     <Key name="mouse1_2" localizationString="@input_key_mouse_button12" shortLocString="" iconName="Mouse_Left_Right_Click" />
-    <Key name="maxis_z" localizationString="@input_key_mouse_zAxis" shortLocString="" iconName="" />
+    <Key name="mwheel_up" localizationString="@input_key_mouse_wheelUp" shortLocString="" iconName="Mouse_Wheel_Up" />
+    <Key name="mwheel_down" localizationString="@input_key_mouse_wheelDown" shortLocString="" iconName="Mouse_Wheel_Down" />
   </device>
   <device name="mouse">
     <Key name="maxis_x" localizationString="@input_key_mouse_xAxis" shortLocString="" iconName="Mouse_xaxis" />
