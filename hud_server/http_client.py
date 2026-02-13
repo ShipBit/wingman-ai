@@ -86,6 +86,7 @@ class HudHttpClient:
     DEFAULT_CONNECT_TIMEOUT = hud_const.HTTP_CONNECT_TIMEOUT
     DEFAULT_REQUEST_TIMEOUT = hud_const.HTTP_REQUEST_TIMEOUT
     RECONNECT_ATTEMPTS = 1
+    MAX_TIMEOUT_RETRIES = 3
 
     def __init__(self, base_url: str = f"http://{hud_const.DEFAULT_HOST}:{hud_const.DEFAULT_PORT}"):
         self.base_url = base_url.rstrip("/")
@@ -198,45 +199,57 @@ class HudHttpClient:
                 )
                 return None
 
-        try:
-            response = await _execute_request()
-            if response and 200 <= response.status_code < 300:
-                return response.json()
-            elif response:
-                # Log non-2xx responses for debugging
+        for attempt in range(1, self.MAX_TIMEOUT_RETRIES + 1):
+            try:
+                response = await _execute_request()
+                if response and 200 <= response.status_code < 300:
+                    return response.json()
+                elif response:
+                    # Log non-2xx responses for debugging
+                    printr.print(
+                        f"[HUD HTTP Client] Request {method} {path} failed with status {response.status_code}",
+                        color=LogType.WARNING,
+                        server_only=True
+                    )
+                return None
+            except RuntimeError as e:
+                # Handle "Event loop is closed" error by reconnecting
+                if "loop" in str(e).lower() or "closed" in str(e).lower():
+                    self._connected = False
+                    self._client = None
+                    # Try to reconnect and retry once
+                    if await self.connect():
+                        try:
+                            response = await _execute_request()
+                            if response and 200 <= response.status_code < 300:
+                                return response.json()
+                        except Exception:
+                            pass  # Give up after retry
+                self._connected = False
+                return None
+            except httpx.ConnectError:
+                # Server not reachable - don't spam logs
+                self._connected = False
+                return None
+            except httpx.TimeoutException:
+                if attempt < self.MAX_TIMEOUT_RETRIES:
+                    continue
                 printr.print(
-                    f"[HUD HTTP Client] Request {method} {path} failed with status {response.status_code}",
+                    f"[HUD HTTP Client] Request {method} {path} timed out after {self.MAX_TIMEOUT_RETRIES} attempts",
                     color=LogType.WARNING,
                     server_only=True
                 )
-            return None
-        except RuntimeError as e:
-            # Handle "Event loop is closed" error by reconnecting
-            if "loop" in str(e).lower() or "closed" in str(e).lower():
                 self._connected = False
-                self._client = None
-                # Try to reconnect and retry once
-                if await self.connect():
-                    try:
-                        response = await _execute_request()
-                        if response and 200 <= response.status_code < 300:
-                            return response.json()
-                    except Exception:
-                        pass  # Give up after retry
-            self._connected = False
-            return None
-        except httpx.ConnectError:
-            # Server not reachable - don't spam logs
-            self._connected = False
-            return None
-        except Exception as e:
-            printr.print(
-                f"[HUD HTTP Client] Request {method} {path} error: {type(e).__name__}: {e}",
-                color=LogType.WARNING,
-                server_only=True
-            )
-            self._connected = False
-            return None
+                return None
+            except Exception as e:
+                printr.print(
+                    f"[HUD HTTP Client] Request {method} {path} error: {type(e).__name__}: {e}",
+                    color=LogType.WARNING,
+                    server_only=True
+                )
+                self._connected = False
+                return None
+        return None
 
     # ─────────────────────────────── Health ─────────────────────────────── #
 
