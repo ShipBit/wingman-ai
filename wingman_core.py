@@ -1,6 +1,7 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
+import platform
 import re
 import threading
 from typing import Optional
@@ -385,6 +386,9 @@ class WingmanCore(WebSocketUser):
         self.settings_service.settings_events.subscribe(
             "va_settings_changed", self.on_va_settings_changed
         )
+        self.settings_service.settings_events.subscribe(
+            "hud_server_settings_changed", self._on_hud_server_settings_changed
+        )
 
         self.whispercpp = Whispercpp(
             settings=self.settings_service.settings.voice_activation.whispercpp,
@@ -435,6 +439,14 @@ class WingmanCore(WebSocketUser):
         if not hud_settings or not hud_settings.enabled:
             return
 
+        if platform.system() != "Windows":
+            self.printr.print(
+                "HUD Server is only supported on Windows.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return
+
         try:
             self._hud_server = HudServer()
             if not self._hud_server.start(
@@ -457,6 +469,20 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
             self._hud_server = None
+
+    async def _on_hud_server_settings_changed(self, hud_settings):
+        """Handle HUD server settings changes — start or stop as needed."""
+        should_run = (
+            hud_settings is not None
+            and hud_settings.enabled
+            and platform.system() == "Windows"
+        )
+        is_running = self._hud_server is not None and self._hud_server.is_running
+
+        if should_run and not is_running:
+            await self._start_hud_server_if_enabled()
+        elif not should_run and is_running:
+            await self._stop_hud_server()
 
     async def _stop_hud_server(self):
         """Stop the HUD server if running."""

@@ -167,6 +167,13 @@ class SettingsService:
             settings.cancel_tts_joystick_button
         )
 
+        # HUD server
+        self.config_manager.settings_config.hud_server = settings.hud_server
+        if settings.hud_server != old.hud_server:
+            await self.settings_events.publish(
+                "hud_server_settings_changed", settings.hud_server
+            )
+
         # save the config file
         self.config_manager.save_settings_config()
 
