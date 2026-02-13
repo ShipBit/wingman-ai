@@ -85,7 +85,7 @@ class OCR:
                             ],
                         }
                     ],
-                    "max_tokens": 1000,
+                    "max_completion_tokens": 1000,
                 }
 
                 self.overlay.display_overlay_text(f"Analysing screenshot for text extraction", display_duration=30000)
@@ -95,7 +95,7 @@ class OCR:
                 )
 
                 if response.status_code != 200:
-                    print(f'request error: {response.json()["error"]["type"]}. Check the file {filename} for details.')
+                    print(f'request error: {response.json()["error"]["type"]}. Check the file {subdir_path} for details.')
                     self.save_debug_data(subdir_path, placeholder_part, timestamp, img_str, response)
                     return "Error calling gpt vision.", False
                 
