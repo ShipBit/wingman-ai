@@ -45,6 +45,8 @@ class OpenAi:
             organization=organization,
             base_url=base_url,
         )
+        self.last_error_type = None
+        self.last_error_message = None
         self.local_whisper_model = None
         self.local_model_name = None
         self.use_local_default = self.stt_config.local
@@ -227,6 +229,9 @@ class OpenAi:
                 printr.print(f"Fehler beim Initialisieren des Azure Clients: {e}", tags="err")
                 return None
 
+        self.last_error_type = None
+        self.last_error_message = None
+
         try:
             if not tools:
                 completion = client.chat.completions.create(
@@ -308,6 +313,8 @@ class OpenAi:
             tags="err"
         )
         message = api_response.message
+        self.last_error_type = None
+        self.last_error_message = None
         try:
             error_details = api_response.response.json()
             if isinstance(error_details, dict) and 'error' in error_details:
@@ -330,6 +337,12 @@ class OpenAi:
             printr.print(f"API-Nachricht: {message}", tags="err")
         else:
             printr.print("Die API lieferte keine weiteren Informationen.", tags="err")
+
+        if message:
+            self.last_error_message = message
+            normalized_message = message.lower()
+            if "tool_calls" in normalized_message and "must be followed by tool messages" in normalized_message:
+                self.last_error_type = "tool_call_sequence"
 
         if api_response.status_code == 401:
             printr.print("Authentifizierungsproblem. Überprüfe deinen API-Schlüssel.", tags="err")
