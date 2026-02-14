@@ -29,6 +29,13 @@ class ComponentManager(FunctionManager):
             "Ship.QuantumDrive",
             "Ship.Shield"
         ]
+        self.valid_classes = [
+            "Civilian",
+            "Competition",
+            "Industrial",
+            "Military",
+            "Stealth"
+        ]
 
     def get_context_mapping(self) -> AIContext:
         return AIContext.CORA
@@ -38,9 +45,12 @@ class ComponentManager(FunctionManager):
 
     def get_function_prompt(self) -> str:
         return (
-            f"Call the function {self.search_ship_component.__name__} when the user asks about components. Do not use the galactapedia function for components. This function is specifically designed to search for ship components. "
+            f"Call the function {self.search_ship_component.__name__} when the user asks about components. Do not use the galactapedia function for components. This function is specifically designed to search for ship components "
             "like coolers, power plants, quantum drives, or shields. You can search by component name and optionally "
-            "filter by size (1 to 12), grade (A to G), or class (Civilian, Competition, Industrial, Military, Stealth). "
+            "filter by size (1 to 12), grade (A to G), or class. "
+            "IMPORTANT: The 'component_class' parameter refers to the component's quality/purpose class "
+            "(Civilian, Competition, Industrial, Military, Stealth), NOT the component type (cooler, power plant, etc.). "
+            "The component type (cooler, quantum drive, etc.) is automatically included in the search. "
             "Provide the information in a TTS-friendly format without mentioning technical details like URLs or API responses."
         )
 
@@ -50,7 +60,7 @@ class ComponentManager(FunctionManager):
                 "type": "function",
                 "function": {
                     "name": self.search_ship_component.__name__,
-                    "description": "Searches for ship components by name with optional filters for size, grade, and class.",
+                    "description": "Searches for ship components (coolers, power plants, quantum drives, shields) by name with optional filters for size, grade, and quality class.",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -59,7 +69,7 @@ class ComponentManager(FunctionManager):
                                 "description": "Name or partial name of the component to search for.",
                             },
                             "size": {
-                                "type": "string",
+                                "type": "integer",
                                 "description": "Optional size filter (1-12).",
                             },
                             "grade": {
@@ -68,7 +78,8 @@ class ComponentManager(FunctionManager):
                             },
                             "component_class": {
                                 "type": "string",
-                                "description": "Optional class filter: Civilian, Competition, Industrial, Military, or Stealth.",
+                                "description": "Optional quality/purpose class filter. Valid values: Civilian, Competition, Industrial, Military, Stealth. Do NOT use component types (cooler, power plant, etc.) here.",
+                                "enum": ["Civilian", "Competition", "Industrial", "Military", "Stealth"]
                             },
                         },
                         "required": ["component_name"],
@@ -86,6 +97,19 @@ class ComponentManager(FunctionManager):
         size_filter = function_args.get("size", None)
         grade_filter = function_args.get("grade", None)
         class_filter = function_args.get("component_class", None)
+
+        # Validate class filter - only use if it's a valid class value
+        if class_filter and class_filter not in self.valid_classes:
+            print_debug(
+                f"Invalid class filter '{class_filter}' ignored. "
+                f"Valid values: {', '.join(self.valid_classes)}"
+            )
+            printr.print(
+                f"Invalid class filter '{class_filter}' ignored. "
+                f"Valid classes are: {', '.join(self.valid_classes)}",
+                tags="warning"
+            )
+            class_filter = None
 
         print_debug(
             f"{self.search_ship_component.__name__} called with component_name='{component_name}', "
