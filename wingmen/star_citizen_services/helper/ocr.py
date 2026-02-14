@@ -47,6 +47,8 @@ class OCR:
         if "test" in filename_placeholders.keys() and is_test is False:
             is_test = filename_placeholders["test"]
 
+        img_str = None
+        response = None
         try:
 
             if not is_test:
@@ -99,7 +101,17 @@ class OCR:
                     self.save_debug_data(subdir_path, placeholder_part, timestamp, img_str, response)
                     return "Error calling gpt vision.", False
                 
-                message_content = response.json()["choices"][0]["message"]["content"]
+                response_data = response.json()
+                message_content = response_data["choices"][0]["message"]["content"]
+                finish_reason = response_data["choices"][0].get("finish_reason")
+                
+                # Check if content is empty (can happen with reasoning models hitting token limit)
+                if not message_content or message_content.strip() == "":
+                    print(f"Vision model returned empty content. Finish reason: {finish_reason}")
+                    if finish_reason == "length":
+                        print("Token limit reached. Consider increasing max_completion_tokens or using a non-reasoning model.")
+                    self.save_debug_data(subdir_path, placeholder_part, timestamp, img_str, response)
+                    return "Vision model returned empty response (possibly due to token limit).", False
             else:
                 # Read JSON data from a file
                 path = os.path.join(self.data_dir, 'examples', subdir_path)
@@ -112,10 +124,20 @@ class OCR:
                     message_content = json.load(file)["choices"][0]["message"]["content"]
 
             if "error" in json.dumps(message_content).lower():
-                self.save_debug_data(subdir_path, placeholder_part, timestamp, img_str, response)
-                return f"Unable to analyse screenshot (maybe cropping error). {json.dumps(message_content)} ", False              
+                if img_str and response is not None:
+                    self.save_debug_data(subdir_path, placeholder_part, timestamp, img_str, response)
+                return f"Unable to analyse screenshot (maybe cropping error). {json.dumps(message_content)} ", False
 
             message_blocks = message_content.split("```")
+            if len(message_blocks) < 2:
+                try:
+                    retrieved_text = json.loads(message_content)
+                except json.JSONDecodeError:
+                    if img_str and response is not None:
+                        self.save_debug_data(subdir_path, placeholder_part, timestamp, img_str, response)
+                    return "Invalid response format from vision model.", False
+                return retrieved_text, True
+
             json_text = message_blocks[1]
             if json_text.startswith("json"):
                 # Schneide die Länge des Wortes vom Anfang des Strings ab

@@ -100,6 +100,23 @@ class MiningManager(FunctionManager):
             extraction_instructions=f"Give me the text within this image. Give me the response in a plain json object structured as defined in this example: {json_string}. Provide the json within markdown ```json ... ```.If you are unable to process the image, just return 'error' as response.",
             overlay=self.overlay)
 
+        with open(f'{self.mining_data_path}/examples/response_structure_rock_scan.json', 'r', encoding="UTF-8") as file:
+            rock_scan_json = file.read()
+
+        self.rock_scan_ocr = OCR(
+            open_ai_model=f'{self.config["open-ai-vision-model"]}',
+            openai_api_key=self.openai_api_key,
+            data_dir=self.mining_data_path,
+            extraction_instructions=(
+                "Extract the rock scan data from this image. "
+                f"Return a plain json object that matches this example exactly: {rock_scan_json}. "
+                "The 'percent' values must be decimals between 0 and 1 (not 0-100). "
+                "Provide the json within markdown ```json ... ```. "
+                "If you are unable to process the image, just return 'error' as response."
+            ),
+            overlay=self.overlay,
+        )
+
         # # we always load from file, as we might restart wingmen.ai indipendently from star citizen
         # # TODO need to check on start, if we want to discard this mission
         # self.load_missions()
@@ -343,7 +360,14 @@ class MiningManager(FunctionManager):
             image_path = screenshots.take_screenshot_ingame(self.mining_data_path, "scans", test=TEST)
             if not image_path:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                return {"success": False, "instructions": "Could not take screenshot. Explain the player, that you only take screenshots, if the active window is Star Citizen. "}
+                function_response = {
+                    "success": False,
+                    "response_instructions": "Tell the player the screenshot could not be taken.",
+                    "message": "Could not take screenshot. Explain the player, that you only take screenshots, if the active window is Star Citizen. ",
+                    "do_not_cache": True,
+                }
+                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
+                return function_response
             self.overlay.display_overlay_text("Screenshot taken", vertical_position_ratio=3, display_duration=5000)
             
             area_image = screenshots.crop_screenshot_coordinates(
@@ -357,12 +381,64 @@ class MiningManager(FunctionManager):
                 screenshot=area_image,
                 areas_and_corners_and_cropstrat=[("UPPER_LEFT", "UPPER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")]
             )
-            base64_jpg_image = screenshots.convert_cv2_image_to_base64_jpeg(cropped_image)
-            scan_result = self.regolith.get_rock_scan_image_infos(base64_jpg_image)
+            scan_result, success = self.rock_scan_ocr.get_screenshot_texts(
+                cropped_image,
+                "scans",
+                test=TEST,
+            )
 
-            if "success" in scan_result and scan_result["success"] is False:
+            if not success or not isinstance(scan_result, dict):
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                return {"success": False, "message": "Couldn't read scan data. Reposition or try have a darker background. "}
+                function_response = {
+                    "success": False,
+                    "response_instructions": "Tell the player the scan data could not be read.",
+                    "message": "Couldn't read scan data. Reposition or try have a darker background. ",
+                    "do_not_cache": True,
+                }
+                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
+                return function_response
+
+            if "captureShipRockScan" not in scan_result:
+                scan_result = {"captureShipRockScan": scan_result}
+
+            scan_payload = scan_result.get("captureShipRockScan", {})
+            if not isinstance(scan_payload, dict) or not scan_payload.get("ores"):
+                self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
+                function_response = {
+                    "success": False,
+                    "response_instructions": "Tell the player the scan data could not be read.",
+                    "message": "Couldn't read scan data. Reposition or try have a darker background. ",
+                    "do_not_cache": True,
+                }
+                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
+                return function_response
+
+            def _coerce_float(value):
+                if isinstance(value, (int, float)):
+                    return float(value)
+                if isinstance(value, str):
+                    cleaned = value.strip().replace("%", "").replace(",", ".")
+                    try:
+                        return float(cleaned)
+                    except ValueError:
+                        return None
+                return None
+
+            for key in ("mass", "inst", "res"):
+                if key in scan_payload:
+                    coerced = _coerce_float(scan_payload.get(key))
+                    if coerced is not None:
+                        scan_payload[key] = coerced
+
+            for ore in scan_payload.get("ores", []):
+                percent_value = _coerce_float(ore.get("percent"))
+                if percent_value is None:
+                    continue
+                if percent_value > 1:
+                    percent_value = percent_value / 100
+                ore["percent"] = percent_value
+
+            scan_result["captureShipRockScan"] = scan_payload
            
             # Übergabe des gecroppten Bildes an das Validation Popup für Rock Scans
             scan_result, operation = MiningValidationPopup.show_popup(
@@ -375,13 +451,26 @@ class MiningManager(FunctionManager):
             )
             if operation == "aborted":
                 self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
-                return {"success": False, "message": "Scan transmission aborted."}
+                function_response = {
+                    "success": False,
+                    "response_instructions": "Tell the player the scan transmission was aborted.",
+                    "message": "Scan transmission aborted.",
+                    "do_not_cache": True,
+                }
+                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
+                return function_response
 
             session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=None)
             cluster = self.regolith.get_or_create_scouting_cluster(session_id)
             function_response = self.regolith.add_ship_cluster_scan_results(session_id, cluster, scan_result["captureShipRockScan"])
             if function_response is None or function_response.get("success", False) is False:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
+                if isinstance(function_response, dict):
+                    function_response.setdefault(
+                        "response_instructions",
+                        "Tell the player the scan could not be saved.",
+                    )
+                    function_response.setdefault("do_not_cache", True)
             else:
                 self.overlay.display_overlay_text(f"Cora: saved {function_response['total_scans']}", vertical_position_ratio=3, display_duration=5000)
                 function_response["do_not_cache"] = True

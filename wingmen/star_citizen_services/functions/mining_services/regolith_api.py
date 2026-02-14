@@ -383,7 +383,7 @@ class RegolithAPI:
     def get_ship_ore_names(self):
         if self.ship_ores is not None:
             return self.ship_ores
-        enum_type = gql("{" + self.get_graphql_for_names("LocationEnum") + "}")
+        enum_type = gql("{" + self.get_graphql_for_names("ShipOreEnum") + "}")
 
         try:
             response = self.client.execute(enum_type)
@@ -1050,9 +1050,35 @@ class RegolithAPI:
             for ore in ores
         ]
 
-        total_percent = sum(ore["percent"] for ore in cleaned_ores)
+        def _normalize_ore_key(value):
+            if not isinstance(value, str):
+                return ""
+            return "".join(ch for ch in value.upper() if ch.isalnum())
+
+        ship_ore_names = self.get_ship_ore_names() or []
+        normalized_ship_ores = {
+            _normalize_ore_key(ore_name): ore_name for ore_name in ship_ore_names
+        }
+
+        normalized_ores = []
+        for ore in cleaned_ores:
+            raw_name = ore.get("ore")
+            if not raw_name:
+                continue
+            if raw_name in ship_ore_names:
+                normalized_ores.append(ore)
+                continue
+            normalized_key = _normalize_ore_key(raw_name)
+            mapped_name = normalized_ship_ores.get(normalized_key)
+            if mapped_name:
+                ore["ore"] = mapped_name
+                normalized_ores.append(ore)
+                continue
+            print_debug(f"Unknown ship ore name from scan: {raw_name}")
+
+        total_percent = sum(ore["percent"] for ore in normalized_ores)
         if 1 - total_percent > 0:
-            cleaned_ores.append({"ore": "INERTMATERIAL", "percent": 1 - total_percent})
+            normalized_ores.append({"ore": "INERTMATERIAL", "percent": 1 - total_percent})
 
         ship_rocks = cluster.get("shipRocks", [])
         ship_rocks.append({
@@ -1061,7 +1087,7 @@ class RegolithAPI:
                     "inst": ship_rock_scan_result["inst"],
                     "res": ship_rock_scan_result["res"],
                     "rockType": ship_rock_scan_result["rockType"],
-                    "ores": cleaned_ores,
+                    "ores": normalized_ores,
                 })
 
         variables = {
@@ -1420,11 +1446,24 @@ class RegolithAPI:
         try:
             response = self.client.execute(query_str, variable_values=variables)
 
-            if not response or "errors" in response or not response.get(image_type):
+            if not response:
+                print("Fehler bei der GraphQL-Anfrage: leere Antwort")
+                self._save_debug_data("image_infos", base64_jpg_url_string, "Empty response")
+                return {
+                    "success": False,
+                    "message": "There was an error when I tried to retrieve image information. I'm very sorry. ",
+                }
+
+            if "errors" in response or not response.get(image_type):
                 print("Fehler bei der GraphQL-Anfrage:")
-                for error in response["errors"]:
-                    print(error["message"])
-                self._save_debug_data("image_infos", base64_jpg_url_string, json.dumps(response["errors"]))
+                for error in response.get("errors", []):
+                    print(error.get("message", "Unknown error"))
+                if "errors" in response:
+                    self._save_debug_data(
+                        "image_infos",
+                        base64_jpg_url_string,
+                        json.dumps(response["errors"]),
+                    )
                 return {
                     "success": False,
                     "message": "There was an error when I tried to retrieve image information. I'm very sorry. ",
@@ -1436,9 +1475,13 @@ class RegolithAPI:
                 return response
         except Exception as e:
             print(
-                f"Error during {image_type} creation {str(e)}: \n{traceback.print_stack()}"
+                f"Error during {image_type} creation {str(e)}: \n{traceback.format_exc()}"
             )
-            self._save_debug_data(image_type=image_type, image_data=base64_jpg_url_string, error_message=str(e))
+            self._save_debug_data(
+                image_type=image_type,
+                image_data=base64_jpg_url_string,
+                error_message=str(e),
+            )
             return {
                 "success": False,
                 "message": "Sorry, but regolith seems not to be available currently. ",
