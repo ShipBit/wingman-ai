@@ -1,4 +1,5 @@
 import json
+import re
 import time
 
 from services.printr import Printr
@@ -24,6 +25,28 @@ printr = Printr()
 REFINERY_CROP_COORDS = ((180, 75), (1200, 1300))
 # Add constant for rock scans
 ROCK_SCAN_COORDS = ((1500, 400), (2300, 1200))
+
+# Mapping of in-game station names to Regolith API refinery enum values
+REFINERY_STATION_MAPPING = {
+    "ARC-L1 Wide Forest Station": "ARCL1",
+    "ARC-L2 Lively Pathway Station": "ARCL2",
+    "ARC-L4 Faint Glen Station": "ARCL4",
+    "CRU-L1 Ambitious Dream Station": "CRUL1",
+    "HUR-L1 Green Glade Station": "HURL1",
+    "HUR-L2 Faithful Dream Station": "HURL2",
+    "MIC-L1 Shallow Frontier Station": "MICL1",
+    "MIC-L2 Long Forest Station": "MICL2",
+    "MIC-L5 Modern Icarus Station": "MICL5",
+    "Pyro Gateway (Stanton)": "PYROG",
+    "Nyx Gateway (Stanton)": "NYX_STANTG",
+    "Terra Gateway (Stanton)": "TERRG",
+    "Checkmate Station": "PYRO_CHECKMATE",
+    "Orbituary": "PYRO_ORBITUARY",
+    "Patch City": "MAGNG",
+    "Ruin Station": "PYRO_RUIN",
+    "Stanton Gateway (Pyro)": "PYRO_STANTG",
+    "Levski": "NYX_LEVSKI",
+}
 
 def print_debug(to_print):
     if DEBUG:
@@ -97,7 +120,20 @@ class MiningManager(FunctionManager):
             open_ai_model=f'{self.config["open-ai-vision-model"]}',
             openai_api_key=self.openai_api_key, 
             data_dir=self.mining_data_path,
-            extraction_instructions=f"Give me the text within this image. Give me the response in a plain json object structured as defined in this example: {json_string}. Provide the json within markdown ```json ... ```.If you are unable to process the image, just return 'error' as response.",
+            extraction_instructions=(
+                f"Extract the refinery work order data from this image exactly as shown. "
+                f"Return a plain JSON object matching this structure: {json_string}. "
+                "Instructions: "
+                "- Extract 'station_name' exactly as shown (e.g., 'HUR-L1 Green Glade Station'). "
+                "- Extract 'processing_selection_method' exactly as shown (e.g., 'Dinyx Solventation'). "
+                "- Extract 'total_cost' as a number without commas. "
+                "- Extract 'processing_time' exactly as shown (e.g., '5h 59m' or '1d 5h 24m'). "
+                "- For 'selected_materials', only include items where yield > 0. "
+                "- Extract 'commodity_name' exactly as shown (e.g., 'Iron (Ore)', 'Taranite (Raw)'). "
+                "- Extract both 'quantity' and 'yield' as numbers. "
+                "Provide the json within markdown ```json ... ```. "
+                "If you are unable to process the image, just return 'error' as response."
+            ),
             overlay=self.overlay)
 
         with open(f'{self.mining_data_path}/examples/response_structure_rock_scan.json', 'r', encoding="UTF-8") as file:
@@ -506,14 +542,52 @@ class MiningManager(FunctionManager):
                 cash_key="workorder"
             )
 
-            base64_jpg_image = screenshots.convert_cv2_image_to_base64_jpeg(area_image)
-            scan_result = self.regolith.get_work_order_image_infos(base64_jpg_image)
+            scan_result, success = self.ocr.get_screenshot_texts(
+                area_image,
+                "refineries",
+                test=TEST,
+            )
 
-            if "success" in scan_result and scan_result["success"] is False:
+            if not success or not isinstance(scan_result, dict):
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                return scan_result
+                function_response = {
+                    "success": False,
+                    "response_instructions": "Tell the player the refinery order data could not be read.",
+                    "message": "Couldn't read refinery order data. Reposition or try again.",
+                    "do_not_cache": True,
+                }
+                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
+                return function_response
             
-            function_response = self.add_work_order_regolith_from_scan(scan_result)
+            # Validate the work_order structure
+            work_order_data = scan_result.get("work_order", {})
+            if not isinstance(work_order_data, dict) or not work_order_data.get("selected_materials"):
+                self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
+                function_response = {
+                    "success": False,
+                    "response_instructions": "Tell the player the refinery order data could not be read.",
+                    "message": "Couldn't read refinery order data. Reposition or try again.",
+                    "do_not_cache": True,
+                }
+                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
+                return function_response
+            
+            # Show validation popup
+            anchor_coords = (REFINERY_CROP_COORDS[1][0], REFINERY_CROP_COORDS[0][1])
+            scan_result, operation = MiningValidationPopup.show_popup(
+                scan_result,
+                anchor_coords=anchor_coords,
+                config_dir=self.mining_data_path,
+            )
+            if operation == "aborted":
+                self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
+                return {
+                    "success": False,
+                    "message": "Work order transmission aborted.",
+                    "do_not_cache": True,
+                }
+            
+            function_response = self.add_work_order_from_screenshot_scan(scan_result)
             function_response["do_not_cache"] = True
 
             self.overlay.display_overlay_text(f"Cora: {'Success' if function_response.get('success', False) else 'Error'}", vertical_position_ratio=3, display_duration=5000)
@@ -526,54 +600,252 @@ class MiningManager(FunctionManager):
 
         return {"success": False, "message": "I couldn't identify the action to be taken. Please repeat. "}
     
-    def add_work_order_regolith_from_scan(self, scan_result):
-        print_debug("\n ===== ADDING REGOLITH WORK ORDER ======")
+    def add_work_order_from_screenshot_scan(self, scan_result):
+        """
+        Process work order from OCR scan with screenshot structure (work_order format).
+        Maps screenshot data to Regolith API structure.
+        """
+        print_debug("\n ===== ADDING WORK ORDER FROM SCREENSHOT SCAN ======")
         
         current_time = int(time.time() * 1000)
+        work_order = scan_result["work_order"]
+        
+        # Map station name to refinery enum using fixed mapping
+        station_name = work_order["station_name"]
+        
+        # Try exact match first
+        refinery_name = REFINERY_STATION_MAPPING.get(station_name)
+        
+        if refinery_name is None:
+            # Fallback to fuzzy matching if exact match fails
+            station_match, success = find_best_match.find_best_match(
+                station_name, 
+                list(REFINERY_STATION_MAPPING.keys()), 
+                score_cutoff=70
+            )
+            if success:
+                refinery_name = REFINERY_STATION_MAPPING[station_match["matched_value"]]
+                print_debug(f'Fuzzy matched station "{station_match["matched_value"]}" from "{station_name}" (confidence: {station_match["score"]})')
+            else:
+                return {
+                    "success": False,
+                    "message": f"Could not identify refinery from station name: {station_name}. Available stations: {', '.join(REFINERY_STATION_MAPPING.keys())}",
+                    "do_not_cache": True
+                }
+        else:
+            print_debug(f'Exact matched station "{station_name}" to refinery enum: {refinery_name}')
+        
+        # Map processing method to method enum
+        method_display = work_order["processing_selection_method"]
+        method_match, success = find_best_match.find_best_match(
+            method_display, 
+            self.regolith.get_refinery_method_names(), 
+            score_cutoff=60
+        )
+        if not success:
+            return {
+                "success": False,
+                "message": f"Could not identify processing method: {method_display}",
+                "do_not_cache": True
+            }
+        method_name = method_match["matched_value"]
+        print_debug(f'Matched method "{method_name}" from "{method_display}" (confidence: {method_match["score"]})')
+        
+        # Convert processing time to seconds
+        processing_time_str = work_order["processing_time"]
+        processing_duration_s = time_string_converter.convert_to_seconds(processing_time_str)
+        print_debug(f'Converted processing time "{processing_time_str}" to {processing_duration_s} seconds')
+        
+        # Create or get session
         session_id = self.regolith.get_or_create_mining_session(
-            name="Ship", activity="SHIP_MINING", refinery=scan_result["captureRefineryOrder"]["refinery"]
+            name="Ship", 
+            activity="SHIP_MINING", 
+            refinery=refinery_name
         )
         if session_id is None:
             print_debug("Couldn't get or create session.")
             return {"success": False, "message": "Couldn't get or create session."}
         
-        # Calculate top-right anchor coordinate (x2, y1)
-        anchor_coords = (REFINERY_CROP_COORDS[1][0], REFINERY_CROP_COORDS[0][1])
-        scan_result, operation = MiningValidationPopup.show_popup(
-            scan_result,
-            anchor_coords=anchor_coords,
-            config_dir=self.mining_data_path,
-        )
-        if operation == "aborted":
-            self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
-            return {"success": False, "message": "Work order transmission aborted."}
+        # Map selected materials to shipOres
+        shipOres = []
+        ship_ore_names = self.regolith.get_ship_ore_names()
         
-        shipOres = scan_result["captureRefineryOrder"]["shipOres"]
-
-        for ore in shipOres:
-            amt = self.regolith.ore_amt_calc(ore["yield"], ore["ore"], scan_result["captureRefineryOrder"]["refinery"], scan_result["captureRefineryOrder"]["method"] )
-            ore["amt"] = amt
-            del ore["yield"]  # Remove the "yield" key from the dictionary
-
+        for material in work_order["selected_materials"]:
+            # Skip materials with yield = 0
+            if material["yield"] <= 0:
+                continue
+            
+            # Clean commodity name: remove suffixes like "(Ore)", "(Raw)", etc.
+            commodity_name = material["commodity_name"]
+            # Remove parenthetical suffixes and trim
+            cleaned_name = re.sub(r'\s*\([^)]*\)\s*$', '', commodity_name).strip()
+            
+            ore_match, success = find_best_match.find_best_match(
+                cleaned_name, 
+                ship_ore_names, 
+                score_cutoff=60
+            )
+            if not success:
+                print_debug(f'Warning: Could not match ore "{commodity_name}" (cleaned: "{cleaned_name}"), skipping')
+                continue
+            
+            ore_name = ore_match["matched_value"]
+            print_debug(f'Matched ore "{ore_name}" from "{commodity_name}" (cleaned: "{cleaned_name}", confidence: {ore_match["score"]})')
+            
+            # Calculate amount using yield
+            amt = self.regolith.ore_amt_calc(
+                material["yield"], 
+                ore_name, 
+                refinery_name, 
+                method_name
+            )
+            
+            shipOres.append({
+                "amt": amt,
+                "ore": ore_name
+            })
+        
+        if not shipOres:
+            return {
+                "success": False, 
+                "message": "No valid ores found in the work order.",
+                "do_not_cache": True
+            }
+        
+        # Build work order mutation variables
         variables = {
             "sessionId": session_id,
             "shipOres": shipOres,
             "workOrder": {
                 "expenses": [
                     {
-                        "name": scan_result["captureRefineryOrder"]["expenses"][0]["name"],
-                        "amount": scan_result["captureRefineryOrder"]["expenses"][0]["amount"],
+                        "name": "Refinery Fee",
+                        "amount": work_order["total_cost"],
                         "ownerScName": self.regolith.retrieve_user_info(),
                     }
                 ],
                 "includeTransferFee": True,
                 "isRefined": True,
                 "isSold": False,
-                "method": scan_result["captureRefineryOrder"]["method"],
-                "note": "Work order created by Cora - Your Star Citizen Ai-compagnion",
+                "method": method_name,
+                "note": "Work order created by Cora - Your Star Citizen AI-companion",
                 "processStartTime": current_time,
-                "processDurationS": scan_result["captureRefineryOrder"]["processDurationS"],
-                "refinery": scan_result["captureRefineryOrder"]["refinery"],
+                "processDurationS": processing_duration_s,
+                "refinery": refinery_name,
+                "shareRefinedValue": True,
+            },
+            "shares": [
+                {
+                    "payeeScName": self.regolith.sc_name,
+                    "share": 1,
+                    "shareType": "SHARE",
+                    "state": True
+                }
+            ]
+        }
+
+        return self.regolith.create_work_order(work_order_details=variables)
+    
+    def add_work_order_from_scan(self, scan_result):
+        """Process work order directly from OCR scan with captureRefineryOrder structure"""
+        print_debug("\n ===== ADDING WORK ORDER FROM SCAN ======")
+        
+        current_time = int(time.time() * 1000)
+        refinery_data = scan_result["captureRefineryOrder"]
+        
+        # Validate and normalize refinery name
+        refinery_name = refinery_data["refinery"]
+        refinery_match, success = find_best_match.find_best_match(
+            refinery_name, 
+            self.regolith.get_refinery_names(), 
+            score_cutoff=70
+        )
+        if success:
+            refinery_name = refinery_match["matched_value"]
+            print_debug(f'Matched refinery "{refinery_name}" (confidence: {refinery_match["score"]})')
+        else:
+            print_debug(f'Warning: Could not match refinery "{refinery_name}", using as-is')
+        
+        # Validate and normalize method name
+        method_name = refinery_data["method"]
+        method_match, success = find_best_match.find_best_match(
+            method_name, 
+            self.regolith.get_refinery_method_names(), 
+            score_cutoff=70
+        )
+        if success:
+            method_name = method_match["matched_value"]
+            print_debug(f'Matched method "{method_name}" (confidence: {method_match["score"]})')
+        else:
+            print_debug(f'Warning: Could not match method "{method_name}", using as-is')
+        
+        # Create or get session
+        session_id = self.regolith.get_or_create_mining_session(
+            name="Ship", 
+            activity="SHIP_MINING", 
+            refinery=refinery_name
+        )
+        if session_id is None:
+            print_debug("Couldn't get or create session.")
+            return {"success": False, "message": "Couldn't get or create session."}
+        
+        # Prepare shipOres with validated ore names and calculated amounts
+        shipOres = []
+        ship_ore_names = self.regolith.get_ship_ore_names()
+        for ore_data in refinery_data["shipOres"]:
+            ore_name = ore_data["ore"]
+            
+            # Validate and normalize ore name
+            ore_match, success = find_best_match.find_best_match(
+                ore_name, 
+                ship_ore_names, 
+                score_cutoff=70
+            )
+            if success:
+                ore_name = ore_match["matched_value"]
+                print_debug(f'Matched ore "{ore_name}" (confidence: {ore_match["score"]})')
+            else:
+                print_debug(f'Warning: Could not match ore "{ore_name}", skipping')
+                continue
+            
+            amt = self.regolith.ore_amt_calc(
+                ore_data["yield"], 
+                ore_name, 
+                refinery_name, 
+                method_name
+            )
+            shipOres.append({
+                "amt": amt,
+                "ore": ore_name
+            })
+        
+        if not shipOres:
+            return {
+                "success": False, 
+                "message": "No valid ores found in the work order.",
+                "do_not_cache": True
+            }
+        
+        # Build work order mutation variables
+        variables = {
+            "sessionId": session_id,
+            "shipOres": shipOres,
+            "workOrder": {
+                "expenses": [
+                    {
+                        "name": refinery_data["expenses"][0]["name"],
+                        "amount": refinery_data["expenses"][0]["amount"],
+                        "ownerScName": self.regolith.retrieve_user_info(),
+                    }
+                ],
+                "includeTransferFee": True,
+                "isRefined": True,
+                "isSold": False,
+                "method": method_name,
+                "note": "Work order created by Cora - Your Star Citizen AI-companion",
+                "processStartTime": current_time,
+                "processDurationS": refinery_data["processDurationS"],
+                "refinery": refinery_name,
                 "shareRefinedValue": True,
             },
             "shares": [
@@ -590,6 +862,10 @@ class MiningManager(FunctionManager):
     
     def add_work_order_regolith(self, work_order):
         print_debug("\n ===== ADDING REGOLITH WORK ORDER ======")
+        
+        # Retrieve user info to ensure sc_name is available
+        self.regolith.retrieve_user_info()
+        
         station = work_order["work_order"]["station_name"]
         refinery, success = find_best_match.find_best_match(station, self.regolith.get_refinery_names(), score_cutoff=0)
         if not success:
@@ -618,7 +894,8 @@ class MiningManager(FunctionManager):
                 "expenses": [
                     {
                         "amount": work_order["work_order"]["total_cost"],
-                        "name": "Refinery Fee"
+                        "name": "Refinery Fee",
+                        "ownerScName": self.regolith.retrieve_user_info(),
                     }
                 ],
                 "includeTransferFee": True,
@@ -629,8 +906,17 @@ class MiningManager(FunctionManager):
                 "processDurationS": processing_time_s, 
                 "processStartTime": current_time,
                 # "processEndTime": (current_time + (processing_time_s * 1000)), not supported, will be returned
-                "refinery": refinery["matched_value"],  
-            }
+                "refinery": refinery["matched_value"],
+                "shareRefinedValue": True,
+            },
+            "shares": [
+                {
+                    "payeeScName": self.regolith.sc_name,
+                    "share": 1,
+                    "shareType": "SHARE",
+                    "state": True
+                }
+            ]
         }
         materials = []
         for material in work_order["work_order"]["selected_materials"]:

@@ -1391,102 +1391,6 @@ class RegolithAPI:
             )
             return False
 
-    def get_work_order_image_infos(self, base64_jpg_url_string):
-        """
-        Expects a "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ" String
-        """
-        print_debug(f"retrieving work order information")
-
-        # GraphQL-Mutation als String, minimiert auf erforderliche Felder
-        query = gql(
-            """
-            query captureRefineryOrder($imgUrl: String!) {
-            captureRefineryOrder(imgUrl: $imgUrl) {
-                expenses {
-                amount
-                name
-                ownerScName
-                }
-                processDurationS
-                refinery
-                method
-                shipOres {
-                amt
-                ore
-                yield
-                }
-            }
-            }
-        """
-        )
-        return self._get_image_infos(query, base64_jpg_url_string, "captureRefineryOrder")
-
-    def get_rock_scan_image_infos(self, base64_jpg_url_string):
-        query = gql(
-            """
-                query captureShipRockScan($imgUrl: String!) {
-                    captureShipRockScan(imgUrl: $imgUrl) {
-                        mass
-                        inst
-                        res
-                        rockType
-                        ores {
-                        ore
-                        percent
-                        }
-                    }
-                }
-            """
-        )
-        return self._get_image_infos(query, base64_jpg_url_string, "captureShipRockScan")
-
-    def _get_image_infos(self, query_str, base64_jpg_url_string, image_type=None ):
-        variables = {"imgUrl": base64_jpg_url_string}
-
-        try:
-            response = self.client.execute(query_str, variable_values=variables)
-
-            if not response:
-                print("Fehler bei der GraphQL-Anfrage: leere Antwort")
-                self._save_debug_data("image_infos", base64_jpg_url_string, "Empty response")
-                return {
-                    "success": False,
-                    "message": "There was an error when I tried to retrieve image information. I'm very sorry. ",
-                }
-
-            if "errors" in response or not response.get(image_type):
-                print("Fehler bei der GraphQL-Anfrage:")
-                for error in response.get("errors", []):
-                    print(error.get("message", "Unknown error"))
-                if "errors" in response:
-                    self._save_debug_data(
-                        "image_infos",
-                        base64_jpg_url_string,
-                        json.dumps(response["errors"]),
-                    )
-                return {
-                    "success": False,
-                    "message": "There was an error when I tried to retrieve image information. I'm very sorry. ",
-                }
-            else:
-                print_debug(
-                    f"retrieved image information: {json.dumps(response, indent=2)}"
-                )
-                return response
-        except Exception as e:
-            print(
-                f"Error during {image_type} creation {str(e)}: \n{traceback.format_exc()}"
-            )
-            self._save_debug_data(
-                image_type=image_type,
-                image_data=base64_jpg_url_string,
-                error_message=str(e),
-            )
-            return {
-                "success": False,
-                "message": "Sorry, but regolith seems not to be available currently. ",
-            }
-
     def _save_debug_data(self, image_type=None, image_data=None, error_message=None):
         """
         Saves image data and error messages to the debug_data directory.
@@ -1512,6 +1416,7 @@ class RegolithAPI:
     def fetch_lookups(self):
         """
         Fetches lookup data from the GraphQL API.
+        Note: refineryBonusLookup was removed from the API.
         """
         query = gql(
             """
@@ -1519,7 +1424,6 @@ class RegolithAPI:
                 lookups {
                     CIG {
                     oreProcessingLookup
-                    refineryBonusLookup
                     methodsBonusLookup
                     }
                 }
@@ -1539,20 +1443,20 @@ class RegolithAPI:
                 return response["lookups"]["CIG"]
         except Exception as e:
             print(
-                f"Error during work order creation {str(e)}: \n{traceback.print_stack()}"
+                f"Error during lookups fetch {str(e)}: \n{traceback.format_exc()}"
             )
             return None
 
     def ore_amt_calc(self, ore_yield, ore, refinery, method):
         """
-        Calculates the final ore amount after applying processing, refinery, and method bonuses.
+        Calculates the final ore amount after applying processing and method bonuses.
+        Note: Refinery-specific bonuses were removed from the API.
 
         Args:
             ore_yield (float): Initial ore yield.
             ore (str): Type of ore.
-            refinery (str): Name of the refinery.
+            refinery (str): Name of the refinery (unused, kept for compatibility).
             method (str): Refining method used.
-            api_url (str): GraphQL API URL to fetch lookup data.
 
         Returns:
             int: Final ore amount rounded to the nearest integer.
@@ -1560,37 +1464,33 @@ class RegolithAPI:
         # Fetch lookup data
         if self.lookups is None:
             self.lookups = self.fetch_lookups()
+        
+        # If lookups failed to load, return the yield value as-is
+        if self.lookups is None:
+            print_debug(f"Warning: Lookups not available, using yield value {ore_yield} as amount")
+            return round(ore_yield)
+        
         ore_processing_lookup = self.lookups["oreProcessingLookup"]
-        refinery_bonus_lookup = self.lookups["refineryBonusLookup"]
         methods_bonus_lookup = self.lookups["methodsBonusLookup"]
 
         # Default bonuses
         processing_bonus = 1
-        refinery_bonus = 1
         method_bonus = 1
-
-        # Refinery bonus lookup
-        if refinery not in refinery_bonus_lookup:
-            print(f"Refinery {refinery} not found.")
-        elif ore not in refinery_bonus_lookup[refinery]:
-            print(f"Ore {ore} not found in refinery {refinery}.")
-        else:
-            refinery_bonus = refinery_bonus_lookup[refinery][ore][0]
 
         # Method bonus lookup
         if method not in methods_bonus_lookup:
-            print(f"Method {method} not found.")
+            print_debug(f"Method {method} not found in lookups.")
         else:
             method_bonus = methods_bonus_lookup[method][0]
 
         # Ore processing bonus lookup
         if ore not in ore_processing_lookup:
-            print(f"Ore {ore} not found in ore processing lookup.")
+            print_debug(f"Ore {ore} not found in ore processing lookup.")
         else:
             processing_bonus = ore_processing_lookup[ore][0]
 
-        # Final calculation
-        final_ore_yield = ore_yield / (processing_bonus * refinery_bonus * method_bonus)
+        # Final calculation (refinery bonus removed from API)
+        final_ore_yield = ore_yield / (processing_bonus * method_bonus)
         return round(final_ore_yield)
 
 

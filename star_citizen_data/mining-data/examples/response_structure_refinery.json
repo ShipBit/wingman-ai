@@ -1,33 +1,31 @@
 {
     "work_order": {
-        {
-            "station_name": "MIC-L2 Long Forest Station",
-            "processing_selection_method": "Ferron Exchange",
-            "total_cost": 10480.00,
-            "processing_time": "9h 32m",
-            "current_capacity": 10190,
-            "selected_materials": [
-                {
-                    "commodity_name": "Gold (Ore)",
-                    "quantity": 567,
-                    "yield": 197
-                },
-                {
-                    "commodity_name": "Quartz (Ore)",
-                    "quantity": 1560,
-                    "yield": 1260
-                },
-                {
-                    "commodity_name": "Taranite (Ore)",
-                    "quantity": 736,
-                    "yield": 626
-                },
-                {
-                    "commodity_name": "Gold (Ore)",
-                    "quantity": 281,
-                    "yield": 0
-                }
-            ]
-        }
+        "station_name": "MIC-L2 Long Forest Station",
+        "processing_selection_method": "Ferron Exchange",
+        "total_cost": 10480,
+        "processing_time": "9h 32m",
+        "current_capacity": 10190,
+        "selected_materials": [
+            {
+                "commodity_name": "Gold (Ore)",
+                "quantity": 567,
+                "yield": 197
+            },
+            {
+                "commodity_name": "Quartz (Ore)",
+                "quantity": 1560,
+                "yield": 1260
+            },
+            {
+                "commodity_name": "Taranite (Ore)",
+                "quantity": 736,
+                "yield": 626
+            },
+            {
+                "commodity_name": "Construction Rubble",
+                "quantity": 800,
+                "yield": 0
+            }
+        ]
     }
 }
