@@ -2,7 +2,7 @@ import asyncio
 import shutil
 from typing import Optional
 from fastapi import APIRouter, HTTPException
-from api.enums import LogType
+from api.enums import LogSource, LogType
 from api.interface import (
     ConfigDirInfo,
     ConfigWithDirInfo,
@@ -427,6 +427,8 @@ class ConfigService:
         self.printr.print(
             f"Starting uninstall of custom skill '{skill_name}'...",
             color=LogType.WARNING,
+            source=LogSource.SYSTEM,
+            source_name=self.source_name,
             server_only=True,
         )
 
