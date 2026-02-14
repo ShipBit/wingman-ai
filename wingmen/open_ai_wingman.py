@@ -1342,7 +1342,6 @@ class OpenAiWingman(Wingman):
         if not tool_call_id:
             return False
 
-        completed = False
         index = len(self.messages)
 
         # go through message history to find and update the tool call
@@ -1355,62 +1354,9 @@ class OpenAiWingman(Wingman):
                 message["content"] = str(response)
                 if tool_call_id in self.pending_tool_calls:
                     self.pending_tool_calls.remove(tool_call_id)
-                break
-        if not index:
-            return False
+                return True
 
-        # find the assistant message that triggered the tool call
-        for message in reversed(self.messages[:index]):
-            index -= 1
-            if self.__get_message_role(message) == "assistant":
-                break
-
-        # check if all tool calls are completed
-        completed = True
-        for tool_call in self.messages[index].tool_calls:
-            if tool_call.id in self.pending_tool_calls:
-                completed = False
-                break
-        if not completed:
-            return True
-
-        # find the first user message(s) that triggered this assistant message
-        index -= 1  # skip the assistant message
-        for message in reversed(self.messages[:index]):
-            index -= 1
-            if self.__get_message_role(message) != "user":
-                index += 1
-                break
-
-        # built message block to move
-        start_index = index
-        end_index = start_index
-        reached_tool_call = False
-        for message in self.messages[start_index:]:
-            if not reached_tool_call and self.__get_message_role(message) == "tool":
-                reached_tool_call = True
-            if reached_tool_call and self.__get_message_role(message) == "user":
-                end_index -= 1
-                break
-            end_index += 1
-        if end_index == len(self.messages):
-            end_index -= 1  # loop ended at the end of the message history, so we have to go back one index
-        message_block = self.messages[start_index : end_index + 1]
-
-        # check if the message block is already at the end
-        if end_index == len(self.messages) - 1:
-            return True
-
-        # move message block to the end
-        del self.messages[start_index : end_index + 1]
-        self.messages.extend(message_block)
-
-        if self.settings.debug_mode:
-            await printr.print_async(
-                "Moved message block to the end.", color=LogType.INFO
-            )
-
-        return True
+        return False
 
     async def add_user_message(self, content: str):
         """Shortens the conversation history if needed and adds a user message to it.
