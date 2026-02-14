@@ -203,13 +203,12 @@ class UexDataRunnerManager(FunctionManager):
                 
         print_debug(f'location name: {validated_tradeport["nickname"]}')            
         self.overlay.display_overlay_text(f'Cora: Screenshot taken, selected tradeport: {validated_tradeport["nickname"]}')
-        buy_result = self._analyse_prices_at_tradeport(screenshot_path, location_name_crop, validated_tradeport, operation)
+        function_result = self._analyse_prices_at_tradeport(screenshot_path, location_name_crop, validated_tradeport, operation)
+        
+        # function_result["do_not_cache"] = True  # we don't want this instant command to be cached
+        print_debug(function_result)
 
-        print_debug(buy_result)
-        if "success" not in buy_result:
-            return buy_result, "Ok"
-
-        return buy_result
+        return function_result
          
     def _analyse_prices_at_tradeport(self, screenshot_path, cropped_screenshot_location, validated_tradeport, operation):
         
@@ -254,7 +253,7 @@ class UexDataRunnerManager(FunctionManager):
         
         if manually_confirmed_data == "aborted":
             return {
-                "instructions": "Tell the user, that transmission has been aborted. "
+                "instructions": "Tell the user, that transmission has been aborted. ",
             }
         print(f"user-validated {new_operation}@{new_terminal_id}: {json.dumps(manually_confirmed_data, indent=2)}")
         
@@ -266,7 +265,7 @@ class UexDataRunnerManager(FunctionManager):
             self.overlay.display_overlay_text("Prices or commodity names not recognized. Check logs.")
             return {"success": False, 
                     "instructions": "You have made errors in recognizing the correct prices on the terminal and all have been rejected.", 
-                    "message": "Could not identify commodity names or prices are not within 40% of allowed tollerance to current prices"
+                    "message": "Could not identify commodity names or prices are not within 40% of allowed tollerance to current prices",
                     }
         
         validated_tradeport = self.uex2_service.get_data("terminals").get(str(new_terminal_id))
@@ -308,9 +307,9 @@ class UexDataRunnerManager(FunctionManager):
                             f"{operation}able_commodities_info": {
                                 "result_information": response2["status"]
                             }
-                        }
+                        },
                     }
         
         self.overlay.display_overlay_text(f'UEX Corp: acknowledged the data transmittion. ', display_duration=1500)
         
-        return "Ok"  # we don't want cora to repeat what we see on screen, if everything was fine
+        return {"success": True, "instruction": "data transmitted"}  # we don't want cora to repeat what we see on screen, if everything was fine
