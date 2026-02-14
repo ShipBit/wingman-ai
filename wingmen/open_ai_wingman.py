@@ -523,6 +523,9 @@ class OpenAiWingman(Wingman):
         completion = self._gpt_call()
 
         if completion is None:
+            reset_message = self._handle_tool_call_sequence_error()
+            if reset_message:
+                return reset_message, None, None
             return None, None, None
 
         response_message, tool_calls = self._process_completion(completion)
@@ -611,6 +614,21 @@ class OpenAiWingman(Wingman):
         """Resets the conversation history by removing all messages except for the initial system message."""
         # Keep original logic
         del self.messages[1:]
+
+    def _handle_tool_call_sequence_error(self):
+        if not self.openai or self.openai.last_error_type != "tool_call_sequence":
+            return None
+
+        self.openai.last_error_type = None
+        self.openai.last_error_message = None
+        self.reset_conversation_history()
+        printr.print(
+            "Tool-call sequence error detected. Conversation history reset.",
+            tags="warn",
+        )
+        return (
+            "Es gab Probleme mit meinem Positronischen Gehirn, bitte stelle die Anfrage erneut und prüfe meine Logs"
+        )
 
     def _try_instant_activation(self, transcript):
         """Tries to execute an instant activation command if present in the transcript."""
