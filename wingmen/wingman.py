@@ -260,7 +260,7 @@ class Wingman:
         # Get discoverable skills list (whitelist)
         discoverable_skills = self.config.discoverable_skills
 
-        for skill_folder_name, skill_config_path in available_skills:
+        for skill_folder_name, skill_config_path, _is_custom, _is_local in available_skills:
             try:
                 # Load default skill config first to get the display name
                 skill_config_dict = ModuleManager.read_config(skill_config_path)
@@ -386,7 +386,7 @@ class Wingman:
                 folder_name = _get_skill_folder_from_module(skill_config.module)
                 user_skill_configs[folder_name] = skill_config
 
-        for skill_folder_name, skill_config_path in available_skills:
+        for skill_folder_name, skill_config_path, _is_custom, _is_local in available_skills:
             try:
                 skill_config_dict = ModuleManager.read_config(skill_config_path)
                 if not skill_config_dict:

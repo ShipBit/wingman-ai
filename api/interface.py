@@ -792,6 +792,16 @@ class SkillBase(BaseModel):
     tools: Optional[list[SkillToolInfo]] = None
     """List of tools provided by this skill."""
 
+    is_custom: bool = False
+    """Whether this skill is a custom (user-installed) skill from custom_skills directory."""
+
+    is_local: bool = False
+    """Whether this skill is a local/in-development skill in the source skills dir (not git-tracked).
+    Only True in dev mode for skills that exist in ./skills/ but are not committed to git."""
+
+    folder_name: str = ""
+    """The skill's directory name on disk (e.g. 'heads_up'). May differ from 'name' (the class name)."""
+
 
 class WingmanSkillState(BaseModel):
     """Skill info with enabled/disabled state for a specific wingman."""

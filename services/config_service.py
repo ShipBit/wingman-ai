@@ -1,4 +1,5 @@
 import asyncio
+import shutil
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from api.enums import LogType
@@ -23,6 +24,7 @@ from api.interface import (
 )
 from services.config_manager import ConfigManager
 from services.config_migration_service import ConfigMigrationService
+from services.file import get_custom_skills_dir
 from services.module_manager import ModuleManager
 from services.printr import Printr
 from services.pub_sub import PubSub
@@ -180,6 +182,12 @@ class ConfigService:
             methods=["POST"],
             path="/wingman-skills/toggle",
             endpoint=self.toggle_wingman_skill,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/custom-skills",
+            endpoint=self.uninstall_skill,
             tags=tags,
         )
         # MCP server endpoints
@@ -391,6 +399,191 @@ class ConfigService:
         except Exception as e:
             self.printr.toast_error(str(e))
             raise e
+
+    # DELETE /custom-skills
+    async def uninstall_skill(self, skill_name: str):
+        """Uninstall a custom skill globally: disable it on all wingmen, remove all
+        custom property overrides from every wingman config, and delete the skill
+        directory from custom_skills.
+
+        Args:
+            skill_name: The skill's folder name in custom_skills (e.g. 'heads_up'),
+                        NOT the internal class name (e.g. 'HeadsUp').
+
+        This is a cross-wingman, cross-config operation designed to allow users to
+        cleanly remove a custom skill version before installing a new one.
+        """
+        import os
+
+        # 1. Verify the skill is actually a custom skill
+        custom_skills_dir = get_custom_skills_dir()
+        skill_dir_path = os.path.join(custom_skills_dir, skill_name)
+
+        if not os.path.isdir(skill_dir_path):
+            msg = f"Custom skill '{skill_name}' not found in custom_skills directory."
+            self.printr.toast_error(msg)
+            raise HTTPException(status_code=404, detail=msg)
+
+        self.printr.print(
+            f"Starting uninstall of custom skill '{skill_name}'...",
+            color=LogType.WARNING,
+            server_only=True,
+        )
+
+        try:
+            # 2. Determine the skill's internal name from its default_config.yaml
+            skill_internal_name = skill_name  # fallback to folder name
+            default_config_path = os.path.join(skill_dir_path, "default_config.yaml")
+            if os.path.isfile(default_config_path):
+                try:
+                    skill_default_config = self.config_manager.read_config(
+                        default_config_path
+                    )
+                    if skill_default_config and "name" in skill_default_config:
+                        skill_internal_name = skill_default_config["name"]
+                except Exception:
+                    pass  # use folder name as fallback
+
+            skill_module_prefix = f"skills.{skill_name}.main"
+            affected_wingmen = []
+
+            # 3. Disable on all active wingmen in the tower (runtime)
+            if self.tower:
+                for wingman in self.tower.wingmen:
+                    skill_was_active = any(
+                        s.config.name == skill_internal_name for s in wingman.skills
+                    )
+                    if skill_was_active:
+                        try:
+                            success, msg = await wingman.disable_skill(
+                                skill_internal_name
+                            )
+                            self.printr.print(
+                                f"  Runtime disable '{skill_internal_name}' on '{wingman.name}': {msg}",
+                                server_only=True,
+                            )
+                        except Exception as e:
+                            self.printr.print(
+                                f"  Warning: could not runtime-disable '{skill_internal_name}' on '{wingman.name}': {e}",
+                                color=LogType.WARNING,
+                                server_only=True,
+                            )
+
+            # 4. Remove skill from ALL wingman configs across ALL config dirs
+            for config_dir in self.config_manager.get_config_dirs():
+                if config_dir.is_deleted:
+                    continue
+
+                wingman_files = self.config_manager.get_wingmen_configs(config_dir)
+                for wingman_file in wingman_files:
+                    if wingman_file.is_deleted:
+                        continue
+
+                    try:
+                        wingman_config = self.config_manager.load_wingman_config(
+                            config_dir=config_dir, wingman_file=wingman_file
+                        )
+                    except Exception as e:
+                        self.printr.print(
+                            f"  Warning: could not load config for '{wingman_file.name}' in '{config_dir.name}': {e}",
+                            color=LogType.WARNING,
+                            server_only=True,
+                        )
+                        continue
+
+                    modified = False
+
+                    # Remove from discoverable_skills list
+                    if (
+                        wingman_config.discoverable_skills
+                        and skill_internal_name in wingman_config.discoverable_skills
+                    ):
+                        wingman_config.discoverable_skills.remove(skill_internal_name)
+                        modified = True
+                        self.printr.print(
+                            f"  Removed '{skill_internal_name}' from discoverable_skills of '{wingman_file.name}' in '{config_dir.name}'.",
+                            server_only=True,
+                        )
+
+                    # Remove skill overrides from skills list (match by name OR module)
+                    if wingman_config.skills:
+                        original_count = len(wingman_config.skills)
+                        wingman_config.skills = [
+                            s
+                            for s in wingman_config.skills
+                            if s.name != skill_internal_name
+                            and s.module != skill_module_prefix
+                        ]
+                        if len(wingman_config.skills) < original_count:
+                            modified = True
+                            self.printr.print(
+                                f"  Removed skill config overrides for '{skill_internal_name}' from '{wingman_file.name}' in '{config_dir.name}'.",
+                                server_only=True,
+                            )
+                        if not wingman_config.skills:
+                            wingman_config.skills = None
+
+                    if modified:
+                        affected_wingmen.append(
+                            f"{wingman_file.name} ({config_dir.name})"
+                        )
+                        # Save the cleaned config (wrapped in try/except so one failure
+                        # doesn't prevent cleanup of remaining configs)
+                        try:
+                            self.config_manager.save_wingman_config(
+                                config_dir=config_dir,
+                                wingman_file=wingman_file,
+                                wingman_config=wingman_config,
+                            )
+                        except Exception as e:
+                            self.printr.print(
+                                f"  Warning: failed to save cleaned config for '{wingman_file.name}' in '{config_dir.name}': {e}",
+                                color=LogType.WARNING,
+                                server_only=True,
+                            )
+
+            # 5. Delete the custom skill directory
+            try:
+                shutil.rmtree(skill_dir_path)
+                self.printr.print(
+                    f"  Deleted custom skill directory: {skill_dir_path}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+            except Exception as e:
+                msg = f"Failed to delete skill directory '{skill_dir_path}': {e}"
+                self.printr.toast_error(msg)
+                raise HTTPException(status_code=500, detail=msg) from e
+
+            # 6. Summary logging and toast
+            if affected_wingmen:
+                affected_list = ", ".join(affected_wingmen)
+                self.printr.print(
+                    f"Custom skill '{skill_internal_name}' uninstalled. Affected Wingmen: {affected_list}",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                self.printr.toast(
+                    f"Custom skill '{skill_internal_name}' uninstalled. Cleaned up configs for: {affected_list}"
+                )
+            else:
+                self.printr.print(
+                    f"Custom skill '{skill_internal_name}' uninstalled. No Wingman configs were affected.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                self.printr.toast(
+                    f"Custom skill '{skill_internal_name}' uninstalled successfully."
+                )
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.printr.toast_error(f"Failed to uninstall skill '{skill_name}': {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to uninstall skill '{skill_name}': {e}",
+            ) from e
 
     # GET /wingman-mcps
     async def get_wingman_mcps(

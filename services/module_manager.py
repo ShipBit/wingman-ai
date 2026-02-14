@@ -199,7 +199,46 @@ class ModuleManager:
         return instance
 
     @staticmethod
-    def read_available_skill_configs() -> list[tuple[str, str]]:
+    def _get_untracked_skill_folders(skills_dir: str) -> set[str] | None:
+        """Get skill folder names that are NOT tracked by git.
+
+        Used to detect in-development custom skills placed in the source ./skills/
+        directory during development. These are skills the developer is working on
+        but haven't committed to the repo yet.
+
+        Returns:
+            set[str]: Untracked folder names when git detection succeeds.
+            None: When git is unavailable or the directory is not in a git repo.
+        """
+        import subprocess
+
+        try:
+            result = subprocess.run(
+                [
+                    "git",
+                    "ls-files",
+                    "--others",
+                    "--directory",
+                    "--exclude-standard",
+                    ".",
+                ],
+                capture_output=True,
+                text=True,
+                cwd=skills_dir,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return {
+                    line.rstrip("/")
+                    for line in result.stdout.strip().split("\n")
+                    if line and "/" not in line.rstrip("/")
+                }
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def read_available_skill_configs() -> list[tuple[str, str, bool, bool]]:
         """Read skill configs from bundled skills and custom skills directories.
 
         Built-in skills are read from:
@@ -215,29 +254,52 @@ class ModuleManager:
 
         Note: Legacy versioned APPDATA/skills is NO LONGER checked. Custom skills
         should be migrated to the non-versioned custom_skills/ directory.
+
+        Returns:
+            List of tuples: (skill_folder_name, config_path, is_custom, is_local)
+            - is_custom: True for skills from custom_skills/ directory
+            - is_local: True for untracked dev skills in the source ./skills/ directory
         """
+        # Source: "bundled" | "local" | "custom"
+        # bundled = bundled/dev dir, git-tracked or release mode
+        # local = bundled/dev dir, NOT git-tracked (dev-in-progress)
+        # custom = custom_skills/ directory
         skill_dirs = []
 
         # 1. Add bundled skills directory (set by main.py)
         bundled_dir = get_bundled_skills_dir()
         if bundled_dir and os.path.isdir(bundled_dir):
-            skill_dirs.append(bundled_dir)
+            skill_dirs.append((bundled_dir, "bundled"))
 
         # 2. Fallback: dev mode - check local skills directory
         # In dev mode, bundled_dir IS the local skills dir, so this is a no-op
         # But we keep it for explicitness
-        if os.path.isdir(SKILLS_DIR) and SKILLS_DIR not in skill_dirs:
+        if os.path.isdir(SKILLS_DIR) and SKILLS_DIR not in [
+            d for d, _ in skill_dirs
+        ]:
             if bundled_dir != os.path.abspath(SKILLS_DIR):
-                skill_dirs.append(SKILLS_DIR)
+                skill_dirs.append((SKILLS_DIR, "bundled"))
 
         # 3. Add custom skills directory (user-created skills, NOT versioned)
         # These can override built-in skills for customization
         custom_skills_dir = get_custom_skills_dir()
         if os.path.isdir(custom_skills_dir):
-            skill_dirs.append(custom_skills_dir)
+            skill_dirs.append((custom_skills_dir, "custom"))
+
+        # Detect untracked (in-development) skill folders in the bundled/dev dir.
+        # In dev mode, skills in ./skills/ that are NOT committed to git are
+        # "local" dev skills the developer is working on.
+        untracked_folders: set[str] | None = None
+        is_dev_mode = not getattr(sys, "frozen", False)
+        for dir_path, source in skill_dirs:
+            if source == "bundled":
+                untracked_folders = ModuleManager._get_untracked_skill_folders(
+                    dir_path
+                )
+                break  # Only check the first bundled dir
 
         skills_default_configs = {}
-        for skills_dir in skill_dirs:
+        for skills_dir, source in skill_dirs:
             # Traverse the skills directory
             try:
                 for skill_name in os.listdir(skills_dir):
@@ -253,10 +315,29 @@ class ModuleManager:
 
                         # Check if the default_config.yaml file exists
                         if os.path.isfile(default_config_path):
-                            # Add the skill name and the default_config.yaml file path to the list
-                            # Later entries (custom skills) override earlier ones (built-in)
+                            # Determine is_custom and is_local flags
+                            is_custom = source == "custom"
+                            is_local = False
+                            if source == "bundled":
+                                if untracked_folders is not None:
+                                    # Git available: precise detection
+                                    is_local = skill_name in untracked_folders
+                                elif is_dev_mode:
+                                    # Git unavailable but running from source:
+                                    # can't distinguish bundled from dev skills,
+                                    # so disable uninstall for all source skills
+                                    is_local = True
+
+                            # Later entries (custom skills) override earlier ones
                             skills_default_configs.update(
-                                {skill_name: (skill_name, default_config_path)}
+                                {
+                                    skill_name: (
+                                        skill_name,
+                                        default_config_path,
+                                        is_custom,
+                                        is_local,
+                                    )
+                                }
                             )
             except OSError:
                 # Directory might not exist or be inaccessible
@@ -271,7 +352,7 @@ class ModuleManager:
         # Get the list of available skill configs
         available_skill_configs = ModuleManager.read_available_skill_configs()
         # Load each skill from its config
-        for skill_folder_name, skill_config_path in available_skill_configs:
+        for skill_folder_name, skill_config_path, is_custom, is_local in available_skill_configs:
             skill_config = ModuleManager.read_config(skill_config_path)
 
             logo = None
@@ -295,6 +376,9 @@ class ModuleManager:
                     config=skill_config,
                     logo=logo,
                     tools=tools if tools else None,
+                    is_custom=is_custom,
+                    is_local=is_local,
+                    folder_name=skill_folder_name,
                 )
                 skills.append(skill)
             except Exception as e:
