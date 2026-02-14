@@ -20,6 +20,48 @@ features:
     cache_tts_responses: true    # Setze auf true, um das Caching für TTS-Antworten zu aktivieren
     instant_command_cache_max_size: 200 # Max items in memory LRU for commands
     tts_cache_max_size: 100           # Max items in memory LRU for TTS
+    cache_match_stopwords_language: auto # auto uses openai.player_language; or de/en
+    cache_match_stopwords:
+      common:
+      - was
+      - ist
+      - what
+      - is
+      - component
+      - komponente
+      de:
+      - der
+      - die
+      - das
+      - ein
+      - eine
+      - und
+      - oder
+      - zu
+      - im
+      - in
+      - am
+      - an
+      - auf
+      - mit
+      - von
+      - fur
+      - bitte
+      en:
+      - the
+      - a
+      - an
+      - and
+      - or
+      - to
+      - in
+      - on
+      - at
+      - by
+      - with
+      - from
+      - for
+      - please
     do_not_cache_phrases:
     - Hallo Cora
     delete_last_cached_command_phrases:

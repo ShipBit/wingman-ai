@@ -2,6 +2,7 @@ import os
 import json
 import time
 import shutil
+import re
 
 from collections import OrderedDict
 from pathlib import Path
@@ -9,10 +10,9 @@ from pathlib import Path
 # Added Union for return type hint, Literal for storage_mode hint
 from typing import Any, Tuple, Optional, Dict, Union, Literal
 
+import Levenshtein
+
 from services.printr import Printr
-from wingmen.star_citizen_services.helper import find_best_match
-
-
 printr = Printr()
 
 # Define the allowed storage modes using Literal for better type hinting
@@ -33,6 +33,24 @@ class CacheManager:
     actual data in a separate subdirectory. Includes functionality to remove
     the most recently added entry during the current session.
     """
+
+    _DEFAULT_CACHE_MATCH_STOPWORDS = {
+        "common": {
+            "was", "ist", "what", "is", "component", "komponente",
+        },
+        "de": {
+            "der", "die", "das", "ein", "eine", "einer", "eines", "einem", "einen",
+            "und", "oder", "aber", "zu", "zum", "zur", "im", "in", "am", "an",
+            "auf", "mit", "von", "fur", "ist", "sind", "war", "waren",
+            "wie", "wo", "warum", "wieso", "weshalb", "welche", "welcher",
+            "welches", "bitte",
+        },
+        "en": {
+            "the", "a", "an", "and", "or", "but", "to", "in", "on", "at", "by",
+            "with", "from", "for", "is", "are", "was", "were", "what", "how",
+            "where", "why", "which", "please",
+        },
+    }
 
     def __init__(
         self,
@@ -61,6 +79,56 @@ class CacheManager:
         self._last_key_flagged_for_removal: bool = False
 
         self.cache_data_path.mkdir(parents=True, exist_ok=True)
+
+        self._cache_match_min_score = 88.0
+        self._cache_match_min_margin = 5.0
+        self._cache_match_stopwords = self._build_cache_match_stopwords()
+
+    def _resolve_cache_match_language(self, cache_config: dict[str, Any]) -> str:
+        configured_language = cache_config.get("cache_match_stopwords_language", "auto")
+        if isinstance(configured_language, str) and configured_language.lower() != "auto":
+            return configured_language.lower()
+
+        player_language = self.config.get("openai", {}).get("player_language")
+        if isinstance(player_language, str) and player_language:
+            candidate = player_language.split("_")[0].split("-")[0].lower()
+            if candidate in ("de", "en"):
+                return candidate
+
+        return "de"
+
+    def _build_cache_match_stopwords(self) -> set[str]:
+        cache_config = self.config.get("features", {}).get("command_and_tts_cache", {}) or {}
+        language = self._resolve_cache_match_language(cache_config)
+        custom_stopwords = cache_config.get("cache_match_stopwords", {}) or {}
+
+        stopwords = set(self._DEFAULT_CACHE_MATCH_STOPWORDS.get("common", set()))
+        stopwords |= set(self._DEFAULT_CACHE_MATCH_STOPWORDS.get(language, set()))
+        if isinstance(custom_stopwords, dict):
+            stopwords |= set(custom_stopwords.get("common", []) or [])
+            stopwords |= set(custom_stopwords.get(language, []) or [])
+
+        return stopwords
+
+    def _normalize_cache_text(self, text: str) -> str:
+        normalized = text.lower()
+        normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+        return " ".join(normalized.split())
+
+    def _pick_distinctive_token(self, tokens: list[str]) -> Optional[str]:
+        candidates = [t for t in tokens if len(t) >= 3 and t not in self._cache_match_stopwords]
+        if not candidates:
+            return None
+        return max(candidates, key=len)
+
+    def _score_cache_candidate(self, query: str, candidate: str, query_tokens: list[str]) -> float:
+        base_score = Levenshtein.ratio(query, candidate) * 100
+        if not query_tokens:
+            return base_score
+
+        candidate_tokens = set(candidate.split())
+        overlap = len(set(query_tokens) & candidate_tokens) / len(set(query_tokens))
+        return (0.7 * base_score) + (0.3 * overlap * 100)
 
     def load(self):
         """Loads cache metadata from the JSON file."""
@@ -250,26 +318,61 @@ class CacheManager:
             The cache key if found, otherwise None.
         """
         if text is not None:
-            # 4. Not found: Attempt fuzzy search for json mode entries based on key_text
             if self.debug:
                 printr.print(
                     f"Searching cache entry for '{text}'",
                     tags="info",
                     console_only=True,
                 )
+
             candidates = []
             for cand_key, v in self.disk_data.items():
                 if v[3] == "json" and v[4]:
                     candidates.append({"key": cand_key, "key_text": v[4]})
+
             if candidates:
-                best, success = find_best_match.find_best_match(text, candidates, attributes=["key_text"], score_cutoff=80)
-                if success and best.get("matched_value") is not None:
-                    printr.print(
-                        f"found {json.dumps(best.get('root_object'),indent=2)} with score {best.get('score')}",
-                        tags="info",
-                        console_only=True,
-                    )
-                    return best.get("root_object").get("key")
+                normalized_query = self._normalize_cache_text(text)
+                query_tokens = normalized_query.split()
+                key_token = self._pick_distinctive_token(query_tokens)
+
+                scored = []
+                filtered_candidates = candidates
+                if key_token:
+                    filtered_candidates = []
+                    for candidate in candidates:
+                        normalized_candidate = self._normalize_cache_text(candidate["key_text"])
+                        if key_token in normalized_candidate.split():
+                            filtered_candidates.append(candidate)
+
+                    if not filtered_candidates:
+                        filtered_candidates = candidates
+
+                for candidate in filtered_candidates:
+                    normalized_candidate = self._normalize_cache_text(candidate["key_text"])
+                    score = self._score_cache_candidate(normalized_query, normalized_candidate, query_tokens)
+                    scored.append((score, candidate))
+
+                if scored:
+                    scored.sort(key=lambda item: item[0], reverse=True)
+                    best_score, best_candidate = scored[0]
+                    second_best_score = scored[1][0] if len(scored) > 1 else 0.0
+                    score_margin = best_score - second_best_score
+
+                    if self.debug:
+                        printr.print(
+                            f"Cache match: best={best_score:.2f}, second={second_best_score:.2f}, margin={score_margin:.2f}",
+                            tags="info",
+                            console_only=True,
+                        )
+
+                    if best_score >= self._cache_match_min_score and score_margin >= self._cache_match_min_margin:
+                        return best_candidate.get("key")
+                    if self.debug:
+                        printr.print(
+                            "Cache match rejected due to low score or insufficient margin.",
+                            tags="info",
+                            console_only=True,
+                        )
                 
         return None
 
