@@ -229,6 +229,10 @@ class StarCitizenWingman(OpenAiWingman):
                 )
 
                 if completion is None:
+                    reset_message = self._handle_tool_call_sequence_error()
+                    if reset_message:
+                        printr.print(reset_message, wait_for_gui=True, tags="warn")
+                        asyncio.run(self._play_to_user(str(reset_message)))
                     return None, None
 
                 response_message, tool_calls = self._process_completion(completion)
