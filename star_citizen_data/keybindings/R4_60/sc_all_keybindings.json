@@ -179,51 +179,6 @@
         },
         "ai_command_reference_name": "lights_controller_Headlights_Toggle"
     },
-    "weapon_change_mining_throttle": {
-        "category": "mining",
-        "actionname": "weapon_change_mining_throttle",
-        "activationMode": "press",
-        "keyboard-mapping": "lalt+maxis_z",
-        "action-label-en": "",
-        "action-description-en": "",
-        "keyboard-mapping-en": "Left Alt+Mouse Wheel",
-        "keyboard-mapping-ui": "@input_key_keyboard_leftAlt+@input_key_mouse_zAxis",
-        "label-ui": "@ui_CIFPSIncreaseMiningThrottle",
-        "description-ui": "@ui_CIFPSIncreaseMiningThrottleDesc",
-        "action-label-de_DE": "",
-        "action-description-de_DE": "",
-        "keyboard-mapping-de_DE": "ALT+Mausrad",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "input_key_keyboard_leftAlt+input_key_mouse_zAxis",
-        "keyboard-mapping-default": "lalt+maxis_z",
-        "keyboard-mapping-custom": null,
-        "command-phrases": {
-            "en": [
-                "Change mining throttle",
-                "Mining throttle",
-                "Increase mining throttle",
-                "Decrease mining throttle",
-                "Set mining throttle"
-            ],
-            "de_DE": [
-                "Mining Schub",
-                "Mining Drossel",
-                "Drossel ändern",
-                "Mining Schub erhöhen",
-                "Mining Schub verringern"
-            ]
-        },
-        "ai_status": {
-            "is_active": true,
-            "inactive_reason": null,
-            "has_keybinding": true,
-            "has_command_phrases": true,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "mining_weapon_change_mining_throttle"
-    },
     "ammoRepool": {
         "category": "player",
         "actionname": "ammoRepool",
@@ -8809,9 +8764,18 @@
             "is_active": false,
             "inactive_reason": "category_excluded",
             "has_keybinding": true,
-            "has_command_phrases": false,
+            "has_command_phrases": true,
             "is_custom_configured": false,
             "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Accept invite"
+            ],
+            "de_DE": [
+                "Einladung annehmen",
+                "Akzeptieren"
+            ]
         },
         "ai_command_reference_name": "default_notification_accept"
     },
@@ -8838,9 +8802,19 @@
             "is_active": false,
             "inactive_reason": "category_excluded",
             "has_keybinding": true,
-            "has_command_phrases": false,
+            "has_command_phrases": true,
             "is_custom_configured": false,
             "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Decline invite",
+                "Decline"
+            ],
+            "de_DE": [
+                "Einladung ablehnen",
+                "Ablehnen"
+            ]
         },
         "ai_command_reference_name": "default_notification_decline"
     },
@@ -11005,6 +10979,51 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "mapui_mapui_pan_up"
+    },
+    "weapon_change_mining_throttle": {
+        "category": "mining",
+        "actionname": "weapon_change_mining_throttle",
+        "activationMode": "press",
+        "keyboard-mapping": "lalt+maxis_z",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Left Alt+Mouse Wheel",
+        "keyboard-mapping-ui": "@input_key_keyboard_leftAlt+@input_key_mouse_zAxis",
+        "label-ui": "@ui_CIFPSIncreaseMiningThrottle",
+        "description-ui": "@ui_CIFPSIncreaseMiningThrottleDesc",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ALT+Mausrad",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "input_key_keyboard_leftAlt+input_key_mouse_zAxis",
+        "keyboard-mapping-default": "lalt+maxis_z",
+        "keyboard-mapping-custom": null,
+        "command-phrases": {
+            "en": [
+                "Change mining throttle",
+                "Mining throttle",
+                "Increase mining throttle",
+                "Decrease mining throttle",
+                "Set mining throttle"
+            ],
+            "de_DE": [
+                "Mining Schub",
+                "Mining Drossel",
+                "Drossel ändern",
+                "Mining Schub erhöhen",
+                "Mining Schub verringern"
+            ]
+        },
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "mining_weapon_change_mining_throttle"
     },
     "ar_mode_scroll_action_down": {
         "category": "player",
