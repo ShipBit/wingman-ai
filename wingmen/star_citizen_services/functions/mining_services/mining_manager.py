@@ -145,7 +145,7 @@ class MiningManager(FunctionManager):
             data_dir=self.mining_data_path,
             extraction_instructions=(
                 "Extract the rock scan data from this image. "
-                f"Return a plain json object that matches this example exactly: {rock_scan_json}. "
+                f"Return a plain json object that matches the format of this example exactly: {rock_scan_json}. "
                 "The 'percent' values must be decimals between 0 and 1 (not 0-100). "
                 "Provide the json within markdown ```json ... ```. "
                 "If you are unable to process the image, just return 'error' as response."
@@ -187,10 +187,9 @@ class MiningManager(FunctionManager):
             f"You are able to manage mining or salvaging sessions and corresponding refinery work orders. "
             f"The following functions allow you to help the player in this task. For each of them, don't make assumptions on the value and set to None if the user hasn't provided information about it. "
             f"- {self.refinery_job_work_order_management.__name__}: call it to add 1, remove 1 or retrieve all refinery work orders / jobs of the active refinery session. This function does not require any further information from the user. "
-            f"- {self.mining_or_salvage_session_management.__name__}: call it to create a new mining / salvage session, delete all finalised sessions or to retrieve the current session. It also allows to open the active session in the browser. "
-            f"- {self.add_rock_scan_or_deposit_cluster_information.__name__}: call it when the player wants to provide information about a scanned rock or found a new mining deposit cluster. "
-            "Only ask the user for confirmation of the values, if you didn't understand them properly. Do not make assumptions on the values. "
-            # f"- {self.get_first_or_next_location_on_delivery_route.__name__}: get information about the next location the user should go. "
+            f"- {self.mining_or_salvage_session_management.__name__}: call it to create a new mining / salvage session, or to open the current session in the browser. "
+            f"- {self.add_rock_scan_or_deposit_cluster_information.__name__}: call this, when the player has found a new deposit cluster or wants to save it, or if he wants to save a scan result of a rock."
+            "If the user provided all information required, do not ask for confirmation about the action to be taken. Do not make assumptions on the values and ask for clarification if not clear. "
         )
     
     # @abstractmethod - overwritten
@@ -268,7 +267,7 @@ class MiningManager(FunctionManager):
                 "type": "function",
                 "function": {
                     "name": self.add_rock_scan_or_deposit_cluster_information.__name__,
-                    "description": "Allows the player to add information about found mining deposit clusters and scan results.",
+                    "description": "Allows the player to add/save information about found mining deposit clusters and rock scan results.",
                     "parameters": {
                         "type": "object",
                         "properties": {
