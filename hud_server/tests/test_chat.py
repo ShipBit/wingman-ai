@@ -362,7 +362,7 @@ async def test_chat_auto_hide(session: TestSession):
 
 
 async def test_chat_overflow(session: TestSession):
-    """Test message overflow and fade effect."""
+    """Test message overflow and fade effect with long messages and typewriter effect."""
     print(f"[{session.name}] Testing chat overflow...")
 
     chat_name = f"overflow_{session.session_id}"
@@ -370,23 +370,36 @@ async def test_chat_overflow(session: TestSession):
     anchor = session.config.get("anchor", Anchor.TOP_LEFT)
     anchor_value = anchor.value if hasattr(anchor, 'value') else anchor
 
+    # Very small height to trigger overflow fade
     props = ChatWindowProps(
         anchor=anchor_value,
-        priority=10,  # Fifth priority
+        priority=10,
         layout_mode=LayoutMode.AUTO.value,
         width=400,
-        max_height=200,  # Small height to trigger overflow
+        max_height=180,  # Very small to ensure overflow with long messages
         fade_old_messages=True,
     )
     await session.create_chat_window(name=chat_name, **props.to_dict())
     await asyncio.sleep(0.5)
 
-    # Send many messages to overflow (unique senders per message to prevent merging)
-    for i in range(15):
-        await session.send_chat_message(chat_name, f"User{i}", f"Message #{i+1}: Testing overflow behavior")
-        await asyncio.sleep(0.4)
+    # Long messages with markdown to test fade out
+    long_messages = [
+        ("Alice", "# This is a very long message title\n\nThis is a long paragraph with **bold text** and *italic text* and some `code` inline. The message continues with more content to make it really long and trigger the fade effect at the bottom of the chat window.\n\n- List item 1\n- List item 2\n- List item 3\n\nAnother paragraph with even more text to ensure we definitely overflow the small max_height."),
+        ("Bob", "This is another long message with **formatting** and some longer content. It should help test the bottom fade effect when messages pile up and exceed the maximum height.\n\nHere's a code block:\n```python\ndef hello():\n    print('Hello, World!')\n```\n\nEnd of message."),
+        ("Charlie", "Short msg"),
+        ("Diana", "## Header in message\n\nThis is a moderately long message with multiple lines of content. It has **bold**, *italic*, and some regular text to test rendering.\n\nLet's add more lines to make it even longer and ensure we trigger the overflow behavior.\n\nLine 5\nLine 6\nLine 7\nLine 8\nLine 9\nLine 10"),
+        ("Eve", "Final short message"),
+    ]
 
-    await asyncio.sleep(2)
+    # Send each long message and wait for typewriter effect
+    for sender, message in long_messages:
+        await session.send_chat_message(chat_name, sender, message)
+        # Wait longer for typewriter effect to complete
+        await asyncio.sleep(2.5)
+
+    # Wait to observe the final result
+    await asyncio.sleep(3)
+
     await session.delete_chat_window(chat_name)
     print(f"[{session.name}] Overflow test complete")
 

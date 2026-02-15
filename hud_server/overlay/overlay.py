@@ -915,13 +915,21 @@ class HeadsUpOverlay:
             self._draw_loading(draw, temp, padding, y, width - padding * 2, loading_color)
             y += 24
 
+        # Loading animation - reserve 30px at bottom when loading
+        loader_space = 30 if win.get('is_loading') else 0
+
         # Calculate final height - use fixed height if specified
         fixed_height = props.get('height')
         bottom_padding = padding - 4
         if fixed_height is not None:
             final_h = int(fixed_height)
         else:
+            # Calculate content height without loader space reservation
+            # (loader is already included in y, we just need to cap at max_height)
             final_h = min(max(60, y + bottom_padding), max_height)
+
+        # Determine if content is clipped (overflows the final window height)
+        content_clipped = y > final_h
 
         # Create final canvas - ALWAYS create fresh to prevent ghosting
         old_canvas = win.get('canvas')
@@ -941,14 +949,65 @@ class HeadsUpOverlay:
         final_draw.rounded_rectangle([0, 0, width - 1, final_h - 1], radius=radius,
                                     fill=bg + (bg_alpha,), outline=(55, 62, 74))
 
-        crop_height = min(final_h, temp.height)
-        crop = temp.crop((0, 0, width, crop_height))
+        # Crop content - show bottom portion when clipped (newest content), top when fits
+        if content_clipped:
+            # Content overflows - crop from bottom to show newest content
+            # Account for loader space: ensure loader is within visible area
+            crop_top = max(0, y - final_h)
+            crop = temp.crop((0, crop_top, width, crop_top + final_h))
+        else:
+            # Content fits - crop from top
+            crop = temp.crop((0, 0, width, min(final_h, temp.height)))
+
         # Composite the text onto the background properly
         # Use Image.alpha_composite to blend correctly without leaving ghost pixels
         # First, create a version of the canvas portion and composite
-        canvas_region = canvas.crop((0, 0, width, crop_height))
+        canvas_region = canvas.crop((0, 0, width, final_h))
         composited = Image.alpha_composite(canvas_region, crop)
         canvas.paste(composited, (0, 0))
+
+        # Apply fade gradient at top when content is clipped to indicate more content above
+        if content_clipped:
+            fade_height = int(props.get('scroll_fade_height', 40))
+            if fade_height > 0:
+                # Fade at top to indicate more content above
+                top_region = canvas.crop((0, 0, width, fade_height))
+
+                # Create a mask identifying magenta (color key) pixels to preserve rounded corners
+                top_data = top_region.load()
+                corner_mask = Image.new('L', (width, fade_height), 0)
+                corner_mask_data = corner_mask.load()
+                for py in range(fade_height):
+                    for px in range(width):
+                        r, g, b, a = top_data[px, py]
+                        # Check if pixel is magenta (color key for transparency)
+                        if r == 255 and g == 0 and b == 255:
+                            corner_mask_data[px, py] = 255  # Mark as corner pixel
+
+                # Create a gradient mask that fades from opaque bg at top to transparent at bottom
+                gradient = Image.new('L', (width, fade_height), 0)
+                for fade_y in range(fade_height):
+                    # Fade: 255 (full bg) at top, 0 (no bg) at bottom
+                    alpha = int(255 * (1.0 - fade_y / fade_height))
+                    ImageDraw.Draw(gradient).line([(0, fade_y), (width, fade_y)], fill=alpha)
+
+                # Create background layer for fade
+                bg_layer = Image.new('RGBA', (width, fade_height), bg + (255,))
+
+                # Apply gradient as alpha to bg layer
+                bg_layer.putalpha(gradient)
+
+                # Composite fade over content
+                faded_top = Image.alpha_composite(top_region, bg_layer)
+
+                # Restore magenta pixels for corners (color key transparency)
+                faded_data = faded_top.load()
+                for py in range(fade_height):
+                    for px in range(width):
+                        if corner_mask_data[px, py] == 255:
+                            faded_data[px, py] = (255, 0, 255, 255)
+
+                canvas.paste(faded_top, (0, 0))
 
         # Update layout manager with new height and get position
         self._layout_manager.update_window_height(name, final_h)
@@ -1167,6 +1226,9 @@ class HeadsUpOverlay:
         calculated_height = max(60, y + bottom_padding)
         final_h = min(calculated_height, max_height)
 
+        # Determine if content is clipped (overflows the final window height)
+        content_clipped = y > final_h
+
         # Create final canvas - ALWAYS create fresh to prevent ghosting
         old_canvas = win.get('canvas')
         if old_canvas is None or old_canvas.width != width or old_canvas.height != final_h:
@@ -1189,6 +1251,96 @@ class HeadsUpOverlay:
         canvas_region = canvas.crop((0, 0, width, final_h))
         composited = Image.alpha_composite(canvas_region, crop)
         canvas.paste(composited, (0, 0))
+
+        # Apply fade gradient at top when content is clipped to indicate more content above
+        if content_clipped:
+            fade_height = int(props.get('scroll_fade_height', 40))
+            if fade_height > 0:
+                # Get the top portion of the canvas before applying fade
+                top_region = canvas.crop((0, 0, width, fade_height))
+
+                # Create a mask identifying magenta (color key) pixels to preserve rounded corners
+                # Magenta = (255, 0, 255) is used as transparency color key
+                top_data = top_region.load()
+                corner_mask = Image.new('L', (width, fade_height), 0)
+                corner_mask_data = corner_mask.load()
+                for py in range(fade_height):
+                    for px in range(width):
+                        r, g, b, a = top_data[px, py]
+                        # Check if pixel is magenta (color key for transparency)
+                        if r == 255 and g == 0 and b == 255:
+                            corner_mask_data[px, py] = 255  # Mark as corner pixel
+
+                # Create a gradient mask that fades from opaque bg at top to transparent at bottom
+                gradient = Image.new('L', (width, fade_height), 0)
+                for fade_y in range(fade_height):
+                    # Fade: 255 (full bg) at top, 0 (no bg) at bottom
+                    alpha = int(255 * (1.0 - fade_y / fade_height))
+                    ImageDraw.Draw(gradient).line([(0, fade_y), (width, fade_y)], fill=alpha)
+
+                # Create background layer for fade
+                bg_layer = Image.new('RGBA', (width, fade_height), bg + (255,))
+
+                # Apply gradient as alpha to bg layer
+                bg_layer.putalpha(gradient)
+
+                # Composite fade over content
+                faded_top = Image.alpha_composite(top_region, bg_layer)
+
+                # Restore magenta pixels for corners (color key transparency)
+                faded_data = faded_top.load()
+                for py in range(fade_height):
+                    for px in range(width):
+                        if corner_mask_data[px, py] == 255:
+                            faded_data[px, py] = (255, 0, 255, 255)
+
+                canvas.paste(faded_top, (0, 0))
+
+        # Apply fade gradient at bottom when content is clipped to indicate more content below
+        if content_clipped:
+            fade_height = int(props.get('scroll_fade_height', 40))
+            if fade_height > 0:
+                # Get the bottom portion of the canvas
+                fade_y = max(0, final_h - fade_height)
+                fade_actual = min(fade_height, final_h - fade_y)
+                if fade_actual > 0:
+                    bottom_region = canvas.crop((0, fade_y, width, fade_y + fade_actual))
+
+                    # Create a mask identifying magenta (color key) pixels to preserve rounded corners
+                    bottom_data = bottom_region.load()
+                    corner_mask = Image.new('L', (width, fade_actual), 0)
+                    corner_mask_data = corner_mask.load()
+                    for py in range(fade_actual):
+                        for px in range(width):
+                            r, g, b, a = bottom_data[px, py]
+                            # Check if pixel is magenta (color key for transparency)
+                            if r == 255 and g == 0 and b == 255:
+                                corner_mask_data[px, py] = 255  # Mark as corner pixel
+
+                    # Create a gradient mask that fades from transparent at bottom to opaque at top
+                    gradient = Image.new('L', (width, fade_actual), 0)
+                    for fade_y_idx in range(fade_actual):
+                        # Fade: 0 (transparent) at bottom, 255 (opaque) at top of fade region
+                        alpha = int(255 * fade_y_idx / fade_actual)
+                        ImageDraw.Draw(gradient).line([(0, fade_y_idx), (width, fade_y_idx)], fill=alpha)
+
+                    # Create background layer for fade
+                    bg_layer = Image.new('RGBA', (width, fade_actual), bg + (255,))
+
+                    # Apply gradient as alpha to bg layer
+                    bg_layer.putalpha(gradient)
+
+                    # Composite fade over content
+                    faded_bottom = Image.alpha_composite(bottom_region, bg_layer)
+
+                    # Restore magenta pixels for corners (color key transparency)
+                    faded_data = faded_bottom.load()
+                    for py in range(fade_actual):
+                        for px in range(width):
+                            if corner_mask_data[px, py] == 255:
+                                faded_data[px, py] = (255, 0, 255, 255)
+
+                    canvas.paste(faded_bottom, (0, fade_y))
 
         # Update layout manager with new height and get position
         self._layout_manager.update_window_height(name, final_h)

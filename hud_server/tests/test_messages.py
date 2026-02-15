@@ -179,6 +179,64 @@ async def test_sequential_messages(session: TestSession, delay: float = 1.5):
     print(f"[{session.name}] Sequential messages test complete")
 
 
+async def test_message_bottom_fade(session: TestSession, delay: float = 2.0):
+    """Test bottom fade effect when message content overflows."""
+    print(f"[{session.name}] Testing message bottom fade...")
+
+    # Very long message that will overflow a small window
+    long_message = """# Comprehensive Status Report
+
+## Navigation Systems
+All navigation systems are **fully operational**. Current heading: `045.7 deg`
+
+## Communication Array
+Minor interference detected on channels 4-6. Switching to backup frequencies.
+
+## Resource Status
+| Resource | Level | Rate |
+|----------|-------|------|
+| Fuel     | 67%   | -2%/h |
+| O2       | 98%   | -0.1%/h |
+| Power    | 85%   | +5%/h |
+
+## Recommendations
+1. Refuel at next station
+2. Run diagnostics on comm array
+3. Continue current heading
+
+## Additional Intel
+- Sector scan complete
+- No hostile contacts detected
+- Friendly vessels in vicinity: 3
+
+> *ETA to destination: 4h 32m*
+
+## Mission Details
+- Objective: Survey nebula region
+- Timeline: 48 hours
+- Support: Available on demand
+
+## Final Notes
+All systems nominal. Ready for next assignment.
+"""
+
+    # Use a small max_height to force overflow and trigger bottom fade
+    await session.draw_message_with_props(
+        "Wingman",
+        long_message,
+        custom_props={"max_height": 150, "scroll_fade_height": 30}
+    )
+    await asyncio.sleep(delay)
+
+    # Also test with loading indicator (should reserve 30px at bottom)
+    await session.set_loading(True)
+    await asyncio.sleep(delay)
+    await session.set_loading(False)
+
+    await session.hide()
+    print(f"[{session.name}] Bottom fade test complete")
+
+
 # =============================================================================
 # Run All Tests
 # =============================================================================
@@ -196,6 +254,8 @@ async def run_all_message_tests(session: TestSession):
     await test_loader_only(session)
     await asyncio.sleep(1)
     await test_sequential_messages(session)
+    await asyncio.sleep(1)
+    await test_message_bottom_fade(session)
 
 
 if __name__ == "__main__":

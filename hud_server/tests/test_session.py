@@ -196,6 +196,27 @@ class TestSession:
             props=self._get_props().to_dict(),
         )
 
+    async def draw_message_with_props(self, title: str, message: str, custom_props: dict):
+        """Draw a message with custom properties (e.g., smaller max_height to trigger overflow)."""
+        if not self._client:
+            return
+        # Start with default props and merge custom props
+        base_props = self._get_props().to_dict()
+        base_props.update(custom_props)
+
+        color_value = self.config["accent_color"]
+        if hasattr(color_value, 'value'):
+            color_value = color_value.value
+
+        await self._client.show_message(
+            group_name=self.group_name,
+            element=WindowType.MESSAGE,
+            title=title,
+            content=message,
+            color=color_value,
+            props=base_props,
+        )
+
     async def draw_user_message(self, message: str):
         """Draw a user message."""
         color_value = self.config["user_color"]
