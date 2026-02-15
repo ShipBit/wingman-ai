@@ -1014,7 +1014,7 @@
             "is_active": true,
             "inactive_reason": null,
             "has_keybinding": true,
-            "has_command_phrases": false,
+            "has_command_phrases": true,
             "is_custom_configured": false,
             "activation_supported": true
         },
