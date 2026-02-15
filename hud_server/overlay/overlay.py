@@ -561,24 +561,23 @@ class HeadsUpOverlay:
             if not canvas:
                 continue
 
-            # For windows that are visible or fading in, use layout position
-            # For windows fading out (state 3), keep their current position (don't move during fade)
-            if fade_state in (1, 2):  # Fading in or fully visible
-                pos = positions.get(name)
-                if pos:
-                    x, y = pos
-                    w, h = canvas.size
+            # Get position from layout - windows should be repositioned even when fading out
+            # so that layout updates are immediate when other windows change size
+            pos = positions.get(name)
+            if pos:
+                x, y = pos
+                w, h = canvas.size
 
-                    # Check if position actually changed
-                    old_x = win.get('_last_x', -1)
-                    old_y = win.get('_last_y', -1)
+                # Check if position actually changed
+                old_x = win.get('_last_x', -1)
+                old_y = win.get('_last_y', -1)
 
-                    if x != old_x or y != old_y:
-                        # Position changed - move window and mark for reblit
-                        user32.MoveWindow(hwnd, x, y, w, h, True)  # True = repaint
-                        win['_last_x'] = x
-                        win['_last_y'] = y
-                        win['canvas_dirty'] = True  # Force reblit after move
+                if x != old_x or y != old_y:
+                    # Position changed - move window and mark for reblit
+                    user32.MoveWindow(hwnd, x, y, w, h, True)  # True = repaint
+                    win['_last_x'] = x
+                    win['_last_y'] = y
+                    win['canvas_dirty'] = True  # Force reblit after move
 
     def _update_message_window(self, name: str, win: Dict):
         """Update message window state (typewriter, fade, etc.)."""
