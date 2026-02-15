@@ -278,6 +278,13 @@ wingmen:
       UexDataRunnerManager: False # True | False - will activate the UEX data runner capabilities. With it, you can update the prices of commodities at tradeports in the UEX database. Requires a UEX account with the UEX API key and the UEX user secret.
       DeliveryMissionManager: False # True | False - will activated the delivery mission manager. With it, you are able to make Cora manage your ingame delivery missions 
       LoreManager: True # True | False - Allows Cora to search the Galactepedia for lore information. 
+      MacroManager:
+        enabled: True # Enables JSON based macro runtime (interval key steps, reminders, countdowns, beep ticker)
+        default_play_beep: True # default macro execution beep
+        min_interval_seconds: 1
+        max_active_macros: 20
+        data_directory: "macro-data" # relative to data-root-directory
+        auto_activate_on_create: True
       AdvancedGenericLogManager: False
       manager_command_phrases:
         ComponentManager:
@@ -310,6 +317,11 @@ wingmen:
             - Galactapedia aktivieren
           deactivate:
             - Galactapedia deaktivieren
+        MacroManager:
+          activate:
+            - Aktiviere Makro Manager
+          deactivate:
+            - Deaktiviere Makro Manager
         AdvancedGenericLogManager:
           activate:
             - Aktiviere Log Manager

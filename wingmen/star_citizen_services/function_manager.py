@@ -420,6 +420,10 @@ class StarCitizensAiFunctionsManager:
         self.manager_states[resolved_name] = True
         if first_initialization:
             manager_instance.after_init()
+        try:
+            manager_instance.on_manager_enabled(source=source)
+        except Exception as e:
+            printr.print_warn(f"{resolved_name} on_manager_enabled failed: {e}")
 
         start_information = ""
         start_information_error = None
@@ -464,6 +468,11 @@ class StarCitizensAiFunctionsManager:
                 "enabled": False,
                 "message": f"{resolved_name} disabled.",
             }
+
+        try:
+            manager_instance.on_manager_disabled(source=source)
+        except Exception as e:
+            printr.print_warn(f"{resolved_name} on_manager_disabled failed: {e}")
 
         context = self.manager_context.get(resolved_name)
         if context:
@@ -588,6 +597,14 @@ class FunctionManager(ABC):
         """  
             This method can be implemented to execute logic that needs to be run after all initialization steps.
         """
+        pass
+
+    def on_manager_enabled(self, source: str = "manual"):
+        """Optional lifecycle hook invoked whenever the manager is enabled."""
+        pass
+
+    def on_manager_disabled(self, source: str = "manual"):
+        """Optional lifecycle hook invoked whenever the manager is disabled."""
         pass
 
     def cora_start_information(self):
