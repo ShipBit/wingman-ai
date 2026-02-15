@@ -993,6 +993,58 @@
         },
         "ai_command_reference_name": "player_emotes_emote_cs_yes"
     },
+    "v_light_amplification_toggle": {
+        "category": "seat_general",
+        "actionname": "v_light_amplification_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": "ralt+l",
+        "keyboard-mapping-default": "ralt+l",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_light_amplification_toggle",
+        "description-ui": "@ui_v_light_amplification_toggle_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_rightAlt+@input_key_keyboard_l",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Right Alt+L",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ALT GR+L",
+        "ai_command_reference_name": "seat_general_v_light_amplification_toggle",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Amplification",
+                "Light amplification",
+                "Enable light amplification",
+                "Disable light amplification",
+                "Toggle light amplification",
+                "Night vision",
+                "Enable night vision",
+                "Disable night vision",
+                "Toggle night vision",
+                "Night vision mode"
+            ],
+            "de_DE": [
+                "Verstärkung",
+                "Lichtverstärkung",
+                "Lichtverstärkung aktivieren",
+                "Lichtverstärkung deaktivieren",
+                "Lichtverstärkung umschalten",
+                "Nachtsicht",
+                "Nachtsicht aktivieren",
+                "Nachtsicht deaktivieren",
+                "Nachtsicht umschalten",
+                "Nachtsicht Modus"
+            ]
+        }
+    },
     "v_toggle_mining_mode": {
         "category": "seat_general",
         "actionname": "v_toggle_mining_mode",
@@ -1916,6 +1968,48 @@
         },
         "ai_command_reference_name": "spaceship_mining_Activate_Mining_Module_Slot_3"
     },
+    "v_mining_use_permanent_modifier": {
+        "category": "spaceship_mining",
+        "actionname": "v_mining_use_permanent_modifier",
+        "activationMode": "press",
+        "keyboard-mapping": "lalt+4",
+        "keyboard-mapping-default": "lalt+4",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CIMiningConsumable1",
+        "description-ui": "@ui_CIMiningConsumableDesc",
+        "keyboard-mapping-ui": "@input_key_keyboard_leftAlt+4",
+        "action-label-en": "Activate Mining Module (Slot 1)",
+        "action-description-en": "Activate a Mining Module",
+        "keyboard-mapping-en": "Left Alt+4",
+        "action-label-de_DE": "Bergbaumodul aktivieren (Platz 1)",
+        "action-description-de_DE": "Ein Bergbaumodul aktivieren",
+        "keyboard-mapping-de_DE": "ALT+4",
+        "ai_command_reference_name": "spaceship_mining_Activate_Mining_Module_Slot_1",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Mine",
+                "Activate mining module",
+                "Enable mining module",
+                "Start mining module",
+                "Mining module slot one"
+            ],
+            "de_DE": [
+                "Bergbau",
+                "Bergbaumodul aktivieren",
+                "Bergbaumodul Platz 1 aktivieren",
+                "Bergbaumodul starten",
+                "Bergbau starten"
+            ]
+        }
+    },
     "v_toggle_mining_laser_fire": {
         "category": "spaceship_mining",
         "actionname": "v_toggle_mining_laser_fire",
@@ -2276,6 +2370,90 @@
         },
         "ai_command_reference_name": "spaceship_missiles_Launch_Missiles_Tap"
     },
+    "v_accel_range_decrement": {
+        "category": "spaceship_movement",
+        "actionname": "v_accel_range_decrement",
+        "activationMode": "press",
+        "keyboard-mapping": "ralt+mwheel_down",
+        "keyboard-mapping-default": "ralt+mwheel_down",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_accel_range_decrement",
+        "description-ui": "@ui_v_accel_range_decrement_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_rightAlt+@input_key_mouse_wheelDown",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Right Alt+Mouse Wheel Down",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ALT GR+Mausrad nach unten",
+        "ai_command_reference_name": "spaceship_movement_v_accel_range_decrement",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Reduce",
+                "Decrease acceleration range",
+                "Lower acceleration range",
+                "Contract acceleration range",
+                "Acceleration range down"
+            ],
+            "de_DE": [
+                "Reduzieren",
+                "Beschleunigungsbereich verringern",
+                "Beschleunigung verringern",
+                "Beschleunigungsbereich verkleinern",
+                "Beschleunigungsbereich runter"
+            ]
+        }
+    },
+    "v_accel_range_increment": {
+        "category": "spaceship_movement",
+        "actionname": "v_accel_range_increment",
+        "activationMode": "press",
+        "keyboard-mapping": "ralt+mwheel_up",
+        "keyboard-mapping-default": "ralt+mwheel_up",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_accel_range_increment",
+        "description-ui": "@ui_v_accel_range_increment_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_rightAlt+@input_key_mouse_wheelUp",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Right Alt+Mouse Wheel Up",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ALT GR+Mausrad nach oben",
+        "ai_command_reference_name": "spaceship_movement_v_accel_range_increment",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Acceleration",
+                "Increase acceleration range",
+                "Raise acceleration range",
+                "Expand acceleration range",
+                "Acceleration range up"
+            ],
+            "de_DE": [
+                "Beschleunigung",
+                "Beschleunigungsbereich erhöhen",
+                "Beschleunigungsbereich erweitern",
+                "Beschleunigung erhöhen",
+                "Beschleunigungsbereich hoch"
+            ]
+        }
+    },
     "v_atc_loading_area_request": {
         "category": "spaceship_movement",
         "actionname": "v_atc_loading_area_request",
@@ -2408,6 +2586,90 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_movement_Autoland"
+    },
+    "v_ifcs_speed_limiter_decrement": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_speed_limiter_decrement",
+        "activationMode": "press",
+        "keyboard-mapping": "lalt+mwheel_down",
+        "keyboard-mapping-default": "lalt+mwheel_down",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_speed_limiter_decrement",
+        "description-ui": "@ui_v_ifcs_speed_limiter_decrement_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_leftAlt+@input_key_mouse_wheelDown",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Left Alt+Mouse Wheel Down",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ALT+Mausrad nach unten",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_speed_limiter_decrement",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Decrease",
+                "Decrease speed limiter",
+                "Lower speed limiter",
+                "Speed limiter down",
+                "Reduce speed limiter"
+            ],
+            "de_DE": [
+                "Verringern",
+                "Geschwindigkeitsbegrenzer verringern",
+                "Begrenzer verringern",
+                "Begrenzer runter",
+                "Geschwindigkeitsbegrenzer senken"
+            ]
+        }
+    },
+    "v_ifcs_speed_limiter_increment": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_speed_limiter_increment",
+        "activationMode": "press",
+        "keyboard-mapping": "lalt+mwheel_up",
+        "keyboard-mapping-default": "lalt+mwheel_up",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_speed_limiter_increment",
+        "description-ui": "@ui_v_ifcs_speed_limiter_increment_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_leftAlt+@input_key_mouse_wheelUp",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Left Alt+Mouse Wheel Up",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ALT+Mausrad nach oben",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_speed_limiter_increment",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Limiter",
+                "Increase speed limiter",
+                "Raise speed limiter",
+                "Speed limiter up",
+                "Speed limiter increase"
+            ],
+            "de_DE": [
+                "Begrenzer",
+                "Geschwindigkeitsbegrenzer erhöhen",
+                "Begrenzer erhöhen",
+                "Begrenzer hoch",
+                "Geschwindigkeitsbegrenzer erhöhen jetzt"
+            ]
+        }
     },
     "v_ifcs_speed_limiter_reset_scm": {
         "category": "spaceship_movement",
@@ -2542,6 +2804,52 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_movement_Decoupled_Mode_Toggle_Hold"
+    },
+    "v_ifcs_vector_decoupling_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_vector_decoupling_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": "lalt+c",
+        "keyboard-mapping-default": "c",
+        "keyboard-mapping-custom": "lalt+c",
+        "label-ui": "@ui_v_ifcs_vector_decoupling_toggle",
+        "description-ui": "@ui_v_ifcs_vector_decoupling_toggle_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_c",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "C",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "C",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_vector_decoupling_toggle",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Decouple",
+                "Couple",
+                "Vector decoupling",
+                "Decouple vector",
+                "Toggle vector decoupling",
+                "Enable vector decoupling",
+                "Disable vector decoupling"
+            ],
+            "de_DE": [
+                "Entkoppeln",
+                "Koppeln",
+                "Vektorentkopplung",
+                "Vektor entkoppeln",
+                "Vektorentkopplung umschalten",
+                "Vektorentkopplung aktivieren",
+                "Vektorentkopplung deaktivieren"
+            ]
+        }
     },
     "v_master_mode_cycle_long": {
         "category": "spaceship_movement",
@@ -3030,6 +3338,50 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_movement_Cycle_Configuration"
+    },
+    "v_vtol_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_vtol_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": "k",
+        "keyboard-mapping-default": "k",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_vtol_toggle",
+        "description-ui": "@ui_v_ifcs_vtol_toggle_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_k",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "K",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "K",
+        "ai_command_reference_name": "spaceship_movement_v_vtol_toggle",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "VTOL",
+                "Toggle VTOL",
+                "Enable VTOL",
+                "Disable VTOL",
+                "Enter VTOL mode",
+                "Exit VTOL mode"
+            ],
+            "de_DE": [
+                "VTOL",
+                "VTOL umschalten",
+                "VTOL aktivieren",
+                "VTOL deaktivieren",
+                "VTOL Modus betreten",
+                "VTOL Modus verlassen"
+            ]
+        }
     },
     "v_engineering_assignment_engine_decrease": {
         "category": "spaceship_power",
@@ -5825,6 +6177,50 @@
         },
         "ai_command_reference_name": "spaceship_targeting_advanced_Cycle_Lock_Sub_Target_Reset_to_Main_Target"
     },
+    "v_weapon_aim_type_cycle": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_aim_type_cycle",
+        "activationMode": "tap",
+        "keyboard-mapping": "ralt+g",
+        "keyboard-mapping-default": "ralt+g",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_aim_type_cycle",
+        "description-ui": "@ui_v_weapon_aim_type_cycle_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_rightAlt+@input_key_keyboard_g",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Right Alt+G",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ALT GR+G",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_aim_type_cycle",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Aim type",
+                "Weapon aim",
+                "Cycle weapon aim",
+                "Next weapon aim",
+                "Gimbal aim",
+                "Fixed aim"
+            ],
+            "de_DE": [
+                "Zieltyp",
+                "Waffen Zieltyp",
+                "Zieltyp wechseln",
+                "Nächster Zieltyp",
+                "Gimbal Ziel",
+                "Fixierte Zielung"
+            ]
+        }
+    },
     "v_weapon_change_firemode": {
         "category": "spaceship_weapons",
         "actionname": "v_weapon_change_firemode",
@@ -5914,6 +6310,48 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_weapons_Cycle_Gimbal_Assist_Standard_Gimbal_Gimbal_Lock_modes"
+    },
+    "v_weapon_gimbals_state_toggle": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_gimbals_state_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": "g",
+        "keyboard-mapping-default": "g",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_gimbals_state_toggle",
+        "description-ui": "@ui_v_weapon_gimbals_state_toggle_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_g",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "G",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "G",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_gimbals_state_toggle",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "command-phrases": {
+            "en": [
+                "Gimbals",
+                "Toggle gimbals",
+                "Enable gimbals",
+                "Disable gimbals",
+                "Weapon gimbals"
+            ],
+            "de_DE": [
+                "Gimbals",
+                "Gimbals umschalten",
+                "Gimbals ein",
+                "Gimbals aus",
+                "Waffen Gimbals"
+            ]
+        }
     },
     "v_weapon_manual_gimbal_cycle_source": {
         "category": "spaceship_weapons",
@@ -7871,6 +8309,32 @@
         },
         "ai_command_reference_name": "character_customizer_character_customizer_pitch_up"
     },
+    "character_customizer_select": {
+        "category": "character_customizer",
+        "actionname": "character_customizer_select",
+        "activationMode": null,
+        "keyboard-mapping": "f",
+        "keyboard-mapping-default": "f",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "@input_key_keyboard_f",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "F",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "F",
+        "ai_command_reference_name": "character_customizer_character_customizer_select",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "character_customizer_step_down": {
         "category": "character_customizer",
         "actionname": "character_customizer_step_down",
@@ -9021,6 +9485,32 @@
         },
         "ai_command_reference_name": "default_ui_back"
     },
+    "ui_click": {
+        "category": "default",
+        "actionname": "ui_click",
+        "activationMode": null,
+        "keyboard-mapping": "enter",
+        "keyboard-mapping-default": "enter",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "@input_key_keyboard_enter",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Return",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ENTER",
+        "ai_command_reference_name": "default_ui_click",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "ui_copy": {
         "category": "default",
         "actionname": "ui_copy",
@@ -9107,6 +9597,58 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "default_ui_down"
+    },
+    "ui_focus_decrement": {
+        "category": "default",
+        "actionname": "ui_focus_decrement",
+        "activationMode": null,
+        "keyboard-mapping": "lshift+tab",
+        "keyboard-mapping-default": "lshift+tab",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "@input_key_keyboard_leftShift+@input_key_keyboard_tab",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Left Shift+Tab",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "SHIFT LINKS+TAB",
+        "ai_command_reference_name": "default_ui_focus_decrement",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "ui_focus_increment": {
+        "category": "default",
+        "actionname": "ui_focus_increment",
+        "activationMode": null,
+        "keyboard-mapping": "tab",
+        "keyboard-mapping-default": "tab",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "@input_key_keyboard_tab",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Tab",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "TAB",
+        "ai_command_reference_name": "default_ui_focus_increment",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "ui_hide_hint": {
         "category": "default",
@@ -9195,6 +9737,58 @@
         },
         "ai_command_reference_name": "default_ui_paste"
     },
+    "ui_primaryTab_decrement": {
+        "category": "default",
+        "actionname": "ui_primaryTab_decrement",
+        "activationMode": null,
+        "keyboard-mapping": "q",
+        "keyboard-mapping-default": "q",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "@input_key_keyboard_q",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Q",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Q",
+        "ai_command_reference_name": "default_ui_primaryTab_decrement",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "ui_primaryTab_increment": {
+        "category": "default",
+        "actionname": "ui_primaryTab_increment",
+        "activationMode": null,
+        "keyboard-mapping": "e",
+        "keyboard-mapping-default": "e",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "@input_key_keyboard_e",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "E",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "O",
+        "ai_command_reference_name": "default_ui_primaryTab_increment",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "ui_radialmenu_pageleft": {
         "category": "default",
         "actionname": "ui_radialmenu_pageleft",
@@ -9281,6 +9875,110 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "default_ui_right"
+    },
+    "ui_secondary_select": {
+        "category": "default",
+        "actionname": "ui_secondary_select",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "default_ui_secondary_select",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "ui_secondaryTab_decrement": {
+        "category": "default",
+        "actionname": "ui_secondaryTab_decrement",
+        "activationMode": null,
+        "keyboard-mapping": "",
+        "keyboard-mapping-default": "",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "default_ui_secondaryTab_decrement",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "ui_secondaryTab_increment": {
+        "category": "default",
+        "actionname": "ui_secondaryTab_increment",
+        "activationMode": null,
+        "keyboard-mapping": "",
+        "keyboard-mapping-default": "",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "default_ui_secondaryTab_increment",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "ui_select": {
+        "category": "default",
+        "actionname": "ui_select",
+        "activationMode": null,
+        "keyboard-mapping": "enter",
+        "keyboard-mapping-default": "enter",
+        "keyboard-mapping-custom": null,
+        "label-ui": null,
+        "description-ui": null,
+        "keyboard-mapping-ui": "@input_key_keyboard_enter",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Return",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ENTER",
+        "ai_command_reference_name": "default_ui_select",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "ui_skip_video": {
         "category": "default",
@@ -10370,6 +11068,58 @@
             "activation_supported": false
         },
         "ai_command_reference_name": "incapacitated_Regen_while_Incapacitated"
+    },
+    "v_lights_off": {
+        "category": "lights_controller",
+        "actionname": "v_lights_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CIToggleLights_Enable",
+        "description-ui": "@ui_CIToggleLightsDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "Headlights\\n(Enable)",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "Scheinwerfer\\n(Anschalten)",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "lights_controller_Headlights_n_Enable",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_lights_on": {
+        "category": "lights_controller",
+        "actionname": "v_lights_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CIToggleLights_Enable",
+        "description-ui": "@ui_CIToggleLightsDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "Headlights\\n(Enable)",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "Scheinwerfer\\n(Anschalten)",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "lights_controller_Headlights_n_Enable",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_toggle_cabin_lights": {
         "category": "lights_controller",
@@ -11691,6 +12441,58 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "player_jump"
+    },
+    "jump_hold": {
+        "category": "player",
+        "actionname": "jump_hold",
+        "activationMode": null,
+        "keyboard-mapping": "space",
+        "keyboard-mapping-default": "space",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CIFPSMoveJumpHold",
+        "description-ui": "@ui_CIFPSMoveJumpHoldDesc",
+        "keyboard-mapping-ui": "@input_key_keyboard_space",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Spacebar",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "LEER",
+        "ai_command_reference_name": "player_jump_hold",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "jump_release": {
+        "category": "player",
+        "actionname": "jump_release",
+        "activationMode": null,
+        "keyboard-mapping": "space",
+        "keyboard-mapping-default": "space",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CIFPSMoveJumpRelease",
+        "description-ui": "@ui_CIFPSMoveJumpHoldDesc",
+        "keyboard-mapping-ui": "@input_key_keyboard_space",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Spacebar",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "LEER",
+        "ai_command_reference_name": "player_jump_release",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "leanleft": {
         "category": "player",
@@ -15723,6 +16525,84 @@
         },
         "ai_command_reference_name": "player_input_optical_tracking_Recenter_Head_Tracking_Device_except_TrackIR"
     },
+    "hmd_lens_display_toggle": {
+        "category": "player_input_optical_tracking",
+        "actionname": "hmd_lens_display_toggle",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_hmd_lensDisplay_toggle",
+        "description-ui": "@ui_hmd_lensDisplay_toggle_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "player_input_optical_tracking_hmd_lens_display_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "hmd_recenter": {
+        "category": "player_input_optical_tracking",
+        "actionname": "hmd_recenter",
+        "activationMode": "press",
+        "keyboard-mapping": "np_5",
+        "keyboard-mapping-default": "np_5",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_hmd_recenter",
+        "description-ui": "@ui_hmd_recenter_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_numpad5",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Numpad 5",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Ziffernblock 5",
+        "ai_command_reference_name": "player_input_optical_tracking_hmd_recenter",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "hmd_theater_mode_toggle": {
+        "category": "player_input_optical_tracking",
+        "actionname": "hmd_theater_mode_toggle",
+        "activationMode": "press",
+        "keyboard-mapping": "lalt+np_5",
+        "keyboard-mapping-default": "lalt+np_5",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_hmd_theater_mode_toggle",
+        "description-ui": "@ui_hmd_theater_mode_toggle_desc",
+        "keyboard-mapping-ui": "@input_key_keyboard_leftAlt+@input_key_keyboard_numpad5",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Left Alt+Numpad 5",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "ALT+Ziffernblock 5",
+        "ai_command_reference_name": "player_input_optical_tracking_hmd_theater_mode_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "remote_action1": {
         "category": "RemoteRigidEntityController",
         "actionname": "remote_action1",
@@ -16302,6 +17182,58 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "seat_general_v_enter_remote_turret_3"
+    },
+    "v_light_amplification_off": {
+        "category": "seat_general",
+        "actionname": "v_light_amplification_off",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_light_amplification_off",
+        "description-ui": "@ui_v_light_amplification_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "seat_general_v_light_amplification_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_light_amplification_on": {
+        "category": "seat_general",
+        "actionname": "v_light_amplification_on",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_light_amplification_on",
+        "description-ui": "@ui_v_light_amplification_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "seat_general_v_light_amplification_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_operator_mode_cycle_back": {
         "category": "seat_general",
@@ -18713,6 +19645,240 @@
         },
         "ai_command_reference_name": "spaceship_movement_Landing_System_Deploy"
     },
+    "v_flight_advanced_hud_off": {
+        "category": "spaceship_movement",
+        "actionname": "v_flight_advanced_hud_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_flight_advanced_hud_off",
+        "description-ui": "@ui_v_flight_advanced_hud_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_flight_advanced_hud_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_flight_advanced_hud_on": {
+        "category": "spaceship_movement",
+        "actionname": "v_flight_advanced_hud_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_flight_advanced_hud_on",
+        "description-ui": "@ui_v_flight_advanced_hud_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_flight_advanced_hud_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_flight_advanced_hud_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_flight_advanced_hud_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_flight_advanced_hud_toggle",
+        "description-ui": "@ui_v_flight_advanced_hud_toggle_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_flight_advanced_hud_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_command_off": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_command_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_command_off",
+        "description-ui": "@ui_v_ifcs_command_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_command_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_command_on": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_command_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_command_on",
+        "description-ui": "@ui_v_ifcs_command_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_command_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_command_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_command_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_command_toggle",
+        "description-ui": "@ui_v_ifcs_command_toggle_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_command_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_core_off": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_core_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_core_off",
+        "description-ui": "@ui_v_ifcs_core_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_core_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_core_on": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_core_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_core_on",
+        "description-ui": "@ui_v_ifcs_core_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_core_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_core_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_core_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_core_toggle",
+        "description-ui": "@ui_v_ifcs_core_toggle_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_core_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "v_ifcs_esp_hold": {
         "category": "spaceship_movement",
         "actionname": "v_ifcs_esp_hold",
@@ -18799,6 +19965,32 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_movement_Gravity_Compensation_Enable"
+    },
+    "v_ifcs_gravity_compensation_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_gravity_compensation_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_toggle_gravity_compensation",
+        "description-ui": "@ui_v_ifcs_toggle_gravity_compensation_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "Gravity Compensation - Toggle",
+        "action-description-en": "Gravity Compensation - Toggle",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_Gravity_Compensation_Toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_ifcs_gsafe_off": {
         "category": "spaceship_movement",
@@ -18974,6 +20166,214 @@
         },
         "ai_command_reference_name": "spaceship_movement_v_ifcs_reset_gmeter_max"
     },
+    "v_ifcs_speed_limiter_down": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_speed_limiter_down",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_speed_limiter_down",
+        "description-ui": "@ui_v_ifcs_speed_limiter_down_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_speed_limiter_down",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_speed_limiter_off": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_speed_limiter_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_speed_limiter_off",
+        "description-ui": "@ui_v_ifcs_speed_limiter_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_speed_limiter_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_speed_limiter_on": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_speed_limiter_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_speed_limiter_on",
+        "description-ui": "@ui_v_ifcs_speed_limiter_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_speed_limiter_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_speed_limiter_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_speed_limiter_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_speed_limiter_toggle",
+        "description-ui": "@ui_v_ifcs_speed_limiter_toggle_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_speed_limiter_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_speed_limiter_up": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_speed_limiter_up",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_speed_limiter_up",
+        "description-ui": "@ui_v_ifcs_speed_limiter_up_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_speed_limiter_up",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_stability_off": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_stability_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_stability_off",
+        "description-ui": "@ui_v_ifcs_stability_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_stability_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_stability_on": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_stability_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_stability_on",
+        "description-ui": "@ui_v_ifcs_stability_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_stability_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_stability_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_stability_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_stability_toggle",
+        "description-ui": "@ui_v_ifcs_stability_toggle_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_stability_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "v_ifcs_throttle_set_normal": {
         "category": "spaceship_movement",
         "actionname": "v_ifcs_throttle_set_normal",
@@ -19147,6 +20547,136 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_movement_Speed_Limiter_On_Off_Hold_Toggle"
+    },
+    "v_ifcs_vector_decoupling_off": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_vector_decoupling_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_vector_decoupling_off",
+        "description-ui": "@ui_v_ifcs_vector_decoupling_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_vector_decoupling_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_vector_decoupling_on": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_vector_decoupling_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_vector_decoupling_on",
+        "description-ui": "@ui_v_ifcs_vector_decoupling_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_vector_decoupling_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_wind_compensation_off": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_wind_compensation_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_wind_compensation_off",
+        "description-ui": "@ui_v_ifcs_wind_compensation_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_wind_compensation_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_wind_compensation_on": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_wind_compensation_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_wind_compensation_on",
+        "description-ui": "@ui_v_ifcs_wind_compensation_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_wind_compensation_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_ifcs_wind_compensation_toggle": {
+        "category": "spaceship_movement",
+        "actionname": "v_ifcs_wind_compensation_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_wind_compensation_toggle",
+        "description-ui": "@ui_v_ifcs_wind_compensation_toggle_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_ifcs_wind_compensation_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_lock_rotation": {
         "category": "spaceship_movement",
@@ -20129,6 +21659,58 @@
         },
         "ai_command_reference_name": "spaceship_movement_Retract_Configuration"
     },
+    "v_vtol_off": {
+        "category": "spaceship_movement",
+        "actionname": "v_vtol_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_vtol_off",
+        "description-ui": "@ui_v_ifcs_vtol_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_vtol_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_vtol_on": {
+        "category": "spaceship_movement",
+        "actionname": "v_vtol_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_ifcs_vtol_on",
+        "description-ui": "@ui_v_ifcs_vtol_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_movement_v_vtol_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "v_yaw_left": {
         "category": "spaceship_movement",
         "actionname": "v_yaw_left",
@@ -20752,6 +22334,58 @@
         },
         "ai_command_reference_name": "spaceship_salvage_Increase_Beam_Spacing"
     },
+    "v_salvage_nudge_down__left": {
+        "category": "spaceship_salvage",
+        "actionname": "v_salvage_nudge_down__left",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CISalvageNudgeDown_Left",
+        "description-ui": "@ui_CISalvageNudgeDown_LeftDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_down_left",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_salvage_nudge_down__right": {
+        "category": "spaceship_salvage",
+        "actionname": "v_salvage_nudge_down__right",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CISalvageNudgeDown_Right",
+        "description-ui": "@ui_CISalvageNudgeDown_RightDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_down_right",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "v_salvage_nudge_down_left": {
         "category": "spaceship_salvage",
         "actionname": "v_salvage_nudge_down__left",
@@ -20809,6 +22443,58 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_down_right"
+    },
+    "v_salvage_nudge_left__left": {
+        "category": "spaceship_salvage",
+        "actionname": "v_salvage_nudge_left__left",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CISalvageNudgeLeft_Left",
+        "description-ui": "@ui_CISalvageNudgeLeft_LeftDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_left_left",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_salvage_nudge_left__right": {
+        "category": "spaceship_salvage",
+        "actionname": "v_salvage_nudge_left__right",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CISalvageNudgeLeft_Right",
+        "description-ui": "@ui_CISalvageNudgeLeft_RightDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_left_right",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_salvage_nudge_left_left": {
         "category": "spaceship_salvage",
@@ -20868,6 +22554,58 @@
         },
         "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_left_right"
     },
+    "v_salvage_nudge_right__left": {
+        "category": "spaceship_salvage",
+        "actionname": "v_salvage_nudge_right__left",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CISalvageNudgeRight_Left",
+        "description-ui": "@ui_CISalvageNudgeRight_LeftDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_right_left",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_salvage_nudge_right__right": {
+        "category": "spaceship_salvage",
+        "actionname": "v_salvage_nudge_right__right",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CISalvageNudgeRight_Right",
+        "description-ui": "@ui_CISalvageNudgeRight_RightDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_right_right",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "v_salvage_nudge_right_left": {
         "category": "spaceship_salvage",
         "actionname": "v_salvage_nudge_right__left",
@@ -20925,6 +22663,58 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_right_right"
+    },
+    "v_salvage_nudge_up__left": {
+        "category": "spaceship_salvage",
+        "actionname": "v_salvage_nudge_up__left",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CISalvageNudgeUp_Left",
+        "description-ui": "@ui_CISalvageNudgeUp_LeftDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_up_left",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_salvage_nudge_up__right": {
+        "category": "spaceship_salvage",
+        "actionname": "v_salvage_nudge_up__right",
+        "activationMode": null,
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CISalvageNudgeUp_Right",
+        "description-ui": "@ui_CISalvageNudgeUp_RightDesc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_salvage_v_salvage_nudge_up_right",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_salvage_nudge_up_left": {
         "category": "spaceship_salvage",
@@ -22537,6 +24327,84 @@
         },
         "ai_command_reference_name": "spaceship_view_Zoom_out_3rd_person_view"
     },
+    "v_weapon_aim_type_set_auto": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_aim_type_set_auto",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_aim_type_set_auto",
+        "description-ui": "@ui_v_weapon_aim_type_set_auto_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_aim_type_set_auto",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_weapon_aim_type_set_painting": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_aim_type_set_painting",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_aim_type_set_painting",
+        "description-ui": "@ui_v_weapon_aim_type_set_painting_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_aim_type_set_painting",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_weapon_aim_type_set_pip_aiming": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_aim_type_set_pip_aiming",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_aim_type_set_pip_aiming",
+        "description-ui": "@ui_v_weapon_aim_type_set_pip_aiming_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_aim_type_set_pip_aiming",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
     "v_weapon_convergence_distance_rel_decrease": {
         "category": "spaceship_weapons",
         "actionname": "v_weapon_convergence_distance_rel_decrease",
@@ -22826,6 +24694,84 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_weapons_Set_Manual_Gimbal_Mode_Long_Press"
+    },
+    "v_weapon_gimbals_state_set_locked": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_gimbals_state_set_locked",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_gimbals_state_set_locked",
+        "description-ui": "@ui_v_weapon_gimbals_state_set_locked_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_gimbals_state_set_locked",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_weapon_gimbals_state_set_unlocked": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_gimbals_state_set_unlocked",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_gimbals_state_set_unlocked",
+        "description-ui": "@ui_v_weapon_gimbals_state_set_unlocked_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_gimbals_state_set_unlocked",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_weapon_gimbals_unlocked_cycle_source": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_gimbals_unlocked_cycle_source",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_gimbals_unlocked_cycle_source",
+        "description-ui": "@ui_v_weapon_gimbals_unlocked_cycle_source_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_gimbals_unlocked_cycle_source",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_weapon_pip_combination_type_set_combined_weapon_group": {
         "category": "spaceship_weapons",
@@ -23580,6 +25526,84 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_weapons_v_weapon_preset_qid_pulse"
+    },
+    "v_weapon_staggered_fire_off": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_staggered_fire_off",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_staggered_fire_off",
+        "description-ui": "@ui_v_weapon_staggered_fire_off_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_staggered_fire_off",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_weapon_staggered_fire_on": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_staggered_fire_on",
+        "activationMode": "press",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_staggered_fire_on",
+        "description-ui": "@ui_v_weapon_staggered_fire_on_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_staggered_fire_on",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
+    },
+    "v_weapon_staggered_fire_toggle": {
+        "category": "spaceship_weapons",
+        "actionname": "v_weapon_staggered_fire_toggle",
+        "activationMode": "tap",
+        "keyboard-mapping": " ",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_v_weapon_staggered_fire_toggle",
+        "description-ui": "@ui_v_weapon_staggered_fire_toggle_desc",
+        "keyboard-mapping-ui": " ",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "spaceship_weapons_v_weapon_staggered_fire_toggle",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_weapon_suppress_aim_assists_hold": {
         "category": "spaceship_weapons",
@@ -25740,6 +27764,32 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "vehicle_mfd_v_mfd_movement_up_short"
+    },
+    "v_mfd_quick_action_repair_all": {
+        "category": "vehicle_mfd",
+        "actionname": "v_mfd_quick_action_repair_all",
+        "activationMode": "tap",
+        "keyboard-mapping": "",
+        "keyboard-mapping-default": "",
+        "keyboard-mapping-custom": null,
+        "label-ui": "@ui_CIMFD_Quick_Action_Repair_All",
+        "description-ui": "ui_CIMFD_Quick_Action_Repair_All_Desc",
+        "keyboard-mapping-ui": "",
+        "action-label-en": "",
+        "action-description-en": "",
+        "keyboard-mapping-en": "",
+        "action-label-de_DE": "",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "",
+        "ai_command_reference_name": "vehicle_mfd_v_mfd_quick_action_repair_all",
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "no_keybinding",
+            "has_keybinding": false,
+            "has_command_phrases": false,
+            "is_custom_configured": false,
+            "activation_supported": true
+        }
     },
     "v_mfd_select_view_comms_long": {
         "category": "vehicle_mfd",

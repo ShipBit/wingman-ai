@@ -192,6 +192,7 @@ class SCKeybindings:
         if self.json_path.exists() and self.config.get("update_keybindings", True):
             print_debug("Update mode: Loading existing keybindings")
             actions = self._load_sc_all_keybindings()
+            actions = self._merge_missing_default_actions(actions)
         else:
             print_debug("Initial build: Parsing SC default keybindings")
             actions = self._build_sc_keybinding_default_actions()
@@ -248,6 +249,32 @@ class SCKeybindings:
         """Ensure keybindings are loaded from file."""
         if self.keybindings is None:
             self.keybindings = self._load_sc_all_keybindings()
+
+    def _merge_missing_default_actions(self, actions: Dict) -> Dict:
+        """
+        Merge newly added default actions into existing keybindings.
+
+        Existing entries are preserved exactly (including user-defined command-phrases).
+        Only action names that are missing in the current JSON are added.
+        """
+        default_actions = self._build_sc_keybinding_default_actions()
+        missing_action_names = [
+            action_name for action_name in default_actions
+            if action_name not in actions
+        ]
+
+        if not missing_action_names:
+            print_debug("Update mode: No new default actions to add")
+            return actions
+
+        for action_name in missing_action_names:
+            actions[action_name] = copy.deepcopy(default_actions[action_name])
+
+        print_debug(
+            f"Update mode: Added {len(missing_action_names)} new actions from default keybindings"
+        )
+
+        return actions
 
     def _load_sc_all_keybindings(self) -> Dict:
         """Load the unified keybindings from JSON file."""
