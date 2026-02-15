@@ -723,276 +723,6 @@
         },
         "ai_command_reference_name": "player_choice_Personal_Commodity_Inventory_Toggle"
     },
-    "emote_cs_forward": {
-        "category": "player_emotes",
-        "actionname": "emote_cs_forward",
-        "activationMode": "press",
-        "keyboard-mapping": "np_5",
-        "action-label-en": "Forward",
-        "action-description-en": "",
-        "keyboard-mapping-en": "Numpad 5",
-        "keyboard-mapping-ui": "@input_key_keyboard_numpad5",
-        "label-ui": "@ui_CIEmoteForward",
-        "description-ui": "@ui_CIEmoteForwardDesc",
-        "action-label-de_DE": "Vorwärts",
-        "action-description-de_DE": "",
-        "keyboard-mapping-de_DE": "Ziffernblock 5",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad5",
-        "keyboard-mapping-default": "np_5",
-        "keyboard-mapping-custom": null,
-        "command-phrases": {
-            "en": [
-                "Forward",
-                "Move forward",
-                "Go forward",
-                "Move forward now",
-                "Advance now"
-            ],
-            "de_DE": [
-                "Vorwärts",
-                "Vorwärts gehen",
-                "Geh vorwärts",
-                "Jetzt vorwärts",
-                "Vorrücken jetzt"
-            ]
-        },
-        "ai_status": {
-            "is_active": true,
-            "inactive_reason": null,
-            "has_keybinding": true,
-            "has_command_phrases": true,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "player_emotes_Forward"
-    },
-    "emote_cs_left": {
-        "category": "player_emotes",
-        "actionname": "emote_cs_left",
-        "activationMode": "press",
-        "keyboard-mapping": "np_1",
-        "action-label-en": "Left",
-        "action-description-en": "",
-        "keyboard-mapping-en": "Numpad 1",
-        "keyboard-mapping-ui": "@input_key_keyboard_numpad1",
-        "label-ui": "@ui_CIEmoteLeft",
-        "description-ui": "@ui_CIEmoteLeftDesc",
-        "action-label-de_DE": "Links",
-        "action-description-de_DE": "",
-        "keyboard-mapping-de_DE": "Ziffernblock 1",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad1",
-        "keyboard-mapping-default": "np_1",
-        "keyboard-mapping-custom": null,
-        "command-phrases": {
-            "en": [
-                "Left",
-                "Turn left",
-                "Go left",
-                "Move left",
-                "Left now"
-            ],
-            "de_DE": [
-                "Links",
-                "Nach links",
-                "Dreh links",
-                "Geh links",
-                "Jetzt links"
-            ]
-        },
-        "ai_status": {
-            "is_active": true,
-            "inactive_reason": null,
-            "has_keybinding": true,
-            "has_command_phrases": true,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "player_emotes_emote_cs_left"
-    },
-    "emote_cs_no": {
-        "category": "player_emotes",
-        "actionname": "emote_cs_no",
-        "activationMode": "press",
-        "keyboard-mapping": "np_6",
-        "action-label-en": "No",
-        "action-description-en": "",
-        "keyboard-mapping-en": "Numpad 6",
-        "keyboard-mapping-ui": "@input_key_keyboard_numpad6",
-        "label-ui": "@ui_CIEmoteNo",
-        "description-ui": "@ui_CIEmoteNoDesc",
-        "action-label-de_DE": "Nein",
-        "action-description-de_DE": "",
-        "keyboard-mapping-de_DE": "Ziffernblock 6",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad6",
-        "keyboard-mapping-default": "np_6",
-        "keyboard-mapping-custom": null,
-        "command-phrases": {
-            "en": [
-                "No",
-                "Negative",
-                "Say no",
-                "Decline",
-                "No now"
-            ],
-            "de_DE": [
-                "Nein",
-                "Negativ",
-                "Sag nein",
-                "Ablehnen",
-                "Nein jetzt"
-            ]
-        },
-        "ai_status": {
-            "is_active": true,
-            "inactive_reason": null,
-            "has_keybinding": true,
-            "has_command_phrases": true,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "player_emotes_emote_cs_no"
-    },
-    "emote_cs_right": {
-        "category": "player_emotes",
-        "actionname": "emote_cs_right",
-        "activationMode": "press",
-        "keyboard-mapping": "np_3",
-        "action-label-en": "Right",
-        "action-description-en": "",
-        "keyboard-mapping-en": "Numpad 3",
-        "keyboard-mapping-ui": "@input_key_keyboard_numpad3",
-        "label-ui": "@ui_CIEmoteRight",
-        "description-ui": "@ui_CIEmoteRightDesc",
-        "action-label-de_DE": "Rechts",
-        "action-description-de_DE": "",
-        "keyboard-mapping-de_DE": "Ziffernblock 3",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad3",
-        "keyboard-mapping-default": "np_3",
-        "keyboard-mapping-custom": null,
-        "command-phrases": {
-            "en": [
-                "Right",
-                "Turn right",
-                "Go right",
-                "Move right",
-                "Right now"
-            ],
-            "de_DE": [
-                "Rechts",
-                "Nach rechts",
-                "Dreh rechts",
-                "Geh rechts",
-                "Jetzt rechts"
-            ]
-        },
-        "ai_status": {
-            "is_active": true,
-            "inactive_reason": null,
-            "has_keybinding": true,
-            "has_command_phrases": true,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "player_emotes_emote_cs_right"
-    },
-    "emote_cs_stop": {
-        "category": "player_emotes",
-        "actionname": "emote_cs_stop",
-        "activationMode": "press",
-        "keyboard-mapping": "np_2",
-        "action-label-en": "Stop",
-        "action-description-en": "",
-        "keyboard-mapping-en": "Numpad 2",
-        "keyboard-mapping-ui": "@input_key_keyboard_numpad2",
-        "label-ui": "@ui_CIEmoteStop",
-        "description-ui": "@ui_CIEmoteStopDesc",
-        "action-label-de_DE": "Aufhören",
-        "action-description-de_DE": "",
-        "keyboard-mapping-de_DE": "Ziffernblock 2",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad2",
-        "keyboard-mapping-default": "np_2",
-        "keyboard-mapping-custom": null,
-        "command-phrases": {
-            "en": [
-                "Stop",
-                "Stop now",
-                "Halt",
-                "Halt now",
-                "Stop moving now"
-            ],
-            "de_DE": [
-                "Stopp",
-                "Stopp jetzt",
-                "Halt",
-                "Halt jetzt",
-                "Bewegung jetzt stoppen"
-            ]
-        },
-        "ai_status": {
-            "is_active": true,
-            "inactive_reason": null,
-            "has_keybinding": true,
-            "has_command_phrases": true,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "player_emotes_emote_cs_stop"
-    },
-    "emote_cs_yes": {
-        "category": "player_emotes",
-        "actionname": "emote_cs_yes",
-        "activationMode": "press",
-        "keyboard-mapping": "np_4",
-        "action-label-en": "Yes",
-        "action-description-en": "",
-        "keyboard-mapping-en": "Numpad 4",
-        "keyboard-mapping-ui": "@input_key_keyboard_numpad4",
-        "label-ui": "@ui_CIEmoteYes",
-        "description-ui": "@ui_CIEmoteYesDesc",
-        "action-label-de_DE": "Ja",
-        "action-description-de_DE": "",
-        "keyboard-mapping-de_DE": "Ziffernblock 4",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad4",
-        "keyboard-mapping-default": "np_4",
-        "keyboard-mapping-custom": null,
-        "command-phrases": {
-            "en": [
-                "Yes",
-                "Affirmative",
-                "Say yes",
-                "Confirm yes",
-                "Say yes now"
-            ],
-            "de_DE": [
-                "Ja",
-                "Bestätigen",
-                "Sag ja",
-                "Ja bestätigen",
-                "Ja jetzt"
-            ]
-        },
-        "ai_status": {
-            "is_active": true,
-            "inactive_reason": null,
-            "has_keybinding": true,
-            "has_command_phrases": true,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "player_emotes_emote_cs_yes"
-    },
     "v_light_amplification_toggle": {
         "category": "seat_general",
         "actionname": "v_light_amplification_toggle",
@@ -15299,7 +15029,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15328,7 +15058,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15357,7 +15087,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15386,7 +15116,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15415,7 +15145,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15444,7 +15174,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15473,7 +15203,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15502,7 +15232,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15531,7 +15261,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15560,7 +15290,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15589,7 +15319,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15618,7 +15348,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15647,13 +15377,283 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
             "activation_supported": true
         },
         "ai_command_reference_name": "player_emotes_emote_cry"
+    },
+    "emote_cs_forward": {
+        "category": "player_emotes",
+        "actionname": "emote_cs_forward",
+        "activationMode": "press",
+        "keyboard-mapping": "np_5",
+        "action-label-en": "Forward",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Numpad 5",
+        "keyboard-mapping-ui": "@input_key_keyboard_numpad5",
+        "label-ui": "@ui_CIEmoteForward",
+        "description-ui": "@ui_CIEmoteForwardDesc",
+        "action-label-de_DE": "Vorwärts",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Ziffernblock 5",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad5",
+        "keyboard-mapping-default": "np_5",
+        "keyboard-mapping-custom": null,
+        "command-phrases": {
+            "en": [
+                "Forward",
+                "Move forward",
+                "Go forward",
+                "Move forward now",
+                "Advance now"
+            ],
+            "de_DE": [
+                "Vorwärts",
+                "Vorwärts gehen",
+                "Geh vorwärts",
+                "Jetzt vorwärts",
+                "Vorrücken jetzt"
+            ]
+        },
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "player_emotes_Forward"
+    },
+    "emote_cs_left": {
+        "category": "player_emotes",
+        "actionname": "emote_cs_left",
+        "activationMode": "press",
+        "keyboard-mapping": "np_1",
+        "action-label-en": "Left",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Numpad 1",
+        "keyboard-mapping-ui": "@input_key_keyboard_numpad1",
+        "label-ui": "@ui_CIEmoteLeft",
+        "description-ui": "@ui_CIEmoteLeftDesc",
+        "action-label-de_DE": "Links",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Ziffernblock 1",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad1",
+        "keyboard-mapping-default": "np_1",
+        "keyboard-mapping-custom": null,
+        "command-phrases": {
+            "en": [
+                "Left",
+                "Turn left",
+                "Go left",
+                "Move left",
+                "Left now"
+            ],
+            "de_DE": [
+                "Links",
+                "Nach links",
+                "Dreh links",
+                "Geh links",
+                "Jetzt links"
+            ]
+        },
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "player_emotes_emote_cs_left"
+    },
+    "emote_cs_no": {
+        "category": "player_emotes",
+        "actionname": "emote_cs_no",
+        "activationMode": "press",
+        "keyboard-mapping": "np_6",
+        "action-label-en": "No",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Numpad 6",
+        "keyboard-mapping-ui": "@input_key_keyboard_numpad6",
+        "label-ui": "@ui_CIEmoteNo",
+        "description-ui": "@ui_CIEmoteNoDesc",
+        "action-label-de_DE": "Nein",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Ziffernblock 6",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad6",
+        "keyboard-mapping-default": "np_6",
+        "keyboard-mapping-custom": null,
+        "command-phrases": {
+            "en": [
+                "No",
+                "Negative",
+                "Say no",
+                "Decline",
+                "No now"
+            ],
+            "de_DE": [
+                "Nein",
+                "Negativ",
+                "Sag nein",
+                "Ablehnen",
+                "Nein jetzt"
+            ]
+        },
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "player_emotes_emote_cs_no"
+    },
+    "emote_cs_right": {
+        "category": "player_emotes",
+        "actionname": "emote_cs_right",
+        "activationMode": "press",
+        "keyboard-mapping": "np_3",
+        "action-label-en": "Right",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Numpad 3",
+        "keyboard-mapping-ui": "@input_key_keyboard_numpad3",
+        "label-ui": "@ui_CIEmoteRight",
+        "description-ui": "@ui_CIEmoteRightDesc",
+        "action-label-de_DE": "Rechts",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Ziffernblock 3",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad3",
+        "keyboard-mapping-default": "np_3",
+        "keyboard-mapping-custom": null,
+        "command-phrases": {
+            "en": [
+                "Right",
+                "Turn right",
+                "Go right",
+                "Move right",
+                "Right now"
+            ],
+            "de_DE": [
+                "Rechts",
+                "Nach rechts",
+                "Dreh rechts",
+                "Geh rechts",
+                "Jetzt rechts"
+            ]
+        },
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "player_emotes_emote_cs_right"
+    },
+    "emote_cs_stop": {
+        "category": "player_emotes",
+        "actionname": "emote_cs_stop",
+        "activationMode": "press",
+        "keyboard-mapping": "np_2",
+        "action-label-en": "Stop",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Numpad 2",
+        "keyboard-mapping-ui": "@input_key_keyboard_numpad2",
+        "label-ui": "@ui_CIEmoteStop",
+        "description-ui": "@ui_CIEmoteStopDesc",
+        "action-label-de_DE": "Aufhören",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Ziffernblock 2",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad2",
+        "keyboard-mapping-default": "np_2",
+        "keyboard-mapping-custom": null,
+        "command-phrases": {
+            "en": [
+                "Stop",
+                "Stop now",
+                "Halt",
+                "Halt now",
+                "Stop moving now"
+            ],
+            "de_DE": [
+                "Stopp",
+                "Stopp jetzt",
+                "Halt",
+                "Halt jetzt",
+                "Bewegung jetzt stoppen"
+            ]
+        },
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "player_emotes_emote_cs_stop"
+    },
+    "emote_cs_yes": {
+        "category": "player_emotes",
+        "actionname": "emote_cs_yes",
+        "activationMode": "press",
+        "keyboard-mapping": "np_4",
+        "action-label-en": "Yes",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Numpad 4",
+        "keyboard-mapping-ui": "@input_key_keyboard_numpad4",
+        "label-ui": "@ui_CIEmoteYes",
+        "description-ui": "@ui_CIEmoteYesDesc",
+        "action-label-de_DE": "Ja",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Ziffernblock 4",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad4",
+        "keyboard-mapping-default": "np_4",
+        "keyboard-mapping-custom": null,
+        "command-phrases": {
+            "en": [
+                "Yes",
+                "Affirmative",
+                "Say yes",
+                "Confirm yes",
+                "Say yes now"
+            ],
+            "de_DE": [
+                "Ja",
+                "Bestätigen",
+                "Sag ja",
+                "Ja bestätigen",
+                "Ja jetzt"
+            ]
+        },
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "player_emotes_emote_cs_yes"
     },
     "emote_dance": {
         "category": "player_emotes",
@@ -15676,7 +15676,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15705,7 +15705,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15734,7 +15734,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15763,7 +15763,7 @@
         "keyboard-mapping-custom": "",
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15792,7 +15792,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15821,7 +15821,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15850,7 +15850,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15879,7 +15879,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15908,7 +15908,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15937,7 +15937,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15966,7 +15966,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -15995,7 +15995,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16024,7 +16024,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16053,7 +16053,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16082,7 +16082,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16111,7 +16111,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16140,7 +16140,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16169,7 +16169,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16198,7 +16198,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16227,7 +16227,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
@@ -16256,7 +16256,7 @@
         "keyboard-mapping-custom": null,
         "ai_status": {
             "is_active": false,
-            "inactive_reason": "no_keybinding",
+            "inactive_reason": "category_excluded",
             "has_keybinding": false,
             "has_command_phrases": false,
             "is_custom_configured": false,
