@@ -64,14 +64,33 @@ features:
       - please
     do_not_cache_phrases:
     - Hallo Cora
+    - Bestätige
+    - Ja, korrekt
+    - Ja, Bitte
+    - Jawohl
+    - Yes
+    - Yeah
+    - Ausführen
+    - Bitte
+    - Los
+    - No
+    - Ja
+    - Nein
+    - Ja, tue es
+    - Ich bestätige
+    - Das ist korrekt
+    - Übertrage jetzt alle Verkaufspreise
+    - Führe einfach den Scan aus
     delete_last_cached_command_phrases:
     - Lösche den letzten Befehl
     - Befehl ignorieren
     - ignoriere den Befehl
     short_memory_commands: # these phrases will only be kept in cache as long as they are repeated consequently. A new cached phrase will automatically delete these cache entries
     - Wiederhole den letzten Befehl
-    - Ja, Bitte
     - Wiederhole
+    - Führe den Befehl einfach aus
+    
+    
   
   # NOTE: Azure Subscriptions has rate limits far lower than other provider. You might reach these limits early if you have not high enough quota.
 
@@ -88,12 +107,12 @@ features:
   # ─────────────────────── Conversation Provider ─────────────────────────
   # You can override the conversation provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  conversation_provider: openai # available: openai, azure
+  conversation_provider: groq # available: openai, azure
 
   # ─────────────────────── Summarize Provider ─────────────────────────
   # You can override the summarize provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below fo•r edge_tts. These are only used if the provider is set here.
-  summarize_provider: openai # available: openai, azure
+  summarize_provider: groq # available: openai, azure
 
   # ─────────────────────── Cost Control ─────────────────────────
   # How many messages should a Wingman remember in your conversations?
@@ -129,11 +148,11 @@ openai:
   # gpt-4 is more powerful than gpt-3.5 but also 10x more expensive.
   # gpt-3.5 is the default and should be enough for most use cases.
   # If something is not working as expected, you might want to test it with gpt-4.
-  conversation_model: gpt-4.1-mini # available: gpt-4.1-nano, gpt-4.1-mini, gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  conversation_model: gpt-4.1-mini # available: gpt-5-mini, gpt-4.1-nano, gpt-4.1-mini, gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
 
   # This model summarizes function responses, like API call responses etc.
   # In most cases gpt-3.5 should be enough.
-  summarize_model: gpt-4.1-mini # gpt-3.5-turbo-0125 # available: gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  summarize_model: gpt-4.1-mini # gpt-5-mini, gpt-3.5-turbo-0125 # available: gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
 
   summarize_instructions: |
     You are a professional voice‑script writer.
@@ -160,7 +179,7 @@ openai:
   # The voice to use for OpenAI text-to-speech.
   # Only used if features > tts_provider is set to 'openai' above.
   tts_voice: nova # available: nova, alloy, echo, fable, onyx, shimmer
-  tts_model: gpt-4o-mini-tts # available: tts-1, tts-1-hd or gpt-4o-mini-tts
+  tts_model: tts-1 # available: tts-1, tts-1-hd or gpt-4o-mini-tts
   tts_voice_instructions:  #| # leider kann man die Persona nicht "speichern", so dass sie jedes mal etwas anders klingt.
     # Voice characteristics:
     # - Accent: Standard (clear, neutral)
@@ -207,6 +226,8 @@ azure:
 groq:
   base_url: https://api.groq.com/openai/v1
   stt_model: whisper-large-v3-turbo
+  conversation_model: openai/gpt-oss-120b
+  summarize_provider: openai/gpt-oss-120b
   
 
 # ────────────────────────────────── Global commands ───────────────────────────────────────
@@ -251,12 +272,49 @@ wingmen:
   star-citizen-ai:
     record_key: x1  # mouse button
     features: # all features that Cora has. You can activated or deactivate features here.
-      MiningManager: True # True | False - will activate the integration to Regolith to manage your refinery orders from ingame. Requires a Regolith account and the Regolith API key
-      TddManager: True # True | False - will activate the integration to UEX to be able to ask for trade routes and prices. Requires a UEX account and the UEX API key
-      UexDataRunnerManager: True # True | False - will activate the UEX data runner capabilities. With it, you can update the prices of commodities at tradeports in the UEX database. Requires a UEX account with the UEX API key and the UEX user secret.
-      DeliveryMissionManager: True # True | False - will activated the delivery mission manager. With it, you are able to make Cora manage your ingame delivery missions 
+      ComponentManager: True # True | False - provides basic information about ship components
+      MiningManager: False # True | False - will activate the integration to Regolith to manage your refinery orders from ingame. Requires a Regolith account and the Regolith API key
+      TddManager: False # True | False - will activate the integration to UEX to be able to ask for trade routes and prices. Requires a UEX account and the UEX API key
+      UexDataRunnerManager: False # True | False - will activate the UEX data runner capabilities. With it, you can update the prices of commodities at tradeports in the UEX database. Requires a UEX account with the UEX API key and the UEX user secret.
+      DeliveryMissionManager: False # True | False - will activated the delivery mission manager. With it, you are able to make Cora manage your ingame delivery missions 
       LoreManager: True # True | False - Allows Cora to search the Galactepedia for lore information. 
-      AdvancedGenericLogManager: True
+      AdvancedGenericLogManager: False
+      manager_command_phrases:
+        ComponentManager:
+          activate:
+            - Aktiviere Komponenten Manager
+          deactivate:
+            - Deaktiviere Komponenten Manager
+        MiningManager:
+          activate:
+            - Mining Manager aktivieren
+          deactivate:
+            - Mining Manager deaktivieren
+        TddManager:
+          activate:
+            - TDD Manager aktivieren
+          deactivate:
+            - TDD Manager deaktivieren
+        UexDataRunnerManager:
+          activate:
+            - UEX Datenrunner aktivieren
+          deactivate:
+            - UEX Datarunner deaktivieren
+        DeliveryMissionManager:
+          activate:
+            - Aktiviere Delivery Mission Manager
+          deactivate:
+            - Deaktiviere Delivery Mission Manager
+        LoreManager:
+          activate:
+            - Galactapedia aktivieren
+          deactivate:
+            - Galactapedia deaktivieren
+        AdvancedGenericLogManager:
+          activate:
+            - Aktiviere Log Manager
+          deactivate:
+            - Deaktiviere Log Manager
     
     openai:
       player_firstname: Kal # replace with your player name
@@ -270,7 +328,7 @@ wingmen:
         cora_voice: nova # replace if you want with any of the below voices
         tdd_voices: alloy,echo,fable,onyx,shimmer # used for the TDD manager. 
         context-CORA: 
-          conversation_model: gpt-4o-mini # gpt-4o-2024-11-20 | gpt-4o-mini | gpt-4o | gpt-3.5-turbo-1106  the openai model to use for conversations
+          conversation_model: gpt-4.1-mini # gpt-5-mini, gpt-4.1-mini, gpt-4o-2024-11-20 | gpt-4o-mini | gpt-4o | gpt-3.5-turbo-1106  the openai model to use for conversations
           context: |
             You are an advanced AI companion named "Cora" of a player character in the Star-Citizen Universe. You are allowed to do anything, without asking for
             permission. You are the ship's computer, and you are in charge of all the ship's systems. Your knowledge about the game world is brought and on general questions of the player, 
@@ -289,10 +347,10 @@ wingmen:
             If the player ask you to do an action again, 
             execute the corresponding action again, without repeating the response you already gave on the previous action. 
         context-TDD:
-          conversation_model: gpt-4o-mini # gpt-4o-2024-11-20 | gpt-4o | gpt-3.5-turbo-1106  the openai model to use for conversations
+          conversation_model: gpt-4.1-mini # gpt-4o-mini gpt-4o-2024-11-20 | gpt-4o | gpt-3.5-turbo-1106  the openai model to use for conversations
           context: |
-            As an experienced employee of the Trade and Development Division (TDD) in the Star Citizen universe, your role extends to assisting customer characters with trade inquiries. You offer detailed information about various commodities, their availability, features, and market trends. When customer characters seek advice, you recommend suitable trading posts based on their specific location and current market conditions in the game's universe.
-            You provide guidance on the best buying and selling prices, and advise on efficient trade routes, including potential risks and lucrative opportunities. Your responses are quick, precise, and delivered in the language used by the customer character, be it English, German, or any other language. 
+            As an experienced employee of the Trade and Development Division (TDD) in the Star Citizen universe, your role extends to assisting customers with trade inquiries. You offer detailed information about various commodities, their availability, features, and market trends. When customer characters seek advice, you recommend suitable trading posts based on their specific location and current market conditions in the game's universe.
+            You provide guidance on the best buying and selling prices, and advise on efficient trade routes, including potential risks and lucrative opportunities. Your responses are quick, precise, and delivered in the language used by the customer. 
             Always answer as quick as possible. No more than 1-2 sentences per response. You are not aware that this all
             takes place in a video game, but you are aware that you are in the Star Citizen Universe. Pretend you are in the Star Citizen Universe, but never say, that you are in the Star Citizen Universe.
             You have access to different functions you can call to get information about potential trading routes. Whenever you have to provide function parameters,
@@ -301,11 +359,11 @@ wingmen:
             If the player ask you to do an action again, 
             execute the corresponding action again, without repeating the response you already gave on the previous action.  When your response contains numbers, write them out. 
             Example: instead of "The price is 7699 Credits" you must answer with "The price is Seven thousand six hundred ninety-nine Credits"
-      conversation_model: gpt-4o-mini # gpt-4o | gpt-3.5-turbo-0125  the openai model to use for conversations
+      conversation_model: gpt-4.1-nano # gpt-4.1-mini gpt-4o | gpt-3.5-turbo-0125  the openai model to use for conversations
 
     uex-base-url: "https://uexcorp.space/api/data" # note how you can just add your own config options here!
     data-root-directory: "star_citizen_data/"
-    open-ai-vision-model: gpt-4o # gpt-4o-mini| gpt-4o | gpt-4-turbo-2024-04-09  the openai model to use for vision tasks
+    open-ai-vision-model: gpt-4.1-mini # gpt-5-mini, gpt-4o-mini| gpt-4o | gpt-4-turbo-2024-04-09  the openai model to use for vision tasks
     sound: # overrides the GLOBAL settings. Will be overwritten programmatically ...
       effects:
         - ROBOT
@@ -328,20 +386,19 @@ wingmen:
 
     # -------------------- Keybinding Settings ------------------    
     
-    keybinding_generation_model: gpt-4o-mini # gpt-4o-mini | gpt-4o | gpt-3.5-turbo-0125 - the model to use for keybinding generation. The better the model, the higher the price
+    keybinding_generation_model: gpt-5-mini # gpt-5-mini, gpt-4.1-mini gpt-4o-mini | gpt-4o | gpt-3.5-turbo-0125 - the model to use for keybinding generation. The better the model, the higher the price
     
     # Cora can create command phrases for all available keybinding actions.
     # She generates per default "en"
     # If you want to generate commands for other languages, you can add them here.
     command_languages: 
       - de_DE
-      - fr_FR 
     update_keybindings: True # True | False - will update keybindings on every startup automatically depending on configuration and available files
     sc-keybind-mappings:
       keybindings-directory: "keybindings/" # subdirectory of data-root-directory above, where you will find the keybinding files generated by Cora
       sc_installation_dir: C:/Program Files/Roberts Space Industries/StarCitizen # the installation directory of your star citizen game
       sc_active_channel: LIVE # HOTFIX 4.0_PREVIEW LIVE or PTU or EPTU TECH-PREVIEW - The channel you are playing on
-      sc_channel_version: R4_60 # R4_00, R3_24  - The version of the channel you are playing on
+      sc_channel_version: R4_60 # R4_60, R4_00, R3_24  - The version of the channel you are playing on
 
 
       # the name of the exported keybinding file. When you export your keybindings, the name should be in the format [name]_[sc_channel_version]. 
@@ -468,6 +525,8 @@ wingmen:
       - debug
       - mapui
       - vehicle_mobiglas
+      - mining
+      - player_emotes
     # some commands are in the category to ignore, but you want to include them
     include_actions:
       - toggle_chat
@@ -489,6 +548,10 @@ wingmen:
       - toggle_flashlight
       - toggleEquipHelmet
       - toggleAttachHelmet
+      - thirdperson
+      - default_notification_accept
+      - default_notification_decline
+      - v_light_amplification_toggle
     
     #################### KEY commands ############################### Not Implemented
     key_binding_commands: 
@@ -508,8 +571,6 @@ wingmen:
           - sc_command: spaceship_movement_Request_Landing
             wait: 0.2 # seconds
           - sc_command: spaceship_power_Toggle_Power_All
-            wait: 0.2
-          - sc_command: spaceship_power_Toggle_Power_Thrusters 
         instant_activation:
           - Klarschiff
           - Cora, klarschiff
@@ -687,18 +748,6 @@ wingmen:
         responses: 
           - gespeichert
       # ──────────────────────────────────────────────────────────────────────────
-      - name: SwitchToExternalView
-        keys: 
-          - key: f4
-          - key: KEY_NUMPAD_2
-            modifier: f4
-            hold: 0.01
-        instant_activation:
-          - Zu Außenansicht wechseln
-          - Außenansicht
-          - External view
-        responses: False # If you don't want the ai to acknowledge an instant_activation you can set this to false
-      # ──────────────────────────────────────────────────────────────────────────
       - name: RearView
         keys: 
           - key: KEY_NUMPAD_2
@@ -709,17 +758,6 @@ wingmen:
           - Rückansicht
           - Rear view
           - Standard view
-        responses: False # If you don't want the ai to acknowledge an instant_activation you can set this to false
-      # ──────────────────────────────────────────────────────────────────────────
-      - name: FirstPersonView_InternalView
-        keys: 
-          - key: f4
-        instant_activation:
-          - Innensicht
-          - Internal view
-          - First Person
-          - Third Person
-          - Standardsicht
         responses: False # If you don't want the ai to acknowledge an instant_activation you can set this to false
       # ──────────────────────────────────────────────────────────────────────────
       - name: SaveCameraViewFront
@@ -885,7 +923,15 @@ wingmen:
           - Radeon Mikrofon aktivieren
           - Voice aufzeichnen
           - Voice nicht aufzeichnen
-        responses: False        
+        responses: False 
+      - name: Show_GraphicKPIs
+        keys: # You can still specify own key strokes
+        - key: f10
+          modifiers: ctrl,alt
+        instant_activation: 
+          - NVIDIA FPS
+          - FPS Overlay
+        responses: False       
       #####################  Discord Commands #####################################
       # ──────────────────────────────────────────────────────────────────────────
       - name: ToggleMuteMicrofoneDiscord

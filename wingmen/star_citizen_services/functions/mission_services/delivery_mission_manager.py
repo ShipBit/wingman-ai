@@ -31,6 +31,14 @@ class DeliveryMissionManager(FunctionManager):
     """  
         This is an example implementation structure that can be copy pasted for new managers.
     """
+    MANAGER_CONTEXT = AIContext.CORA
+    MANAGER_DESCRIPTION = "Manages delivery missions: capture missions, plan routes, and determine the next pickup/dropoff stop."
+    MANAGER_CAPABILITIES = [
+        "Read delivery missions via OCR",
+        "Add, discard, and summarize missions",
+        "Determine the next route step with pickup/dropoff logic",
+    ]
+
     def __init__(self, config, secret_keeper):
         super().__init__(config, secret_keeper)
         # do further initialisation steps here

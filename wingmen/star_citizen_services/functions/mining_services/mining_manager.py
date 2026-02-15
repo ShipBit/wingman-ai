@@ -57,6 +57,15 @@ class MiningManager(FunctionManager):
     """  
         This is an example implementation structure that can be copy pasted for new managers.
     """
+    MANAGER_CONTEXT = AIContext.CORA
+    MANAGER_DESCRIPTION = "Supports mining and salvage sessions, including Regolith session control, refinery work orders, and scan capture."
+    MANAGER_CAPABILITIES = [
+        "Create and manage mining/salvage sessions",
+        "Capture and store refinery work orders via OCR",
+        "Document rock scans and cluster information",
+        "Look up cluster details by signature value",
+    ]
+
     def __init__(self, config, secret_keeper):
         super().__init__(config, secret_keeper)
         # do further initialisation steps here

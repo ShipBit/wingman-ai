@@ -33,6 +33,13 @@ printr = Printr()
 
 
 class UexDataRunnerManager(FunctionManager):
+    MANAGER_CONTEXT = AIContext.CORA
+    MANAGER_DESCRIPTION = "Captures terminal prices via OCR and submits validated commodity price data to UEX."
+    MANAGER_CAPABILITIES = [
+        "Read trading terminal screenshots",
+        "Validate and correct commodity prices",
+        "Submit buy/sell prices to UEX",
+    ]
     
     def __init__(self, config, secret_keeper: SecretKeeper):
         super().__init__(config, secret_keeper)

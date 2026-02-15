@@ -17,6 +17,14 @@ def print_debug(to_print):
 
 
 class LoreManager(FunctionManager):
+    MANAGER_CONTEXT = AIContext.CORA
+    MANAGER_DESCRIPTION = "Searches Galactapedia lore (ingame world information), provides news, and summarizes articles in detail."
+    MANAGER_CAPABILITIES = [
+        "Search Galactapedia by topic",
+        "Fetch current lore news",
+        "Summarize individual Galactapedia articles in detail",
+    ]
+
     def __init__(self, config, secret_keeper):
         super().__init__(config, secret_keeper)
         self.wiki_base_url = "https://api.star-citizen.wiki/api/v2/galactapedia"

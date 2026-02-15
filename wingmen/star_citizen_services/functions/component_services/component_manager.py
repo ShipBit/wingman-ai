@@ -19,6 +19,13 @@ class ComponentManager(FunctionManager):
     Manager for searching and retrieving ship component information from the Star Citizen Wiki API.
     Handles queries about coolers, power plants, quantum drives, and shields.
     """
+    MANAGER_CONTEXT = AIContext.CORA
+    MANAGER_DESCRIPTION = "Provides ship component details (coolers, power plants, quantum drives, shields), including pricing and locations."
+    MANAGER_CAPABILITIES = [
+        "Search components by name",
+        "Filter by size, class, and grade",
+        "Show the cheapest purchase options including terminal",
+    ]
 
     def __init__(self, config, secret_keeper):
         super().__init__(config, secret_keeper)

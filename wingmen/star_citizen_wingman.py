@@ -148,6 +148,248 @@ class StarCitizenWingman(OpenAiWingman):
             traceback.print_exc()
             errors.append(f"Initialisation Error: {e}. Check console for more information")
 
+    def _refresh_manager_runtime_state(self):
+        """Recalculate tools for current and cached contexts after manager activation changes."""
+        if not self.ai_functions_manager:
+            return
+
+        self.current_tools = self._get_context_tools(self.current_context)
+        for context_name, context_data in self.contexts_history.items():
+            context_data["tools"] = self._get_context_tools(context_name)
+            self.contexts_history[context_name] = context_data
+
+    @staticmethod
+    def _serialize_start_information(start_information):
+        if not start_information:
+            return ""
+        if isinstance(start_information, str):
+            return start_information.strip()
+        try:
+            return json.dumps(start_information, ensure_ascii=False)
+        except Exception:
+            return str(start_information)
+
+    def _summarize_manager_start_information(self, manager_name: str, start_information):
+        serialized_start_information = self._serialize_start_information(start_information)
+        if not serialized_start_information:
+            return ""
+        if not self.openai:
+            return ""
+
+        if len(serialized_start_information) > 6000:
+            serialized_start_information = serialized_start_information[:6000]
+
+        player_language = self.config["openai"].get("player_language")
+        system_prompt = (
+            "You are Cora, a concise in-game ship AI assistant. "
+            "Summarize operational status information for spoken output. "
+            "Use natural spoken language, do not output JSON, and never read field names literally. "
+            "Do not mention managers, tools, activation, function names, or APIs. "
+            "Do not say phrases like 'your manager', 'my manager', 'I activated'. "
+            "Do not describe ownership of a manager. "
+            "Speak as a neutral status report from Cora's assistant perspective. "
+            "Keep it short (max two sentences)."
+        )
+        user_prompt = (
+            f"Player language: {player_language}. "
+            f"Activated manager (for context only, do not mention it): {manager_name}. "
+            "The activation confirmation is already spoken separately. "
+            "Only provide the follow-up status content. "
+            "Prefer phrasing like 'Aktuell gibt es ...' when the player language is German. "
+            "Summarize this status information for the player:\n"
+            f"{serialized_start_information}"
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        azure_config = None
+        if self.conversation_provider == "azure":
+            azure_config = self._get_azure_config("conversation")
+            if not azure_config:
+                return ""
+
+        completion = self.openai.ask(
+            messages=messages,
+            model=self.config["openai"].get("conversation_model"),
+            azure_config=azure_config,
+        )
+        if completion is None:
+            return ""
+
+        response_message, _ = self._process_completion(completion)
+        summarized = (getattr(response_message, "content", "") or "").strip()
+        return " ".join(summarized.split())
+
+    def _enrich_toggle_result_with_summary(self, toggle_result: dict):
+        if not toggle_result:
+            return toggle_result
+
+        if not (
+            toggle_result.get("success", False)
+            and toggle_result.get("changed", False)
+            and toggle_result.get("enabled", False)
+        ):
+            return toggle_result
+
+        if toggle_result.get("start_information_error"):
+            return toggle_result
+
+        start_information = toggle_result.get("start_information")
+        if not start_information:
+            return toggle_result
+
+        start_information_summary = self._summarize_manager_start_information(
+            toggle_result.get("manager_name", "Manager"),
+            start_information,
+        )
+        if start_information_summary:
+            toggle_result["start_information_summary"] = start_information_summary
+
+        return toggle_result
+
+    def _build_manager_toggle_response_text(self, toggle_result: dict):
+        manager_name = toggle_result.get("manager_name", "Manager")
+        success = toggle_result.get("success", False)
+        if not success:
+            return toggle_result.get("message", f"{manager_name} konnte nicht umgeschaltet werden.")
+
+        enabled = toggle_result.get("enabled", False)
+        changed = toggle_result.get("changed", False)
+        if changed:
+            if enabled:
+                start_information_error = toggle_result.get("start_information_error")
+                start_info_text = toggle_result.get("start_information_summary", "")
+                base_message = f"{manager_name} ist jetzt aktiviert."
+                if start_information_error:
+                    return f"{base_message} Startinformationen konnten nicht geladen werden: {start_information_error}."
+                if start_info_text:
+                    return f"{base_message} {start_info_text}"
+                return base_message
+            return f"{manager_name} ist jetzt deaktiviert."
+
+        if enabled:
+            return f"{manager_name} ist bereits aktiviert."
+        return f"{manager_name} ist bereits deaktiviert."
+
+    def _try_instant_activation(self, transcript):
+        if not self.ai_functions_manager:
+            return super()._try_instant_activation(transcript)
+
+        manager_toggle_result = self.ai_functions_manager.match_and_toggle_manager_by_phrase(transcript)
+        if manager_toggle_result:
+            manager_toggle_result = self._enrich_toggle_result_with_summary(manager_toggle_result)
+            if manager_toggle_result.get("success", False) and manager_toggle_result.get("changed", False):
+                self._refresh_manager_runtime_state()
+            return self._build_manager_toggle_response_text(manager_toggle_result)
+
+        return super()._try_instant_activation(transcript)
+
+    def _get_manager_control_prompt(self):
+        manager_names = ", ".join(self.ai_functions_manager.get_manager_names())
+        return (
+            f"Use function '{self.manage_feature_manager_state.__name__}' when the player asks about your capabilities, "
+            "available modules/managers, or requests activating/deactivating a manager. "
+            f"Available managers: {manager_names}. "
+            "If the requested manager is unclear, call the function with action 'list_managers' first."
+        )
+
+    def _manager_control_tool(self):
+        manager_names = self.ai_functions_manager.get_manager_names()
+        return {
+            "type": "function",
+            "function": {
+                "name": self.manage_feature_manager_state.__name__,
+                "description": (
+                    "Lists feature managers and toggles them at runtime. "
+                    "Use this for capability questions and manager on/off requests."
+                ),
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "action": {
+                            "type": "string",
+                            "description": "Action to execute.",
+                            "enum": ["list_managers", "activate_manager", "deactivate_manager"]
+                        },
+                        "manager_name": {
+                            "type": "string",
+                            "description": "Name of the manager to activate/deactivate.",
+                            "enum": manager_names
+                        },
+                        "include_inactive": {
+                            "type": "boolean",
+                            "description": "Only relevant for list_managers. If true, include active and inactive managers."
+                        }
+                    },
+                    "required": ["action"]
+                }
+            }
+        }
+
+    def manage_feature_manager_state(self, function_args):
+        action = function_args.get("action", "list_managers")
+        include_inactive = function_args.get("include_inactive", True)
+
+        if action == "list_managers":
+            managers = self.ai_functions_manager.get_manager_overview(include_inactive=include_inactive)
+            return {
+                "success": True,
+                "action": action,
+                "managers": managers,
+                "instructions": (
+                    "Summarize available capabilities grouped by active and inactive managers. "
+                    "If the user asks to toggle one manager, call this function again with activate_manager or deactivate_manager."
+                ),
+            }
+
+        manager_name = function_args.get("manager_name")
+        if not manager_name:
+            return {
+                "success": False,
+                "action": action,
+                "available_managers": self.ai_functions_manager.get_manager_names(),
+                "instructions": "Ask the user which manager should be toggled.",
+            }
+
+        if action not in ["activate_manager", "deactivate_manager"]:
+            return {
+                "success": False,
+                "action": action,
+                "instructions": "Invalid action. Use list_managers, activate_manager or deactivate_manager.",
+            }
+
+        enabled = action == "activate_manager"
+        toggle_result = self.ai_functions_manager.set_manager_enabled(
+            manager_name=manager_name,
+            enabled=enabled,
+            source="tool-call",
+        )
+        toggle_result = self._enrich_toggle_result_with_summary(toggle_result)
+
+        if toggle_result.get("success", False):
+            self._refresh_manager_runtime_state()
+
+        start_information_summary = toggle_result.get("start_information_summary", "")
+        manager_state = toggle_result.copy()
+        manager_state["has_start_information"] = bool(manager_state.get("start_information"))
+        manager_state.pop("start_information", None)
+        manager_state.pop("start_information_summary", None)
+
+        return {
+            "success": toggle_result.get("success", False),
+            "action": action,
+            "manager_state": manager_state,
+            "start_information_summary": start_information_summary,
+            "managers": self.ai_functions_manager.get_manager_overview(include_inactive=True),
+            "instructions": (
+                "If start_information_summary exists, use it for the spoken response in the player's language. "
+                "If it is empty, confirm the updated manager state in one short sentence. "
+                "If state change failed, explain the reason from manager_state.message."
+            ),
+        }
+
     def _set_current_context(self, new_context: AIContext, new: bool = False):
         """Set the current context to the specified context name."""
         self.current_context = new_context
@@ -178,7 +420,7 @@ class StarCitizenWingman(OpenAiWingman):
                 f"Available station names: {station_names}. "
             )
 
-            functions_prompt = " "
+            functions_prompt = f" {self._get_manager_control_prompt()} "
 
             context_switch_prompt = ""
             if new_context == AIContext.CORA:
@@ -310,14 +552,14 @@ class StarCitizenWingman(OpenAiWingman):
         if current_context == AIContext.CORA:
             return self._get_cora_tools()
         elif current_context == AIContext.TDD:
-            tdd_tools = []
+            tdd_tools = [self._manager_control_tool()]
             for ai_function_manager in self.ai_functions_manager.get_managers(current_context):
                 ai_function_manager: FunctionManager
                 tdd_tools.extend(ai_function_manager.get_function_tools())
             tdd_tools.append(self._context_switch_tool(current_context=AIContext.TDD))
             return tdd_tools
         else:
-            return self._context_switch_tool()
+            return [self._manager_control_tool(), self._context_switch_tool()]
        
     def _cleanup_conversation_history(self):
         """
@@ -414,11 +656,24 @@ class StarCitizenWingman(OpenAiWingman):
                 instant_reponse = self._select_command_response(command)
                 await self. _play_to_user(instant_reponse)
 
+        if function_name == self.manage_feature_manager_state.__name__:
+            function_response = self.manage_feature_manager_state(function_args)
+
         # finally, check for any function managers implementing the called function
         if function_name in self.ai_functions_manager.get_function_registry():
             function_to_call = self.ai_functions_manager.get_function(function_name)
             if callable(function_to_call):
                 function_response = function_to_call(function_args)
+        elif function_name not in ["switch_context", "execute_command", self.manage_feature_manager_state.__name__]:
+            manager_name = self.ai_functions_manager.get_manager_for_function(function_name)
+            if manager_name and not self.ai_functions_manager.is_manager_enabled(manager_name):
+                function_response = {
+                    "success": False,
+                    "instructions": (
+                        f"{manager_name} is currently disabled. "
+                        f"Activate it via {self.manage_feature_manager_state.__name__} before calling {function_name}."
+                    ),
+                }
 
         instructions = self.config["openai"].get("summarize_instructions")
         if instructions and isinstance(function_response, dict):
@@ -714,6 +969,7 @@ class StarCitizenWingman(OpenAiWingman):
         
     def _get_cora_tools(self) -> list[dict]:
         tools = []
+        tools.append(self._manager_control_tool())
         tools.append(self._get_keybinding_commands())
         for ai_function_manager in self.ai_functions_manager.get_managers(AIContext.CORA):
             ai_function_manager: FunctionManager

@@ -23,6 +23,13 @@ def print_debug(to_print):
 
 
 class TddManager(FunctionManager):
+    MANAGER_CONTEXT = AIContext.TDD
+    MANAGER_DESCRIPTION = "Provides UEX trading insights: best routes, buy/sell locations, and TDD operator switching."
+    MANAGER_CAPABILITIES = [
+        "Find the best trade route from/between locations",
+        "Find the best selling locations for commodities",
+        "Switch TDD employees dynamically",
+    ]
 
     def __init__(self, config, secret_keeper):
         super().__init__(config, secret_keeper)

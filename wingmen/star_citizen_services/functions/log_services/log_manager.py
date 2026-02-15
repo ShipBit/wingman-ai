@@ -209,6 +209,13 @@ class AdvancedGenericLogManager(FunctionManager):
       }
     }
     """
+    MANAGER_CONTEXT = AIContext.CORA
+    MANAGER_DESCRIPTION = "Persistent session logbook with filtered queries and automatic/custom summaries."
+    MANAGER_CAPABILITIES = [
+        "Create log entries and split sessions",
+        "Retrieve logs filtered or in full",
+        "Generate and store summaries from logs",
+    ]
 
     MAX_LOG_ENTRIES = 100          # maximal 100 Einträge in recent_logs
     MAX_LOG_CHARACTERS = 10000     # maximal 10.000 Zeichen als JSON in-memory
