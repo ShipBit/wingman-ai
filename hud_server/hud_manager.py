@@ -74,6 +74,10 @@ class GroupState:
     loader_color: Optional[str] = None
     is_chat_window: bool = False
     visible: bool = True
+    # Element visibility: tracks which elements are manually hidden
+    # Keys: "message", "persistent", "chat"
+    # Values: True if hidden, False if visible
+    element_hidden: dict[str, bool] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert state to dictionary for persistence."""
@@ -226,45 +230,54 @@ class HudManager:
 
     # ─────────────────────────────── Group Management ─────────────────────────────── #
 
-    def create_group(self, group_name: str, props: Optional[dict[str, Any]] = None) -> bool:
+    def _make_key(self, group_name: str, element: str) -> str:
+        """Create internal key from group_name and element."""
+        return f"{element}_{group_name}"
+
+    def create_group(self, group_name: str, element: str, props: Optional[dict[str, Any]] = None) -> bool:
         """Create or update a HUD group."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
-                self._groups[group_name] = GroupState()
+            if key not in self._groups:
+                self._groups[key] = GroupState()
 
             if props:
-                self._groups[group_name].props.update(props)
-                self._groups[group_name].is_chat_window = props.get("is_chat_window", False)
+                self._groups[key].props.update(props)
+                self._groups[key].is_chat_window = props.get("is_chat_window", False)
 
             self._notify_callbacks({
                 "type": "create_group",
                 "group": group_name,
+                "element": element,
                 "props": props or {}
             })
 
             return True
 
-    def update_group(self, group_name: str, props: dict[str, Any]) -> bool:
+    def update_group(self, group_name: str, element: str, props: dict[str, Any]) -> bool:
         """Update properties of an existing group."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            self._groups[group_name].props.update(props)
+            self._groups[key].props.update(props)
 
             self._notify_callbacks({
                 "type": "update_group",
                 "group": group_name,
+                "element": element,
                 "props": props
             })
 
             return True
 
-    def delete_group(self, group_name: str) -> bool:
+    def delete_group(self, group_name: str, element: str) -> bool:
         """Delete a HUD group."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name in self._groups:
-                del self._groups[group_name]
+            if key in self._groups:
+                del self._groups[key]
 
                 self._notify_callbacks({
                     "type": "delete_group",
@@ -305,6 +318,7 @@ class HudManager:
     def show_message(
         self,
         group_name: str,
+        element: str,
         title: str,
         content: str,
         color: Optional[str] = None,
@@ -313,11 +327,12 @@ class HudManager:
         duration: Optional[float] = None
     ) -> bool:
         """Show a message in a group."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
-                self.create_group(group_name)
+            if key not in self._groups:
+                self.create_group(group_name, element)
 
-            self._groups[group_name].current_message = HudMessage(
+            self._groups[key].current_message = HudMessage(
                 title=title,
                 content=content,
                 color=color,
@@ -327,7 +342,7 @@ class HudManager:
             )
 
             # Build props dict for overlay
-            overlay_props = dict(self._groups[group_name].props)
+            overlay_props = dict(self._groups[key].props)
             if props:
                 overlay_props.update(props)
             if duration is not None:
@@ -345,13 +360,14 @@ class HudManager:
 
             return True
 
-    def append_message(self, group_name: str, content: str) -> bool:
+    def append_message(self, group_name: str, element: str, content: str) -> bool:
         """Append content to the current message (for streaming)."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            state = self._groups[group_name]
+            state = self._groups[key]
             if state.current_message:
                 state.current_message.content += content
 
@@ -374,13 +390,14 @@ class HudManager:
 
             return True
 
-    def hide_message(self, group_name: str) -> bool:
+    def hide_message(self, group_name: str, element: str) -> bool:
         """Hide/fade out the current message."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            self._groups[group_name].current_message = None
+            self._groups[key].current_message = None
 
             self._notify_callbacks({
                 "type": "hide_message",
@@ -391,15 +408,16 @@ class HudManager:
 
     # ─────────────────────────────── Loader ─────────────────────────────── #
 
-    def set_loader(self, group_name: str, show: bool, color: Optional[str] = None) -> bool:
+    def set_loader(self, group_name: str, element: str, show: bool, color: Optional[str] = None) -> bool:
         """Show or hide the loader animation."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
-                self.create_group(group_name)
+            if key not in self._groups:
+                self.create_group(group_name, element)
 
-            self._groups[group_name].loader_visible = show
+            self._groups[key].loader_visible = show
             if color:
-                self._groups[group_name].loader_color = color
+                self._groups[key].loader_color = color
 
             self._notify_callbacks({
                 "type": "set_loader",
@@ -415,17 +433,19 @@ class HudManager:
     def add_item(
         self,
         group_name: str,
+        element: str,
         title: str,
         description: str = "",
         color: Optional[str] = None,
         duration: Optional[float] = None
     ) -> bool:
         """Add a persistent item to a group."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
-                self.create_group(group_name)
+            if key not in self._groups:
+                self.create_group(group_name, element)
 
-            self._groups[group_name].items[title] = HudItem(
+            self._groups[key].items[title] = HudItem(
                 title=title,
                 description=description,
                 color=color,
@@ -446,20 +466,22 @@ class HudManager:
     def update_item(
         self,
         group_name: str,
+        element: str,
         title: str,
         description: Optional[str] = None,
         color: Optional[str] = None,
         duration: Optional[float] = None
     ) -> bool:
         """Update an existing item."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            if title not in self._groups[group_name].items:
+            if title not in self._groups[key].items:
                 return False
 
-            item = self._groups[group_name].items[title]
+            item = self._groups[key].items[title]
             if description is not None:
                 item.description = description
             if color is not None:
@@ -478,14 +500,15 @@ class HudManager:
 
             return True
 
-    def remove_item(self, group_name: str, title: str) -> bool:
+    def remove_item(self, group_name: str, element: str, title: str) -> bool:
         """Remove an item from a group."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            if title in self._groups[group_name].items:
-                del self._groups[group_name].items[title]
+            if title in self._groups[key].items:
+                del self._groups[key].items[title]
 
                 self._notify_callbacks({
                     "type": "remove_item",
@@ -496,13 +519,14 @@ class HudManager:
                 return True
             return False
 
-    def clear_items(self, group_name: str) -> bool:
+    def clear_items(self, group_name: str, element: str) -> bool:
         """Clear all items from a group."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            self._groups[group_name].items.clear()
+            self._groups[key].items.clear()
 
             self._notify_callbacks({
                 "type": "clear_items",
@@ -516,6 +540,7 @@ class HudManager:
     def show_progress(
         self,
         group_name: str,
+        element: str,
         title: str,
         current: float,
         maximum: float = 100,
@@ -524,11 +549,12 @@ class HudManager:
         auto_close: bool = False
     ) -> bool:
         """Show or update a progress bar."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
-                self.create_group(group_name)
+            if key not in self._groups:
+                self.create_group(group_name, element)
 
-            items = self._groups[group_name].items
+            items = self._groups[key].items
             if title in items:
                 item = items[title]
                 item.progress_current = current
@@ -564,6 +590,7 @@ class HudManager:
     def show_timer(
         self,
         group_name: str,
+        element: str,
         title: str,
         duration: float,
         description: str = "",
@@ -572,12 +599,13 @@ class HudManager:
         initial_progress: float = 0
     ) -> bool:
         """Show a timer-based progress bar."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if group_name not in self._groups:
-                self.create_group(group_name)
+            if key not in self._groups:
+                self.create_group(group_name, element)
 
             now = time.time()
-            self._groups[group_name].items[title] = HudItem(
+            self._groups[key].items[title] = HudItem(
                 title=title,
                 description=description,
                 is_progress=True,
@@ -605,33 +633,10 @@ class HudManager:
 
     # ─────────────────────────────── Chat Window ─────────────────────────────── #
 
-    def create_chat_window(
-        self,
-        name: str,
-        props: Optional[dict[str, Any]] = None
-    ) -> bool:
-        """Create a chat window group."""
-        with self._lock:
-            final_props = props or {}
-            final_props["is_chat_window"] = True
-
-            if name not in self._groups:
-                self._groups[name] = GroupState()
-            self._groups[name].props.update(final_props)
-            self._groups[name].is_chat_window = True
-
-            # Use 'create_chat_window' command for overlay compatibility
-            self._notify_callbacks({
-                "type": "create_chat_window",
-                "name": name,
-                "props": final_props
-            })
-
-            return True
-
     def send_chat_message(
         self,
-        window_name: str,
+        group_name: str,
+        element: str,
         sender: str,
         text: str,
         color: Optional[str] = None
@@ -642,11 +647,12 @@ class HudManager:
         If the message is merged with the previous message from the same sender,
         the existing message's ID is returned.
         """
+        key = self._make_key(group_name, element)
         with self._lock:
-            if window_name not in self._groups:
+            if key not in self._groups:
                 return None
 
-            state = self._groups[window_name]
+            state = self._groups[key]
 
             # Append to last message if same sender
             if (
@@ -671,7 +677,8 @@ class HudManager:
 
             self._notify_callbacks({
                 "type": "chat_message",
-                "name": window_name,
+                "group": group_name,
+                "element": element,
                 "id": message_id,
                 "sender": sender,
                 "text": text,
@@ -682,7 +689,8 @@ class HudManager:
 
     def update_chat_message(
         self,
-        window_name: str,
+        group_name: str,
+        element: str,
         message_id: str,
         text: str
     ) -> bool:
@@ -693,18 +701,19 @@ class HudManager:
 
         Returns True if the message was found and updated, False otherwise.
         """
+        key = self._make_key(group_name, element)
         with self._lock:
-            if window_name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            state = self._groups[window_name]
+            state = self._groups[key]
 
             for msg in state.chat_messages:
                 if msg.id == message_id:
                     msg.text = text
                     self._notify_callbacks({
                         "type": "update_chat_message",
-                        "name": window_name,
+                        "group": group_name,
                         "id": message_id,
                         "text": text
                     })
@@ -712,47 +721,111 @@ class HudManager:
 
             return False
 
-    def clear_chat_window(self, name: str) -> bool:
+    def clear_chat_window(self, group_name: str, element: str) -> bool:
         """Clear all messages from a chat window."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            self._groups[name].chat_messages.clear()
+            self._groups[key].chat_messages.clear()
 
             self._notify_callbacks({
                 "type": "clear_chat_window",
-                "name": name
+                "group": group_name
             })
 
             return True
 
-    def show_chat_window(self, name: str) -> bool:
+    def show_chat_window(self, group_name: str, element: str) -> bool:
         """Show a hidden chat window."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            self._groups[name].visible = True
+            self._groups[key].visible = True
 
             self._notify_callbacks({
                 "type": "show_chat_window",
-                "name": name
+                "group": group_name
             })
 
             return True
 
-    def hide_chat_window(self, name: str) -> bool:
+    def hide_chat_window(self, group_name: str, element: str) -> bool:
         """Hide a chat window."""
+        key = self._make_key(group_name, element)
         with self._lock:
-            if name not in self._groups:
+            if key not in self._groups:
                 return False
 
-            self._groups[name].visible = False
+            self._groups[key].visible = False
 
             self._notify_callbacks({
                 "type": "hide_chat_window",
-                "name": name
+                "group": group_name
+            })
+
+            return True
+
+    def show_element(self, group_name: str, element: str) -> bool:
+        """Show a hidden HUD element.
+
+        The element will continue to receive updates and perform all logic,
+        but will now be displayed again.
+
+        Args:
+            group_name: Name of the HUD group
+            element: Element type - "message", "persistent", or "chat"
+
+        Returns:
+            True if successful, False if group not found
+        """
+        key = self._make_key(group_name, element)
+        with self._lock:
+            if key not in self._groups:
+                return False
+
+            group = self._groups[key]
+            # Clear the hidden flag for this element
+            if element in group.element_hidden:
+                group.element_hidden[element] = False
+
+            self._notify_callbacks({
+                "type": "show_element",
+                "group": group_name,
+                "element": element
+            })
+
+            return True
+
+    def hide_element(self, group_name: str, element: str) -> bool:
+        """Hide a HUD element.
+
+        The element will no longer be displayed but will still receive updates
+        and perform all logic (timers, auto-hide, updates) in the background.
+
+        Args:
+            group_name: Name of the HUD group
+            element: Element type - "message", "persistent", or "chat"
+
+        Returns:
+            True if successful, False if group not found
+        """
+        key = self._make_key(group_name, element)
+        with self._lock:
+            if key not in self._groups:
+                return False
+
+            group = self._groups[key]
+            # Set the hidden flag for this element
+            group.element_hidden[element] = True
+
+            self._notify_callbacks({
+                "type": "hide_element",
+                "group": group_name,
+                "element": element
             })
 
             return True

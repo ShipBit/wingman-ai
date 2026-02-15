@@ -293,6 +293,7 @@ class HeadsUpOverlay:
             'opacity': 0,
             'target_opacity': int(merged_props.get('opacity', 0.85) * 255),
             'last_render_state': None,
+            'hidden': False,  # manually hidden flag
         }
 
         # Type-specific initialization
@@ -490,23 +491,31 @@ class HeadsUpOverlay:
             try:
                 win_type = win.get('type')
                 group = win.get('group', 'default')
+                # Check if window is manually hidden
+                is_hidden = win.get('hidden', False)
 
                 if win_type == self.WINDOW_TYPE_MESSAGE:
                     message_windows[group] = win
                     self._update_message_window(name, win)
-                    self._draw_message_window(name, win)
-                    self._blit_window(name, win)
+                    # Only draw and blit if not hidden
+                    if not is_hidden:
+                        self._draw_message_window(name, win)
+                        self._blit_window(name, win)
 
                 elif win_type == self.WINDOW_TYPE_PERSISTENT:
                     persistent_windows[group] = win
                     self._update_persistent_window(name, win)
-                    self._draw_persistent_window(name, win)
+                    # Only draw if not hidden (blit happens in second pass)
+                    if not is_hidden:
+                        self._draw_persistent_window(name, win)
                     # Don't blit yet - wait for collision check
 
                 elif win_type == self.WINDOW_TYPE_CHAT:
                     self._update_chat_window(name, win)
-                    self._draw_chat_window(name, win)
-                    self._blit_window(name, win)
+                    # Only draw and blit if not hidden
+                    if not is_hidden:
+                        self._draw_chat_window(name, win)
+                        self._blit_window(name, win)
 
             except Exception as e:
                 self._report_exception(f"update_window_{name}", e)
@@ -514,10 +523,13 @@ class HeadsUpOverlay:
         # Second pass: check collisions and update persistent windows
         for group, pers_win in persistent_windows.items():
             try:
-                msg_win = message_windows.get(group)
-                collision = self._check_window_collision(msg_win, pers_win)
-                self._update_persistent_fade(pers_win, collision)
-                self._blit_window(self._get_window_name(self.WINDOW_TYPE_PERSISTENT, group), pers_win)
+                is_hidden = pers_win.get('hidden', False)
+                # Only blit if not hidden
+                if not is_hidden:
+                    msg_win = message_windows.get(group)
+                    collision = self._check_window_collision(msg_win, pers_win)
+                    self._update_persistent_fade(pers_win, collision)
+                    self._blit_window(self._get_window_name(self.WINDOW_TYPE_PERSISTENT, group), pers_win)
             except Exception as e:
                 self._report_exception(f"persistent_collision_{group}", e)
 
@@ -533,6 +545,10 @@ class HeadsUpOverlay:
         for name, win in self._windows.items():
             hwnd = win.get('hwnd')
             if not hwnd:
+                continue
+
+            # Skip windows that are manually hidden
+            if win.get('hidden', False):
                 continue
 
             # Skip windows that are completely hidden (fade_state 0 AND opacity 0)
@@ -666,6 +682,10 @@ class HeadsUpOverlay:
         hwnd = win.get('hwnd')
         if not hwnd:
             return
+
+        # If manually hidden, force has_content to False so fade out completes
+        if win.get('hidden', False):
+            has_content = False
 
         key = 0x00FF00FF
         fade_amount = int(1080 * self.dt)
@@ -2650,6 +2670,32 @@ class HeadsUpOverlay:
                     # Note: Don't release layout slot yet - window still visible during fade-out
                     # Layout slot will be released when fade completes (opacity reaches 0)
                     win['canvas_dirty'] = True
+
+            # =====================================================================
+            # Element Visibility Commands
+            # =====================================================================
+            elif t == 'show_element':
+                group_name = msg.get('group')
+                element = msg.get('element')
+                if group_name and element:
+                    window_name = self._get_window_name(element, group_name)
+                    if window_name in self._windows:
+                        win = self._windows[window_name]
+                        win['hidden'] = False
+                        win['fade_state'] = 1  # fade in
+                        self._layout_manager.set_window_visible(window_name, True)
+                        win['canvas_dirty'] = True
+
+            elif t == 'hide_element':
+                group_name = msg.get('group')
+                element = msg.get('element')
+                if group_name and element:
+                    window_name = self._get_window_name(element, group_name)
+                    if window_name in self._windows:
+                        win = self._windows[window_name]
+                        win['hidden'] = True
+                        win['fade_state'] = 3  # fade out
+                        win['canvas_dirty'] = True
 
         except Exception as e:
             self._report_exception("handle_message", e)

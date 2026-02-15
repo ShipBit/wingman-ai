@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from hud_server.http_client import HudHttpClient
 from hud_server.types import (
     HudColor, LayoutMode,
-    MessageProps, PersistentProps, ChatWindowProps
+    MessageProps, PersistentProps, ChatWindowProps, WindowType
 )
 
 
@@ -276,6 +276,7 @@ class UserClient:
         # Create private HUD
         await self._client.create_group(
             self.private_hud_group,
+            WindowType.MESSAGE,
             props=self._config_to_props(self.config["private_hud"])
         )
         print(f"[{self.display_name}] Created private HUD group")
@@ -283,6 +284,7 @@ class UserClient:
         # Create private persistent panel
         await self._client.create_group(
             self.private_persistent_group,
+            WindowType.PERSISTENT,
             props=self._config_to_props(self.config["private_persistent"])
         )
         print(f"[{self.display_name}] Created private persistent group")
@@ -340,6 +342,7 @@ class UserClient:
             return
         await self._client.show_message(
             self.private_hud_group,
+            WindowType.MESSAGE,
             title=title,
             content=content,
             color=color or self.config["private_hud"]["accent_color"],
@@ -349,7 +352,7 @@ class UserClient:
         """Show/hide loader in private HUD."""
         if not self._client:
             return
-        await self._client.show_loader(self.private_hud_group, show)
+        await self._client.show_loader(self.private_hud_group, WindowType.MESSAGE, show)
 
     async def add_private_item(self, title: str, description: str,
                                duration: Optional[float] = None):
@@ -358,6 +361,7 @@ class UserClient:
             return
         await self._client.add_item(
             self.private_persistent_group,
+            WindowType.PERSISTENT,
             title=title,
             description=description,
             duration=duration,
@@ -369,6 +373,7 @@ class UserClient:
             return
         await self._client.update_item(
             self.private_persistent_group,
+            WindowType.PERSISTENT,
             title=title,
             description=description,
         )
@@ -377,7 +382,7 @@ class UserClient:
         """Remove a persistent item from private panel."""
         if not self._client:
             return
-        await self._client.remove_item(self.private_persistent_group, title)
+        await self._client.remove_item(self.private_persistent_group, WindowType.PERSISTENT, title)
 
     async def show_private_progress(self, title: str, current: float,
                                     maximum: float = 100, description: str = ""):
@@ -386,6 +391,7 @@ class UserClient:
             return
         await self._client.show_progress(
             self.private_persistent_group,
+            WindowType.PERSISTENT,
             title=title,
             current=current,
             maximum=maximum,
@@ -399,6 +405,7 @@ class UserClient:
             return
         await self._client.show_timer(
             self.private_persistent_group,
+            WindowType.PERSISTENT,
             title=title,
             duration=duration,
             description=description,
@@ -468,7 +475,7 @@ class SharedGroupManager:
                     typewriter_effect=config.get("typewriter_effect"),
                     z_order=config.get("z_order"),
                 )
-                await self._client.create_group(group_id, props=props)
+                await self._client.create_group(group_id, WindowType.MESSAGE, props=props)
             print(f"[SharedGroupManager] Created shared group: {config['name']}")
 
     async def cleanup_shared_groups(self):
@@ -490,6 +497,7 @@ class SharedGroupManager:
             return
         await self._client.show_message(
             "team_notifications",
+            WindowType.MESSAGE,
             title=title,
             content=content,
             color=color,
@@ -502,6 +510,7 @@ class SharedGroupManager:
             return
         await self._client.send_chat_message(
             "team_chat",
+            WindowType.CHAT,
             sender=sender,
             text=text,
             color=color,
@@ -513,6 +522,7 @@ class SharedGroupManager:
             return
         await self._client.add_item(
             "shared_status",
+            WindowType.PERSISTENT,
             title=title,
             description=description,
         )

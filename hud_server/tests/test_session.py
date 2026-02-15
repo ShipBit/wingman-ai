@@ -10,7 +10,7 @@ from typing import Optional, Any
 from hud_server.http_client import HudHttpClient
 from hud_server.types import (
     Anchor, LayoutMode, HudColor, FontFamily,
-    MessageProps, PersistentProps, ChatWindowProps
+    MessageProps, PersistentProps, ChatWindowProps, WindowType
 )
 
 
@@ -102,9 +102,8 @@ class TestSession:
         self._client: Optional[HudHttpClient] = None
         self.running = False
 
-        # Group name for this session
+        # Group name for this session (just the identifier, element passed separately)
         self.group_name = f"session_{session_id}_{self.name.lower()}"
-        self.persistent_group = f"persistent_{session_id}"
 
     async def start(self) -> bool:
         """Connect to the HUD server."""
@@ -189,6 +188,7 @@ class TestSession:
             color_value = color_value.value
         await self._client.show_message(
             group_name=self.group_name,
+            element=WindowType.MESSAGE,
             title=title,
             content=message,
             color=color_value,
@@ -214,7 +214,7 @@ class TestSession:
         """Hide the current message."""
         if not self._client:
             return
-        await self._client.hide_message(group_name=self.group_name)
+        await self._client.hide_message(group_name=self.group_name, element=WindowType.MESSAGE)
 
     async def set_loading(self, state: bool):
         """Set loading indicator state."""
@@ -225,6 +225,7 @@ class TestSession:
             color_value = color_value.value
         await self._client.show_loader(
             group_name=self.group_name,
+            element=WindowType.MESSAGE,
             show=state,
             color=color_value,
         )
@@ -238,7 +239,8 @@ class TestSession:
         if not self._client:
             return
         await self._client.add_item(
-            group_name=self.persistent_group,
+            group_name=self.group_name,
+            element=WindowType.PERSISTENT,
             title=title,
             description=description,
             duration=duration,
@@ -249,7 +251,8 @@ class TestSession:
         if not self._client:
             return
         await self._client.update_item(
-            group_name=self.persistent_group,
+            group_name=self.group_name,
+            element=WindowType.PERSISTENT,
             title=title,
             description=description,
         )
@@ -258,13 +261,38 @@ class TestSession:
         """Remove persistent information."""
         if not self._client:
             return
-        await self._client.remove_item(group_name=self.persistent_group, title=title)
+        await self._client.remove_item(group_name=self.group_name, element=WindowType.PERSISTENT, title=title)
 
     async def clear_all_persistent_info(self):
         """Clear all persistent information."""
         if not self._client:
             return
-        await self._client.clear_items(group_name=self.persistent_group)
+        await self._client.clear_items(group_name=self.group_name, element=WindowType.PERSISTENT)
+
+    # =========================================================================
+    # Element Visibility Commands
+    # =========================================================================
+
+    async def hide_element(self, element: WindowType):
+        """Hide a HUD element (message, persistent, or chat)."""
+        if not self._client:
+            return
+        await self._client.hide_element(group_name=self.group_name, element=element)
+
+    async def show_element(self, element: WindowType):
+        """Show a HUD element (message, persistent, or chat)."""
+        if not self._client:
+            return
+            group = self.group_name
+        await self._client.show_element(group_name=group, element=element)
+
+    async def hide_persistent(self):
+        """Hide the persistent info panel."""
+        await self.hide_element(WindowType.PERSISTENT)
+
+    async def show_persistent(self):
+        """Show the persistent info panel."""
+        await self.show_element(WindowType.PERSISTENT)
 
     # =========================================================================
     # Progress Commands
@@ -277,7 +305,8 @@ class TestSession:
         if not self._client:
             return
         await self._client.show_progress(
-            group_name=self.persistent_group,
+            group_name=self.group_name,
+            element=WindowType.PERSISTENT,
             title=title,
             current=current,
             maximum=maximum,
@@ -292,7 +321,8 @@ class TestSession:
         if not self._client:
             return
         await self._client.show_timer(
-            group_name=self.persistent_group,
+            group_name=self.group_name,
+            element=WindowType.PERSISTENT,
             title=title,
             duration=duration,
             description=description,
@@ -308,7 +338,7 @@ class TestSession:
         """Create a chat window."""
         if not self._client:
             return
-        await self._client.create_chat_window(name=name, **props)
+        await self._client.create_chat_window(group_name=name, element=WindowType.CHAT, **props)
 
     async def send_chat_message(self, window_name: str, sender: str, text: str,
                                 color: Optional[str] = None) -> Optional[str]:
@@ -316,7 +346,8 @@ class TestSession:
         if not self._client:
             return None
         result = await self._client.send_chat_message(
-            window_name=window_name,
+            group_name=window_name,
+            element=WindowType.CHAT,
             sender=sender,
             text=text,
             color=color,
@@ -330,7 +361,8 @@ class TestSession:
         if not self._client:
             return
         await self._client.update_chat_message(
-            window_name=window_name,
+            group_name=window_name,
+            element=WindowType.CHAT,
             message_id=message_id,
             text=text,
         )
@@ -339,25 +371,25 @@ class TestSession:
         """Clear a chat window."""
         if not self._client:
             return
-        await self._client.clear_chat_window(name)
+        await self._client.clear_chat_window(group_name=name, element=WindowType.CHAT)
 
     async def delete_chat_window(self, name: str):
         """Delete a chat window."""
         if not self._client:
             return
-        await self._client.delete_chat_window(name)
+        await self._client.delete_chat_window(group_name=name, element=WindowType.CHAT)
 
     async def show_chat_window(self, name: str):
         """Show a chat window."""
         if not self._client:
             return
-        await self._client.show_chat_window(name)
+        await self._client.show_chat_window(group_name=name, element=WindowType.CHAT)
 
     async def hide_chat_window(self, name: str):
         """Hide a chat window."""
         if not self._client:
             return
-        await self._client.hide_chat_window(name)
+        await self._client.hide_chat_window(group_name=name, element=WindowType.CHAT)
 
     # =========================================================================
     # State Management

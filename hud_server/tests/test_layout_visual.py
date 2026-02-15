@@ -17,7 +17,7 @@ import asyncio
 sys.path.insert(0, ".")
 
 from hud_server.tests.test_runner import TestContext
-from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps
+from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps, WindowType
 
 
 # =============================================================================
@@ -82,7 +82,7 @@ async def cleanup_groups(client, group_names):
     """Helper to clean up groups."""
     for name in group_names:
         try:
-            await client.hide_message(name)
+            await client.hide_message(name, WindowType.MESSAGE)
         except:
             pass
     await asyncio.sleep(0.5)
@@ -109,10 +109,11 @@ async def test_all_nine_anchors(session):
             width=280,
             accent_color=_get_value(config["color"]),
         )
-        await client.create_group(group_name, props=props)
+        await client.create_group(group_name, WindowType.MESSAGE, props=props)
 
         await client.show_message(
             group_name,
+            WindowType.MESSAGE,
             title=f"{config['emoji_fallback']} {config['label']}",
             content=f"Anchor: **{_get_value(anchor)}**\n\nThis window is positioned at the {config['label'].lower()} of the screen.",
             duration=30.0
@@ -157,10 +158,11 @@ async def test_priority_stacking(session):
             width=380,
             accent_color=_get_value(color),
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
 
         await client.show_message(
             name,
+            WindowType.MESSAGE,
             title=label,
             content=f"Priority value: **{priority}**\n\nHigher priority = closer to anchor point (top).",
             duration=20.0
@@ -186,10 +188,11 @@ async def test_priority_stacking(session):
             width=320,
             accent_color=_get_value(color),
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
 
         await client.show_message(
             name,
+            WindowType.MESSAGE,
             title=f"Right Side (P:{priority})",
             content=f"Independent stack on right side.\nPriority: {priority}",
             duration=15.0
@@ -220,7 +223,7 @@ async def test_dynamic_height_changes(session):
         width=420,
         accent_color=HudColor.ACCENT_ORANGE.value,
     )
-    await client.create_group("dyn_top", props=top_props)
+    await client.create_group("dyn_top", WindowType.MESSAGE, props=top_props)
 
     bottom_props = MessageProps(
         anchor=Anchor.TOP_LEFT.value,
@@ -229,12 +232,13 @@ async def test_dynamic_height_changes(session):
         width=420,
         accent_color=HudColor.ACCENT_BLUE.value,
     )
-    await client.create_group("dyn_bottom", props=bottom_props)
+    await client.create_group("dyn_bottom", WindowType.MESSAGE, props=bottom_props)
 
     # Phase 1: Short top window
     print("Phase 1: Top window is SHORT")
     await client.show_message(
         "dyn_top",
+        WindowType.MESSAGE,
         title="Top Window - SHORT",
         content="This is a short message.",
         duration=30.0
@@ -243,6 +247,7 @@ async def test_dynamic_height_changes(session):
 
     await client.show_message(
         "dyn_bottom",
+        WindowType.MESSAGE,
         title="Bottom Window",
         content="Watch me move as the top window changes height!",
         duration=30.0
@@ -253,6 +258,7 @@ async def test_dynamic_height_changes(session):
     print("Phase 2: Top window GROWS - bottom should move DOWN")
     await client.show_message(
         "dyn_top",
+        WindowType.MESSAGE,
         title="Top Window - TALL",
         content="""This window has grown significantly!
 
@@ -282,6 +288,7 @@ Layout manager handles it.
     print("Phase 3: Top window SHRINKS - bottom should move UP")
     await client.show_message(
         "dyn_top",
+        WindowType.MESSAGE,
         title="Top Window - SHORT again",
         content="Shrunk back down.",
         duration=20.0
@@ -292,6 +299,7 @@ Layout manager handles it.
     print("Phase 4: Top window MEDIUM height")
     await client.show_message(
         "dyn_top",
+        WindowType.MESSAGE,
         title="Top Window - MEDIUM",
         content="Now at a medium height.\n\nWith a bit more content.\n\nJust enough to demonstrate.",
         duration=15.0
@@ -322,33 +330,33 @@ async def test_visibility_reflow(session):
             width=380,
             accent_color=_get_value(color),
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
 
     # Show all three
     print("Phase 1: All 3 windows visible")
     for name, label in zip(groups, labels):
-        await client.show_message(name, title=label, content=f"Window: {label}", duration=30.0)
+        await client.show_message(name, WindowType.MESSAGE, title=label, content=f"Window: {label}", duration=30.0)
         await asyncio.sleep(0.2)
     await asyncio.sleep(3)
 
     # Hide middle (green)
     print("Phase 2: HIDING middle (Green) - Blue should move UP")
-    await client.hide_message("vis_2")
+    await client.hide_message("vis_2", WindowType.MESSAGE)
     await asyncio.sleep(3)
 
     # Show middle again
     print("Phase 3: SHOWING middle (Green) - Blue should move DOWN")
-    await client.show_message("vis_2", title="Second (Green) - BACK!", content="I'm back in the stack!", duration=20.0)
+    await client.show_message("vis_2", WindowType.MESSAGE, title="Second (Green) - BACK!", content="I'm back in the stack!", duration=20.0)
     await asyncio.sleep(3)
 
     # Hide first (red)
     print("Phase 4: HIDING first (Red) - Both should move UP")
-    await client.hide_message("vis_1")
+    await client.hide_message("vis_1", WindowType.MESSAGE)
     await asyncio.sleep(3)
 
     # Hide all except blue
     print("Phase 5: Only Blue remains")
-    await client.hide_message("vis_2")
+    await client.hide_message("vis_2", WindowType.MESSAGE)
     await asyncio.sleep(2)
 
     await cleanup_groups(client, groups)
@@ -382,10 +390,11 @@ async def test_opposite_anchors(session):
             width=320,
             accent_color=_get_value(color),
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
 
         await client.show_message(
             name,
+            WindowType.MESSAGE,
             title=label,
             content=f"Anchor: **{_get_value(anchor)}**\n\nDiagonal positioning test.",
             duration=15.0
@@ -417,10 +426,11 @@ async def test_center_anchors(session):
         width=350,
         accent_color=HudColor.WHITE.value,
     )
-    await client.create_group("center_main", props=center_props)
+    await client.create_group("center_main", WindowType.MESSAGE, props=center_props)
 
     await client.show_message(
         "center_main",
+        WindowType.MESSAGE,
         title="CENTER",
         content="This window is in the absolute center of the screen.",
         duration=20.0
@@ -448,10 +458,11 @@ async def test_center_anchors(session):
             width=260,
             accent_color=_get_value(color),
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
 
         await client.show_message(
             name,
+            WindowType.MESSAGE,
             title=label,
             content=f"Positioned at the {_get_value(anchor).replace('_', ' ')}.",
             duration=15.0
@@ -489,10 +500,11 @@ async def test_stacking_at_edge_centers(session):
             width=280,
             accent_color=_get_value(color),
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
 
         await client.show_message(
             name,
+            WindowType.MESSAGE,
             title=f"Left Stack (P:{priority})",
             content=f"Priority: {priority}\nVertically centered stack.",
             duration=20.0
@@ -513,10 +525,11 @@ async def test_stacking_at_edge_centers(session):
             width=280,
             accent_color=_get_value(color),
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
 
         await client.show_message(
             name,
+            WindowType.MESSAGE,
             title=f"Right Stack (P:{priority})",
             content=f"Priority: {priority}\nMirrored stack on right.",
             duration=20.0
@@ -547,10 +560,11 @@ async def test_mixed_content_with_progress(session):
         width=400,
         accent_color=HudColor.ACCENT_BLUE.value,
     )
-    await client.create_group("msg_group", props=msg_props)
+    await client.create_group("msg_group", WindowType.MESSAGE, props=msg_props)
 
     await client.show_message(
         "msg_group",
+        WindowType.MESSAGE,
         title="System Status",
         content="Active operations are displayed below.\n\nProgress bars update in real-time.",
         duration=30.0
@@ -564,11 +578,12 @@ async def test_mixed_content_with_progress(session):
         width=380,
         accent_color=HudColor.ACCENT_ORANGE.value,
     )
-    await client.create_group("progress_group", props=progress_props)
+    await client.create_group("progress_group", WindowType.MESSAGE, props=progress_props)
 
     # Add progress bar
     await client.show_progress(
         "progress_group",
+        WindowType.MESSAGE,
         title="Download Progress",
         current=0,
         maximum=100,
@@ -582,6 +597,7 @@ async def test_mixed_content_with_progress(session):
     for i in range(0, 101, 5):
         await client.show_progress(
             "progress_group",
+            WindowType.MESSAGE,
             title="Download Progress",
             current=i,
             maximum=100,
@@ -593,7 +609,7 @@ async def test_mixed_content_with_progress(session):
     await asyncio.sleep(2)
 
     await cleanup_groups(client, groups)
-    await client.remove_item("progress_group", "Download Progress")
+    await client.remove_item("progress_group", WindowType.MESSAGE, "Download Progress")
     print("[OK] Test 8 complete\n")
 
 
@@ -615,7 +631,7 @@ async def test_rapid_show_hide(session):
             width=350,
             accent_color=colors[i].value,
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
 
     print("Performing 5 rapid show/hide cycles...")
 
@@ -624,25 +640,25 @@ async def test_rapid_show_hide(session):
 
         # Show all
         for name in groups:
-            await client.show_message(name, title=f"Window {name}", content=f"Cycle {cycle + 1}", duration=10.0)
+            await client.show_message(name, WindowType.MESSAGE, title=f"Window {name}", content=f"Cycle {cycle + 1}", duration=10.0)
             await asyncio.sleep(0.05)
 
         await asyncio.sleep(0.5)
 
         # Hide middle
-        await client.hide_message("rapid_2")
+        await client.hide_message("rapid_2", WindowType.MESSAGE)
         await asyncio.sleep(0.3)
 
         # Show middle
-        await client.show_message("rapid_2", title="Window rapid_2", content=f"Back! Cycle {cycle + 1}", duration=10.0)
+        await client.show_message("rapid_2", WindowType.MESSAGE, title="Window rapid_2", content=f"Back! Cycle {cycle + 1}", duration=10.0)
         await asyncio.sleep(0.3)
 
         # Hide first
-        await client.hide_message("rapid_1")
+        await client.hide_message("rapid_1", WindowType.MESSAGE)
         await asyncio.sleep(0.3)
 
         # Show first
-        await client.show_message("rapid_1", title="Window rapid_1", content=f"Back! Cycle {cycle + 1}", duration=10.0)
+        await client.show_message("rapid_1", WindowType.MESSAGE, title="Window rapid_1", content=f"Back! Cycle {cycle + 1}", duration=10.0)
         await asyncio.sleep(0.2)
 
     print("Stress test complete - checking final state...")

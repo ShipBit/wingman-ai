@@ -6,6 +6,7 @@ Defines all request/response models and configuration schemas for the HUD Server
 
 from typing import Optional, Any
 from pydantic import BaseModel, Field, field_validator
+from hud_server.types import WindowType
 
 
 # ─────────────────────────────── Configuration ─────────────────────────────── #
@@ -130,7 +131,10 @@ class CreateGroupRequest(BaseModel):
     """Request to create a new HUD group."""
 
     group_name: str
-    """Unique name for this group."""
+    """Unique name for the group (e.g., wingman name)."""
+
+    element: WindowType
+    """The element type for this group (message, persistent, or chat)."""
 
     props: Optional[dict[str, Any]] = None
     """Optional properties for the group."""
@@ -142,6 +146,9 @@ class UpdateGroupRequest(BaseModel):
     group_name: str
     """Name of the group to update."""
 
+    element: WindowType
+    """The element type."""
+
     props: dict[str, Any]
     """Properties to update."""
 
@@ -150,7 +157,10 @@ class MessageRequest(BaseModel):
     """Request to show a message in a group."""
 
     group_name: str = Field(..., min_length=1, max_length=100)
-    """Name of the HUD group."""
+    """Name of the HUD group (e.g., wingman name)."""
+
+    element: WindowType
+    """The element type (message, persistent, or chat)."""
 
     title: str = Field(..., min_length=1, max_length=200)
     """Message title."""
@@ -175,6 +185,7 @@ class AppendMessageRequest(BaseModel):
     """Request to append content to current message (streaming)."""
 
     group_name: str
+    element: WindowType
     content: str
 
 
@@ -182,6 +193,7 @@ class LoaderRequest(BaseModel):
     """Request to show/hide loader animation."""
 
     group_name: str
+    element: WindowType
     show: bool = True
     color: Optional[str] = None
 
@@ -190,7 +202,10 @@ class ItemRequest(BaseModel):
     """Request to add/update a persistent item."""
 
     group_name: str
-    """Name of the HUD group."""
+    """Name of the HUD group (e.g., wingman name)."""
+
+    element: WindowType
+    """The element type (must be persistent)."""
 
     title: str
     """Item title/identifier (unique within group)."""
@@ -209,6 +224,7 @@ class UpdateItemRequest(BaseModel):
     """Request to update an existing item."""
 
     group_name: str
+    element: WindowType
     title: str
     description: Optional[str] = None
     color: Optional[str] = None
@@ -219,6 +235,7 @@ class RemoveItemRequest(BaseModel):
     """Request to remove an item."""
 
     group_name: str
+    element: WindowType
     title: str
 
 
@@ -226,6 +243,7 @@ class ProgressRequest(BaseModel):
     """Request to show/update a progress bar."""
 
     group_name: str
+    element: WindowType
     title: str
     current: float
     maximum: float = 100
@@ -239,6 +257,7 @@ class TimerRequest(BaseModel):
     """Request to show a timer-based progress bar."""
 
     group_name: str
+    element: WindowType
     title: str
     duration: float
     description: str = ""
@@ -251,8 +270,11 @@ class TimerRequest(BaseModel):
 class ChatMessageRequest(BaseModel):
     """Request to send a chat message."""
 
-    window_name: str
-    """Name of the chat window."""
+    group_name: str
+    """Name of the HUD group."""
+
+    element: WindowType
+    """The element type (must be chat)."""
 
     sender: str
     """Sender name."""
@@ -267,8 +289,11 @@ class ChatMessageRequest(BaseModel):
 class ChatMessageUpdateRequest(BaseModel):
     """Request to update an existing chat message."""
 
-    window_name: str
-    """Name of the chat window containing the message."""
+    group_name: str
+    """Name of the HUD group."""
+
+    element: WindowType
+    """The element type."""
 
     message_id: str
     """ID of the message to update (returned by send_chat_message)."""
@@ -280,11 +305,32 @@ class ChatMessageUpdateRequest(BaseModel):
 class CreateChatWindowRequest(BaseModel):
     """Request to create a chat window."""
 
-    name: str
+    group_name: str
+    """Name of the HUD group (e.g., wingman name)."""
+
+    element: WindowType
+    """The element type (must be chat)."""
+
+    anchor: Optional[str] = "top_left"
+    """Screen anchor point."""
+
+    priority: int = 5
+    """Stacking priority within anchor zone."""
+
+    layout_mode: str = "auto"
+    """Layout mode (auto or manual)."""
+
     x: int = 20
     y: int = 20
     width: int = 400
     max_height: int = 400
+    bg_color: Optional[str] = None
+    text_color: Optional[str] = None
+    accent_color: Optional[str] = None
+    opacity: Optional[float] = None
+    font_size: Optional[int] = None
+    font_family: Optional[str] = None
+    border_radius: Optional[int] = None
     auto_hide: bool = False
     auto_hide_delay: float = 10.0
     max_messages: int = 50

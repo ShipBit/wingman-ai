@@ -27,7 +27,7 @@ from services.file import get_writable_dir
 from services.printr import Printr
 from skills.skill_base import Skill, tool
 from hud_server.http_client import HudHttpClient
-from hud_server.types import Anchor, HudColor, FontFamily, LayoutMode, MessageProps, PersistentProps
+from hud_server.types import Anchor, HudColor, FontFamily, LayoutMode, MessageProps, PersistentProps, WindowType
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -75,9 +75,8 @@ class HUD(Skill):
         self._monitor_task: Optional[asyncio.Task] = None
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
-        # Groups configuration
-        self._messages_group = "messages"
-        self._persistent_group = "persistent"
+        # Group name for HUD (just wingman identifier, element passed separately)
+        self._group_name = None
 
     # ─────────────────────────────── Configuration ─────────────────────────────── #
 
@@ -415,12 +414,12 @@ class HUD(Skill):
         pers_props = self._get_persistent_props()
 
         # Delete and recreate message group
-        await self._client.delete_group(self._messages_group)
-        await self._client.create_group(self._messages_group, props=msg_props)
+        await self._client.delete_group(self._group_name, WindowType.MESSAGE)
+        await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props)
 
         # Delete and recreate persistent group, then restore items
-        await self._client.delete_group(self._persistent_group)
-        await self._client.create_group(self._persistent_group, props=pers_props)
+        await self._client.delete_group(self._group_name, WindowType.PERSISTENT)
+        await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props)
 
         # Re-add all persistent items with the new group settings
         if self._persistent_items:
@@ -461,10 +460,10 @@ class HUD(Skill):
                 pass
 
             # Setup group names if not done
-            if self._messages_group == "messages":
+            if self._group_name == "messages":
                 sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', self.wingman.name)
-                self._messages_group = f"messages_{sanitized_name}"
-                self._persistent_group = f"persistent_{sanitized_name}"
+                self._group_name = f"messages_{sanitized_name}"
+                self._group_name = f"persistent_{sanitized_name}"
 
         if not self._client.connected:
             # Try to connect/reconnect
@@ -480,8 +479,8 @@ class HUD(Skill):
                     # Create/update groups after connect
                     msg_props = self._get_hud_props()
                     pers_props = self._get_persistent_props()
-                    await self._client.create_group(self._messages_group, props=msg_props)
-                    await self._client.create_group(self._persistent_group, props=pers_props)
+                    await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props)
+                    await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props)
 
                     # Start audio monitor if not running
                     if not self._monitor_task or self._monitor_task.done():
@@ -530,8 +529,8 @@ class HUD(Skill):
         
         # Setup groups with unique names per wingman
         sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', self.wingman.name)
-        self._messages_group = f"messages_{sanitized_name}"
-        self._persistent_group = f"persistent_{sanitized_name}"
+        self._group_name = f"messages_{sanitized_name}"
+        self._group_name = f"persistent_{sanitized_name}"
 
         try:
             if await self._client.connect(timeout=3.0):
@@ -546,8 +545,8 @@ class HUD(Skill):
                 try:
                     msg_props = self._get_hud_props()
                     pers_props = self._get_persistent_props()
-                    await self._client.create_group(self._messages_group, props=msg_props)
-                    await self._client.create_group(self._persistent_group, props=pers_props)
+                    await self._client.create_group(self._group_name, WindowType.MESSAGE, props=msg_props)
+                    await self._client.create_group(self._group_name, WindowType.PERSISTENT, props=pers_props)
                 except Exception:
                     pass
             else:
@@ -626,8 +625,8 @@ class HUD(Skill):
         # Save state
         self._save_persistent_items()
         self.hud_clear_all(False)
-        await self._client.delete_group(self._messages_group)
-        await self._client.delete_group(self._persistent_group)
+        await self._client.delete_group(self._group_name, WindowType.MESSAGE)
+        await self._client.delete_group(self._group_name, WindowType.PERSISTENT)
 
         # Disconnect client
         if self._client:
@@ -715,7 +714,8 @@ class HUD(Skill):
         props.fade_delay = duration
 
         result = await self._client.show_message(
-            group_name=self._messages_group,
+            group_name=self._group_name,
+            element=WindowType.MESSAGE,
             title=title,
             content=message,
             color=color,
@@ -735,13 +735,13 @@ class HUD(Skill):
         if not await self._ensure_connected():
             return
 
-        await self._client.hide_message(group_name=self._messages_group)
+        await self._client.hide_message(group_name=self._group_name, element=WindowType.MESSAGE)
 
     async def _show_loader(self, show: bool, color: str = None):
         """Show or hide the loading animation."""
         if not await self._ensure_connected():
             return
-        await self._client.show_loader(group_name=self._messages_group, show=show, color=color)
+        await self._client.show_loader(group_name=self._group_name, element=WindowType.MESSAGE, show=show, color=color)
 
     def _send_command_sync(self, coro):
         """Send a command synchronously (for @tool methods)."""
@@ -817,7 +817,8 @@ class HUD(Skill):
                         self._persistent_items[title] = item
                         self._send_command_sync(
                             self._client.show_timer(
-                                group_name=self._persistent_group,
+                                group_name=self._group_name,
+                                element=WindowType.PERSISTENT,
                                 title=title,
                                 duration=item['timer_duration'],
                                 description=item.get('description', ''),
@@ -831,7 +832,8 @@ class HUD(Skill):
                     self._persistent_items[title] = item
                     self._send_command_sync(
                         self._client.show_progress(
-                            group_name=self._persistent_group,
+                            group_name=self._group_name,
+                            element=WindowType.PERSISTENT,
                             title=title,
                             current=item.get('current', 0),
                             maximum=item.get('maximum', 100),
@@ -851,7 +853,8 @@ class HUD(Skill):
                 self._persistent_items[title] = item
                 self._send_command_sync(
                     self._client.add_item(
-                        group_name=self._persistent_group,
+                        group_name=self._group_name,
+                        element=WindowType.PERSISTENT,
                         title=title,
                         description=item.get('description', ''),
                         duration=remaining_duration
@@ -973,7 +976,8 @@ class HUD(Skill):
         if self._client:
             self._send_command_sync(
                 self._client.add_item(
-                    group_name=self._persistent_group,
+                    group_name=self._group_name,
+                    element=WindowType.PERSISTENT,
                     title=title,
                     description=description_markdown,
                     duration=valid_duration
@@ -994,7 +998,7 @@ class HUD(Skill):
 
         if self._client:
             self._send_command_sync(
-                self._client.remove_item(group_name=self._persistent_group, title=title)
+                self._client.remove_item(group_name=self._group_name, element=WindowType.PERSISTENT, title=title)
             )
 
         self._save_persistent_items()
@@ -1046,7 +1050,7 @@ class HUD(Skill):
             self._persistent_items.pop(title, None)
             if self._client:
                 self._send_command_sync(
-                    self._client.remove_item(group_name=self._persistent_group, title=title)
+                    self._client.remove_item(group_name=self._group_name, element=WindowType.PERSISTENT, title=title)
                 )
 
         if save:
@@ -1092,7 +1096,8 @@ class HUD(Skill):
         if self._client:
             self._send_command_sync(
                 self._client.show_progress(
-                    group_name=self._persistent_group,
+                    group_name=self._group_name,
+                    element=WindowType.PERSISTENT,
                     title=title,
                     current=current,
                     maximum=maximum,
@@ -1142,7 +1147,8 @@ class HUD(Skill):
         if self._client:
             self._send_command_sync(
                 self._client.show_timer(
-                    group_name=self._persistent_group,
+                    group_name=self._group_name,
+                    element=WindowType.PERSISTENT,
                     title=title,
                     duration=duration_seconds,
                     description=description_markdown or '',
@@ -1194,7 +1200,8 @@ class HUD(Skill):
         if self._client:
             self._send_command_sync(
                 self._client.show_progress(
-                    group_name=self._persistent_group,
+                    group_name=self._group_name,
+                    element=WindowType.PERSISTENT,
                     title=title,
                     current=current,
                     maximum=maximum,
@@ -1239,7 +1246,8 @@ class HUD(Skill):
         if self._client:
             self._send_command_sync(
                 self._client.update_item(
-                    group_name=self._persistent_group,
+                    group_name=self._group_name,
+                    element=WindowType.PERSISTENT,
                     title=title,
                     description=description_markdown,
                     duration=send_duration
@@ -1248,3 +1256,57 @@ class HUD(Skill):
 
         self._save_persistent_items()
         return f"Updated info panel: {title}"
+
+    @tool()
+    def hud_hide(self) -> str:
+        """
+        Hide the HUD elements (message window and persistent info panel).
+
+        The HUD elements will no longer be displayed but will still receive updates
+        and perform all logic (timers, auto-hide, item updates) in the background.
+        Use hud_show to display them again.
+        """
+        print(f"[HUD SKILL] hud_hide called, _group_name={self._group_name}")
+        if self._client:
+            print(f"[HUD SKILL] Calling hide_element for PERSISTENT")
+            self._send_command_sync(
+                self._client.hide_element(
+                    group_name=self._group_name,
+                    element=WindowType.PERSISTENT
+                )
+            )
+            print(f"[HUD SKILL] Calling hide_element for MESSAGE")
+            self._send_command_sync(
+                self._client.hide_element(
+                    group_name=self._group_name,
+                    element=WindowType.MESSAGE
+                )
+            )
+        else:
+            print(f"[HUD SKILL] No client!")
+
+        return "HUD is now hidden."
+
+    @tool()
+    def hud_show(self) -> str:
+        """
+        Show the HUD elements (message window and persistent info panel).
+
+        The HUD elements will continue to receive updates and perform all logic,
+        and will now be displayed again.
+        """
+        if self._client:
+            self._send_command_sync(
+                self._client.show_element(
+                    group_name=self._group_name,
+                    element=WindowType.PERSISTENT
+                )
+            )
+            self._send_command_sync(
+                self._client.show_element(
+                    group_name=self._group_name,
+                    element=WindowType.MESSAGE
+                )
+            )
+
+        return "HUD is now visible."

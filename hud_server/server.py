@@ -25,6 +25,7 @@ from api.enums import LogType
 from services.printr import Printr
 from hud_server.hud_manager import HudManager
 from hud_server import constants as hud_const
+from hud_server.types import WindowType
 from hud_server.models import (
     CreateGroupRequest,
     UpdateGroupRequest,
@@ -213,28 +214,40 @@ class HudServer:
         @app.post("/groups", response_model=OperationResponse, tags=["groups"])
         async def create_group(request: CreateGroupRequest):
             """Create or update a HUD group."""
-            self.manager.create_group(request.group_name, request.props)
+            self.manager.create_group(request.group_name, request.element.value, request.props)
             return OperationResponse(status="ok", message=f"Group '{request.group_name}' created")
 
-        @app.put("/groups/{group_name}", response_model=OperationResponse, tags=["groups"])
-        async def update_group(group_name: str, request: UpdateGroupRequest):
+        @app.put("/groups/{group_name}/{element}", response_model=OperationResponse, tags=["groups"])
+        async def update_group(group_name: str, element: str, request: UpdateGroupRequest):
             """Update properties of an existing group."""
-            if not self.manager.update_group(group_name, request.props):
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.update_group(group_name, element_type.value, request.props):
                 raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok", message=f"Group '{group_name}' updated")
 
-        @app.patch("/groups/{group_name}", response_model=OperationResponse, tags=["groups"])
-        async def patch_group(group_name: str, request: UpdateGroupRequest):
+        @app.patch("/groups/{group_name}/{element}", response_model=OperationResponse, tags=["groups"])
+        async def patch_group(group_name: str, element: str, request: UpdateGroupRequest):
             """Update properties of an existing group (PATCH)."""
-            result = self.manager.update_group(group_name, request.props)
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            result = self.manager.update_group(group_name, element_type.value, request.props)
             if not result:
                 raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok", message=f"Group '{group_name}' updated")
 
-        @app.delete("/groups/{group_name}", response_model=OperationResponse, tags=["groups"])
-        async def delete_group(group_name: str):
+        @app.delete("/groups/{group_name}/{element}", response_model=OperationResponse, tags=["groups"])
+        async def delete_group(group_name: str, element: str):
             """Delete a HUD group."""
-            if not self.manager.delete_group(group_name):
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.delete_group(group_name, element_type.value):
                 raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok", message=f"Group '{group_name}' deleted")
 
@@ -266,6 +279,7 @@ class HudServer:
             """Show a message in a HUD group."""
             self.manager.show_message(
                 group_name=request.group_name,
+                element=request.element.value,
                 title=request.title,
                 content=request.content,
                 color=request.color,
@@ -278,14 +292,18 @@ class HudServer:
         @app.post("/message/append", response_model=OperationResponse, tags=["messages"])
         async def append_message(request: AppendMessageRequest):
             """Append content to the current message (for streaming)."""
-            if not self.manager.append_message(request.group_name, request.content):
+            if not self.manager.append_message(request.group_name, request.element.value, request.content):
                 raise HTTPException(status_code=404, detail=f"Group '{request.group_name}' not found")
             return OperationResponse(status="ok")
 
-        @app.post("/message/hide/{group_name}", response_model=OperationResponse, tags=["messages"])
-        async def hide_message(group_name: str):
+        @app.post("/message/hide/{group_name}/{element}", response_model=OperationResponse, tags=["messages"])
+        async def hide_message(group_name: str, element: str):
             """Hide the current message in a group."""
-            if not self.manager.hide_message(group_name):
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.hide_message(group_name, element_type.value):
                 raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok")
 
@@ -294,7 +312,7 @@ class HudServer:
         @app.post("/loader", response_model=OperationResponse, tags=["loader"])
         async def set_loader(request: LoaderRequest):
             """Show or hide the loader animation."""
-            self.manager.set_loader(request.group_name, request.show, request.color)
+            self.manager.set_loader(request.group_name, request.element.value, request.show, request.color)
             return OperationResponse(status="ok")
 
         # ─────────────────────────────── Items ─────────────────────────────── #
@@ -304,6 +322,7 @@ class HudServer:
             """Add a persistent item to a group."""
             self.manager.add_item(
                 group_name=request.group_name,
+                element=request.element.value,
                 title=request.title,
                 description=request.description,
                 color=request.color,
@@ -316,6 +335,7 @@ class HudServer:
             """Update an existing item."""
             if not self.manager.update_item(
                 group_name=request.group_name,
+                element=request.element.value,
                 title=request.title,
                 description=request.description,
                 color=request.color,
@@ -324,17 +344,25 @@ class HudServer:
                 raise HTTPException(status_code=404, detail="Item not found")
             return OperationResponse(status="ok")
 
-        @app.delete("/items/{group_name}/{title}", response_model=OperationResponse, tags=["items"])
-        async def remove_item(group_name: str, title: str):
+        @app.delete("/items/{group_name}/{element}/{title}", response_model=OperationResponse, tags=["items"])
+        async def remove_item(group_name: str, element: str, title: str):
             """Remove an item from a group."""
-            if not self.manager.remove_item(group_name, title):
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.remove_item(group_name, element_type.value, title):
                 raise HTTPException(status_code=404, detail="Item not found")
             return OperationResponse(status="ok")
 
-        @app.delete("/items/{group_name}", response_model=OperationResponse, tags=["items"])
-        async def clear_items(group_name: str):
+        @app.delete("/items/{group_name}/{element}", response_model=OperationResponse, tags=["items"])
+        async def clear_items(group_name: str, element: str):
             """Clear all items from a group."""
-            if not self.manager.clear_items(group_name):
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.clear_items(group_name, element_type.value):
                 raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok")
 
@@ -345,6 +373,7 @@ class HudServer:
             """Show or update a progress bar."""
             self.manager.show_progress(
                 group_name=request.group_name,
+                element=request.element.value,
                 title=request.title,
                 current=request.current,
                 maximum=request.maximum,
@@ -359,6 +388,7 @@ class HudServer:
             """Show a timer-based progress bar."""
             self.manager.show_timer(
                 group_name=request.group_name,
+                element=request.element.value,
                 title=request.title,
                 duration=request.duration,
                 description=request.description,
@@ -374,10 +404,20 @@ class HudServer:
         async def create_chat_window(request: CreateChatWindowRequest):
             """Create a new chat window."""
             props = {
+                "anchor": request.anchor,
+                "priority": request.priority,
+                "layout_mode": request.layout_mode,
                 "x": request.x,
                 "y": request.y,
                 "width": request.width,
                 "max_height": request.max_height,
+                "bg_color": request.bg_color,
+                "text_color": request.text_color,
+                "accent_color": request.accent_color,
+                "opacity": request.opacity,
+                "font_size": request.font_size,
+                "font_family": request.font_family,
+                "border_radius": request.border_radius,
                 "auto_hide": request.auto_hide,
                 "auto_hide_delay": request.auto_hide_delay,
                 "max_messages": request.max_messages,
@@ -385,62 +425,140 @@ class HudServer:
                 "fade_old_messages": request.fade_old_messages,
                 "is_chat_window": True,
             }
+            # Remove None values
+            props = {k: v for k, v in props.items() if v is not None}
             if request.props:
                 props.update(request.props)
 
-            self.manager.create_chat_window(request.name, props)
-            return OperationResponse(status="ok", message=f"Chat window '{request.name}' created")
+            self.manager.create_group(request.group_name, request.element.value, props)
+            return OperationResponse(status="ok", message=f"Chat window '{request.group_name}' created")
 
-        @app.delete("/chat/window/{name}", response_model=OperationResponse, tags=["chat"])
-        async def delete_chat_window(name: str):
+        @app.delete("/chat/window/{group_name}/{element}", response_model=OperationResponse, tags=["chat"])
+        async def delete_chat_window(group_name: str, element: str):
             """Delete a chat window."""
-            if not self.manager.delete_group(name):
-                raise HTTPException(status_code=404, detail=f"Chat window '{name}' not found")
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.delete_group(group_name, element_type.value):
+                raise HTTPException(status_code=404, detail=f"Chat window '{group_name}' not found")
             return OperationResponse(status="ok")
 
         @app.post("/chat/message", response_model=ChatMessageResponse, tags=["chat"])
         async def send_chat_message(request: ChatMessageRequest):
             """Send a message to a chat window. Returns the message ID."""
             message_id = self.manager.send_chat_message(
-                window_name=request.window_name,
+                group_name=request.group_name,
+                element=request.element.value,
                 sender=request.sender,
                 text=request.text,
                 color=request.color
             )
             if message_id is None:
-                raise HTTPException(status_code=404, detail=f"Chat window '{request.window_name}' not found")
+                raise HTTPException(status_code=404, detail=f"Chat window '{request.group_name}' not found")
             return ChatMessageResponse(status="ok", message_id=message_id)
 
         @app.put("/chat/message", response_model=OperationResponse, tags=["chat"])
         async def update_chat_message(request: ChatMessageUpdateRequest):
             """Update an existing chat message's text content by its ID."""
             if not self.manager.update_chat_message(
-                window_name=request.window_name,
+                group_name=request.group_name,
+                element=request.element.value,
                 message_id=request.message_id,
                 text=request.text
             ):
-                raise HTTPException(status_code=404, detail=f"Message '{request.message_id}' not found in window '{request.window_name}'")
+                raise HTTPException(status_code=404, detail=f"Message '{request.message_id}' not found in window '{request.group_name}'")
             return OperationResponse(status="ok")
 
-        @app.delete("/chat/messages/{window_name}", response_model=OperationResponse, tags=["chat"])
-        async def clear_chat_messages(window_name: str):
+        @app.delete("/chat/messages/{group_name}/{element}", response_model=OperationResponse, tags=["chat"])
+        async def clear_chat_messages(group_name: str, element: str):
             """Clear all messages from a chat window."""
-            if not self.manager.clear_chat_window(window_name):
-                raise HTTPException(status_code=404, detail=f"Chat window '{window_name}' not found")
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.clear_chat_window(group_name, element_type.value):
+                raise HTTPException(status_code=404, detail=f"Chat window '{group_name}' not found")
             return OperationResponse(status="ok")
 
-        @app.post("/chat/show/{name}", response_model=OperationResponse, tags=["chat"])
-        async def show_chat_window(name: str):
+        @app.post("/chat/show/{group_name}/{element}", response_model=OperationResponse, tags=["chat"])
+        async def show_chat_window(group_name: str, element: str):
             """Show a hidden chat window."""
-            if not self.manager.show_chat_window(name):
-                raise HTTPException(status_code=404, detail=f"Chat window '{name}' not found")
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.show_chat_window(group_name, element_type.value):
+                raise HTTPException(status_code=404, detail=f"Chat window '{group_name}' not found")
             return OperationResponse(status="ok")
 
-        @app.post("/chat/hide/{name}", response_model=OperationResponse, tags=["chat"])
-        async def hide_chat_window(name: str):
+        @app.post("/chat/hide/{group_name}/{element}", response_model=OperationResponse, tags=["chat"])
+        async def hide_chat_window(group_name: str, element: str):
             """Hide a chat window."""
-            if not self.manager.hide_chat_window(name):
-                raise HTTPException(status_code=404, detail=f"Chat window '{name}' not found")
+            try:
+                element_type = WindowType(element)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid element type: {element}")
+            if not self.manager.hide_chat_window(group_name, element_type.value):
+                raise HTTPException(status_code=404, detail=f"Chat window '{group_name}' not found")
+            return OperationResponse(status="ok")
+
+        # ─────────────────────────────── Element Visibility ─────────────────────────────── #
+
+        @app.post("/element/show", response_model=OperationResponse, tags=["element"])
+        async def show_element(request: Request):
+            """Show a hidden HUD element (message, persistent, or chat).
+
+            The element will continue to receive updates and perform all logic,
+            but will now be displayed again.
+            """
+            body = await request.json()
+            group_name = body.get("group_name")
+            element_str = body.get("element")
+
+            if not group_name or not element_str:
+                raise HTTPException(status_code=400, detail="group_name and element are required")
+
+            # Validate element is a valid WindowType enum value
+            try:
+                element = WindowType(element_str)
+            except ValueError:
+                valid_values = [e.value for e in WindowType]
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"element must be one of: {', '.join(valid_values)}"
+                )
+
+            if not self.manager.show_element(group_name, element.value):
+                raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
+            return OperationResponse(status="ok")
+
+        @app.post("/element/hide", response_model=OperationResponse, tags=["element"])
+        async def hide_element(request: Request):
+            """Hide a HUD element (message, persistent, or chat).
+
+            The element will no longer be displayed but will still receive updates
+            and perform all logic (timers, auto-hide, updates) in the background.
+            """
+            body = await request.json()
+            group_name = body.get("group_name")
+            element_str = body.get("element")
+
+            if not group_name or not element_str:
+                raise HTTPException(status_code=400, detail="group_name and element are required")
+
+            # Validate element is a valid WindowType enum value
+            try:
+                element = WindowType(element_str)
+            except ValueError:
+                valid_values = [e.value for e in WindowType]
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"element must be one of: {', '.join(valid_values)}"
+                )
+
+            if not self.manager.hide_element(group_name, element.value):
+                raise HTTPException(status_code=404, detail=f"Group '{group_name}' not found")
             return OperationResponse(status="ok")
 
 

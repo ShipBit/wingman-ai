@@ -27,7 +27,7 @@ import time
 import random
 from enum import Enum
 from hud_server.tests.test_session import TestSession
-from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps
+from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps, WindowType
 
 try:
     import keyboard.keyboard as keyboard
@@ -452,6 +452,7 @@ async def show_cell(session: TestSession, x: int, y: int, cell_type: str, color_
 
     await session._client.show_message(
         group_name=group_name,
+        element=WindowType.MESSAGE,
         title=" ",
         content=" ",  # Need non-empty content to keep HUD visible
         color=cell_color,
@@ -468,7 +469,7 @@ async def hide_cell(session: TestSession, x: int, y: int):
 
     if (x, y) in _active_cell_huds:
         group_name = get_cell_group_name(x, y)
-        await session._client.delete_group(group_name)
+        await session._client.delete_group(group_name, WindowType.MESSAGE)
         _active_cell_huds.discard((x, y))
 
 
@@ -479,12 +480,12 @@ async def cleanup_all_cells(session: TestSession):
 
     for (x, y) in list(_active_cell_huds):
         group_name = get_cell_group_name(x, y)
-        await session._client.delete_group(group_name)
+        await session._client.delete_group(group_name, WindowType.MESSAGE)
 
     _active_cell_huds.clear()
 
     # Also clean up stats
-    await session._client.delete_group("snake_stats")
+    await session._client.delete_group("snake_stats", WindowType.MESSAGE)
 
 
 async def render_initial_state(session: TestSession, game: SnakeGame):
@@ -621,6 +622,7 @@ async def show_combo_flash(session: TestSession, combo: int):
     )
     await session._client.show_message(
         group_name="snake_combo_flash",
+        element=WindowType.MESSAGE,
         title=" ",
         content=combo_text,
         color=color,
@@ -641,6 +643,7 @@ async def show_start_screen(session: TestSession):
     # Title HUD - Highest priority
     await session._client.show_message(
         group_name="snake_menu_title",
+        element=WindowType.MESSAGE,
         title=" ",  # Space to pass validation
         content="# 🐍 ENDLESS SNAKE GAME 🐍",
         color=COLOR_GAME,
@@ -651,6 +654,7 @@ async def show_start_screen(session: TestSession):
     # How to Play HUD
     await session._client.show_message(
         group_name="snake_menu_howto",
+        element=WindowType.MESSAGE,
         title=" ",
         content="""## How to Play
 - Use **Arrow Keys** to control the snake
@@ -667,6 +671,7 @@ async def show_start_screen(session: TestSession):
     # Features HUD
     await session._client.show_message(
         group_name="snake_menu_features",
+        element=WindowType.MESSAGE,
         title=" ",
         content="""## Features
 - 🌈 Snake body gradient (head to tail)
@@ -682,6 +687,7 @@ async def show_start_screen(session: TestSession):
     # Controls HUD
     await session._client.show_message(
         group_name="snake_menu_controls",
+        element=WindowType.MESSAGE,
         title=" ",
         content=f"""## Controls
 - **↑ ↓ ← →** : Move snake
@@ -694,6 +700,7 @@ async def show_start_screen(session: TestSession):
     # Start Button HUD
     await session._client.show_message(
         group_name="snake_menu_start",
+        element=WindowType.MESSAGE,
         title=" ",
         content="🎮 **Press SPACE to begin your endless journey!** 🎮",
         color=COLOR_GAME,
@@ -722,6 +729,7 @@ async def show_stats(session: TestSession, game: SnakeGame, elapsed: float, spee
 
     await session._client.show_message(
         group_name="snake_stats",
+        element=WindowType.MESSAGE,
         title="🎮 Endless Snake",
         content=stats_message,
         color=COLOR_GAME,
@@ -761,6 +769,7 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
     # Game Over Title HUD
     await session._client.show_message(
         group_name="snake_gameover_title",
+        element=WindowType.MESSAGE,
         title=" ",
         content=f"# {result_emoji} GAME OVER {result_emoji}",
         color=COLOR_GAME_OVER,
@@ -771,6 +780,7 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
     # Rating HUD
     await session._client.show_message(
         group_name="snake_gameover_rating",
+        element=WindowType.MESSAGE,
         title=" ",
         content=f"## {rating}",
         color=COLOR_GAME_OVER,
@@ -781,6 +791,7 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
     # Stats HUD
     await session._client.show_message(
         group_name="snake_gameover_stats",
+        element=WindowType.MESSAGE,
         title=" ",
         content=f"""### Final Stats
 - **Score:** {game.score}
@@ -795,6 +806,7 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
     # Play Again Button HUD
     await session._client.show_message(
         group_name="snake_gameover_playagain",
+        element=WindowType.MESSAGE,
         title=" ",
         content="🔄 **Press SPACE to play again**",
         color=COLOR_GAME,
@@ -805,6 +817,7 @@ async def show_game_over_screen(session: TestSession, game: SnakeGame, elapsed: 
     # Exit Button HUD
     await session._client.show_message(
         group_name="snake_gameover_exit",
+        element=WindowType.MESSAGE,
         title=" ",
         content="👋 **Press ESC to exit**",
         color="#888888",
@@ -842,11 +855,11 @@ async def test_snake_game(session: TestSession):
 
     # Hide start menu before game starts
     if session._client:
-        await session._client.delete_group("snake_menu_title")
-        await session._client.delete_group("snake_menu_howto")
-        await session._client.delete_group("snake_menu_features")
-        await session._client.delete_group("snake_menu_controls")
-        await session._client.delete_group("snake_menu_start")
+        await session._client.delete_group("snake_menu_title", WindowType.MESSAGE)
+        await session._client.delete_group("snake_menu_howto", WindowType.MESSAGE)
+        await session._client.delete_group("snake_menu_features", WindowType.MESSAGE)
+        await session._client.delete_group("snake_menu_controls", WindowType.MESSAGE)
+        await session._client.delete_group("snake_menu_start", WindowType.MESSAGE)
 
     print(f"[{session.name}] Game started!")
 
@@ -959,11 +972,11 @@ async def test_snake_game(session: TestSession):
 
         # Hide game over menu
         if session._client:
-            await session._client.delete_group("snake_gameover_title")
-            await session._client.delete_group("snake_gameover_rating")
-            await session._client.delete_group("snake_gameover_stats")
-            await session._client.delete_group("snake_gameover_playagain")
-            await session._client.delete_group("snake_gameover_exit")
+            await session._client.delete_group("snake_gameover_title", WindowType.MESSAGE)
+            await session._client.delete_group("snake_gameover_rating", WindowType.MESSAGE)
+            await session._client.delete_group("snake_gameover_stats", WindowType.MESSAGE)
+            await session._client.delete_group("snake_gameover_playagain", WindowType.MESSAGE)
+            await session._client.delete_group("snake_gameover_exit", WindowType.MESSAGE)
 
         # Cleanup keyboard hooks before returning
         keyboard.unhook_all()
@@ -976,17 +989,17 @@ async def test_snake_game(session: TestSession):
         # Cleanup all menu HUDs
         if session._client:
             # Start menu
-            await session._client.delete_group("snake_menu_title")
-            await session._client.delete_group("snake_menu_howto")
-            await session._client.delete_group("snake_menu_features")
-            await session._client.delete_group("snake_menu_controls")
-            await session._client.delete_group("snake_menu_start")
+            await session._client.delete_group("snake_menu_title", WindowType.MESSAGE)
+            await session._client.delete_group("snake_menu_howto", WindowType.MESSAGE)
+            await session._client.delete_group("snake_menu_features", WindowType.MESSAGE)
+            await session._client.delete_group("snake_menu_controls", WindowType.MESSAGE)
+            await session._client.delete_group("snake_menu_start", WindowType.MESSAGE)
             # Game over menu
-            await session._client.delete_group("snake_gameover_title")
-            await session._client.delete_group("snake_gameover_rating")
-            await session._client.delete_group("snake_gameover_stats")
-            await session._client.delete_group("snake_gameover_playagain")
-            await session._client.delete_group("snake_gameover_exit")
+            await session._client.delete_group("snake_gameover_title", WindowType.MESSAGE)
+            await session._client.delete_group("snake_gameover_rating", WindowType.MESSAGE)
+            await session._client.delete_group("snake_gameover_stats", WindowType.MESSAGE)
+            await session._client.delete_group("snake_gameover_playagain", WindowType.MESSAGE)
+            await session._client.delete_group("snake_gameover_exit", WindowType.MESSAGE)
         return False
 
 

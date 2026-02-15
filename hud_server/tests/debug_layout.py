@@ -7,7 +7,7 @@ import asyncio
 sys.path.insert(0, ".")
 
 from hud_server.tests.test_runner import TestContext
-from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps
+from hud_server.types import Anchor, LayoutMode, HudColor, MessageProps, WindowType
 
 
 async def debug_layout_test(session):
@@ -34,14 +34,14 @@ async def debug_layout_test(session):
             width=400,
             accent_color=color.value,
         )
-        await client.create_group(name, props=props)
+        await client.create_group(name, WindowType.MESSAGE, props=props)
         print(f"   Created: {name} (priority={priority})")
 
     await asyncio.sleep(0.5)
 
     print("\n2. Showing all three messages...")
     for name, priority, color, label in groups_config:
-        await client.show_message(name, title=label, content=f"Priority: {priority}", duration=60.0)
+        await client.show_message(name, WindowType.MESSAGE, title=label, content=f"Priority: {priority}", duration=60.0)
         print(f"   Shown: {name}")
         await asyncio.sleep(0.2)
 
@@ -50,14 +50,14 @@ async def debug_layout_test(session):
     await asyncio.sleep(3)
 
     print("\n3. HIDING GREEN (middle)...")
-    await client.hide_message("debug_green")
+    await client.hide_message("debug_green", WindowType.MESSAGE)
     print("   Expected stack: RED, BLUE (GREEN hidden)")
     print("   BLUE should move UP to where GREEN was")
     print("   Waiting 3 seconds - verify visually...")
     await asyncio.sleep(3)
 
     print("\n4. SHOWING GREEN again...")
-    await client.show_message("debug_green", title="GREEN - BACK!", content="I should be in the MIDDLE!", duration=60.0)
+    await client.show_message("debug_green", WindowType.MESSAGE, title="GREEN - BACK!", content="I should be in the MIDDLE!", duration=60.0)
     print("   Expected stack: RED, GREEN, BLUE")
     print("   GREEN should appear BETWEEN RED and BLUE")
     print("   BLUE should move DOWN")
@@ -66,7 +66,7 @@ async def debug_layout_test(session):
 
     print("\n5. Cleanup...")
     for name, _, _, _ in groups_config:
-        await client.hide_message(name)
+        await client.hide_message(name, WindowType.MESSAGE)
 
     await asyncio.sleep(1)
     print("\n[DONE] Check the console output above and visual behavior")
