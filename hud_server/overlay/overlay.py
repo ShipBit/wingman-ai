@@ -2854,8 +2854,106 @@ class HeadsUpOverlay:
                         win['fade_state'] = 3  # fade out
                         win['canvas_dirty'] = True
 
+            elif t == 'update_settings':
+                self._handle_settings_update(msg)
+
         except Exception as e:
             self._report_exception("handle_message", e)
+
+    def _handle_settings_update(self, settings: dict):
+        """Handle settings update message.
+
+        Args:
+            settings: Dict containing settings to update (framerate, layout_margin, layout_spacing, screen)
+        """
+        # Update framerate
+        if "framerate" in settings:
+            self._global_framerate = max(1, min(240, settings["framerate"]))
+
+        # Update layout settings
+        layout_changed = False
+        if "layout_margin" in settings:
+            self._layout_margin = settings["layout_margin"]
+            layout_changed = True
+        if "layout_spacing" in settings:
+            self._layout_spacing = settings["layout_spacing"]
+            layout_changed = True
+
+        # If layout settings changed, reposition all windows
+        if layout_changed:
+            # Re-register all windows with new margin/spacing values
+            self._reregister_all_windows()
+
+        # Handle screen change - recreate LayoutManager and reposition
+        if "screen" in settings:
+            new_screen = settings["screen"]
+            if new_screen != self._screen:
+                self._screen = new_screen
+                # Get new monitor dimensions
+                try:
+                    screen_width, screen_height, screen_offset_x, screen_offset_y = get_monitor_dimensions(self._screen)
+                except Exception as e:
+                    # Fall back to current dimensions
+                    screen_width, screen_height = self._layout_manager.screen_size
+                    screen_offset_x, screen_offset_y = self._layout_manager.screen_offset
+                # Create new layout manager with new screen info
+                self._layout_manager = LayoutManager(
+                    screen_width=screen_width,
+                    screen_height=screen_height,
+                    screen_offset_x=screen_offset_x,
+                    screen_offset_y=screen_offset_y,
+                    default_margin=self._layout_margin,
+                    default_spacing=self._layout_spacing,
+                )
+                # Re-register all windows with new layout manager
+                self._reregister_all_windows()
+
+    def _reregister_all_windows(self):
+        """Re-register all windows with the layout manager after screen change.
+
+        This ensures windows are repositioned to the new screen's coordinates.
+        """
+        # Use current margin/spacing values when re-registering
+        current_margin = self._layout_margin
+        current_spacing = self._layout_spacing
+
+        for name, win in self._windows.items():
+            props = win.get('props', {})
+
+            # Get anchor and layout mode from props or defaults
+            anchor_str = props.get('anchor', 'top_left')
+            layout_mode_str = props.get('layout_mode', 'auto')
+
+            try:
+                anchor = Anchor(anchor_str)
+            except ValueError:
+                anchor = Anchor.TOP_LEFT
+
+            try:
+                layout_mode = LayoutMode(layout_mode_str) if layout_mode_str == "manual" else LayoutMode.AUTO
+            except ValueError:
+                layout_mode = LayoutMode.AUTO
+
+            # Get dimensions
+            width = props.get('width', 400)
+            height = win.get('canvas', {}).size[1] if win.get('canvas') else 200
+            priority = props.get('priority', 10)
+
+            # Re-register with layout manager, using CURRENT margin/spacing values
+            self._layout_manager.register_window(
+                name=name,
+                anchor=anchor,
+                mode=layout_mode,
+                priority=priority,
+                width=width,
+                height=height,
+                margin_x=current_margin,
+                margin_y=current_margin,
+                spacing=current_spacing,
+            )
+
+        # Force position recalculation and window repositioning
+        self._update_all_window_positions()
 
     def _create_overlay_window(self, name, x, y, w, h):
         ex = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE

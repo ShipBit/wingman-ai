@@ -484,6 +484,21 @@ class WingmanCore(WebSocketUser):
             await self._start_hud_server_if_enabled()
         elif not should_run and is_running:
             await self._stop_hud_server()
+        elif should_run and is_running:
+            # Server already running - update settings without restart
+            try:
+                self._hud_server.update_settings(
+                    framerate=getattr(hud_settings, 'framerate', 60),
+                    layout_margin=getattr(hud_settings, 'layout_margin', 20),
+                    layout_spacing=getattr(hud_settings, 'layout_spacing', 15),
+                    screen=getattr(hud_settings, 'screen', 1),
+                )
+            except Exception as e:
+                self.printr.print(
+                    f"Error updating HUD server settings: {e}",
+                    color=LogType.ERROR,
+                    server_only=True
+                )
 
     async def _stop_hud_server(self):
         """Stop the HUD server if running."""

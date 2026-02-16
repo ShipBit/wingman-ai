@@ -5,6 +5,7 @@ Provides the TestSession class that uses the HTTP API to send commands
 to the HUD server and overlay.
 """
 
+import httpx
 from typing import Optional, Any
 
 from hud_server.http_client import HudHttpClient
@@ -428,4 +429,46 @@ class TestSession:
         if not self._client:
             return False
         return await self._client.health_check()
+
+    async def update_settings(self, framerate: Optional[int] = None,
+                           layout_margin: Optional[int] = None,
+                           layout_spacing: Optional[int] = None,
+                           screen: Optional[int] = None):
+        """Update HUD server settings dynamically.
+
+        Args:
+            framerate: New framerate (1-240)
+            layout_margin: New layout margin in pixels
+            layout_spacing: New layout spacing in pixels
+            screen: New screen index (1=primary, etc.)
+        """
+        if not self._client:
+            print(f"[{self.name}] Cannot update settings: not connected")
+            return
+
+        # Build query parameters
+        params = {}
+        if framerate is not None:
+            params["framerate"] = framerate
+        if layout_margin is not None:
+            params["layout_margin"] = layout_margin
+        if layout_spacing is not None:
+            params["layout_spacing"] = layout_spacing
+        if screen is not None:
+            params["screen"] = screen
+
+        print(f"[{self.name}] Updating settings: {params}")
+
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/settings/update",
+                    params=params
+                )
+                if response.status_code == 200:
+                    print(f"[{self.name}] Settings updated successfully")
+                else:
+                    print(f"[{self.name}] Settings update failed: {response.status_code}")
+        except Exception as e:
+            print(f"[{self.name}] Settings update error: {e}")
 

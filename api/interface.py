@@ -1071,6 +1071,12 @@ class HudServerSettings(BaseModel):
     framerate: int = Field(default=60, ge=1)
     """HUD overlay rendering framerate. Higher = smoother but more CPU. Minimum 1."""
 
+    layout_margin: int = Field(default=20, ge=0, le=200)
+    """Margin from screen edges in pixels for HUD elements. Between 0 and 200."""
+
+    layout_spacing: int = Field(default=15, ge=0, le=100)
+    """Spacing between stacked HUD windows in pixels. Between 0 and 100."""
+
     screen: int = Field(default=1, ge=1, le=10)
     """Which screen/monitor to render the HUD on (1 = primary, 2 = secondary, etc.)."""
 

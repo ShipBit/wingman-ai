@@ -211,6 +211,24 @@ class HudServer:
             """Root endpoint - same as health check."""
             return await health_check()
 
+        # ─────────────────────────────── Settings ─────────────────────────────── #
+
+        @app.post("/settings/update", tags=["settings"])
+        async def update_settings(
+            framerate: Optional[int] = None,
+            layout_margin: Optional[int] = None,
+            layout_spacing: Optional[int] = None,
+            screen: Optional[int] = None
+        ):
+            """Update HUD server settings dynamically without restart."""
+            self.update_settings(
+                framerate=framerate,
+                layout_margin=layout_margin,
+                layout_spacing=layout_spacing,
+                screen=screen
+            )
+            return {"status": "ok", "message": "Settings updated"}
+
         # ─────────────────────────────── Groups ─────────────────────────────── #
 
         @app.post("/groups", response_model=OperationResponse, tags=["groups"])
@@ -735,6 +753,36 @@ class HudServer:
             server_only=True
         )
         return False
+
+    def update_settings(self, framerate: int = None, layout_margin: int = None,
+                       layout_spacing: int = None, screen: int = None):
+        """Update HUD server settings without restarting.
+
+        Args:
+            framerate: New framerate (1-240)
+            layout_margin: New layout margin in pixels
+            layout_spacing: New layout spacing in pixels
+            screen: New screen index (1=primary, 2=secondary, etc.)
+        """
+        # Update local state and build message with only changed settings
+        settings_msg = {"type": "update_settings"}
+
+        if framerate is not None:
+            self._framerate = max(1, min(240, framerate))
+            settings_msg["framerate"] = self._framerate
+        if layout_margin is not None:
+            self._layout_margin = layout_margin
+            settings_msg["layout_margin"] = self._layout_margin
+        if layout_spacing is not None:
+            self._layout_spacing = layout_spacing
+            settings_msg["layout_spacing"] = self._layout_spacing
+        if screen is not None:
+            self._screen = max(1, screen)
+            settings_msg["screen"] = self._screen
+
+        # Send to overlay if running - only include changed settings
+        if self._command_queue and self._overlay_thread and self._overlay_thread.is_alive():
+            self._command_queue.put(settings_msg)
 
     def _run_server(self):
         """Run the server in its own thread with its own event loop."""
