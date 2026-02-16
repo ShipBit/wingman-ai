@@ -74,7 +74,7 @@ class PocketTTS:
                     color=LogType.INFO,
                     server_only=True,
                 )
-                self.model = TTSModel.load_model(variant=model_path)
+                self.model = TTSModel.load_model(config=model_path)
             else:
                 try:
                     default_model_path = self._get_default_model_path()
@@ -83,7 +83,7 @@ class PocketTTS:
                         color=LogType.INFO,
                         server_only=True,
                     )
-                    self.model = TTSModel.load_model(variant=default_model_path)
+                    self.model = TTSModel.load_model(config=default_model_path)
                 except Exception:
                     self.printr.print(
                         "Loading backup default PocketTTS model (voice cloning may not be available)...",
