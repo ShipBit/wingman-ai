@@ -280,11 +280,16 @@ wingmen:
       LoreManager: True # True | False - Allows Cora to search the Galactepedia for lore information. 
       MacroManager:
         enabled: True # Enables JSON based macro runtime (interval key steps, reminders, countdowns, beep ticker)
+        debug_mode: False # logs manage_macro function args and parsed duration values for debugging
         default_play_beep: True # default macro execution beep
         min_interval_seconds: 1
         max_active_macros: 20
+        default_afk_interval_seconds: 120 # default AFK macro interval (press Y every 120 seconds)
         data_directory: "macro-data" # relative to data-root-directory
         auto_activate_on_create: True
+        reload_command_phrases:
+          - makros neu laden
+          - reload makros
       AdvancedGenericLogManager: False
       manager_command_phrases:
         ComponentManager:

@@ -3,6 +3,7 @@ import re
 import time
 import hashlib
 import threading
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from difflib import SequenceMatcher
@@ -45,14 +46,13 @@ class MacroRuntimeJob:
 class MacroManager(FunctionManager):
     MANAGER_CONTEXT = AIContext.CORA
     MANAGER_DESCRIPTION = (
-        "Manages named macros (JSON based), including interval keypress sequences, countdowns, reminders and beep tickers."
+        "Manages named macros, including interval keypress sequences, countdowns, reminders and beep tickers."
     )
     MANAGER_CAPABILITIES = [
-        "Create and update named macros stored as JSON files",
+        "Create and update named macros",
         "Activate/deactivate macros by tool call or command phrase",
         "Run interval key sequences with modifiers and wait steps",
         "Run countdown announcements and reminder speech",
-        "Use dedicated macro TTS audio cache",
     ]
 
     PHRASE_MATCH_THRESHOLD = 0.88
@@ -70,6 +70,19 @@ class MacroManager(FunctionManager):
     }
     VALID_MACRO_TYPES = {"interval_sequence", "countdown", "reminder", "beep_ticker"}
     ONE_SHOT_TYPES = {"countdown", "reminder"}
+    RUNTIME_COUNTDOWN_JOB_NAME = "__runtime_countdown__"
+    DEFAULT_AFK_MACRO_NAME = "AFK"
+    DEFAULT_AFK_SOURCE_FILE = "default_afk.json"
+    DEFAULT_RELOAD_COMMAND_PHRASES = [
+        "makros neu laden",
+        "makros neu einlesen",
+        "reload makros",
+        "reload macros",
+        "macro reload",
+        "macro manager reload",
+    ]
+    TIMER_KEYWORDS = ("timer", "countdown")
+    DURATION_HINT = "Use duration format like '1m 20s', '45s', or '2h 5m'."
 
     def __init__(self, config, secret_keeper):
         super().__init__(config, secret_keeper)
@@ -78,11 +91,34 @@ class MacroManager(FunctionManager):
 
         feature_entry = self.config.get("features", {}).get(self.__class__.__name__, {})
         self.macro_feature_config = feature_entry if isinstance(feature_entry, dict) else {}
+        self.debug_mode = bool(
+            self.macro_feature_config.get(
+                "debug_mode",
+                self.config.get("features", {}).get("debug_mode", False),
+            )
+        )
 
         self.default_play_beep = bool(self.macro_feature_config.get("default_play_beep", True))
         self.min_interval_seconds = max(float(self.macro_feature_config.get("min_interval_seconds", 1.0)), 0.1)
         self.max_active_macros = max(int(self.macro_feature_config.get("max_active_macros", 20)), 1)
         self.auto_activate_on_create = bool(self.macro_feature_config.get("auto_activate_on_create", True))
+        self.default_timer_duration_seconds = max(
+            int(float(self.macro_feature_config.get("default_timer_duration_seconds", 120))),
+            1,
+        )
+        self.default_afk_interval_seconds = max(
+            float(self.macro_feature_config.get("default_afk_interval_seconds", 120)),
+            self.min_interval_seconds,
+        )
+        configured_reload_phrases = self.macro_feature_config.get(
+            "reload_command_phrases",
+            self.DEFAULT_RELOAD_COMMAND_PHRASES,
+        )
+        if isinstance(configured_reload_phrases, str):
+            configured_reload_phrases = [configured_reload_phrases]
+        if not isinstance(configured_reload_phrases, list):
+            configured_reload_phrases = list(self.DEFAULT_RELOAD_COMMAND_PHRASES)
+        self.reload_command_phrases = self._dedupe_phrases([str(item) for item in configured_reload_phrases])
 
         data_root_directory = self.config.get("data-root-directory", "star_citizen_data")
         macro_data_directory = self.macro_feature_config.get("data_directory", "macro-data")
@@ -107,6 +143,7 @@ class MacroManager(FunctionManager):
         self._lock = threading.RLock()
         self._tts_text_cache_lock = threading.RLock()
         self._spoken_text_cache: dict[str, str] = {}
+        self._runtime_countdown_duration_seconds: Optional[int] = None
 
         self._load_spoken_text_cache()
         self.load_macro_definitions()
@@ -127,14 +164,15 @@ class MacroManager(FunctionManager):
     def get_function_prompt(self) -> str:
         return (
             f"Use {self.manage_macro.__name__} for creating, managing and toggling named macros. "
-            "Use explicit seconds for timing values. "
+            "Use duration strings in format like '1m 20s', '45s', or '2h 5m' for all timing values. "
+            "For timer or countdown requests, use action 'start_countdown' instead of creating a new macro. "
+            "Use action 'stop_countdown' to stop the currently running countdown. "
+            "Use action 'get_countdown_remaining' when the player asks for the remaining countdown time. "
+            "A default AFK macro (Y every two minutes) already exists. "
             "For interval keypress macros, use steps of type key_press, key_hold and wait. "
             "Always provide a macro name when creating a new macro. "
             "When creating a macro, provide command_phrases in natural spoken language based on what the macro does. "
             "Prefer short, everyday variants and include at least one very short alias. "
-            "Example for a macro that presses Y every second: "
-            "activate phrases like 'Makro Y wiederholt drücken', 'Y jede Sekunde', 'Y Spam an'; "
-            "deactivate phrases like 'Y wiederholen aus', 'Y Spam aus'."
         )
 
     def get_function_tools(self) -> list[dict]:
@@ -144,8 +182,7 @@ class MacroManager(FunctionManager):
                 "function": {
                     "name": self.manage_macro.__name__,
                     "description": (
-                        "Create/update/list/activate/deactivate named macros. "
-                        "Macros are persisted as JSON and can run key intervals, countdown speech, reminders or beep tickers."
+                        "Create/update/list/activate/deactivate named macros, start countdowns, and run reminders or beeps."
                     ),
                     "parameters": {
                         "type": "object",
@@ -156,14 +193,16 @@ class MacroManager(FunctionManager):
                                     "list_macros",
                                     "get_macro",
                                     "reload_macros",
+                                    "start_countdown",
+                                    "stop_countdown",
+                                    "get_countdown_remaining",
                                     "activate_macro",
                                     "deactivate_macro",
                                     "stop_all_macros",
                                     "delete_macro",
                                     "create_interval_macro",
-                                    "create_countdown_macro",
                                     "create_reminder_macro",
-                                    "create_beep_ticker_macro",
+                                    "create_metronome_beep_ticker_macro",
                                 ],
                                 "description": "Macro operation to perform.",
                             },
@@ -192,20 +231,18 @@ class MacroManager(FunctionManager):
                                     },
                                 },
                                 "description": (
-                                    "Spoken trigger phrases for this macro. "
+                                    "Spoken intuitive trigger phrases for this macro. Provide english phrases and phrases in the player's language if different. These are used to activate/deactivate the macro by voice command. "
                                     "Write colloquial phrases based on macro behavior, not technical identifiers. "
-                                    "Include short variants. Example for a Y-repeat macro: "
-                                    "activate ['Y jede Sekunde', 'Y Spam an'], "
-                                    "deactivate ['Y Spam aus', 'Y stoppen']."
+                                    "Include short variants. Example for an AFK macro: activate ['start afk', 'enable afk', 'afk on', 'I'm afk'], deactivate ['stop afk', 'disable afk', 'I'm back']."
                                 ),
                             },
-                            "interval_seconds": {
-                                "type": "number",
-                                "description": "Interval between macro cycles (seconds).",
+                            "interval_compact_duration_format": {
+                                "type": "string",
+                                "description": "Required for interval and beep ticker creation. Expects compact duration format '1m 20s', '45s', '2h 5m'. Defines how often the steps are executed for interval macros, and how often the beep plays for beep ticker macros.",
                             },
-                            "total_duration_seconds": {
-                                "type": "number",
-                                "description": "Optional total runtime in seconds for interval/beep ticker macros.",
+                            "total_duration_compact_duration_format": {
+                                "type": "string",
+                                "description": "Optional total runtime for interval/beep ticker macros. Expects compact duration format '1m 20s', '45s', '2h 5m'. If not provided, the macro will run indefinitely until deactivated. Example if the player says 'start an interval macro that presses Y every 2 minutes for 10 minutes', the total_duration would be '10m'.",
                             },
                             "steps": {
                                 "type": "array",
@@ -228,13 +265,13 @@ class MacroManager(FunctionManager):
                                     "required": ["type"],
                                 },
                             },
-                            "duration_seconds": {
-                                "type": "integer",
-                                "description": "Countdown duration in seconds.",
+                            "duration_compact_duration_format": {
+                                "type": "string",
+                                "description": "Required for start_countdown. Expects compact duration format '1m 20s', '45s', '2h 5m'. Example if the player says 'start countdown for 1 minute 20 seconds', the duration would be '1m 20s'.",
                             },
-                            "delay_seconds": {
-                                "type": "integer",
-                                "description": "Reminder delay in seconds.",
+                            "delay_compact_duration_format": {
+                                "type": "string",
+                                "description": "Required for reminder creation. Expects compact duration format '1m 20s', '45s', '2h 5m'. Example if the player says 'remind me in 1 minute 20 seconds', the delay would be '1m 20s'.",
                             },
                             "text": {
                                 "type": "string",
@@ -249,6 +286,7 @@ class MacroManager(FunctionManager):
 
     def manage_macro(self, function_args):
         action = function_args.get("action")
+        self._debug_log("manage_macro.call", action=action, function_args=function_args)
 
         if action == "list_macros":
             return self._response_success(
@@ -258,14 +296,32 @@ class MacroManager(FunctionManager):
             )
 
         if action == "reload_macros":
-            self.stop_all_macros(persist_state=False)
-            self.load_macro_definitions()
-            self._activate_enabled_macros_from_disk()
-            return self._response_success(
-                action,
-                "Macros reloaded from disk.",
-                macros=self._list_macro_overview(),
+            return self._reload_macros(source="tool_call")
+
+        if action == "start_countdown":
+            duration_seconds = self._parse_duration_to_seconds(function_args.get("duration_compact_duration_format"))
+            self._debug_log(
+                "manage_macro.start_countdown.parsed",
+                raw_duration=function_args.get("duration_compact_duration_format"),
+                parsed_seconds=duration_seconds,
             )
+            if duration_seconds is None:
+                return self._duration_input_error(
+                    action=action,
+                    field_name="duration_compact_duration_format",
+                    detail="Missing or invalid countdown duration.",
+                )
+            return self._start_countdown(
+                duration_seconds=duration_seconds,
+                text=function_args.get("text"),
+                play_beep=function_args.get("play_beep"),
+            )
+
+        if action == "stop_countdown":
+            return self._stop_runtime_countdown_job()
+
+        if action == "get_countdown_remaining":
+            return self.get_countdown_remaining()
 
         if action == "stop_all_macros":
             stopped = self.stop_all_macros(persist_state=True)
@@ -276,7 +332,14 @@ class MacroManager(FunctionManager):
             )
 
         macro_name = function_args.get("name")
-        if action != "list_macros" and action != "reload_macros" and action != "stop_all_macros":
+        if action not in {
+            "list_macros",
+            "reload_macros",
+            "stop_all_macros",
+            "start_countdown",
+            "stop_countdown",
+            "get_countdown_remaining",
+        }:
             if not isinstance(macro_name, str) or not macro_name.strip():
                 return self._response_error(action, "Please provide a valid macro name.")
             macro_name = macro_name.strip()
@@ -298,17 +361,39 @@ class MacroManager(FunctionManager):
 
         if action == "create_interval_macro":
             steps = function_args.get("steps")
-            interval_seconds = function_args.get("interval_seconds")
+            interval_seconds = self._parse_duration_to_seconds(function_args.get("interval_compact_duration_format"))
+            total_duration_raw = function_args.get("total_duration_compact_duration_format")
+            total_duration_seconds = None
+            if total_duration_raw is not None:
+                total_duration_seconds = self._parse_duration_to_seconds(total_duration_raw)
+            self._debug_log(
+                "manage_macro.create_interval_macro.parsed",
+                raw_interval=function_args.get("interval_compact_duration_format"),
+                parsed_interval_seconds=interval_seconds,
+                raw_total_duration=total_duration_raw,
+                parsed_total_duration_seconds=total_duration_seconds,
+                steps_count=len(steps) if isinstance(steps, list) else None,
+            )
             if not isinstance(steps, list) or not steps:
                 return self._response_error(action, "Please provide at least one step for the interval macro.")
             if interval_seconds is None:
-                return self._response_error(action, "Please provide 'interval_seconds' for interval macros.")
+                return self._duration_input_error(
+                    action=action,
+                    field_name="interval_compact_duration_format",
+                    detail="Missing or invalid interval.",
+                )
+            if total_duration_raw is not None and total_duration_seconds is None:
+                return self._duration_input_error(
+                    action=action,
+                    field_name="total_duration_compact_duration_format",
+                    detail="Invalid total duration.",
+                )
 
             macro_definition = {
                 "name": macro_name,
                 "type": "interval_sequence",
                 "interval_seconds": interval_seconds,
-                "total_duration_seconds": function_args.get("total_duration_seconds"),
+                "total_duration_seconds": total_duration_seconds,
                 "steps": steps,
                 "play_beep": function_args.get("play_beep", self.default_play_beep),
                 "enabled": bool(function_args.get("activate", self.auto_activate_on_create)),
@@ -316,26 +401,21 @@ class MacroManager(FunctionManager):
             }
             return self._create_or_update_macro(action, macro_definition)
 
-        if action == "create_countdown_macro":
-            duration_seconds = function_args.get("duration_seconds")
-            if duration_seconds is None:
-                return self._response_error(action, "Please provide 'duration_seconds' for countdown macros.")
-            macro_definition = {
-                "name": macro_name,
-                "type": "countdown",
-                "duration_seconds": duration_seconds,
-                "text": function_args.get("text"),
-                "play_beep": function_args.get("play_beep", self.default_play_beep),
-                "enabled": bool(function_args.get("activate", self.auto_activate_on_create)),
-                "command_phrases": function_args.get("command_phrases", {}),
-            }
-            return self._create_or_update_macro(action, macro_definition)
-
         if action == "create_reminder_macro":
-            delay_seconds = function_args.get("delay_seconds")
+            delay_seconds = self._parse_duration_to_seconds(function_args.get("delay_compact_duration_format"))
             text = function_args.get("text")
+            self._debug_log(
+                "manage_macro.create_reminder_macro.parsed",
+                raw_delay=function_args.get("delay_compact_duration_format"),
+                parsed_delay_seconds=delay_seconds,
+                has_text=bool(text),
+            )
             if delay_seconds is None:
-                return self._response_error(action, "Please provide 'delay_seconds' for reminder macros.")
+                return self._duration_input_error(
+                    action=action,
+                    field_name="delay_compact_duration_format",
+                    detail="Missing or invalid reminder delay.",
+                )
             if not text:
                 return self._response_error(action, "Please provide 'text' for reminder macros.")
             macro_definition = {
@@ -349,22 +429,187 @@ class MacroManager(FunctionManager):
             }
             return self._create_or_update_macro(action, macro_definition)
 
-        if action == "create_beep_ticker_macro":
-            interval_seconds = function_args.get("interval_seconds")
+        if action == "create_metronome_beep_ticker_macro":
+            interval_seconds = self._parse_duration_to_seconds(function_args.get("interval_compact_duration_format"))
+            total_duration_raw = function_args.get("total_duration_compact_duration_format")
+            total_duration_seconds = None
+            if total_duration_raw is not None:
+                total_duration_seconds = self._parse_duration_to_seconds(total_duration_raw)
+            self._debug_log(
+                "manage_macro.create_beep_ticker_macro.parsed",
+                raw_interval=function_args.get("interval_compact_duration_format"),
+                parsed_interval_seconds=interval_seconds,
+                raw_total_duration=total_duration_raw,
+                parsed_total_duration_seconds=total_duration_seconds,
+            )
             if interval_seconds is None:
-                return self._response_error(action, "Please provide 'interval_seconds' for beep ticker macros.")
+                return self._duration_input_error(
+                    action=action,
+                    field_name="interval_compact_duration_format",
+                    detail="Missing or invalid interval.",
+                )
+            if total_duration_raw is not None and total_duration_seconds is None:
+                return self._duration_input_error(
+                    action=action,
+                    field_name="total_duration_compact_duration_format",
+                    detail="Invalid total duration.",
+                )
             macro_definition = {
                 "name": macro_name,
                 "type": "beep_ticker",
                 "interval_seconds": interval_seconds,
-                "total_duration_seconds": function_args.get("total_duration_seconds"),
+                "total_duration_seconds": total_duration_seconds,
                 "play_beep": True,
                 "enabled": bool(function_args.get("activate", self.auto_activate_on_create)),
                 "command_phrases": function_args.get("command_phrases", {}),
             }
             return self._create_or_update_macro(action, macro_definition)
 
+        self._debug_log("manage_macro.unsupported_action", action=action, function_args=function_args)
         return self._response_error(action, f"Unsupported action '{action}'.")
+
+    def _reload_macros(self, source: str = "runtime"):
+        self.stop_all_macros(persist_state=False)
+        self.load_macro_definitions()
+        self._activate_enabled_macros_from_disk()
+        return self._response_success(
+            "reload_macros",
+            "Macros reloaded from disk.",
+            source=source,
+            macros=self._list_macro_overview(),
+        )
+
+    def _start_countdown(self, duration_seconds: Any, text: Any = None, play_beep: Any = None):
+        resolved_duration = self._coerce_positive_seconds(duration_seconds)
+        if resolved_duration is None:
+            return self._duration_input_error(
+                action="start_countdown",
+                field_name="duration_compact_duration_format",
+                detail="Missing or invalid countdown duration.",
+            )
+
+        runtime_macro = self._build_runtime_countdown_macro(
+            duration_seconds=resolved_duration,
+            text=text,
+            play_beep=play_beep,
+        )
+        return self._start_runtime_countdown_job(runtime_macro, resolved_duration)
+
+    def _build_runtime_countdown_macro(
+        self,
+        duration_seconds: int,
+        text: Any = None,
+        play_beep: Any = None,
+    ) -> dict[str, Any]:
+        final_text = self._clean_optional_text(text) or self._countdown_finished_text(self._get_player_language_code())
+        return {
+            "name": "Runtime Countdown",
+            "type": "countdown",
+            "duration_seconds": int(duration_seconds),
+            "text": final_text,
+            "play_beep": bool(self.default_play_beep if play_beep is None else play_beep),
+            "enabled": False,
+        }
+
+    def _start_runtime_countdown_job(self, runtime_macro: dict[str, Any], duration_seconds: int):
+        self._stop_runtime_countdown_job()
+
+        with self._lock:
+            if len(self.active_jobs) >= self.max_active_macros:
+                return self._response_error(
+                    "start_countdown",
+                    f"Cannot start countdown. Maximum of {self.max_active_macros} active macros reached.",
+                )
+
+            stop_event = threading.Event()
+            thread = threading.Thread(
+                target=self._run_macro_worker,
+                args=(self.RUNTIME_COUNTDOWN_JOB_NAME, stop_event, runtime_macro),
+                daemon=True,
+                name=f"Macro-{self.RUNTIME_COUNTDOWN_JOB_NAME}",
+            )
+            job = MacroRuntimeJob(
+                name=self.RUNTIME_COUNTDOWN_JOB_NAME,
+                stop_event=stop_event,
+                thread=thread,
+            )
+            self.active_jobs[self.RUNTIME_COUNTDOWN_JOB_NAME] = job
+            self._runtime_countdown_duration_seconds = int(duration_seconds)
+
+        thread.start()
+        return self._response_success(
+            "start_countdown",
+            f"Countdown started ({self._format_duration_text(duration_seconds)}).",
+            instructions="Inform the player in his language that the countdown has started by confirming the duration in a natural spoken format. Example: '1m 20s' becomes 'one minute and twenty seconds'."
+        )
+
+    def _stop_runtime_countdown_job(self):
+        job: Optional[MacroRuntimeJob] = None
+        with self._lock:
+            job = self.active_jobs.get(self.RUNTIME_COUNTDOWN_JOB_NAME)
+
+        if not job:
+            return self._response_success(
+                "stop_countdown",
+                "In player language: Countdown is already inactive.",
+            )
+
+        job.stop_event.set()
+        if job.thread.is_alive():
+            job.thread.join(timeout=1.5)
+        with self._lock:
+            self.active_jobs.pop(self.RUNTIME_COUNTDOWN_JOB_NAME, None)
+            self._runtime_countdown_duration_seconds = None
+
+        return self._response_success(
+            "stop_countdown",
+            "Countdown stopped.",
+            instructions="Inform the player in his language"
+        )
+
+    def get_countdown_remaining(self):
+        with self._lock:
+            job = self.active_jobs.get(self.RUNTIME_COUNTDOWN_JOB_NAME)
+            duration_seconds = self._runtime_countdown_duration_seconds
+
+        if not job or not duration_seconds:
+            return self._response_error(
+                "get_countdown_remaining",
+                "No countdown is currently running.",
+                hints=[
+                    "Start a countdown first with action 'start_countdown'.",
+                    self.DURATION_HINT,
+                ],
+                instructions="Inform the player in his language"
+            )
+
+        elapsed = max(0.0, time.time() - job.started_at)
+        remaining_seconds = max(0, int(math.ceil(duration_seconds - elapsed)))
+        remaining_compact = self._format_duration_compact(remaining_seconds)
+
+        return self._response_success(
+            "get_countdown_remaining",
+            f"In player language: Remaining time: {remaining_compact}.",
+            instructions="Transform to spoken format based on player language. Example: '1m 20s' becomes 'one minute and twenty seconds'."
+        )
+
+    def _duration_input_error(self, action: str, field_name: str, detail: str):
+        self._debug_log(
+            "manage_macro.duration_input_error",
+            action=action,
+            field_name=field_name,
+            detail=detail,
+        )
+        return self._response_error(
+            action,
+            detail,
+            field=field_name,
+            hints=[
+                self.DURATION_HINT,
+                f"Example: set '{field_name}' to '1m 20s' or '45s'.",
+            ],
+            instructions="Inform the player in his language"
+        )
 
     def _create_or_update_macro(self, action: str, raw_definition: dict[str, Any]):
         sanitized = self._sanitize_macro_definition(raw_definition)
@@ -382,15 +627,16 @@ class MacroManager(FunctionManager):
         except Exception as e:
             return self._response_error(
                 action,
-                f"TTS preparation failed. Macro '{sanitized['name']}' was not saved: {e}",
+                f"In player language: TTS preparation failed. Macro '{sanitized['name']}' was not saved: {e}",
+                instructions="Inform the player in his language"
             )
 
         self._save_macro_definition(sanitized)
         creation_notice = ""
         if warmup_stats.get("audio_generated", 0) > 0 or warmup_stats.get("spoken_text_generated", 0) > 0:
             creation_notice = (
-                f"Makro '{sanitized['name']}' wird erstellt und Sprachdateien werden vorbereitet "
-                f"({warmup_stats.get('audio_generated', 0)} neue Audio-Dateien)."
+                f"Macro '{sanitized['name']}' is being created and speech files are prepared "
+                f"({warmup_stats.get('audio_generated', 0)} new audio files)."
             )
 
         if sanitized.get("enabled", False):
@@ -458,11 +704,20 @@ class MacroManager(FunctionManager):
             sanitized["steps"] = steps
 
         elif macro_type == "countdown":
-            duration_seconds = int(float(macro.get("duration_seconds", 0)))
+            dynamic_duration = bool(macro.get("dynamic_duration", False))
+            raw_duration = macro.get("duration_seconds", self.default_timer_duration_seconds)
+            try:
+                duration_seconds = int(float(raw_duration))
+            except (TypeError, ValueError):
+                duration_seconds = 0
             if duration_seconds <= 0:
-                return None
+                if dynamic_duration:
+                    duration_seconds = self.default_timer_duration_seconds
+                else:
+                    return None
+            sanitized["dynamic_duration"] = dynamic_duration
             sanitized["duration_seconds"] = duration_seconds
-            sanitized["text"] = self._clean_optional_text(macro.get("text")) or "Countdown beendet."
+            sanitized["text"] = self._clean_optional_text(macro.get("text")) or "Countdown finished."
 
         elif macro_type == "reminder":
             delay_seconds = int(float(macro.get("delay_seconds", 0)))
@@ -581,8 +836,61 @@ class MacroManager(FunctionManager):
             except Exception as e:
                 printr.print_warn(f"Could not load macro file '{macro_file.name}': {e}")
 
+        created_defaults = self._ensure_default_macros(loaded_macros)
         with self._lock:
             self.macros = loaded_macros
+        for macro in created_defaults:
+            self._save_macro_definition(macro)
+
+    def _ensure_default_macros(self, loaded_macros: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+        created_defaults: list[dict[str, Any]] = []
+        known_names = {self._normalize_text(name) for name in loaded_macros.keys()}
+
+        for macro in self._default_macros():
+            normalized_name = self._normalize_text(macro.get("name", ""))
+            if not normalized_name or normalized_name in known_names:
+                continue
+
+            sanitized = self._sanitize_macro_definition(macro)
+            if not sanitized:
+                continue
+
+            loaded_macros[sanitized["name"]] = sanitized
+            known_names.add(normalized_name)
+            created_defaults.append(sanitized)
+
+        return created_defaults
+
+    def _default_macros(self) -> list[dict[str, Any]]:
+        afk_macro = {
+            "name": self.DEFAULT_AFK_MACRO_NAME,
+            "type": "interval_sequence",
+            "interval_seconds": self.default_afk_interval_seconds,
+            "total_duration_seconds": None,
+            "steps": [
+                {
+                    "type": "key_press",
+                    "key": "y",
+                    "modifiers": [],
+                }
+            ],
+            "play_beep": False,
+            "enabled": False,
+            "source_file": self.DEFAULT_AFK_SOURCE_FILE,
+            "command_phrases": {
+                "activate": [
+                    "start afk",
+                    "enable afk",
+                    "afk on",
+                ],
+                "deactivate": [
+                    "stop afk",
+                    "disable afk",
+                    "afk off",
+                ],
+            },
+        }
+        return [afk_macro]
 
     def _activate_enabled_macros_from_disk(self):
         macro_names = []
@@ -605,6 +913,7 @@ class MacroManager(FunctionManager):
                         "enabled": bool(macro.get("enabled", False)),
                         "active": name in self.active_jobs,
                         "play_beep": bool(macro.get("play_beep", self.default_play_beep)),
+                        "dynamic_duration": bool(macro.get("dynamic_duration", False)),
                         "command_phrases": macro.get("command_phrases", {}),
                     }
                 )
@@ -628,49 +937,46 @@ class MacroManager(FunctionManager):
                     return known_name
         return None
 
-    def activate_macro(self, macro_name: str, persist_state: bool = True):
+    def activate_macro(
+        self,
+        macro_name: str,
+        persist_state: bool = True,
+        runtime_macro: Optional[dict[str, Any]] = None,
+    ):
         resolved_name = self._resolve_macro_name(macro_name)
         if not resolved_name:
             return self._response_error(
                 "activate_macro",
-                self._localize_text(
-                    de=f"Makro '{macro_name}' wurde nicht gefunden.",
-                    en=f"Macro '{macro_name}' not found.",
-                ),
+                f"Macro '{macro_name}' not found.",
+                instructions="Inform the player in his language"
             )
 
         with self._lock:
             if resolved_name in self.active_jobs:
                 return self._response_success(
                     "activate_macro",
-                    self._localize_text(
-                        de="Makro ist bereits aktiv.",
-                        en="Macro is already active.",
-                    ),
+                    "Macro is already active.",
                     macro_name=resolved_name,
+                    instructions="Inform the player in his language"
                 )
             if len(self.active_jobs) >= self.max_active_macros:
                 return self._response_error(
                     "activate_macro",
-                    self._localize_text(
-                        de=f"Makro kann nicht gestartet werden. Maximum von {self.max_active_macros} aktiven Makros erreicht.",
-                        en=f"Cannot start macro. Maximum of {self.max_active_macros} active macros reached.",
-                    ),
+                    f"Cannot start macro. Maximum of {self.max_active_macros} active macros reached.",
+                    instructions="Inform the player in his language"
                 )
             macro = self.macros.get(resolved_name)
             if not macro:
                 return self._response_error(
                     "activate_macro",
-                    self._localize_text(
-                        de=f"Makro '{resolved_name}' wurde nicht gefunden.",
-                        en=f"Macro '{resolved_name}' not found.",
-                    ),
+                    f"Macro '{resolved_name}' not found.",
+                    instructions="Inform the player in his language"
                 )
 
             stop_event = threading.Event()
             thread = threading.Thread(
                 target=self._run_macro_worker,
-                args=(resolved_name, stop_event),
+                args=(resolved_name, stop_event, runtime_macro),
                 daemon=True,
                 name=f"Macro-{resolved_name}",
             )
@@ -686,21 +992,34 @@ class MacroManager(FunctionManager):
         thread.start()
         return self._response_success(
             "activate_macro",
-            self._localize_text(
-                de="Makro aktiviert.",
-                en="Macro activated.",
-            ),
+            "Macro activated.",
             macro_name=resolved_name,
+            instructions="Inform the player in his language"
         )
 
     def deactivate_macro(self, macro_name: str, persist_state: bool = True):
         resolved_name = self._resolve_macro_name(macro_name)
         if not resolved_name:
+            with self._lock:
+                active_named_macros = sorted(
+                    [name for name in self.active_jobs.keys() if name in self.macros],
+                    key=lambda item: item.lower(),
+                )
+                available_macros = sorted(self.macros.keys(), key=lambda item: item.lower())
+
             return self._response_error(
                 "deactivate_macro",
-                self._localize_text(
-                    de=f"Makro '{macro_name}' wurde nicht gefunden.",
-                    en=f"Macro '{macro_name}' not found.",
+                f"Macro '{macro_name}' not found.",
+                requested_macro_name=macro_name,
+                active_named_macros=active_named_macros,
+                available_macros=available_macros,
+                next_steps=[
+                    "Inspect 'active_named_macros' and 'available_macros' from this tool response.",
+                    "If exactly one suitable macro exists, call action 'deactivate_macro' for that macro.",
+                    "If multiple suitable macros exist, ask the player which one should be deactivated.",
+                ],
+                instructions=(
+                    "Respond in the player's language."
                 ),
             )
 
@@ -720,20 +1039,16 @@ class MacroManager(FunctionManager):
                 self.active_jobs.pop(resolved_name, None)
             return self._response_success(
                 "deactivate_macro",
-                self._localize_text(
-                    de="Makro deaktiviert.",
-                    en="Macro deactivated.",
-                ),
+                "Macro deactivated.",
                 macro_name=resolved_name,
+                instructions="Inform the player in his language"
             )
 
         return self._response_success(
             "deactivate_macro",
-            self._localize_text(
-                de="Makro ist bereits inaktiv.",
-                en="Macro is already inactive.",
-            ),
+            "Macro is already inactive.",
             macro_name=resolved_name,
+            instructions="Inform the player in his language"
         )
 
     def stop_all_macros(self, persist_state: bool = True) -> int:
@@ -746,13 +1061,16 @@ class MacroManager(FunctionManager):
                     self._save_macro_definition(macro)
 
         for macro_name in active_names:
-            self.deactivate_macro(macro_name, persist_state=False)
+            if macro_name == self.RUNTIME_COUNTDOWN_JOB_NAME:
+                self._stop_runtime_countdown_job()
+            else:
+                self.deactivate_macro(macro_name, persist_state=False)
         return len(active_names)
 
     def delete_macro(self, macro_name: str):
         resolved_name = self._resolve_macro_name(macro_name)
         if not resolved_name:
-            return self._response_error("delete_macro", f"Macro '{macro_name}' not found.")
+            return self._response_error("delete_macro", f"Macro '{macro_name}' not found.", instructions="Inform the player in his language")
 
         self.deactivate_macro(resolved_name, persist_state=False)
 
@@ -763,17 +1081,22 @@ class MacroManager(FunctionManager):
                 if file_path.exists():
                     file_path.unlink()
             except OSError as e:
-                return self._response_error("delete_macro", f"Could not delete '{file_path.name}': {e}")
+                return self._response_error("delete_macro", f"Could not delete '{file_path.name}': {e}", instructions="Inform the player in his language")
 
         with self._lock:
             self.macros.pop(resolved_name, None)
-        return self._response_success("delete_macro", f"Macro '{resolved_name}' deleted.")
+        return self._response_success("delete_macro", f"Macro '{resolved_name}' deleted.", instructions="Inform the player in his language")
 
-    def _run_macro_worker(self, macro_name: str, stop_event: threading.Event):
+    def _run_macro_worker(
+        self,
+        macro_name: str,
+        stop_event: threading.Event,
+        runtime_macro: Optional[dict[str, Any]] = None,
+    ):
         completed = False
         auto_disable_on_completion = False
         try:
-            macro = self._get_macro(macro_name)
+            macro = dict(runtime_macro) if isinstance(runtime_macro, dict) else self._get_macro(macro_name)
             if not macro:
                 return
 
@@ -800,6 +1123,8 @@ class MacroManager(FunctionManager):
         finally:
             with self._lock:
                 self.active_jobs.pop(macro_name, None)
+                if macro_name == self.RUNTIME_COUNTDOWN_JOB_NAME:
+                    self._runtime_countdown_duration_seconds = None
 
             if completed and auto_disable_on_completion:
                 with self._lock:
@@ -816,9 +1141,14 @@ class MacroManager(FunctionManager):
         play_beep = bool(macro.get("play_beep", self.default_play_beep))
         contains_key_steps = self._macro_contains_key_steps(macro)
 
-        started_at = time.time()
+        started_at = time.monotonic()
         while not stop_event.is_set():
-            loop_started_at = time.time()
+            if total_duration_seconds is not None:
+                elapsed_total = time.monotonic() - started_at
+                if elapsed_total >= total_duration_seconds:
+                    return True
+
+            loop_started_at = time.monotonic()
             if contains_key_steps and not self._is_star_citizen_window_active():
                 if self.debug_mode:
                     printr.print_warn(
@@ -830,7 +1160,13 @@ class MacroManager(FunctionManager):
                     )
                     self._persist_macro_enabled_state(macro_name=macro.get("name"), enabled=False)
                     return False
-                if not self._sleep_interruptible(interval_seconds, stop_event):
+                sleep_duration = interval_seconds
+                if total_duration_seconds is not None:
+                    remaining = max(0.0, total_duration_seconds - (time.monotonic() - started_at))
+                    sleep_duration = min(sleep_duration, remaining)
+                    if sleep_duration <= 0:
+                        return True
+                if not self._sleep_interruptible(sleep_duration, stop_event):
                     return False
                 continue
 
@@ -840,11 +1176,18 @@ class MacroManager(FunctionManager):
             if stop_event.is_set():
                 return False
 
-            if total_duration_seconds is not None and (time.time() - started_at) >= total_duration_seconds:
-                return True
+            if total_duration_seconds is not None:
+                elapsed_total = time.monotonic() - started_at
+                if elapsed_total >= total_duration_seconds:
+                    return True
 
-            elapsed = time.time() - loop_started_at
+            elapsed = time.monotonic() - loop_started_at
             sleep_duration = max(0.0, interval_seconds - elapsed)
+            if total_duration_seconds is not None:
+                remaining = max(0.0, total_duration_seconds - (time.monotonic() - started_at))
+                sleep_duration = min(sleep_duration, remaining)
+                if sleep_duration <= 0:
+                    return True
             if not self._sleep_interruptible(sleep_duration, stop_event):
                 return False
         return False
@@ -909,13 +1252,21 @@ class MacroManager(FunctionManager):
         total_duration_seconds = macro.get("total_duration_seconds")
         if total_duration_seconds is not None:
             total_duration_seconds = max(float(total_duration_seconds), 0.1)
-        started_at = time.time()
+        started_at = time.monotonic()
 
         while not stop_event.is_set():
+            if total_duration_seconds is not None:
+                elapsed_total = time.monotonic() - started_at
+                if elapsed_total >= total_duration_seconds:
+                    return True
             self._play_beep()
-            if total_duration_seconds is not None and (time.time() - started_at) >= total_duration_seconds:
-                return True
-            if not self._sleep_interruptible(interval_seconds, stop_event):
+            sleep_duration = interval_seconds
+            if total_duration_seconds is not None:
+                remaining = max(0.0, total_duration_seconds - (time.monotonic() - started_at))
+                sleep_duration = min(sleep_duration, remaining)
+                if sleep_duration <= 0:
+                    return True
+            if not self._sleep_interruptible(sleep_duration, stop_event):
                 return False
         return False
 
@@ -1091,31 +1442,13 @@ class MacroManager(FunctionManager):
         return plan
 
     def _countdown_minutes_left_text(self, minutes_left: int, language_code: str) -> str:
-        if language_code == "de":
-            suffix = "Minute" if minutes_left == 1 else "Minuten"
-            return f"Noch {minutes_left} {suffix}."
         suffix = "minute" if minutes_left == 1 else "minutes"
         return f"{minutes_left} {suffix} remaining."
 
     def _countdown_thirty_seconds_text(self, language_code: str) -> str:
-        if language_code == "de":
-            return "Noch 30 Sekunden."
         return "30 seconds remaining."
 
     def _countdown_number_text(self, number: int, language_code: str) -> str:
-        words_de = {
-            0: "null",
-            1: "eins",
-            2: "zwei",
-            3: "drei",
-            4: "vier",
-            5: "fuenf",
-            6: "sechs",
-            7: "sieben",
-            8: "acht",
-            9: "neun",
-            10: "zehn",
-        }
         words_en = {
             0: "zero",
             1: "one",
@@ -1129,26 +1462,24 @@ class MacroManager(FunctionManager):
             9: "nine",
             10: "ten",
         }
-        if language_code == "de":
-            return words_de.get(number, str(number))
         return words_en.get(number, str(number))
 
     def _countdown_finished_text(self, language_code: str) -> str:
-        if language_code == "de":
-            return "Countdown beendet."
         return "Countdown finished."
 
     def _get_player_language_code(self) -> str:
-        player_language = str(self.config.get("openai", {}).get("player_language", "de_DE")).strip().lower()
+        player_language = str(self.config.get("openai", {}).get("player_language", "en_G")).strip().lower()
         if not player_language:
-            return "de"
-        return player_language.split("_")[0].split("-")[0] or "de"
+            return "en"
+        return player_language.split("_")[0].split("-")[0] or "en"
 
     def _collect_tts_texts_for_macro(self, macro: dict[str, Any]) -> list[str]:
         macro_type = macro.get("type")
         language_code = self._get_player_language_code()
 
         if macro_type == "countdown":
+            if bool(macro.get("dynamic_duration", False)):
+                return []
             duration_seconds = int(macro.get("duration_seconds", 0))
             if duration_seconds <= 0:
                 return []
@@ -1437,7 +1768,23 @@ class MacroManager(FunctionManager):
         normalized_transcript = self._normalize_text(transcript)
         if not normalized_transcript:
             return None
+        self._debug_log(
+            "phrase_match.begin",
+            transcript=transcript,
+            normalized_transcript=normalized_transcript,
+        )
+
+        if self._is_reload_phrase(normalized_transcript):
+            self._debug_log("phrase_match.reload_detected", normalized_transcript=normalized_transcript)
+            return self._reload_macros(source="instant_phrase")
+
         action_hint = self._extract_action_hint(normalized_transcript)
+
+        if self._is_countdown_remaining_query(normalized_transcript):
+            result = self.get_countdown_remaining()
+            result["intent"] = "runtime_countdown_remaining"
+            self._debug_log("phrase_match.countdown_remaining_query", result=result)
+            return result
 
         best_match = None
         best_score = 0.0
@@ -1474,6 +1821,7 @@ class MacroManager(FunctionManager):
                         }
 
         if not best_match:
+            self._debug_log("phrase_match.no_match", normalized_transcript=normalized_transcript)
             return None
 
         if best_match["action"] == "activate":
@@ -1482,26 +1830,152 @@ class MacroManager(FunctionManager):
             result = self.deactivate_macro(best_match["macro_name"], persist_state=True)
 
         result["match"] = best_match
+        self._debug_log("phrase_match.match_applied", best_match=best_match, result=result)
         return result
+
+    def _is_reload_phrase(self, normalized_transcript: str) -> bool:
+        padded_transcript = f" {normalized_transcript} "
+        for phrase in self.reload_command_phrases:
+            normalized_phrase = self._normalize_text(phrase)
+            if not normalized_phrase:
+                continue
+            if normalized_phrase == normalized_transcript:
+                return True
+            if f" {normalized_phrase} " in padded_transcript:
+                return True
+
+        has_macro_term = any(token in padded_transcript for token in (" macro ", " macros ", " makro ", " makros "))
+        has_reload_term = any(token in padded_transcript for token in (" reload ", " neu laden ", " neu einlesen "))
+        return has_macro_term and has_reload_term
+
+    def _contains_timer_keyword(self, normalized_transcript: str) -> bool:
+        padded_transcript = f" {normalized_transcript} "
+        return any(f" {keyword} " in padded_transcript for keyword in self.TIMER_KEYWORDS)
+
+    def _is_countdown_remaining_query(self, normalized_transcript: str) -> bool:
+        padded = f" {normalized_transcript} "
+        query_markers = (
+            " remaining time ",
+            " time left ",
+            " how much time ",
+        )
+        has_query_marker = any(marker in padded for marker in query_markers)
+        has_timer_context = self._contains_timer_keyword(normalized_transcript) or " countdown " in padded
+        return has_query_marker and has_timer_context
+
+    def _parse_duration_to_seconds(self, value: Any) -> Optional[int]:
+        self._debug_log("duration_parse.input", raw_value=value)
+        if not isinstance(value, str):
+            self._debug_log("duration_parse.output", raw_value=value, parsed_seconds=None, reason="not_a_string")
+            return None
+
+        candidate = value.strip().lower()
+        if not candidate:
+            self._debug_log("duration_parse.output", raw_value=value, parsed_seconds=None, reason="empty_string")
+            return None
+
+        compact = re.sub(r"\s+", "", candidate)
+        if not re.fullmatch(r"(?:\d+[hms]){1,3}", compact):
+            self._debug_log(
+                "duration_parse.output",
+                raw_value=value,
+                normalized=compact,
+                parsed_seconds=None,
+                reason="invalid_format",
+            )
+            return None
+
+        total = 0
+        seen_units = set()
+        for number_text, unit in re.findall(r"(\d+)([hms])", compact):
+            if unit in seen_units:
+                return None
+            seen_units.add(unit)
+            amount = int(number_text)
+            if amount < 0:
+                return None
+            if unit == "h":
+                total += amount * 3600
+            elif unit == "m":
+                total += amount * 60
+            else:
+                total += amount
+
+        parsed_seconds = total if total > 0 else None
+        self._debug_log(
+            "duration_parse.output",
+            raw_value=value,
+            normalized=compact,
+            parsed_seconds=parsed_seconds,
+            reason="ok" if parsed_seconds is not None else "zero_duration",
+        )
+        return parsed_seconds
+
+    def _debug_log(self, event: str, **payload):
+        if not self.debug_mode:
+            return
+        try:
+            serialized_payload = json.dumps(payload, ensure_ascii=False, default=str, indent=2)
+        except Exception:
+            serialized_payload = str(payload)
+        printr.print(
+            f"[MacroManager debug] {event}: {serialized_payload}",
+            tags="info",
+            console_only=True,
+        )
+
+    @staticmethod
+    def _coerce_positive_seconds(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        try:
+            seconds = int(float(value))
+        except (TypeError, ValueError):
+            return None
+        if seconds <= 0:
+            return None
+        return seconds
+
+    def _format_duration_text(self, seconds: int) -> str:
+        seconds = max(int(seconds), 0)
+        hours, remainder = divmod(seconds, 3600)
+        minutes, remaining_seconds = divmod(remainder, 60)
+
+        parts = []
+        if hours:
+            parts.append(f"{hours} {'hour' if hours == 1 else 'hours'}")
+        if minutes:
+            parts.append(f"{minutes} {'minute' if minutes == 1 else 'minutes'}")
+        if remaining_seconds and not hours:
+            parts.append(f"{remaining_seconds} {'second' if remaining_seconds == 1 else 'seconds'}")
+        return " ".join(parts) or f"{seconds} seconds"
+
+    @staticmethod
+    def _format_duration_compact(seconds: int) -> str:
+        seconds = max(int(seconds), 0)
+        hours, remainder = divmod(seconds, 3600)
+        minutes, sec = divmod(remainder, 60)
+        parts = []
+        if hours:
+            parts.append(f"{hours}h")
+        if minutes:
+            parts.append(f"{minutes}m")
+        if sec or not parts:
+            parts.append(f"{sec}s")
+        return " ".join(parts)
 
     def _build_macro_command_phrases(self, name: str, custom_phrases: Any) -> dict[str, list[str]]:
         spoken_name = self._humanize_macro_name(name)
         defaults = {
             "activate": [
-                f"starte {spoken_name}",
-                f"mach {spoken_name} an",
-                f"schalte {spoken_name} ein",
-                f"aktiviere {spoken_name}",
                 f"start {spoken_name}",
                 f"enable {spoken_name}",
+                f"turn on {spoken_name}",
             ],
             "deactivate": [
-                f"stoppe {spoken_name}",
-                f"mach {spoken_name} aus",
-                f"schalte {spoken_name} aus",
-                f"deaktiviere {spoken_name}",
                 f"stop {spoken_name}",
                 f"disable {spoken_name}",
+                f"turn off {spoken_name}",
             ],
         }
 
@@ -1524,19 +1998,14 @@ class MacroManager(FunctionManager):
     @staticmethod
     def _extract_action_hint(normalized_transcript: str):
         if (
-            "deaktivier" in normalized_transcript
-            or "ausschalt" in normalized_transcript
-            or "stop" in normalized_transcript
+            "stop" in normalized_transcript
             or "turn off" in normalized_transcript
             or "disable" in normalized_transcript
             or "deactivate" in normalized_transcript
         ):
             return "deactivate"
         if (
-            "aktivier" in normalized_transcript
-            or "einschalt" in normalized_transcript
-            or "starte" in normalized_transcript
-            or "start" in normalized_transcript
+            "start" in normalized_transcript
             or "turn on" in normalized_transcript
             or "enable" in normalized_transcript
             or "activate" in normalized_transcript
@@ -1581,15 +2050,8 @@ class MacroManager(FunctionManager):
     def _humanize_macro_name(self, name: str) -> str:
         text = self._normalize_text(name).replace("_", " ")
         replacements = [
-            (" key press ", " taste "),
-            (" key hold ", " taste halten "),
-            (" every second ", " jede sekunde "),
-            (" every minute ", " jede minute "),
-            (" every ", " jede "),
-            (" second ", " sekunde "),
-            (" seconds ", " sekunden "),
-            (" minute ", " minute "),
-            (" minutes ", " minuten "),
+            (" key press ", " key "),
+            (" key hold ", " hold key "),
             ("macro ", ""),
         ]
         padded = f" {text} "
@@ -1605,9 +2067,6 @@ class MacroManager(FunctionManager):
         if isinstance(value, str):
             return value.strip()
         return str(value).strip()
-
-    def _localize_text(self, de: str, en: str) -> str:
-        return de if self._get_player_language_code() == "de" else en
 
     @staticmethod
     def _slugify(text: str) -> str:
