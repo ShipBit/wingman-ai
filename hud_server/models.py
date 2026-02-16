@@ -33,6 +33,9 @@ class HudServerSettings(BaseModel):
     layout_spacing: int = Field(default=15, ge=0, le=100)
     """Spacing between stacked HUD windows in pixels. Between 0 and 100."""
 
+    screen: int = Field(default=1, ge=1, le=10)
+    """Which screen/monitor to render the HUD on (1 = primary, 2 = secondary, etc.)."""
+
     @field_validator('host')
     @classmethod
     def validate_host(cls, v: str) -> str:

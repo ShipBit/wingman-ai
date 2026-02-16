@@ -80,6 +80,7 @@ class HudServer:
     DEFAULT_FRAMERATE = hud_const.DEFAULT_FRAMERATE
     DEFAULT_LAYOUT_MARGIN = hud_const.DEFAULT_LAYOUT_MARGIN
     DEFAULT_LAYOUT_SPACING = hud_const.DEFAULT_LAYOUT_SPACING
+    DEFAULT_SCREEN = 1
 
     # Server startup timeout
     STARTUP_TIMEOUT_SECONDS = hud_const.SERVER_STARTUP_TIMEOUT
@@ -95,6 +96,7 @@ class HudServer:
         self._framerate = self.DEFAULT_FRAMERATE
         self._layout_margin = self.DEFAULT_LAYOUT_MARGIN
         self._layout_spacing = self.DEFAULT_LAYOUT_SPACING
+        self._screen = self.DEFAULT_SCREEN
 
         # HUD state manager
         self.manager = HudManager()
@@ -592,6 +594,7 @@ class HudServer:
                 framerate=self._framerate,
                 layout_margin=self._layout_margin,
                 layout_spacing=self._layout_spacing,
+                screen=self._screen,
             )
 
             # Register callback to send commands to overlay
@@ -676,7 +679,8 @@ class HudServer:
     # ─────────────────────────────── Server Lifecycle ─────────────────────────────── #
 
     def start(self, host: str = DEFAULT_HOST, port: int = DEFAULT_PORT, framerate: int = DEFAULT_FRAMERATE,
-               layout_margin: int = DEFAULT_LAYOUT_MARGIN, layout_spacing: int = DEFAULT_LAYOUT_SPACING) -> bool:
+               layout_margin: int = DEFAULT_LAYOUT_MARGIN, layout_spacing: int = DEFAULT_LAYOUT_SPACING,
+               screen: int = DEFAULT_SCREEN) -> bool:
         """
         Start the HUD server in a background thread.
 
@@ -686,6 +690,7 @@ class HudServer:
             framerate: HUD overlay rendering framerate (min 1)
             layout_margin: Margin from screen edges in pixels
             layout_spacing: Spacing between stacked windows in pixels
+            screen: Which monitor to render the HUD on (1 = primary, 2 = secondary, etc.)
 
         Returns:
             True if server started successfully
@@ -703,6 +708,7 @@ class HudServer:
         self._framerate = max(1, framerate)
         self._layout_margin = layout_margin
         self._layout_spacing = layout_spacing
+        self._screen = max(1, screen)
 
         self._thread = threading.Thread(
             target=self._run_server,

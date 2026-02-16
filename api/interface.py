@@ -1071,6 +1071,9 @@ class HudServerSettings(BaseModel):
     framerate: int = Field(default=60, ge=1)
     """HUD overlay rendering framerate. Higher = smoother but more CPU. Minimum 1."""
 
+    screen: int = Field(default=1, ge=1, le=10)
+    """Which screen/monitor to render the HUD on (1 = primary, 2 = secondary, etc.)."""
+
 
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None

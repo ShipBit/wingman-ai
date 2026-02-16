@@ -40,6 +40,7 @@ from hud_server.platform.win32 import (
     _ensure_window_class, _class_name,
     force_on_top, WINEVENTPROC,
     EVENT_SYSTEM_FOREGROUND, WINEVENT_OUTOFCONTEXT, WINEVENT_SKIPOWNPROCESS,
+    get_monitor_dimensions,
 )
 from hud_server.layout import LayoutManager, Anchor, LayoutMode
 from hud_server.constants import (
@@ -65,7 +66,7 @@ class HeadsUpOverlay:
     WINDOW_TYPE_CHAT = 'chat'
 
     def __init__(self, command_queue=None, error_queue=None, framerate: int = 60,
-                 layout_margin: int = 20, layout_spacing: int = 15):
+                 layout_margin: int = 20, layout_spacing: int = 15, screen: int = 1):
         self.running = True
         self.msg_queue = command_queue if command_queue else queue.Queue()
         self.error_queue = error_queue
@@ -76,6 +77,7 @@ class HeadsUpOverlay:
         self._global_framerate = max(1, framerate)
         self._layout_margin = layout_margin
         self._layout_spacing = layout_spacing
+        self._screen = screen
 
         # Reactive foreground management
         self._foreground_changed = threading.Event()
@@ -198,9 +200,13 @@ class HeadsUpOverlay:
         # LAYOUT MANAGER
         # =====================================================================
         # Automatic positioning and stacking to prevent window overlap
+        # Get screen dimensions and offset based on selected monitor
+        screen_width, screen_height, screen_offset_x, screen_offset_y = get_monitor_dimensions(self._screen)
         self._layout_manager = LayoutManager(
-            screen_width=user32.GetSystemMetrics(0) if hasattr(user32, 'GetSystemMetrics') else 1920,
-            screen_height=user32.GetSystemMetrics(1) if hasattr(user32, 'GetSystemMetrics') else 1080,
+            screen_width=screen_width,
+            screen_height=screen_height,
+            screen_offset_x=screen_offset_x,
+            screen_offset_y=screen_offset_y,
             default_margin=self._layout_margin,
             default_spacing=self._layout_spacing,
         )

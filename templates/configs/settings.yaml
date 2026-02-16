@@ -49,3 +49,4 @@ hud_server:
   host: "127.0.0.1"
   port: 7862
   framerate: 60
+  screen: 1

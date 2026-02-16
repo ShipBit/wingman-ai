@@ -96,12 +96,16 @@ class LayoutManager:
         self,
         screen_width: int = 1920,
         screen_height: int = 1080,
+        screen_offset_x: int = 0,
+        screen_offset_y: int = 0,
         default_margin: int = 20,
         default_spacing: int = 10
     ):
         self._lock = threading.RLock()
         self._screen_width = screen_width
         self._screen_height = screen_height
+        self._screen_offset_x = screen_offset_x
+        self._screen_offset_y = screen_offset_y
         self._default_margin = default_margin
         self._default_spacing = default_spacing
 
@@ -120,10 +124,23 @@ class LayoutManager:
                 self._screen_height = height
                 self._invalidate_cache()
 
+    def set_screen_offset(self, offset_x: int, offset_y: int):
+        """Update screen offset and invalidate cache."""
+        with self._lock:
+            if self._screen_offset_x != offset_x or self._screen_offset_y != offset_y:
+                self._screen_offset_x = offset_x
+                self._screen_offset_y = offset_y
+                self._invalidate_cache()
+
     @property
     def screen_size(self) -> Tuple[int, int]:
         """Get current screen dimensions."""
         return (self._screen_width, self._screen_height)
+
+    @property
+    def screen_offset(self) -> Tuple[int, int]:
+        """Get current screen offset (position of monitor on desktop)."""
+        return (self._screen_offset_x, self._screen_offset_y)
 
     def register_window(
         self,
@@ -288,9 +305,15 @@ class LayoutManager:
                     self._windows[name].computed_x = x
                     self._windows[name].computed_y = y
 
-            self._position_cache = positions
+            # Add screen offset to all positions
+            positions_with_offset = {
+                name: (x + self._screen_offset_x, y + self._screen_offset_y)
+                for name, (x, y) in positions.items()
+            }
+
+            self._position_cache = positions_with_offset
             self._cache_valid = True
-            return positions
+            return positions_with_offset
 
     def _compute_anchor_positions(
         self,
@@ -390,7 +413,7 @@ class LayoutManager:
         return positions
 
     def get_position(self, name: str) -> Optional[Tuple[int, int]]:
-        """Get the computed position for a window."""
+        """Get the computed position for a window (offset already included via compute_positions)."""
         positions = self.compute_positions()
         return positions.get(name)
 

@@ -455,6 +455,7 @@ class WingmanCore(WebSocketUser):
                 framerate=getattr(hud_settings, 'framerate', 60),
                 layout_margin=getattr(hud_settings, 'layout_margin', 20),
                 layout_spacing=getattr(hud_settings, 'layout_spacing', 15),
+                screen=getattr(hud_settings, 'screen', 1),
             ):
                 self.printr.print(
                     f"HUD Server failed to start on port {hud_settings.port}",

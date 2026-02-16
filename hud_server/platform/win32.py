@@ -1,6 +1,20 @@
 ﻿import ctypes
 from ctypes import wintypes
 
+from api.enums import LogType
+from services.printr import Printr
+from hud_server.constants import (
+    LOG_MONITORS_AVAILABLE,
+    LOG_MONITOR_NONE,
+    LOG_MONITOR_SELECTED,
+    LOG_MONITOR_FALLBACK_GETSYSTEMMETRICS,
+    LOG_MONITOR_FALLBACK_UNAVAILABLE,
+    LOG_MONITOR_NONE_AVAILABLE,
+    LOG_MONITOR_ERROR,
+)
+
+printr = Printr()
+
 # Windows API Constants
 GWL_EXSTYLE = -20
 WS_POPUP = 0x80000000
@@ -78,6 +92,33 @@ user32.UpdateLayeredWindow.argtypes = [
     ctypes.POINTER(wintypes.SIZE), wintypes.HDC, ctypes.POINTER(wintypes.POINT),
     wintypes.COLORREF, ctypes.POINTER(RGBQUAD), wintypes.DWORD
 ]
+
+# Multi-monitor support - define types first
+MONITORINFOF_PRIMARY = 1
+
+
+class MONITORINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.DWORD),
+        ("rcMonitor", wintypes.RECT),
+        ("rcWork", wintypes.RECT),
+        ("dwFlags", wintypes.DWORD),
+    ]
+
+
+MONITORENUMPROC = ctypes.WINFUNCTYPE(
+    wintypes.BOOL,
+    wintypes.HMONITOR,
+    wintypes.HDC,
+    ctypes.POINTER(wintypes.RECT),
+    LPARAM
+)
+
+# Setup function prototypes for multi-monitor APIs
+user32.EnumDisplayMonitors.argtypes = [wintypes.HDC, ctypes.POINTER(wintypes.RECT), MONITORENUMPROC, LPARAM]
+user32.EnumDisplayMonitors.restype = wintypes.BOOL
+user32.GetMonitorInfoW.argtypes = [wintypes.HMONITOR, ctypes.POINTER(MONITORINFO)]
+user32.GetMonitorInfoW.restype = wintypes.BOOL
 
 # Basic Win32 message structures for a non-blocking pump
 class POINT(ctypes.Structure):
@@ -162,3 +203,90 @@ def _ensure_window_class():
 def force_on_top(hwnd):
     user32.SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
+
+
+# ─────────────────────────────── Multi-Monitor Support ─────────────────────────────── #
+
+
+# Store callback globally to prevent garbage collection
+_enum_callback = None
+
+
+def get_all_monitors():
+    """Get information about all connected monitors.
+
+    Returns:
+        list: List of monitor info dicts with keys: left, top, right, bottom, width, height, is_primary
+    """
+    global _enum_callback
+
+    monitors = []
+    try:
+        # Use a closure to capture monitors list
+        def callback(hmonitor, hdc, lprect, lparam):
+            mi = MONITORINFO()
+            mi.cbSize = ctypes.sizeof(MONITORINFO)
+            if user32.GetMonitorInfoW(hmonitor, ctypes.byref(mi)):
+                monitors.append({
+                    'left': mi.rcMonitor.left,
+                    'top': mi.rcMonitor.top,
+                    'right': mi.rcMonitor.right,
+                    'bottom': mi.rcMonitor.bottom,
+                    'width': mi.rcMonitor.right - mi.rcMonitor.left,
+                    'height': mi.rcMonitor.bottom - mi.rcMonitor.top,
+                    'is_primary': bool(mi.dwFlags & MONITORINFOF_PRIMARY),
+                })
+            return True
+
+        _enum_callback = MONITORENUMPROC(callback)
+        user32.EnumDisplayMonitors(None, None, _enum_callback, 0)
+    except Exception as e:
+        printr.print(LOG_MONITOR_ERROR.format(e), color=LogType.ERROR, server_only=True)
+    return monitors
+
+
+def get_monitor_dimensions(screen_index: int = 1):
+    """Get the dimensions and offset of a specific monitor by index.
+
+    Args:
+        screen_index: Monitor index (1 = primary, 2 = secondary, etc.)
+
+    Returns:
+        tuple: (width, height, offset_x, offset_y) of the requested monitor
+    """
+    monitors = get_all_monitors()
+
+    # Log available monitors
+    if monitors:
+        monitor_list = ", ".join(
+            f"{i+1}: {m['width']}x{m['height']}{' (primary)' if m['is_primary'] else ''}"
+            for i, m in enumerate(monitors)
+        )
+        printr.print(LOG_MONITORS_AVAILABLE.format(monitor_list), color=LogType.INFO, server_only=True)
+    else:
+        printr.print(LOG_MONITOR_NONE, color=LogType.WARNING, server_only=True)
+
+    if not monitors:
+        # Fallback to primary monitor using GetSystemMetrics
+        width = user32.GetSystemMetrics(0) if hasattr(user32, 'GetSystemMetrics') else 1920
+        height = user32.GetSystemMetrics(1) if hasattr(user32, 'GetSystemMetrics') else 1080
+        printr.print(LOG_MONITOR_FALLBACK_GETSYSTEMMETRICS.format(screen_index, width, height), color=LogType.WARNING, server_only=True)
+        return width, height, 0, 0
+
+    # Adjust index to 0-based
+    index = screen_index - 1
+
+    if index < len(monitors):
+        monitor = monitors[index]
+        printr.print(LOG_MONITOR_SELECTED.format(screen_index, monitor['width'], monitor['height']), color=LogType.INFO, server_only=True)
+        return monitor['width'], monitor['height'], monitor['left'], monitor['top']
+
+    # If the requested screen doesn't exist, return the last available monitor
+    if monitors:
+        monitor = monitors[-1]
+        printr.print(LOG_MONITOR_FALLBACK_UNAVAILABLE.format(screen_index, len(monitors), monitor['width'], monitor['height']), color=LogType.WARNING, server_only=True)
+        return monitor['width'], monitor['height'], monitor['left'], monitor['top']
+
+    # Ultimate fallback
+    printr.print(LOG_MONITOR_NONE_AVAILABLE, color=LogType.WARNING, server_only=True)
+    return 1920, 1080, 0, 0
