@@ -1,0 +1,27 @@
+All voices are selected cc0 licensed voices from:
+https://huggingface.co/kyutai/tts-voices
+Specifically from:
+/unmute-prod-website/ (ex03_ex01_happy_001_channel1_334s)
+and
+/voice-donations/ (rest of voices)
+
+
+If names changed substantially as used, reflected below:
+Abo_Ayman --> Abo
+Awais_Shah --> Awais
+Bobby_McFern --> Bobby
+BrokenHypocrite --> Ben
+Developuese --> Zoe
+ex03_ex01_happy_001_channel1_334s --> Eric
+Fred_Mara—> Fred
+Hielos 2 --> Hielos
+Jeremy_Q --> Jeremy
+Latin Accent --> Yolanda
+Midlands_Bedfordshire_Dialect --> Douglas
+Mystery Sir --> Aaron
+OldNerd3 --> Edward
+Ra Xor --> Raxor
+Robert2 --> Robert
+Selfie --> James
+The Other Brother --> Christopher
+
