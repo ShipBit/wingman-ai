@@ -158,6 +158,7 @@ cython_debug/
 #.idea/
 
 # VSCode files
+wingman-ai.code-workspace
 .vscode/settings.json
 /.vs/
 
@@ -174,5 +175,6 @@ whispercpp-cuda/
 whispercpp-models/
 faster-whisper-models/
 pocket-tts-models/
+pocket-tts-voices/
 
-wingman-ai.code-workspace
+
