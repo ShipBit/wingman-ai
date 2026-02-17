@@ -22,6 +22,11 @@ class Migration200To210(BaseMigration):
             old["pocket_tts"] = new["pocket_tts"]
             self.log("- added new setting: pocket_tts")
 
+        # Add HUD Server Settings
+        if "hud_server" not in old and "hud_server" in new:
+            old["hud_server"] = new["hud_server"]
+            self.log("- added new setting: hud_server")
+
         return old
 
     def migrate_defaults(self, old: dict, new: dict) -> dict:

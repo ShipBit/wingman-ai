@@ -60,6 +60,7 @@ from services.system_manager import SystemManager
 from services.tower import Tower
 from services.websocket_user import WebSocketUser
 from hud_server.server import HudServer
+from hud_server.validation import validate_hud_settings, get_invalid_summary
 
 
 class WingmanCore(WebSocketUser):
@@ -433,6 +434,19 @@ class WingmanCore(WebSocketUser):
         # Start HUD Server if enabled
         await self._start_hud_server_if_enabled()
 
+    def _get_validated_hud_settings(self, hud_settings, log_invalid: bool = True) -> dict:
+        """Validate HUD settings and return dict with defaults for invalid values."""
+        result = validate_hud_settings(hud_settings)
+        invalid = result.pop('_invalid', {})
+
+        if log_invalid and invalid:
+            self.printr.print(
+                "[HUD] " + get_invalid_summary(invalid),
+                color=LogType.INFO
+            )
+
+        return result
+
     async def _start_hud_server_if_enabled(self):
         """Start the HUD server if enabled in settings."""
         hud_settings = getattr(self.settings_service.settings, 'hud_server', None)
@@ -441,38 +455,35 @@ class WingmanCore(WebSocketUser):
 
         if platform.system() != "Windows":
             self.printr.print(
-                "HUD Server is only supported on Windows.",
+                "[HUD] Server is only supported on Windows.",
                 color=LogType.WARNING,
                 server_only=True,
             )
             return
 
         try:
+            validated = self._get_validated_hud_settings(hud_settings)
             self._hud_server = HudServer()
-            if not self._hud_server.start(
-                host=hud_settings.host,
-                port=hud_settings.port,
-                framerate=getattr(hud_settings, 'framerate', 60),
-                layout_margin=getattr(hud_settings, 'layout_margin', 20),
-                layout_spacing=getattr(hud_settings, 'layout_spacing', 15),
-                screen=getattr(hud_settings, 'screen', 1),
-            ):
+            if not self._hud_server.start(**validated):
                 self.printr.print(
-                    f"HUD Server failed to start on port {hud_settings.port}",
+                    f"[HUD] Server failed to start on port {validated['port']}",
                     color=LogType.ERROR,
-                    server_only=True,
+                    server_only=False,
                 )
                 self._hud_server = None
         except Exception as e:
             self.printr.print(
-                f"HUD Server error: {e}",
+                f"[HUD] Server error: {e}",
                 color=LogType.ERROR,
-                server_only=True,
+                server_only=False,
             )
             self._hud_server = None
 
     async def _on_hud_server_settings_changed(self, hud_settings):
         """Handle HUD server settings changes — start or stop as needed."""
+        # Validate settings and apply defaults for invalid values
+        validated = self._get_validated_hud_settings(hud_settings)
+
         should_run = (
             hud_settings is not None
             and hud_settings.enabled
@@ -488,10 +499,10 @@ class WingmanCore(WebSocketUser):
             # Server already running - update settings without restart
             try:
                 self._hud_server.update_settings(
-                    framerate=getattr(hud_settings, 'framerate', 60),
-                    layout_margin=getattr(hud_settings, 'layout_margin', 20),
-                    layout_spacing=getattr(hud_settings, 'layout_spacing', 15),
-                    screen=getattr(hud_settings, 'screen', 1),
+                    framerate=validated['framerate'],
+                    layout_margin=validated['layout_margin'],
+                    layout_spacing=validated['layout_spacing'],
+                    screen=validated['screen'],
                 )
             except Exception as e:
                 self.printr.print(

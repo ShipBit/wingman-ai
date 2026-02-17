@@ -13,13 +13,6 @@ hint:
   en: Please make sure the HUD server in the global settings is enabled.
   de: Bitte stelle sicher, dass der HUD-Server in den globalen Einstellungen aktiviert ist.
 custom_properties:
-  - id: user_color
-    name: User Color
-    hint: Color for user name in messages (hex format).
-    property_type: string
-    value: "#4cd964"
-    required: false
-
   - id: accent_color
     name: Accent Color
     hint: Accent color for assistant messages and highlights (hex format).
@@ -43,10 +36,29 @@ custom_properties:
 
   - id: chat_anchor
     name: Chat Window Position
-    hint: Screen position for the chat window. Options are top_left, top_center, top_right, left_center, center, right_center, bottom_left, bottom_center, bottom_right.
-    property_type: string
+    hint: Screen position for the chat window.
+    property_type: single_select
     value: "top_left"
     required: false
+    options:
+      - label: "Top Left"
+        value: "top_left"
+      - label: "Top Center"
+        value: "top_center"
+      - label: "Top Right"
+        value: "top_right"
+      - label: "Left Center"
+        value: "left_center"
+      - label: "Center"
+        value: "center"
+      - label: "Right Center"
+        value: "right_center"
+      - label: "Bottom Left"
+        value: "bottom_left"
+      - label: "Bottom Center"
+        value: "bottom_center"
+      - label: "Bottom Right"
+        value: "bottom_right"
 
   - id: chat_priority
     name: Chat Window Priority
@@ -71,10 +83,29 @@ custom_properties:
 
   - id: persistent_anchor
     name: Info Panel Position
-    hint: Screen position for persistent info panels. Options are top_left, top_center, top_right, left_center, center, right_center, bottom_left, bottom_center, bottom_right.
-    property_type: string
+    hint: Screen position for persistent info panels.
+    property_type: single_select
     value: "top_left"
     required: false
+    options:
+      - label: "Top Left"
+        value: "top_left"
+      - label: "Top Center"
+        value: "top_center"
+      - label: "Top Right"
+        value: "top_right"
+      - label: "Left Center"
+        value: "left_center"
+      - label: "Center"
+        value: "center"
+      - label: "Right Center"
+        value: "right_center"
+      - label: "Bottom Left"
+        value: "bottom_left"
+      - label: "Bottom Center"
+        value: "bottom_center"
+      - label: "Bottom Right"
+        value: "bottom_right"
 
   - id: persistent_priority
     name: Info Panel Priority
@@ -95,13 +126,6 @@ custom_properties:
     hint: Maximum height of persistent info panels in pixels. Content will be clipped if it exceeds this height.
     property_type: number
     value: 600
-    required: false
-
-  - id: opacity
-    name: Opacity
-    hint: Transparency of HUD elements (0.0 to 1.0).
-    property_type: number
-    value: 0.85
     required: false
 
   - id: border_radius
@@ -137,6 +161,20 @@ custom_properties:
     hint: Maximum time in seconds to wait for audio playback before auto-hiding messages. If audio doesn't start within this time, the message will be hidden.
     property_type: number
     value: 5
+    required: false
+
+  - id: opacity
+    name: Opacity
+    hint: Transparency of HUD elements (0 = fully transparent, 100 = no transparency).
+    property_type: slider
+    options:
+      - label: "min"
+        value: 0
+      - label: "max"
+        value: 100
+      - label: "step"
+        value: 1
+    value: 85
     required: false
 
   - id: typewriter_effect

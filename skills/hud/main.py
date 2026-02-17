@@ -28,6 +28,7 @@ from services.printr import Printr
 from skills.skill_base import Skill, tool
 from hud_server.http_client import HudHttpClient
 from hud_server.types import Anchor, HudColor, FontFamily, LayoutMode, MessageProps, PersistentProps, WindowType
+from hud_server.validation import validate_hud_settings
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -56,7 +57,6 @@ class HUD(Skill):
         # State
         self.active = False
         self.stop_event = threading.Event()
-        self.current_display_text = ""
         self.expecting_audio = False
         self.audio_expect_start_time = 0.0
 
@@ -76,7 +76,25 @@ class HUD(Skill):
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Group name for HUD (just wingman identifier, element passed separately)
-        self._group_name = None
+        self._group_name = re.sub(r'[^a-zA-Z0-9_-]', '_', self.wingman.name)
+
+    # ─────────────────────────────── Helpers ─────────────────────────────── #
+
+    @staticmethod
+    def _is_valid_hex_color(color: str) -> bool:
+        """Validate a hex color string (#RGB, #RRGGBB, or #RRGGBBAA)."""
+        if not isinstance(color, str):
+            return False
+        if not color.startswith('#'):
+            return False
+        hex_part = color[1:]
+        if len(hex_part) not in (3, 6, 8):
+            return False
+        try:
+            int(hex_part, 16)
+            return True
+        except ValueError:
+            return False
 
     # ─────────────────────────────── Configuration ─────────────────────────────── #
 
@@ -96,35 +114,9 @@ class HUD(Skill):
                 )
             )
 
-        # Color validation helper - supports #RGB, #RRGGBB, or #RRGGBBAA formats
-        def is_valid_hex_color(color: str) -> bool:
-            if not isinstance(color, str):
-                return False
-            if not color.startswith('#'):
-                return False
-            hex_part = color[1:]
-            if len(hex_part) not in (3, 6, 8):  # 3, 6, or 8 hex chars (with alpha)
-                return False
-            try:
-                int(hex_part, 16)
-                return True
-            except ValueError:
-                return False
-
-        # Validate user_color
-        user_color = self.retrieve_custom_property_value("user_color", errors)
-        if not is_valid_hex_color(user_color):
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.wingman.name,
-                    message=f"Invalid user_color: '{user_color}'. Must be a valid hex color (e.g., #ffffff).",
-                    error_type=WingmanInitializationErrorType.INVALID_CONFIG
-                )
-            )
-
         # Validate accent_color
         accent_color = self.retrieve_custom_property_value("accent_color", errors)
-        if not is_valid_hex_color(accent_color):
+        if not self._is_valid_hex_color(accent_color):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
@@ -135,7 +127,7 @@ class HUD(Skill):
 
         # Validate bg_color
         bg_color = self.retrieve_custom_property_value("bg_color", errors)
-        if not is_valid_hex_color(bg_color):
+        if not self._is_valid_hex_color(bg_color):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
@@ -146,7 +138,7 @@ class HUD(Skill):
 
         # Validate text_color
         text_color = self.retrieve_custom_property_value("text_color", errors)
-        if not is_valid_hex_color(text_color):
+        if not self._is_valid_hex_color(text_color):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
@@ -243,13 +235,13 @@ class HUD(Skill):
                 )
             )
 
-        # Validate opacity
+        # Validate opacity (0-100 range from slider)
         opacity = self.retrieve_custom_property_value("opacity", errors)
-        if not isinstance(opacity, (int, float)) or not (0.0 <= opacity <= 1.0):
+        if not isinstance(opacity, (int, float)) or not (0 <= opacity <= 100):
             errors.append(
                 WingmanInitializationError(
                     wingman_name=self.wingman.name,
-                    message=f"Invalid opacity: '{opacity}'. Must be a number between 0.0 and 1.0.",
+                    message=f"Invalid opacity: '{opacity}'. Must be a number between 0 and 100.",
                     error_type=WingmanInitializationErrorType.INVALID_CONFIG
                 )
             )
@@ -371,7 +363,7 @@ class HUD(Skill):
             bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
             text_color=str(self._get_prop("text_color", HudColor.TEXT_PRIMARY)),
             accent_color=str(self._get_prop("accent_color", HudColor.ACCENT_BLUE)),
-            opacity=float(self._get_prop("opacity", 0.85)),
+            opacity=float(self._get_prop("opacity", 85)) / 100.0,
             border_radius=int(self._get_prop("border_radius", 12)),
             font_size=int(self._get_prop("font_size", 16)),
             content_padding=int(self._get_prop("content_padding", 16)),
@@ -390,7 +382,7 @@ class HUD(Skill):
             bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
             text_color=str(self._get_prop("text_color", HudColor.TEXT_PRIMARY)),
             accent_color=str(self._get_prop("accent_color", HudColor.ACCENT_BLUE)),
-            opacity=float(self._get_prop("opacity", 0.85)),
+            opacity=float(self._get_prop("opacity", 85)) / 100.0,
             border_radius=int(self._get_prop("border_radius", 12)),
             font_size=int(self._get_prop("font_size", 16)),
             content_padding=int(self._get_prop("content_padding", 16)),
@@ -450,7 +442,8 @@ class HUD(Skill):
 
         # Create client if it doesn't exist (e.g., after skill reactivation or loop change)
         if not self._client:
-            base_url = f"http://{hud_settings.host}:{hud_settings.port}"
+            validated = validate_hud_settings(hud_settings)
+            base_url = f"http://{validated['host']}:{validated['port']}"
             self._client = HudHttpClient(base_url=base_url)
 
             # Store current loop reference
@@ -458,12 +451,6 @@ class HUD(Skill):
                 self._main_loop = asyncio.get_running_loop()
             except RuntimeError:
                 pass
-
-            # Setup group names if not done
-            if self._group_name == "messages":
-                sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', self.wingman.name)
-                self._group_name = f"messages_{sanitized_name}"
-                self._group_name = f"persistent_{sanitized_name}"
 
         if not self._client.connected:
             # Try to connect/reconnect
@@ -518,7 +505,8 @@ class HUD(Skill):
             return
 
         # Connect to HUD server
-        base_url = f"http://{hud_settings.host}:{hud_settings.port}"
+        validated = validate_hud_settings(hud_settings)
+        base_url = f"http://{validated['host']}:{validated['port']}"
         self._client = HudHttpClient(base_url=base_url)
 
         # store the loop where the client was created
@@ -527,11 +515,6 @@ class HUD(Skill):
         except RuntimeError:
             pass
         
-        # Setup groups with unique names per wingman
-        sanitized_name = re.sub(r'[^a-zA-Z0-9_-]', '_', self.wingman.name)
-        self._group_name = f"messages_{sanitized_name}"
-        self._group_name = f"persistent_{sanitized_name}"
-
         try:
             if await self._client.connect(timeout=3.0):
                 await printr.print_async(
@@ -625,8 +608,11 @@ class HUD(Skill):
         # Save state
         self._save_persistent_items()
         self.hud_clear_all(False)
-        await self._client.delete_group(self._group_name, WindowType.MESSAGE)
-        await self._client.delete_group(self._group_name, WindowType.PERSISTENT)
+
+        # Delete groups if client exists
+        if self._client:
+            await self._client.delete_group(self._group_name, WindowType.MESSAGE)
+            await self._client.delete_group(self._group_name, WindowType.PERSISTENT)
 
         # Disconnect client
         if self._client:
@@ -703,7 +689,7 @@ class HUD(Skill):
         title: str,
         message: str,
         color: str,
-        tools: list = None,
+        tools: Optional[list] = None,
         duration: float = 180.0
     ):
         """Show a message on the HUD."""
@@ -868,11 +854,10 @@ class HUD(Skill):
         if not self._get_prop("show_chat_messages", True):
             return
 
-        self.current_display_text = message
-        user_color = str(self._get_prop("user_color", "#4cd964"))
-        await self._show_message("USER", message, user_color)
-
+        # Use accent color for user messages (user_color was unused)
         accent_color = str(self._get_prop("accent_color", "#00aaff"))
+        await self._show_message("USER", message, accent_color)
+
         await self._show_loader(True, accent_color)
 
     async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
@@ -933,7 +918,6 @@ class HUD(Skill):
                 })
 
         if message:
-            self.current_display_text = message
             self.expecting_audio = True
             self.audio_expect_start_time = time.time()
             await self._show_message(
@@ -950,7 +934,7 @@ class HUD(Skill):
     # ─────────────────────────────── Tool Methods ─────────────────────────────── #
 
     @tool()
-    def hud_add_info(
+    async def hud_add_info(
         self,
         title: str,
         description_markdown: str,
@@ -964,6 +948,9 @@ class HUD(Skill):
         :param description_markdown: Content to display (Markdown supported).
         :param duration: Auto-remove after this many seconds. If not set, stays until removed.
         """
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
         valid_duration = duration if duration and duration > 0 else None
 
         self._persistent_items[title] = {
@@ -973,8 +960,7 @@ class HUD(Skill):
             'expiry': time.time() + valid_duration if valid_duration else None
         }
 
-        if self._client:
-            self._send_command_sync(
+        self._send_command_sync(
                 self._client.add_item(
                     group_name=self._group_name,
                     element=WindowType.PERSISTENT,
@@ -988,24 +974,26 @@ class HUD(Skill):
         return f"Added/Updated info panel: {title}"
 
     @tool()
-    def hud_remove_info(self, title: str) -> str:
+    async def hud_remove_info(self, title: str) -> str:
         """
         Remove a persistent information panel from the HUD.
 
         :param title: The title of the info panel to remove.
         """
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
         self._persistent_items.pop(title, None)
 
-        if self._client:
-            self._send_command_sync(
-                self._client.remove_item(group_name=self._group_name, element=WindowType.PERSISTENT, title=title)
-            )
+        self._send_command_sync(
+            self._client.remove_item(group_name=self._group_name, element=WindowType.PERSISTENT, title=title)
+        )
 
         self._save_persistent_items()
         return f"Removed info panel: {title}"
 
     @tool()
-    def hud_list_info(self) -> str:
+    async def hud_list_info(self) -> str:
         """
         List all currently visible information panels on the HUD.
         Returns JSON with all active panels.
@@ -1038,10 +1026,13 @@ class HUD(Skill):
         return json.dumps(active_items, indent=2)
 
     @tool()
-    def hud_clear_all(self, save: bool = True) -> str:
+    async def hud_clear_all(self, save: bool = True) -> str:
         """
         Remove all information panels and progress bars from the HUD.
         """
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
         # Create a copy of keys to iterate because we will modify the dict
         items_to_remove = list(self._persistent_items.keys())
         cleared_count = len(items_to_remove)
@@ -1059,7 +1050,7 @@ class HUD(Skill):
         return f"Cleared {cleared_count} item(s) from HUD."
 
     @tool()
-    def hud_show_progress(
+    async def hud_show_progress(
         self,
         title: str,
         current: float,
@@ -1078,6 +1069,9 @@ class HUD(Skill):
         :param auto_close: If True, removes the bar when reaching 100%.
         :param color: Optional color for the progress bar (hex color like #00ff00).
         """
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
         if maximum <= 0:
             maximum = 100
 
@@ -1111,7 +1105,7 @@ class HUD(Skill):
         return f"Progress '{title}': {percentage:.1f}%"
 
     @tool()
-    def hud_show_timer(
+    async def hud_show_timer(
         self,
         title: str,
         duration_seconds: float,
@@ -1128,6 +1122,9 @@ class HUD(Skill):
         :param auto_close: If True (default), removes the timer after completion.
         :param color: Optional color for the timer bar (hex color like #00ff00).
         """
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
         if duration_seconds <= 0:
             duration_seconds = 1
 
@@ -1161,7 +1158,7 @@ class HUD(Skill):
         return f"Timer '{title}' started: {duration_seconds:.1f}s"
 
     @tool()
-    def hud_update_progress(
+    async def hud_update_progress(
         self,
         title: str,
         current: float,
@@ -1176,6 +1173,9 @@ class HUD(Skill):
         :param maximum: Optional new maximum value.
         :param description_markdown: Optional new description.
         """
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
         if title not in self._persistent_items:
             return f"Progress '{title}' not found. Use hud_show_progress first."
 
@@ -1214,7 +1214,7 @@ class HUD(Skill):
         return f"Updated progress '{title}': {percentage:.1f}%"
 
     @tool()
-    def hud_update_info(
+    async def hud_update_info(
         self,
         title: str,
         description_markdown: str,
@@ -1227,6 +1227,9 @@ class HUD(Skill):
         :param description_markdown: The new content (Markdown supported).
         :param duration: Optional new auto-remove timer in seconds.
         """
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
         if title not in self._persistent_items:
             return f"Info '{title}' not found. Use hud_add_info first."
 
@@ -1258,7 +1261,7 @@ class HUD(Skill):
         return f"Updated info panel: {title}"
 
     @tool()
-    def hud_hide(self) -> str:
+    async def hud_hide(self) -> str:
         """
         Hide the HUD elements (message window and persistent info panel).
 
@@ -1266,29 +1269,26 @@ class HUD(Skill):
         and perform all logic (timers, auto-hide, item updates) in the background.
         Use hud_show to display them again.
         """
-        print(f"[HUD SKILL] hud_hide called, _group_name={self._group_name}")
-        if self._client:
-            print(f"[HUD SKILL] Calling hide_element for PERSISTENT")
-            self._send_command_sync(
-                self._client.hide_element(
-                    group_name=self._group_name,
-                    element=WindowType.PERSISTENT
-                )
+        if not await self._ensure_connected():
+            return "HUD server is not available."
+
+        self._send_command_sync(
+            self._client.hide_element(
+                group_name=self._group_name,
+                element=WindowType.PERSISTENT
             )
-            print(f"[HUD SKILL] Calling hide_element for MESSAGE")
-            self._send_command_sync(
-                self._client.hide_element(
-                    group_name=self._group_name,
-                    element=WindowType.MESSAGE
-                )
+        )
+        self._send_command_sync(
+            self._client.hide_element(
+                group_name=self._group_name,
+                element=WindowType.MESSAGE
             )
-        else:
-            print(f"[HUD SKILL] No client!")
+        )
 
         return "HUD is now hidden."
 
     @tool()
-    def hud_show(self) -> str:
+    async def hud_show(self) -> str:
         """
         Show the HUD elements (message window and persistent info panel).
 

@@ -138,7 +138,7 @@ HTTP_VALIDATION_ERROR = 422
 HTTP_INTERNAL_ERROR = 500
 
 # Log Messages
-LOG_SERVER_STARTED = "[HUD] Server started on http://{}:{}"
+LOG_SERVER_STARTED = "[HUD] Server started on http://{}:{}/docs"
 LOG_SERVER_STOPPED = "[HUD] Server stopped"
 LOG_SERVER_STARTUP_TIMEOUT = "[HUD] Failed to start within {}s timeout"
 LOG_SERVER_ALREADY_RUNNING = "[HUD] Server already running"
