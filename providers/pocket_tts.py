@@ -24,6 +24,7 @@ from services.printr import Printr
 MODELS_DIR = "pocket-tts-models"
 INCLUDED_VOICES_DIR = "pocket-tts-voices"
 
+
 class PocketTTS:
     def __init__(self, settings: Optional[PocketTTSSettings] = None):
         if settings is None:
@@ -173,7 +174,9 @@ class PocketTTS:
                 )
             )
         # Wingman included cc0 voices
-        if self.wingman_included_voices_dir and os.path.isdir(self.wingman_included_voices_dir):
+        if self.wingman_included_voices_dir and os.path.isdir(
+            self.wingman_included_voices_dir
+        ):
             extensions = ("*.wav", "*.mp3", "*.flac", "*.safetensors")
             audio_files = []
             for ext in extensions:
@@ -216,7 +219,9 @@ class PocketTTS:
         resolved_key = voice_id_or_path
         # Check WingmanAI included voices
         if self.wingman_included_voices_dir:
-            possible_path = os.path.join(self.wingman_included_voices_dir, voice_id_or_path)
+            possible_path = os.path.join(
+                self.wingman_included_voices_dir, voice_id_or_path
+            )
             if os.path.exists(possible_path):
                 resolved_key = os.path.abspath(possible_path)
             else:
@@ -457,5 +462,5 @@ class PocketTTS:
         else:
             # Return included directory
             app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            wingmanai_voices_dir = os.path.join(app_dir, INCLUDED_VOICES_DIR)   
+            wingmanai_voices_dir = os.path.join(app_dir, INCLUDED_VOICES_DIR)
         return wingmanai_voices_dir
