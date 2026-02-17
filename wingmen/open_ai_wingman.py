@@ -1330,7 +1330,7 @@ class OpenAiWingman(Wingman):
             self.pending_tool_calls.append(tool_call.id)
 
     async def _update_tool_response(self, tool_call_id, response) -> bool:
-        """Updates a tool response in the conversation history. This also moves the message to the end of the history if all tool responses are given.
+        """Updates a tool response in the conversation history.
 
         Args:
             tool_call_id (str): The identifier of the tool call to update the response for.
