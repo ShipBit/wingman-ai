@@ -284,15 +284,15 @@ class StarCitizenWingman(OpenAiWingman):
                 self._refresh_manager_runtime_state()
             return self._build_manager_toggle_response_text(manager_toggle_result)
 
-        macro_manager_instance = self.ai_functions_manager.manager_instances.get("MacroManager")
-        if (
-            macro_manager_instance
-            and self.ai_functions_manager.is_manager_enabled("MacroManager")
-            and hasattr(macro_manager_instance, "match_and_toggle_macro_by_phrase")
-        ):
-            macro_toggle_result = macro_manager_instance.match_and_toggle_macro_by_phrase(transcript)
-            if macro_toggle_result:
-                return macro_toggle_result.get("message", "Makrostatus aktualisiert.")
+        # macro_manager_instance = self.ai_functions_manager.manager_instances.get("MacroManager")
+        # if (
+        #     macro_manager_instance
+        #     and self.ai_functions_manager.is_manager_enabled("MacroManager")
+        #     and hasattr(macro_manager_instance, "match_and_toggle_macro_by_phrase")
+        # ):
+        #     macro_toggle_result = macro_manager_instance.match_and_toggle_macro_by_phrase(transcript)
+        #     if macro_toggle_result:
+        #         return macro_toggle_result.get("message", "Makrostatus aktualisiert.")
 
         return super()._try_instant_activation(transcript)
 

@@ -979,7 +979,7 @@
         "category": "spaceship_defensive",
         "actionname": "v_weapon_countermeasure_decoy_burst_decrease",
         "activationMode": "press",
-        "keyboard-mapping": "lalt+h",
+        "keyboard-mapping": "lalt+lctrl+down",
         "action-label-en": "Decoy - Decrease Burst Size (tap)",
         "action-description-en": "Decreases the burst size by one.",
         "keyboard-mapping-en": "Left Alt+H",
@@ -993,7 +993,7 @@
         "action-description-fr_FR": "",
         "keyboard-mapping-fr_FR": "input_key_keyboard_leftAlt+input_key_keyboard_h",
         "keyboard-mapping-default": "lalt+h",
-        "keyboard-mapping-custom": null,
+        "keyboard-mapping-custom": "lalt+lctrl+down",
         "command-phrases": {
             "en": [
                 "Shrink",
@@ -1024,7 +1024,7 @@
         "category": "spaceship_defensive",
         "actionname": "v_weapon_countermeasure_decoy_burst_increase",
         "activationMode": "press",
-        "keyboard-mapping": "ralt+h",
+        "keyboard-mapping": "lalt+lctrl+up",
         "action-label-en": "Decoy - Increase Burst Size (tap)",
         "action-description-en": "Increases the burst size by one.",
         "keyboard-mapping-en": "Right Alt+H",
@@ -1038,7 +1038,7 @@
         "action-description-fr_FR": "",
         "keyboard-mapping-fr_FR": "input_key_keyboard_rightAlt+input_key_keyboard_h",
         "keyboard-mapping-default": "ralt+h",
-        "keyboard-mapping-custom": null,
+        "keyboard-mapping-custom": "lalt+lctrl+up",
         "command-phrases": {
             "en": [
                 "Burst",
@@ -1069,7 +1069,7 @@
         "category": "spaceship_defensive",
         "actionname": "v_weapon_countermeasure_decoy_launch",
         "activationMode": null,
-        "keyboard-mapping": "h",
+        "keyboard-mapping": "lalt+mouse1",
         "action-label-en": "Decoy - Launch Burst (tap), Set and Launch Burst (hold)",
         "action-description-en": "Launches a decoy countermeasure.",
         "keyboard-mapping-en": "H",
@@ -1083,7 +1083,7 @@
         "action-description-fr_FR": "",
         "keyboard-mapping-fr_FR": "input_key_keyboard_h",
         "keyboard-mapping-default": "h",
-        "keyboard-mapping-custom": null,
+        "keyboard-mapping-custom": "lalt+mouse1",
         "command-phrases": {
             "en": [
                 "Decoy",
@@ -1110,11 +1110,64 @@
         },
         "ai_command_reference_name": "spaceship_defensive_Decoy_Launch_Burst_tap_Set_and_Launch_Burst_hold"
     },
+    "v_weapon_countermeasure_decoy_launch_panic": {
+        "category": "spaceship_defensive",
+        "actionname": "v_weapon_countermeasure_decoy_launch_panic",
+        "activationMode": "press",
+        "keyboard-mapping": "lalt+mouse3",
+        "action-label-en": "Decoy - Panic Launch (tap)",
+        "action-description-en": "Launches a large percentage of the countermeasure magazine.",
+        "keyboard-mapping-en": "",
+        "keyboard-mapping-ui": " ",
+        "label-ui": "@ui_CI_Countermeasures_Decoy_Launch_Panic",
+        "description-ui": "@ui_CI_Countermeasures_Decoy_Launch_PanicDesc",
+        "action-label-de_DE": "Köder – Panikstart (tippen)",
+        "action-description-de_DE": "Feuert einen großen Prozentteil des Täuschkörpermagazins ab.",
+        "keyboard-mapping-de_DE": "",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": "lalt+mouse3",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "spaceship_defensive_Decoy_Panic_Launch_tap",
+        "command-phrases": {
+            "en": [
+                "Decoys",
+                "Launch decoys",
+                "Fire decoys",
+                "Deploy decoys",
+                "Panic decoy launch",
+                "Countermeasures",
+                "Launch countermeasures",
+                "Deploy countermeasures",
+                "Mass countermeasure launch"
+            ],
+            "de_DE": [
+                "Täuschkörper",
+                "Täuschkörper abfeuern",
+                "Täuschkörper einsetzen",
+                "Täuschkörper starten",
+                "Panikstart Täuschkörper abfeuern",
+                "Abwehrmaßnahmen",
+                "Abwehrmaßnahmen einsetzen",
+                "Abwehrmaßnahmen starten",
+                "Massenstart Abwehrmaßnahmen"
+            ]
+        }
+    },
     "v_weapon_countermeasure_noise_launch": {
         "category": "spaceship_defensive",
         "actionname": "v_weapon_countermeasure_noise_launch",
         "activationMode": "press",
-        "keyboard-mapping": "j",
+        "keyboard-mapping": "lalt+mouse2",
         "action-label-en": "Noise - Deploy (Tap)",
         "action-description-en": "Deploys a noise countermeasure.",
         "keyboard-mapping-en": "J",
@@ -1128,7 +1181,7 @@
         "action-description-fr_FR": "",
         "keyboard-mapping-fr_FR": "input_key_keyboard_j",
         "keyboard-mapping-default": "j",
-        "keyboard-mapping-custom": null,
+        "keyboard-mapping-custom": "lalt+mouse2",
         "command-phrases": {
             "en": [
                 "Noise",
@@ -17843,35 +17896,6 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_defensive_Shield_reset_levels"
-    },
-    "v_weapon_countermeasure_decoy_launch_panic": {
-        "category": "spaceship_defensive",
-        "actionname": "v_weapon_countermeasure_decoy_launch_panic",
-        "activationMode": "press",
-        "keyboard-mapping": " ",
-        "action-label-en": "Decoy - Panic Launch (tap)",
-        "action-description-en": "Launches a large percentage of the countermeasure magazine.",
-        "keyboard-mapping-en": "",
-        "keyboard-mapping-ui": " ",
-        "label-ui": "@ui_CI_Countermeasures_Decoy_Launch_Panic",
-        "description-ui": "@ui_CI_Countermeasures_Decoy_Launch_PanicDesc",
-        "action-label-de_DE": "Köder – Panikstart (tippen)",
-        "action-description-de_DE": "Feuert einen großen Prozentteil des Täuschkörpermagazins ab.",
-        "keyboard-mapping-de_DE": "",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "",
-        "keyboard-mapping-default": " ",
-        "keyboard-mapping-custom": null,
-        "ai_status": {
-            "is_active": false,
-            "inactive_reason": "no_keybinding",
-            "has_keybinding": false,
-            "has_command_phrases": false,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "spaceship_defensive_Decoy_Panic_Launch_tap"
     },
     "v_invoke_docking": {
         "category": "spaceship_docking",

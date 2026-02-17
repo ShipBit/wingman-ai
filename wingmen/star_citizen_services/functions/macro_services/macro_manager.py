@@ -60,13 +60,19 @@ class MacroManager(FunctionManager):
         "alt": "alt",
         "altleft": "altleft",
         "altright": "altright",
+        "lalt": "altleft",
+        "ralt": "altright",
         "shift": "shift",
         "shiftleft": "shiftleft",
         "shiftright": "shiftright",
+        "lshift": "shiftleft",
+        "rshift": "shiftright",
         "ctrl": "ctrl",
         "control": "ctrl",
         "ctrlleft": "ctrlleft",
         "ctrlright": "ctrlright",
+        "lctrl": "ctrlleft",
+        "rctrl": "ctrlright",
     }
     VALID_MACRO_TYPES = {"interval_sequence", "countdown", "reminder", "beep_ticker"}
     ONE_SHOT_TYPES = {"countdown", "reminder"}
@@ -91,12 +97,33 @@ class MacroManager(FunctionManager):
 
         feature_entry = self.config.get("features", {}).get(self.__class__.__name__, {})
         self.macro_feature_config = feature_entry if isinstance(feature_entry, dict) else {}
+        global_debug_mode = bool(self.config.get("features", {}).get("debug_mode", False))
         self.debug_mode = bool(
             self.macro_feature_config.get(
                 "debug_mode",
-                self.config.get("features", {}).get("debug_mode", False),
+                global_debug_mode,
             )
         )
+        self.dry_run_key_actions = bool(
+            self.macro_feature_config.get(
+                "dry_run_key_actions",
+                global_debug_mode,
+            )
+        )
+
+        sc_keybind_mappings = self.config.get("sc-keybind-mappings", {})
+        raw_key_mappings = (
+            sc_keybind_mappings.get("key-mappings", {})
+            if isinstance(sc_keybind_mappings, dict)
+            else {}
+        )
+        self.sc_key_mappings: dict[str, str] = {}
+        if isinstance(raw_key_mappings, dict):
+            for source_key, target_key in raw_key_mappings.items():
+                source = str(source_key).strip().lower()
+                target = str(target_key).strip()
+                if source and target:
+                    self.sc_key_mappings[source] = target
 
         self.default_play_beep = bool(self.macro_feature_config.get("default_play_beep", True))
         self.min_interval_seconds = max(float(self.macro_feature_config.get("min_interval_seconds", 1.0)), 0.1)
@@ -1298,6 +1325,12 @@ class MacroManager(FunctionManager):
                 f"[debug_mode] Macro key action: key={key}, modifiers={modifiers}, hold_ms={hold_ms}",
                 tags="info",
             )
+        if self.dry_run_key_actions:
+            if self.debug_mode:
+                printr.print(
+                    "[debug_mode] Skipping physical key action because dry_run_key_actions is enabled.",
+                    tags="info",
+                )
             return
 
         normalized_modifiers = []
@@ -2080,19 +2113,24 @@ class MacroManager(FunctionManager):
         key = modifier.strip().lower()
         return self.SUPPORTED_MODIFIERS.get(key)
 
-    @staticmethod
-    def _normalize_key(key: str) -> Optional[str]:
+    def _normalize_key(self, key: str) -> Optional[str]:
         if not key:
             return None
         normalized = key.strip().lower()
         normalized = normalized.replace(" ", "_")
-        if normalized in ("mouseleft", "mouse_left", "mouse1"):
+        mapped = self.sc_key_mappings.get(normalized, normalized)
+        mapped = str(mapped).strip()
+        if not mapped:
+            return None
+
+        canonical = mapped.lower().replace(" ", "_")
+        if canonical in ("mouseleft", "mouse_left", "mouse1"):
             return "mouse_left"
-        if normalized in ("mouseright", "mouse_right", "mouse2"):
+        if canonical in ("mouseright", "mouse_right", "mouse2"):
             return "mouse_right"
-        if normalized in ("mousemiddle", "mouse_middle", "mouse3"):
+        if canonical in ("mousemiddle", "mouse_middle", "mouse3"):
             return "mouse_middle"
-        return normalized
+        return mapped
 
     @staticmethod
     def _resolve_mouse_button(key: str) -> tuple[bool, str]:
