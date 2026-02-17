@@ -464,7 +464,19 @@ class WingmanCore(WebSocketUser):
         try:
             validated = self._get_validated_hud_settings(hud_settings)
             self._hud_server = HudServer()
-            if not self._hud_server.start(**validated):
+            # Run blocking start() in executor to avoid blocking the event loop
+            loop = asyncio.get_event_loop()
+            success = await loop.run_in_executor(
+                None,
+                self._hud_server.start,
+                validated['host'],
+                validated['port'],
+                validated['framerate'],
+                validated['layout_margin'],
+                validated['layout_spacing'],
+                validated['screen'],
+            )
+            if not success:
                 self.printr.print(
                     f"[HUD] Server failed to start on port {validated['port']}",
                     color=LogType.ERROR,

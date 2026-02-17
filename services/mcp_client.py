@@ -692,25 +692,43 @@ class McpClient:
 
         # Check if SSE connection is still alive, attempt reconnect if not
         if not connection.sse_connection_alive or not connection.sse_loop or not connection.session:
-            printr.print(
-                f"SSE connection to {connection.config.display_name} was closed, attempting reconnect...",
-                color=LogType.WARNING,
-                server_only=True,
-            )
-            # Clean up the old connection
-            await self._cleanup_connection(connection)
-            # Reconnect
-            await self._connect_sse(connection, connection.merged_headers)
+            # Retry with exponential backoff
+            max_retries = 3
+            base_delay = 0.5
+            last_error = None
 
-            if not connection.sse_connection_alive or not connection.sse_loop or not connection.session:
+            for attempt in range(max_retries):
+                if attempt > 0:
+                    delay = base_delay * (2 ** (attempt - 1))
+                    printr.print(
+                        f"SSE reconnect to {connection.config.display_name} failed, retrying in {delay}s (attempt {attempt + 1}/{max_retries})...",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                    await asyncio.sleep(delay)
+
+                # Clean up the old connection
+                await self._cleanup_connection(connection)
+                # Attempt reconnect
+                try:
+                    await self._connect_sse(connection, connection.merged_headers)
+                except Exception as e:
+                    last_error = e
+                    continue
+
+                # Check if reconnect succeeded
+                if connection.sse_connection_alive and connection.sse_loop and connection.session:
+                    printr.print(
+                        f"SSE connection to {connection.config.display_name} reconnected successfully",
+                        color=LogType.INFO,
+                        server_only=True,
+                    )
+                    break
+            else:
+                # All retries exhausted
                 raise RuntimeError(
-                    f"Failed to reconnect SSE connection to {connection.config.display_name}"
+                    f"Failed to reconnect SSE connection to {connection.config.display_name} after {max_retries} attempts: {last_error}"
                 )
-            printr.print(
-                f"SSE connection to {connection.config.display_name} reconnected successfully",
-                color=LogType.INFO,
-                server_only=True,
-            )
 
         # Create a future to get the result from the SSE thread
         loop = asyncio.get_event_loop()

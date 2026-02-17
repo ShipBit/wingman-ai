@@ -607,12 +607,28 @@ class HUD(Skill):
 
         # Save state
         self._save_persistent_items()
-        self.hud_clear_all(False)
 
-        # Delete groups if client exists
+        # Clear HUD items - wrap in try-except to handle server unavailability
+        try:
+            await self.hud_clear_all(False)
+        except Exception as e:
+            printr.print(
+                f"[HUD] Error clearing items during unload: {e}",
+                color=LogType.WARNING,
+                server_only=True
+            )
+
+        # Delete groups if client exists - wrap in try-except
         if self._client:
-            await self._client.delete_group(self._group_name, WindowType.MESSAGE)
-            await self._client.delete_group(self._group_name, WindowType.PERSISTENT)
+            try:
+                await self._client.delete_group(self._group_name, WindowType.MESSAGE)
+                await self._client.delete_group(self._group_name, WindowType.PERSISTENT)
+            except Exception as e:
+                printr.print(
+                    f"[HUD] Error deleting groups during unload: {e}",
+                    color=LogType.WARNING,
+                    server_only=True
+                )
 
         # Disconnect client
         if self._client:
