@@ -69,25 +69,38 @@ server.start(host="127.0.0.1", port=7862, framerate=60)
 
 ```python
 from hud_server.http_client import HudHttpClient
+from hud_server.types import WindowType
 
 async with HudHttpClient() as client:
-    # Create a HUD group
-    await client.create_group("my_wingman", {
-        "x": 20, "y": 20, "width": 400,
-        "bg_color": "#1e212b", "accent_color": "#00aaff"
+    # Create a message HUD group (for temporary messages)
+    await client.create_group("my_wingman", WindowType.MESSAGE, {
+        "anchor": "top_left",
+        "priority": 20,
+        "width": 400,
+        "bg_color": "#1e212b",
+        "accent_color": "#00aaff"
     })
-    
+
+    # Create a persistent HUD group (for info panels)
+    await client.create_group("my_wingman", WindowType.PERSISTENT, {
+        "anchor": "bottom_left",
+        "priority": 10,
+        "width": 400
+    })
+
     # Show a message
     await client.show_message(
         group_name="my_wingman",
+        element=WindowType.MESSAGE,
         title="Hello!",
         content="This is a **Markdown** message with `code`.",
         duration=10.0
     )
-    
-    # Add a progress bar
+
+    # Add a progress bar (to persistent group)
     await client.show_progress(
         group_name="my_wingman",
+        element=WindowType.PERSISTENT,
         title="Loading",
         current=50,
         maximum=100
@@ -98,11 +111,13 @@ async with HudHttpClient() as client:
 
 ```python
 from hud_server.http_client import HudHttpClientSync
+from hud_server.types import WindowType
 
 with HudHttpClientSync() as client:
-    client.create_group("my_wingman")
-    client.show_message("my_wingman", "Title", "Content")
-    client.show_progress("my_wingman", "Loading", 50, 100)
+    client.create_group("my_wingman", WindowType.MESSAGE)
+    client.create_group("my_wingman", WindowType.PERSISTENT)
+    client.show_message("my_wingman", WindowType.MESSAGE, "Title", "Content")
+    client.show_progress("my_wingman", WindowType.PERSISTENT, "Loading", 50, 100)
 ```
 
 ## API Endpoints
@@ -115,9 +130,23 @@ with HudHttpClientSync() as client:
 ### Groups
 
 - `POST /groups` - Create or update a HUD group
-- `PATCH /groups/{group_name}` - Update group properties
-- `DELETE /groups/{group_name}` - Delete a group
+- `PUT /groups/{group_name}/{element}` - Create or update a specific element type
+- `PATCH /groups/{group_name}/{element}` - Update group properties
+- `DELETE /groups/{group_name}/{element}` - Delete a group element
 - `GET /groups` - List all groups
+
+> **Note:** Groups require an `element` parameter to specify the window type (`message`, `persistent`, or `chat`).
+
+### Element Visibility
+
+- `POST /element/show` - Show a hidden element (message, persistent, or chat)
+- `POST /element/hide` - Hide an element without removing it
+
+This allows you to temporarily hide HUD elements while preserving their state and continuing to receive updates in the background.
+
+### Settings
+
+- `POST /settings/update` - Update server settings at runtime (framerate, layout_margin, layout_spacing, screen)
 
 ### Messages
 
@@ -192,9 +221,23 @@ settings = HudServerSettings(
     port=7862,                # Default port
     framerate=60,             # Overlay FPS (1-240)
     layout_margin=20,         # Screen edge margin
-    layout_spacing=15         # Window spacing
+    layout_spacing=15,        # Window spacing
+    screen=1                  # Monitor index (1=primary, 2+=additional monitors)
 )
 ```
+
+### Dynamic Settings Update
+
+The server supports runtime configuration changes without restart via the `/settings/update` endpoint:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `framerate` | int | Overlay FPS (1-240) |
+| `layout_margin` | int | Screen edge margin in pixels |
+| `layout_spacing` | int | Window spacing in pixels |
+| `screen` | int | Monitor index (1=primary, 2+=additional monitors) |
+
+**Note:** Screen changes take effect on next overlay render cycle. The server must be restarted for host/port changes to take effect.
 
 ### Group Properties
 
@@ -547,3 +590,9 @@ server.start(port=7863)
 1. Verify server is running: `http://127.0.0.1:7862/health`
 2. Check firewall settings
 3. Use correct host/port in client
+
+### Multi-monitor Issues
+
+1. Verify the correct screen index: Screen 1 is primary, Screen 2 is secondary, etc.
+2. Check Windows display settings to confirm monitor order
+3. Try restarting the HUD server after changing screen settings
