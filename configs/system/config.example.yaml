@@ -503,13 +503,7 @@ wingmen:
       - v_strafe_down
       - v_strafe_left
       - v_strafe_right
-      - v_strafe_forward_abs
-      - v_strafe_back_abs
       - v_afterburner
-      - v_toggle_jump_request
-      - v_engage_jump
-      - v_speed_range_rel
-      - v_accel_range_rel
       - v_space_brake
       - v_lock_rotation
       - v_increase_mining_throttle
@@ -519,7 +513,20 @@ wingmen:
       - v_salvage_toggle_beam_spacing_axis
       - turret_limiter_rel_increase
       - turret_limiter_rel_decrease
-      - turret_instant_zoom
+      - v_ifcs_speed_limiter_decrement
+      - v_ifcs_speed_limiter_increment
+      - v_accel_range_decrement
+      - v_accel_range_increment
+      - v_strafe_back
+      - v_strafe_forward
+      - v_strafe_trim_reset_long
+      - v_strafe_trim_reset_short
+      - v_weapon_cycle_missile_back
+      - v_weapon_cycle_missile_fwd
+      - v_weapon_preset_next
+      - v_weapon_preset_prev
+      - v_mfd_interact_cycle_backwards_short
+      - v_mfd_interact_cycle_forwards_short
     keybind_categories_to_ignore:
       - spaceship_general
       - player
