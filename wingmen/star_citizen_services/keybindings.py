@@ -367,6 +367,7 @@ class SCKeybindings:
         status = {
             'is_active': True,
             'inactive_reason': None,
+            'included_reason': None,
             'has_keybinding': False,
             'has_command_phrases': False,
             'is_custom_configured': False,
@@ -397,22 +398,35 @@ class SCKeybindings:
             status['inactive_reason'] = 'unsupported_activation'
             return status
         
+        is_explicitly_included = actionname in self.keybind_actions_to_include
+        is_explicitly_excluded = actionname in self.ignored_actionnames
+
         # Check if explicitly excluded
-        if actionname in self.ignored_actionnames:
+        if is_explicitly_excluded:
             # Unless explicitly included
-            if actionname not in self.keybind_actions_to_include:
+            if not is_explicitly_included:
                 status['is_active'] = False
                 status['inactive_reason'] = 'explicitly_excluded'
                 return status
         
         # Check if category is excluded
         category = cmd.get('category', '')
-        if category in self.keybind_categories_to_ignore:
+        is_category_excluded = category in self.keybind_categories_to_ignore
+        if is_category_excluded:
             # Unless this specific action is included
-            if actionname not in self.keybind_actions_to_include:
+            if not is_explicitly_included:
                 status['is_active'] = False
                 status['inactive_reason'] = 'category_excluded'
                 return status
+
+        # Track include override reason for easier maintenance/debugging.
+        if is_explicitly_included:
+            if is_explicitly_excluded and is_category_excluded:
+                status['included_reason'] = 'overrode_action_and_category_exclusion'
+            elif is_explicitly_excluded:
+                status['included_reason'] = 'overrode_action_exclusion'
+            elif is_category_excluded:
+                status['included_reason'] = 'overrode_category_exclusion'
         
         # Check if has keybinding
         if not status['has_keybinding']:

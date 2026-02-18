@@ -54,6 +54,7 @@ def calculate_ai_status(cmd, config_filters=None):
     status = {
         'is_active': True,
         'inactive_reason': None,
+        'included_reason': None,
         'has_keybinding': False,
         'has_command_phrases': False,
         'is_custom_configured': False,
@@ -80,23 +81,36 @@ def calculate_ai_status(cmd, config_filters=None):
         status['inactive_reason'] = 'unsupported_activation'
         return status
     
-    # Check if explicitly excluded
     actionname = cmd.get('actionname', '')
-    if actionname in config_filters['ignored_actions']:
+    is_explicitly_included = actionname in config_filters['included_actions']
+    is_explicitly_excluded = actionname in config_filters['ignored_actions']
+
+    # Check if explicitly excluded
+    if is_explicitly_excluded:
         # Unless explicitly included
-        if actionname not in config_filters['included_actions']:
+        if not is_explicitly_included:
             status['is_active'] = False
             status['inactive_reason'] = 'explicitly_excluded'
             return status
     
     # Check if category is excluded
     category = cmd.get('category', '')
-    if category in config_filters['ignored_categories']:
+    is_category_excluded = category in config_filters['ignored_categories']
+    if is_category_excluded:
         # Unless this specific action is included
-        if actionname not in config_filters['included_actions']:
+        if not is_explicitly_included:
             status['is_active'] = False
             status['inactive_reason'] = 'category_excluded'
             return status
+
+    # Track include override reason for easier maintenance/debugging.
+    if is_explicitly_included:
+        if is_explicitly_excluded and is_category_excluded:
+            status['included_reason'] = 'overrode_action_and_category_exclusion'
+        elif is_explicitly_excluded:
+            status['included_reason'] = 'overrode_action_exclusion'
+        elif is_category_excluded:
+            status['included_reason'] = 'overrode_category_exclusion'
     
     # Check if has keybinding
     if not status['has_keybinding']:
