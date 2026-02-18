@@ -278,6 +278,7 @@ wingmen:
       UexDataRunnerManager: False # True | False - will activate the UEX data runner capabilities. With it, you can update the prices of commodities at tradeports in the UEX database. Requires a UEX account with the UEX API key and the UEX user secret.
       DeliveryMissionManager: False # True | False - will activated the delivery mission manager. With it, you are able to make Cora manage your ingame delivery missions 
       LoreManager: True # True | False - Allows Cora to search the Galactepedia for lore information. 
+      IssueCouncilManager: False # True | False - checks known bugs in the RSI Issue Council and analyzes duplicate relations
       MacroManager:
         enabled: True # Enables JSON based macro runtime (interval key steps, reminders, countdowns, beep ticker)
         debug_mode: False # logs manage_macro function args and parsed duration values for debugging
@@ -322,6 +323,13 @@ wingmen:
             - Galactapedia aktivieren
           deactivate:
             - Galactapedia deaktivieren
+        IssueCouncilManager:
+          activate:
+            - Aktiviere Issue Council Manager
+            - Issue Council Manager aktivieren
+          deactivate:
+            - Deaktiviere Issue Council Manager
+            - Issue Council Manager deaktivieren
         MacroManager:
           activate:
             - Aktiviere Makro Manager
@@ -975,6 +983,38 @@ wingmen:
     # ─────────────────────AdvancedGenericLogManager────────────────────────────────── 
     AdvancedGenericLogManager:
       log_file_path: "star_citizen_data/logs/log_memories.json"
+
+    # ─────────────────────IssueCouncilManager───────────────────────────────────────
+    IssueCouncilManager:
+      api_url: "https://api-issue-council.robertsspaceindustries.com/gql"
+      issue_web_url: "https://issue-council.robertsspaceindustries.com/projects/STAR-CITIZEN/issues"
+      project_id: "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0"
+      bearer_token: "" # optional hardcoded token (not recommended)
+      bearer_token_env_var: "ISSUE_COUNCIL_BEARER_TOKEN" # preferred runtime source
+      bearer_token_file: "star_citizen_data/issue_council_data/.issue_council_bearer_token" # semi-auto token drop-in file
+      session_cookie: "" # optional fallback cookie header value from logged-in browser session
+      auth_debug_hint: "Copy Authorization Bearer token from a logged-in /gql browser request."
+      token_capture_script_path: "star_citizen_data/issue_council_data/scripts/capture_issue_council_token.py" # auto-started on missing/invalid token
+      token_capture_timeout_seconds: 600 # wait time for login/token capture
+      token_capture_retry_cooldown_seconds: 30 # avoid repeated helper relaunch within short interval
+      request_timeout_seconds: 12
+      default_search_limit: 20
+      max_detail_fetch: 14
+      max_possible_duplicate_fetch: 8
+      llm_validation_enabled: True # let LLM validate best matching issue from candidate list
+      llm_summary_enabled: True # let LLM prepare final player-facing summary from analysis result
+      llm_validation_candidates: 12 # how many candidates are sent to LLM validation
+      llm_temperature: 0.15 # lower is more deterministic
+      llm_max_tokens: 1200 # token budget for IssueCouncil internal LLM calls
+      llm_duplicate_review_candidates: 12 # number of candidates with details sent to duplicate-relevance scoring
+      llm_relevance_min: 0.50 # relevance score threshold (0-1); below this candidate is filtered
+      llm_duplicate_relevance_min: 0.55 # duplicate relevance threshold (0-1); below this candidate is filtered
+      llm_detail_char_limit: 380 # max characters per issue detail field sent to LLM
+      enforce_english_search_terms: True # if true, non-English search terms are filtered out
+      auto_generate_english_search_terms: True # if true, manager asks LLM to generate English terms if missing
+      debug_mode: False # prints IssueCouncil debug markers to console
+      debug_log_payloads: False # if true, includes full payloads for all debug markers (very verbose)
+      default_environment_ids: [] # optional GraphQL environment id filters
 
 
 
