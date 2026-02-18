@@ -252,27 +252,39 @@ class SCKeybindings:
 
     def _merge_missing_default_actions(self, actions: Dict) -> Dict:
         """
-        Merge newly added default actions into existing keybindings.
+        Sync existing keybindings against current default actions.
 
-        Existing entries are preserved exactly (including user-defined command-phrases).
-        Only action names that are missing in the current JSON are added.
+        - Adds action names that are new in current defaultProfile.xml
+        - Removes action names that no longer exist in current defaultProfile.xml
+        - Preserves existing entries (including user-defined command-phrases) for shared keys
         """
         default_actions = self._build_sc_keybinding_default_actions()
-        missing_action_names = [
-            action_name for action_name in default_actions
-            if action_name not in actions
-        ]
+        default_action_names = set(default_actions.keys())
+        current_action_names = set(actions.keys())
 
-        if not missing_action_names:
+        missing_action_names = sorted(default_action_names - current_action_names)
+        obsolete_action_names = sorted(current_action_names - default_action_names)
+
+        if obsolete_action_names:
+            print_debug(
+                f"Update mode: Removing {len(obsolete_action_names)} obsolete actions not found in current defaultProfile.xml"
+            )
+            for action_name in obsolete_action_names:
+                actions.pop(action_name, None)
+                print_debug(f"  - removed obsolete action: {action_name}")
+
+        if missing_action_names:
+            print_debug(
+                f"Update mode: Adding {len(missing_action_names)} new actions from current defaultProfile.xml"
+            )
+            for action_name in missing_action_names:
+                actions[action_name] = copy.deepcopy(default_actions[action_name])
+                print_debug(f"  - added new action: {action_name}")
+        else:
             print_debug("Update mode: No new default actions to add")
-            return actions
 
-        for action_name in missing_action_names:
-            actions[action_name] = copy.deepcopy(default_actions[action_name])
-
-        print_debug(
-            f"Update mode: Added {len(missing_action_names)} new actions from default keybindings"
-        )
+        if not missing_action_names and not obsolete_action_names:
+            print_debug("Update mode: Keybindings already in sync with current defaultProfile.xml")
 
         return actions
 
