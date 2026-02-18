@@ -84,6 +84,7 @@ class CustomPropertyType(Enum):
     SLIDER = "slider"
     AUDIO_FILES = "audio_files"
     AUDIO_DEVICE = "audio_device"
+    COLOR = "color"
 
 
 class AzureApiVersion(Enum):

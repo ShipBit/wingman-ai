@@ -16,21 +16,21 @@ custom_properties:
   - id: accent_color
     name: Accent Color
     hint: Accent color for assistant messages and highlights (hex format).
-    property_type: string
+    property_type: color
     value: "#00aaff"
     required: false
 
   - id: bg_color
     name: Background Color
     hint: Background color of HUD elements (hex format, e.g. #1e212b or #1e212b80 for 50% transparent).
-    property_type: string
+    property_type: color
     value: "#1e212b"
     required: false
 
   - id: text_color
     name: Text Color
     hint: Main text color (hex format).
-    property_type: string
+    property_type: color
     value: "#f0f0f0"
     required: false
 
