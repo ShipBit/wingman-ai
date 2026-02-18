@@ -49,6 +49,7 @@ TRADE_ROUTES_REPORTS = "commodities_routes"
 ACTIVE_STAR_SYSTEMS = {
     "Stanton": 68,
     "Pyro": 64,
+    "Nyx": 55
 }
 
 TRADE_ROUTE_PROMPT_INSTRUCTIONS = (

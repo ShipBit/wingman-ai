@@ -26,6 +26,8 @@ class OverlayPopup(tk.Toplevel):
         super().__init__(master)
         
         self.terminal_prices = list(terminal_prices.values())
+        self.selected_terminal_id = self.terminal_prices[0].get("id_terminal")
+        self.selected_terminal_name = self.terminal_prices[0].get("terminal_name")
         self.updated_data = copy.deepcopy(screenshot_prices)
         self.user_updated_data = copy.deepcopy(screenshot_prices)
         self.operation = operation
@@ -203,6 +205,8 @@ class OverlayPopup(tk.Toplevel):
         self.destroy()
     
     def process_data(self):
+        # Ensure current tradeport entry text is applied even if user confirms immediately.
+        self.tradeport_update()
         self.user_updated_data = [data for data in self.updated_data if data.get('transmit', True)]
         self.destroy()
 
@@ -215,7 +219,7 @@ class OverlayPopup(tk.Toplevel):
     
     def get_updated_data(self):
         # Method to retrieve the updated data after the window is closed
-        return self.user_updated_data, self.operation, self.terminal_prices[0]['id_terminal']
+        return self.user_updated_data, self.operation, self.selected_terminal_id
     
     def get_primary_monitor_resolution(self):
         monitors = get_monitors()
@@ -255,8 +259,9 @@ class OverlayPopup(tk.Toplevel):
         if len(updated_tradeport_name) == 0:
             # revert
             self.revert_tradeport(event)
+            return
 
-        if updated_tradeport_name == self.terminal_prices[0]["terminal_name"]:
+        if updated_tradeport_name == self.selected_terminal_name:
             return
         
         uex = UEXApi2()
@@ -264,11 +269,16 @@ class OverlayPopup(tk.Toplevel):
         uex_terminal = uex.get_terminal(updated_tradeport_name, search_fields=["nickname", "name", "space_station_name", "outpost_name", "city_name"], cutoff=50)
         
         if uex_terminal is None:
-            matched_tradeport = {"terminal_name": "unknown"}
+            matched_tradeport = {"terminal_name": self.selected_terminal_name}
         else:
             print_debug(f"found terminal: {uex_terminal['name']}")
             self.terminal_prices = list(uex.get_prices_of(price_category="commodities_prices", id_terminal=uex_terminal["id"]).values())
-            matched_tradeport = self.terminal_prices[0]
+            self.selected_terminal_id = uex_terminal["id"]
+            if self.terminal_prices:
+                matched_tradeport = self.terminal_prices[0]
+            else:
+                matched_tradeport = {"terminal_name": uex_terminal["name"]}
+            self.selected_terminal_name = matched_tradeport["terminal_name"]
 
         screenshot_prices, validated_prices, invalid_prices, success = CommodityPriceValidator.validate_price_information(self.updated_data, self.terminal_prices, self.operation)
        
@@ -298,7 +308,7 @@ class OverlayPopup(tk.Toplevel):
     def revert_tradeport(self, event=None):
         self.tradeport_entry.delete(0, tk.END)
         # Einfügen des neuen Textes in das Entry-Widget
-        self.tradeport_entry.insert(0, self.terminal_prices[0]["terminal_name"])
+        self.tradeport_entry.insert(0, self.selected_terminal_name)
         self.adjust_entry_width(self.tradeport_entry)
         self.tradeport_entry.update()  # Update  
 

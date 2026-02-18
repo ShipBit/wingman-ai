@@ -275,11 +275,11 @@ class UexDataRunnerManager(FunctionManager):
                     "message": "Could not identify commodity names or prices are not within 40% of allowed tollerance to current prices",
                     }
         
-        validated_tradeport = self.uex2_service.get_data("terminals").get(str(new_terminal_id))
+        terminals = self.uex2_service.get_data("terminals")
+        validated_tradeport = self._get_terminal_by_id(terminals, new_terminal_id)
         if not validated_tradeport:
             self.overlay.display_overlay_text(f"Error: No tradeport with id {new_terminal_id} found.")
             print(f"terminal with id {new_terminal_id} not found.")
-            terminals = self.uex2_service.get_data("terminals")
             first_terminal = terminals[next(iter(terminals))]
             print(json.dumps(first_terminal, indent=2))
             return {"success": False, 
@@ -320,3 +320,47 @@ class UexDataRunnerManager(FunctionManager):
         self.overlay.display_overlay_text(f'UEX Corp: acknowledged the data transmittion. ', display_duration=1500)
         
         return {"success": True, "instruction": "data transmitted"}  # we don't want cora to repeat what we see on screen, if everything was fine
+
+    @staticmethod
+    def _get_terminal_by_id(terminals: dict, terminal_id):
+        """
+        Robust lookup for terminal IDs.
+        IDs can be keyed as int (fresh API response) or str (JSON-loaded cache).
+        """
+        if not terminals or terminal_id is None:
+            return None
+
+        normalized = str(terminal_id).strip()
+        lookup_keys = [terminal_id, normalized]
+        normalized_int = None
+        try:
+            # Accept "802", 802 and even "802.0" from UI components.
+            normalized_int = int(float(normalized))
+            lookup_keys.append(normalized_int)
+        except (ValueError, TypeError):
+            pass
+
+        seen = set()
+        for key in lookup_keys:
+            # deduplicate keys across equivalent types
+            marker = (type(key), key)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            if key in terminals:
+                return terminals[key]
+
+        # Fallback: search by entry payload id for maximum compatibility.
+        for terminal in terminals.values():
+            terminal_id_value = terminal.get("id", "")
+            terminal_id_str = str(terminal_id_value).strip()
+            if terminal_id_str == normalized:
+                return terminal
+            if normalized_int is not None:
+                try:
+                    if int(terminal_id_value) == normalized_int:
+                        return terminal
+                except (ValueError, TypeError):
+                    pass
+
+        return None
