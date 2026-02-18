@@ -13,30 +13,35 @@ hint:
   en: Please make sure the HUD server in the global settings is enabled.
   de: Bitte stelle sicher, dass der HUD-Server in den globalen Einstellungen aktiviert ist.
 custom_properties:
-  - id: accent_color
-    name: Accent Color
-    hint: Accent color for assistant messages and highlights (hex format).
-    property_type: color
-    value: "#00aaff"
-    required: false
-
-  - id: bg_color
-    name: Background Color
-    hint: Background color of HUD elements (hex format, e.g. #1e212b or #1e212b80 for 50% transparent).
-    property_type: color
-    value: "#1e212b"
-    required: false
-
-  - id: text_color
-    name: Text Color
-    hint: Main text color (hex format).
-    property_type: color
-    value: "#f0f0f0"
-    required: false
-
   - id: chat_anchor
     name: Chat Window Position
-    hint: Screen position for the chat window.
+    hint: Screen position/anchor for the chat window.
+    property_type: single_select
+    value: "top_left"
+    required: false
+    options:
+      - label: "Top Left"
+        value: "top_left"
+      - label: "Top Center"
+        value: "top_center"
+      - label: "Top Right"
+        value: "top_right"
+      - label: "Left Center"
+        value: "left_center"
+      - label: "Center"
+        value: "center"
+      - label: "Right Center"
+        value: "right_center"
+      - label: "Bottom Left"
+        value: "bottom_left"
+      - label: "Bottom Center"
+        value: "bottom_center"
+      - label: "Bottom Right"
+        value: "bottom_right"
+
+  - id: persistent_anchor
+    name: Info Panel Position
+    hint: Screen position for persistent info panels.
     property_type: single_select
     value: "top_left"
     required: false
@@ -67,9 +72,23 @@ custom_properties:
     value: 20
     required: false
 
+  - id: persistent_priority
+    name: Info Panel Priority
+    hint: Stacking priority for info panels. Higher values appear closer to the anchor point.
+    property_type: number
+    value: 10
+    required: false
+
   - id: hud_width
     name: Chat Window Width
     hint: Width of the chat window in pixels.
+    property_type: number
+    value: 400
+    required: false
+
+  - id: persistent_width
+    name: Info Panel Width
+    hint: Width of persistent info panels in pixels.
     property_type: number
     value: 400
     required: false
@@ -81,51 +100,63 @@ custom_properties:
     value: 600
     required: false
 
-  - id: persistent_anchor
-    name: Info Panel Position
-    hint: Screen position for persistent info panels.
-    property_type: single_select
-    value: "top_left"
-    required: false
-    options:
-      - label: "Top Left"
-        value: "top_left"
-      - label: "Top Center"
-        value: "top_center"
-      - label: "Top Right"
-        value: "top_right"
-      - label: "Left Center"
-        value: "left_center"
-      - label: "Center"
-        value: "center"
-      - label: "Right Center"
-        value: "right_center"
-      - label: "Bottom Left"
-        value: "bottom_left"
-      - label: "Bottom Center"
-        value: "bottom_center"
-      - label: "Bottom Right"
-        value: "bottom_right"
-
-  - id: persistent_priority
-    name: Info Panel Priority
-    hint: Stacking priority for info panels. Higher values appear closer to the anchor point.
-    property_type: number
-    value: 10
-    required: false
-
-  - id: persistent_width
-    name: Info Panel Width
-    hint: Width of persistent info panels in pixels.
-    property_type: number
-    value: 400
-    required: false
-
   - id: persistent_max_height
     name: Info Panel Max Height
     hint: Maximum height of persistent info panels in pixels. Content will be clipped if it exceeds this height.
     property_type: number
     value: 600
+    required: false
+
+  - id: font_size
+    name: Font Size
+    hint: Text font size in pixels.
+    property_type: number
+    value: 16
+    required: false
+
+  - id: font_family
+    name: Font Family
+    hint: "Font family for HUD text. Available options: Segoe UI, Arial, Verdana, Tahoma, Trebuchet MS, Calibri, Consolas, Courier New, Open Sans."
+    property_type: single_select
+    value: "Segoe UI"
+    required: false
+    options:
+      - label: "Segoe UI"
+        value: "Segoe UI"
+      - label: "Arial"
+        value: "Arial"
+      - label: "Verdana"
+        value: "Verdana"
+      - label: "Tahoma"
+        value: "Tahoma"
+      - label: "Trebuchet MS"
+        value: "Trebuchet MS"
+      - label: "Calibri"
+        value: "Calibri"
+      - label: "Consolas"
+        value: "Consolas"
+      - label: "Courier New"
+        value: "Courier New"
+
+  - id: accent_color
+    name: Accent Color
+    hint: Accent color for assistant messages and highlights (hex format).
+    property_type: color
+    value: "#00aaff"
+    required: false
+
+  - id: bg_color
+    name: Background Color
+    hint: Background color of HUD elements (hex format, e.g. #1e212b or #1e212b80 for 50% transparent).
+    property_type: color
+    value: "#1e212b"
+    required: false
+
+  - id: text_color
+    name: Text Color
+    hint: Main text color (hex format).
+    property_type: color
+    value: "#f0f0f0"
     required: false
 
   - id: border_radius
@@ -140,20 +171,6 @@ custom_properties:
     hint: Padding inside HUD elements in pixels.
     property_type: number
     value: 16
-    required: false
-
-  - id: font_size
-    name: Font Size
-    hint: Text font size in pixels.
-    property_type: number
-    value: 16
-    required: false
-
-  - id: font_family
-    name: Font Family
-    hint: "Font family for HUD text. Available options: Segoe UI, Arial, Verdana, Tahoma, Trebuchet MS, Calibri, Consolas, Courier New, Open Sans."
-    property_type: string
-    value: "Segoe UI"
     required: false
 
   - id: max_display_time
