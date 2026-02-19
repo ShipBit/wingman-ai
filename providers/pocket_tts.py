@@ -22,6 +22,7 @@ from services.printr import Printr
 
 
 MODELS_DIR = "pocket-tts-models"
+POCKET_TTS_VOICES_DIR = "embeddings"
 INCLUDED_VOICES_DIR = "pocket-tts-voices"
 
 
@@ -217,6 +218,11 @@ class PocketTTS:
 
         # 1. Normalize/Resolve the ID to its final path/form first
         resolved_key = voice_id_or_path
+        # Check Pocket-TTS voices 
+        built_in_voices_dir = self._get_pocket_tts_included_voices_dir()
+        possible_path = os.path.join(built_in_voices_dir, f"{resolved_key}.safetensors")
+        if os.path.exists(possible_path):
+            resolved_key = os.path.abspath(possible_path)
         # Check WingmanAI included voices
         if self.wingman_included_voices_dir:
             possible_path = os.path.join(
@@ -225,8 +231,8 @@ class PocketTTS:
             if os.path.exists(possible_path):
                 resolved_key = os.path.abspath(possible_path)
             else:
-                # Try finding file with supported extensions
-                for ext in [".wav", ".mp3", ".flac", ".safetensors"]:
+                # Try finding file with supported extensions, preferring safetensors over other formats
+                for ext in [".safetensors", ".wav", ".mp3", ".flac",]:
                     p = possible_path + ext
                     if os.path.exists(p):
                         resolved_key = os.path.abspath(p)
@@ -237,8 +243,8 @@ class PocketTTS:
             if os.path.exists(possible_path):
                 resolved_key = os.path.abspath(possible_path)
             else:
-                # Try finding file with supported extensions
-                for ext in [".wav", ".mp3", ".flac", ".safetensors"]:
+                # Try finding file with supported extensions, preferring safetensors over other formats
+                for ext in [".safetensors", ".wav", ".mp3", ".flac",]:
                     p = possible_path + ext
                     if os.path.exists(p):
                         resolved_key = os.path.abspath(p)
@@ -275,7 +281,8 @@ class PocketTTS:
         if not self.model:
             self.printr.toast_error("PocketTTS model not loaded.")
             return
-
+        # Hack for pocket-tts sometimes skipping first syllable in short generations
+        text = "..." + text
         try:
             # We assume config.voice holds the voice ID or path
             voice_id = config.voice if config.voice else "alba"
@@ -443,6 +450,29 @@ class PocketTTS:
             model_path = "b6369a24"
         return model_path
 
+    def _get_pocket_tts_included_voices_dir(self):
+        # Determine path to wingman included voices directory
+        is_windows = platform.system() == "Windows"
+        if is_windows:
+            # move one dir up, out of _internal (if bundled)
+            app_is_bundled = getattr(sys, "frozen", False)
+            app_root_path = (
+                sys._MEIPASS
+                if app_is_bundled
+                else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            app_dir = (
+                os.path.dirname(app_root_path) if app_is_bundled else app_root_path
+            )
+            pocket_tts_included_voices_dir = os.path.join(app_dir, MODELS_DIR, POCKET_TTS_VOICES_DIR)
+
+        else:
+            # Return included directory
+            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            pocket_tts_included_voices_dir = os.path.join(app_dir, MODELS_DIR, POCKET_TTS_VOICES_DIR)
+        return pocket_tts_included_voices_dir
+        
+    
     def _get_wingman_included_voices_dir(self):
         # Determine path to wingman included voices directory
         is_windows = platform.system() == "Windows"
