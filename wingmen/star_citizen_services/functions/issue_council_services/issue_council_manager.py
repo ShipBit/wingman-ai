@@ -616,7 +616,7 @@ query IssueByCode($code: String!) {
             return {
                 "success": True,
                 "known_bug": False,
-                "yes_no": "Nein",
+                "yes_no": "no",
                 "searched_terms": english_search_terms,
                 "search_runs": variation_runs,
                 "candidate_count": 0,
@@ -807,7 +807,7 @@ query IssueByCode($code: String!) {
         result = {
             "success": True,
             "known_bug": known_bug,
-            "yes_no": "Ja" if known_bug else "Nein",
+            "yes_no": "yes" if known_bug else "no",
             "searched_terms": english_search_terms,
             "search_runs": variation_runs,
             "candidate_count": len(ranked_candidates),
@@ -843,7 +843,7 @@ query IssueByCode($code: String!) {
             "instructions": (
                 "If preferred_answer exists, use it as the main spoken answer. "
                 "Then summarize yes/no and explain best matching issue and duplicate situation. "
-                "If duplicate_analysis.possible_unmarked_duplicates_count > 0, explicitly mention at least two possible duplicate codes. "
+                "If duplicate_analysis.possible_unmarked_duplicates_count > 0, explicitly summarize the content of at least two potential duplicates. "
                 "Mention that browser links can be opened only after explicit user confirmation."
             ),
             "do_not_cache": True,

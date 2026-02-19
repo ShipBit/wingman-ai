@@ -353,6 +353,7 @@ class MiningManager(FunctionManager):
         function_response = self.manage_work_session(type=function_type, function_args=function_args)
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
         self.overlay.display_overlay_text("DONE", vertical_position_ratio=3, display_duration=5000)
+        function_response["do_not_cache"] = True  # we don't want session management commands to be cached, as they are usually one-time commands that change frequently
         return function_response
 
     def manage_work_session(self, type, function_args):
@@ -393,6 +394,7 @@ class MiningManager(FunctionManager):
         function_type = function_args["type"]
         printr.print(f'-> Refinery Management: {function_type}', tags="info")
         function_response = self.manage_work_order(type=function_type, work_order_index=work_order_index)
+        function_response["do_not_cache"] = True  # we don't want work order management commands to be cached, as they are usually one-time commands that change frequently
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
         return function_response
     

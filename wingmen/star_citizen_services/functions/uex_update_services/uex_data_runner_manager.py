@@ -160,7 +160,7 @@ class UexDataRunnerManager(FunctionManager):
         self.overlay.display_overlay_text("Trying to submit all prices ...")
         print_debug(function_args)
         if not function_args.get("player_provided_terminal_name"):
-            function_response = json.dumps({"success": False, "instruction": "Ask the player to provide the tradeport name for which he wants the prices to be transmitted"})
+            function_response = json.dumps({"success": False, "instruction": "Ask the player to provide the tradeport name for which he wants the prices to be transmitted", "do_not_cache": True})
             return function_response, None
 
         terminal_type = function_args.get("terminal_type", "commodity")    
@@ -168,16 +168,18 @@ class UexDataRunnerManager(FunctionManager):
         tradeport = self.uex2_service.get_terminal(function_args["player_provided_terminal_name"], type=terminal_type, search_fields=["nickname", "name", "space_station_name", "outpost_name", "city_name"])
 
         if not tradeport:
-            function_response = json.dumps({"success": False, "instruction": 'Could not identify the given tradeport name. Please repeat clearly the tradeport name.'})
+            function_response = json.dumps({"success": False, "instruction": 'Could not identify the given tradeport name. Please repeat clearly the tradeport name.', "do_not_cache": True})
             return function_response, None
                
         if "operation" not in function_args:
             self.overlay.display_overlay_text("Invalid command.")
             return {"success": False, "instructions": "The user did not provide enough information to process his request. He has to tell at what terminal he is standing and what trading operation he wants to analyse. It is important, that he selects the current location inventory and that he has activated the correct operations tab.", 
-                    "error": "missing tradeport or trading operation. "
+                    "error": "missing tradeport or trading operation. ",
+                    "do_not_cache": True
                     }, None
         
         function_response = self._get_data_from_screenshots(tradeport, function_args["operation"])
+        function_response["do_not_cache"] = True  # we don't want this instant command to be cached 
         
         printr.print(f'-> Result: {json.dumps(function_response)}', tags="info")
 

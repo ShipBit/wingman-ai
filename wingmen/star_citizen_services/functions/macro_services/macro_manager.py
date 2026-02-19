@@ -683,6 +683,7 @@ class MacroManager(FunctionManager):
             f"Macro '{sanitized['name']}' saved.",
             macro=self._get_macro(sanitized["name"]),
             tts_warmup=warmup_stats,
+            do_not_cache=True,
         )
         if creation_notice:
             response["creation_notice"] = creation_notice
@@ -1068,14 +1069,16 @@ class MacroManager(FunctionManager):
                 "deactivate_macro",
                 "Macro deactivated.",
                 macro_name=resolved_name,
-                instructions="Inform the player in his language"
+                instructions="Inform the player in his language",
+                do_not_cache=True
             )
 
         return self._response_success(
             "deactivate_macro",
             "Macro is already inactive.",
             macro_name=resolved_name,
-            instructions="Inform the player in his language"
+            instructions="Inform the player in his language",
+            do_not_cache=True
         )
 
     def stop_all_macros(self, persist_state: bool = True) -> int:
@@ -2151,6 +2154,6 @@ class MacroManager(FunctionManager):
 
     @staticmethod
     def _response_error(action: str, message: str, **payload):
-        response = {"success": False, "action": action, "message": message}
+        response = {"success": False, "action": action, "message": message, "do_not_cache": True}
         response.update(payload)
         return response
