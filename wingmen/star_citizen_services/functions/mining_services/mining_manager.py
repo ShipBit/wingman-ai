@@ -74,12 +74,6 @@ class MiningManager(FunctionManager):
         self.mining_data_path = f'{self.config["data-root-directory"]}/mining-data'
         self.mining_file_path = f'{self.mining_data_path}/active-refinery-jobs.json'
 
-        self.openai_api_key = secret_keeper.retrieve(
-            requester="MiningManager",
-            key="openai",
-            friendly_key_name="OpenAI API key",
-            prompt_if_missing=False
-        )
         self.uex2_api_key = secret_keeper.retrieve(
             requester="MiningManager",
             key="uex2_api_key",
@@ -126,9 +120,10 @@ class MiningManager(FunctionManager):
         json_string = file_content   
 
         self.ocr = OCR(
-            open_ai_model=f'{self.config["open-ai-vision-model"]}',
-            openai_api_key=self.openai_api_key, 
             data_dir=self.mining_data_path,
+            config=self.config,
+            secret_keeper=secret_keeper,
+            requester_name="MiningManager",
             extraction_instructions=(
                 f"Extract the refinery work order data from this image exactly as shown. "
                 f"Return a plain JSON object matching this structure: {json_string}. "
@@ -149,9 +144,10 @@ class MiningManager(FunctionManager):
             rock_scan_json = file.read()
 
         self.rock_scan_ocr = OCR(
-            open_ai_model=f'{self.config["open-ai-vision-model"]}',
-            openai_api_key=self.openai_api_key,
             data_dir=self.mining_data_path,
+            config=self.config,
+            secret_keeper=secret_keeper,
+            requester_name="MiningManager",
             extraction_instructions=(
                 "Extract the rock scan data from this image. "
                 f"Return a plain json object that matches the format of this example exactly: {rock_scan_json}. "

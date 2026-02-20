@@ -2,8 +2,6 @@ import os
 import json
 import datetime
 
-from openai import OpenAI
-
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 
@@ -45,13 +43,6 @@ class UexDataRunnerManager(FunctionManager):
         super().__init__(config, secret_keeper)
         self.config = config
         self.data_dir_path = f'{self.config["data-root-directory"]}uex/kiosk_analyzer'
-        self.openai_api_key = secret_keeper.retrieve(
-            requester="UexDataRunnerManager",
-            key="openai",
-            friendly_key_name="OpenAI API key",
-            prompt_if_missing=False
-        )
-        self.client: OpenAI = OpenAI(api_key=self.openai_api_key)
 
         self.best_template_index = 1
         
@@ -88,9 +79,10 @@ class UexDataRunnerManager(FunctionManager):
         prompt = ocr_commodity_prices_prompt   
 
         self.commodity_prices_ocr = OCR(
-            open_ai_model=f'{self.config["open-ai-vision-model"]}',
-            openai_api_key=self.openai_api_key, 
             data_dir=self.data_dir_path,
+            config=self.config,
+            secret_keeper=secret_keeper,
+            requester_name="UexDataRunnerManager",
             extraction_instructions=prompt,
             overlay=self.overlay)
         

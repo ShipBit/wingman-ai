@@ -388,7 +388,8 @@ wingmen:
 
     uex-base-url: "https://uexcorp.space/api/data" # note how you can just add your own config options here!
     data-root-directory: "star_citizen_data/"
-    open-ai-vision-model: gpt-4.1-mini # gpt-5-mini, gpt-4o-mini| gpt-4o | gpt-4-turbo-2024-04-09  the openai model to use for vision tasks
+    # For Gemini vision models, add `gemini: <your-api-key>` to configs/system/secrets.yaml
+    open-ai-vision-model: gpt-4.1-mini # gpt-5-mini, gpt-4o-mini, gpt-4o, gpt-4-turbo-2024-04-09, gemini-2.5-flash - model for vision/OCR tasks
     sound: # overrides the GLOBAL settings. Will be overwritten programmatically ...
       effects:
         - ROBOT

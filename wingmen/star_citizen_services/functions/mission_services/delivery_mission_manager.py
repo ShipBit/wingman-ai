@@ -53,13 +53,6 @@ class DeliveryMissionManager(FunctionManager):
         self.missions_file_path = f'{self.mission_data_path}/active-missions.json'
         self.delivery_route_file_path = f'{self.mission_data_path}/active-delivery-route.json'
 
-        self.openai_api_key = secret_keeper.retrieve(
-            requester="MissionService",
-            key="openai",
-            friendly_key_name="OpenAI API key",
-            prompt_if_missing=False
-        )
-
         self.uex_service = UEXApi2()
 
         self.overlay1 = StarCitizenOverlay()
@@ -73,9 +66,10 @@ class DeliveryMissionManager(FunctionManager):
         json_string = file_content   
 
         self.ocr = OCR(
-            open_ai_model=f'{self.config["open-ai-vision-model"]}',
-            openai_api_key=self.openai_api_key, 
             data_dir=self.mission_data_path,
+            config=self.config,
+            secret_keeper=secret_keeper,
+            requester_name="MissionService",
             extraction_instructions=f"Give me the text within this image. Give me the response in a plain json object structured as defined in this example: {json_string}. Provide the json within markdown ```json ... ```.If you are unable to process the image, just return 'error' as response.",
             overlay=self.overlay1)
         
