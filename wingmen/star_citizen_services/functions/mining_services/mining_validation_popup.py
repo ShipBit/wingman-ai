@@ -100,16 +100,22 @@ class MiningValidationPopup(tk.Toplevel):
         self.crop_image = crop_image
         if self.crop_image is not None and self.crop_image.__class__.__module__ == "numpy":
             self.crop_image = Image.fromarray(cv2.cvtColor(self.crop_image, cv2.COLOR_BGR2RGB))
+        self.popup_variant_key = self._build_popup_variant_key(title, self.crop_image is not None)
         self.config_path = None
         if config_dir:
             try:
-                self.config_path = Path(config_dir).expanduser().resolve() / "popup_config.json"
+                self.config_path = Path(config_dir).expanduser().resolve() / f"popup_config_{self.popup_variant_key}.json"
             except Exception:
-                self.config_path = Path(config_dir) / "popup_config.json"
+                self.config_path = Path(config_dir) / f"popup_config_{self.popup_variant_key}.json"
         self._last_saved_geometry = None
         self._tooltip_window = None
         self.base_countdown = 10
         self._has_invalid_fields = False
+        self._interaction_window_handle = self._get_foreground_window()
+        self._cursor_position_before_interaction = None
+        self._focus_handoff_done = False
+        self._global_click_poll_job = None
+        self._last_global_click_state = self._read_global_mouse_buttons()
         self.icon_images = {}
         self.button_icon_images = {}
         self._load_ui_icons()
@@ -454,14 +460,15 @@ class MiningValidationPopup(tk.Toplevel):
         height = min(max_height, max(min_height, size.get("height", height)))
         x = position.get("x", x)
         y = position.get("y", y)
+        width, height, x, y = self._clamp_geometry_to_screen(width, height, x, y, screen_w, screen_h)
         self.base_countdown = self.popup_config.get("countdown_seconds", default_config["countdown_seconds"])
         self.countdown_seconds = self.base_countdown * (2 if self._has_invalid_fields else 1)
         self.minsize(min_width, min_height)
         self.geometry(f"{width}x{height}+{x}+{y}")
-        self._last_saved_geometry = {"width": width, "height": height, "x": x, "y": y}
+        self.update_idletasks()
+        self._last_saved_geometry = self._get_current_geometry()
         self.bind("<Return>", lambda e: self.confirm())
         self.bind("<Escape>", lambda e: self.abort())
-        self.after(5000, self.focus_force)
 
         self.auto_confirm_job = None
         self.countdown_active = True
@@ -472,9 +479,8 @@ class MiningValidationPopup(tk.Toplevel):
 
         self.bind_all("<ButtonPress>", self._on_first_mouse_press, add="+")
         self.bind_all("<ButtonRelease>", self._on_first_mouse_release, add="+")
-
-        self.foreground_window_before_cursor_move = self._get_foreground_window()
-        self.after(0, self._move_cursor_to_abort_button)
+        self.after(0, self._restore_game_focus_if_locked)
+        self.after(80, self._start_global_click_watch)
 
     def _configure_scrollbar_style(self):
         style = ttk.Style(self)
@@ -559,6 +565,7 @@ class MiningValidationPopup(tk.Toplevel):
         if self._buttons_locked:
             return
         self._cancel_auto_confirm()
+        self._restore_input_context_after_interaction()
         print_debug("Data confirmed")
         try:
             updated_text = self.text.get("1.0", tk.END).strip()
@@ -573,6 +580,7 @@ class MiningValidationPopup(tk.Toplevel):
         if self._buttons_locked:
             return
         self._cancel_auto_confirm()
+        self._restore_input_context_after_interaction()
         print_debug("Process aborted")
         self.validated_data = None
         self.operation = "aborted"
@@ -609,19 +617,98 @@ class MiningValidationPopup(tk.Toplevel):
             )
         self.countdown_active = False
 
-    def _move_cursor_to_abort_button(self):
+    def _prepare_popup_manual_interaction(self):
+        if self._focus_handoff_done:
+            return
+        self._cursor_position_before_interaction = self._get_cursor_position()
         unblock_mouse = self._temporarily_block_mouse_input()
-        self.focus_force()
+        self._focus_popup_window()
         self.update_idletasks()
-        window_x = self.winfo_rootx()
-        window_y = self.winfo_rooty()
-        target_x = self.abort_button.winfo_rootx() - window_x + self.abort_button.winfo_width() // 2
-        target_y = self.abort_button.winfo_rooty() - window_y + self.abort_button.winfo_height() // 2
-        self.event_generate("<Motion>", warp=True, x=target_x, y=target_y)
-        self.after(60, unblock_mouse)
-        self.after(50, self._restore_foreground_window)
+        self._move_cursor_to_abort_button()
+        self.after(220, unblock_mouse)
+        self._focus_handoff_done = True
 
-    def _get_foreground_window(self):
+    def _move_cursor_to_abort_button(self):
+        self.update_idletasks()
+        target_x = self.abort_button.winfo_rootx() + (self.abort_button.winfo_width() // 2)
+        target_y = self.abort_button.winfo_rooty() + (self.abort_button.winfo_height() // 2)
+        self._set_cursor_position(target_x, target_y)
+
+    def _restore_input_context_after_interaction(self):
+        self._stop_global_click_watch()
+        if not self._focus_handoff_done:
+            return
+        unblock_mouse = self._temporarily_block_mouse_input()
+        if self._cursor_position_before_interaction:
+            self._set_cursor_position(
+                self._cursor_position_before_interaction[0],
+                self._cursor_position_before_interaction[1],
+            )
+        self._restore_game_focus()
+        self.after(220, unblock_mouse)
+
+    def _focus_popup_window(self):
+        self.lift()
+        try:
+            self.focus_force()
+        except Exception:
+            pass
+        if sys.platform != "win32":
+            return
+        try:
+            import ctypes
+
+            ctypes.windll.user32.SetForegroundWindow(int(self.winfo_id()))
+        except Exception as exc:
+            print_debug(f"SetForegroundWindow(popup) failed: {exc}")
+
+    def _restore_game_focus(self):
+        if not self._interaction_window_handle or sys.platform != "win32":
+            return
+        try:
+            import ctypes
+
+            ctypes.windll.user32.SetForegroundWindow(int(self._interaction_window_handle))
+        except Exception as exc:
+            print_debug(f"SetForegroundWindow(game) failed: {exc}")
+
+    def _restore_game_focus_if_locked(self):
+        if not self._focus_handoff_done:
+            self._restore_game_focus()
+
+    def _start_global_click_watch(self):
+        if sys.platform != "win32":
+            return
+        if not self._buttons_locked or self._focus_handoff_done:
+            return
+        self._last_global_click_state = self._read_global_mouse_buttons()
+        self._poll_global_click_watch()
+
+    def _stop_global_click_watch(self):
+        if self._global_click_poll_job is None:
+            return
+        try:
+            self.after_cancel(self._global_click_poll_job)
+        except Exception:
+            pass
+        self._global_click_poll_job = None
+
+    def _poll_global_click_watch(self):
+        self._global_click_poll_job = None
+        if not self.winfo_exists() or not self._buttons_locked or self._focus_handoff_done:
+            return
+        left_down, right_down = self._read_global_mouse_buttons()
+        prev_left, prev_right = self._last_global_click_state
+        self._last_global_click_state = (left_down, right_down)
+        if (left_down and not prev_left) or (right_down and not prev_right):
+            self._handle_first_manual_input(triggered_by_global_click=True)
+            return
+        self._global_click_poll_job = self.after(30, self._poll_global_click_watch)
+
+    @staticmethod
+    def _get_foreground_window():
+        if sys.platform != "win32":
+            return None
         try:
             import ctypes
 
@@ -629,17 +716,49 @@ class MiningValidationPopup(tk.Toplevel):
         except Exception:
             return None
 
-    def _restore_foreground_window(self):
-        if not self.foreground_window_before_cursor_move:
+    @staticmethod
+    def _get_cursor_position():
+        if sys.platform != "win32":
+            return None
+        try:
+            import ctypes
+
+            class POINT(ctypes.Structure):
+                _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+            point = POINT()
+            if ctypes.windll.user32.GetCursorPos(ctypes.byref(point)):
+                return int(point.x), int(point.y)
+        except Exception:
+            return None
+        return None
+
+    @staticmethod
+    def _set_cursor_position(x, y):
+        if sys.platform != "win32":
             return
         try:
             import ctypes
 
-            ctypes.windll.user32.SetForegroundWindow(self.foreground_window_before_cursor_move)
+            ctypes.windll.user32.SetCursorPos(int(x), int(y))
         except Exception:
             pass
 
-    def _temporarily_block_mouse_input(self, duration_ms=150):
+    @staticmethod
+    def _read_global_mouse_buttons():
+        if sys.platform != "win32":
+            return False, False
+        try:
+            import ctypes
+
+            left_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x01) & 0x8000)
+            right_down = bool(ctypes.windll.user32.GetAsyncKeyState(0x02) & 0x8000)
+            return left_down, right_down
+        except Exception:
+            return False, False
+
+    @staticmethod
+    def _temporarily_block_mouse_input():
         if sys.platform != "win32":
             return lambda: None
         try:
@@ -663,34 +782,40 @@ class MiningValidationPopup(tk.Toplevel):
             except Exception as unblock_exc:
                 print_debug(f"BlockInput release failed: {unblock_exc}")
 
-        self.after(duration_ms, unblock)
         return unblock
+
+    def _handle_first_manual_input(self, triggered_by_global_click=False):
+        if not self._buttons_locked:
+            return
+        self._cancel_auto_confirm()
+        self._prepare_popup_manual_interaction()
+        if triggered_by_global_click:
+            self._unlock_interaction_controls()
+
+    def _unlock_interaction_controls(self):
+        self._buttons_locked = False
+        self._unlock_pending = False
+        self.unbind_all("<ButtonPress>")
+        self.unbind_all("<ButtonRelease>")
+        self._stop_global_click_watch()
 
     def _on_first_mouse_press(self, _event):
         if not self._buttons_locked:
             return
-        self._cancel_auto_confirm()
+        self._handle_first_manual_input()
         self._unlock_pending = True
         return "break"
 
     def _on_first_mouse_release(self, _event):
         if not self._buttons_locked and not self._unlock_pending:
             return
-        self._buttons_locked = False
-        self._unlock_pending = False
-        self.unbind_all("<ButtonPress>")
-        self.unbind_all("<ButtonRelease>")
+        self._unlock_interaction_controls()
         return "break"
 
     def _save_current_geometry(self):
         if not self.config_path:
             return
-        geometry = {
-            "width": self.winfo_width(),
-            "height": self.winfo_height(),
-            "x": self.winfo_x(),
-            "y": self.winfo_y(),
-        }
+        geometry = self._get_current_geometry()
         if geometry == self._last_saved_geometry:
             return
         config = {
@@ -741,6 +866,45 @@ class MiningValidationPopup(tk.Toplevel):
                 pass
             self._tooltip_window = None
 
+    @staticmethod
+    def _build_popup_variant_key(title, has_crop_image):
+        if title:
+            title_key = re.sub(r"[^a-z0-9]+", "_", title.strip().lower()).strip("_")
+            if not title_key:
+                title_key = "default"
+        else:
+            title_key = "default"
+        image_key = "with_crop" if has_crop_image else "no_crop"
+        return f"{title_key}_{image_key}"
+
+    @staticmethod
+    def _clamp_geometry_to_screen(width, height, x, y, screen_w, screen_h):
+        width = max(1, min(int(width), int(screen_w)))
+        height = max(1, min(int(height), int(screen_h)))
+        max_x = max(0, int(screen_w) - width)
+        max_y = max(0, int(screen_h) - height)
+        x = min(max(0, int(x)), max_x)
+        y = min(max(0, int(y)), max_y)
+        return width, height, x, y
+
+    def _get_current_geometry(self):
+        self.update_idletasks()
+        geometry_str = self.geometry()
+        match = re.match(r"^(\d+)x(\d+)\+(-?\d+)\+(-?\d+)$", geometry_str)
+        if match:
+            return {
+                "width": int(match.group(1)),
+                "height": int(match.group(2)),
+                "x": int(match.group(3)),
+                "y": int(match.group(4)),
+            }
+        return {
+            "width": int(self.winfo_width()),
+            "height": int(self.winfo_height()),
+            "x": int(self.winfo_x()),
+            "y": int(self.winfo_y()),
+        }
+
     def _highlight_invalid_fields(self, json_str):
         try:
             self.text.tag_delete("invalid_value")
@@ -768,7 +932,6 @@ class MiningValidationPopup(tk.Toplevel):
         try:
             self.config_path.parent.mkdir(parents=True, exist_ok=True)
             if not self.config_path.exists():
-                self._write_popup_config(config)
                 return config
             with open(self.config_path, "r", encoding="utf-8") as cfg:
                 loaded = json.load(cfg)
