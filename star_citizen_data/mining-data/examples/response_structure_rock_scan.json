@@ -1,0 +1,14 @@
+{
+    "captureShipRockScan": {
+        "mass": 0.0,
+        "res": 0.0,
+        "inst": 0.0,
+        "rockType": "GNEISS",
+        "ores": [
+            {
+                "ore": "GOLD",
+                "percent": 0.12
+            }
+        ]
+    }
+}

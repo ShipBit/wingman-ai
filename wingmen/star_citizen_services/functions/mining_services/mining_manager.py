@@ -17,7 +17,7 @@ from wingmen.star_citizen_services.functions.uex_v2 import uex_api_module
 
 
 DEBUG = False
-TEST = False # Set to True for testing purposes, e.g. to use example screenshots without being in the game
+TEST = True # Set to True for testing purposes, e.g. to use example screenshots without being in the game
 REGOLITH_TEST = False
 printr = Printr()
 
@@ -426,7 +426,7 @@ class MiningManager(FunctionManager):
             scan_result, success = self.rock_scan_ocr.get_screenshot_texts(
                 cropped_image,
                 "scans",
-                test=TEST,
+                test=False,
             )
 
             if not success or not isinstance(scan_result, dict):

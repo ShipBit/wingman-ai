@@ -1,5 +1,6 @@
 import copy
 import json
+import locale
 import re
 import sys
 from pathlib import Path
@@ -7,14 +8,8 @@ import tkinter as tk
 import tkinter.font as tkfont
 from tkinter import ttk
 
+import cv2
 from PIL import Image, ImageTk
-from screeninfo import get_monitors
-import cv2  # hinzugefügt
-
-from gui.root import WingmanUI
-from wingmen.star_citizen_services.functions.uex_v2.uex_api_module import UEXApi2
-from wingmen.star_citizen_services.helper import find_best_match as search
-from wingmen.star_citizen_services.functions.uex_update_services.commodity_price_validator import CommodityPriceValidator
 
 
 DEBUG = False
@@ -26,22 +21,85 @@ def print_debug(to_print):
 
 
 class MiningValidationPopup(tk.Toplevel):
+    THEME = {
+        "bg": "#060f1d",
+        "panel": "#0d1b2d",
+        "panel_alt": "#102239",
+        "border": "#1c3f64",
+        "text": "#d7efff",
+        "muted": "#83a4c6",
+        "entry_bg": "#0a1730",
+        "entry_border": "#2e6aa2",
+        "accent": "#2ab8ff",
+        "accent_hover": "#3ec5ff",
+        "confirm": "#11b67a",
+        "confirm_hover": "#14cb88",
+        "danger": "#d8456a",
+        "danger_hover": "#ef587f",
+        "tooltip_bg": "#13233a",
+        "tooltip_text": "#d5f0ff",
+        "warning": "#ff8a7a",
+    }
+    SCROLLBAR_STYLE = "MiningValidation.Vertical.TScrollbar"
+    H_SCROLLBAR_STYLE = "MiningValidation.Horizontal.TScrollbar"
+    I18N = {
+        "en": {
+            "popup_title": "Mining Validation",
+            "default_title": "Work-Order Validation",
+            "banner_subtitle": "Validate extracted mining data and adjust JSON values where needed.",
+            "json_block_title": "Recognized Data",
+            "source_crop_title": "Snapshot",
+            "save_position": "Save Position",
+            "confirm": "Confirm",
+            "abort": "Abort",
+            "save_position_tooltip": "Save current popup position and size",
+            "confirm_countdown": "Confirm ({seconds})",
+            "autosubmit_countdown": "Autosubmit in {seconds}s",
+            "autosubmit_paused": "Autosubmit paused",
+        },
+        "de": {
+            "popup_title": "Mining Validierung",
+            "default_title": "Work-Order Validierung",
+            "banner_subtitle": "Prüfe extrahierte Mining-Daten und korrigiere JSON-Werte bei Bedarf.",
+            "json_block_title": "Erkannte Daten",
+            "source_crop_title": "Snapshot",
+            "save_position": "Position speichern",
+            "confirm": "Bestätigen",
+            "abort": "Abbrechen",
+            "save_position_tooltip": "Aktuelle Fensterposition und -größe speichern",
+            "confirm_countdown": "Bestätigen ({seconds})",
+            "autosubmit_countdown": "Autosubmit in {seconds}s",
+            "autosubmit_paused": "Autosubmit pausiert",
+        },
+    }
+
     def __init__(
         self,
         master,
         work_order_info,
         anchor_coords=None,
-        title="Work-Order Validierung",
+        title=None,
         align="default",
         crop_image=None,
         config_dir=None,
     ):
         super().__init__(master)
-        self.attributes('-topmost', True)  # Overlay: Popup über alle anderen Fenster
-        self.title(title)
+        self.theme = self.THEME
+        self.lang = self._detect_language()
+        self.translations = self.I18N.get(self.lang, self.I18N["en"])
+        self.attributes("-topmost", True)
+        self.overrideredirect(True)
+        self.resizable(True, True)
+        self.title(self._t("popup_title"))
+        self.configure(bg=self.theme["bg"])
+        self._configure_scrollbar_style()
+        self._drag_offset_x = 0
+        self._drag_offset_y = 0
         self.validated_data = None
         self.operation = "aborted"
         self.crop_image = crop_image
+        if self.crop_image is not None and self.crop_image.__class__.__module__ == "numpy":
+            self.crop_image = Image.fromarray(cv2.cvtColor(self.crop_image, cv2.COLOR_BGR2RGB))
         self.config_path = None
         if config_dir:
             try:
@@ -52,114 +110,334 @@ class MiningValidationPopup(tk.Toplevel):
         self._tooltip_window = None
         self.base_countdown = 10
         self._has_invalid_fields = False
+        self.icon_images = {}
+        self.button_icon_images = {}
+        self._load_ui_icons()
 
-        # Bereite JSON-String vor und bestimme Maße für den Textbereich
+        banner_title_text = (title or self._t("default_title")).upper()
+
         json_str = json.dumps(work_order_info, indent=4, ensure_ascii=False)
-        lines = json_str.splitlines()
+        lines = json_str.splitlines() or ["{}"]
         num_lines = len(lines)
+        max_line_chars = max(len(line) for line in lines)
 
-        # replace arbitrary factors with real font metrics
-        font_obj = tkfont.Font(font=("Helvetica", 12))
-        text_pixel_width  = max(font_obj.measure(line) for line in lines)
-        text_pixel_height = font_obj.metrics("linespace") * num_lines
+        font_obj = tkfont.Font(font=("Consolas", 12))
+        char_pixel_width = max(7, font_obj.measure("0"))
+        line_pixel_height = max(14, font_obj.metrics("linespace"))
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
 
-        # Wenn ein crop_image vorhanden, bestimme Bildgrößen und setze Gesamtmaße
+        image_width = 0
+        image_height = 0
         if self.crop_image is not None:
-            if self.crop_image.__class__.__module__ == "numpy":
-                self.crop_image = Image.fromarray(cv2.cvtColor(self.crop_image, cv2.COLOR_BGR2RGB))
             image_width, image_height = self.crop_image.size
-            extra_margin = 40  # erhöhter Extra-Wert, um dem Bild mehr Breite zu geben
-            adjusted_image_width = image_width + extra_margin
-            total_width  = text_pixel_width + adjusted_image_width
-            total_height = max(text_pixel_height, image_height)
-        else:
-            total_width  = max(400, text_pixel_width)
-            total_height = max(250, text_pixel_height)
 
-        # Positionierung
+        image_panel_width = image_width + 40 if self.crop_image is not None else 0
+        available_text_width_px = max(420, screen_width - image_panel_width - 120)
+        available_text_height_px = max(260, screen_height - 300)
+        max_visible_chars = max(44, available_text_width_px // char_pixel_width)
+        max_visible_lines = max(14, available_text_height_px // line_pixel_height)
+        self.text_width_chars = min(max_line_chars + 2, max_visible_chars)
+        self.text_height_lines = min(num_lines + 1, max_visible_lines)
+
+        text_pixel_width = (self.text_width_chars * char_pixel_width) + 50
+        text_pixel_height = (self.text_height_lines * line_pixel_height) + 40
+
+        if self.crop_image is not None:
+            total_width = min(screen_width - 40, text_pixel_width + image_panel_width + 70)
+            total_height = min(screen_height - 40, max(text_pixel_height + 220, image_height + 190))
+        else:
+            total_width = min(screen_width - 40, max(560, text_pixel_width + 80))
+            total_height = min(screen_height - 40, max(400, text_pixel_height + 200))
+
         if anchor_coords:
             if align == "left":
-                x = anchor_coords[0] - total_width
-                y = anchor_coords[1]
+                x = max(20, anchor_coords[0] - total_width)
+                y = max(20, anchor_coords[1])
+            elif align == "right":
+                x = anchor_coords[0] + 20
+                y = max(20, anchor_coords[1])
             else:
-                offset = 20
-                x = anchor_coords[0] + offset
-                y = anchor_coords[1]
+                x = anchor_coords[0] + 20
+                y = max(20, anchor_coords[1])
         else:
-            screen_width = self.winfo_screenwidth()
-            screen_height = self.winfo_screenheight()
-            x = screen_width - total_width - 20
-            y = int((screen_height - total_height) / 2)
+            x = max(20, screen_width - total_width - 20)
+            y = max(20, int((screen_height - total_height) / 2))
 
-        self.rowconfigure(0, weight=1)
-        self.rowconfigure(1, weight=0)
+        self.rowconfigure(0, weight=0)
+        self.rowconfigure(1, weight=1)
+        self.rowconfigure(2, weight=0)
+        self.columnconfigure(0, weight=1)
         if self.crop_image is not None:
-            # Zwei Spalten: Bild links, Text rechts (unabhängig von 'align')
-            image_frame = tk.Frame(self, width=adjusted_image_width)
-            text_frame  = tk.Frame(self, width=text_pixel_width)
-            image_frame.grid(row=0, column=0, sticky="nsew")
-            text_frame.grid(row=0, column=1, sticky="nsew")
-            text_container = text_frame
-        else:
-            text_container = tk.Frame(self)
-            text_container.grid(row=0, column=0, sticky="nsew")
-        text_container.rowconfigure(0, weight=1)
+            self.columnconfigure(1, weight=0)
+
+        banner_frame = tk.Frame(
+            self,
+            bg=self.theme["panel_alt"],
+            highlightthickness=1,
+            highlightbackground=self.theme["border"],
+            padx=12,
+            pady=8,
+        )
+        banner_frame.grid(
+            row=0,
+            column=0,
+            columnspan=2 if self.crop_image is not None else 1,
+            sticky="ew",
+            padx=14,
+            pady=(14, 8),
+        )
+        banner_frame.columnconfigure(1, weight=1)
+
+        self.cora_logo_tk = self._load_logo_image()
+        if self.cora_logo_tk:
+            tk.Label(
+                banner_frame,
+                image=self.cora_logo_tk,
+                bg=self.theme["panel_alt"],
+                bd=0,
+            ).grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, 10))
+
+        banner_title = tk.Label(
+            banner_frame,
+            text=banner_title_text,
+            bg=self.theme["panel_alt"],
+            fg=self.theme["accent"],
+            font=("Segoe UI", 14, "bold"),
+            anchor="w",
+        )
+        banner_title.grid(row=0, column=1, sticky="w")
+        banner_subtitle = tk.Label(
+            banner_frame,
+            text=self._t("banner_subtitle"),
+            bg=self.theme["panel_alt"],
+            fg=self.theme["muted"],
+            font=("Segoe UI", 10),
+            anchor="w",
+            justify="left",
+        )
+        banner_subtitle.grid(row=1, column=1, sticky="ew", pady=(2, 0))
+        self.banner_subtitle_label = banner_subtitle
+        close_button = tk.Button(
+            banner_frame,
+            text="x",
+            command=self.abort,
+            font=("Segoe UI", 10, "bold"),
+            cursor="hand2",
+            relief=tk.FLAT,
+            bd=0,
+            padx=8,
+            pady=1,
+            bg=self.theme["panel"],
+            activebackground=self.theme["danger"],
+            fg=self.theme["accent"],
+            activeforeground="#ffffff",
+        )
+        close_button.grid(row=0, column=2, rowspan=2, sticky="e")
+
+        for widget in (banner_frame, banner_title, banner_subtitle):
+            widget.bind("<ButtonPress-1>", self._start_window_drag)
+            widget.bind("<B1-Motion>", self._on_window_drag)
+        banner_frame.bind("<Configure>", self._on_banner_resize, add="+")
+
+        text_container = tk.Frame(
+            self,
+            bg=self.theme["panel"],
+            highlightthickness=1,
+            highlightbackground=self.theme["border"],
+            padx=10,
+            pady=10,
+        )
+        text_container.grid(row=1, column=0, sticky="nsew", padx=(14, 8 if self.crop_image is not None else 14), pady=(0, 8))
+        text_container.rowconfigure(1, weight=1)
         text_container.columnconfigure(0, weight=1)
-        
-        self.text = tk.Text(text_container, wrap=tk.NONE, font=("Helvetica", 12))
-        # Breite in Zeichen bleibt, hier optional anpassen
-        max_chars = max(len(line) for line in lines)
-        self.text.config(width=min(max_chars, 80))
-        scrollbar = ttk.Scrollbar(text_container, command=self.text.yview)
-        self.text.configure(yscrollcommand=scrollbar.set)
+
+        tk.Label(
+            text_container,
+            text=self._t("json_block_title"),
+            bg=self.theme["panel"],
+            fg=self.theme["accent"],
+            font=("Segoe UI", 11, "bold"),
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew", pady=(0, 8))
+
+        editor_frame = tk.Frame(text_container, bg=self.theme["panel"])
+        editor_frame.grid(row=1, column=0, sticky="nsew")
+        editor_frame.rowconfigure(0, weight=1)
+        editor_frame.columnconfigure(0, weight=1)
+
+        self.text = tk.Text(
+            editor_frame,
+            wrap=tk.NONE,
+            font=("Consolas", 12),
+            bg=self.theme["entry_bg"],
+            fg=self.theme["text"],
+            insertbackground=self.theme["accent"],
+            selectbackground="#124169",
+            selectforeground=self.theme["text"],
+            relief=tk.FLAT,
+            bd=0,
+            padx=10,
+            pady=10,
+            highlightthickness=1,
+            highlightbackground=self.theme["entry_border"],
+            highlightcolor=self.theme["accent"],
+        )
+        self.text.config(
+            width=self.text_width_chars,
+            height=self.text_height_lines,
+        )
+        self.v_scrollbar = ttk.Scrollbar(editor_frame, style=self.SCROLLBAR_STYLE, command=self.text.yview)
+        self.h_scrollbar = ttk.Scrollbar(editor_frame, style=self.H_SCROLLBAR_STYLE, orient=tk.HORIZONTAL, command=self.text.xview)
+        self.text.configure(yscrollcommand=self._on_text_vertical_scroll, xscrollcommand=self._on_text_horizontal_scroll)
         self.text.grid(row=0, column=0, sticky="nsew")
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.v_scrollbar.grid(row=0, column=1, sticky="ns")
+        self.h_scrollbar.grid(row=1, column=0, sticky="ew")
         self.text.insert(tk.END, json_str)
         self._has_invalid_fields = self._highlight_invalid_fields(json_str)
-        
+        self.after_idle(self._refresh_text_scrollbars)
+
         if self.crop_image is not None:
+            image_frame = tk.Frame(
+                self,
+                bg=self.theme["panel_alt"],
+                highlightthickness=1,
+                highlightbackground=self.theme["border"],
+                padx=10,
+                pady=10,
+            )
+            image_frame.grid(row=1, column=1, sticky="n", padx=(8, 14), pady=(0, 8))
+            tk.Label(
+                image_frame,
+                text=self._t("source_crop_title"),
+                bg=self.theme["panel_alt"],
+                fg=self.theme["muted"],
+                font=("Segoe UI", 9, "bold"),
+                anchor="w",
+            ).pack(fill="x", pady=(0, 6))
             self.image_tk = ImageTk.PhotoImage(self.crop_image)
-            image_label = tk.Label(image_frame, image=self.image_tk)
+            image_label = tk.Label(image_frame, image=self.image_tk, bg=self.theme["panel_alt"], bd=0)
             image_label.pack(expand=True, fill="both")
-        
-        # Button-Leiste über volle Breite, Buttons zentriert
-        button_frame = tk.Frame(self)
+
+        button_frame = tk.Frame(self, bg=self.theme["bg"])
         if self.crop_image is not None:
-            button_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
+            button_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 14))
         else:
-            button_frame.grid(row=1, column=0, sticky="ew")
-        # flexible Ränder links (0) und rechts (3)
-        button_frame.grid_columnconfigure(0, weight=0)
-        button_frame.grid_columnconfigure(3, weight=1)
-        # Buttons in Mitte (Spalten 1 und 2)
-        self.save_button = tk.Button(button_frame, text="💾", font=("Helvetica", 12, "bold"), command=self._save_current_geometry)
-        self.confirm_button = tk.Button(button_frame, text="Bestätigen", bg="green", fg="white", font=("Helvetica", 14, "bold"), command=self.confirm)
-        self.abort_button   = tk.Button(button_frame, text="Abbrechen", bg="red", fg="white",   font=("Helvetica", 14, "bold"), command=self.abort)
-        self.save_button.grid(row=0, column=0, padx=10, pady=10)
-        self.confirm_button.grid(row=0, column=1, padx=10, pady=10)
-        self.abort_button.grid  (row=0, column=2, padx=10, pady=10)
-        self._add_tooltip(self.save_button, "Speicher aktuelle Fensterposition")
-        
+            button_frame.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 14))
+
+        button_inner = tk.Frame(button_frame, bg=self.theme["bg"])
+        button_inner.pack(anchor="center")
+        button_inner.grid_columnconfigure(0, weight=1)
+        button_inner.grid_columnconfigure(1, weight=1)
+        button_inner.grid_columnconfigure(2, weight=1)
+
+        self.save_button = tk.Button(
+            button_inner,
+            text=self._t("save_position"),
+            font=("Segoe UI", 11, "bold"),
+            command=self._save_current_geometry,
+            cursor="hand2",
+            relief=tk.FLAT,
+            bd=0,
+            bg=self.theme["panel_alt"],
+            activebackground=self.theme["panel"],
+            fg=self.theme["accent"],
+            activeforeground=self.theme["accent_hover"],
+            padx=14,
+            pady=10,
+        )
+        self.confirm_button = tk.Button(
+            button_inner,
+            text="",
+            command=self.confirm,
+            font=("Segoe UI", 11, "bold"),
+            cursor="hand2",
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
+            padx=0,
+            pady=0,
+            bg=self.theme["bg"],
+            activebackground=self.theme["bg"],
+        )
+        self.abort_button = tk.Button(
+            button_inner,
+            text="",
+            command=self.abort,
+            font=("Segoe UI", 11, "bold"),
+            cursor="hand2",
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=0,
+            padx=0,
+            pady=0,
+            bg=self.theme["bg"],
+            activebackground=self.theme["bg"],
+        )
+        send_icon = self.button_icon_images.get("sent_to_regolith")
+        abort_icon = self.button_icon_images.get("abort")
+        self._confirm_icon_loaded = bool(send_icon)
+        self._abort_icon_loaded = bool(abort_icon)
+        if send_icon:
+            self.confirm_button.configure(image=send_icon)
+        else:
+            self.confirm_button.configure(
+                text=self._t("confirm"),
+                bg=self.theme["confirm"],
+                activebackground=self.theme["confirm_hover"],
+                fg="#eefcf8",
+                activeforeground="#eefcf8",
+                padx=14,
+                pady=10,
+            )
+        if abort_icon:
+            self.abort_button.configure(image=abort_icon)
+        else:
+            self.abort_button.configure(
+                text=self._t("abort"),
+                bg=self.theme["danger"],
+                activebackground=self.theme["danger_hover"],
+                fg="#ffecf0",
+                activeforeground="#ffecf0",
+                padx=14,
+                pady=10,
+            )
+        self.save_button.grid(row=0, column=0, padx=(0, 12), pady=0, sticky="ew")
+        self.confirm_button.grid(row=0, column=1, padx=12, pady=0, sticky="ew")
+        self.abort_button.grid(row=0, column=2, padx=(12, 0), pady=0, sticky="ew")
+        self._add_tooltip(self.save_button, self._t("save_position_tooltip"))
+        self._add_tooltip(self.confirm_button, self._t("confirm"))
+        self._add_tooltip(self.abort_button, self._t("abort"))
+
+        self.autosubmit_label = tk.Label(
+            button_frame,
+            text="",
+            bg=self.theme["bg"],
+            fg=self.theme["muted"],
+            font=("Segoe UI", 10),
+            anchor="center",
+            justify="center",
+        )
+        self.autosubmit_label.pack(anchor="center", pady=(8, 0))
+
         self.update_idletasks()
-        # passe Fenstergröße an den benötigten Inhalt an (inkl. Dekoration)
-        width  = self.winfo_reqwidth()
+        width = self.winfo_reqwidth()
         height = self.winfo_reqheight()
         screen_w = self.winfo_screenwidth()
         screen_h = self.winfo_screenheight()
-        # Positionierung basierend auf align
-        offset = 20
         if align == "left":
             x = 20
         elif align == "right":
             x = screen_w - width - 20
         elif anchor_coords:
-            x = anchor_coords[0] + offset
+            x = anchor_coords[0] + 20
         else:
             x = screen_w - width - 20
         if anchor_coords:
-            y = anchor_coords[1]
+            y = max(20, anchor_coords[1])
         else:
             y = (screen_h - height) // 2
+
         default_config = {
             "countdown_seconds": 10,
             "position": {"x": x, "y": y},
@@ -168,37 +446,101 @@ class MiningValidationPopup(tk.Toplevel):
         self.popup_config = self._load_popup_config(default_config)
         size = self.popup_config.get("size", {})
         position = self.popup_config.get("position", {})
-        width = size.get("width", width)
-        height = size.get("height", height)
+        max_width = max(420, screen_w - 40)
+        max_height = max(320, screen_h - 40)
+        min_width = max(460, min(width, max_width))
+        min_height = max(360, min(height, max_height))
+        width = min(max_width, max(min_width, size.get("width", width)))
+        height = min(max_height, max(min_height, size.get("height", height)))
         x = position.get("x", x)
         y = position.get("y", y)
         self.base_countdown = self.popup_config.get("countdown_seconds", default_config["countdown_seconds"])
         self.countdown_seconds = self.base_countdown * (2 if self._has_invalid_fields else 1)
+        self.minsize(min_width, min_height)
         self.geometry(f"{width}x{height}+{x}+{y}")
         self._last_saved_geometry = {"width": width, "height": height, "x": x, "y": y}
-        # entferne direkten Fokus, setze Verzögerung von 5 Sekunden
         self.bind("<Return>", lambda e: self.confirm())
         self.bind("<Escape>", lambda e: self.abort())
         self.after(5000, self.focus_force)
 
-        # Auto-Bestätigung nach Countdown
         self.auto_confirm_job = None
         self.countdown_active = True
-        self._buttons_locked = True   # Sperre Buttons bis nach dem ersten Klick
-        self._unlock_pending = False  # Wird true nach dem ersten Klick-Press
+        self._buttons_locked = True
+        self._unlock_pending = False
         self._update_confirm_button_text()
         self.auto_confirm_job = self.after(1000, self._run_auto_confirm_countdown)
 
-        # Erster Mausklick (irgendwo) stoppt den Countdown; dieser Klick löst keine Aktion aus.
         self.bind_all("<ButtonPress>", self._on_first_mouse_press, add="+")
         self.bind_all("<ButtonRelease>", self._on_first_mouse_release, add="+")
 
-        # Cursor auf den Abbrechen-Button legen, sobald alles gerendert ist
         self.foreground_window_before_cursor_move = self._get_foreground_window()
         self.after(0, self._move_cursor_to_abort_button)
 
+    def _configure_scrollbar_style(self):
+        style = ttk.Style(self)
+        style.configure(
+            self.SCROLLBAR_STYLE,
+            troughcolor=self.theme["panel"],
+            background=self.theme["accent"],
+            bordercolor=self.theme["panel"],
+            arrowcolor=self.theme["panel"],
+        )
+        style.map(
+            self.SCROLLBAR_STYLE,
+            background=[("active", self.theme["accent_hover"])],
+        )
+        style.configure(
+            self.H_SCROLLBAR_STYLE,
+            troughcolor=self.theme["panel"],
+            background=self.theme["accent"],
+            bordercolor=self.theme["panel"],
+            arrowcolor=self.theme["panel"],
+        )
+        style.map(
+            self.H_SCROLLBAR_STYLE,
+            background=[("active", self.theme["accent_hover"])],
+        )
+
+    def _start_window_drag(self, event):
+        self._drag_offset_x = event.x_root - self.winfo_x()
+        self._drag_offset_y = event.y_root - self.winfo_y()
+
+    def _on_window_drag(self, event):
+        new_x = max(0, event.x_root - self._drag_offset_x)
+        new_y = max(0, event.y_root - self._drag_offset_y)
+        self.geometry(f"+{new_x}+{new_y}")
+
+    def _on_banner_resize(self, event):
+        if not hasattr(self, "banner_subtitle_label"):
+            return
+        # Keep subtitle readable when logo + close button reduce title area width.
+        wrap_length = max(260, event.width - 260)
+        self.banner_subtitle_label.configure(wraplength=wrap_length)
+
+    def _on_text_vertical_scroll(self, first, last):
+        if hasattr(self, "v_scrollbar"):
+            self.v_scrollbar.set(first, last)
+            if float(first) <= 0.0 and float(last) >= 1.0:
+                self.v_scrollbar.grid_remove()
+            else:
+                self.v_scrollbar.grid()
+
+    def _on_text_horizontal_scroll(self, first, last):
+        if hasattr(self, "h_scrollbar"):
+            self.h_scrollbar.set(first, last)
+            if float(first) <= 0.0 and float(last) >= 1.0:
+                self.h_scrollbar.grid_remove()
+            else:
+                self.h_scrollbar.grid()
+
+    def _refresh_text_scrollbars(self):
+        x_first, x_last = self.text.xview()
+        y_first, y_last = self.text.yview()
+        self._on_text_horizontal_scroll(str(x_first), str(x_last))
+        self._on_text_vertical_scroll(str(y_first), str(y_last))
+
     @staticmethod
-    def show_popup(work_order_info, anchor_coords=None, title="Work-Order Validierung", align="default", crop_image=None, config_dir=None):
+    def show_popup(work_order_info, anchor_coords=None, title=None, align="default", crop_image=None, config_dir=None):
         root = tk._get_default_root() or tk.Tk()
         root.withdraw()
         popup = MiningValidationPopup(
@@ -214,39 +556,41 @@ class MiningValidationPopup(tk.Toplevel):
         return popup.validated_data, popup.operation
 
     def confirm(self):
-        # Ignoriere Button-Klicks solange der Countdown aktiv ist.
         if self._buttons_locked:
             return
         self._cancel_auto_confirm()
-        print_debug("Daten bestätigt")
+        print_debug("Data confirmed")
         try:
             updated_text = self.text.get("1.0", tk.END).strip()
             self.validated_data = json.loads(updated_text)
         except Exception as e:
-            print_debug("JSON parsing error: " + str(e))
+            print_debug(f"JSON parsing error: {e}")
             self.validated_data = None
         self.operation = "confirmed"
         self.destroy()
 
     def abort(self):
-        # Ignoriere Button-Klicks solange der Countdown aktiv ist.
         if self._buttons_locked:
             return
         self._cancel_auto_confirm()
-        print_debug("Prozess abgebrochen")
+        print_debug("Process aborted")
         self.validated_data = None
         self.operation = "aborted"
         self.destroy()
 
     def _update_confirm_button_text(self):
-        self.confirm_button.config(text=f"Bestätigen ({self.countdown_seconds})")
+        if hasattr(self, "autosubmit_label"):
+            self.autosubmit_label.config(
+                text=self._t("autosubmit_countdown").format(seconds=self.countdown_seconds),
+                fg=self.theme["muted"],
+            )
 
     def _run_auto_confirm_countdown(self):
         self.auto_confirm_job = None
         self.countdown_seconds -= 1
         if self.countdown_seconds <= 0:
             self.countdown_active = False
-            self._buttons_locked = False  # Automatisches Bestätigen soll nicht blockiert werden
+            self._buttons_locked = False
             self.confirm()
             return
         self._update_confirm_button_text()
@@ -256,14 +600,17 @@ class MiningValidationPopup(tk.Toplevel):
         if self.auto_confirm_job is not None:
             self.after_cancel(self.auto_confirm_job)
             self.auto_confirm_job = None
-        self.confirm_button.config(text="Bestätigen")
+        if not getattr(self, "_confirm_icon_loaded", False):
+            self.confirm_button.config(text=self._t("confirm"))
+        if hasattr(self, "autosubmit_label"):
+            self.autosubmit_label.config(
+                text=self._t("autosubmit_paused"),
+                fg=self.theme["warning"],
+            )
         self.countdown_active = False
-        # Countdown ist aus, aber Buttons bleiben gesperrt bis nach dem ersten Klick-Release.
 
     def _move_cursor_to_abort_button(self):
-        # Block mouse input briefly so the warp does not nudge the game camera.
         unblock_mouse = self._temporarily_block_mouse_input()
-        # Kurz den Fokus auf das Popup holen, Cursor bewegen, danach Fokus zurückgeben
         self.focus_force()
         self.update_idletasks()
         window_x = self.winfo_rootx()
@@ -277,6 +624,7 @@ class MiningValidationPopup(tk.Toplevel):
     def _get_foreground_window(self):
         try:
             import ctypes
+
             return ctypes.windll.user32.GetForegroundWindow()
         except Exception:
             return None
@@ -286,6 +634,7 @@ class MiningValidationPopup(tk.Toplevel):
             return
         try:
             import ctypes
+
             ctypes.windll.user32.SetForegroundWindow(self.foreground_window_before_cursor_move)
         except Exception:
             pass
@@ -295,6 +644,7 @@ class MiningValidationPopup(tk.Toplevel):
             return lambda: None
         try:
             import ctypes
+
             success = bool(ctypes.windll.user32.BlockInput(True))
             if not success:
                 return lambda: None
@@ -319,7 +669,6 @@ class MiningValidationPopup(tk.Toplevel):
     def _on_first_mouse_press(self, _event):
         if not self._buttons_locked:
             return
-        # Stopp den Countdown, halte Buttons aber bis zum Loslassen gesperrt.
         self._cancel_auto_confirm()
         self._unlock_pending = True
         return "break"
@@ -327,7 +676,6 @@ class MiningValidationPopup(tk.Toplevel):
     def _on_first_mouse_release(self, _event):
         if not self._buttons_locked and not self._unlock_pending:
             return
-        # Nach dem ersten Klick-Release: Buttons freigeben.
         self._buttons_locked = False
         self._unlock_pending = False
         self.unbind_all("<ButtonPress>")
@@ -346,7 +694,6 @@ class MiningValidationPopup(tk.Toplevel):
         if geometry == self._last_saved_geometry:
             return
         config = {
-            # Countdown aus der geladenen Konfiguration unverändert lassen
             "countdown_seconds": self.base_countdown,
             "position": {"x": geometry["x"], "y": geometry["y"]},
             "size": {"width": geometry["width"], "height": geometry["height"]},
@@ -358,8 +705,10 @@ class MiningValidationPopup(tk.Toplevel):
     def _add_tooltip(self, widget, text):
         def enter(_):
             self._show_tooltip(widget, text)
+
         def leave(_):
             self._hide_tooltip()
+
         widget.bind("<Enter>", enter)
         widget.bind("<Leave>", leave)
 
@@ -371,7 +720,17 @@ class MiningValidationPopup(tk.Toplevel):
         x = widget.winfo_rootx() + widget.winfo_width() // 2
         y = widget.winfo_rooty() + widget.winfo_height() + 4
         tw.wm_geometry(f"+{x}+{y}")
-        label = tk.Label(tw, text=text, background="#ffffe0", relief="solid", borderwidth=1, font=("Helvetica", 9))
+        label = tk.Label(
+            tw,
+            text=text,
+            background=self.theme["tooltip_bg"],
+            foreground=self.theme["tooltip_text"],
+            relief="solid",
+            borderwidth=1,
+            font=("Segoe UI", 9),
+            padx=4,
+            pady=2,
+        )
         label.pack(ipadx=4, ipady=2)
 
     def _hide_tooltip(self):
@@ -383,16 +742,15 @@ class MiningValidationPopup(tk.Toplevel):
             self._tooltip_window = None
 
     def _highlight_invalid_fields(self, json_str):
-        """Markiere leere/null/0-Werte im JSON rot und liefere True, falls etwas markiert wurde."""
         try:
             self.text.tag_delete("invalid_value")
         except tk.TclError:
             pass
-        self.text.tag_configure("invalid_value", foreground="red")
+        self.text.tag_configure("invalid_value", foreground=self.theme["warning"])
         patterns = [
             r":\s+null\b",
             r":\s+0(?:\.0+)?(?=[\s,\}\]])",
-            r":\s+\"\"",
+            r':\s+""',
         ]
         invalid_found = False
         for pattern in patterns:
@@ -430,3 +788,49 @@ class MiningValidationPopup(tk.Toplevel):
                 json.dump(config, cfg, ensure_ascii=False, indent=2)
         except Exception as exc:
             print_debug(f"Failed to write popup config: {exc}")
+
+    def _detect_language(self):
+        try:
+            lang = (locale.getlocale()[0] or "").lower()
+        except Exception:
+            lang = ""
+        if not lang and hasattr(locale, "getdefaultlocale"):
+            try:
+                lang = (locale.getdefaultlocale()[0] or "").lower()
+            except Exception:
+                lang = ""
+        return "de" if lang.startswith("de") else "en"
+
+    def _t(self, key):
+        return self.translations.get(key, self.I18N["en"].get(key, key))
+
+    def _asset_base_directories(self):
+        root_assets = Path(__file__).resolve().parents[4] / "assets"
+        return [root_assets / "cora-sc", root_assets / "sc-cora"]
+
+    def _load_icon_asset(self, file_name, size=None):
+        for asset_dir in self._asset_base_directories():
+            icon_path = asset_dir / file_name
+            if not icon_path.exists():
+                continue
+            try:
+                image = Image.open(icon_path)
+                if size:
+                    if hasattr(Image, "Resampling"):
+                        image = image.resize(size, Image.Resampling.LANCZOS)
+                    else:
+                        image = image.resize(size, Image.LANCZOS)
+                return ImageTk.PhotoImage(image)
+            except Exception as exc:
+                print_debug(f"Failed to load icon asset '{icon_path}': {exc}")
+        return None
+
+    def _load_ui_icons(self):
+        self.button_icon_images = {
+            "sent_to_regolith": self._load_icon_asset("sent_to_regolith.png"),
+            "abort": self._load_icon_asset("abort.png"),
+        }
+        self.icon_images.update(self.button_icon_images)
+
+    def _load_logo_image(self):
+        return self._load_icon_asset("Cora_Box.png")

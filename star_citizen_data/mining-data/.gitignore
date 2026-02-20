@@ -3,3 +3,4 @@
 *.png
 !template_*.png
 !examples/response_structure_refinery.json*
+!examples/response_structure_rock_scan.json*
