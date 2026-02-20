@@ -760,12 +760,55 @@ class StarCitizenWingman(OpenAiWingman):
             fallback_name = command.get("actionname")
             if fallback_name:
                 overwrite_command = overwrite_commands.get(fallback_name)
+
+        runtime_override = getattr(self, "_sc_command_runtime_override", None)
+        if runtime_override and runtime_override.get("sc_command") == command_name:
+            if not overwrite_command:
+                overwrite_command = {}
+            if runtime_override.get("hold") is not None:
+                overwrite_command["hold"] = runtime_override.get("hold")
+            if runtime_override.get("modifier") is not None:
+                overwrite_command["modifier"] = runtime_override.get("modifier")
+            if runtime_override.get("modifiers") is not None:
+                overwrite_command["modifiers"] = runtime_override.get("modifiers")
         if overwrite_command and overwrite_command.get("hold"):
             old_sc_activation_mode = sc_activation_mode
             sc_activation_mode = overwrite_command.get("hold")
             print_debug(f"overwritten activationMode: was {old_sc_activation_mode} -> {sc_activation_mode}")
 
+        # Allow modifier overrides from config overwrite_command
+        modifier_overrides = []
+        if overwrite_command:
+            if overwrite_command.get("modifier"):
+                modifier_overrides.append(overwrite_command.get("modifier"))
+            if overwrite_command.get("modifiers"):
+                override_value = overwrite_command.get("modifiers")
+                if isinstance(override_value, str):
+                    modifier_overrides.extend([
+                        key.strip() for key in override_value.split(",") if key.strip()
+                    ])
+                elif isinstance(override_value, list):
+                    modifier_overrides.extend([key for key in override_value if key])
+                else:
+                    modifier_overrides.append(str(override_value))
+
+        if modifier_overrides:
+            key_mappings = self.config["sc-keybind-mappings"]["key-mappings"]
+            resolved_overrides = [
+                key_mappings.get(override_key, override_key)
+                for override_key in modifier_overrides
+                if override_key
+            ]
+            order = resolved_overrides + [key for key in order if key not in resolved_overrides]
+            modifiers = set(order)
+            non_modifier_keys = [key for key in keys if key not in modifiers]
+            keys = resolved_overrides + non_modifier_keys
+
         hold = self.config["sc-keybind-mappings"]["key-press-mappings"].get(sc_activation_mode)
+        if hold is None and isinstance(sc_activation_mode, (int, float)):
+            hold = sc_activation_mode
+        if hold is None:
+            hold = 1
 
         command_desc = None
         if not command.get("action-description-en"):
@@ -894,7 +937,11 @@ class StarCitizenWingman(OpenAiWingman):
         response = None
         if len(command.get("sc_commands", [])) > 0 and not self.debug:
             for sc_command in command.get("sc_commands"):
-                self._execute_star_citizen_keymapping_command(sc_command["sc_command"])
+                self._sc_command_runtime_override = sc_command
+                try:
+                    self._execute_star_citizen_keymapping_command(sc_command["sc_command"])
+                finally:
+                    self._sc_command_runtime_override = None
                 if sc_command.get("wait"):
                     time.sleep(sc_command["wait"])
             if command.get("responses") is not False:
