@@ -1309,45 +1309,25 @@
         },
         "ai_command_reference_name": "spaceship_docking_Toggle_Docking_Mode"
     },
-    "v_toggle_all_doors": {
+    "v_close_all_doors": {
         "category": "spaceship_general",
-        "actionname": "v_toggle_all_doors",
+        "actionname": "v_close_all_doors",
         "activationMode": "press",
-        "keyboard-mapping": "lalt+d",
-        "action-label-en": "Open/Close Doors (Toggle)",
-        "action-description-en": "Toggle Open/Close Doors",
+        "keyboard-mapping": "ralt+d",
+        "action-label-en": "Close All Doors",
+        "action-description-en": "Close All Doors",
         "keyboard-mapping-en": "",
         "keyboard-mapping-ui": " ",
-        "label-ui": "@ui_CICockpitDoorsToggleAll",
-        "description-ui": "@ui_CICockpitDoorsToggleAllDesc",
-        "action-label-de_DE": "Türen öffnen/schließen (umschalten)",
-        "action-description-de_DE": "Türen öffnen/schließen umschalten",
+        "label-ui": "@ui_CICockpitDoorsCloseAll",
+        "description-ui": "@ui_CICockpitDoorsCloseAllDesc",
+        "action-label-de_DE": "Alle Türen schließen",
+        "action-description-de_DE": "Alle Türen schließen",
         "keyboard-mapping-de_DE": "",
         "action-label-fr_FR": "",
         "action-description-fr_FR": "",
         "keyboard-mapping-fr_FR": "",
-        "keyboard-mapping-default": "lalt+d",
-        "keyboard-mapping-custom": "lalt+d",
-        "command-phrases": {
-            "en": [
-                "Open doors",
-                "Close doors",
-                "Toggle doors",
-                "Doors",
-                "Open hatches",
-                "Close hatches",
-                "Hatches"
-            ],
-            "de_DE": [
-                "Türen öffnen",
-                "Türen schließen",
-                "Türen umschalten",
-                "Türen",
-                "Luken öffnen",
-                "Luken schließen",
-                "Luken"
-            ]
-        },
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": "ralt+d",
         "ai_status": {
             "is_active": true,
             "inactive_reason": null,
@@ -1357,7 +1337,71 @@
             "is_custom_configured": false,
             "activation_supported": true
         },
-        "ai_command_reference_name": "spaceship_general_Open_Close_Doors_Toggle"
+        "ai_command_reference_name": "spaceship_general_Close_All_Doors",
+        "command-phrases": {
+            "en": [
+                "Close",
+                "Close doors",
+                "Shut doors",
+                "Close all doors",
+                "Close hatches",
+                "Seal hatches"
+            ],
+            "de_DE": [
+                "Schließen",
+                "Türen schließen",
+                "Luken schließen",
+                "Alle Türen schließen",
+                "Türen zu",
+                "Luken verriegeln"
+            ]
+        }
+    },
+    "v_open_all_doors": {
+        "category": "spaceship_general",
+        "actionname": "v_open_all_doors",
+        "activationMode": "press",
+        "keyboard-mapping": "lalt+d",
+        "action-label-en": "Open All Doors",
+        "action-description-en": "Open All Doors",
+        "keyboard-mapping-en": "",
+        "keyboard-mapping-ui": " ",
+        "label-ui": "@ui_CICockpitDoorsOpenAll",
+        "description-ui": "@ui_CICockpitDoorsOpenAllDesc",
+        "action-label-de_DE": "Alle Türen öffnen",
+        "action-description-de_DE": "Alle Türen öffnen",
+        "keyboard-mapping-de_DE": "",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "",
+        "keyboard-mapping-default": " ",
+        "keyboard-mapping-custom": "lalt+d",
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "included_reason": "overrode_category_exclusion",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "spaceship_general_Open_All_Doors",
+        "command-phrases": {
+            "en": [
+                "Open",
+                "Open doors",
+                "Unseal doors",
+                "Open all doors",
+                "Open hatches"
+            ],
+            "de_DE": [
+                "Öffnen",
+                "Türen öffnen",
+                "Luken öffnen",
+                "Alle Türen öffnen",
+                "Luftschleusen öffnen"
+            ]
+        }
     },
     "v_toggle_all_portlocks": {
         "category": "spaceship_general",
@@ -6997,6 +7041,52 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "vehicle_mfd_v_mfd_soft_select_mfd_9_short"
+    },
+    "view_load_view_2": {
+        "category": "view_director_mode",
+        "actionname": "view_load_view_2",
+        "activationMode": "tap",
+        "keyboard-mapping": "np_2",
+        "action-label-en": "Load View 2",
+        "action-description-en": "",
+        "keyboard-mapping-en": "Numpad 2",
+        "keyboard-mapping-ui": "@input_key_keyboard_numpad2",
+        "label-ui": "@ui_CIAdvanCamLoad2",
+        "description-ui": "@ui_CIAdvanCamLoad2Desc",
+        "action-label-de_DE": "Ansicht 2 laden",
+        "action-description-de_DE": "",
+        "keyboard-mapping-de_DE": "Ziffernblock 2",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad2",
+        "keyboard-mapping-default": "np_2",
+        "keyboard-mapping-custom": null,
+        "ai_status": {
+            "is_active": true,
+            "inactive_reason": null,
+            "included_reason": "overrode_category_exclusion",
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "view_director_mode_Load_View_2",
+        "command-phrases": {
+            "en": [
+                "View",
+                "View 2",
+                "View two",
+                "Load view",
+                "Load view 2"
+            ],
+            "de_DE": [
+                "Ansicht",
+                "Ansicht 2",
+                "Ansicht zwei",
+                "Ansicht laden",
+                "Ansicht 2 laden"
+            ]
+        }
     },
     "character_customizer_dnamode_down": {
         "category": "character_customizer",
@@ -17691,36 +17781,6 @@
         },
         "ai_command_reference_name": "spaceship_general_spectate_enterpuremode"
     },
-    "v_close_all_doors": {
-        "category": "spaceship_general",
-        "actionname": "v_close_all_doors",
-        "activationMode": "press",
-        "keyboard-mapping": " ",
-        "action-label-en": "Close All Doors",
-        "action-description-en": "Close All Doors",
-        "keyboard-mapping-en": "",
-        "keyboard-mapping-ui": " ",
-        "label-ui": "@ui_CICockpitDoorsCloseAll",
-        "description-ui": "@ui_CICockpitDoorsCloseAllDesc",
-        "action-label-de_DE": "Alle Türen schließen",
-        "action-description-de_DE": "Alle Türen schließen",
-        "keyboard-mapping-de_DE": "",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "",
-        "keyboard-mapping-default": " ",
-        "keyboard-mapping-custom": null,
-        "ai_status": {
-            "is_active": false,
-            "inactive_reason": "category_excluded",
-            "included_reason": null,
-            "has_keybinding": false,
-            "has_command_phrases": false,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "spaceship_general_Close_All_Doors"
-    },
     "v_cooler_throttle_down": {
         "category": "spaceship_general",
         "actionname": "v_cooler_throttle_down",
@@ -17815,7 +17875,7 @@
         "category": "spaceship_general",
         "actionname": "v_lock_all_doors",
         "activationMode": "press",
-        "keyboard-mapping": " ",
+        "keyboard-mapping": "lalt+lctrl+d",
         "action-label-en": "Lock All Doors",
         "action-description-en": "Lock All Doors",
         "keyboard-mapping-en": "",
@@ -17829,17 +17889,41 @@
         "action-description-fr_FR": "",
         "keyboard-mapping-fr_FR": "",
         "keyboard-mapping-default": " ",
-        "keyboard-mapping-custom": null,
+        "keyboard-mapping-custom": "lalt+lctrl+d",
         "ai_status": {
             "is_active": false,
             "inactive_reason": "category_excluded",
             "included_reason": null,
-            "has_keybinding": false,
-            "has_command_phrases": false,
+            "has_keybinding": true,
+            "has_command_phrases": true,
             "is_custom_configured": false,
             "activation_supported": true
         },
-        "ai_command_reference_name": "spaceship_general_Lock_All_Doors"
+        "ai_command_reference_name": "spaceship_general_Lock_All_Doors",
+        "command-phrases": {
+            "en": [
+                "Lock",
+                "Lock doors",
+                "Lock all doors",
+                "Lock ship doors",
+                "Lock cockpit doors",
+                "Secure",
+                "Secure doors",
+                "Secure all doors",
+                "Secure ship doors"
+            ],
+            "de_DE": [
+                "Verriegeln",
+                "Türen verriegeln",
+                "Alle Türen verriegeln",
+                "Schiffstüren verriegeln",
+                "Cockpit Türen verriegeln",
+                "Sichern",
+                "Türen sichern",
+                "Alle Türen sichern",
+                "Schiffstüren sichern"
+            ]
+        }
     },
     "v_lock_all_ports": {
         "category": "spaceship_general",
@@ -17870,36 +17954,6 @@
             "activation_supported": true
         },
         "ai_command_reference_name": "spaceship_general_Port_Lock_All"
-    },
-    "v_open_all_doors": {
-        "category": "spaceship_general",
-        "actionname": "v_open_all_doors",
-        "activationMode": "press",
-        "keyboard-mapping": " ",
-        "action-label-en": "Open All Doors",
-        "action-description-en": "Open All Doors",
-        "keyboard-mapping-en": "",
-        "keyboard-mapping-ui": " ",
-        "label-ui": "@ui_CICockpitDoorsOpenAll",
-        "description-ui": "@ui_CICockpitDoorsOpenAllDesc",
-        "action-label-de_DE": "Alle Türen öffnen",
-        "action-description-de_DE": "Alle Türen öffnen",
-        "keyboard-mapping-de_DE": "",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "",
-        "keyboard-mapping-default": " ",
-        "keyboard-mapping-custom": null,
-        "ai_status": {
-            "is_active": false,
-            "inactive_reason": "category_excluded",
-            "included_reason": null,
-            "has_keybinding": false,
-            "has_command_phrases": false,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "spaceship_general_Open_All_Doors"
     },
     "v_self_destruct": {
         "category": "spaceship_general",
@@ -17961,11 +18015,61 @@
         },
         "ai_command_reference_name": "spaceship_general_Lock_Unlock_Doors_Toggle"
     },
+    "v_toggle_all_doors": {
+        "category": "spaceship_general",
+        "actionname": "v_toggle_all_doors",
+        "activationMode": "press",
+        "keyboard-mapping": "lalt+d",
+        "action-label-en": "Open/Close Doors (Toggle)",
+        "action-description-en": "Toggle Open/Close Doors",
+        "keyboard-mapping-en": "",
+        "keyboard-mapping-ui": " ",
+        "label-ui": "@ui_CICockpitDoorsToggleAll",
+        "description-ui": "@ui_CICockpitDoorsToggleAllDesc",
+        "action-label-de_DE": "Türen öffnen/schließen (umschalten)",
+        "action-description-de_DE": "Türen öffnen/schließen umschalten",
+        "keyboard-mapping-de_DE": "",
+        "action-label-fr_FR": "",
+        "action-description-fr_FR": "",
+        "keyboard-mapping-fr_FR": "",
+        "keyboard-mapping-default": "lalt+d",
+        "keyboard-mapping-custom": "lalt+d",
+        "command-phrases": {
+            "en": [
+                "Open doors",
+                "Close doors",
+                "Toggle doors",
+                "Doors",
+                "Open hatches",
+                "Close hatches",
+                "Hatches"
+            ],
+            "de_DE": [
+                "Türen öffnen",
+                "Türen schließen",
+                "Türen umschalten",
+                "Türen",
+                "Luken öffnen",
+                "Luken schließen",
+                "Luken"
+            ]
+        },
+        "ai_status": {
+            "is_active": false,
+            "inactive_reason": "category_excluded",
+            "included_reason": null,
+            "has_keybinding": true,
+            "has_command_phrases": true,
+            "is_custom_configured": false,
+            "activation_supported": true
+        },
+        "ai_command_reference_name": "spaceship_general_Open_Close_Doors_Toggle"
+    },
     "v_unlock_all_doors": {
         "category": "spaceship_general",
         "actionname": "v_unlock_all_doors",
         "activationMode": "press",
-        "keyboard-mapping": " ",
+        "keyboard-mapping": "ralt+lctrl+s",
         "action-label-en": "Unlock All Doors",
         "action-description-en": "Unlock All Doors",
         "keyboard-mapping-en": "",
@@ -17979,17 +18083,41 @@
         "action-description-fr_FR": "",
         "keyboard-mapping-fr_FR": "",
         "keyboard-mapping-default": " ",
-        "keyboard-mapping-custom": null,
+        "keyboard-mapping-custom": "ralt+lctrl+s",
         "ai_status": {
             "is_active": false,
             "inactive_reason": "category_excluded",
             "included_reason": null,
-            "has_keybinding": false,
-            "has_command_phrases": false,
+            "has_keybinding": true,
+            "has_command_phrases": true,
             "is_custom_configured": false,
             "activation_supported": true
         },
-        "ai_command_reference_name": "spaceship_general_Unlock_All_Doors"
+        "ai_command_reference_name": "spaceship_general_Unlock_All_Doors",
+        "command-phrases": {
+            "en": [
+                "Unlock",
+                "Unlock doors",
+                "Unlock all doors",
+                "Unlock ship doors",
+                "Unlock cockpit doors",
+                "Open",
+                "Open doors",
+                "Open all doors",
+                "Open ship doors"
+            ],
+            "de_DE": [
+                "Entriegeln",
+                "Türen entriegeln",
+                "Alle Türen entriegeln",
+                "Schiffstüren entriegeln",
+                "Cockpit Türen entriegeln",
+                "Öffnen",
+                "Türen öffnen",
+                "Alle Türen öffnen",
+                "Schiffstüren öffnen"
+            ]
+        }
     },
     "v_unlock_all_ports": {
         "category": "spaceship_general",
@@ -29071,36 +29199,6 @@
         },
         "ai_command_reference_name": "view_director_mode_Load_View_1"
     },
-    "view_load_view_2": {
-        "category": "view_director_mode",
-        "actionname": "view_load_view_2",
-        "activationMode": "tap",
-        "keyboard-mapping": "np_2",
-        "action-label-en": "Load View 2",
-        "action-description-en": "",
-        "keyboard-mapping-en": "Numpad 2",
-        "keyboard-mapping-ui": "@input_key_keyboard_numpad2",
-        "label-ui": "@ui_CIAdvanCamLoad2",
-        "description-ui": "@ui_CIAdvanCamLoad2Desc",
-        "action-label-de_DE": "Ansicht 2 laden",
-        "action-description-de_DE": "",
-        "keyboard-mapping-de_DE": "Ziffernblock 2",
-        "action-label-fr_FR": "",
-        "action-description-fr_FR": "",
-        "keyboard-mapping-fr_FR": "input_key_keyboard_numpad2",
-        "keyboard-mapping-default": "np_2",
-        "keyboard-mapping-custom": null,
-        "ai_status": {
-            "is_active": false,
-            "inactive_reason": "category_excluded",
-            "included_reason": null,
-            "has_keybinding": true,
-            "has_command_phrases": false,
-            "is_custom_configured": false,
-            "activation_supported": true
-        },
-        "ai_command_reference_name": "view_director_mode_Load_View_2"
-    },
     "view_load_view_3": {
         "category": "view_director_mode",
         "actionname": "view_load_view_3",
@@ -29155,11 +29253,37 @@
             "inactive_reason": "category_excluded",
             "included_reason": null,
             "has_keybinding": true,
-            "has_command_phrases": false,
+            "has_command_phrases": true,
             "is_custom_configured": false,
             "activation_supported": true
         },
-        "ai_command_reference_name": "view_director_mode_Load_View_4"
+        "ai_command_reference_name": "view_director_mode_Load_View_4",
+        "command-phrases": {
+            "en": [
+                "Load",
+                "Load view",
+                "Load view 4",
+                "Load camera view",
+                "Load camera view 4",
+                "Recall view",
+                "Recall view 4",
+                "Recall camera view",
+                "View 4",
+                "Select view 4"
+            ],
+            "de_DE": [
+                "Ansicht",
+                "Ansicht laden",
+                "Ansicht 4 laden",
+                "Kamera Ansicht laden",
+                "Kamera Ansicht 4 laden",
+                "Ansicht abrufen",
+                "Ansicht 4 abrufen",
+                "Ansicht 4",
+                "Ansicht 4 auswählen",
+                "Ansicht auswählen"
+            ]
+        }
     },
     "view_load_view_5": {
         "category": "view_director_mode",
