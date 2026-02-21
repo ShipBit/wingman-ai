@@ -426,7 +426,7 @@ class MiningManager(FunctionManager):
             scan_result, success = self.rock_scan_ocr.get_screenshot_texts(
                 cropped_image,
                 "scans",
-                test=False,
+                test=TEST,
             )
 
             if not success or not isinstance(scan_result, dict):
@@ -490,6 +490,10 @@ class MiningManager(FunctionManager):
                 align="right",
                 crop_image=cropped_image,
                 config_dir=self.mining_data_path,
+                validation_context={
+                    "rock_types": self.regolith.get_cluster_types(),
+                    "ship_ores": self.regolith.get_ship_ore_names(),
+                },
             )
             if operation == "aborted":
                 self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
@@ -514,7 +518,18 @@ class MiningManager(FunctionManager):
                     )
                     function_response.setdefault("do_not_cache", True)
             else:
-                self.overlay.display_overlay_text(f"Cora: saved {function_response['total_scans']}", vertical_position_ratio=3, display_duration=5000)
+                if function_response.get("warnings"):
+                    self.overlay.display_overlay_text(
+                        f"Cora: warning {function_response['total_scans']}",
+                        vertical_position_ratio=3,
+                        display_duration=5000,
+                    )
+                else:
+                    self.overlay.display_overlay_text(
+                        f"Cora: saved {function_response['total_scans']}",
+                        vertical_position_ratio=3,
+                        display_duration=5000,
+                    )
                 function_response["do_not_cache"] = True
                 
         elif function_type == "add_new_cluster":

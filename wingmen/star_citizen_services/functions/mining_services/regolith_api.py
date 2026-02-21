@@ -4,6 +4,7 @@ import webbrowser
 import traceback
 import os
 import base64
+import re
 from collections import defaultdict
 
 from datetime import datetime
@@ -485,7 +486,7 @@ class RegolithAPI:
             session_id = self.create_mining_session(name, activity, refinery)
         return session_id
 
-    def create_mining_session(self, name, activity, refinery, location, start_poi, direction):
+    def create_mining_session(self, name, activity, refinery, location=None, start_poi=None, direction=None):
         now = datetime.now()
         # Zuerst das Datum mit führenden Nullen formatieren
         formatted_date_with_zero = now.strftime("%A, %b %d, %I %p")
@@ -792,6 +793,8 @@ class RegolithAPI:
                         createdAt
                         clusterType
                         clusterCount
+                        gravityWell
+                        includeInSurvey
                         note
                         ... on ShipClusterFind {
                             shipRocks {
@@ -830,9 +833,9 @@ class RegolithAPI:
 
                 if not scouting_items:
                     # Keine Einträge vorhanden
-                    scoutingFindId = self.create_scouting_cluster(session_id)
-                    print_debug(f"Created new scouting item: {scoutingFindId}")
-                    return scoutingFindId, 0
+                    cluster = self.create_scouting_cluster(session_id)
+                    print_debug(f"Created new scouting item: {cluster}")
+                    return cluster
                 else:
                     # Es existiert bereits mindestens ein Eintrag
                     # Sortiere absteigend nach createdAt:
@@ -850,65 +853,8 @@ class RegolithAPI:
         
         mutation = ""
         variables = {}
-        if cluster_type and cluster_type in SHIP_CLUSTER_TYPES:
-            mutation = gql(
-                """mutation addScoutingFind($sessionId: ID!, $scoutingFind: ScoutingFindInput!, $shipRocks: [ShipRockInput!]) {
-                    addScoutingFind(
-                        sessionId: $sessionId
-                        scoutingFind: $scoutingFind
-                        shipRocks: $shipRocks
-                    ) {
-                        ...ScoutingFindFragment
-                    }
-                    }
-
-                    fragment ScoutingFindFragment on ScoutingFindInterface {
-                    ...ScoutingFindBaseFragment
-                    state
-                    }
-
-                    fragment ScoutingFindBaseFragment on ScoutingFindInterface {
-                    scoutingFindId
-                    createdAt
-                    clusterType
-                    clusterCount
-                    gravityWell
-                    includeInSurvey
-                    note
-                    ... on ShipClusterFind {
-                        shipRocks {
-                        ...ShipRockFragment
-                        }
-                    }
-                    }
-
-                    fragment ShipRockFragment on ShipRock {
-                    mass
-                    inst
-                    res
-                    state
-                    ores {
-                        ore
-                        percent
-                    }
-                    }  
-            """
-            )
-
-            variables = {
-                "sessionId": session_id,
-                "scoutingFind": {
-                    "state": "DISCOVERED",
-                    "clusterCount": cluster_count,
-                    "gravityWell": self.active_session["sessionSettings"]["gravityWell"],
-                    "includeInSurvey": True,
-                    "note": "{'info': 'This cluster has been discovered by Cora - your AI Compagnion.'"
-                    + (f", 'cluster_type': '{cluster_type}'" if cluster_type else "")
-                    + "}",
-                },
-                "shipRocks": [],
-            }
-        else:
+        is_vehicle_like_cluster = cluster_type in VEHICLE_CLUSTER_TYPES or cluster_type in FPS_CLUSTER_TYPES
+        if is_vehicle_like_cluster:
             mutation = gql(
                 """mutation addScoutingFind($sessionId: ID!, $scoutingFind: ScoutingFindInput!, $vehicleRocks: [VehicleRockInput!]) {
                     addScoutingFind(
@@ -972,6 +918,65 @@ class RegolithAPI:
                     for _ in range(cluster_count)
                 ],
             }
+        else:
+            mutation = gql(
+                """mutation addScoutingFind($sessionId: ID!, $scoutingFind: ScoutingFindInput!, $shipRocks: [ShipRockInput!]) {
+                    addScoutingFind(
+                        sessionId: $sessionId
+                        scoutingFind: $scoutingFind
+                        shipRocks: $shipRocks
+                    ) {
+                        ...ScoutingFindFragment
+                    }
+                    }
+
+                    fragment ScoutingFindFragment on ScoutingFindInterface {
+                    ...ScoutingFindBaseFragment
+                    state
+                    }
+
+                    fragment ScoutingFindBaseFragment on ScoutingFindInterface {
+                    scoutingFindId
+                    createdAt
+                    clusterType
+                    clusterCount
+                    gravityWell
+                    includeInSurvey
+                    note
+                    ... on ShipClusterFind {
+                        shipRocks {
+                        ...ShipRockFragment
+                        }
+                    }
+                    }
+
+                    fragment ShipRockFragment on ShipRock {
+                    mass
+                    inst
+                    res
+                    state
+                    rockType
+                    ores {
+                        ore
+                        percent
+                    }
+                    }  
+            """
+            )
+
+            variables = {
+                "sessionId": session_id,
+                "scoutingFind": {
+                    "state": "DISCOVERED",
+                    "clusterCount": cluster_count,
+                    "gravityWell": self.active_session["sessionSettings"]["gravityWell"],
+                    "includeInSurvey": True,
+                    "note": "{'info': 'This cluster has been discovered by Cora - your AI Compagnion.'"
+                    + (f", 'cluster_type': '{cluster_type}'" if cluster_type else "")
+                    + "}",
+                },
+                "shipRocks": [],
+            }
 
         try:
             response = self.client.execute(mutation, variable_values=variables)
@@ -993,6 +998,13 @@ class RegolithAPI:
     def add_ship_cluster_scan_results(
         self, session_id, cluster, ship_rock_scan_result
     ):
+        if not isinstance(cluster, dict) or not cluster.get("scoutingFindId"):
+            return {
+                "success": False,
+                "response_instructions": "Tell the player the scouting cluster could not be resolved.",
+                "result": "Missing or invalid scouting cluster.",
+            }
+
         mutation = gql(
             """mutation updateScoutingFind($sessionId: ID!, $scoutingFindId: ID!, $scoutingFind: ScoutingFindInput!, $shipRocks: [ShipRockInput!]) {
                 updateScoutingFind(
@@ -1055,6 +1067,41 @@ class RegolithAPI:
                 return ""
             return "".join(ch for ch in value.upper() if ch.isalnum())
 
+        def _normalize_scan_name(value):
+            if not isinstance(value, str):
+                return ""
+            value = value.upper()
+            # Remove parenthetical suffixes like "(RAW)" / "(ORE)" and whitespace separators.
+            value = re.sub(r"\([^)]*\)", "", value)
+            value = value.replace(" ", "").replace("-", "").replace("_", "")
+            # Normalize common OCR variants.
+            value = value.replace("MATERIALS", "MATERIAL")
+            if value == "INERTMATERIAL":
+                return "INERTMATERIAL"
+            # Drop common suffix tokens, e.g. "BEXALITERAW" -> "BEXALITE".
+            for suffix in ("RAW", "ORE"):
+                if value.endswith(suffix) and len(value) > len(suffix):
+                    value = value[: -len(suffix)]
+            return value
+
+        def _to_percent(value):
+            if isinstance(value, (int, float)):
+                num = float(value)
+            elif isinstance(value, str):
+                cleaned = value.strip().replace("%", "").replace(",", ".")
+                try:
+                    num = float(cleaned)
+                except ValueError:
+                    return None
+            else:
+                return None
+
+            if num > 1:
+                num = num / 100
+            if num < 0:
+                return None
+            return num
+
         ship_ore_names = self.get_ship_ore_names() or []
         normalized_ship_ores = {
             _normalize_ore_key(ore_name): ore_name for ore_name in ship_ore_names
@@ -1065,38 +1112,126 @@ class RegolithAPI:
             raw_name = ore.get("ore")
             if not raw_name:
                 continue
+
+            percent_value = _to_percent(ore.get("percent"))
+            if percent_value is None:
+                continue
+            ore["percent"] = percent_value
+
             if raw_name in ship_ore_names:
                 normalized_ores.append(ore)
                 continue
+
             normalized_key = _normalize_ore_key(raw_name)
             mapped_name = normalized_ship_ores.get(normalized_key)
             if mapped_name:
                 ore["ore"] = mapped_name
                 normalized_ores.append(ore)
                 continue
+
+            cleaned_key = _normalize_scan_name(raw_name)
+            mapped_name = normalized_ship_ores.get(cleaned_key)
+            if mapped_name:
+                ore["ore"] = mapped_name
+                normalized_ores.append(ore)
+                continue
+
+            if cleaned_key in ("INERTMATERIAL", "INERTMATERIALS"):
+                ore["ore"] = "INERTMATERIAL"
+                normalized_ores.append(ore)
+                continue
             print_debug(f"Unknown ship ore name from scan: {raw_name}")
 
+        ore_totals = {}
+        for ore in normalized_ores:
+            ore_name = ore["ore"]
+            ore_totals[ore_name] = ore_totals.get(ore_name, 0) + ore["percent"]
+        normalized_ores = [
+            {"ore": ore_name, "percent": percent}
+            for ore_name, percent in ore_totals.items()
+            if percent > 0
+        ]
+
         total_percent = sum(ore["percent"] for ore in normalized_ores)
+        if total_percent > 1:
+            # Keep ratios but ensure payload sums to 1.
+            normalized_ores = [
+                {"ore": ore["ore"], "percent": ore["percent"] / total_percent}
+                for ore in normalized_ores
+                if ore["percent"] > 0
+            ]
+            total_percent = sum(ore["percent"] for ore in normalized_ores)
         if 1 - total_percent > 0:
             normalized_ores.append({"ore": "INERTMATERIAL", "percent": 1 - total_percent})
 
+        def _normalize_cluster_type(value):
+            if not isinstance(value, str):
+                return None
+            key = _normalize_ore_key(value)
+            for suffix in ("DEPOSITS", "DEPOSIT", "CLUSTERS", "CLUSTER", "ROCKS", "ROCK"):
+                if key.endswith(suffix) and len(key) > len(suffix):
+                    key = key[: -len(suffix)]
+            if key in SHIP_CLUSTER_TYPES:
+                return key
+            return None
+
+        rock_type = _normalize_cluster_type(ship_rock_scan_result.get("rockType"))
+        if not rock_type:
+            rock_type = _normalize_cluster_type(cluster.get("clusterType"))
+
+        def _to_float(value):
+            if isinstance(value, (int, float)):
+                return float(value)
+            if isinstance(value, str):
+                cleaned = value.strip().replace(",", ".")
+                try:
+                    return float(cleaned)
+                except ValueError:
+                    return None
+            return None
+
         ship_rocks = cluster.get("shipRocks", [])
-        ship_rocks.append({
-                    "mass": ship_rock_scan_result["mass"],
-                    "state": "READY",
-                    "inst": ship_rock_scan_result["inst"],
-                    "res": ship_rock_scan_result["res"],
-                    "rockType": ship_rock_scan_result["rockType"],
-                    "ores": normalized_ores,
-                })
+        inst_value = _to_float(ship_rock_scan_result.get("inst"))
+        if inst_value is None:
+            inst_value = ship_rock_scan_result.get("inst")
+        if isinstance(inst_value, (int, float)) and inst_value == 0:
+            inst_value = 1.0
+
+        res_value = _to_percent(ship_rock_scan_result.get("res"))
+        if res_value is None:
+            res_value = ship_rock_scan_result.get("res")
+        if isinstance(res_value, (int, float)) and res_value == 0:
+            res_value = 0.01
+
+        ship_rock_payload = {
+            "mass": ship_rock_scan_result["mass"],
+            "state": "READY",
+            "inst": inst_value,
+            "res": res_value,
+            "ores": normalized_ores,
+        }
+        if rock_type:
+            ship_rock_payload["rockType"] = rock_type
+
+        ship_rocks.append(ship_rock_payload)
+
+        scouting_find_payload = {
+            "state": "DISCOVERED",
+            "includeInSurvey": True,
+        }
+        if cluster.get("clusterCount") is not None:
+            scouting_find_payload["clusterCount"] = cluster.get("clusterCount")
+        if cluster.get("note"):
+            scouting_find_payload["note"] = cluster.get("note")
+        if cluster.get("gravityWell"):
+            scouting_find_payload["gravityWell"] = cluster.get("gravityWell")
+        elif self.active_session and self.active_session.get("sessionSettings", {}).get("gravityWell"):
+            scouting_find_payload["gravityWell"] = self.active_session["sessionSettings"]["gravityWell"]
 
         variables = {
             "sessionId": session_id,
             "scoutingFindId": cluster["scoutingFindId"],
-            "scoutingFind": {
-                "state": "DISCOVERED",
-                "includeInSurvey": True,
-            },
+            "scoutingFind": scouting_find_payload,
             "shipRocks": ship_rocks,
         }
 
@@ -1115,10 +1250,47 @@ class RegolithAPI:
                     "result": response["errors"],
                 }
             else:
+                update_find = response.get("updateScoutingFind", {}) or {}
+                response_warnings = []
+                response_ship_rocks = update_find.get("shipRocks") or []
+                if not response_ship_rocks:
+                    response_warnings.append("Regolith response contains no shipRocks.")
+                else:
+                    latest_response_rock = response_ship_rocks[-1]
+                    response_ores = latest_response_rock.get("ores") or []
+                    if not response_ores:
+                        response_warnings.append("Regolith response contains no ores for the latest rock.")
+                    sent_ore_names = {
+                        ore.get("ore")
+                        for ore in ship_rock_payload.get("ores", [])
+                        if isinstance(ore, dict) and ore.get("ore")
+                    }
+                    response_ore_names = {
+                        ore.get("ore")
+                        for ore in response_ores
+                        if isinstance(ore, dict) and ore.get("ore")
+                    }
+                    missing_in_response = sorted(sent_ore_names - response_ore_names)
+                    if missing_in_response:
+                        response_warnings.append(
+                            f"Regolith response is missing ores: {', '.join(missing_in_response)}"
+                        )
+
+                    sent_rock_type = ship_rock_payload.get("rockType")
+                    if sent_rock_type and not latest_response_rock.get("rockType"):
+                        response_warnings.append(
+                            f"Regolith response did not persist rockType '{sent_rock_type}'."
+                        )
+
                 return {
                     "success": True,
-                    "response_instructions": "Shortly confirm that the scan has been saved, like: '9 of 12 rocks scanned. ",
-                    "total_scans": f"{len(ship_rocks)}/{response['updateScoutingFind']['clusterCount']}"
+                    "response_instructions": (
+                        "Shortly confirm that the scan has been saved, like: '9 of 12 rocks scanned. "
+                        if not response_warnings
+                        else "Confirm the scan save, but warn that Regolith returned incomplete data."
+                    ),
+                    "total_scans": f"{len(ship_rocks)}/{update_find.get('clusterCount', cluster.get('clusterCount', '?'))}",
+                    "warnings": response_warnings,
                 }
         except Exception as e:
             print(f"Error during save scan: {str(e)}:\n{traceback.print_stack()}")

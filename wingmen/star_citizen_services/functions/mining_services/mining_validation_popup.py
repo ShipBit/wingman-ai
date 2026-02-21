@@ -82,11 +82,13 @@ class MiningValidationPopup(tk.Toplevel):
         align="default",
         crop_image=None,
         config_dir=None,
+        validation_context=None,
     ):
         super().__init__(master)
         self.theme = self.THEME
         self.lang = self._detect_language()
         self.translations = self.I18N.get(self.lang, self.I18N["en"])
+        self.validation_context = validation_context or {}
         self.attributes("-topmost", True)
         self.overrideredirect(True)
         self.resizable(True, True)
@@ -111,6 +113,9 @@ class MiningValidationPopup(tk.Toplevel):
         self._tooltip_window = None
         self.base_countdown = 10
         self._has_invalid_fields = False
+        self._validation_errors = []
+        self._scan_validation_mode = self._is_ship_scan_payload(work_order_info)
+        self._scan_percent_display_mode = self._scan_validation_mode
         self._interaction_window_handle = self._get_foreground_window()
         self._cursor_position_before_interaction = None
         self._focus_handoff_done = False
@@ -122,7 +127,8 @@ class MiningValidationPopup(tk.Toplevel):
 
         banner_title_text = (title or self._t("default_title")).upper()
 
-        json_str = json.dumps(work_order_info, indent=4, ensure_ascii=False)
+        display_data = self._prepare_scan_payload_for_display(work_order_info)
+        json_str = json.dumps(display_data, indent=4, ensure_ascii=False)
         lines = json_str.splitlines() or ["{}"]
         num_lines = len(lines)
         max_line_chars = max(len(line) for line in lines)
@@ -173,6 +179,7 @@ class MiningValidationPopup(tk.Toplevel):
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=1)
         self.rowconfigure(2, weight=0)
+        self.rowconfigure(3, weight=0)
         self.columnconfigure(0, weight=1)
         if self.crop_image is not None:
             self.columnconfigure(1, weight=0)
@@ -325,11 +332,50 @@ class MiningValidationPopup(tk.Toplevel):
             image_label = tk.Label(image_frame, image=self.image_tk, bg=self.theme["panel_alt"], bd=0)
             image_label.pack(expand=True, fill="both")
 
+        self.validation_frame = tk.Frame(
+            self,
+            bg="#2d0f17",
+            highlightthickness=1,
+            highlightbackground=self.theme["danger"],
+            padx=10,
+            pady=8,
+        )
+        self.validation_title_label = tk.Label(
+            self.validation_frame,
+            text="Validation",
+            bg="#2d0f17",
+            fg="#ffd3dd",
+            font=("Segoe UI", 10, "bold"),
+            anchor="w",
+            justify="left",
+        )
+        self.validation_title_label.pack(fill="x")
+        self.validation_message_label = tk.Label(
+            self.validation_frame,
+            text="",
+            bg="#2d0f17",
+            fg="#ffd3dd",
+            font=("Segoe UI", 10),
+            anchor="w",
+            justify="left",
+            wraplength=900,
+        )
+        self.validation_message_label.pack(fill="x", pady=(4, 0))
+        self.validation_frame.grid(
+            row=2,
+            column=0,
+            columnspan=2 if self.crop_image is not None else 1,
+            sticky="ew",
+            padx=14,
+            pady=(0, 8),
+        )
+        self.validation_frame.grid_remove()
+
         button_frame = tk.Frame(self, bg=self.theme["bg"])
         if self.crop_image is not None:
-            button_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 14))
+            button_frame.grid(row=3, column=0, columnspan=2, sticky="ew", padx=14, pady=(0, 14))
         else:
-            button_frame.grid(row=2, column=0, sticky="ew", padx=14, pady=(0, 14))
+            button_frame.grid(row=3, column=0, sticky="ew", padx=14, pady=(0, 14))
 
         button_inner = tk.Frame(button_frame, bg=self.theme["bg"])
         button_inner.pack(anchor="center")
@@ -462,13 +508,20 @@ class MiningValidationPopup(tk.Toplevel):
         y = position.get("y", y)
         width, height, x, y = self._clamp_geometry_to_screen(width, height, x, y, screen_w, screen_h)
         self.base_countdown = self.popup_config.get("countdown_seconds", default_config["countdown_seconds"])
-        self.countdown_seconds = self.base_countdown * (2 if self._has_invalid_fields else 1)
+        self._refresh_validation_feedback_from_editor(adjust_countdown=False)
+        if self._scan_validation_mode:
+            self.base_countdown = 5
+            self.countdown_seconds = 15 if self._validation_errors else 5
+        else:
+            self.countdown_seconds = self.base_countdown * (2 if self._has_invalid_fields else 1)
         self.minsize(min_width, min_height)
         self.geometry(f"{width}x{height}+{x}+{y}")
         self.update_idletasks()
         self._last_saved_geometry = self._get_current_geometry()
         self.bind("<Return>", lambda e: self.confirm())
         self.bind("<Escape>", lambda e: self.abort())
+        self.text.edit_modified(False)
+        self.text.bind("<<Modified>>", self._on_text_modified, add="+")
 
         self.auto_confirm_job = None
         self.countdown_active = True
@@ -546,7 +599,15 @@ class MiningValidationPopup(tk.Toplevel):
         self._on_text_vertical_scroll(str(y_first), str(y_last))
 
     @staticmethod
-    def show_popup(work_order_info, anchor_coords=None, title=None, align="default", crop_image=None, config_dir=None):
+    def show_popup(
+        work_order_info,
+        anchor_coords=None,
+        title=None,
+        align="default",
+        crop_image=None,
+        config_dir=None,
+        validation_context=None,
+    ):
         root = tk._get_default_root() or tk.Tk()
         root.withdraw()
         popup = MiningValidationPopup(
@@ -557,6 +618,7 @@ class MiningValidationPopup(tk.Toplevel):
             align=align,
             crop_image=crop_image,
             config_dir=config_dir,
+            validation_context=validation_context,
         )
         root.wait_window(popup)
         return popup.validated_data, popup.operation
@@ -570,6 +632,8 @@ class MiningValidationPopup(tk.Toplevel):
         try:
             updated_text = self.text.get("1.0", tk.END).strip()
             self.validated_data = json.loads(updated_text)
+            self._apply_scan_percent_display_to_payload(self.validated_data)
+            self._apply_ship_scan_fallback_defaults(self.validated_data)
         except Exception as e:
             print_debug(f"JSON parsing error: {e}")
             self.validated_data = None
@@ -616,6 +680,300 @@ class MiningValidationPopup(tk.Toplevel):
                 fg=self.theme["warning"],
             )
         self.countdown_active = False
+
+    def _on_text_modified(self, _event):
+        try:
+            if not self.text.edit_modified():
+                return
+            self.text.edit_modified(False)
+        except tk.TclError:
+            return
+        self._refresh_validation_feedback_from_editor(adjust_countdown=self.countdown_active and self._buttons_locked)
+
+    def _refresh_validation_feedback_from_editor(self, adjust_countdown=False):
+        try:
+            json_str = self.text.get("1.0", tk.END).strip()
+        except Exception:
+            return
+        self._has_invalid_fields = self._highlight_invalid_fields(json_str)
+        errors = []
+
+        parsed = None
+        if self._scan_validation_mode:
+            try:
+                parsed = json.loads(json_str) if json_str else {}
+            except Exception:
+                errors.append(self._scan_issue("invalid_json"))
+            else:
+                errors.extend(self._validate_ship_scan_payload(parsed))
+
+        self._set_validation_errors(errors)
+
+        if adjust_countdown and self._scan_validation_mode:
+            self.countdown_seconds = 15 if errors else 5
+            self._update_confirm_button_text()
+
+    def _set_validation_errors(self, errors):
+        self._validation_errors = errors
+        if not errors:
+            self.validation_frame.grid_remove()
+            return
+
+        title = "Validierungswarnungen" if self.lang == "de" else "Validation Warnings"
+        self.validation_title_label.configure(text=title)
+        self.validation_message_label.configure(text="\n".join(f"- {msg}" for msg in errors))
+        self.validation_frame.grid()
+
+    @staticmethod
+    def _is_ship_scan_payload(payload):
+        return isinstance(payload, dict) and isinstance(payload.get("captureShipRockScan"), dict)
+
+    @staticmethod
+    def _normalize_enum_key(value):
+        if not isinstance(value, str):
+            return ""
+        return "".join(ch for ch in value.upper() if ch.isalnum())
+
+    @classmethod
+    def _normalize_rock_type_key(cls, value):
+        key = cls._normalize_enum_key(value)
+        for suffix in ("DEPOSITS", "DEPOSIT", "CLUSTERS", "CLUSTER", "ROCKS", "ROCK"):
+            if key.endswith(suffix) and len(key) > len(suffix):
+                key = key[: -len(suffix)]
+        return key
+
+    @staticmethod
+    def _normalize_scan_ore_name(value):
+        if not isinstance(value, str):
+            return ""
+        value = value.upper()
+        value = re.sub(r"\([^)]*\)", "", value)
+        value = value.replace(" ", "").replace("-", "").replace("_", "")
+        value = value.replace("MATERIALS", "MATERIAL")
+        for suffix in ("RAW", "ORE"):
+            if value.endswith(suffix) and len(value) > len(suffix):
+                value = value[: -len(suffix)]
+        return value
+
+    @staticmethod
+    def _to_float(value):
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            cleaned = value.strip().replace("%", "").replace(",", ".")
+            try:
+                return float(cleaned)
+            except ValueError:
+                return None
+        return None
+
+    @staticmethod
+    def _contains_ocr_swap_digits(value):
+        if value is None:
+            return False
+        text = str(value).strip()
+        if not text:
+            return False
+        # Rule 3: warn if digit 0 or 8 appears in numeric OCR fields.
+        return ("0" in text) or ("8" in text)
+
+    def _scan_issue(self, key, **kwargs):
+        messages = {
+            "de": {
+                "invalid_json": "JSON ist ungültig und kann nicht geparst werden.",
+                "missing_payload": "Kein gültiger 'captureShipRockScan'-Payload vorhanden.",
+                "composition_sum": "Regel 1: Summe der Zusammensetzungsprozente muss 1 ± 0.01 sein (aktuell: {value:.4f}).",
+                "inst_zero": "Regel 2: 'inst' ist 0. Fallback beim Senden: 1.0.",
+                "res_zero": "Regel 2: 'res' ist 0. Fallback beim Senden: 0.01.",
+                "zero_or_eight": "Regel 3: Mögliche OCR-Vertauschung (Ziffer 0/8) gefunden in: {fields}.",
+                "rocktype_unmapped": "Regel 4: Rock Type ist nicht erkannt oder nicht auf Regolith mapbar: '{value}'.",
+                "rocktype_missing_map": "Regel 4: Rock-Type-Mappingdaten fehlen.",
+                "ore_unmapped": "Regel 5: Inhaltsstoffe nicht mapbar mit Regolith: {ores}.",
+                "ore_missing_map": "Regel 5: Ore-Mappingdaten fehlen.",
+                "inert_missing": "Regel 1: INERT MATERIAL fehlt in der Zusammensetzung.",
+            },
+            "en": {
+                "invalid_json": "JSON is invalid and cannot be parsed.",
+                "missing_payload": "No valid 'captureShipRockScan' payload found.",
+                "composition_sum": "Rule 1: Composition percent sum must be 1 ± 0.01 (current: {value:.4f}).",
+                "inst_zero": "Rule 2: 'inst' is 0. Send fallback: 1.0.",
+                "res_zero": "Rule 2: 'res' is 0. Send fallback: 0.01.",
+                "zero_or_eight": "Rule 3: Possible OCR digit swap (0/8) found in: {fields}.",
+                "rocktype_unmapped": "Rule 4: Rock type is missing or cannot be mapped to Regolith: '{value}'.",
+                "rocktype_missing_map": "Rule 4: Rock type mapping data is missing.",
+                "ore_unmapped": "Rule 5: Ores cannot be mapped to Regolith: {ores}.",
+                "ore_missing_map": "Rule 5: Ore mapping data is missing.",
+                "inert_missing": "Rule 1: INERT MATERIAL is missing from composition.",
+            },
+        }
+        lang = "de" if self.lang == "de" else "en"
+        return messages[lang][key].format(**kwargs)
+
+    def _validate_ship_scan_payload(self, payload):
+        issues = []
+        scan_payload = payload.get("captureShipRockScan")
+        if not isinstance(scan_payload, dict):
+            issues.append(self._scan_issue("missing_payload"))
+            return issues
+
+        ship_ores = self.validation_context.get("ship_ores") or []
+        rock_types = self.validation_context.get("rock_types") or []
+        ore_map = {
+            self._normalize_enum_key(name): name for name in ship_ores if isinstance(name, str)
+        }
+        rock_map = {
+            self._normalize_enum_key(name): name for name in rock_types if isinstance(name, str)
+        }
+
+        inst_value = self._to_float(scan_payload.get("inst"))
+        res_value = self._to_float(scan_payload.get("res"))
+        if inst_value == 0:
+            issues.append(self._scan_issue("inst_zero"))
+        if res_value == 0:
+            issues.append(self._scan_issue("res_zero"))
+
+        suspicious_fields = []
+        numeric_candidates = {
+            "mass": scan_payload.get("mass"),
+            "inst": scan_payload.get("inst"),
+            "res": scan_payload.get("res"),
+        }
+        ores = scan_payload.get("ores", [])
+        if isinstance(ores, list):
+            for idx, ore in enumerate(ores, start=1):
+                if isinstance(ore, dict):
+                    numeric_candidates[f"ore[{idx}].percent"] = ore.get("percent")
+
+        for field, raw_value in numeric_candidates.items():
+            num = self._to_float(raw_value)
+            if num is None:
+                continue
+            if (
+                abs(num) < 1e-12
+                or abs(num - 8.0) < 1e-12
+                or self._contains_ocr_swap_digits(raw_value)
+            ):
+                suspicious_fields.append(field)
+
+        rock_type_raw = scan_payload.get("rockType")
+        if not rock_map:
+            issues.append(self._scan_issue("rocktype_missing_map"))
+        else:
+            rock_key = self._normalize_rock_type_key(rock_type_raw)
+            if rock_key not in rock_map:
+                issues.append(self._scan_issue("rocktype_unmapped", value=rock_type_raw))
+
+        if not ore_map:
+            issues.append(self._scan_issue("ore_missing_map"))
+
+        composition_sum = 0.0
+        has_inert = False
+        unmapped_ores = []
+        if not isinstance(ores, list) or not ores:
+            unmapped_ores.append("<empty>")
+        else:
+            for ore in ores:
+                if not isinstance(ore, dict):
+                    continue
+                ore_raw = ore.get("ore")
+                ore_key = self._normalize_enum_key(ore_raw)
+                normalized_key = self._normalize_scan_ore_name(ore_raw)
+                mapped = ore_map.get(ore_key) or ore_map.get(normalized_key)
+                if normalized_key in ("INERTMATERIAL", "INERTMATERIALS"):
+                    mapped = "INERTMATERIAL"
+                if not mapped:
+                    unmapped_ores.append(str(ore_raw))
+                if mapped == "INERTMATERIAL":
+                    has_inert = True
+
+                percent_value = self._to_float(ore.get("percent"))
+                if percent_value is None:
+                    continue
+                if percent_value > 1:
+                    percent_value = percent_value / 100
+                composition_sum += percent_value
+
+        if unmapped_ores:
+            issues.append(self._scan_issue("ore_unmapped", ores=", ".join(sorted(set(unmapped_ores)))))
+        # Full ore sums of 99.99% or 100% are valid without INERT material.
+        full_ore_sum_without_inert = (not has_inert) and (abs(composition_sum - 1.0) <= 0.0002)
+        if full_ore_sum_without_inert:
+            suspicious_fields = [field for field in suspicious_fields if not field.startswith("ore[")]
+
+        if suspicious_fields:
+            issues.append(self._scan_issue("zero_or_eight", fields=", ".join(suspicious_fields)))
+
+        if not has_inert and not full_ore_sum_without_inert:
+            issues.append(self._scan_issue("inert_missing"))
+        if abs(composition_sum - 1.0) > 0.01:
+            issues.append(self._scan_issue("composition_sum", value=composition_sum))
+
+        return issues
+
+    def _apply_ship_scan_fallback_defaults(self, payload):
+        if not self._scan_validation_mode or not isinstance(payload, dict):
+            return
+        scan_payload = payload.get("captureShipRockScan")
+        if not isinstance(scan_payload, dict):
+            return
+
+        inst_value = self._to_float(scan_payload.get("inst"))
+        res_value = self._to_float(scan_payload.get("res"))
+        if inst_value == 0:
+            scan_payload["inst"] = 1.0
+        if res_value == 0:
+            scan_payload["res"] = 0.01
+
+    def _prepare_scan_payload_for_display(self, payload):
+        if not self._scan_percent_display_mode or not isinstance(payload, dict):
+            return payload
+
+        display_payload = copy.deepcopy(payload)
+        scan_payload = display_payload.get("captureShipRockScan")
+        if not isinstance(scan_payload, dict):
+            return display_payload
+
+        ores = scan_payload.get("ores")
+        if not isinstance(ores, list):
+            return display_payload
+
+        for ore in ores:
+            if not isinstance(ore, dict):
+                continue
+            percent_value = self._to_float(ore.get("percent"))
+            if percent_value is None:
+                continue
+            # UI shows percentages (0-100) to match in-game scan display.
+            if percent_value <= 1:
+                ore["percent"] = round(percent_value * 100, 4)
+            else:
+                ore["percent"] = percent_value
+
+        return display_payload
+
+    def _apply_scan_percent_display_to_payload(self, payload):
+        if not self._scan_percent_display_mode or not isinstance(payload, dict):
+            return
+
+        scan_payload = payload.get("captureShipRockScan")
+        if not isinstance(scan_payload, dict):
+            return
+
+        ores = scan_payload.get("ores")
+        if not isinstance(ores, list):
+            return
+
+        for ore in ores:
+            if not isinstance(ore, dict):
+                continue
+            percent_value = self._to_float(ore.get("percent"))
+            if percent_value is None:
+                continue
+            # Convert UI percentage format back to backend ratio format (0-1).
+            if percent_value > 1:
+                ore["percent"] = percent_value / 100
+            else:
+                ore["percent"] = percent_value
 
     def _prepare_popup_manual_interaction(self):
         if self._focus_handoff_done:
@@ -908,9 +1266,11 @@ class MiningValidationPopup(tk.Toplevel):
     def _highlight_invalid_fields(self, json_str):
         try:
             self.text.tag_delete("invalid_value")
+            self.text.tag_delete("ocr_swap_digit")
         except tk.TclError:
             pass
         self.text.tag_configure("invalid_value", foreground=self.theme["warning"])
+        self.text.tag_configure("ocr_swap_digit", foreground=self.theme["danger"])
         patterns = [
             r":\s+null\b",
             r":\s+0(?:\.0+)?(?=[\s,\}\]])",
@@ -923,6 +1283,19 @@ class MiningValidationPopup(tk.Toplevel):
                 end_idx = f"1.0 + {match.end()}c"
                 self.text.tag_add("invalid_value", start_idx, end_idx)
                 invalid_found = True
+
+        if self._scan_validation_mode:
+            # Highlight suspicious OCR digits (0/8) inside numeric JSON values.
+            number_value_pattern = r":\s*(-?\d+(?:[.,]\d+)?)\s*(?=[,\}\]])"
+            for match in re.finditer(number_value_pattern, json_str):
+                number_text = match.group(1)
+                number_start = match.start(1)
+                for offset, char in enumerate(number_text):
+                    if char in ("0", "8"):
+                        start_idx = f"1.0 + {number_start + offset}c"
+                        end_idx = f"1.0 + {number_start + offset + 1}c"
+                        self.text.tag_add("ocr_swap_digit", start_idx, end_idx)
+                        invalid_found = True
         return invalid_found
 
     def _load_popup_config(self, default_config):

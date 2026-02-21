@@ -1,23 +1,23 @@
 {
-    "id": "chatcmpl-9EjRaerv1d67IRQZQmTOzzwHBwmK2",
-    "object": "chat.completion",
-    "created": 1713298306,
-    "model": "gpt-4-turbo-2024-04-09",
-    "choices": [
+    "candidates": [
         {
-            "index": 0,
-            "message": {
-                "role": "assistant",
-                "content": "```json\n{\n    \"delivery_mission\": {\n        \"revenue\": 3000,\n        \"packages\": [\n            {\n                \"package_id\": \"505401\",\n                \"pickup\": {\n                    \"facility\": \"HDMS-Bezdek\",\n                    \"location\": \"Arial\"\n                },\n                \"drop_off\": {\n                    \"facility\": \"HDMS-Norgaard\",\n                    \"location\": \"Aberdeen\"\n                }\n            }\n        ]\n    }\n}\n```"
+            "content": {
+                "parts": [
+                    {
+                        "text": "```json\n{\n    \"delivery_mission\": {\n        \"revenue\": 3000,\n        \"packages\": [\n            {\n                \"package_id\": \"505401\",\n                \"pickup\": {\n                    \"facility\": \"HDMS-Bezdek\",\n                    \"location\": \"Arial\"\n                },\n                \"drop_off\": {\n                    \"facility\": \"HDMS-Norgaard\",\n                    \"location\": \"Aberdeen\"\n                }\n            }\n        ]\n    }\n}\n```"
+                    }
+                ],
+                "role": "model"
             },
-            "logprobs": null,
-            "finish_reason": "stop"
+            "finishReason": "STOP",
+            "index": 0
         }
     ],
-    "usage": {
-        "prompt_tokens": 1264,
-        "completion_tokens": 99,
-        "total_tokens": 1363
-    },
-    "system_fingerprint": "fp_67e6987839"
+    "model_version": "gemini-2.5-flash",
+    "response_id": "delivery-test-static",
+    "usage_metadata": {
+        "prompt_token_count": 0,
+        "candidates_token_count": 0,
+        "total_token_count": 0
+    }
 }
