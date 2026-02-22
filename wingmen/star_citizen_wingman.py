@@ -724,7 +724,7 @@ class StarCitizenWingman(OpenAiWingman):
         #     self.switch_context_executed = False
         #     return "Error", None
         # first, we have to remove from the current context old information from the "old" request history, as it belongs to the context that we switch to
-        context_messages = None
+        context_messages = []
         if len(self.messages) >= 3:  # bis hierhin wurde hinzugefügt: benutzerrequest und gpt response (tool_call: switch!). Mit der system message,  müssen also mindestens 3 nachrichten vorhanden sein
             # wir entfernen die neuesten 2 nachrichten: user request + tool_call
             context_messages = self.messages[-2:]
@@ -743,7 +743,8 @@ class StarCitizenWingman(OpenAiWingman):
             self.config["sound"]["play_beep"] = True
             self.config["sound"]["effects"] = ["RADIO", "INTERIOR_HELMET"]
             self.config["openai"]["conversation_model"] = self.config["openai"]["contexts"][f"context-{AIContext.TDD.name}"]["conversation_model"]
-        self.messages.extend(context_messages)  # we readd the messages to the switched context.
+        if context_messages:
+            self.messages.extend(context_messages)  # we readd the messages to the switched context.
         # self._add_user_message(self.current_user_request) # we readd the user message to the new context to make the same user request in the new context
         # context has been switched, so we can return the contexts swtich request
         # self.switch_context_executed = True

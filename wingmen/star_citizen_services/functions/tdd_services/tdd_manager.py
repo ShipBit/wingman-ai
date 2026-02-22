@@ -24,11 +24,10 @@ def print_debug(to_print):
 
 class TddManager(FunctionManager):
     MANAGER_CONTEXT = AIContext.TDD
-    MANAGER_DESCRIPTION = "Provides UEX trading insights: best routes, buy/sell locations, and TDD operator switching."
+    MANAGER_DESCRIPTION = "Provides trading information about commodities and trade routes."
     MANAGER_CAPABILITIES = [
         "Find the best trade route from/between locations",
         "Find the best selling locations for commodities",
-        "Switch TDD employees dynamically",
     ]
 
     def __init__(self, config, secret_keeper):
@@ -157,9 +156,13 @@ class TddManager(FunctionManager):
             # Only location_to provided -> find best trade routes around the location
             function_response = self.uex_service.find_best_trade_between_locations_code(location_name_from=location_to, location_name_to=location_to)
             not_found_message = f"No trade for destination '{location_to}'."
+        elif location_from and commodity_name and not location_to:
+            # Commodity and origin provided -> find tradeports at given location for commodity
+            function_response = self.uex_service.find_best_buy_price_at_location_codes(location_name=location_from, commodity_name=commodity_name)
+            not_found_message = f"No trade found @'{location_from}' for {commodity_name}."
         else:
             # In case the provided parameters are insufficient or ambiguous, ask the player for clarification.
-            return {"instructions": "Could not identify the trade request. Please provide more details."}
+            return {"success": False, "instructions": "Could not identify the trade request. Please provide more details.", "do_not_cache": True}
         
         # Process response
         success = function_response.get("success", False)
@@ -170,18 +173,26 @@ class TddManager(FunctionManager):
             # Safely retrieve keys with fallback values
             moon_or_planet_buy = trade_route.get("buy_moon", "") or trade_route.get("buy_orbit", "")
             moon_or_planet_sell = trade_route.get("sell_moon", "") or trade_route.get("sell_orbit", "")
-            if commodity_name and moon_or_planet_sell and not moon_or_planet_buy:
+            is_sell_only = bool(trade_route.get("sell_at_tradeport_name")) and not trade_route.get("buy_at_tradeport_name")
+            is_buy_only = bool(trade_route.get("buy_at_tradeport_name")) and not trade_route.get("sell_at_tradeport_name")
+
+            if commodity_name and is_sell_only:
                 self.overlay.display_overlay_text(
-                    f'Sell {trade_route["commodity"]} at {trade_route["sell_at_tradeport_name"]} ({moon_or_planet_sell}) for {trade_route["sell_price"]} aUEC.'
+                    f'Sell {trade_route.get("commodity", commodity_name)} at {trade_route.get("sell_at_tradeport_name", "")} ({moon_or_planet_sell}) for {trade_route.get("sell_price", "")} aUEC.'
                 )
-                print_debug(f'Sell {trade_route["commodity"]} at {trade_route["sell_at_tradeport_name"]} ({moon_or_planet_sell}) for {trade_route["sell_price"]} aUEC.')
+                print_debug(f'Sell {trade_route.get("commodity", commodity_name)} at {trade_route.get("sell_at_tradeport_name", "")} ({moon_or_planet_sell}) for {trade_route.get("sell_price", "")} aUEC.')
+            elif commodity_name and is_buy_only:
+                self.overlay.display_overlay_text(
+                    f'Buy {trade_route.get("commodity", commodity_name)} at {trade_route.get("buy_at_tradeport_name", "")} ({moon_or_planet_buy}) for {trade_route.get("buy_price", "")} aUEC.'
+                )
+                print_debug(f'Buy {trade_route.get("commodity", commodity_name)} at {trade_route.get("buy_at_tradeport_name", "")} ({moon_or_planet_buy}) for {trade_route.get("buy_price", "")} aUEC.')
             else:
                 self.overlay.display_overlay_text(
-                    f'Buy {trade_route["commodity"]} at {trade_route["buy_at_tradeport_name"]} ({moon_or_planet_buy}). '
-                    f'Sell at {trade_route["sell_at_tradeport_name"]} ({moon_or_planet_sell}). Profit: {trade_route["profit"]} aUEC.'
+                    f'Buy {trade_route.get("commodity", "")} at {trade_route.get("buy_at_tradeport_name", "")} ({moon_or_planet_buy}). '
+                    f'Sell at {trade_route.get("sell_at_tradeport_name", "")} ({moon_or_planet_sell}). Profit: {trade_route.get("profit", "")} aUEC.'
                 )
-                print_debug(f'Buy {trade_route["commodity"]} at {trade_route["buy_at_tradeport_name"]} ({moon_or_planet_buy}). '
-                            f'Sell at {trade_route["sell_at_tradeport_name"]} ({moon_or_planet_sell}).')
+                print_debug(f'Buy {trade_route.get("commodity", "")} at {trade_route.get("buy_at_tradeport_name", "")} ({moon_or_planet_buy}). '
+                            f'Sell at {trade_route.get("sell_at_tradeport_name", "")} ({moon_or_planet_sell}).')
         else:
             # If not successful, display the error message if available.
             message = function_response.get("message", not_found_message)

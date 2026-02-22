@@ -1095,6 +1095,113 @@ class UEXApi2():
             "uex_community_trade_routes": uex_routes,
             "number_of_alternatives": len(best_trades) + len(uex_routes)
         }
+    
+    def _find_best_buy_price_at_location(self, commodity_id, location_id, location_category):
+        """
+        Find best local buying price for a commodity at a specific location.
+        """
+        no_route = {"success": False, "message": f"No available tradeport found for commodity {commodity_id} at location {location_id}."}
+        terminal_data = [
+            t for t in self.data[CATEGORY_TERMINALS].get("data").values()
+            if t["type"] == "commodity"
+        ]
+        commodities_data = self.data[CATEGORY_COMMODITIES].get("data", {})
+
+        buyable_commodities = {
+            c[ID_FIELD_NAME]: c
+            for c in commodities_data.values()
+            if c["is_buyable"] == 1 and c["price_buy"] > 0
+        }
+        if commodity_id not in buyable_commodities:
+            return no_route
+
+        # UEX community routes – dynamischer Param-Builder
+        # falls MOON => map to planet ...
+        param_dict = {}
+        if location_category == CATEGORY_MOONS:
+            moon = self.data[CATEGORY_MOONS]["data"].get(location_id)
+            if moon:
+                param_dict["id_planet_origin"] = moon["id_planet"]
+        else:
+            param_dict = self._build_dynamic_param_dict(location_category, location_id, is_origin=True)
+        param_dict["id_commodity"] = commodity_id
+
+        uex_routes = []
+        # CITIES => mehrere Terminals
+        if location_category == CATEGORY_CITIES:
+            city_terms = [t["id"] for t in terminal_data if t["id_city"] == location_id]
+            for tid in city_terms:
+                d = dict(param_dict)
+                d["id_terminal_origin"] = tid
+                tmp = self.get_uex_trade_routes(**d)
+                uex_routes.extend(tmp)
+        elif location_category == CATEGORY_OUTPOSTS:
+            outpost_terms = [t["id"] for t in terminal_data if t["id_outpost"] == location_id]
+            for tid in outpost_terms:
+                d = dict(param_dict)
+                d["id_terminal_origin"] = tid
+                tmp = self.get_uex_trade_routes(**d)
+                uex_routes.extend(tmp)
+        else:
+            # normal
+            routes = self.get_uex_trade_routes(**param_dict)
+            uex_routes.extend(routes)
+
+        if uex_routes:
+            uex_routes.sort(key=lambda x: x["score"], reverse=True)
+            uex_routes = uex_routes[:5]
+            uex_routes = [self._transform_uex_trade_entry(r) for r in uex_routes]
+
+        # Lokaler Teil
+        id_field_name = {
+            CATEGORY_SYSTEMS: "id_star_system",
+            CATEGORY_ORBITS: "id_orbit",
+            CATEGORY_MOONS:  "id_moon",
+            CATEGORY_CITIES: "id_city",
+            CATEGORY_OUTPOSTS: "id_outpost",
+            CATEGORY_STATIONS: "id_space_station"
+        }.get(location_category, "")
+
+        tradeports = [
+            t for t in terminal_data
+            if t.get(id_field_name) == location_id
+        ]
+
+        prices = self.get_prices_of(price_category=PRICES_COMMODITIES, id_commodity=commodity_id)
+        if not prices:
+            return no_route
+        prices = {p["id_terminal"]: p for p in prices.values()}
+
+        top_trades = []
+        trade_id = 0
+
+        for trp in tradeports:
+            pinfo = prices.get(trp["id"])
+            if pinfo is None:
+                continue
+            bp = pinfo["price_buy"]
+            if bp <= 0:
+                continue
+
+            info = self._build_trade_buying_info(commodity_id, pinfo, round(bp, 2))
+            heapq.heappush(top_trades, (bp, trade_id, info))
+            trade_id += 1
+
+        if not top_trades:
+            return no_route
+
+        best_trades = []
+        for _ in range(min(3, len(top_trades))):
+            _, _, info = heapq.heappop(top_trades)
+            best_trades.append(info)
+
+        return {
+            "success": True,
+            "result_interpretation_instructions": TRADE_ROUTE_PROMPT_INSTRUCTIONS,
+            "trade_routes": best_trades,
+            "uex_community_trade_routes": uex_routes,
+            "number_of_alternatives": len(best_trades) + len(uex_routes)
+        }
 
     # ---------------------------------------------------------
     #   UNVERÄNDERT: Hilfsfunktionen create_trade_info, transform_uex_trade_entry
@@ -1147,6 +1254,16 @@ class UEXApi2():
             "sell_orbit": best_sell.get("orbit_name", ''),
             "sell_system": best_sell.get("star_system_name", ''),
             "sell_price": max_sell_price
+        }
+    
+    def _build_trade_buying_info(self, commodity_code, best_buy, min_buy_price):
+        return {
+            "commodity": best_buy.get("commodity_name", ''),
+            "buy_at_tradeport_name": best_buy.get("terminal_name", ''),
+            "buy_moon": best_buy.get("moon_name", ''),
+            "buy_orbit": best_buy.get("orbit_name", ''),
+            "buy_system": best_buy.get("star_system_name", ''),
+            "buy_price": min_buy_price
         }
 
     # ---------------------------------------------------------
@@ -1226,6 +1343,30 @@ class UEXApi2():
             }
     
         return self._find_best_sell_price_at_location(
+            commodity_id=commodity[ID_FIELD_NAME],
+            location_id=location_to[ID_FIELD_NAME],
+            location_category=category
+        )
+    
+    def find_best_buy_price_at_location_codes(self, commodity_name, location_name):
+        if __name__ != "__main__":
+            printr.print(text=f"Suche beste Einkaufsoption für {commodity_name} bei {location_name}", tags="info")
+        
+        category, location_to = self.get_location(location_name)
+        commodity = self.get_commodity(commodity_name)
+        
+        if not location_to:
+            return {
+                "success": False,
+                "result_interpretation_instructions": f"The location {location_name} could not be found. User should try again speaking clearly. "
+            }
+        if not commodity:
+            return {
+                "success": False,
+                "result_interpretation_instructions": f"The commodity {commodity_name} could not be identified. Ask the user to repeat the name clearly. "
+            }
+    
+        return self._find_best_buy_price_at_location(
             commodity_id=commodity[ID_FIELD_NAME],
             location_id=location_to[ID_FIELD_NAME],
             location_category=category
