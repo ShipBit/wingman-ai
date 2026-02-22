@@ -580,7 +580,9 @@ class FunctionManager(ABC):
         self.secret_keeper = secret_keeper
         self.conversation_client: OpenAI = None
         self.name = self.__class__.__name__
+        self.conversation_provider = "openai"
         self.conversation_model = "gpt-4o"
+        self.conversation_reasoning_effort = None
 
     @classmethod
     def get_manager_metadata(cls):
@@ -613,7 +615,73 @@ class FunctionManager(ABC):
         """
         return ""
     
-    def ask_ai(self, system_prompt: str, user_prompt: str, max_tokens=512, temperature=0.7, response_format={"type": "json_object"}):
+    @staticmethod
+    def _extract_model_and_reasoning(raw_model_config, fallback_model=None):
+        model = fallback_model
+        reasoning_effort = None
+
+        if isinstance(raw_model_config, str):
+            model = raw_model_config
+        elif isinstance(raw_model_config, dict):
+            model = (
+                raw_model_config.get("model")
+                or raw_model_config.get("name")
+                or fallback_model
+            )
+            reasoning_effort = raw_model_config.get("reasoning_effort")
+
+        return model, reasoning_effort
+
+    def _resolve_model_settings(self, provider: str, mode: str = "conversation"):
+        openai_settings = self.config.get("openai", {})
+        provider_settings = self.config.get(provider, {})
+        mode_section = provider_settings.get(mode, {})
+        fallback_model = openai_settings.get(f"{mode}_model")
+        if mode == "summarize" and not fallback_model:
+            fallback_model = openai_settings.get("conversation_model")
+
+        model, reasoning_effort = self._extract_model_and_reasoning(
+            provider_settings.get(f"{mode}_model"), fallback_model
+        )
+        if reasoning_effort is None:
+            reasoning_effort = provider_settings.get(f"{mode}_reasoning_effort")
+        if reasoning_effort is None:
+            reasoning_effort = provider_settings.get("reasoning_effort")
+
+        if isinstance(mode_section, dict):
+            section_model, section_reasoning = self._extract_model_and_reasoning(
+                mode_section, None
+            )
+            if not section_model:
+                section_model = mode_section.get("deployment_name")
+            if section_model:
+                model = section_model
+            if reasoning_effort is None:
+                reasoning_effort = section_reasoning
+            if reasoning_effort is None:
+                reasoning_effort = mode_section.get("reasoning_effort")
+
+        return model or fallback_model, reasoning_effort
+
+    def _retrieve_secret_with_fallback(self, key: str, friendly_name: str, fallback_keys=None):
+        fallback_keys = fallback_keys or []
+        for fallback_key in [key, *fallback_keys]:
+            secret = self.secret_keeper.retrieve(
+                requester=self.name,
+                key=fallback_key,
+                friendly_key_name=friendly_name,
+                prompt_if_missing=False,
+            )
+            if secret:
+                return secret
+        return self.secret_keeper.retrieve(
+            requester=self.name,
+            key=key,
+            friendly_key_name=friendly_name,
+            prompt_if_missing=True,
+        )
+
+    def ask_ai(self, system_prompt: str, user_prompt: str, max_tokens=512, temperature=0.7, response_format={"type": "json_object"}, reasoning_effort=None):
         """
         Ask configured conversation provider for a response to the given prompts.
             Params:
@@ -624,10 +692,13 @@ class FunctionManager(ABC):
                 response_format: dict - The response format to be returned. Default is a JSON object.
         """
         self._init_conversation_client()
+        if not self.conversation_client:
+            printr.print_err("Conversation client is not initialized.")
+            return None
         try: 
-            completion = self.conversation_client.chat.completions.create(
-                model=self.conversation_model,
-                messages=[
+            completion_kwargs = {
+                "model": self.conversation_model,
+                "messages": [
                     {
                         "role": "system",
                         "content": system_prompt
@@ -637,9 +708,21 @@ class FunctionManager(ABC):
                         "content": user_prompt
                     }
                 ],
-                max_tokens=max_tokens,
-                temperature=temperature,
-                response_format=response_format,
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            }
+            if response_format is not None:
+                completion_kwargs["response_format"] = response_format
+            resolved_reasoning_effort = (
+                reasoning_effort
+                if reasoning_effort is not None
+                else self.conversation_reasoning_effort
+            )
+            if resolved_reasoning_effort:
+                completion_kwargs["reasoning_effort"] = resolved_reasoning_effort
+
+            completion = self.conversation_client.chat.completions.create(
+                **completion_kwargs,
             )
             return completion
         except APIStatusError as e:
@@ -684,35 +767,21 @@ class FunctionManager(ABC):
             This method initializes the conversation client for the manager on first use.
         """
         if not self.conversation_client:
-            openai_api_key = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="openai",
-                friendly_key_name="OpenAI API key",
-                prompt_if_missing=True,
-            )
-            if not openai_api_key:
-                print("Missing 'openai' API key. Please provide a valid key in the settings.")
-            else:
-                openai_organization = self.config["openai"].get("organization")
-                openai_base_url = self.config["openai"].get("base_url")
-                self.conversation_client = OpenAI(
-                    api_key=openai_api_key,
-                    organization=openai_organization,
-                    base_url=openai_base_url,
-            )
-                
-            self.conversation_model = self.config["openai"].get("conversation_model")
-
-            if self.config["features"].get(
+            self.conversation_provider = self.config["features"].get(
                 "conversation_provider", "openai"
-            ) == "azure":
+            )
+            self.conversation_model, self.conversation_reasoning_effort = (
+                self._resolve_model_settings(self.conversation_provider, "conversation")
+            )
+
+            if self.conversation_provider == "azure":
                 azure_api_key = self.secret_keeper.retrieve(
-                        requester=self.name,
-                        key="azure_conversation",
-                        friendly_key_name="Azure Conversation API key",
-                        prompt_if_missing=True,
-                    )
-                
+                    requester=self.name,
+                    key="azure_conversation",
+                    friendly_key_name="Azure Conversation API key",
+                    prompt_if_missing=True,
+                )
+
                 self.conversation_client = AzureOpenAI(
                     api_key=azure_api_key,
                     azure_endpoint=self.config["azure"]
@@ -723,6 +792,41 @@ class FunctionManager(ABC):
                     .get("conversation", {})
                     .get("deployment_name", None),
                 )
+                if not self.conversation_model:
+                    self.conversation_model = self.config["azure"].get("conversation", {}).get("deployment_name")
+                return
+
+            if self.conversation_provider == "groq":
+                groq_api_key = self._retrieve_secret_with_fallback(
+                    key="groq_conversation",
+                    friendly_name="Groq Conversation API key",
+                    fallback_keys=["groq", "groq_stt"],
+                )
+                self.conversation_client = OpenAI(
+                    api_key=groq_api_key,
+                    base_url=self.config.get("groq", {}).get("base_url"),
+                )
+                if not self.conversation_model:
+                    self.conversation_model = self.config.get("groq", {}).get("conversation_model")
+                return
+
+            openai_api_key = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="openai",
+                friendly_key_name="OpenAI API key",
+                prompt_if_missing=True,
+            )
+            if not openai_api_key:
+                printr.print_err("Missing 'openai' API key. Please provide a valid key in the settings.")
+                return
+
+            openai_organization = self.config["openai"].get("organization")
+            openai_base_url = self.config["openai"].get("base_url")
+            self.conversation_client = OpenAI(
+                api_key=openai_api_key,
+                organization=openai_organization,
+                base_url=openai_base_url,
+            )
 
     def _handle_api_error(self, api_response):
         printr.print_err(

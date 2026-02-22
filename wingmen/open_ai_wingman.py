@@ -1,5 +1,7 @@
 import json
 import os
+from datetime import datetime
+from uuid import uuid4
 
 from openai import AzureOpenAI
 
@@ -24,11 +26,11 @@ def print_debug(message):
 
 
 def _ensure_debug_log():
-    """Ensure debug log file exists and is empty (truncate)."""
+    """Ensure debug log file exists and truncate it at startup."""
     log_dir = os.path.dirname(DEBUG_LOG_PATH)
     os.makedirs(log_dir, exist_ok=True)
     with open(DEBUG_LOG_PATH, "w", encoding="utf-8") as f:
-        pass  # Truncate file
+        f.write("")
 
 
 def _default_json(obj):
@@ -46,11 +48,22 @@ def _log_debug_entry(entry):
     """Append a formatted entry to the debug log file for better readability."""
     with open(DEBUG_LOG_PATH, "a", encoding="utf-8") as f:
         entry_type = entry.get("type", "")
+        timestamp = entry.get("timestamp") or f"{datetime.utcnow().isoformat(timespec='milliseconds')}Z"
+        trace_id = entry.get("trace_id")
+        stage = entry.get("stage")
+        step = entry.get("step")
         f.write("\n" + "=" * 30 + f" {entry_type.upper()} " + "=" * 30 + "\n")
+        f.write(f"TIMESTAMP: {timestamp}\n")
+        if trace_id:
+            f.write(f"TRACE_ID: {trace_id}\n")
+        if step is not None:
+            f.write(f"STEP: {step}\n")
+        if stage:
+            f.write(f"STAGE: {stage}\n")
         if entry_type == "request":
             # Pretty print messages and tools
             f.write("MESSAGES:\n")
-            messages = entry.get("messages", [])
+            messages = entry.get("messages") or []
             for i, msg in enumerate(messages):
                 try:
                     # Ensure msg is serializable, default to str if complex object
@@ -71,7 +84,7 @@ def _log_debug_entry(entry):
                     msg_str = str(msg)
                 f.write(f"  [{i}] {msg_str}\n")
             f.write("\nTOOLS:\n")
-            tools = entry.get("tools", [])
+            tools = entry.get("tools") or []
             for tool in tools:
                 try:
                     tool_str = json.dumps(
@@ -81,6 +94,8 @@ def _log_debug_entry(entry):
                     tool_str = str(tool)
                 f.write(f"  {tool_str}\n")
             f.write(f"\nMODEL: {entry.get('model')}\n")
+            f.write(f"PROVIDER: {entry.get('provider')}\n")
+            f.write(f"REASONING_EFFORT: {entry.get('reasoning_effort')}\n")
             f.write(f"AZURE_CONFIG: {entry.get('azure_config')}\n")
         elif entry_type == "response":
             resp = entry.get("response")
@@ -102,6 +117,16 @@ def _log_debug_entry(entry):
                 resp_str = str(resp)  # Fallback
             f.write("RESPONSE:\n")
             f.write(resp_str + "\n")
+        elif entry_type == "event":
+            payload = entry.get("payload", {})
+            try:
+                payload_str = json.dumps(
+                    payload, ensure_ascii=False, indent=4, default=_default_json
+                )
+            except Exception:
+                payload_str = str(payload)
+            f.write("PAYLOAD:\n")
+            f.write(payload_str + "\n")
         else:
             # Fallback: pretty print the whole entry
             f.write(
@@ -151,14 +176,14 @@ class OpenAiWingman(Wingman):
         }
         self.groq_keys = {
             "stt_model": None,
+            "conversation": None,
+            "summarize": None,
         }
         self.openai_api_key = None
 
         # STT Provider
         self.stt_provider = self.config["features"].get("stt_provider", None)
-        self.stt_model = self.config.get(self.stt_provider, {}).get(
-            "stt_model", None
-        )  # Safer access
+        self.stt_model = self._resolve_stt_model()
 
         self.conversation_provider = self.config["features"].get(
             "conversation_provider", None
@@ -166,26 +191,208 @@ class OpenAiWingman(Wingman):
         self.summarize_provider = self.config["features"].get(
             "summarize_provider", None
         )
+        self._active_debug_trace_id = None
+        self._active_debug_step = 0
 
         if self.debug or DEBUG:
             _ensure_debug_log()
+
+    def _debug_enabled(self):
+        return self.debug or DEBUG
+
+    def _next_debug_step(self):
+        self._active_debug_step += 1
+        return self._active_debug_step
+
+    @staticmethod
+    def _truncate_debug_value(value, max_chars: int = 3000):
+        try:
+            if isinstance(value, (dict, list)):
+                rendered = json.dumps(value, ensure_ascii=False, default=_default_json)
+            else:
+                rendered = str(value)
+        except Exception:
+            rendered = str(value)
+
+        if len(rendered) <= max_chars:
+            return rendered
+        return f"{rendered[:max_chars]} ... [truncated {len(rendered) - max_chars} chars]"
+
+    def _start_debug_trace(self, source: str, payload: dict | None = None):
+        if not self._debug_enabled():
+            return
+        self._prune_debug_log(max_cycles=3, reserve_for_new_trace=True)
+        self._active_debug_trace_id = f"trace-{uuid4().hex[:12]}"
+        self._active_debug_step = 0
+        self._log_debug_event("trace_start", {"source": source, **(payload or {})})
+
+    def _prune_debug_log(self, max_cycles: int = 3, reserve_for_new_trace: bool = False):
+        if not self._debug_enabled():
+            return
+        if max_cycles < 1:
+            max_cycles = 1
+
+        max_traces_to_keep = max_cycles - 1 if reserve_for_new_trace else max_cycles
+        if max_traces_to_keep < 0:
+            max_traces_to_keep = 0
+
+        if not os.path.exists(DEBUG_LOG_PATH):
+            return
+
+        try:
+            with open(DEBUG_LOG_PATH, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+        except Exception:
+            return
+
+        if not lines:
+            return
+
+        blocks = []
+        i = 0
+        total = len(lines)
+        block_prefix = "============================== "
+        block_suffix = " ==============================\n"
+        block_end = "======================================================================"
+
+        while i < total:
+            line = lines[i]
+            if line.startswith(block_prefix) and line.endswith(block_suffix):
+                start = i
+                j = i + 1
+                while j < total and not lines[j].startswith(block_end):
+                    j += 1
+                end = j if j < total else total - 1
+                block_lines = lines[start : end + 1]
+                trace_id = None
+                for block_line in block_lines:
+                    if block_line.startswith("TRACE_ID:"):
+                        trace_id = block_line.split(":", 1)[1].strip()
+                        break
+                blocks.append({"trace_id": trace_id, "lines": block_lines})
+                i = end + 1
+                continue
+            i += 1
+
+        if not blocks:
+            return
+
+        ordered_trace_ids = []
+        for block in blocks:
+            trace_id = block.get("trace_id")
+            if trace_id and trace_id not in ordered_trace_ids:
+                ordered_trace_ids.append(trace_id)
+
+        if len(ordered_trace_ids) <= max_traces_to_keep:
+            return
+
+        keep_trace_ids = set(ordered_trace_ids[-max_traces_to_keep:]) if max_traces_to_keep > 0 else set()
+        kept_lines = []
+        for block in blocks:
+            trace_id = block.get("trace_id")
+            if trace_id in keep_trace_ids:
+                kept_lines.extend(block.get("lines", []))
+
+        try:
+            with open(DEBUG_LOG_PATH, "w", encoding="utf-8") as f:
+                f.writelines(kept_lines)
+        except Exception:
+            return
+
+    def _log_debug_event(self, stage: str, payload: dict | None = None):
+        if not self._debug_enabled():
+            return
+        _log_debug_entry(
+            {
+                "type": "event",
+                "trace_id": self._active_debug_trace_id,
+                "step": self._next_debug_step(),
+                "stage": stage,
+                "payload": payload or {},
+            }
+        )
+
+    def _log_debug_request(
+        self,
+        stage: str,
+        messages,
+        tools,
+        provider,
+        model,
+        reasoning_effort,
+        azure_config,
+    ):
+        if not self._debug_enabled():
+            return
+        _log_debug_entry(
+            {
+                "type": "request",
+                "trace_id": self._active_debug_trace_id,
+                "step": self._next_debug_step(),
+                "stage": stage,
+                "messages": messages,
+                "tools": tools,
+                "provider": provider,
+                "model": model,
+                "reasoning_effort": reasoning_effort,
+                "azure_config": bool(azure_config),
+            }
+        )
+
+    def _log_debug_response(self, stage: str, response):
+        if not self._debug_enabled() or response is None:
+            return
+        try:
+            if hasattr(response, "model_dump_json"):
+                response_json = response.model_dump_json()
+            elif hasattr(response, "model_dump"):
+                response_json = json.dumps(
+                    response.model_dump(), ensure_ascii=False, default=str
+                )
+            elif hasattr(response, "__dict__"):
+                response_json = json.dumps(
+                    response.__dict__, ensure_ascii=False, default=str
+                )
+            else:
+                response_json = str(response)
+        except Exception as e:
+            printr.print_warn(
+                f"Could not serialize response for debug log ({stage}): {e}"
+            )
+            response_json = str(response)
+
+        _log_debug_entry(
+            {
+                "type": "response",
+                "trace_id": self._active_debug_trace_id,
+                "step": self._next_debug_step(),
+                "stage": stage,
+                "response": response_json,
+            }
+        )
 
     def validate(self):
         errors = super().validate()
         self.load_caches() 
 
-        self.openai_api_key = self.secret_keeper.retrieve(
-            requester=self.name,
-            key="openai",
-            friendly_key_name="OpenAI API key",
-            prompt_if_missing=True,
-        )
-        if not self.openai_api_key:
-            errors.append(
-                "Missing 'openai' API key. Please provide a valid key in the settings."
+        if self._is_openai_key_required():
+            self.openai_api_key = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="openai",
+                friendly_key_name="OpenAI API key",
+                prompt_if_missing=True,
             )
-            # Return early if fundamental key is missing and other validations depend on it
-            # return errors # Keep original behavior: continue validation
+            if not self.openai_api_key:
+                errors.append(
+                    "Missing 'openai' API key. Please provide a valid key in the settings."
+                )
+        else:
+            self.openai_api_key = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="openai",
+                friendly_key_name="OpenAI API key",
+                prompt_if_missing=False,
+            )
 
         openai_organization = self.config["openai"].get("organization")
         openai_base_url = self.config["openai"].get("base_url")
@@ -195,7 +402,7 @@ class OpenAiWingman(Wingman):
         self.__validate_groq_config(errors)
 
         # Keep original behavior: Check errors *before* initializing OpenAI client
-        if not errors and self.openai_api_key:  # Check errors again
+        if not errors:
             try:
                 self.openai = OpenAi(
                     organization=openai_organization,
@@ -210,6 +417,146 @@ class OpenAiWingman(Wingman):
         # No else needed here, errors are collected
 
         return errors
+
+    def _is_openai_key_required(self) -> bool:
+        return any(
+            [
+                self.tts_provider == "openai",
+                self.stt_provider == "openai",
+                self.conversation_provider == "openai",
+                self.summarize_provider == "openai",
+            ]
+        )
+
+    def _resolve_stt_model(self):
+        if self.stt_provider == "azure":
+            return (
+                self.config.get("azure", {})
+                .get("stt_model", {})
+                .get("deployment_name")
+            )
+        return self.config.get(self.stt_provider, {}).get("stt_model", None)
+
+    @staticmethod
+    def _extract_model_and_reasoning(raw_model_config, fallback_model=None):
+        model = fallback_model
+        reasoning_effort = None
+
+        if isinstance(raw_model_config, str):
+            model = raw_model_config
+        elif isinstance(raw_model_config, dict):
+            model = (
+                raw_model_config.get("model")
+                or raw_model_config.get("name")
+                or fallback_model
+            )
+            reasoning_effort = raw_model_config.get("reasoning_effort")
+
+        return model, reasoning_effort
+
+    def _resolve_model_settings(self, provider: str, mode: str):
+        openai_settings = self.config.get("openai", {})
+        provider_settings = self.config.get(provider, {})
+        mode_section = provider_settings.get(mode, {})
+
+        fallback_model = openai_settings.get(f"{mode}_model")
+        if mode == "summarize" and not fallback_model:
+            fallback_model = openai_settings.get("conversation_model")
+
+        model, reasoning_effort = self._extract_model_and_reasoning(
+            provider_settings.get(f"{mode}_model"), fallback_model
+        )
+        if not model:
+            model = fallback_model
+
+        if reasoning_effort is None:
+            reasoning_effort = provider_settings.get(f"{mode}_reasoning_effort")
+        if reasoning_effort is None:
+            reasoning_effort = provider_settings.get("reasoning_effort")
+
+        if isinstance(mode_section, dict):
+            section_model, section_reasoning = self._extract_model_and_reasoning(
+                mode_section, None
+            )
+            if not section_model:
+                section_model = mode_section.get("deployment_name")
+            if section_model:
+                model = section_model
+            if reasoning_effort is None:
+                reasoning_effort = section_reasoning
+            if reasoning_effort is None:
+                reasoning_effort = mode_section.get("reasoning_effort")
+
+        return model, reasoning_effort
+
+    def _resolve_chat_request(self, mode: str):
+        provider = self.conversation_provider if mode == "conversation" else self.summarize_provider
+        provider = provider or "openai"
+        model, reasoning_effort = self._resolve_model_settings(provider, mode)
+
+        request = {
+            "provider": provider,
+            "model": model,
+            "reasoning_effort": reasoning_effort,
+            "azure_config": None,
+            "api_key": None,
+            "base_url": None,
+            "organization": None,
+        }
+
+        if provider == "azure":
+            azure_config = self._get_azure_config(mode)
+            if not azure_config:
+                printr.print_err(
+                    f"Azure is {mode} provider, but config is invalid."
+                )
+                return None
+            request["azure_config"] = azure_config
+            if not request["model"]:
+                request["model"] = azure_config.deployment_name
+            return request
+
+        if provider == "groq":
+            api_key = self.groq_keys.get(mode)
+            if not api_key:
+                printr.print_err(
+                    f"Groq is {mode} provider, but API key is missing."
+                )
+                return None
+            request["api_key"] = api_key
+            request["base_url"] = self.config.get("groq", {}).get("base_url")
+            return request
+
+        request["organization"] = self.config.get("openai", {}).get("organization")
+        request["base_url"] = self.config.get("openai", {}).get("base_url")
+        if not request["model"]:
+            request["model"] = (
+                self.config.get("openai", {}).get("conversation_model")
+                if mode == "conversation"
+                else self.config.get("openai", {}).get(
+                    "summarize_model",
+                    self.config.get("openai", {}).get("conversation_model"),
+                )
+            )
+        return request
+
+    def _retrieve_secret_with_fallback(self, key: str, friendly_name: str, fallback_keys=None):
+        fallback_keys = fallback_keys or []
+        for fallback_key in [key, *fallback_keys]:
+            secret = self.secret_keeper.retrieve(
+                requester=self.name,
+                key=fallback_key,
+                friendly_key_name=friendly_name,
+                prompt_if_missing=False,
+            )
+            if secret:
+                return secret
+        return self.secret_keeper.retrieve(
+            requester=self.name,
+            key=key,
+            friendly_key_name=friendly_name,
+            prompt_if_missing=True,
+        )
 
     def __build_stt_config(self):
         """Builds the STT configuration based on the provider specified in the config.
@@ -248,17 +595,57 @@ class OpenAiWingman(Wingman):
         return stt_config
 
     def __validate_groq_config(self, errors):
+        is_groq_used = (
+            self.stt_provider == "groq"
+            or self.conversation_provider == "groq"
+            or self.summarize_provider == "groq"
+        )
+        if not is_groq_used:
+            return
+
+        groq_settings = self.config.get("groq", {})
+        if not groq_settings:
+            errors.append(
+                "Missing 'groq' section in config, but Groq is selected as a provider."
+            )
+            return
+        if not groq_settings.get("base_url"):
+            errors.append(
+                "Missing 'base_url' in 'groq' config, but Groq is selected as a provider."
+            )
+
         if self.stt_provider == "groq":
-            self.groq_keys["stt_model"] = self.secret_keeper.retrieve(
-                requester=self.name,
+            self.groq_keys["stt_model"] = self._retrieve_secret_with_fallback(
                 key="groq_stt",
-                friendly_key_name="Groq STT API key",
-                prompt_if_missing=True,
+                friendly_name="Groq STT API key",
+                fallback_keys=["groq"],
             )
             if not self.groq_keys["stt_model"]:
                 errors.append(
                     "Missing 'groq_stt' key for Groq STT provider."
                 )  # More specific message
+
+        if self.conversation_provider == "groq":
+            self.groq_keys["conversation"] = self._retrieve_secret_with_fallback(
+                key="groq_conversation",
+                friendly_name="Groq Conversation API key",
+                fallback_keys=["groq", "groq_stt"],
+            )
+            if not self.groq_keys["conversation"]:
+                errors.append(
+                    "Missing Groq API key for conversation provider (expected 'groq_conversation' or fallback 'groq')."
+                )
+
+        if self.summarize_provider == "groq":
+            self.groq_keys["summarize"] = self._retrieve_secret_with_fallback(
+                key="groq_summarize",
+                friendly_name="Groq Summarize API key",
+                fallback_keys=["groq", "groq_conversation", "groq_stt"],
+            )
+            if not self.groq_keys["summarize"]:
+                errors.append(
+                    "Missing Groq API key for summarize provider (expected 'groq_summarize' or fallback 'groq')."
+                )
 
     def __validate_elevenlabs_config(self, errors):
         # >>> ADDED: Check if elevenlabs is actually the provider <<<
@@ -380,21 +767,48 @@ class OpenAiWingman(Wingman):
 
     async def _transcribe(self, audio_input_wav):
         """Transcribes the recorded audio to text using the configured STT provider."""
+        self._start_debug_trace(
+            "stt",
+            {
+                "stt_provider": self.stt_provider,
+                "stt_model": self.stt_model,
+                "audio_input_wav": audio_input_wav,
+            },
+        )
+
         # >>> MODIFIED: Check if OpenAI client (handling STT) is initialized <<<
         if not self.openai:
             printr.print_err(
                 f"STT provider '{self.stt_provider}' selected, but OpenAI client failed to initialize. Cannot transcribe."
             )
+            self._log_debug_event(
+                "stt_error",
+                {"error": "OpenAI client not initialized for STT"},
+            )
             return None, None
 
         response_format = "json"  # Whisper JSON includes text
+        self._log_debug_event(
+            "stt_request",
+            {
+                "response_format": response_format,
+            },
+        )
 
         transcript_obj = self.openai.transcribe(
             audio_input_wav, response_format=response_format
         )
+        transcript_text = transcript_obj.text if transcript_obj else None
+        self._log_debug_event(
+            "stt_response",
+            {
+                "transcript": self._truncate_debug_value(transcript_text, 8000),
+                "transcript_present": bool(transcript_text),
+            },
+        )
 
         # Return transcript text and None for locale (as in original)
-        return transcript_obj.text if transcript_obj else None, None
+        return transcript_text, None
 
     def _get_azure_config(self, section):
         """Gets Azure configuration details for a specific service section."""
@@ -438,6 +852,13 @@ class OpenAiWingman(Wingman):
             )
         self.last_transcript_locale = locale
         normalized_transcript = transcript.lower().strip() if transcript else ""
+        self._log_debug_event(
+            "conversation_input",
+            {
+                "locale": locale,
+                "transcript": self._truncate_debug_value(normalized_transcript, 2000),
+            },
+        )
 
         # 1. Check standard instant activation commands (using original transcript)
         instant_response_text = self._try_instant_activation(normalized_transcript)
@@ -463,10 +884,16 @@ class OpenAiWingman(Wingman):
                 self.messages.append(msg)
                 # Run summarization based on tool results
                 summarize_response_content = self._summarize_function_calls()
+                if summarize_response_content is None:
+                    printr.print_err("Critical error: summarization failed. Aborting response.")
+                    return None, None, None
                 # Important: _summarize_function_calls *also* adds the summary message to self.messages in the original code
                 final_text_to_speak, _ = self._finalize_response(
                     summarize_response_content
                 )
+                if not final_text_to_speak:
+                    printr.print_err("Critical error: summarization did not return a valid spoken text. Aborting response.")
+                    return None, None, None
 
                 return final_text_to_speak, final_text_to_speak, None            
         
@@ -507,9 +934,15 @@ class OpenAiWingman(Wingman):
                     # such that we can summarize the response through ai calls.
                     self._add_user_message(normalized_transcript)
                     summarize_response_content = self._summarize_function_calls()
+                    if summarize_response_content is None:
+                        printr.print_err("Critical error: summarization failed. Aborting response.")
+                        return None, None, None
                     final_text_to_speak, _ = self._finalize_response(
                         summarize_response_content
                     )
+                    if not final_text_to_speak:
+                        printr.print_err("Critical error: summarization did not return a valid spoken text. Aborting response.")
+                        return None, None, None
                 else:
                     # If TTS response is cached, we can directly use it
                     final_text_to_speak = self.tts_cache_manager.get_cached_text(tts_cache_key)
@@ -545,10 +978,16 @@ class OpenAiWingman(Wingman):
 
             # Run summarization based on tool results
             summarize_response_content = self._summarize_function_calls()
+            if summarize_response_content is None:
+                printr.print_err("Critical error: summarization failed. Aborting response.")
+                return None, None, None
             # Important: _summarize_function_calls *also* adds the summary message to self.messages in the original code
             final_text_to_speak, _ = self._finalize_response(
                 summarize_response_content
             )
+            if not final_text_to_speak:
+                printr.print_err("Critical error: summarization did not return a valid spoken text. Aborting response.")
+                return None, None, None
 
         else:
             # No tool calls, use the direct response content
@@ -653,66 +1092,38 @@ class OpenAiWingman(Wingman):
                 tags="info",
             )
 
-        azure_config = None
-        if self.conversation_provider == "azure":
-            azure_config = self._get_azure_config("conversation")
-            # >>> Added check if Azure config is valid <<<
-            if not azure_config:
-                printr.print_err(
-                    "Azure is conversation provider, but config is invalid. Aborting GPT call."
-                )
-                return None  # Abort if Azure config is bad
+        chat_request = self._resolve_chat_request("conversation")
+        if not chat_request:
+            return None
 
         tools_to_use = self._build_tools()
 
         # --- Debug logging: log request ---
-        if DEBUG:
-            _log_debug_entry(
-                {
-                    "type": "request",
-                    "messages": self.messages,
-                    "tools": tools_to_use,
-                    "model": self.config["openai"].get("conversation_model"),
-                    "azure_config": bool(azure_config),  # Log if Azure config was used
-                }
-            )
+        self._log_debug_request(
+            stage="conversation_request",
+            messages=self.messages,
+            tools=tools_to_use,
+            provider=chat_request.get("provider"),
+            model=chat_request.get("model"),
+            reasoning_effort=chat_request.get("reasoning_effort"),
+            azure_config=chat_request.get("azure_config"),
+        )
 
         log_memory_usage("before_gpt_call")
         result = self.openai.ask(
             messages=self.messages,
             tools=tools_to_use if tools_to_use else None,  # Pass None if no tools
-            model=self.config["openai"].get("conversation_model"),
-            azure_config=azure_config,
+            model=chat_request.get("model"),
+            azure_config=chat_request.get("azure_config"),
+            api_key=chat_request.get("api_key"),
+            base_url=chat_request.get("base_url"),
+            organization=chat_request.get("organization"),
+            reasoning_effort=chat_request.get("reasoning_effort"),
         )
         log_memory_usage("after_gpt_call")
 
         # --- Debug logging: log response ---
-        if DEBUG and result is not None:
-            try:
-                # Try to serialize the result (may need to convert to dict)
-                if hasattr(result, "model_dump_json"):
-                    response_json = result.model_dump_json()
-                elif hasattr(result, "model_dump"):  # Try model_dump before __dict__
-                    response_json = json.dumps(
-                        result.model_dump(), ensure_ascii=False, default=str
-                    )
-                elif hasattr(result, "__dict__"):
-                    response_json = json.dumps(
-                        result.__dict__, ensure_ascii=False, default=str
-                    )
-                else:
-                    response_json = str(result)
-            except Exception as e:
-                printr.print_warn(
-                    f"Could not serialize GPT response for debug log: {e}"
-                )
-                response_json = str(result)
-            _log_debug_entry(
-                {
-                    "type": "response",
-                    "response": response_json,
-                }
-            )
+        self._log_debug_response("conversation_response", result)
 
         return result
 
@@ -752,12 +1163,27 @@ class OpenAiWingman(Wingman):
             for function_call in cached_function_calls:
                 function_name = function_call[0]
                 function_args = function_call[1]
+                self._log_debug_event(
+                    "tool_call_cached_execute",
+                    {
+                        "function_name": function_name,
+                        "function_args": function_args,
+                        "cache_key": call_cache_key,
+                    },
+                )
 
                 # Pass transcript and is_cached_call=True
                 function_response, instant_response_iter = (
                     await self._execute_command_by_function_call(
                         function_name, function_args
                     )
+                )
+                self._log_debug_event(
+                    "tool_call_cached_result",
+                    {
+                        "function_name": function_name,
+                        "function_response": self._truncate_debug_value(function_response, 4000),
+                    },
                 )
 
                 caching_key_function_objects.append((function_name, call_cache_key, function_response))
@@ -776,6 +1202,14 @@ class OpenAiWingman(Wingman):
             for tool_call in tool_calls:
                 function_name = tool_call.function.name
                 function_args = json.loads(tool_call.function.arguments)
+                self._log_debug_event(
+                    "tool_call_execute",
+                    {
+                        "function_name": function_name,
+                        "function_args": function_args,
+                        "tool_call_id": getattr(tool_call, "id", None),
+                    },
+                )
 
                 cached_function_calls.append((function_name, function_args))
 
@@ -784,6 +1218,13 @@ class OpenAiWingman(Wingman):
                     await self._execute_command_by_function_call(
                         function_name, function_args
                     )
+                )
+                self._log_debug_event(
+                    "tool_call_result",
+                    {
+                        "function_name": function_name,
+                        "function_response": self._truncate_debug_value(function_response, 6000),
+                    },
                 )
 
                 # Skip caching if payload requests no-cache
@@ -840,42 +1281,188 @@ class OpenAiWingman(Wingman):
             printr.print_err("OpenAI client not initialized. Cannot summarize.")
             return None
 
-        azure_config = None
-        # Do not modify the original messages list
-        messages_for_summary = list(self.messages)  # Use copy for safety
+        summarize_request = self._resolve_chat_request("summarize")
+        if not summarize_request:
+            return None
 
-        summarize_model = self.config["openai"].get(
-            "summarize_model", self.config["openai"].get("conversation_model")
+        messages_for_summary = self._build_summarization_messages()
+
+        self._log_debug_request(
+            stage="summarize_request",
+            messages=messages_for_summary,
+            tools=None,
+            provider=summarize_request.get("provider"),
+            model=summarize_request.get("model"),
+            reasoning_effort=summarize_request.get("reasoning_effort"),
+            azure_config=summarize_request.get("azure_config"),
         )
-
-        if self.summarize_provider == "azure":
-            azure_config = self._get_azure_config("summarize")
-            if not azure_config:
-                printr.print_err(
-                    "Azure is summarize provider, but config is invalid. Cannot summarize."
-                )
-                return None
-
         summarize_response = self.openai.ask(
             messages=messages_for_summary,
-            model=summarize_model,
-            azure_config=azure_config,
+            model=summarize_request.get("model"),
+            azure_config=summarize_request.get("azure_config"),
+            api_key=summarize_request.get("api_key"),
+            base_url=summarize_request.get("base_url"),
+            organization=summarize_request.get("organization"),
+            reasoning_effort=summarize_request.get("reasoning_effort"),
             # No tools needed for summarization
         )
 
         if summarize_response is None:
             printr.print_err("Summarization call failed.")
+            self._log_debug_event(
+                "summarize_error",
+                {"error": "Summarization call failed"},
+            )
             return None
+
+        self._log_debug_response("summarize_response", summarize_response)
 
         # Process the summarization response
         # Use _process_completion to handle potential None content etc.
         summary_message, _ = self._process_completion(summarize_response)
+        summary_text = getattr(summary_message, "content", "") or ""
+        if not isinstance(summary_text, str):
+            summary_text = self._extract_tts_fallback_text(summary_text) or ""
+
+        finish_reason = None
+        try:
+            finish_reason = summarize_response.choices[0].finish_reason
+        except Exception:
+            finish_reason = None
+
+        if not summary_text.strip():
+            error_payload = {
+                "error": "Summarization returned empty spoken text",
+                "finish_reason": finish_reason,
+            }
+            if finish_reason == "length":
+                error_payload["hint"] = (
+                    "Model hit response length limit before returning spoken output."
+                )
+            self._log_debug_event("summarize_error", error_payload)
+            printr.print_err(
+                "Critical error: summarization returned no spoken text."
+            )
+            return None
+
+        if self._looks_like_structured_output(summary_text):
+            self._log_debug_event(
+                "summarize_error",
+                {
+                    "error": "Summarization returned structured output",
+                    "summary_preview": self._truncate_debug_value(summary_text, 600),
+                },
+            )
+            printr.print_err(
+                "Critical error: summarization returned structured output instead of spoken text."
+            )
+            return None
 
         # Add the summary to the main conversation history
         # Ensure we add the correct type (original object or dict)
         self.messages.append(summary_message)
         # Return the content string
         return getattr(summary_message, "content", "")
+
+    def _build_summarization_messages(self):
+        summarize_instructions = self.config.get("openai", {}).get("summarize_instructions")
+        if not summarize_instructions:
+            summarize_instructions = (
+                "Summarize the provided tool results for spoken output. "
+                "Use natural language and do not output JSON."
+            )
+
+        latest_user_message = ""
+        for message in reversed(self.messages):
+            if self._get_message_role(message) == "user":
+                latest_user_message = (self._get_message_content(message) or "").strip()
+                break
+
+        tool_payloads = self._get_trailing_tool_payloads()
+        prepared_payloads = self._prepare_tool_payloads_for_summary(tool_payloads)
+        serialized_payloads = ""
+        try:
+            serialized_payloads = json.dumps(prepared_payloads, ensure_ascii=False)
+        except Exception:
+            serialized_payloads = str(prepared_payloads)
+
+        if len(serialized_payloads) > 12000:
+            serialized_payloads = serialized_payloads[:12000]
+
+        player_language = self.config.get("openai", {}).get("player_language", "de_DE")
+        user_prompt = (
+            f"Player language: {player_language}\n"
+            f"Original request (if available): {latest_user_message}\n\n"
+            "Output constraints:\n"
+            "- Return plain spoken prose only.\n"
+            "- Never output JSON, code blocks, bullet points, field names, or braces.\n"
+            "- Do not output analysis or reasoning steps.\n"
+            "- Keep it concise and listener-friendly.\n\n"
+            "Tool results to summarize:\n"
+            f"{serialized_payloads}"
+        )
+
+        return [
+            {"role": "system", "content": summarize_instructions},
+            {"role": "user", "content": user_prompt},
+        ]
+
+    def _prepare_tool_payloads_for_summary(self, payloads):
+        if not isinstance(payloads, list):
+            return []
+
+        def trim(value, depth=0):
+            if depth > 3:
+                return str(value)[:400]
+            if isinstance(value, dict):
+                compact = {}
+                for key, nested in value.items():
+                    if key in {"raw", "debug"}:
+                        continue
+                    compact[key] = trim(nested, depth + 1)
+                return compact
+            if isinstance(value, list):
+                trimmed_list = [trim(item, depth + 1) for item in value[:3]]
+                if len(value) > 3:
+                    trimmed_list.append(f"... {len(value) - 3} more items")
+                return trimmed_list
+            if isinstance(value, str):
+                normalized = " ".join(value.split()).strip()
+                if len(normalized) > 600:
+                    return f"{normalized[:600]} ..."
+                return normalized
+            return value
+
+        prepared_payloads = []
+        for payload in payloads:
+            if isinstance(payload, dict):
+                summary_payload = payload.get("summary_payload")
+                if summary_payload is not None:
+                    prepared_payloads.append(trim(summary_payload))
+                    continue
+            prepared_payloads.append(trim(payload))
+
+        return prepared_payloads
+
+    @staticmethod
+    def _looks_like_structured_output(text: str):
+        if not text:
+            return True
+        normalized = (text or "").strip().lower()
+        if not normalized:
+            return True
+        if normalized.startswith("{") or normalized.startswith("["):
+            return True
+        if normalized.count("{") + normalized.count("}") >= 2:
+            return True
+        markers = [
+            '"success":',
+            '"trade_routes":',
+            '"uex_community_trade_routes":',
+            "-> resultat:",
+            "tool results to summarize",
+        ]
+        return any(marker in normalized for marker in markers)
 
     def _finalize_response(self, summarize_response: str) -> tuple[str, str]:
         """Finalizes the response based on the call of the second (summarize) GPT call.
@@ -887,17 +1474,11 @@ class OpenAiWingman(Wingman):
             A tuple containing the final response to the user.
         """
         summarized_text = self._extract_tts_fallback_text(summarize_response)
-        if summarized_text:
-            return summarized_text, summarized_text
-
-        history_fallback = self._extract_fallback_response_from_history()
-        if history_fallback:
-            return history_fallback, history_fallback
-
-        generic_error = (
-            "Die Zusammenfassung ist fehlgeschlagen. Bitte stelle die Anfrage erneut."
-        )
-        return generic_error, generic_error
+        if not summarized_text:
+            return None, None
+        if self._looks_like_structured_output(summarized_text):
+            return None, None
+        return summarized_text, summarized_text
 
     def _extract_fallback_response_from_history(self):
         for message in reversed(self.messages):
@@ -981,6 +1562,7 @@ class OpenAiWingman(Wingman):
                 parsed_result = self._extract_tts_fallback_text(parsed)
                 if parsed_result:
                     return parsed_result
+                return None
             except Exception:
                 pass
 
@@ -1064,10 +1646,19 @@ class OpenAiWingman(Wingman):
         # Keep original checks
         if not text or text.strip().lower() == "ok":
             return
+        self._log_debug_event(
+            "tts_start",
+            {
+                "tts_provider": self.tts_provider,
+                "tts_cache_key": tts_cache_key,
+                "text_preview": self._truncate_debug_value(text, 500),
+            },
+        )
 
         # --- >>> ADDED: TTS Cache Logic <<< ---
         cached_audio_bytes = None
         cache_hit = False
+        needs_update = False
 
         # Check TTS Cache using the provided key
         if self.tts_cache_manager and tts_cache_key:
@@ -1082,10 +1673,21 @@ class OpenAiWingman(Wingman):
                     tts_cache_key)
                 if needs_update:
                     text = self.tts_cache_manager.get_cached_text(tts_cache_key)
+                self._log_debug_event(
+                    "tts_cache_hit",
+                    {
+                        "tts_cache_key": tts_cache_key,
+                        "needs_update": bool(needs_update),
+                    },
+                )
             else:
                 printr.print(
                     f"   TTS cache miss (key: {tts_cache_key[:8]}...). Calling API.",
                     tags="info",
+                )
+                self._log_debug_event(
+                    "tts_cache_miss",
+                    {"tts_cache_key": tts_cache_key},
                 )
         # --- >>> END: TTS Cache Check <<< ---
 
@@ -1103,6 +1705,13 @@ class OpenAiWingman(Wingman):
 
             if audio_bytes_generated:
                 cached_audio_bytes = audio_bytes_generated
+                self._log_debug_event(
+                    "tts_generated",
+                    {
+                        "tts_provider": self.tts_provider,
+                        "audio_bytes": len(audio_bytes_generated),
+                    },
+                )
 
                 if self.tts_cache_manager and tts_cache_key:
                     try:
@@ -1123,37 +1732,80 @@ class OpenAiWingman(Wingman):
                         )
             else:
                 printr.print_err(f"TTS generation failed for text: '{text[:50]}...'")
+                self._log_debug_event(
+                    "tts_error",
+                    {"error": "TTS generation returned no audio bytes"},
+                )
                 return  # Don't attempt to play if generation failed
 
         # --- Play Audio (from cache or new generation) ---
         if cached_audio_bytes:
             self.audio_player.stream_with_effects(cached_audio_bytes, self.config)
+            self._log_debug_event(
+                "tts_playback_complete",
+                {"audio_bytes": len(cached_audio_bytes)},
+            )
 
     def _generate_with_openai(self, text):
         if not self.openai:
             return None
         try:
+            model = self.config["openai"].get("tts_model")
+            voice = self.config["openai"].get("tts_voice")
+            self._log_debug_event(
+                "tts_request",
+                {
+                    "provider": "openai",
+                    "model": model,
+                    "voice": voice,
+                    "text_preview": self._truncate_debug_value(text, 400),
+                },
+            )
             response = self.openai.speak(
                 text,
-                self.config["openai"].get("tts_model"),
-                self.config["openai"].get("tts_voice"),
+                model,
+                voice,
                 self.config["openai"].get("tts_voice_instructions", ""),
                 self.config["openai"].get("player_language"),
             )
             # Return bytes directly
+            self._log_debug_event(
+                "tts_response",
+                {
+                    "provider": "openai",
+                    "audio_bytes": len(response.content) if response and response.content else 0,
+                },
+            )
             return response.content if response else None
         except Exception as e:
             printr.print_err(f"Error generating OpenAI TTS: {e}")
+            self._log_debug_event(
+                "tts_error",
+                {"provider": "openai", "error": str(e)},
+            )
             return None
 
     def _generate_with_azure(self, text):
         azure_config = self._get_azure_config("tts")
         if not azure_config:
             printr.print_err("Azure TTS selected, but config is invalid.")
+            self._log_debug_event(
+                "tts_error",
+                {"provider": "azure", "error": "Azure TTS config is invalid"},
+            )
             return None
 
         voice = self.config.get("azure", {}).get("tts", {}).get("voice", "nova")
         try:
+            self._log_debug_event(
+                "tts_request",
+                {
+                    "provider": "azure",
+                    "model": azure_config.deployment_name,
+                    "voice": voice,
+                    "text_preview": self._truncate_debug_value(text, 400),
+                },
+            )
             # Note: Azure TTS might use a different endpoint or client setup than completions.
             # Assuming AzureOpenAI client works for TTS based on original code structure.
             # If a dedicated SpeechSDK client is needed, instantiate it here.
@@ -1171,10 +1823,21 @@ class OpenAiWingman(Wingman):
                 input=text,
             )
             # Return bytes directly
+            self._log_debug_event(
+                "tts_response",
+                {
+                    "provider": "azure",
+                    "audio_bytes": len(response.content) if response and response.content else 0,
+                },
+            )
             return response.content if response else None
         except Exception as e:
             printr.print_err(f"Error generating Azure TTS: {e}")
             # Log more details if needed
+            self._log_debug_event(
+                "tts_error",
+                {"provider": "azure", "error": str(e)},
+            )
             return None
 
     # --- >>> ADDED: ElevenLabs generation method <<< ---
@@ -1182,6 +1845,10 @@ class OpenAiWingman(Wingman):
         """Generates speech using ElevenLabs API and returns audio bytes."""
         if not self.elevenlabs_api_key:
             printr.print_err("ElevenLabs TTS selected, but API key is missing.")
+            self._log_debug_event(
+                "tts_error",
+                {"provider": "elevenlabs", "error": "API key missing"},
+            )
             return None
 
         try:
@@ -1217,8 +1884,21 @@ class OpenAiWingman(Wingman):
                 printr.print_err(
                     "No valid ElevenLabs voice ID found (or name lookup failed)."
                 )
+                self._log_debug_event(
+                    "tts_error",
+                    {"provider": "elevenlabs", "error": "No valid voice ID"},
+                )
                 return None
 
+            self._log_debug_event(
+                "tts_request",
+                {
+                    "provider": "elevenlabs",
+                    "model": model,
+                    "voice_id": target_voice,
+                    "text_preview": self._truncate_debug_value(text, 400),
+                },
+            )
             audio_generator = client.generate(
                 text=text,
                 voice=Voice(
@@ -1231,15 +1911,30 @@ class OpenAiWingman(Wingman):
             )
             # Consume the generator to get bytes
             full_audio = b"".join(audio_generator)
+            self._log_debug_event(
+                "tts_response",
+                {
+                    "provider": "elevenlabs",
+                    "audio_bytes": len(full_audio) if full_audio else 0,
+                },
+            )
             return full_audio
 
         except ImportError:
             printr.print_err(
                 "ElevenLabs library not installed. Please run 'pip install elevenlabs'"
             )
+            self._log_debug_event(
+                "tts_error",
+                {"provider": "elevenlabs", "error": "library not installed"},
+            )
             return None
         except Exception as e:
             printr.print_err(f"Error generating ElevenLabs TTS: {e}")
+            self._log_debug_event(
+                "tts_error",
+                {"provider": "elevenlabs", "error": str(e)},
+            )
             return None
 
     def _build_tools(self):

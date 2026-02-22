@@ -107,12 +107,12 @@ features:
   # ─────────────────────── Conversation Provider ─────────────────────────
   # You can override the conversation provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below for edge_tts. These are only used if the provider is set here.
-  conversation_provider: groq # available: openai, azure
+  conversation_provider: groq # available: openai, azure, groq
 
   # ─────────────────────── Summarize Provider ─────────────────────────
   # You can override the summarize provider to use a different one than the default.
   # Note that the other providers may have additional config blocks as shown below fo•r edge_tts. These are only used if the provider is set here.
-  summarize_provider: groq # available: openai, azure
+  summarize_provider: groq # available: openai, azure, groq
 
   # ─────────────────────── Cost Control ─────────────────────────
   # How many messages should a Wingman remember in your conversations?
@@ -149,10 +149,13 @@ openai:
   # gpt-3.5 is the default and should be enough for most use cases.
   # If something is not working as expected, you might want to test it with gpt-4.
   conversation_model: gpt-4.1-mini # available: gpt-5-mini, gpt-4.1-nano, gpt-4.1-mini, gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  # Optional reasoning effort for this provider/model call (supported values depend on the model/provider)
+  #conversation_reasoning_effort: low # optional: low, medium, high
 
   # This model summarizes function responses, like API call responses etc.
   # In most cases gpt-3.5 should be enough.
   summarize_model: gpt-4.1-mini # gpt-5-mini, gpt-3.5-turbo-0125 # available: gpt-4o, gpt-4o-mini, gpt-3.5-turbo-1106, gpt-4-1106-preview (and more)
+  #summarize_reasoning_effort: low # optional: low, medium, high
 
   summarize_instructions: |
     You are a professional voice‑script writer.
@@ -211,10 +214,12 @@ azure:
     api_base_url: https://cora-ai.openai.azure.com/ # https://xxx.openai.azure.com/
     api_version: 2025-01-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
     deployment_name: gpt-4o-mini # The deployment name e.g. 'whisper'
+    #reasoning_effort: low # optional: low, medium, high
   summarize:
     api_base_url: https://cora-ai.openai.azure.com/ # https://xxx.openai.azure.com/
     api_version: 2025-01-01-preview # The API version to use. For a list of supported versions, see here: https://learn.microsoft.com/en-us/azure/ai-services/openai/reference
     deployment_name: gpt-4.1-nano # The deployment name e.g. 'whisper'
+    #reasoning_effort: low # optional: low, medium, high
   tts:
     api_base_url: https://cora-ai.openai.azure.com/ # https://xxx.openai.azure.com/
     api_version: 2024-10-01-preview # The API version to use. For a list o
@@ -227,7 +232,9 @@ groq:
   base_url: https://api.groq.com/openai/v1
   stt_model: whisper-large-v3-turbo
   conversation_model: openai/gpt-oss-120b
-  summarize_provider: openai/gpt-oss-120b
+  summarize_model: openai/gpt-oss-120b
+  #conversation_reasoning_effort: low # optional: low, medium, high
+  #summarize_reasoning_effort: low # optional: low, medium, high
   
 
 # ────────────────────────────────── Global commands ───────────────────────────────────────

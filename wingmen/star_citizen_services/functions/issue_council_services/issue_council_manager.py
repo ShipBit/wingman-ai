@@ -436,6 +436,7 @@ query IssueByCode($code: String!) {
             "Always prepare Issue Council search terms in English, even if the player speaks another language. "
             "Use the player's wording as bug_description and do not invent missing details. "
             "Always pass english_search_terms with concise English keywords and symptom phrases. "
+            "For optional parameters, omit the field when unknown instead of sending null. "
             "After analysis, summarize yes or no, best matching issue, reproductions, duplicate status, and potential unmarked duplicates. "
             "When the user explicitly confirms opening links, call "
             f"{self.open_issue_council_issues_in_browser.__name__}. "
@@ -461,7 +462,7 @@ query IssueByCode($code: String!) {
                                 "description": "Natural language bug description from the player.",
                             },
                             "environment_name": {
-                                "type": "string",
+                                "type": ["string", "null"],
                                 "description": "Optional environment hint (for example LIVE 4.6.0).",
                             },
                             "include_fixed": {
@@ -804,6 +805,28 @@ query IssueByCode($code: String!) {
         if preferred_answer and follow_up_question:
             preferred_answer = f"{preferred_answer} {follow_up_question}".strip()
 
+        best_matching_issue_payload = {
+            **best_details_payload,
+            "confidence": best_confidence,
+            "heuristic_confidence": heuristic_confidence,
+            "llm_confidence": llm_confidence if llm_selection_active else None,
+            "matched_terms": best_candidate.get("matched_terms", []),
+            "search_score": best_candidate.get("search_score", 0.0),
+        }
+        summary_payload = self._build_summary_payload_for_tts(
+            known_bug=known_bug,
+            preferred_answer=preferred_answer,
+            llm_player_summary=llm_summary_payload.get("summary_for_player"),
+            follow_up_question=follow_up_question,
+            best_matching_issue=best_matching_issue_payload,
+            root_issue=root_details_payload,
+            direct_duplicates_of_best_issue=direct_duplicates_of_best,
+            total_confirmed_duplicates_in_tree=total_confirmed_duplicates,
+            possible_unmarked_duplicates=possible_duplicates,
+            possible_duplicates_preview=possible_duplicates_preview,
+            browser_open_order=browser_order,
+        )
+
         result = {
             "success": True,
             "known_bug": known_bug,
@@ -811,14 +834,7 @@ query IssueByCode($code: String!) {
             "searched_terms": english_search_terms,
             "search_runs": variation_runs,
             "candidate_count": len(ranked_candidates),
-            "best_matching_issue": {
-                **best_details_payload,
-                "confidence": best_confidence,
-                "heuristic_confidence": heuristic_confidence,
-                "llm_confidence": llm_confidence if llm_selection_active else None,
-                "matched_terms": best_candidate.get("matched_terms", []),
-                "search_score": best_candidate.get("search_score", 0.0),
-            },
+            "best_matching_issue": best_matching_issue_payload,
             "top_candidates": ranked_candidates[:5],
             "duplicate_analysis": {
                 "root_issue": root_details_payload,
@@ -846,6 +862,7 @@ query IssueByCode($code: String!) {
                 "If duplicate_analysis.possible_unmarked_duplicates_count > 0, explicitly summarize the content of at least two potential duplicates. "
                 "Mention that browser links can be opened only after explicit user confirmation."
             ),
+            "summary_payload": summary_payload,
             "do_not_cache": True,
         }
 
@@ -1452,6 +1469,79 @@ query IssueByCode($code: String!) {
             if len(codes) >= max_items:
                 break
         return ", ".join(codes)
+
+    def _build_summary_payload_for_tts(
+        self,
+        known_bug: bool,
+        preferred_answer: str,
+        llm_player_summary: str,
+        follow_up_question: str,
+        best_matching_issue: dict,
+        root_issue: dict,
+        direct_duplicates_of_best_issue: int,
+        total_confirmed_duplicates_in_tree: int,
+        possible_unmarked_duplicates: list[dict],
+        possible_duplicates_preview: str,
+        browser_open_order: list[str],
+    ):
+        best_issue = self._as_dict(best_matching_issue)
+        root = self._as_dict(root_issue)
+
+        compact_possible_duplicates = []
+        for candidate in possible_unmarked_duplicates[:3]:
+            candidate = self._as_dict(candidate)
+            if not candidate.get("code"):
+                continue
+            compact_possible_duplicates.append(
+                {
+                    "code": candidate.get("code"),
+                    "title": candidate.get("title"),
+                    "status": candidate.get("status"),
+                    "confidence": candidate.get("confidence"),
+                    "reasoning_short": candidate.get("reasoning_short"),
+                }
+            )
+
+        return {
+            "success": True,
+            "known_bug": bool(known_bug),
+            "yes_no": "yes" if known_bug else "no",
+            "preferred_answer": str(preferred_answer or "").strip(),
+            "llm_player_summary": str(llm_player_summary or "").strip(),
+            "llm_follow_up_question": str(follow_up_question or "").strip(),
+            "best_matching_issue": {
+                "code": best_issue.get("code"),
+                "title": best_issue.get("title"),
+                "status": best_issue.get("status"),
+                "severity": best_issue.get("severity"),
+                "environment_name": best_issue.get("environment_name"),
+                "confidence": best_issue.get("confidence"),
+                "actual_behaviour": best_issue.get("actual_behaviour"),
+                "opened_on": best_issue.get("opened_on"),
+                "confirmed_on": best_issue.get("confirmed_on"),
+                "fixed_on": best_issue.get("fixed_on"),
+            },
+            "duplicate_analysis": {
+                "root_issue": {
+                    "code": root.get("code"),
+                    "title": root.get("title"),
+                    "status": root.get("status"),
+                },
+                "direct_duplicates_of_best_issue": direct_duplicates_of_best_issue,
+                "total_confirmed_duplicates_in_tree": total_confirmed_duplicates_in_tree,
+                "possible_unmarked_duplicates_count": len(possible_unmarked_duplicates),
+                "possible_unmarked_duplicates": compact_possible_duplicates,
+            },
+            "possible_duplicates_preview": str(possible_duplicates_preview or "").strip(),
+            "requires_user_confirmation_for_browser_open": True,
+            "browser_open_order": list(browser_open_order or [])[:6],
+            "instructions": (
+                "If preferred_answer exists, use it as the main spoken answer. "
+                "Then summarize yes/no and explain best matching issue and duplicate situation. "
+                "If duplicate_analysis.possible_unmarked_duplicates_count > 0, explicitly summarize the content of at least two potential duplicates. "
+                "Mention that browser links can be opened only after explicit user confirmation."
+            ),
+        }
 
     def _debug_log(self, label: str, payload=None, force_payload: bool = False):
         if not (self.debug_mode or DEBUG):

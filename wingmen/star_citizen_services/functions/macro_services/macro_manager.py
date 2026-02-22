@@ -1639,22 +1639,6 @@ class MacroManager(FunctionManager):
         return spoken_text, True
 
     def _prepare_spoken_text_with_model(self, text: str, language_code: str) -> str:
-        if self._openai_tts_client is None:
-            self._openai_api_key = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="openai",
-                friendly_key_name="OpenAI API key",
-                prompt_if_missing=False,
-            )
-            if not self._openai_api_key:
-                raise RuntimeError("OpenAI API key is required for macro spoken-text generation.")
-            self._openai_tts_client = OpenAI(
-                api_key=self._openai_api_key,
-                organization=self.config.get("openai", {}).get("organization"),
-                base_url=self.config.get("openai", {}).get("base_url"),
-            )
-
-        model = self.config.get("openai", {}).get("conversation_model", "gpt-4.1-mini")
         system_prompt = (
             "You translate input text into a pronunciation safe script for TTS. "
             "Return only plain text, no quotes. "
@@ -1668,17 +1652,18 @@ class MacroManager(FunctionManager):
         user_prompt = f"Input text:\n{text}"
 
         try:
-            completion = self._openai_tts_client.chat.completions.create(
-                model=model,
+            completion = self.ask_ai(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                max_tokens=256,
                 temperature=0,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+                response_format=None,
             )
+            if completion is None:
+                raise RuntimeError("Model returned no completion for spoken-text generation.")
             content = (completion.choices[0].message.content or "").strip()
             if not content:
-                raise RuntimeError("OpenAI returned empty spoken-text content.")
+                raise RuntimeError("Model returned empty spoken-text content.")
             return content
         except Exception as e:
             raise RuntimeError(f"Macro spoken-text generation failed: {e}") from e

@@ -204,16 +204,18 @@ class StarCitizenWingman(OpenAiWingman):
             {"role": "user", "content": user_prompt},
         ]
 
-        azure_config = None
-        if self.conversation_provider == "azure":
-            azure_config = self._get_azure_config("conversation")
-            if not azure_config:
-                return ""
+        conversation_request = self._resolve_chat_request("conversation")
+        if not conversation_request:
+            return ""
 
         completion = self.openai.ask(
             messages=messages,
-            model=self.config["openai"].get("conversation_model"),
-            azure_config=azure_config,
+            model=conversation_request.get("model"),
+            azure_config=conversation_request.get("azure_config"),
+            api_key=conversation_request.get("api_key"),
+            base_url=conversation_request.get("base_url"),
+            organization=conversation_request.get("organization"),
+            reasoning_effort=conversation_request.get("reasoning_effort"),
         )
         if completion is None:
             return ""
@@ -470,14 +472,18 @@ class StarCitizenWingman(OpenAiWingman):
                 initial_user_message = "Follow these instructions: 1. welcome me. 2. summarize in a natural conversational way suitable for a tts engine the following information: " + initial_user_message
                 self._add_user_message(initial_user_message)
             
-                azure_config = None
-                if self.conversation_provider == "azure":
-                    azure_config = self._get_azure_config("conversation")
+                conversation_request = self._resolve_chat_request("conversation")
+                if not conversation_request:
+                    return None, None
 
                 completion = self.openai.ask(
                     messages=self.messages,
-                    model=self.config["openai"].get("conversation_model"),
-                    azure_config=azure_config,
+                    model=conversation_request.get("model"),
+                    azure_config=conversation_request.get("azure_config"),
+                    api_key=conversation_request.get("api_key"),
+                    base_url=conversation_request.get("base_url"),
+                    organization=conversation_request.get("organization"),
+                    reasoning_effort=conversation_request.get("reasoning_effort"),
                 )
 
                 if completion is None:

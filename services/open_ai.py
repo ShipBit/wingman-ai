@@ -35,7 +35,7 @@ class OpenAi:
 
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None,
         stt_config: STTConfig,
         organization: str | None = None,
         base_url: str | None = None,
@@ -43,11 +43,13 @@ class OpenAi:
         self.stt_config = stt_config
         self.api_key = api_key
 
-        self.client = OpenAI(
-            api_key=api_key,
-            organization=organization,
-            base_url=base_url,
-        )
+        self.client = None
+        if api_key:
+            self.client = OpenAI(
+                api_key=api_key,
+                organization=organization,
+                base_url=base_url,
+            )
         self.last_error_type = None
         self.last_error_message = None
         self.local_whisper_model = None
@@ -87,13 +89,16 @@ class OpenAi:
                 self.use_local_default = False
 
         if self.stt_config.stt_provider == "openai":
+            if not self.client:
+                printr.print("OpenAI STT provider selected but OpenAI API key is missing.", tags="err")
+                return
             self.stt_client = self.client
             return
 
         if self.stt_config.stt_provider == "azure":
             azure_config = self.stt_config.azure_config
             if azure_config:
-                self.sst_client = AzureOpenAI(
+                self.stt_client = AzureOpenAI(
                     api_key=azure_config.api_key,
                     azure_endpoint=azure_config.api_base_url,
                     api_version=azure_config.api_version,
@@ -212,6 +217,10 @@ class OpenAi:
         stream: bool = False,
         tools: list[dict[str, any]] = None,
         azure_config: AzureConfig | None = None,
+        api_key: str | None = None,
+        base_url: str | None = None,
+        organization: str | None = None,
+        reasoning_effort: str | None = None,
     ):
         if not model:
             model = "gpt-3.5-turbo-1106"
@@ -231,6 +240,21 @@ class OpenAi:
             except Exception as e:
                 printr.print(f"Fehler beim Initialisieren des Azure Clients: {e}", tags="err")
                 return None
+        elif api_key:
+            api_type = "OpenAI-compatible"
+            try:
+                client = OpenAI(
+                    api_key=api_key,
+                    organization=organization,
+                    base_url=base_url,
+                )
+            except Exception as e:
+                printr.print(f"Fehler beim Initialisieren des Clients ({api_type}): {e}", tags="err")
+                return None
+
+        if not client:
+            printr.print("Kein API Client verfügbar. Bitte API-Schlüssel/Provider-Konfiguration prüfen.", tags="err")
+            return None
 
         self.last_error_type = None
         self.last_error_message = None
@@ -242,22 +266,26 @@ class OpenAi:
                     "Sanitized message history before API call to repair tool-call sequence.",
                     tags="warn",
                 )
-            if not tools:
-                completion = client.chat.completions.create(
-                    stream=stream,
-                    messages=messages_to_send,
-                    model=model,
-                )
-            else:
-                completion = client.chat.completions.create(
-                    stream=stream,
-                    messages=messages_to_send,
-                    model=model,
-                    tools=tools,
-                    tool_choice="auto",
-                )
+            completion_kwargs = {
+                "stream": stream,
+                "messages": messages_to_send,
+                "model": model,
+            }
+            if tools:
+                completion_kwargs["tools"] = tools
+                completion_kwargs["tool_choice"] = "auto"
+            if reasoning_effort:
+                completion_kwargs["reasoning_effort"] = reasoning_effort
+
+            completion = client.chat.completions.create(**completion_kwargs)
             return completion
         except APIStatusError as e:
+            if not tools and self._is_tool_call_without_tools_error(e):
+                retry_completion = self._retry_without_tools_instruction(
+                    client, completion_kwargs
+                )
+                if retry_completion is not None:
+                    return retry_completion
             self._handle_api_error(e)
             return None
         except UnicodeEncodeError:
@@ -265,6 +293,43 @@ class OpenAi:
             return None
         except Exception as e:
             printr.print(f"Unerwarteter Fehler bei der Chat Completion mit {api_type}: {e}", tags="err")
+            return None
+
+    @staticmethod
+    def _is_tool_call_without_tools_error(api_error: APIStatusError) -> bool:
+        message = (getattr(api_error, "message", "") or "").lower()
+        if "tool choice is none, but model called a tool" in message:
+            return True
+
+        try:
+            error_json = api_error.response.json()
+            error_obj = (error_json or {}).get("error", {})
+            error_message = (error_obj.get("message", "") or "").lower()
+            error_code = (error_obj.get("code", "") or "").lower()
+            return (
+                "tool choice is none, but model called a tool" in error_message
+                or error_code == "tool_use_failed"
+            )
+        except Exception:
+            return False
+
+    def _retry_without_tools_instruction(self, client, completion_kwargs):
+        try:
+            original_messages = completion_kwargs.get("messages", [])
+            retry_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You must not call any tools or functions. "
+                        "Respond only with plain text."
+                    ),
+                }
+            ]
+            retry_messages.extend(original_messages)
+            retry_kwargs = completion_kwargs.copy()
+            retry_kwargs["messages"] = retry_messages
+            return client.chat.completions.create(**retry_kwargs)
+        except Exception:
             return None
 
     def speak(self, 
