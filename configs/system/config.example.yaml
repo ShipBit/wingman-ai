@@ -277,6 +277,7 @@ wingmen:
       TddManager: False # True | False - will activate the integration to UEX to be able to ask for trade routes and prices. Requires a UEX account and the UEX API key
       UexDataRunnerManager: False # True | False - will activate the UEX data runner capabilities. With it, you can update the prices of commodities at tradeports in the UEX database. Requires a UEX account with the UEX API key and the UEX user secret.
       DeliveryMissionManager: False # True | False - will activated the delivery mission manager. With it, you are able to make Cora manage your ingame delivery missions 
+      NavigationManager: False # True | False - enables in-game starmap route automation via template matching and OCR validation.
       LoreManager: True # True | False - Allows Cora to search the Galactepedia for lore information. 
       IssueCouncilManager: False # True | False - checks known bugs in the RSI Issue Council and analyzes duplicate relations
       MacroManager:
@@ -318,6 +319,11 @@ wingmen:
             - Aktiviere Delivery Mission Manager
           deactivate:
             - Deaktiviere Delivery Mission Manager
+        NavigationManager:
+          activate:
+            - Aktiviere Navigation Manager
+          deactivate:
+            - Deaktiviere Navigation Manager
         LoreManager:
           activate:
             - Galactapedia aktivieren
