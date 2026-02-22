@@ -1658,6 +1658,7 @@ class MacroManager(FunctionManager):
                 max_tokens=256,
                 temperature=0,
                 response_format=None,
+                llm_call="spoken_text_generation",
             )
             if completion is None:
                 raise RuntimeError("Model returned no completion for spoken-text generation.")

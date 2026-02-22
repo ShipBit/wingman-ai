@@ -299,6 +299,14 @@ wingmen:
         reload_command_phrases:
           - makros neu laden
           - reload makros
+        # Optional per-LLM-call overrides for MacroManager internal model calls.
+        # If omitted, global features.conversation_provider + provider defaults are used.
+        llm_calls:
+          spoken_text_generation:
+            provider: openai # available: openai, azure, groq
+            model: gpt-4.1-mini # optional override for this call only
+            max_tokens: 256 # optional override for this call only
+            reasoning_effort: low # optional: low, medium, high
       AdvancedGenericLogManager: False
       manager_command_phrases:
         ComponentManager:
@@ -997,6 +1005,19 @@ wingmen:
     # ─────────────────────AdvancedGenericLogManager────────────────────────────────── 
     AdvancedGenericLogManager:
       log_file_path: "star_citizen_data/logs/log_memories.json"
+      # Optional defaults for all internal LLM calls of this manager.
+      llm_defaults:
+        provider: openai # available: openai, azure, groq
+        model: gpt-4.1-mini
+        max_tokens: 1024
+        reasoning_effort: low # optional
+      # Optional per-call overrides.
+      llm_calls:
+        log_entry_enrichment:
+          max_tokens: 1024
+        log_summary:
+          model: gpt-4.1-mini
+          max_tokens: 4096
 
     # ─────────────────────IssueCouncilManager───────────────────────────────────────
     IssueCouncilManager:
@@ -1029,6 +1050,18 @@ wingmen:
       debug_mode: False # prints IssueCouncil debug markers to console
       debug_log_payloads: False # if true, includes full payloads for all debug markers (very verbose)
       default_environment_ids: [] # optional GraphQL environment id filters
+      # Optional defaults for IssueCouncilManager LLM calls.
+      llm_defaults:
+        provider: openai # available: openai, azure, groq
+        model: gpt-4.1-mini
+        max_tokens: 1200
+        reasoning_effort: low # optional
+      # Optional per-call overrides.
+      llm_calls:
+        issue_candidate_selection:
+          max_tokens: 1200
+        duplicate_relevance_scoring:
+          max_tokens: 1200
 
 
 

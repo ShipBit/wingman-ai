@@ -583,6 +583,12 @@ class FunctionManager(ABC):
         self.conversation_provider = "openai"
         self.conversation_model = "gpt-4o"
         self.conversation_reasoning_effort = None
+        self._llm_clients = {}
+        self._ask_ai_debug_request_logger = None
+        self._ask_ai_debug_response_logger = None
+        self._ask_ai_debug_event_logger = None
+        self._ask_ai_debug_trace_id = None
+        self._ask_ai_debug_stage_prefix = f"manager.{self.name}.ask_ai"
 
     @classmethod
     def get_manager_metadata(cls):
@@ -608,6 +614,36 @@ class FunctionManager(ABC):
     def on_manager_disabled(self, source: str = "manual"):
         """Optional lifecycle hook invoked whenever the manager is disabled."""
         pass
+
+    @staticmethod
+    def _sanitize_debug_stage_fragment(value: str | None):
+        if not value:
+            return None
+        return re.sub(r"[^a-zA-Z0-9._-]+", "_", str(value).strip())
+
+    def set_ask_ai_debug_context(
+        self,
+        request_logger=None,
+        response_logger=None,
+        event_logger=None,
+        trace_id: str | None = None,
+        stage_prefix: str | None = None,
+    ):
+        self._ask_ai_debug_request_logger = request_logger
+        self._ask_ai_debug_response_logger = response_logger
+        self._ask_ai_debug_event_logger = event_logger
+        self._ask_ai_debug_trace_id = trace_id
+        normalized_prefix = self._sanitize_debug_stage_fragment(stage_prefix)
+        self._ask_ai_debug_stage_prefix = (
+            normalized_prefix or f"manager.{self.name}.ask_ai"
+        )
+
+    def clear_ask_ai_debug_context(self):
+        self._ask_ai_debug_request_logger = None
+        self._ask_ai_debug_response_logger = None
+        self._ask_ai_debug_event_logger = None
+        self._ask_ai_debug_trace_id = None
+        self._ask_ai_debug_stage_prefix = f"manager.{self.name}.ask_ai"
 
     def cora_start_information(self):
         """  
@@ -681,7 +717,155 @@ class FunctionManager(ABC):
             prompt_if_missing=True,
         )
 
-    def ask_ai(self, system_prompt: str, user_prompt: str, max_tokens=512, temperature=0.7, response_format={"type": "json_object"}, reasoning_effort=None):
+    @staticmethod
+    def _coerce_optional_positive_int(value):
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None
+
+    @staticmethod
+    def _clean_optional_string(value):
+        if value is None:
+            return None
+        text = str(value).strip()
+        return text or None
+
+    def _resolve_manager_call_overrides(self, llm_call: str = None):
+        """Resolve optional manager overrides from manager and feature sections.
+
+        Supported keys:
+        - llm_defaults: {provider, model, max_tokens, reasoning_effort}
+        - llm_calls.<call_key>: {provider, model, max_tokens, reasoning_effort}
+        """
+        merged = {}
+
+        manager_config = self.config.get(self.name, {})
+        if not isinstance(manager_config, dict):
+            manager_config = {}
+
+        feature_config = self.config.get("features", {}).get(self.name, {})
+        if not isinstance(feature_config, dict):
+            feature_config = {}
+
+        for config_block in [manager_config, feature_config]:
+            defaults = config_block.get("llm_defaults", {})
+            if isinstance(defaults, dict):
+                merged.update(defaults)
+
+        if llm_call:
+            for config_block in [manager_config, feature_config]:
+                calls = config_block.get("llm_calls", {})
+                if not isinstance(calls, dict):
+                    continue
+                call_config = calls.get(llm_call, {})
+                if isinstance(call_config, dict):
+                    merged.update(call_config)
+        return merged
+
+    def _resolve_ask_ai_request(self, llm_call: str, max_tokens, reasoning_effort):
+        call_overrides = self._resolve_manager_call_overrides(llm_call=llm_call)
+
+        provider = self._clean_optional_string(call_overrides.get("provider"))
+        provider = (provider or self.config.get("features", {}).get("conversation_provider") or "openai").lower()
+
+        model, provider_reasoning_effort = self._resolve_model_settings(provider, "conversation")
+        override_model = self._clean_optional_string(call_overrides.get("model"))
+        if override_model:
+            model = override_model
+
+        override_max_tokens = self._coerce_optional_positive_int(call_overrides.get("max_tokens"))
+        resolved_max_tokens = override_max_tokens if override_max_tokens is not None else max_tokens
+
+        override_reasoning_effort = self._clean_optional_string(call_overrides.get("reasoning_effort"))
+        resolved_reasoning_effort = (
+            reasoning_effort
+            if reasoning_effort is not None
+            else override_reasoning_effort
+        )
+        if resolved_reasoning_effort is None:
+            resolved_reasoning_effort = provider_reasoning_effort
+
+        return {
+            "provider": provider,
+            "model": model,
+            "max_tokens": resolved_max_tokens,
+            "reasoning_effort": resolved_reasoning_effort,
+        }
+
+    def _get_llm_client(self, provider: str):
+        provider = (provider or "openai").lower()
+        if provider in self._llm_clients:
+            return self._llm_clients[provider]
+
+        if provider == "azure":
+            azure_api_key = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="azure_conversation",
+                friendly_key_name="Azure Conversation API key",
+                prompt_if_missing=True,
+            )
+            if not azure_api_key:
+                printr.print_err("Missing 'azure_conversation' key for Azure conversation provider.")
+                return None
+            azure_conversation = self.config.get("azure", {}).get("conversation", {})
+            client = AzureOpenAI(
+                api_key=azure_api_key,
+                azure_endpoint=azure_conversation.get("api_base_url", None),
+                api_version=azure_conversation.get("api_version", None),
+                azure_deployment=azure_conversation.get("deployment_name", None),
+            )
+            self._llm_clients[provider] = client
+            return client
+
+        if provider == "groq":
+            groq_api_key = self._retrieve_secret_with_fallback(
+                key="groq_conversation",
+                friendly_name="Groq Conversation API key",
+                fallback_keys=["groq", "groq_stt"],
+            )
+            if not groq_api_key:
+                printr.print_err("Missing Groq API key for conversation provider.")
+                return None
+            client = OpenAI(
+                api_key=groq_api_key,
+                base_url=self.config.get("groq", {}).get("base_url"),
+            )
+            self._llm_clients[provider] = client
+            return client
+
+        if provider == "openai":
+            openai_api_key = self.secret_keeper.retrieve(
+                requester=self.name,
+                key="openai",
+                friendly_key_name="OpenAI API key",
+                prompt_if_missing=True,
+            )
+            if not openai_api_key:
+                printr.print_err("Missing 'openai' API key. Please provide a valid key in the settings.")
+                return None
+            client = OpenAI(
+                api_key=openai_api_key,
+                organization=self.config.get("openai", {}).get("organization"),
+                base_url=self.config.get("openai", {}).get("base_url"),
+            )
+            self._llm_clients[provider] = client
+            return client
+
+        printr.print_err(f"Unsupported LLM provider '{provider}' for manager {self.name}.")
+        return None
+
+    def ask_ai(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens=512,
+        temperature=0.7,
+        response_format={"type": "json_object"},
+        reasoning_effort=None,
+        llm_call: str = None,
+    ):
         """
         Ask configured conversation provider for a response to the given prompts.
             Params:
@@ -690,14 +874,63 @@ class FunctionManager(ABC):
                 max_tokens: int - The maximum number of tokens to generate
                 temperature: float - The sampling temperature
                 response_format: dict - The response format to be returned. Default is a JSON object.
+                llm_call: str - Optional manager call key to resolve provider/model/max_tokens/reasoning overrides.
         """
-        self._init_conversation_client()
-        if not self.conversation_client:
+        request = self._resolve_ask_ai_request(
+            llm_call=llm_call,
+            max_tokens=max_tokens,
+            reasoning_effort=reasoning_effort,
+        )
+        client = self._get_llm_client(request.get("provider"))
+        if not client:
             printr.print_err("Conversation client is not initialized.")
             return None
+        if not request.get("model"):
+            printr.print_err(f"No model resolved for provider '{request.get('provider')}' in manager {self.name}.")
+            return None
+
+        self.conversation_provider = request.get("provider")
+        self.conversation_model = request.get("model")
+        self.conversation_reasoning_effort = request.get("reasoning_effort")
+        self.conversation_client = client
+
+        llm_call_stage = self._sanitize_debug_stage_fragment(llm_call)
+        stage_base = self._ask_ai_debug_stage_prefix
+        if llm_call_stage:
+            stage_base = f"{stage_base}.{llm_call_stage}"
+
+        azure_debug_config = None
+        if request.get("provider") == "azure":
+            azure_debug_config = self.config.get("azure", {}).get("conversation")
+
+        if self._ask_ai_debug_request_logger:
+            self._ask_ai_debug_request_logger(
+                stage=f"{stage_base}.request",
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                tools=None,
+                provider=request.get("provider"),
+                model=request.get("model"),
+                reasoning_effort=request.get("reasoning_effort"),
+                azure_config=azure_debug_config,
+            )
+
+        if self._ask_ai_debug_event_logger:
+            self._ask_ai_debug_event_logger(
+                f"{stage_base}.meta",
+                {
+                    "manager": self.name,
+                    "llm_call": llm_call,
+                    "max_tokens": request.get("max_tokens"),
+                    "response_format": response_format,
+                    "trace_id_hint": self._ask_ai_debug_trace_id,
+                },
+            )
         try: 
             completion_kwargs = {
-                "model": self.conversation_model,
+                "model": request.get("model"),
                 "messages": [
                     {
                         "role": "system",
@@ -708,27 +941,48 @@ class FunctionManager(ABC):
                         "content": user_prompt
                     }
                 ],
-                "max_tokens": max_tokens,
+                "max_tokens": request.get("max_tokens"),
                 "temperature": temperature,
             }
             if response_format is not None:
                 completion_kwargs["response_format"] = response_format
-            resolved_reasoning_effort = (
-                reasoning_effort
-                if reasoning_effort is not None
-                else self.conversation_reasoning_effort
-            )
+            resolved_reasoning_effort = request.get("reasoning_effort")
             if resolved_reasoning_effort:
                 completion_kwargs["reasoning_effort"] = resolved_reasoning_effort
 
-            completion = self.conversation_client.chat.completions.create(
+            completion = client.chat.completions.create(
                 **completion_kwargs,
             )
+            if self._ask_ai_debug_response_logger:
+                self._ask_ai_debug_response_logger(
+                    f"{stage_base}.response",
+                    completion,
+                )
             return completion
         except APIStatusError as e:
+            if self._ask_ai_debug_event_logger:
+                self._ask_ai_debug_event_logger(
+                    f"{stage_base}.error",
+                    {
+                        "manager": self.name,
+                        "error_type": "APIStatusError",
+                        "status_code": getattr(e, "status_code", None),
+                        "message": getattr(e, "message", None),
+                        "trace_id_hint": self._ask_ai_debug_trace_id,
+                    },
+                )
             self._handle_api_error(e)
             return None
         except UnicodeEncodeError:
+            if self._ask_ai_debug_event_logger:
+                self._ask_ai_debug_event_logger(
+                    f"{stage_base}.error",
+                    {
+                        "manager": self.name,
+                        "error_type": "UnicodeEncodeError",
+                        "trace_id_hint": self._ask_ai_debug_trace_id,
+                    },
+                )
             printr.print_err(
                 "The OpenAI API key you provided is invalid. Please check the GUI settings or your 'secrets.yaml'"
             )
@@ -767,66 +1021,15 @@ class FunctionManager(ABC):
             This method initializes the conversation client for the manager on first use.
         """
         if not self.conversation_client:
-            self.conversation_provider = self.config["features"].get(
-                "conversation_provider", "openai"
+            request = self._resolve_ask_ai_request(
+                llm_call=None,
+                max_tokens=512,
+                reasoning_effort=None,
             )
-            self.conversation_model, self.conversation_reasoning_effort = (
-                self._resolve_model_settings(self.conversation_provider, "conversation")
-            )
-
-            if self.conversation_provider == "azure":
-                azure_api_key = self.secret_keeper.retrieve(
-                    requester=self.name,
-                    key="azure_conversation",
-                    friendly_key_name="Azure Conversation API key",
-                    prompt_if_missing=True,
-                )
-
-                self.conversation_client = AzureOpenAI(
-                    api_key=azure_api_key,
-                    azure_endpoint=self.config["azure"]
-                    .get("conversation", {})
-                    .get("api_base_url", None),
-                    api_version=self.config["azure"].get("conversation", {}).get("api_version", None),
-                    azure_deployment=self.config["azure"]
-                    .get("conversation", {})
-                    .get("deployment_name", None),
-                )
-                if not self.conversation_model:
-                    self.conversation_model = self.config["azure"].get("conversation", {}).get("deployment_name")
-                return
-
-            if self.conversation_provider == "groq":
-                groq_api_key = self._retrieve_secret_with_fallback(
-                    key="groq_conversation",
-                    friendly_name="Groq Conversation API key",
-                    fallback_keys=["groq", "groq_stt"],
-                )
-                self.conversation_client = OpenAI(
-                    api_key=groq_api_key,
-                    base_url=self.config.get("groq", {}).get("base_url"),
-                )
-                if not self.conversation_model:
-                    self.conversation_model = self.config.get("groq", {}).get("conversation_model")
-                return
-
-            openai_api_key = self.secret_keeper.retrieve(
-                requester=self.name,
-                key="openai",
-                friendly_key_name="OpenAI API key",
-                prompt_if_missing=True,
-            )
-            if not openai_api_key:
-                printr.print_err("Missing 'openai' API key. Please provide a valid key in the settings.")
-                return
-
-            openai_organization = self.config["openai"].get("organization")
-            openai_base_url = self.config["openai"].get("base_url")
-            self.conversation_client = OpenAI(
-                api_key=openai_api_key,
-                organization=openai_organization,
-                base_url=openai_base_url,
-            )
+            self.conversation_provider = request.get("provider")
+            self.conversation_model = request.get("model")
+            self.conversation_reasoning_effort = request.get("reasoning_effort")
+            self.conversation_client = self._get_llm_client(self.conversation_provider)
 
     def _handle_api_error(self, api_response):
         printr.print_err(

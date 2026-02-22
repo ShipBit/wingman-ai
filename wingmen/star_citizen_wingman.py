@@ -679,7 +679,23 @@ class StarCitizenWingman(OpenAiWingman):
         if function_name in self.ai_functions_manager.get_function_registry():
             function_to_call = self.ai_functions_manager.get_function(function_name)
             if callable(function_to_call):
-                function_response = function_to_call(function_args)
+                manager_instance = getattr(function_to_call, "__self__", None)
+                if isinstance(manager_instance, FunctionManager):
+                    if self._debug_enabled():
+                        manager_instance.set_ask_ai_debug_context(
+                            request_logger=self._log_debug_request,
+                            response_logger=self._log_debug_response,
+                            event_logger=self._log_debug_event,
+                            trace_id=self._active_debug_trace_id,
+                            stage_prefix=f"manager.{manager_instance.name}.{function_name}",
+                        )
+                    else:
+                        manager_instance.clear_ask_ai_debug_context()
+                try:
+                    function_response = function_to_call(function_args)
+                finally:
+                    if isinstance(manager_instance, FunctionManager):
+                        manager_instance.clear_ask_ai_debug_context()
         elif function_name not in ["switch_context", "execute_command", self.manage_feature_manager_state.__name__]:
             manager_name = self.ai_functions_manager.get_manager_for_function(function_name)
             if manager_name and not self.ai_functions_manager.is_manager_enabled(manager_name):

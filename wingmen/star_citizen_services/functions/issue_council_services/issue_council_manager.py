@@ -1097,6 +1097,7 @@ query IssueByCode($code: String!) {
             max_tokens=self.llm_max_tokens,
             temperature=self.llm_temperature,
             response_format={"type": "json_object"},
+            llm_call="issue_candidate_selection",
         )
         parsed = self._extract_json_object_from_completion(completion)
         self._debug_log("llm validates issue candidates response", parsed)
@@ -1173,6 +1174,7 @@ query IssueByCode($code: String!) {
             max_tokens=self.llm_max_tokens,
             temperature=self.llm_temperature,
             response_format={"type": "json_object"},
+            llm_call="duplicate_relevance_scoring",
         )
         parsed = self._extract_json_object_from_completion(completion)
         self._debug_log("llm duplicate relevance response", parsed)

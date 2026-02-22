@@ -388,7 +388,8 @@ class AdvancedGenericLogManager(FunctionManager):
         completion = self.ask_ai(
             LOG_ENTRY_PROMPT,
             user_prompt=json.dumps(user_prompt, ensure_ascii=False),
-            max_tokens=1024
+            max_tokens=1024,
+            llm_call="log_entry_enrichment",
         )
 
         new_entry = self._extract_json_response(completion)
@@ -586,7 +587,12 @@ class AdvancedGenericLogManager(FunctionManager):
         user_prompt = {
             "logs_to_summarize": log_entries,
         }
-        completion = self.ask_ai(SUMMERIZE_PROMPT, user_prompt=json.dumps(user_prompt, ensure_ascii=False), max_tokens=4096)
+        completion = self.ask_ai(
+            SUMMERIZE_PROMPT,
+            user_prompt=json.dumps(user_prompt, ensure_ascii=False),
+            max_tokens=4096,
+            llm_call="log_summary",
+        )
 
         new_entry = self._extract_json_response(completion)
         
