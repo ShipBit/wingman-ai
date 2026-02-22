@@ -15,7 +15,7 @@ from wingmen.star_citizen_services.ai_context_enum import AIContext
 from wingmen.star_citizen_services.function_manager import FunctionManager
 
 
-DEBUG = False
+DEBUG = True
 printr = Printr()
 
 
@@ -27,19 +27,18 @@ def print_debug(to_print):
 class IssueCouncilManager(FunctionManager):
     MANAGER_CONTEXT = AIContext.CORA
     MANAGER_DESCRIPTION = (
-        "Checks Star Citizen Issue Council for known bugs, analyzes duplicate relations, "
-        "and can open prioritized issue links in the browser."
+        "Checks Star Citizen Issue Council for known bugs."
     )
     MANAGER_CAPABILITIES = [
         "Search Issue Council by free text and bug symptoms",
         "Pick the closest matching issue and summarize relevance",
         "Analyze reproductions, duplicate links, and possible duplicate variants",
-        "Build and print duplicate hierarchy tree (root issue first)",
-        "Open issue links in browser after user confirmation",
+        "Opens issue links in browser.",
     ]
 
     DEFAULT_PROJECT_ID = "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0"
     DEFAULT_STATUSES = ["OPEN", "CONFIRMED", "UNDER_INVESTIGATION"]
+    DEFAULT_MAX_BROWSER_OPEN_TABS = 15
     STOP_WORDS = {
         "a",
         "an",
@@ -97,19 +96,6 @@ class IssueCouncilManager(FunctionManager):
         "- If no clear match exists, set best_issue_code to null and known_bug to false.\n"
         "- Never invent issue codes."
     )
-    LLM_SUMMARY_SYSTEM_PROMPT = (
-        "You summarize Issue Council analysis for a player.\n"
-        "Return only a valid JSON object with keys:\n"
-        "- summary_for_player: concise tts spoken-friendly summary in the user's language\n"
-        "- follow_up_question: optional short question, empty string if not needed\n"
-        "Rules:\n"
-        "- Use only provided data.\n"
-        "- Keep it factual and actionable.\n"
-        "- Mention uncertainty if confidence is low.\n"
-        "- If possible_duplicates is not empty, explicitly mention at least two issue codes as possible variants.\n"
-        "- Do not mention issue codes in the summary text.\n"
-        "- Any numbers or dates should be mentioned in spoken-friendly format (i.e. 'three' instead of 3, 'January first' instead of 01/01, etc.\n"
-    )
     LLM_DUPLICATE_REVIEW_SYSTEM_PROMPT = (
         "You evaluate if Issue Council candidates are relevant to a player's bug report and if they are plausible duplicates.\n"
         "Return only a valid JSON object with key 'evaluations' as an array.\n"
@@ -125,9 +111,9 @@ class IssueCouncilManager(FunctionManager):
         "- Use issue details (actual behavior, expected behavior, steps, environment), not title words only.\n"
         "- Never invent issue codes.\n"
     )
-    LLM_ENGLISH_SEARCH_TERMS_SYSTEM_PROMPT = (
+    LLM_search_phrases_SYSTEM_PROMPT = (
         "You convert a Star Citizen bug description into concise English Issue Council search queries.\n"
-        "Return only a valid JSON object with key 'english_search_terms' (array of strings).\n"
+        "Return only a valid JSON object with key 'search_phrases' (array of strings).\n"
         "Rules:\n"
         "- English only.\n"
         "- Use short high-signal terms/phrases (1-5 words).\n"
@@ -317,7 +303,6 @@ query IssueByCode($code: String!) {
             manager_cfg.get("max_possible_duplicate_fetch", 8), default=8, minimum=3, maximum=25
         )
         self.llm_validation_enabled = bool(manager_cfg.get("llm_validation_enabled", True))
-        self.llm_summary_enabled = bool(manager_cfg.get("llm_summary_enabled", True))
         self.llm_validation_candidates = self._coerce_int(
             manager_cfg.get("llm_validation_candidates", 12), default=12, minimum=4, maximum=25
         )
@@ -351,9 +336,9 @@ query IssueByCode($code: String!) {
             minimum=120,
             maximum=1200,
         )
-        self.enforce_english_search_terms = bool(manager_cfg.get("enforce_english_search_terms", True))
-        self.auto_generate_english_search_terms = bool(
-            manager_cfg.get("auto_generate_english_search_terms", True)
+        self.enforce_search_phrases = bool(manager_cfg.get("enforce_search_phrases", True))
+        self.auto_generate_search_phrases = bool(
+            manager_cfg.get("auto_generate_search_phrases", True)
         )
         self.debug_mode = bool(
             manager_cfg.get(
@@ -432,16 +417,14 @@ query IssueByCode($code: String!) {
 
     def get_function_prompt(self) -> str:
         return (
-            f"When the player describes a bug and asks whether it is already known, call {self.check_issue_council_for_known_bug.__name__}. "
-            "Always prepare Issue Council search terms in English, even if the player speaks another language. "
+            f"When the player ask to search for an issue or bug, call {self.check_issue_council_for_known_bug.__name__}. "
+            "Always prepare Issue Council search phrases in English, even if the player speaks another language. "
             "Use the player's wording as bug_description and do not invent missing details. "
-            "Always pass english_search_terms with concise English keywords and symptom phrases. "
-            "For optional parameters, omit the field when unknown instead of sending null. "
-            "After analysis, summarize yes or no, best matching issue, reproductions, duplicate status, and potential unmarked duplicates. "
-            "When the user explicitly confirms opening links, call "
+            "Always pass search_phrases with concise English symptom phrases. Avoid single word search phrases unless for the key aspect of the bug description. combine the object with symptoms to build search phrases. "
+            "Example search_phrases for bug_description 'Is there a bug about the fabricator dissapearing in the hangar?': ['fabricator', 'fabricator hangar', 'fabricator disappearing hangar', 'fabricator missing']. "
+            "When the user asks to open issue links, call "
             f"{self.open_issue_council_issues_in_browser.__name__}. "
-            "For browser opening, default to source=last_analysis and include_possible_duplicates=true, unless user asks for a single specific code. "
-            "Do not open browser links without explicit user confirmation."
+            "For browser opening, default to source=last_analysis, unless user asks for a single specific code. "
         )
 
     def get_function_tools(self) -> list[dict]:
@@ -451,8 +434,7 @@ query IssueByCode($code: String!) {
                 "function": {
                     "name": self.check_issue_council_for_known_bug.__name__,
                     "description": (
-                        "Searches Star Citizen Issue Council for a described bug, picks the best matching issue, "
-                        "analyzes reproductions and duplicate relations, and builds a hierarchy tree."
+                        "Searches Star Citizen Issue Council for a described bug."
                     ),
                     "parameters": {
                         "type": "object",
@@ -461,29 +443,13 @@ query IssueByCode($code: String!) {
                                 "type": "string",
                                 "description": "Natural language bug description from the player.",
                             },
-                            "environment_name": {
-                                "type": ["string", "null"],
-                                "description": "Optional environment hint (for example LIVE 4.6.0).",
-                            },
-                            "include_fixed": {
-                                "type": "boolean",
-                                "description": "If true, include FIXED issues in the filtered search.",
-                            },
-                            "search_limit": {
-                                "type": "integer",
-                                "description": "How many issues should be requested per search variation (5-30).",
-                            },
-                            "confidence_threshold": {
-                                "type": "number",
-                                "description": "Optional threshold between 0 and 1 for known bug yes/no decision.",
-                            },
-                            "english_search_terms": {
+                            "search_phrases": {
                                 "type": "array",
-                                "description": "Required English search phrases/keywords used for Issue Council lookup.",
+                                "description": "Search phrases for Issue Council lookup.",
                                 "items": {"type": "string"},
                             },
                         },
-                        "required": ["bug_description", "english_search_terms"],
+                        "required": ["bug_description", "search_phrases"],
                     },
                 },
             },
@@ -493,8 +459,7 @@ query IssueByCode($code: String!) {
                     "name": self.open_issue_council_issues_in_browser.__name__,
                     "description": (
                         "Opens issue links in browser. Default source is the latest analysis. "
-                        "Root issue is opened first, then by ascending issue number. "
-                        "If include_possible_duplicates is true, potential variants are included."
+                        "Root issue is opened first, then by ascending issue number."
                     ),
                     "parameters": {
                         "type": "object",
@@ -509,14 +474,6 @@ query IssueByCode($code: String!) {
                                 "description": "Required for source=issue_codes. Example: ['STARC-188247'].",
                                 "items": {"type": "string"},
                             },
-                            "include_possible_duplicates": {
-                                "type": "boolean",
-                                "description": "Only for source=last_analysis. Include potential unmarked duplicates.",
-                            },
-                            "max_to_open": {
-                                "type": "integer",
-                                "description": "Maximum number of tabs to open (1-40).",
-                            },
                         },
                     },
                 },
@@ -529,46 +486,29 @@ query IssueByCode($code: String!) {
             return {
                 "success": False,
                 "known_bug": False,
-                "yes_no": "Nein",
                 "instructions": "Ask the user for a more specific bug description.",
                 "do_not_cache": True,
             }
 
-        include_fixed = bool(function_args.get("include_fixed", False))
-        search_limit = self._coerce_int(
-            function_args.get("search_limit", self.default_search_limit),
-            default=self.default_search_limit,
-            minimum=5,
-            maximum=30,
-        )
-        threshold = self._coerce_float(
-            function_args.get("confidence_threshold", 0.42),
-            default=0.42,
-            minimum=0.1,
-            maximum=0.95,
-        )
+        threshold = 0.42
 
         statuses = list(self.DEFAULT_STATUSES)
-        if include_fixed and "FIXED" not in statuses:
-            statuses.append("FIXED")
-
-        environment_name = function_args.get("environment_name", None)
-        english_search_terms = function_args.get("english_search_terms", [])
+        search_phrases = function_args.get("search_phrases", [])
         
-        print_debug(f"IssueCouncil search terms: {english_search_terms}")
+        print_debug(f"IssueCouncil search terms: {search_phrases}")
 
         candidates_by_code = {}
         variation_runs = []
-        for term in english_search_terms:
+        for term in search_phrases:
             self._debug_log(
                 "graphql issues query",
-                {"text": term, "statuses": statuses, "first": search_limit},
+                {"text": term, "statuses": statuses, "first": self.default_search_limit},
                 force_payload=True,
             )
             search_result = self._search_issues(
                 search_term=term,
                 statuses=statuses,
-                first=search_limit,
+                first=self.default_search_limit,
             )
             variation_runs.append(
                 {
@@ -605,20 +545,11 @@ query IssueByCode($code: String!) {
 
         ranked_candidates = self._rank_candidates(description, list(candidates_by_code.values()))
 
-        if environment_name:
-            env_filter = environment_name.lower().strip()
-            ranked_candidates = [
-                candidate
-                for candidate in ranked_candidates
-                if env_filter in (candidate.get("environment_name", "").lower())
-            ]
-
         if not ranked_candidates:
             return {
                 "success": True,
                 "known_bug": False,
-                "yes_no": "no",
-                "searched_terms": english_search_terms,
+                "searched_terms": search_phrases,
                 "search_runs": variation_runs,
                 "candidate_count": 0,
                 "instructions": (
@@ -783,27 +714,10 @@ query IssueByCode($code: String!) {
 
         best_details_payload = self._build_issue_payload(best_issue_detail, fallback=best_candidate)
         root_details_payload = self._build_issue_payload(root_issue_detail)
-        llm_summary_payload = {}
-        if self.llm_summary_enabled:
-            llm_summary_payload = self._llm_summarize_issue_analysis(
-                user_description=description,
-                known_bug=known_bug,
-                confidence=best_confidence,
-                best_issue=best_details_payload,
-                root_issue=root_details_payload,
-                possible_duplicates=possible_duplicates[: self.max_possible_duplicate_fetch],
-            )
-        preferred_answer = llm_summary_payload.get("summary_for_player", "")
-        follow_up_question = llm_summary_payload.get("follow_up_question", "")
         possible_duplicates_preview = self._format_issue_code_preview(
             possible_duplicates,
             max_items=4,
         )
-        if possible_duplicates_preview:
-            duplicate_hint = f"Possible variants: {possible_duplicates_preview}."
-            preferred_answer = f"{preferred_answer} {duplicate_hint}".strip() if preferred_answer else duplicate_hint
-        if preferred_answer and follow_up_question:
-            preferred_answer = f"{preferred_answer} {follow_up_question}".strip()
 
         best_matching_issue_payload = {
             **best_details_payload,
@@ -814,10 +728,10 @@ query IssueByCode($code: String!) {
             "search_score": best_candidate.get("search_score", 0.0),
         }
         summary_payload = self._build_summary_payload_for_tts(
+            player_bug_description=description,
             known_bug=known_bug,
-            preferred_answer=preferred_answer,
-            llm_player_summary=llm_summary_payload.get("summary_for_player"),
-            follow_up_question=follow_up_question,
+            confidence=best_confidence,
+            confidence_threshold=threshold,
             best_matching_issue=best_matching_issue_payload,
             root_issue=root_details_payload,
             direct_duplicates_of_best_issue=direct_duplicates_of_best,
@@ -830,8 +744,6 @@ query IssueByCode($code: String!) {
         result = {
             "success": True,
             "known_bug": known_bug,
-            "yes_no": "yes" if known_bug else "no",
-            "searched_terms": english_search_terms,
             "search_runs": variation_runs,
             "candidate_count": len(ranked_candidates),
             "best_matching_issue": best_matching_issue_payload,
@@ -851,14 +763,11 @@ query IssueByCode($code: String!) {
             "browser_open_order": browser_order,
             "browser_open_order_with_possible_duplicates": browser_order_with_possible,
             "llm_validation": llm_selection,
-            "llm_player_summary": llm_summary_payload.get("summary_for_player"),
-            "llm_follow_up_question": follow_up_question,
-            "preferred_answer": preferred_answer,
             "possible_duplicates_preview": possible_duplicates_preview,
             "requires_user_confirmation_for_browser_open": True,
             "instructions": (
-                "If preferred_answer exists, use it as the main spoken answer. "
-                "Then summarize yes/no and explain best matching issue and duplicate situation. "
+                "Summarize yes/no for known bug likelihood first. "
+                "Then explain best matching issue and duplicate situation. "
                 "If duplicate_analysis.possible_unmarked_duplicates_count > 0, explicitly summarize the content of at least two potential duplicates. "
                 "Mention that browser links can be opened only after explicit user confirmation."
             ),
@@ -873,7 +782,6 @@ query IssueByCode($code: String!) {
             "browser_open_order_with_possible_duplicates": browser_order_with_possible,
             "possible_duplicates": possible_duplicates,
             "llm_validation": llm_selection,
-            "llm_player_summary": llm_summary_payload.get("summary_for_player"),
             "hierarchy_tree_console": hierarchy_tree,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -881,9 +789,6 @@ query IssueByCode($code: String!) {
 
     def open_issue_council_issues_in_browser(self, function_args):
         source = function_args.get("source", "last_analysis")
-        include_possible_duplicates = bool(function_args.get("include_possible_duplicates", True))
-        include_arg_explicitly_set = "include_possible_duplicates" in function_args
-        max_to_open = self._coerce_int(function_args.get("max_to_open", 15), default=15, minimum=1, maximum=40)
 
         codes_to_open = []
         if source == "last_analysis":
@@ -895,9 +800,8 @@ query IssueByCode($code: String!) {
                     ),
                     "do_not_cache": True,
                 }
-            if include_possible_duplicates:
-                codes_to_open = self.last_analysis.get("browser_open_order_with_possible_duplicates", [])
-            else:
+            codes_to_open = self.last_analysis.get("browser_open_order_with_possible_duplicates", [])
+            if not codes_to_open:
                 codes_to_open = self.last_analysis.get("browser_open_order", [])
         elif source == "issue_codes":
             issue_codes = self._normalize_issue_codes(function_args.get("issue_codes", []))
@@ -909,9 +813,7 @@ query IssueByCode($code: String!) {
                 }
             codes_to_open = self._build_browser_order_from_explicit_codes(issue_codes)
             if (
-                include_possible_duplicates
-                and not include_arg_explicitly_set
-                and self.last_analysis
+                self.last_analysis
                 and len(codes_to_open) == 1
                 and codes_to_open[0]
                 in {
@@ -928,7 +830,7 @@ query IssueByCode($code: String!) {
                 "do_not_cache": True,
             }
 
-        if source == "last_analysis" and include_possible_duplicates and len(codes_to_open) <= 1 and self.last_analysis:
+        if source == "last_analysis" and len(codes_to_open) <= 1 and self.last_analysis:
             possible_variant_codes = self._sort_issue_codes(
                 [
                     entry.get("code")
@@ -939,7 +841,9 @@ query IssueByCode($code: String!) {
             if possible_variant_codes:
                 codes_to_open = self._dedupe_list([*codes_to_open, *possible_variant_codes])
 
-        codes_to_open = self._dedupe_list(self._normalize_issue_codes(codes_to_open))[:max_to_open]
+        codes_to_open = self._dedupe_list(self._normalize_issue_codes(codes_to_open))[
+            : self.DEFAULT_MAX_BROWSER_OPEN_TABS
+        ]
         if not codes_to_open:
             return {
                 "success": False,
@@ -956,8 +860,8 @@ query IssueByCode($code: String!) {
             "browser open sequence",
             {
                 "source": source,
-                "include_possible_duplicates": include_possible_duplicates,
                 "requested_codes": codes_to_open,
+                "max_open_tabs": self.DEFAULT_MAX_BROWSER_OPEN_TABS,
                 "opened_count": len([entry for entry in opened if entry.get("opened")]),
             },
         )
@@ -970,7 +874,7 @@ query IssueByCode($code: String!) {
             "open_sequence": codes_to_open,
             "opened": opened,
             "instructions": (
-                "Confirm which issue tabs were opened. If some could not be opened, ask the user to open URLs manually."
+                "Confirm only, that the issue tabs were opened."
             ),
             "do_not_cache": True,
         }
@@ -1231,42 +1135,6 @@ query IssueByCode($code: String!) {
             "do_not_cache": True,
         }
 
-    def _llm_summarize_issue_analysis(
-        self,
-        user_description: str,
-        known_bug: bool,
-        confidence: float,
-        best_issue: dict,
-        root_issue: dict,
-        possible_duplicates: list[dict],
-    ):
-        payload = {
-            "player_bug_description": user_description,
-            "known_bug": known_bug,
-            "confidence": confidence,
-            "best_matching_issue": best_issue,
-            "root_issue": root_issue,
-            "possible_duplicates": possible_duplicates,
-        }
-        self._debug_log("llm summarizes issue analysis request", payload)
-        completion = self.ask_ai(
-            self.LLM_SUMMARY_SYSTEM_PROMPT,
-            user_prompt=json.dumps(payload, ensure_ascii=False),
-            max_tokens=self.llm_max_tokens,
-            temperature=self.llm_temperature,
-            response_format={"type": "json_object"},
-        )
-        parsed = self._extract_json_object_from_completion(completion)
-        self._debug_log("llm summarizes issue analysis response", parsed)
-        
-        if not isinstance(parsed, dict):
-            return {}
-        return {
-            "summary_for_player": str(parsed.get("summary_for_player", "")).strip(),
-            "follow_up_question": str(parsed.get("follow_up_question", "")).strip(),
-            "do_not_cache": True,
-        }
-
     def _llm_score_duplicate_relevance(
         self,
         user_description: str,
@@ -1472,10 +1340,10 @@ query IssueByCode($code: String!) {
 
     def _build_summary_payload_for_tts(
         self,
+        player_bug_description: str,
         known_bug: bool,
-        preferred_answer: str,
-        llm_player_summary: str,
-        follow_up_question: str,
+        confidence: float,
+        confidence_threshold: float,
         best_matching_issue: dict,
         root_issue: dict,
         direct_duplicates_of_best_issue: int,
@@ -1494,7 +1362,6 @@ query IssueByCode($code: String!) {
                 continue
             compact_possible_duplicates.append(
                 {
-                    "code": candidate.get("code"),
                     "title": candidate.get("title"),
                     "status": candidate.get("status"),
                     "confidence": candidate.get("confidence"),
@@ -1504,13 +1371,21 @@ query IssueByCode($code: String!) {
 
         return {
             "success": True,
+            "player_bug_description": str(player_bug_description or "").strip(),
             "known_bug": bool(known_bug),
-            "yes_no": "yes" if known_bug else "no",
-            "preferred_answer": str(preferred_answer or "").strip(),
-            "llm_player_summary": str(llm_player_summary or "").strip(),
-            "llm_follow_up_question": str(follow_up_question or "").strip(),
+            "confidence": self._coerce_float(
+                confidence,
+                default=0.0,
+                minimum=0.0,
+                maximum=1.0,
+            ),
+            "confidence_threshold": self._coerce_float(
+                confidence_threshold,
+                default=0.0,
+                minimum=0.0,
+                maximum=1.0,
+            ),
             "best_matching_issue": {
-                "code": best_issue.get("code"),
                 "title": best_issue.get("title"),
                 "status": best_issue.get("status"),
                 "severity": best_issue.get("severity"),
@@ -1533,13 +1408,14 @@ query IssueByCode($code: String!) {
                 "possible_unmarked_duplicates": compact_possible_duplicates,
             },
             "possible_duplicates_preview": str(possible_duplicates_preview or "").strip(),
-            "requires_user_confirmation_for_browser_open": True,
-            "browser_open_order": list(browser_open_order or [])[:6],
             "instructions": (
-                "If preferred_answer exists, use it as the main spoken answer. "
-                "Then summarize yes/no and explain best matching issue and duplicate situation. "
-                "If duplicate_analysis.possible_unmarked_duplicates_count > 0, explicitly summarize the content of at least two potential duplicates. "
-                "Mention that browser links can be opened only after explicit user confirmation."
+                "Generate one short spoken response in the player's language. "
+                "Start with yes/no for known bug likelihood and mention uncertainty when confidence is near threshold. "
+                "Do not mention issue codes when mentioning specific issues, focus on the description of the issue. "
+                "Explain the best matching issue and information about known duplicates. "
+                "If other potential issues exists that might be relevant, explicitly mention the title and status of at least two of them. "
+                "Finally, ask the if he wants you to open the issues in the browser. "
+                "Do not read JSON keys or field names aloud."
             ),
         }
 
