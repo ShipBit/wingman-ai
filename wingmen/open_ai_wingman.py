@@ -886,9 +886,150 @@ class OpenAiWingman(Wingman):
         Returns:
             A tuple containing the final response to the user.
         """
-        if summarize_response is None:
-            return self.messages[-1]["content"], self.messages[-1]["content"]
-        return summarize_response, summarize_response
+        summarized_text = self._extract_tts_fallback_text(summarize_response)
+        if summarized_text:
+            return summarized_text, summarized_text
+
+        history_fallback = self._extract_fallback_response_from_history()
+        if history_fallback:
+            return history_fallback, history_fallback
+
+        generic_error = (
+            "Die Zusammenfassung ist fehlgeschlagen. Bitte stelle die Anfrage erneut."
+        )
+        return generic_error, generic_error
+
+    def _extract_fallback_response_from_history(self):
+        for message in reversed(self.messages):
+            content = self._get_message_content(message)
+            extracted = self._extract_tts_fallback_text(content)
+            if extracted:
+                return extracted
+        return None
+
+    def _get_latest_failed_tool_payload(self):
+        for payload in reversed(self._get_trailing_tool_payloads()):
+            if isinstance(payload, dict) and payload.get("success") is False:
+                return payload
+        return None
+
+    def _get_trailing_tool_payloads(self):
+        payloads = []
+        started_tool_block = False
+
+        for message in reversed(self.messages):
+            role = self._get_message_role(message)
+            if role == "tool":
+                started_tool_block = True
+                payload = self._parse_tool_payload_content(self._get_message_content(message))
+                if payload is not None:
+                    payloads.append(payload)
+                continue
+            if started_tool_block:
+                break
+
+        return list(reversed(payloads))
+
+    @staticmethod
+    def _parse_tool_payload_content(content):
+        if content is None:
+            return None
+        if isinstance(content, dict):
+            return content
+        if not isinstance(content, str):
+            content = str(content)
+        stripped = content.strip()
+        if not stripped:
+            return None
+        try:
+            return json.loads(stripped)
+        except Exception:
+            return None
+
+    def _get_message_content(self, message):
+        if isinstance(message, dict):
+            return message.get("content")
+        return getattr(message, "content", None)
+
+    def _extract_tts_fallback_text(self, value):
+        if value is None:
+            return None
+
+        if isinstance(value, dict):
+            return self._extract_text_from_payload_dict(value)
+
+        if isinstance(value, list):
+            normalized_parts = []
+            for item in value:
+                piece = self._extract_tts_fallback_text(item)
+                if piece:
+                    normalized_parts.append(piece)
+            if normalized_parts:
+                return self._trim_tts_text(" ".join(normalized_parts))
+            return None
+
+        if not isinstance(value, str):
+            value = str(value)
+
+        stripped = value.strip()
+        if not stripped:
+            return None
+
+        if stripped.startswith("{") or stripped.startswith("["):
+            try:
+                parsed = json.loads(stripped)
+                parsed_result = self._extract_tts_fallback_text(parsed)
+                if parsed_result:
+                    return parsed_result
+            except Exception:
+                pass
+
+        return self._trim_tts_text(" ".join(stripped.split()))
+
+    def _extract_text_from_payload_dict(self, payload: dict):
+        preferred_keys = [
+            "preferred_answer",
+            "llm_player_summary",
+            "message",
+            "instructions",
+            "llm_follow_up_question",
+            "error",
+        ]
+
+        for key in preferred_keys:
+            if key not in payload:
+                continue
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return self._trim_tts_text(" ".join(value.split()))
+            nested = self._extract_tts_fallback_text(value)
+            if nested:
+                return nested
+
+        return None
+
+    @staticmethod
+    def _trim_tts_text(text: str, max_chars: int = 3000):
+        if not text:
+            return None
+
+        if len(text) <= max_chars:
+            return text
+
+        truncated = text[:max_chars]
+        cut_candidates = [
+            truncated.rfind(". "),
+            truncated.rfind("! "),
+            truncated.rfind("? "),
+            truncated.rfind(", "),
+            truncated.rfind(" "),
+        ]
+        cut = max(cut_candidates)
+        if cut > int(max_chars * 0.6):
+            truncated = truncated[:cut].strip()
+        else:
+            truncated = truncated.strip()
+        return f"{truncated} ..."
 
     async def _execute_command_by_function_call(
         self, function_name: str, function_args: dict[str, any]

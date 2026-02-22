@@ -995,12 +995,13 @@ query IssueByCode($code: String!) {
             "success": True,
             "issues": issues,
             "total_count": filtered_issues.get("totalCount", 0),
+            "do_not_cache": True
         }
 
     def _get_issue_details(self, code: str):
         code = self._normalize_issue_code(code)
         if not code:
-            return {"success": False, "error": "Invalid issue code."}
+            return {"success": False, "error": "Invalid issue code.", "do_not_cache": True}
 
         request_result = self._request_graphql(self.ISSUE_DETAILS_QUERY, {"code": code})
         if not request_result.get("success", False):
@@ -1008,8 +1009,8 @@ query IssueByCode($code: String!) {
 
         issue = request_result.get("data", {}).get("issueByCode") if isinstance(request_result.get("data"), dict) else None
         if not issue:
-            return {"success": False, "error": f"Issue {code} not found."}
-        return {"success": True, "issue": issue}
+            return {"success": False, "error": f"Issue {code} not found.", "do_not_cache": True}
+        return {"success": True, "issue": issue, "do_not_cache": True}
 
     def _request_graphql(self, query: str, variables: dict):
         payload = {"query": query, "variables": variables}
@@ -1042,20 +1043,21 @@ query IssueByCode($code: String!) {
                     "success": False,
                     "auth_required": True,
                     "error": self._build_auth_error_message(status_code=response.status_code),
+                    "do_not_cache": True
                 }
 
             response.raise_for_status()
             payload = response.json()
         except requests.RequestException as error:
-            return {"success": False, "error": f"Issue Council request failed: {error}"}
+            return {"success": False, "error": f"Issue Council request failed: {error}", "do_not_cache": True}
         except ValueError as error:
-            return {"success": False, "error": f"Issue Council response parse failed: {error}"}
+            return {"success": False, "error": f"Issue Council response parse failed: {error}", "do_not_cache": True}
 
         errors = payload.get("errors", [])
         if errors:
             message = errors[0].get("message") if isinstance(errors[0], dict) else str(errors[0])
-            return {"success": False, "error": f"Issue Council GraphQL error: {message}"}
-        return {"success": True, "data": payload.get("data", {})}
+            return {"success": False, "error": f"Issue Council GraphQL error: {message}", "do_not_cache": True}
+        return {"success": True, "data": payload.get("data", {}), "do_not_cache": True}
 
     def _extract_issue_summary(self, issue_node: dict):
         issue_node = self._as_dict(issue_node)
@@ -1178,7 +1180,7 @@ query IssueByCode($code: String!) {
         parsed = self._extract_json_object_from_completion(completion)
         self._debug_log("llm validates issue candidates response", parsed)
         if not isinstance(parsed, dict):
-            return {"success": False, "error": "Could not parse LLM candidate selection response."}
+            return {"success": False, "error": "Could not parse LLM candidate selection response.", "do_not_cache": True}
 
         best_issue_code = self._normalize_issue_code(parsed.get("best_issue_code"))
         if best_issue_code and best_issue_code not in allowed_codes:
@@ -1209,6 +1211,7 @@ query IssueByCode($code: String!) {
             "review_issue_codes": review_codes,
             "possible_duplicate_codes": possible_duplicate_codes,
             "missing_information": parsed.get("missing_information", []),
+            "do_not_cache": True,
         }
 
     def _llm_summarize_issue_analysis(
@@ -1244,6 +1247,7 @@ query IssueByCode($code: String!) {
         return {
             "summary_for_player": str(parsed.get("summary_for_player", "")).strip(),
             "follow_up_question": str(parsed.get("follow_up_question", "")).strip(),
+            "do_not_cache": True,
         }
 
     def _llm_score_duplicate_relevance(

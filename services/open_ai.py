@@ -3,6 +3,7 @@ import os
 import time
 import csv
 import traceback
+from collections.abc import Mapping
 from dataclasses import dataclass
 from types import SimpleNamespace
 from openai import OpenAI, APIStatusError, AzureOpenAI
@@ -30,6 +31,8 @@ class STTConfig:
 PERFORMANCE_CSV_PATH = os.path.join("debug_data", "stt", "performance.csv")
 
 class OpenAi:
+    _MAX_TTS_INPUT_CHARS = 4000
+
     def __init__(
         self,
         api_key: str,
@@ -233,16 +236,22 @@ class OpenAi:
         self.last_error_message = None
 
         try:
+            messages_to_send = self._sanitize_messages_for_tool_call_sequence(messages)
+            if len(messages_to_send) != len(messages):
+                printr.print(
+                    "Sanitized message history before API call to repair tool-call sequence.",
+                    tags="warn",
+                )
             if not tools:
                 completion = client.chat.completions.create(
                     stream=stream,
-                    messages=messages,
+                    messages=messages_to_send,
                     model=model,
                 )
             else:
                 completion = client.chat.completions.create(
                     stream=stream,
-                    messages=messages,
+                    messages=messages_to_send,
                     model=model,
                     tools=tools,
                     tool_choice="auto",
@@ -267,6 +276,11 @@ class OpenAi:
         try:
             if not voice:
                 voice = "nova"
+
+            text = self._sanitize_tts_input(text)
+            if not text:
+                printr.print_warn("TTS skipped because input text is empty after sanitization.")
+                return None
 
             client_to_use = self.client
 
@@ -299,6 +313,130 @@ class OpenAi:
             printr.print(f"Unerwarteter Fehler bei der Sprachgenerierung: {e}", tags="err")
             traceback.print_exc()
             return None
+
+    @staticmethod
+    def _get_message_role(message):
+        if isinstance(message, Mapping):
+            return message.get("role")
+        return getattr(message, "role", None)
+
+    @staticmethod
+    def _get_message_tool_calls(message):
+        if isinstance(message, Mapping):
+            return message.get("tool_calls")
+        return getattr(message, "tool_calls", None)
+
+    @staticmethod
+    def _get_tool_call_id(tool_call):
+        if isinstance(tool_call, Mapping):
+            return tool_call.get("id")
+        return getattr(tool_call, "id", None)
+
+    @staticmethod
+    def _get_message_tool_call_id(message):
+        if isinstance(message, Mapping):
+            return message.get("tool_call_id")
+        return getattr(message, "tool_call_id", None)
+
+    def _sanitize_messages_for_tool_call_sequence(self, messages):
+        """
+        Sanitizes a sequence of chat messages to ensure proper pairing between assistant tool calls and corresponding tool responses.
+        Args:
+            messages (list): A list of chat message dictionaries, each containing information such as role and tool call data.
+        Returns:
+            list: A sanitized list of messages where:
+                - Assistant messages with tool calls are only included if all expected tool responses follow and match their tool call IDs.
+                - Tool messages not attached to a valid assistant tool-call block are skipped.
+                - Orphaned or incomplete assistant tool calls and their immediate tool blocks are removed.
+                - All other messages are preserved.
+        The function iterates through the message sequence, grouping assistant tool calls with their corresponding tool responses, and discards any incomplete or orphaned tool call sequences to maintain message integrity.
+        """
+        if not isinstance(messages, list):
+            return messages
+
+        sanitized = []
+        i = 0
+        total = len(messages)
+
+        while i < total:
+            message = messages[i]
+            role = self._get_message_role(message)
+
+            if role == "assistant":
+                tool_calls = self._get_message_tool_calls(message) or []
+                expected_ids = {
+                    str(call_id)
+                    for call_id in (
+                        self._get_tool_call_id(tool_call) for tool_call in tool_calls
+                    )
+                    if call_id
+                }
+
+                if not expected_ids:
+                    sanitized.append(message)
+                    i += 1
+                    continue
+
+                j = i + 1
+                collected_tool_messages = []
+                collected_ids = set()
+                while j < total and self._get_message_role(messages[j]) == "tool":
+                    tool_message = messages[j]
+                    tool_call_id = self._get_message_tool_call_id(tool_message)
+                    if tool_call_id is not None:
+                        normalized_id = str(tool_call_id)
+                        if normalized_id in expected_ids:
+                            collected_tool_messages.append(tool_message)
+                            collected_ids.add(normalized_id)
+                    j += 1
+
+                if expected_ids.issubset(collected_ids):
+                    sanitized.append(message)
+                    sanitized.extend(collected_tool_messages)
+                # If incomplete, drop the dangling assistant call and its immediate tool block.
+                i = j
+                continue
+
+            if role == "tool":
+                # Orphan tool messages are skipped unless attached to a valid assistant tool-call block above.
+                i += 1
+                continue
+
+            sanitized.append(message)
+            i += 1
+
+        return sanitized
+
+    def _sanitize_tts_input(self, text: str, max_chars: int | None = None) -> str:
+        if text is None:
+            return ""
+
+        if not isinstance(text, str):
+            text = str(text)
+
+        normalized = " ".join(text.split()).strip()
+        if not normalized:
+            return ""
+
+        hard_limit = max_chars or self._MAX_TTS_INPUT_CHARS
+        if len(normalized) <= hard_limit:
+            return normalized
+
+        truncated = normalized[:hard_limit]
+        cut_candidates = [
+            truncated.rfind(". "),
+            truncated.rfind("! "),
+            truncated.rfind("? "),
+            truncated.rfind(", "),
+            truncated.rfind(" "),
+        ]
+        cut = max(cut_candidates)
+        if cut > int(hard_limit * 0.6):
+            truncated = truncated[:cut].strip()
+        else:
+            truncated = truncated.strip()
+
+        return f"{truncated} ..."
 
     def _handle_key_error(self):
         printr.print(

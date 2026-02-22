@@ -20,7 +20,7 @@ except ImportError:
 from wingmen.star_citizen_services.overlay import StarCitizenOverlay
 
 
-DEBUG = False
+DEBUG = True
 TEST = False
 
 
@@ -417,6 +417,7 @@ class OCR:
                 with open(full_path, 'r', encoding="UTF-8") as file:
                     message_content, _ = self._extract_message_content(json.load(file))
                     message_content = self._normalize_message_content(message_content)
+                    print(f"Loaded example response from {full_path} for testing.")
 
             if "error" in json.dumps(message_content).lower():
                 if img_str and response is not None:
@@ -481,8 +482,15 @@ class OCR:
             os.makedirs(path)
 
         img_path = os.path.join(path, f"vision_payload_image_{placeholder_part}_{timestamp}.jpg")
-        with open(img_path, 'wb') as f:
-            f.write(base64.b64decode(img_str))
+        if img_str:
+            try:
+                encoded = img_str.split(",", 1)[1] if isinstance(img_str, str) and "," in img_str else img_str
+                with open(img_path, 'wb') as f:
+                    f.write(base64.b64decode(encoded))
+            except (TypeError, ValueError) as exc:
+                print_debug(f"Could not decode debug image payload: {exc}")
+        else:
+            print_debug("No image payload available for debug image dump.")
 
         # Create the full path and filename
         filename = f"open_ai_full_response_{placeholder_part}_{timestamp}.json"
@@ -490,10 +498,20 @@ class OCR:
         
         # Write JSON data to a file
         with open(full_path, 'w', encoding="UTF-8") as file:
+            if response is None:
+                json.dump({"debug": "No HTTP response object available (likely test/example mode)."}, file, indent=4)
+                return filename
+
+            if isinstance(response, (dict, list)):
+                json.dump(response, file, indent=4)
+                return filename
+
             try:
                 json.dump(response.json(), file, indent=4)
             except ValueError:
-                json.dump({"raw_response": response.text}, file, indent=4)
+                json.dump({"raw_response": getattr(response, "text", str(response))}, file, indent=4)
+            except Exception as exc:
+                json.dump({"debug_dump_error": str(exc), "raw_response": getattr(response, "text", str(response))}, file, indent=4)
         return filename
 
     def get_screenshotfile_texts(self, image_path, *subdirectories, **filename_placeholders):
