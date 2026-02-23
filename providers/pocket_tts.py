@@ -218,7 +218,7 @@ class PocketTTS:
 
         # 1. Normalize/Resolve the ID to its final path/form first
         resolved_key = voice_id_or_path
-        # Check Pocket-TTS voices 
+        # Check Pocket-TTS voices
         built_in_voices_dir = self._get_pocket_tts_included_voices_dir()
         possible_path = os.path.join(built_in_voices_dir, f"{resolved_key}.safetensors")
         if os.path.exists(possible_path):
@@ -232,7 +232,12 @@ class PocketTTS:
                 resolved_key = os.path.abspath(possible_path)
             else:
                 # Try finding file with supported extensions, preferring safetensors over other formats
-                for ext in [".safetensors", ".wav", ".mp3", ".flac",]:
+                for ext in [
+                    ".safetensors",
+                    ".wav",
+                    ".mp3",
+                    ".flac",
+                ]:
                     p = possible_path + ext
                     if os.path.exists(p):
                         resolved_key = os.path.abspath(p)
@@ -244,7 +249,12 @@ class PocketTTS:
                 resolved_key = os.path.abspath(possible_path)
             else:
                 # Try finding file with supported extensions, preferring safetensors over other formats
-                for ext in [".safetensors", ".wav", ".mp3", ".flac",]:
+                for ext in [
+                    ".safetensors",
+                    ".wav",
+                    ".mp3",
+                    ".flac",
+                ]:
                     p = possible_path + ext
                     if os.path.exists(p):
                         resolved_key = os.path.abspath(p)
@@ -432,65 +442,39 @@ class PocketTTS:
             return "wav"
         return fmt
 
+    def _get_app_dir(self) -> str:
+        """Return the application root directory (bundle-aware).
+
+        In PyInstaller one-dir builds, runtime assets often live under an internal
+        directory (e.g. "_internal"), while our bundled models/voices are located
+        alongside that directory. We therefore resolve to the parent of
+        the PyInstaller extraction directory ("_MEIPASS") when bundled.
+        """
+
+        app_is_bundled = getattr(sys, "frozen", False)
+        if app_is_bundled:
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                return os.path.dirname(meipass)
+
+        # Source/dev layout: <repo>/providers/pocket_tts.py -> app root is two dirs up.
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
     def _get_default_model_path(self) -> str:
         is_windows = platform.system() == "Windows"
         if is_windows:
-            # move one dir up, out of _internal (if bundled)
-            app_is_bundled = getattr(sys, "frozen", False)
-            app_root_path = (
-                sys._MEIPASS
-                if app_is_bundled
-                else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            )
-            app_dir = (
-                os.path.dirname(app_root_path) if app_is_bundled else app_root_path
-            )
+            app_dir = self._get_app_dir()
             model_path = os.path.join(app_dir, MODELS_DIR, "b6369a24.yaml")
         else:
             model_path = "b6369a24"
         return model_path
 
-    def _get_pocket_tts_included_voices_dir(self):
+    def _get_pocket_tts_included_voices_dir(self) -> str:
         # Determine path to PocketTTS included/bundled embeddings directory
-        is_windows = platform.system() == "Windows"
-        if is_windows:
-            # move one dir up, out of _internal (if bundled)
-            app_is_bundled = getattr(sys, "frozen", False)
-            app_root_path = (
-                sys._MEIPASS
-                if app_is_bundled
-                else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            )
-            app_dir = (
-                os.path.dirname(app_root_path) if app_is_bundled else app_root_path
-            )
-            pocket_tts_included_voices_dir = os.path.join(app_dir, MODELS_DIR, POCKET_TTS_VOICES_DIR)
+        app_dir = self._get_app_dir()
+        return os.path.join(app_dir, MODELS_DIR, POCKET_TTS_VOICES_DIR)
 
-        else:
-            # Return included directory
-            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            pocket_tts_included_voices_dir = os.path.join(app_dir, MODELS_DIR, POCKET_TTS_VOICES_DIR)
-        return pocket_tts_included_voices_dir
-        
-    
-    def _get_wingman_included_voices_dir(self):
+    def _get_wingman_included_voices_dir(self) -> str:
         # Determine path to wingman included voices directory
-        is_windows = platform.system() == "Windows"
-        if is_windows:
-            # move one dir up, out of _internal (if bundled)
-            app_is_bundled = getattr(sys, "frozen", False)
-            app_root_path = (
-                sys._MEIPASS
-                if app_is_bundled
-                else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            )
-            app_dir = (
-                os.path.dirname(app_root_path) if app_is_bundled else app_root_path
-            )
-            wingmanai_voices_dir = os.path.join(app_dir, INCLUDED_VOICES_DIR)
-
-        else:
-            # Return included directory
-            app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            wingmanai_voices_dir = os.path.join(app_dir, INCLUDED_VOICES_DIR)
-        return wingmanai_voices_dir
+        app_dir = self._get_app_dir()
+        return os.path.join(app_dir, INCLUDED_VOICES_DIR)
