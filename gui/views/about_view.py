@@ -14,7 +14,7 @@ class AboutView(ctk.CTkFrame):
         self.grid_rowconfigure(1, weight=1)
         padding = {"padx":15, "pady":10}
 
-        self.headline = ctk.CTkLabel(self, text="About Wingman AI", font=('TkHeadingFont', 20, "bold"))
+        self.headline = ctk.CTkLabel(self, text="About Cora SC", font=('TkHeadingFont', 20, "bold"))
         self.headline.grid(row=0, column=0, columnspan=2, **padding)
         self.close_button = IconButton(self,
                                         icon="close",

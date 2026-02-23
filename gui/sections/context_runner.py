@@ -7,10 +7,22 @@ printr = Printr()
 
 
 class ContextRunner(ctk.CTkFrame):
+    THEME = {
+        "bg": "#060f1d",
+        "panel": "#0d1b2d",
+        "panel_alt": "#102239",
+        "border": "#1c3f64",
+        "text": "#d7efff",
+        "muted": "#83a4c6",
+        "accent": "#2ab8ff",
+        "accent_hover": "#3ec5ff",
+    }
+
     def __init__(self, master, context="", **kwargs):
         super().__init__(master, **kwargs)
 
         self.core = master.core
+        self.theme = self.THEME
         self.core.load_context(context)
         self.status_var = ctk.StringVar(self, "Inactive", "status")
         tower = self.core.tower
@@ -26,7 +38,7 @@ class ContextRunner(ctk.CTkFrame):
             self,
             text=context_title,
             font=("TkHeadingFont", 20, "bold"),
-            text_color="#EB154D",
+            text_color=self.theme["accent"],
         )
         self.title.grid(row=0, column=0, padx=20, pady=10, sticky="w")
 
@@ -35,7 +47,8 @@ class ContextRunner(ctk.CTkFrame):
             self,
             textvariable=self.status_var,
             anchor="w",
-            fg_color=("grey70", "grey30"),
+            fg_color=self.theme["panel_alt"],
+            text_color=self.theme["text"],
             corner_radius=10,
             width=65,
             pady=3,
@@ -80,6 +93,9 @@ class ContextRunner(ctk.CTkFrame):
             command=self.toggle_listener,
             height=45,
             font=("TkHeadingFont", 22, "bold"),
+            fg_color=self.theme["accent"],
+            hover_color=self.theme["accent_hover"],
+            text_color="#041524",
         )
         self.button.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
         if not tower:

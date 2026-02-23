@@ -2,5 +2,11 @@
 *.xcf
 *.mp4
 
-!Cora_icon_*.png
-!Cora_SC_Image.png
+!Cora*.png
+!abort.png
+!changed.png
+!check.png
+!error.png
+!unknown.png
+!warn.png
+!sent*.png

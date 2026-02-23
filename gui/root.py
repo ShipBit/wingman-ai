@@ -22,6 +22,13 @@ class WingmanUI(ctk.CTk):
     _views: dict[VIEWS, ctk.CTkFrame | None] = dict(
         context=None, settings=None, about=None
     )
+    THEME = {
+        "bg": "#060f1d",
+        "panel": "#0d1b2d",
+        "panel_alt": "#102239",
+        "border": "#1c3f64",
+        "accent": "#2ab8ff",
+    }
     
     @classmethod
     def get_instance(cls, *args, **kwargs):
@@ -45,36 +52,59 @@ class WingmanUI(ctk.CTk):
     def __init__(self, core):
         super().__init__()
         self.core = core
+        self.theme = self.THEME
 
         self.about_window = None
 
+        theme_path = path.join(self.core.app_root_dir, "assets", "themes", "cora-sc.json")
+        if path.exists(theme_path):
+            ctk.set_default_color_theme(theme_path)
         ctk.set_appearance_mode(
             self.core.config_manager.gui_config.get("appearance", "system")
         )
-        # TODO: add themes
-        # ctk.set_default_color_theme(path.join(self.core.app_root_dir, "assets", "themes", "wingman-ai.json"))
-
-        self.title("Wingman AI")
+        self.title("Cora SC")
         self.geometry("1024x800+200+150")
         self.minsize(400, 150)
-        # no way to set this on MacOS
-        self.iconbitmap(path.join(self.core.app_root_dir, "assets", "wingman-ai.ico"))
+        self.configure(fg_color=self.theme["bg"])
+
+        icon_dir = path.join(self.core.app_root_dir, "assets", "cora-sc")
+        icon_candidates = [
+            "Cora_C_icon.png",
+            "Cora_C_icon_250.png",
+            "Cora_C_icon_150.png",
+            "Cora_C_icon_100.png",
+        ]
+        self._app_icons = []
+        for icon_name in icon_candidates:
+            candidate_path = path.join(icon_dir, icon_name)
+            if not path.exists(candidate_path):
+                continue
+            try:
+                self._app_icons.append(tk.PhotoImage(file=candidate_path))
+            except tk.TclError:
+                continue
+
+        if self._app_icons:
+            self.iconphoto(True, *self._app_icons)
+            self.wm_iconphoto(True, *self._app_icons)
+        if platform.startswith("win"):
+            app_icon_ico = path.join(
+                self.core.app_root_dir, "assets", "cora-sc", "Cora_C_icon.ico"
+            )
+            if path.exists(app_icon_ico):
+                try:
+                    self.iconbitmap(app_icon_ico)
+                except tk.TclError:
+                    pass
 
         if platform == "darwin":
-            mac_dock_icon = tk.Image(
-                "photo",
-                file=path.join(
-                    self.core.app_root_dir, "assets", "icons", "wingman-ai.png"
-                ),
-            )
-            self.iconphoto(True, mac_dock_icon)
             self.menubar = tk.Menu(self)
             self.system_menu = tk.Menu(self.menubar, name="apple")
-            self.system_menu.add_command(label="Exit Wingman AI", command=self.quit)
+            self.system_menu.add_command(label="Exit Cora SC", command=self.quit)
             self.menubar.add_cascade(label="System", menu=self.system_menu)
             self.help_menu = tk.Menu(self.menubar, tearoff=0)
             self.help_menu.add_command(
-                label="About Wingman AI", command=lambda: self.show_view("about")
+                label="About Cora SC", command=lambda: self.show_view("about")
             )
             self.menubar.add_cascade(label="Help", menu=self.help_menu)
             self.config(menu=self.menubar)
@@ -82,7 +112,14 @@ class WingmanUI(ctk.CTk):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        self.header = Header(self, height=74, corner_radius=0)
+        self.header = Header(
+            self,
+            height=74,
+            corner_radius=0,
+            fg_color=self.theme["panel_alt"],
+            border_color=self.theme["border"],
+            border_width=1,
+        )
         self.header.grid(row=0, column=0, sticky="we")
 
         view_grid = {"row": 1, "column": 0, "sticky": "nesw"}
@@ -99,7 +136,9 @@ class WingmanUI(ctk.CTk):
         )
         self._views["context"].grid(**view_grid)
 
-        self.notification_banner = NotificationBanner(self, corner_radius=0)
+        self.notification_banner = NotificationBanner(
+            self, corner_radius=0, fg_color=self.theme["panel_alt"]
+        )
         self.notification_banner.set_grid_position(row=2, column=0)
 
     def switch_view(self, view: VIEWS, show=True):

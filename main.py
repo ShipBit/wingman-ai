@@ -3,6 +3,7 @@ import sys
 import asyncio
 import threading
 import traceback # Import traceback
+import ctypes
 from typing import Optional # Import Optional
 from pynput import keyboard
 from pynput import mouse
@@ -17,6 +18,7 @@ from wingmen.wingman import Wingman
 printr = Printr()
 
 DEBUG = False
+WINDOWS_APP_ID = "cora.sc.wingmanai"
 
 
 def print_debug(to_print):
@@ -241,6 +243,12 @@ class WingmanAI:
 
 # ─────────────────────────────────── ↓ START ↓ ─────────────────────────────────────────
 if __name__ == "__main__":
+    if sys.platform.startswith("win"):
+        try:
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(WINDOWS_APP_ID)
+        except Exception:
+            pass
+
     core = WingmanAI()
     listener = None
     mouseListener = None

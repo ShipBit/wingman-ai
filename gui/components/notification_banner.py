@@ -6,9 +6,9 @@ from services.printr import Printr
 
 class NotificationBanner(ctk.CTkFrame):
     notification_level: dict[Printr.CHANNEL, Any] = {
-        "info": {"color": ("#113399", "#113399"), "font_color": "white"},
-        "warning": {"color": ("yellow", "yellow"), "font_color": ("black", "black")},
-        "error": {"color": "#dd0033", "font_color": "white"}
+        "info": {"color": ("#102239", "#102239"), "font_color": "#d7efff"},
+        "warning": {"color": ("#ff8a7a", "#ff8a7a"), "font_color": ("#041524", "#041524")},
+        "error": {"color": "#d8456a", "font_color": "white"}
     }
 
     def __init__(self, master, **kwargs):
@@ -23,7 +23,7 @@ class NotificationBanner(ctk.CTkFrame):
                                 size=16,
                                 padding=8,
                                 themed=False,
-                                hover_color="white",
+                                hover_color="#3ec5ff",
                                 command=self.hide)
         self.close_button.grid(row=0, column=3, padx=5, pady=5, sticky="e")
 

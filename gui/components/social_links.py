@@ -22,14 +22,14 @@ class SocialLinks(ctk.CTkFrame):
                                 size=32,
                                 hover_color=btn_hover_color,
                                 themed=False,
-                                command=lambda: self.__open_link("https://github.com/ShipBit/wingman-ai"))
+                                command=lambda: self.__open_link("https://github.com/kalumet/cora-sc"))
         self.github_button.grid(row=0, column=1, **padding)
         self.patreon_button = IconButton(self,
                                 icon="patreon",
                                 size=32,
                                 hover_color=btn_hover_color,
                                 themed=False,
-                                command=lambda: self.__open_link("https://patreon.com/ShipBit"))
+                                command=lambda: self.__open_link("https://www.patreon.com"))
         self.patreon_button.grid(row=0, column=2, **padding)
 
 
