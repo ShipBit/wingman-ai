@@ -451,7 +451,7 @@ class PocketTTS:
         return model_path
 
     def _get_pocket_tts_included_voices_dir(self):
-        # Determine path to wingman included voices directory
+        # Determine path to PocketTTS included/bundled embeddings directory
         is_windows = platform.system() == "Windows"
         if is_windows:
             # move one dir up, out of _internal (if bundled)
