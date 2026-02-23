@@ -1,0 +1,238 @@
+query Issues($query: SimilarIssuesQueryInput!) {
+  similarIssues(query: $query) {
+    totalCount
+    pages {
+      current {
+        pageInfo {
+          startCursor
+          endCursor
+          hasNextPage
+          hasPreviousPage
+          __typename
+        }
+        pageNumber
+        __typename
+      }
+      first {
+        pageInfo {
+          startCursor
+          endCursor
+          hasNextPage
+          hasPreviousPage
+          __typename
+        }
+        pageNumber
+        __typename
+      }
+      last {
+        pageInfo {
+          startCursor
+          endCursor
+          hasNextPage
+          hasPreviousPage
+          __typename
+        }
+        pageNumber
+        __typename
+      }
+      next {
+        pageInfo {
+          startCursor
+          endCursor
+          hasNextPage
+          hasPreviousPage
+          __typename
+        }
+        pageNumber
+        __typename
+      }
+      previous {
+        pageInfo {
+          startCursor
+          endCursor
+          hasNextPage
+          hasPreviousPage
+          __typename
+        }
+        pageNumber
+        __typename
+      }
+      __typename
+    }
+    edges {
+      cursor
+      node {
+        id
+        code
+        status
+        search {
+          score
+          relevanceScore
+          highlights {
+            tag
+            field
+            matches
+            __typename
+          }
+          excerpts {
+            field
+            content
+            __typename
+          }
+          __typename
+        }
+        project {
+          id
+          code
+          name
+          __typename
+        }
+        details {
+          severity
+          title
+          category {
+            id
+            code
+            name
+            __typename
+          }
+          environment {
+            id
+            code
+            name
+            __typename
+          }
+          __typename
+        }
+        openDetails {
+          openedBy {
+            id
+            name {
+              first
+              last
+              __typename
+            }
+            username
+            displayName
+            avatarUrl
+            __typename
+          }
+          confirmationThreshold
+          openedOn
+          expiresOn
+          __typename
+        }
+        community {
+          contributionCount
+          reproductionCount
+          severity
+          voteCount
+          earlyReproductionContributors {
+            id
+            name {
+              first
+              last
+              __typename
+            }
+            email
+            avatarUrl
+            username
+            displayName
+            __typename
+          }
+          __typename
+        }
+        confirmedDetails {
+          confirmedOn
+          __typename
+        }
+        archivedDetails {
+          archivedOn
+          reason
+          duplicateOf {
+            id
+            code
+            __typename
+          }
+          __typename
+        }
+        underInvestigationDetails {
+          investigationStartedOn
+          __typename
+        }
+        fixedDetails {
+          fixedOn
+          fixedInReleaseCode
+          __typename
+        }
+        externalIssue {
+          code
+          url
+          fixedInReleaseCode
+          metadata {
+            key
+            value
+            __typename
+          }
+          __typename
+        }
+        viewerProperties {
+          canContribute
+          cannotContributeReason
+          favourited
+          __typename
+        }
+        visibility {
+          ...SecurityVisibilityFragment
+          __typename
+        }
+        promotionDetails {
+          ...IssueSummaryPromotionDetailsFragment
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}
+
+fragment SecurityVisibilityFragment on SecurityVisibility {
+  level
+  inheritancePolicy
+  restrictedTo {
+    ... on SecurityUserTrustee {
+      type
+      user {
+        id
+        displayName
+        avatarUrl
+        __typename
+      }
+      __typename
+    }
+    ... on SecurityGroupTrustee {
+      type
+      group {
+        id
+        code
+        name
+        role
+        isDeleted
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment IssueSummaryPromotionDetailsFragment on IssueSummaryPromotionDetails {
+  status
+  promotedOn
+  unpromotedOn
+  additionalInfo
+  __typename
+}

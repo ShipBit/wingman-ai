@@ -33,12 +33,16 @@ class IssueCouncilManager(FunctionManager):
         "Search Issue Council by free text and bug symptoms",
         "Pick the closest matching issue and summarize relevance",
         "Analyze reproductions, duplicate links, and possible duplicate variants",
+        "Create a new issue when no relevant issue exists",
         "Opens issue links in browser.",
     ]
 
     DEFAULT_PROJECT_ID = "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0"
+    DEFAULT_PROJECT_CODE = "STAR-CITIZEN"
     DEFAULT_STATUSES = ["OPEN", "CONFIRMED", "UNDER_INVESTIGATION"]
     DEFAULT_MAX_BROWSER_OPEN_TABS = 15
+    DEFAULT_ISSUE_SEVERITY = "MEDIUM"
+    ALLOWED_ISSUE_SEVERITIES = {"LOW", "MEDIUM", "HIGH", "CRITICAL"}
     STOP_WORDS = {
         "a",
         "an",
@@ -120,8 +124,78 @@ class IssueCouncilManager(FunctionManager):
         "- Focus on symptoms and entities.\n"
         "- Do not add explanations."
     )
+    LLM_CATEGORY_SELECTION_SYSTEM_PROMPT = (
+        "You map a Star Citizen bug report to the best matching Issue Council category.\n"
+        "Return only a valid JSON object with keys:\n"
+        "- category_id: string or null (must be one of provided category ids)\n"
+        "- reasoning_short: short string\n"
+        "Rules:\n"
+        "- Prefer category semantics over popularity.\n"
+        "- Never invent category ids."
+    )
 
-    FILTERED_ISSUES_QUERY = """
+    SIMILAR_ISSUES_QUERY = """
+query Issues($query: SimilarIssuesQueryInput!) {
+  similarIssues(query: $query) {
+    totalCount
+    edges {
+      node {
+        id
+        code
+        status
+        search {
+          score
+          relevanceScore
+          highlights {
+            field
+            matches
+          }
+        }
+        details {
+          title
+          severity
+          category {
+            name
+          }
+          environment {
+            id
+            code
+            name
+          }
+        }
+        openDetails {
+          openedOn
+          expiresOn
+        }
+        community {
+          contributionCount
+          reproductionCount
+          voteCount
+        }
+        archivedDetails {
+          archivedOn
+          reason
+          duplicateOf {
+            code
+          }
+        }
+        confirmedDetails {
+          confirmedOn
+        }
+        underInvestigationDetails {
+          investigationStartedOn
+        }
+        fixedDetails {
+          fixedOn
+          fixedInReleaseCode
+        }
+      }
+    }
+  }
+}
+"""
+
+    FILTERED_ISSUES_FALLBACK_QUERY = """
 query Issues($filteredQuery: IssueQueryInput!) {
   filteredIssues: issues(query: $filteredQuery) {
     totalCount
@@ -145,6 +219,8 @@ query Issues($filteredQuery: IssueQueryInput!) {
             name
           }
           environment {
+            id
+            code
             name
           }
         }
@@ -203,6 +279,8 @@ query IssueByCode($code: String!) {
         name
       }
       environment {
+        id
+        code
         name
       }
       release {
@@ -273,6 +351,137 @@ query IssueByCode($code: String!) {
 }
 """
 
+    PROJECT_DETAILS_QUERY = """
+query Project($code: String!, $environmentQueryInput: EnvironmentQueryInput!, $releaseDeploymentQueryInput: ReleaseDeploymentQueryInput!) {
+  projectByCode(code: $code) {
+    id
+    code
+    name
+    environments(query: $environmentQueryInput) {
+      edges {
+        node {
+          id
+          code
+          name
+          status
+          viewerProperties {
+            canOpenIssue
+            canPostContribution
+          }
+          deployments(query: $releaseDeploymentQueryInput) {
+            edges {
+              node {
+                id
+                status
+                isCurrent
+                completedOn
+                release {
+                  id
+                  code
+                  version {
+                    code
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+    ISSUE_CATEGORIES_QUERY = """
+query ProjectIssueCategories($projectId: ID!, $query: IssueCategoryQueryInput!) {
+  project(id: $projectId) {
+    id
+    issueCategories(query: $query) {
+      edges {
+        node {
+          id
+          code
+          name
+          status
+          statistics {
+            issueCount
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+    SUGGESTED_SYSTEM_CONFIGURATION_QUERY = """
+query GetSuggestedSystemConfiguration($query: SuggestedSystemConfigurationQueryInput!) {
+  viewer {
+    id
+    suggestedSystemConfiguration(query: $query) {
+      id
+      name
+    }
+  }
+}
+"""
+
+    OPEN_ISSUE_MUTATION = """
+mutation OpenIssue($input: OpenIssueInput!) {
+  openIssue(input: $input) {
+    code
+    success
+    message
+    issue {
+      id
+      code
+      status
+      details {
+        title
+        severity
+        category {
+          id
+          code
+          name
+        }
+        environment {
+          id
+          code
+          name
+        }
+        release {
+          id
+          code
+          version {
+            code
+          }
+        }
+      }
+      project {
+        id
+        code
+        name
+      }
+    }
+    problem {
+      type
+      title
+      status
+      help
+      data {
+        ... on ValidationErrors {
+          errors {
+            field
+            code
+            message
+            help
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
     def __init__(self, config, secret_keeper):
         super().__init__(config, secret_keeper)
         self.config = config
@@ -290,6 +499,9 @@ query IssueByCode($code: String!) {
             "https://issue-council.robertsspaceindustries.com/projects/STAR-CITIZEN/issues",
         )
         self.project_id = manager_cfg.get("project_id", self.DEFAULT_PROJECT_ID)
+        self.project_code = str(
+            manager_cfg.get("project_code", self.DEFAULT_PROJECT_CODE)
+        ).strip() or self.DEFAULT_PROJECT_CODE
         self.request_timeout_seconds = self._coerce_int(
             manager_cfg.get("request_timeout_seconds", 12), default=12, minimum=4, maximum=60
         )
@@ -377,6 +589,12 @@ query IssueByCode($code: String!) {
             minimum=5,
             maximum=300,
         )
+        self.project_context_refresh_seconds = self._coerce_int(
+            manager_cfg.get("project_context_refresh_seconds", 21600),  # 6 hours
+            default=21600,
+            minimum=1800,
+            maximum=86400,
+        )
         self.last_token_capture_attempt_ts = 0.0
 
         bearer_secret = self.secret_keeper.retrieve(
@@ -406,6 +624,12 @@ query IssueByCode($code: String!) {
             environment_ids = []
         self.default_environment_ids = [env_id for env_id in environment_ids if isinstance(env_id, str) and env_id]
 
+        self.project_context = {}
+        self.project_context_loaded_at = 0.0
+        self.issue_categories = []
+        self.issue_categories_loaded_at = 0.0
+        self.cached_system_configuration_id = None
+        self.cached_system_configuration_loaded_at = 0.0
         self.last_analysis = None
 
     def get_context_mapping(self) -> AIContext:
@@ -414,6 +638,7 @@ query IssueByCode($code: String!) {
     def register_functions(self, function_register):
         function_register[self.check_issue_council_for_known_bug.__name__] = self.check_issue_council_for_known_bug
         function_register[self.open_issue_council_issues_in_browser.__name__] = self.open_issue_council_issues_in_browser
+        function_register[self.create_issue_council_issue.__name__] = self.create_issue_council_issue
 
     def get_function_prompt(self) -> str:
         return (
@@ -421,13 +646,21 @@ query IssueByCode($code: String!) {
             "Always prepare Issue Council search phrases in English, even if the player speaks another language. "
             "Use the player's wording as bug_description and do not invent missing details. "
             "Always pass search_phrases with concise English symptom phrases. Avoid single word search phrases unless for the key aspect of the bug description. combine the object with symptoms to build search phrases. "
+            "Optionally pass environment as environment name, to filter search results by environment. "
             "Example search_phrases for bug_description 'Is there a bug about the fabricator dissapearing in the hangar?': ['fabricator', 'fabricator hangar', 'fabricator disappearing hangar', 'fabricator missing']. "
+            "If no relevant issue is found, ask if the player wants to create a new issue and call "
+            f"{self.create_issue_council_issue.__name__}. "
+            "Creating an issue requires environment, actual behavior, expected behavior, and reproduction steps. All text must be in English. even if the user speaks another language. Do not invent any details, only use the provided information. "
             "When the user asks to open issue links, call "
             f"{self.open_issue_council_issues_in_browser.__name__}. "
             "For browser opening, default to source=last_analysis, unless user asks for a single specific code. "
         )
 
     def get_function_tools(self) -> list[dict]:
+        search_environment_schema = self._build_environment_param_schema(required=False)
+        create_environment_schema = self._build_environment_param_schema(required=True)
+        severity_schema = self._build_severity_param_schema()
+        category_schema = self._build_category_param_schema()
         return [
             {
                 "type": "function",
@@ -448,8 +681,48 @@ query IssueByCode($code: String!) {
                                 "description": "Search phrases for Issue Council lookup.",
                                 "items": {"type": "string"},
                             },
+                            "environment": search_environment_schema,
                         },
                         "required": ["bug_description", "search_phrases"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": self.create_issue_council_issue.__name__,
+                    "description": (
+                        "Creates a new Issue Council issue when no relevant known issue exists. All Text must be in english."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "environment": create_environment_schema,
+                            "title": {
+                                "type": "string",
+                                "description": "Optional short issue title.",
+                            },
+                            "bug_description": {
+                                "type": "string",
+                                "description": "Optional full bug description context.",
+                            },
+                            "actual_behaviour": {
+                                "type": "string",
+                                "description": "Required. What happens currently.",
+                            },
+                            "expected_behaviour": {
+                                "type": "string",
+                                "description": "Required. What should happen instead.",
+                            },
+                            "reproduction_steps": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Required. Ordered reproduction steps as list of strings.",
+                            },
+                            "severity": severity_schema,
+                            "category": category_schema,
+                        },
+                        "required": [],
                     },
                 },
             },
@@ -491,6 +764,38 @@ query IssueByCode($code: String!) {
             }
 
         threshold = 0.42
+        project_context_result = self._refresh_project_context(force=False)
+        active_environments = project_context_result.get("active_environments", [])
+        environment_input = function_args.get("environment")
+        selected_environment = None
+        if environment_input:
+            if not project_context_result.get("success", False):
+                return {
+                    "success": False,
+                    "known_bug": False,
+                    "error": project_context_result.get("error"),
+                    "instructions": (
+                        "Project environment metadata could not be loaded. "
+                        "Please refresh authentication and retry."
+                    ),
+                    "do_not_cache": True,
+                }
+            selected_environment = self._resolve_environment_filter(
+                environment_input=environment_input,
+                active_environments=active_environments,
+            )
+            if not selected_environment:
+                return {
+                    "success": False,
+                    "known_bug": False,
+                    "invalid_environment_filter": str(environment_input),
+                    "available_environments": self._build_environment_options_payload(active_environments),
+                    "instructions": (
+                        "The provided environment filter is unknown. "
+                        "Ask the user to choose one of the available active environments and retry."
+                    ),
+                    "do_not_cache": True,
+                }
 
         statuses = list(self.DEFAULT_STATUSES)
         search_phrases = function_args.get("search_phrases", [])
@@ -500,21 +805,32 @@ query IssueByCode($code: String!) {
         candidates_by_code = {}
         variation_runs = []
         for term in search_phrases:
+            term = str(term or "").strip()
+            if not term:
+                continue
             self._debug_log(
-                "graphql issues query",
-                {"text": term, "statuses": statuses, "first": self.default_search_limit},
+                "graphql similar issues query",
+                {
+                    "title": term,
+                    "statuses": statuses,
+                    "first": self.default_search_limit,
+                    "environment_filter": (selected_environment or {}).get("name"),
+                },
                 force_payload=True,
             )
             search_result = self._search_issues(
                 search_term=term,
                 statuses=statuses,
                 first=self.default_search_limit,
+                environment_filter=selected_environment,
             )
             variation_runs.append(
                 {
                     "search_term": term,
                     "success": search_result.get("success", False),
                     "total_count": search_result.get("total_count", 0),
+                    "search_backend": search_result.get("search_backend"),
+                    "environment_filter": (selected_environment or {}).get("name"),
                     "error": search_result.get("error"),
                 }
             )
@@ -529,8 +845,10 @@ query IssueByCode($code: String!) {
                 summary = self._extract_issue_summary(issue_node)
                 summary.setdefault("matched_terms", [])
                 summary.setdefault("search_scores", [])
+                summary.setdefault("search_relevance_scores", [])
                 summary["matched_terms"].append(term)
                 summary["search_scores"].append(summary.get("search_score", 0.0))
+                summary["search_relevance_scores"].append(summary.get("search_relevance_score", 0.0))
 
                 existing = candidates_by_code.get(code)
                 if existing is None:
@@ -538,8 +856,14 @@ query IssueByCode($code: String!) {
                 else:
                     existing["matched_terms"] = self._dedupe_list(existing.get("matched_terms", []) + [term])
                     existing["search_scores"] = [*existing.get("search_scores", []), summary.get("search_score", 0.0)]
+                    existing["search_relevance_scores"] = [
+                        *existing.get("search_relevance_scores", []),
+                        summary.get("search_relevance_score", 0.0),
+                    ]
                     if summary.get("search_score", 0.0) > existing.get("search_score", 0.0):
                         existing["search_score"] = summary.get("search_score", 0.0)
+                    if summary.get("search_relevance_score", 0.0) > existing.get("search_relevance_score", 0.0):
+                        existing["search_relevance_score"] = summary.get("search_relevance_score", 0.0)
                     if not existing.get("title") and summary.get("title"):
                         existing["title"] = summary.get("title")
 
@@ -552,9 +876,22 @@ query IssueByCode($code: String!) {
                 "searched_terms": search_phrases,
                 "search_runs": variation_runs,
                 "candidate_count": 0,
+                "selected_environment_filter": self._build_environment_option(selected_environment),
+                "issue_creation_suggested": True,
+                "issue_creation_requirements": {
+                    "requires_environment": True,
+                    "required_fields": [
+                        "environment",
+                        "actual_behaviour",
+                        "expected_behaviour",
+                        "reproduction_steps",
+                    ],
+                    "available_environments": self._build_environment_options_payload(active_environments),
+                },
                 "instructions": (
                     "No matching issue was found with current filters. "
-                    "Ask for additional symptoms, mission context, or exact error wording and retry."
+                    "Ask if the user wants to create a new Issue Council ticket. "
+                    "If yes, collect environment, actual behavior, expected behavior, and reproduction steps, then call create_issue_council_issue."
                 ),
                 "do_not_cache": True,
             }
@@ -616,7 +953,8 @@ query IssueByCode($code: String!) {
                     "title": candidate.get("title", ""),
                     "status": candidate.get("status"),
                     "confidence": candidate.get("confidence", 0.0),
-                    "source": "variation_search",
+                    "search_relevance_score": candidate.get("search_relevance_score", 0.0),
+                    "source": "similar_issue_search",
                 }
             )
             if len(ranked_candidate_variants) >= self.max_possible_duplicate_fetch:
@@ -636,6 +974,7 @@ query IssueByCode($code: String!) {
                     "title": candidate_match.get("title", ""),
                     "status": candidate_match.get("status"),
                     "confidence": candidate_match.get("confidence", 0.0),
+                    "search_relevance_score": candidate_match.get("search_relevance_score", 0.0),
                     "source": "llm_candidate_validation",
                 }
             )
@@ -726,6 +1065,7 @@ query IssueByCode($code: String!) {
             "llm_confidence": llm_confidence if llm_selection_active else None,
             "matched_terms": best_candidate.get("matched_terms", []),
             "search_score": best_candidate.get("search_score", 0.0),
+            "search_relevance_score": best_candidate.get("search_relevance_score", 0.0),
         }
         summary_payload = self._build_summary_payload_for_tts(
             player_bug_description=description,
@@ -745,6 +1085,7 @@ query IssueByCode($code: String!) {
             "success": True,
             "known_bug": known_bug,
             "search_runs": variation_runs,
+            "selected_environment_filter": self._build_environment_option(selected_environment),
             "candidate_count": len(ranked_candidates),
             "best_matching_issue": best_matching_issue_payload,
             "top_candidates": ranked_candidates[:5],
@@ -778,6 +1119,7 @@ query IssueByCode($code: String!) {
         self.last_analysis = {
             "best_issue_code": best_code,
             "root_issue_code": root_code,
+            "selected_environment_filter": self._build_environment_option(selected_environment),
             "browser_open_order": browser_order,
             "browser_open_order_with_possible_duplicates": browser_order_with_possible,
             "possible_duplicates": possible_duplicates,
@@ -786,6 +1128,207 @@ query IssueByCode($code: String!) {
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         return result
+
+    def create_issue_council_issue(self, function_args):
+        project_context_result = self._refresh_project_context(force=True)
+        if not project_context_result.get("success", False):
+            return {
+                "success": False,
+                "error": project_context_result.get("error"),
+                "instructions": (
+                    "Project metadata could not be loaded. "
+                    "Please refresh authentication and retry issue creation."
+                ),
+                "do_not_cache": True,
+            }
+
+        active_environments = project_context_result.get("active_environments", [])
+        environment_input = function_args.get("environment")
+        selected_environment = self._resolve_environment_filter(
+            environment_input=environment_input,
+            active_environments=active_environments,
+        )
+        if not selected_environment:
+            return {
+                "success": False,
+                "missing_required_fields": ["environment"],
+                "available_environments": self._build_environment_options_payload(active_environments),
+                "instructions": (
+                    "Issue creation requires an active environment. "
+                    "Ask the user which environment should be used and call create_issue_council_issue again."
+                ),
+                "do_not_cache": True,
+            }
+        if not bool(selected_environment.get("can_open_issue")):
+            return {
+                "success": False,
+                "selected_environment": self._build_environment_option(selected_environment),
+                "available_environments": self._build_environment_options_payload(active_environments),
+                "instructions": (
+                    "The selected environment does not allow opening issues for the current account. "
+                    "Ask the user to choose a different active environment."
+                ),
+                "do_not_cache": True,
+            }
+
+        release_id = selected_environment.get("current_release_id")
+        if not release_id:
+            return {
+                "success": False,
+                "selected_environment": self._build_environment_option(selected_environment),
+                "instructions": (
+                    "No active release deployment was found for the selected environment. "
+                    "Ask the user to choose another active environment."
+                ),
+                "do_not_cache": True,
+            }
+
+        actual_behaviour = str(function_args.get("actual_behaviour") or "").strip()
+        expected_behaviour = str(function_args.get("expected_behaviour") or "").strip()
+        reproduction_steps = self._normalize_reproduction_steps(
+            function_args.get("reproduction_steps")
+        )
+
+        missing_required_fields = []
+        if not actual_behaviour:
+            missing_required_fields.append("actual_behaviour")
+        if not expected_behaviour:
+            missing_required_fields.append("expected_behaviour")
+        if not reproduction_steps:
+            missing_required_fields.append("reproduction_steps")
+
+        if missing_required_fields:
+            return {
+                "success": False,
+                "missing_required_fields": missing_required_fields,
+                "selected_environment": self._build_environment_option(selected_environment),
+                "instructions": (
+                    "Collect the missing issue details from the user and call create_issue_council_issue again. "
+                    "Required details are actual behavior, expected behavior, and clear reproduction steps."
+                ),
+                "do_not_cache": True,
+            }
+
+        bug_description = str(function_args.get("bug_description") or "").strip()
+        title = str(function_args.get("title") or "").strip()
+        if not title:
+            title = self._build_issue_title(
+                bug_description=bug_description,
+                actual_behaviour=actual_behaviour,
+                expected_behaviour=expected_behaviour,
+            )
+
+        severity = self._normalize_issue_severity(function_args.get("severity"))
+        category_selection = self._select_issue_category(
+            category_input=function_args.get("category"),
+            bug_description=bug_description,
+            title=title,
+            actual_behaviour=actual_behaviour,
+            expected_behaviour=expected_behaviour,
+            reproduction_steps=reproduction_steps,
+        )
+        if not category_selection:
+            return {
+                "success": False,
+                "instructions": (
+                    "Issue category could not be determined. "
+                    "Please retry with more bug context or provide a category explicitly."
+                ),
+                "do_not_cache": True,
+            }
+
+        details_payload = {
+            "title": title,
+            "categoryId": category_selection.get("id"),
+            "severity": severity,
+            "reproductionSteps": [
+                {"description": step, "evidences": []}
+                for step in reproduction_steps
+            ],
+            "releaseId": release_id,
+            "environmentId": selected_environment.get("id"),
+            "projectId": self.project_id,
+            "actualBehaviour": {
+                "description": actual_behaviour,
+                "evidences": [],
+            },
+            "expectedBehaviour": {
+                "description": expected_behaviour,
+                "evidences": [],
+            },
+            "additionalEvidences": [],
+        }
+        system_configuration_id = self._get_suggested_system_configuration_id(force=False)
+        if system_configuration_id:
+            details_payload["systemConfigurationId"] = system_configuration_id
+
+        software_configuration_id = str(
+            function_args.get("software_configuration_id") or ""
+        ).strip()
+        if software_configuration_id:
+            details_payload["softwareConfigurationId"] = software_configuration_id
+
+        request_result = self._request_graphql(
+            self.OPEN_ISSUE_MUTATION,
+            {"input": {"details": details_payload}},
+        )
+        if not request_result.get("success", False):
+            return request_result
+
+        open_issue = self._as_dict(
+            self._as_dict(request_result.get("data")).get("openIssue")
+        )
+        issue_payload = self._as_dict(open_issue.get("issue"))
+        created_issue_code = self._normalize_issue_code(issue_payload.get("code"))
+        created_success = bool(open_issue.get("success")) and bool(created_issue_code)
+        if not created_success:
+            return {
+                "success": False,
+                "error": open_issue.get("message") or "Issue creation failed.",
+                "problem": self._extract_problem_payload(open_issue.get("problem")),
+                "selected_environment": self._build_environment_option(selected_environment),
+                "selected_category": {
+                    "id": category_selection.get("id"),
+                    "code": category_selection.get("code"),
+                    "name": category_selection.get("name"),
+                },
+                "instructions": (
+                    "Issue could not be created. Summarize the validation error and ask the user for the missing or corrected data."
+                ),
+                "do_not_cache": True,
+            }
+
+        issue_url = self._issue_url_for_code(created_issue_code)
+        was_opened = webbrowser.open(issue_url, new=2)
+        self._debug_log(
+            "created issue",
+            {
+                "code": created_issue_code,
+                "url": issue_url,
+                "opened_browser": bool(was_opened),
+                "environment": selected_environment.get("name"),
+                "release_version": selected_environment.get("current_release_version"),
+            },
+        )
+
+        return {
+            "success": True,
+            "issue_created": True,
+            "created_issue_code": created_issue_code,
+            "created_issue_url": issue_url,
+            "browser_opened": bool(was_opened),
+            "selected_environment": self._build_environment_option(selected_environment),
+            "selected_category": {
+                "id": category_selection.get("id"),
+                "code": category_selection.get("code"),
+                "name": category_selection.get("name"),
+            },
+            "release_version": selected_environment.get("current_release_version"),
+            "instructions": (
+                "Confirm that the issue was created and opened in the browser so the user can add evidence and manual corrections."
+            ),
+            "do_not_cache": True,
+        }
 
     def open_issue_council_issues_in_browser(self, function_args):
         source = function_args.get("source", "last_analysis")
@@ -879,7 +1422,89 @@ query IssueByCode($code: String!) {
             "do_not_cache": True,
         }
 
-    def _search_issues(self, search_term: str, statuses: list[str], first: int):
+    def _search_issues(
+        self,
+        search_term: str,
+        statuses: list[str],
+        first: int,
+        environment_filter: dict | None = None,
+    ):
+        similar_result = self._search_similar_issues(
+            search_term=search_term,
+            first=first,
+            environment_filter=environment_filter,
+        )
+        if similar_result.get("success", False):
+            return similar_result
+
+        filtered_result = self._search_issues_fallback_filtered(
+            search_term=search_term,
+            statuses=statuses,
+            first=first,
+            environment_filter=environment_filter,
+        )
+        if not filtered_result.get("success", False):
+            similar_error = str(similar_result.get("error", "")).strip()
+            fallback_error = str(filtered_result.get("error", "")).strip()
+            if similar_error and fallback_error:
+                filtered_result["error"] = (
+                    f"similarIssues failed: {similar_error}. "
+                    f"filteredIssues fallback failed: {fallback_error}"
+                )
+        else:
+            filtered_result["fallback_from_similar_error"] = similar_result.get("error")
+        return filtered_result
+
+    def _search_similar_issues(
+        self,
+        search_term: str,
+        first: int,
+        environment_filter: dict | None = None,
+    ):
+        variables = {
+            "query": {
+                "projectIds": [self.project_id],
+                "paging": {"first": first},
+                "similarIssue": {
+                    "title": search_term,
+                    "severity": None,
+                },
+            }
+        }
+        request_result = self._request_graphql(self.SIMILAR_ISSUES_QUERY, variables)
+        if not request_result.get("success", False):
+            return request_result
+
+        data = request_result.get("data", {})
+        similar_issues = data.get("similarIssues", {}) if isinstance(data, dict) else {}
+        edges = similar_issues.get("edges", []) if isinstance(similar_issues, dict) else []
+        issues = []
+        for edge in edges:
+            node = edge.get("node", {}) if isinstance(edge, dict) else {}
+            if node:
+                issues.append(node)
+
+        issues = self._filter_issues_by_environment(issues, environment_filter)
+        return {
+            "success": True,
+            "issues": issues,
+            "total_count": len(issues),
+            "search_backend": "similarIssues",
+            "do_not_cache": True,
+        }
+
+    def _search_issues_fallback_filtered(
+        self,
+        search_term: str,
+        statuses: list[str],
+        first: int,
+        environment_filter: dict | None = None,
+    ):
+        environment_ids = (
+            [environment_filter.get("id")]
+            if isinstance(environment_filter, dict) and environment_filter.get("id")
+            else []
+        )
         variables = {
             "filteredQuery": {
                 "projectIds": [self.project_id],
@@ -888,7 +1513,7 @@ query IssueByCode($code: String!) {
                 "severities": [],
                 "categoryIds": [],
                 "releaseIds": [],
-                "environmentIds": self.default_environment_ids,
+                "environmentIds": environment_ids,
                 "dateRanges": [],
                 "sortBy": {
                     "direction": "DESC",
@@ -899,7 +1524,7 @@ query IssueByCode($code: String!) {
                 "tags": [],
             }
         }
-        request_result = self._request_graphql(self.FILTERED_ISSUES_QUERY, variables)
+        request_result = self._request_graphql(self.FILTERED_ISSUES_FALLBACK_QUERY, variables)
         if not request_result.get("success", False):
             return request_result
 
@@ -912,11 +1537,13 @@ query IssueByCode($code: String!) {
             if node:
                 issues.append(node)
 
+        issues = self._filter_issues_by_environment(issues, environment_filter)
         return {
             "success": True,
             "issues": issues,
-            "total_count": filtered_issues.get("totalCount", 0),
-            "do_not_cache": True
+            "total_count": len(issues),
+            "search_backend": "filteredIssues_fallback",
+            "do_not_cache": True,
         }
 
     def _get_issue_details(self, code: str):
@@ -980,6 +1607,509 @@ query IssueByCode($code: String!) {
             return {"success": False, "error": f"Issue Council GraphQL error: {message}", "do_not_cache": True}
         return {"success": True, "data": payload.get("data", {}), "do_not_cache": True}
 
+    def _refresh_project_context(self, force: bool = False):
+        now = time.time()
+        if (
+            not force
+            and self.project_context
+            and (now - self.project_context_loaded_at) < self.project_context_refresh_seconds
+        ):
+            return {
+                "success": True,
+                "project": self.project_context.get("project", {}),
+                "active_environments": self.project_context.get("active_environments", []),
+                "do_not_cache": True,
+            }
+
+        variables = {
+            "code": self.project_code,
+            "environmentQueryInput": {
+                "name": "",
+                "sortBy": {"field": "SCHEDULE_OPENING_ON", "direction": "DESC"},
+                "statuses": ["OPEN"],
+                "includeIdsInResult": [],
+                "paging": {"first": 50},
+            },
+            "releaseDeploymentQueryInput": {
+                "statuses": ["ACTIVE"],
+                "sortBy": {"field": "RELEASE_CREATED_ON", "direction": "DESC"},
+                "paging": {"first": 100},
+            },
+        }
+        request_result = self._request_graphql(self.PROJECT_DETAILS_QUERY, variables)
+        if not request_result.get("success", False):
+            return request_result
+
+        project = self._as_dict(self._as_dict(request_result.get("data")).get("projectByCode"))
+        if not project:
+            return {
+                "success": False,
+                "error": f"Project not found for code {self.project_code}.",
+                "do_not_cache": True,
+            }
+
+        environments = []
+        environments_node = self._as_dict(project.get("environments"))
+        for edge in environments_node.get("edges", []):
+            node = self._as_dict(self._as_dict(edge).get("node"))
+            if not node:
+                continue
+            deployment = self._select_current_deployment(
+                self._as_dict(node.get("deployments"))
+            )
+            release = self._as_dict(self._as_dict(deployment).get("release"))
+            version = self._as_dict(release.get("version"))
+            viewer_props = self._as_dict(node.get("viewerProperties"))
+            environments.append(
+                {
+                    "id": node.get("id"),
+                    "code": node.get("code"),
+                    "name": node.get("name"),
+                    "status": node.get("status"),
+                    "can_open_issue": bool(viewer_props.get("canOpenIssue")),
+                    "can_post_contribution": bool(viewer_props.get("canPostContribution")),
+                    "current_deployment_id": deployment.get("id"),
+                    "current_release_id": release.get("id"),
+                    "current_release_code": release.get("code"),
+                    "current_release_version": version.get("code"),
+                    "current_deployment_status": deployment.get("status"),
+                    "current_deployment_completed_on": deployment.get("completedOn"),
+                }
+            )
+
+        environments.sort(key=lambda env: str(env.get("name") or ""))
+        self.project_context = {
+            "project": {
+                "id": project.get("id"),
+                "code": project.get("code"),
+                "name": project.get("name"),
+            },
+            "active_environments": environments,
+        }
+        self.project_context_loaded_at = now
+        return {
+            "success": True,
+            "project": self.project_context.get("project", {}),
+            "active_environments": environments,
+            "do_not_cache": True,
+        }
+
+    def _select_current_deployment(self, deployments_node: dict):
+        deployments_node = self._as_dict(deployments_node)
+        deployment_nodes = []
+        for edge in deployments_node.get("edges", []):
+            node = self._as_dict(self._as_dict(edge).get("node"))
+            if node:
+                deployment_nodes.append(node)
+        if not deployment_nodes:
+            return {}
+
+        for deployment in deployment_nodes:
+            if bool(deployment.get("isCurrent")):
+                return deployment
+        for deployment in deployment_nodes:
+            if str(deployment.get("status", "")).upper() == "ACTIVE":
+                return deployment
+        return deployment_nodes[0]
+
+    def _resolve_environment_filter(self, environment_input, active_environments: list[dict]):
+        token = self._normalize_match_token(environment_input)
+        if not token:
+            return None
+
+        exact_matches = []
+        partial_matches = []
+        for environment in active_environments:
+            env = self._as_dict(environment)
+            env_id = self._normalize_match_token(env.get("id"))
+            env_code = self._normalize_match_token(env.get("code"))
+            env_name = self._normalize_match_token(env.get("name"))
+            env_release_version = self._normalize_match_token(env.get("current_release_version"))
+            haystack = [env_id, env_code, env_name, env_release_version]
+            if token in [item for item in haystack if item]:
+                exact_matches.append(env)
+                continue
+            if any(token in item for item in haystack if item):
+                partial_matches.append(env)
+
+        if exact_matches:
+            return exact_matches[0]
+        if partial_matches:
+            return partial_matches[0]
+        return None
+
+    def _filter_issues_by_environment(
+        self,
+        issues: list[dict],
+        environment_filter: dict | None,
+    ):
+        if not environment_filter:
+            return issues
+
+        target_id = self._normalize_match_token(environment_filter.get("id"))
+        target_code = self._normalize_match_token(environment_filter.get("code"))
+        target_name = self._normalize_match_token(environment_filter.get("name"))
+        if not any([target_id, target_code, target_name]):
+            return issues
+
+        filtered_issues = []
+        for issue in issues:
+            issue_details = self._as_dict(self._as_dict(issue).get("details"))
+            issue_env = self._as_dict(issue_details.get("environment"))
+            issue_env_id = self._normalize_match_token(issue_env.get("id"))
+            issue_env_code = self._normalize_match_token(issue_env.get("code"))
+            issue_env_name = self._normalize_match_token(issue_env.get("name"))
+
+            id_match = bool(target_id and issue_env_id and target_id == issue_env_id)
+            code_match = bool(target_code and issue_env_code and target_code == issue_env_code)
+            name_match = bool(target_name and issue_env_name and target_name in issue_env_name)
+            if id_match or code_match or name_match:
+                filtered_issues.append(issue)
+        return filtered_issues
+
+    def _build_environment_option(self, environment: dict | None):
+        environment = self._as_dict(environment)
+        if not environment:
+            return None
+        return {
+            "id": environment.get("id"),
+            "code": environment.get("code"),
+            "name": environment.get("name"),
+            "current_release_version": environment.get("current_release_version"),
+            "current_release_id": environment.get("current_release_id"),
+            "can_open_issue": bool(environment.get("can_open_issue")),
+        }
+
+    def _build_environment_options_payload(self, environments: list[dict]):
+        options = []
+        for environment in environments:
+            option = self._build_environment_option(environment)
+            if option:
+                options.append(option)
+        return options
+
+    def _get_available_environment_names_for_tool_schema(self):
+        environment_names = []
+        project_context_result = self._refresh_project_context(force=False)
+        environments = []
+        if project_context_result.get("success", False):
+            environments = project_context_result.get("active_environments", [])
+        elif self.project_context:
+            environments = self.project_context.get("active_environments", [])
+
+        for environment in environments:
+            name = str(self._as_dict(environment).get("name") or "").strip()
+            if name:
+                environment_names.append(name)
+        environment_names = self._dedupe_list(environment_names)
+        environment_names.sort()
+        return environment_names
+
+    def _build_environment_param_schema(self, required: bool):
+        environment_names = self._get_available_environment_names_for_tool_schema()
+        if required:
+            description = (
+                "Required. Environment name where the issue occurs. "
+                "Use one of the enum values."
+            )
+        else:
+            description = (
+                "Optional environment name filter. "
+                "Default is no environment restriction."
+            )
+        schema = {
+            "type": "string",
+            "description": description,
+        }
+        if environment_names:
+            schema["enum"] = environment_names
+        return schema
+
+    def _build_severity_param_schema(self):
+        allowed_values = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+        return {
+            "type": "string",
+            "description": "Optional issue severity. Use one of the enum values. Default is MEDIUM.",
+            "enum": allowed_values,
+        }
+
+    def _get_available_category_names_for_tool_schema(self):
+        category_names = []
+        categories_result = self._get_issue_categories(force=False)
+        categories = []
+        if categories_result.get("success", False):
+            categories = categories_result.get("categories", [])
+        elif self.issue_categories:
+            categories = self.issue_categories
+
+        for category in categories:
+            name = str(self._as_dict(category).get("name") or "").strip()
+            if name:
+                category_names.append(name)
+        category_names = self._dedupe_list(category_names)
+        category_names.sort()
+        return category_names
+
+    def _build_category_param_schema(self):
+        category_names = self._get_available_category_names_for_tool_schema()
+        schema = {
+            "type": "string",
+            "description": (
+                "Optional issue category name. Use one of the enum values. "
+                "If omitted, the manager auto-selects the best category."
+            ),
+        }
+        if category_names:
+            schema["enum"] = category_names
+        return schema
+
+    def _build_issue_title(
+        self,
+        bug_description: str,
+        actual_behaviour: str,
+        expected_behaviour: str,
+    ):
+        candidate = str(bug_description or "").strip()
+        if not candidate:
+            candidate = str(actual_behaviour or "").strip()
+        if not candidate:
+            candidate = str(expected_behaviour or "").strip()
+        candidate = " ".join(candidate.split()).strip()
+        if not candidate:
+            return "Issue report created by Wingman"
+        if len(candidate) > 110:
+            candidate = f"{candidate[:110].rstrip()}..."
+        return candidate
+
+    def _normalize_reproduction_steps(self, raw_steps):
+        steps = []
+        if isinstance(raw_steps, str):
+            for line in raw_steps.replace("\r", "\n").split("\n"):
+                line = line.strip(" -\t")
+                if line:
+                    steps.append(line)
+        elif isinstance(raw_steps, list):
+            for entry in raw_steps:
+                text = str(entry or "").strip(" -\t")
+                if text:
+                    steps.append(text)
+        return self._dedupe_list(steps)
+
+    def _normalize_issue_severity(self, severity_value):
+        normalized = str(severity_value or self.DEFAULT_ISSUE_SEVERITY).strip().upper()
+        if normalized in self.ALLOWED_ISSUE_SEVERITIES:
+            return normalized
+        return self.DEFAULT_ISSUE_SEVERITY
+
+    def _get_issue_categories(self, force: bool = False):
+        now = time.time()
+        if (
+            not force
+            and self.issue_categories
+            and (now - self.issue_categories_loaded_at) < self.project_context_refresh_seconds
+        ):
+            return {"success": True, "categories": self.issue_categories, "do_not_cache": True}
+
+        variables = {
+            "projectId": self.project_id,
+            "query": {
+                "name": "",
+                "statuses": ["ACTIVE"],
+                "includeIdsInResult": [],
+                "sortBy": {"field": "NAME", "direction": "ASC"},
+                "paging": {"first": 100},
+            },
+        }
+        request_result = self._request_graphql(self.ISSUE_CATEGORIES_QUERY, variables)
+        if not request_result.get("success", False):
+            return request_result
+
+        categories = []
+        project_node = self._as_dict(self._as_dict(request_result.get("data")).get("project"))
+        issue_categories = self._as_dict(project_node.get("issueCategories"))
+        for edge in issue_categories.get("edges", []):
+            node = self._as_dict(self._as_dict(edge).get("node"))
+            stats = self._as_dict(node.get("statistics"))
+            if not node:
+                continue
+            categories.append(
+                {
+                    "id": node.get("id"),
+                    "code": node.get("code"),
+                    "name": node.get("name"),
+                    "status": node.get("status"),
+                    "issue_count": self._coerce_int(
+                        stats.get("issueCount", 0),
+                        default=0,
+                        minimum=0,
+                        maximum=99999999,
+                    ),
+                }
+            )
+
+        self.issue_categories = categories
+        self.issue_categories_loaded_at = now
+        return {"success": True, "categories": categories, "do_not_cache": True}
+
+    def _select_issue_category(
+        self,
+        category_input,
+        bug_description: str,
+        title: str,
+        actual_behaviour: str,
+        expected_behaviour: str,
+        reproduction_steps: list[str],
+    ):
+        categories_result = self._get_issue_categories(force=False)
+        if not categories_result.get("success", False):
+            return None
+        categories = categories_result.get("categories", [])
+        if not categories:
+            return None
+
+        explicit_match = self._resolve_issue_category(category_input, categories)
+        if explicit_match:
+            return explicit_match
+
+        llm_selection = self._llm_select_issue_category(
+            categories=categories,
+            bug_description=bug_description,
+            title=title,
+            actual_behaviour=actual_behaviour,
+            expected_behaviour=expected_behaviour,
+            reproduction_steps=reproduction_steps,
+        )
+        if llm_selection:
+            return llm_selection
+
+        for category in categories:
+            if self._normalize_match_token(category.get("code")) == "general-ui":
+                return category
+        return max(categories, key=lambda item: item.get("issue_count", 0))
+
+    def _resolve_issue_category(self, category_input, categories: list[dict]):
+        token = self._normalize_match_token(category_input)
+        if not token:
+            return None
+        exact_matches = []
+        partial_matches = []
+        for category in categories:
+            category_id = self._normalize_match_token(category.get("id"))
+            category_code = self._normalize_match_token(category.get("code"))
+            category_name = self._normalize_match_token(category.get("name"))
+            haystack = [category_id, category_code, category_name]
+            if token in [item for item in haystack if item]:
+                exact_matches.append(category)
+                continue
+            if any(token in item for item in haystack if item):
+                partial_matches.append(category)
+        if exact_matches:
+            return exact_matches[0]
+        if partial_matches:
+            return partial_matches[0]
+        return None
+
+    def _llm_select_issue_category(
+        self,
+        categories: list[dict],
+        bug_description: str,
+        title: str,
+        actual_behaviour: str,
+        expected_behaviour: str,
+        reproduction_steps: list[str],
+    ):
+        category_payload = [
+            {
+                "id": category.get("id"),
+                "code": category.get("code"),
+                "name": category.get("name"),
+                "issue_count": category.get("issue_count", 0),
+            }
+            for category in categories
+            if category.get("id")
+        ]
+        if not category_payload:
+            return None
+
+        payload = {
+            "bug_report": {
+                "title": title,
+                "bug_description": bug_description,
+                "actual_behaviour": actual_behaviour,
+                "expected_behaviour": expected_behaviour,
+                "reproduction_steps": reproduction_steps[:8],
+            },
+            "categories": category_payload,
+        }
+        completion = self.ask_ai(
+            self.LLM_CATEGORY_SELECTION_SYSTEM_PROMPT,
+            user_prompt=json.dumps(payload, ensure_ascii=False),
+            max_tokens=min(800, self.llm_max_tokens),
+            temperature=min(0.2, self.llm_temperature),
+            response_format={"type": "json_object"},
+            llm_call="issue_category_selection",
+        )
+        parsed = self._extract_json_object_from_completion(completion)
+        if not isinstance(parsed, dict):
+            return None
+        category_id = str(parsed.get("category_id") or "").strip()
+        if not category_id:
+            return None
+        return self._resolve_issue_category(category_id, categories)
+
+    def _get_suggested_system_configuration_id(self, force: bool = False):
+        now = time.time()
+        if (
+            not force
+            and self.cached_system_configuration_loaded_at
+            and (now - self.cached_system_configuration_loaded_at)
+            < self.project_context_refresh_seconds
+        ):
+            return self.cached_system_configuration_id
+
+        variables = {"query": {"supportedByProjectId": self.project_id}}
+        request_result = self._request_graphql(
+            self.SUGGESTED_SYSTEM_CONFIGURATION_QUERY,
+            variables,
+        )
+        self.cached_system_configuration_loaded_at = now
+        if not request_result.get("success", False):
+            return None
+        viewer = self._as_dict(self._as_dict(request_result.get("data")).get("viewer"))
+        config = self._as_dict(viewer.get("suggestedSystemConfiguration"))
+        self.cached_system_configuration_id = config.get("id")
+        return self.cached_system_configuration_id
+
+    def _extract_problem_payload(self, problem):
+        problem = self._as_dict(problem)
+        payload = {
+            "type": problem.get("type"),
+            "title": problem.get("title"),
+            "status": problem.get("status"),
+            "help": problem.get("help"),
+            "validation_errors": [],
+        }
+        data = self._as_dict(problem.get("data"))
+        validation_errors = self._as_dict(data).get("errors", [])
+        for entry in validation_errors:
+            entry = self._as_dict(entry)
+            payload["validation_errors"].append(
+                {
+                    "field": entry.get("field"),
+                    "code": entry.get("code"),
+                    "message": entry.get("message"),
+                    "help": entry.get("help"),
+                }
+            )
+        return payload
+
+    @staticmethod
+    def _normalize_match_token(value):
+        normalized = str(value or "").strip().lower()
+        normalized = normalized.replace("_", "-")
+        normalized = re.sub(r"\s+", " ", normalized)
+        return normalized
+
     def _extract_issue_summary(self, issue_node: dict):
         issue_node = self._as_dict(issue_node)
         details = self._as_dict(issue_node.get("details"))
@@ -1003,12 +2133,15 @@ query IssueByCode($code: String!) {
             "status": issue_node.get("status"),
             "title": details.get("title", ""),
             "severity": details.get("severity"),
+            "environment_id": details_environment.get("id"),
+            "environment_code": details_environment.get("code"),
             "environment_name": details_environment.get("name"),
             "opened_on": open_details.get("openedOn"),
             "reproduction_count": community.get("reproductionCount", 0),
             "contribution_count": community.get("contributionCount", 0),
             "vote_count": community.get("voteCount", 0),
             "search_score": self._coerce_float(search_info.get("score", 0.0), default=0.0, minimum=0.0, maximum=100000.0),
+            "search_relevance_score": self._coerce_float(search_info.get("relevanceScore", 0.0), default=0.0, minimum=0.0, maximum=1.0),
             "highlight_matches": flattened_matches,
             "duplicate_of_code": duplicate_of.get("code"),
         }
@@ -1030,10 +2163,19 @@ query IssueByCode($code: String!) {
             composite_text = f"{title} {highlights}".strip().lower()
             textual_similarity = SequenceMatcher(None, normalized_description, composite_text).ratio()
             normalized_search_score = candidate.get("search_score", 0.0) / max_search_score
+            relevance_score = self._coerce_float(
+                candidate.get("search_relevance_score", 0.0),
+                default=0.0,
+                minimum=0.0,
+                maximum=1.0,
+            )
             reproduction_count = self._coerce_float(candidate.get("reproduction_count", 0), default=0.0, minimum=0.0, maximum=2000.0)
             reproduction_bonus = min(1.0, reproduction_count / 100.0)
             confidence = round(
-                (textual_similarity * 0.57) + (normalized_search_score * 0.33) + (reproduction_bonus * 0.10),
+                (textual_similarity * 0.47)
+                + (normalized_search_score * 0.28)
+                + (relevance_score * 0.15)
+                + (reproduction_bonus * 0.10),
                 4,
             )
 
@@ -1075,6 +2217,7 @@ query IssueByCode($code: String!) {
                     "severity": candidate.get("severity"),
                     "environment_name": candidate.get("environment_name"),
                     "search_score": candidate.get("search_score", 0.0),
+                    "search_relevance_score": candidate.get("search_relevance_score", 0.0),
                     "heuristic_confidence": candidate.get("confidence", 0.0),
                     "reproduction_count": candidate.get("reproduction_count", 0),
                     "matched_terms": candidate.get("matched_terms", []),
@@ -1234,6 +2377,7 @@ query IssueByCode($code: String!) {
             "category_name": category.get("name"),
             "heuristic_confidence": candidate.get("confidence", 0.0),
             "search_score": candidate.get("search_score", 0.0),
+            "search_relevance_score": candidate.get("search_relevance_score", 0.0),
             "reproduction_count": candidate.get("reproduction_count", 0),
             "actual_behaviour": self._truncate_text(actual.get("description"), self.llm_detail_char_limit),
             "expected_behaviour": self._truncate_text(expected.get("description"), self.llm_detail_char_limit),

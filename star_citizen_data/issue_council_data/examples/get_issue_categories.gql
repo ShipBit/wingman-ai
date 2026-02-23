@@ -1,0 +1,104 @@
+query ProjectIssueCategories($projectId: ID!, $filteredQuery: IssueCategoryQueryInput!, $activeQuery: IssueCategoryQueryInput!, $allQuery: IssueCategoryQueryInput!) {
+  project(id: $projectId) {
+    id
+    filteredCategories: issueCategories(query: $filteredQuery) {
+      edges {
+        cursor
+        node {
+          ...IssueCategoryFragment
+          ...IssueCategoryStatisticsFragment
+          __typename
+        }
+        __typename
+      }
+      totalCount
+      pageInfo {
+        ...PageInfoFragment
+        __typename
+      }
+      pages {
+        ...PagesFragment
+        __typename
+      }
+      __typename
+    }
+    activeCategories: issueCategories(query: $activeQuery) {
+      totalCount
+      __typename
+    }
+    allCategories: issueCategories(query: $allQuery) {
+      totalCount
+      __typename
+    }
+    __typename
+  }
+}
+
+fragment IssueCategoryFragment on IssueCategory {
+  id
+  code
+  name
+  intent
+  status
+  __typename
+}
+
+fragment IssueCategoryStatisticsFragment on IssueCategory {
+  statistics {
+    issueCount
+    __typename
+  }
+  __typename
+}
+
+fragment PagesFragment on Pages {
+  current {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  first {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  last {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  next {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  previous {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment PageInfoFragment on PageInfo {
+  startCursor
+  endCursor
+  hasNextPage
+  hasPreviousPage
+  __typename
+}

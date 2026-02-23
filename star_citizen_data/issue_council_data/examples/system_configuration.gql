@@ -1,0 +1,95 @@
+query GetSuggestedSystemConfiguration($query: SuggestedSystemConfigurationQueryInput!) {
+  viewer {
+    id
+    suggestedSystemConfiguration(query: $query) {
+      ...SystemConfig
+      __typename
+    }
+    __typename
+  }
+}
+
+fragment SystemConfig on SystemConfiguration {
+  id
+  name
+  platform {
+    id
+    code
+    name
+    createdOn
+    updatedOn
+    __typename
+  }
+  operatingSystem {
+    type
+    name
+    language
+    __typename
+  }
+  hardware {
+    version
+    processor {
+      model
+      __typename
+    }
+    memory {
+      quantity
+      unit
+      __typename
+    }
+    __typename
+  }
+  graphics {
+    card {
+      manufacturer
+      model
+      chipType
+      memory {
+        quantity
+        unit
+        __typename
+      }
+      driver {
+        name
+        version
+        __typename
+      }
+      __typename
+    }
+    directX {
+      version
+      __typename
+    }
+    __typename
+  }
+  peripherals {
+    manufacturer
+    model
+    __typename
+  }
+  network {
+    provider
+    connectionType
+    mobileTelephonyGeneration
+    downloadThroughput {
+      quantity
+      unit
+      __typename
+    }
+    modem {
+      manufacturer
+      model
+      __typename
+    }
+    uploadThroughput {
+      quantity
+      unit
+      __typename
+    }
+    __typename
+  }
+  additionalInfo
+  createdOn
+  updatedOn
+  __typename
+}

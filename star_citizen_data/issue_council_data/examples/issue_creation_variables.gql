@@ -1,0 +1,40 @@
+{
+  "input": {
+    "details": {
+      "title": "Epilepsy Warning: Flickering Light Effects in the Atmosphere",
+      "categoryId": "7f47455f-7460-45a6-af04-cc2fa60261c1",
+      "severity": "MEDIUM",
+      "reproductionSteps": [
+        {
+          "description": "Fly with any ship over planets or moons.",
+          "evidences": []
+        },
+        {
+          "description": "In the ship, but also walking on the moon",
+          "evidences": []
+        }
+      ],
+      "systemConfigurationId": "0638d4aa-c9e2-4da3-aba0-e7dd7def0852",
+      "softwareConfigurationId": "591550d4-a22f-4367-81e8-96db2024cfe8",
+      "releaseId": "8e8657b5-8be0-4972-a94f-1f3d851dd177",
+      "environmentId": "a15e620d-d379-4c66-a77e-2560aa567f55",
+      "projectId": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+      "actualBehaviour": {
+        "description": "There are flickering light effects in the atmosphere, in some cases very intense.",
+        "evidences": [
+          {
+            "mediaResourceId": "4b4fa84f-fead-464c-ab66-85d7d7370f34"
+          }
+        ]
+      },
+      "expectedBehaviour": {
+        "description": "no flickering",
+        "evidences": []
+      },
+      "mediaManagement": {
+        "workspaceId": "dc7ede49-acbf-486f-bc23-eb221b6f89d1"
+      },
+      "additionalEvidences": []
+    }
+  }
+}

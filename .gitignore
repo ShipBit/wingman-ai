@@ -182,4 +182,8 @@ cache_data/
 # Macro manager runtime/user data
 star_citizen_data/macro-data/macros/
 star_citizen_data/macro-data/tts_cache/
-star_citizen_data/issue_council_data/
+
+# Issue Council local/runtime data (keep examples and scripts trackable)
+star_citizen_data/issue_council_data/.issue_council_bearer_token
+star_citizen_data/issue_council_data/playwright_profile/
+star_citizen_data/issue_council_data/scripts/__pycache__/

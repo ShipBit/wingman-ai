@@ -1,0 +1,14 @@
+{
+  "query": {
+    "projectIds": [
+      "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0"
+    ],
+    "paging": {
+      "first": 100
+    },
+    "similarIssue": {
+      "title": "Bought commodities have 0 quality",
+      "severity": null
+    }
+  }
+}

@@ -1,0 +1,527 @@
+query IssueByCode($code: String!) {
+  issueByCode(code: $code) {
+    id
+    code
+    status
+    project {
+      id
+      code
+      name
+      __typename
+    }
+    openDetails {
+      confirmationThreshold
+      openedOn
+      expiresOn
+      __typename
+    }
+    details {
+      title
+      category {
+        id
+        code
+        name
+        __typename
+      }
+      environment {
+        ...EnvironmentDescriptorFragment
+        __typename
+      }
+      release {
+        ...ReleaseDescriptorFragment
+        __typename
+      }
+      severity
+      reproductionSteps {
+        description
+        evidences {
+          ...IssueEvidenceFragment
+          __typename
+        }
+        __typename
+      }
+      actualBehaviour {
+        description
+        evidences {
+          ...IssueEvidenceFragment
+          __typename
+        }
+        __typename
+      }
+      expectedBehaviour {
+        description
+        evidences {
+          ...IssueEvidenceFragment
+          __typename
+        }
+        __typename
+      }
+      workaround {
+        description
+        evidences {
+          ...IssueEvidenceFragment
+          __typename
+        }
+        __typename
+      }
+      additionalEvidences {
+        ...IssueEvidenceFragment
+        __typename
+      }
+      __typename
+    }
+    community {
+      contributionCount
+      favouriteCount
+      severity
+      reproductionCount
+      possibleDuplicateIssues {
+        entries {
+          duplicateCount
+          issue {
+            title
+            id
+            code
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      statistics {
+        assessmentTypeDistribution {
+          entries {
+            assessmentType
+            count
+            __typename
+          }
+          __typename
+        }
+        severityDistribution {
+          entries {
+            severity
+            count
+            __typename
+          }
+          __typename
+        }
+        deploymentDistribution {
+          entries {
+            deployment {
+              environment {
+                id
+                code
+                name
+                __typename
+              }
+              release {
+                id
+                code
+                version {
+                  code
+                  __typename
+                }
+                __typename
+              }
+              __typename
+            }
+            contributionCount
+            assessmentTypeDistribution {
+              reproductionCount
+              entries {
+                assessmentType
+                count
+                __typename
+              }
+              __typename
+            }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      voteCount
+      possibleDuplicateIssuesCount
+      lastContribution {
+        id
+        submittedOn
+        __typename
+      }
+      __typename
+    }
+    confirmedDetails {
+      confirmedOn
+      additionalInfo
+      __typename
+    }
+    archivedDetails {
+      archivedOn
+      reason
+      additionalInfo
+      duplicateOf {
+        id
+        code
+        title
+        __typename
+      }
+      __typename
+    }
+    underInvestigationDetails {
+      investigationStartedOn
+      additionalInfo
+      __typename
+    }
+    fixedDetails {
+      fixedOn
+      additionalInfo
+      fixedInReleaseCode
+      __typename
+    }
+    viewerProperties {
+      canDelete
+      canModify
+      canContribute
+      contributions {
+        id
+        submittedOn
+        assessment {
+          type
+          severity
+          environment {
+            ...EnvironmentDescriptorFragment
+            __typename
+          }
+          release {
+            ...ReleaseDescriptorFragment
+            __typename
+          }
+          systemConfiguration {
+            ...SystemConfigSnapshot
+            __typename
+          }
+          softwareConfiguration {
+            ...SoftwareConfigSnapshot
+            __typename
+          }
+          possibleDuplicateOf {
+            id
+            code
+            title
+            __typename
+          }
+          evidences {
+            ...IssueEvidenceFragment
+            __typename
+          }
+          __typename
+        }
+        content
+        contentAvailability
+        viewerProperties {
+          canDelete
+          canModify
+          __typename
+        }
+        __typename
+      }
+      contributionActivities {
+        id
+        contribution {
+          id
+          submittedOn
+          assessment {
+            type
+            severity
+            environment {
+              ...EnvironmentDescriptorFragment
+              __typename
+            }
+            release {
+              ...ReleaseDescriptorFragment
+              __typename
+            }
+            systemConfiguration {
+              ...SystemConfigSnapshot
+              __typename
+            }
+            softwareConfiguration {
+              ...SoftwareConfigSnapshot
+              __typename
+            }
+            possibleDuplicateOf {
+              id
+              code
+              title
+              __typename
+            }
+            evidences {
+              ...IssueEvidenceFragment
+              __typename
+            }
+            __typename
+          }
+          content
+          contentAvailability
+          viewerProperties {
+            canDelete
+            canModify
+            __typename
+          }
+          lastModification {
+            id
+            comment
+            modifiedOn
+            modifiedAs
+            changes {
+              property
+              __typename
+            }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      hasVoted
+      canVote
+      canCancelVote
+      favourited
+      __typename
+    }
+    externalIssue {
+      code
+      url
+      fixedInReleaseCode
+      metadata {
+        key
+        value
+        __typename
+      }
+      __typename
+    }
+    visibility {
+      ...SecurityVisibilityFragment
+      __typename
+    }
+    promotionDetails {
+      ...IssuePromotionDetailsFragment
+      __typename
+    }
+    tags {
+      id
+      type
+      tagDetails
+      __typename
+    }
+    __typename
+  }
+}
+
+fragment SystemConfigSnapshot on SystemConfigurationSnapshot {
+  id
+  reference {
+    id
+    __typename
+  }
+  name
+  platform {
+    id
+    code
+    name
+    createdOn
+    updatedOn
+    __typename
+  }
+  operatingSystem {
+    type
+    name
+    language
+    __typename
+  }
+  hardware {
+    version
+    processor {
+      model
+      __typename
+    }
+    memory {
+      quantity
+      unit
+      __typename
+    }
+    __typename
+  }
+  graphics {
+    card {
+      manufacturer
+      model
+      chipType
+      memory {
+        quantity
+        unit
+        __typename
+      }
+      driver {
+        name
+        version
+        __typename
+      }
+      __typename
+    }
+    directX {
+      version
+      __typename
+    }
+    __typename
+  }
+  network {
+    provider
+    downloadThroughput {
+      quantity
+      unit
+      __typename
+    }
+    modem {
+      manufacturer
+      model
+      __typename
+    }
+    connectionType
+    mobileTelephonyGeneration
+    uploadThroughput {
+      quantity
+      unit
+      __typename
+    }
+    __typename
+  }
+  peripherals {
+    manufacturer
+    model
+    __typename
+  }
+  additionalInfo
+  createdOn
+  __typename
+}
+
+fragment SoftwareConfigSnapshot on SoftwareConfigurationSnapshot {
+  id
+  reference {
+    id
+    __typename
+  }
+  fields {
+    specification {
+      ...SoftwareConfigSpecField
+      __typename
+    }
+    value
+    __typename
+  }
+  createdOn
+  __typename
+}
+
+fragment SoftwareConfigSpecField on SoftwareConfigurationSpecificationField {
+  code
+  label
+  options {
+    code
+    label
+    valueType
+    value
+    __typename
+  }
+  constraints {
+    required
+    minLength
+    maxLength
+    range {
+      ... on SoftwareConfigurationSpecificationFieldNumberRange {
+        start
+        startInclusive
+        end
+        endInclusive
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  valueType
+  displayInSummary
+  __typename
+}
+
+fragment EnvironmentDescriptorFragment on EnvironmentDescriptor {
+  id
+  code
+  name
+  __typename
+}
+
+fragment ReleaseDescriptorFragment on ReleaseDescriptor {
+  id
+  code
+  version {
+    code
+    __typename
+  }
+  __typename
+}
+
+fragment SecurityVisibilityFragment on SecurityVisibility {
+  level
+  inheritancePolicy
+  restrictedTo {
+    ... on SecurityUserTrustee {
+      type
+      user {
+        id
+        displayName
+        avatarUrl
+        __typename
+      }
+      __typename
+    }
+    ... on SecurityGroupTrustee {
+      type
+      group {
+        id
+        code
+        name
+        role
+        isDeleted
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment IssuePromotionDetailsFragment on IssuePromotionDetails {
+  status
+  promotedOn
+  unpromotedOn
+  additionalInfo
+  __typename
+}
+
+fragment IssueEvidenceFragment on IssueEvidence {
+  contentAvailability
+  visibility {
+    ...SecurityVisibilityFragment
+    __typename
+  }
+  viewerProperties {
+    canViewContent
+    cannotViewContentReason
+    isVisibleOnlyToViewer
+    __typename
+  }
+  __typename
+}

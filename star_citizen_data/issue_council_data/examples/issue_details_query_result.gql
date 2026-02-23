@@ -1,0 +1,310 @@
+{
+    "data": {
+        "issueByCode": {
+            "id": "1de2cff3-c552-4ccc-bb70-6db6c3c2ebc1",
+            "code": "STARC-188247",
+            "status": "CONFIRMED",
+            "project": {
+                "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                "code": "STAR-CITIZEN",
+                "name": "Star Citizen",
+                "__typename": "ProjectDescriptor"
+            },
+            "openDetails": {
+                "confirmationThreshold": 10,
+                "openedOn": "2025-11-29T21:13:03.664Z",
+                "expiresOn": "2025-12-29T21:13:03.664Z",
+                "__typename": "OpenIssueDetails"
+            },
+            "details": {
+                "title": "Vanduul Bodies Multiple Spawn",
+                "category": {
+                    "id": "941b2244-1a42-4705-a180-fe76125283d2",
+                    "code": "iYcglDZZaBUNUjAcPC5T-",
+                    "name": "Object dropping / spawning and cleanup",
+                    "__typename": "IssueCategoryDescriptor"
+                },
+                "environment": {
+                    "id": "53b130c8-1c07-4978-b8bf-3836e14c2c52",
+                    "code": "QwyfB-L7bR2Njkg78-AJL",
+                    "name": "LIVE 4.4.0",
+                    "__typename": "EnvironmentDescriptor"
+                },
+                "release": {
+                    "id": "1eb6a48a-d940-420f-b1a2-92c1afe15cff",
+                    "code": "1NEv8i2y3O8pD4F2hwqTJ",
+                    "version": {
+                        "code": "4.4.0-live.10766222",
+                        "__typename": "Version"
+                    },
+                    "__typename": "ReleaseDescriptor"
+                },
+                "severity": "HIGH",
+                "reproductionSteps": [
+                    {
+                        "description": "Take Vanduul Tech Smugglers",
+                        "evidences": [],
+                        "__typename": "IssueBehaviour"
+                    },
+                    {
+                        "description": "Go Auxiliary Station",
+                        "evidences": [],
+                        "__typename": "IssueBehaviour"
+                    },
+                    {
+                        "description": "Find Vanduul Body and Hold F",
+                        "evidences": [],
+                        "__typename": "IssueBehaviour"
+                    },
+                    {
+                        "description": "Move the Mouse Over the Corpse",
+                        "evidences": [],
+                        "__typename": "IssueBehaviour"
+                    }
+                ],
+                "actualBehaviour": {
+                    "description": "In the Vanduul Tech Smugglers mission, the vanduul corpses are spawning on top of each other, which makes looting very difficult.",
+                    "evidences": [],
+                    "__typename": "IssueBehaviour"
+                },
+                "expectedBehaviour": {
+                    "description": "The previous corpse should be removed before a new one spawns.",
+                    "evidences": [],
+                    "__typename": "IssueBehaviour"
+                },
+                "workaround": {
+                    "description": "Try holding F to cycle between the corpses.",
+                    "evidences": [],
+                    "__typename": "IssueBehaviour"
+                },
+                "additionalEvidences": [
+                    {
+                        "contentAvailability": "AVAILABLE",
+                        "visibility": {
+                            "level": "PUBLIC",
+                            "inheritancePolicy": "SPECIFIC",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "viewerProperties": {
+                            "canViewContent": true,
+                            "cannotViewContentReason": null,
+                            "isVisibleOnlyToViewer": false,
+                            "__typename": "IssueEvidenceViewerProperties"
+                        },
+                        "__typename": "IssueEvidence"
+                    }
+                ],
+                "__typename": "IssueDetails"
+            },
+            "community": {
+                "contributionCount": 29,
+                "favouriteCount": 0,
+                "severity": "MEDIUM",
+                "reproductionCount": 29,
+                "possibleDuplicateIssues": {
+                    "entries": [],
+                    "__typename": "IssuePossibleDuplicates"
+                },
+                "statistics": {
+                    "assessmentTypeDistribution": {
+                        "entries": [
+                            {
+                                "assessmentType": "CAN_REPRODUCE",
+                                "count": 29,
+                                "__typename": "IssueAssessmentTypeDistributionEntry"
+                            }
+                        ],
+                        "__typename": "IssueAssessmentTypeDistribution"
+                    },
+                    "severityDistribution": {
+                        "entries": [
+                            {
+                                "severity": "LOW",
+                                "count": 1,
+                                "__typename": "IssueSeverityDistributionEntry"
+                            },
+                            {
+                                "severity": "MEDIUM",
+                                "count": 16,
+                                "__typename": "IssueSeverityDistributionEntry"
+                            },
+                            {
+                                "severity": "HIGH",
+                                "count": 7,
+                                "__typename": "IssueSeverityDistributionEntry"
+                            },
+                            {
+                                "severity": "CRITICAL",
+                                "count": 5,
+                                "__typename": "IssueSeverityDistributionEntry"
+                            }
+                        ],
+                        "__typename": "IssueSeverityDistribution"
+                    },
+                    "deploymentDistribution": {
+                        "entries": [
+                            {
+                                "deployment": {
+                                    "environment": {
+                                        "id": "53b130c8-1c07-4978-b8bf-3836e14c2c52",
+                                        "code": "QwyfB-L7bR2Njkg78-AJL",
+                                        "name": "LIVE 4.4.0",
+                                        "__typename": "EnvironmentDescriptor"
+                                    },
+                                    "release": {
+                                        "id": "1eb6a48a-d940-420f-b1a2-92c1afe15cff",
+                                        "code": "1NEv8i2y3O8pD4F2hwqTJ",
+                                        "version": {
+                                            "code": "4.4.0-live.10766222",
+                                            "__typename": "Version"
+                                        },
+                                        "__typename": "ReleaseDescriptor"
+                                    },
+                                    "__typename": "IssueDeploymentDescriptor"
+                                },
+                                "contributionCount": 26,
+                                "assessmentTypeDistribution": {
+                                    "reproductionCount": 26,
+                                    "entries": [
+                                        {
+                                            "assessmentType": "CAN_REPRODUCE",
+                                            "count": 26,
+                                            "__typename": "IssueAssessmentTypeDistributionEntry"
+                                        }
+                                    ],
+                                    "__typename": "IssueAssessmentTypeDistribution"
+                                },
+                                "__typename": "IssueDeploymentDistributionEntry"
+                            },
+                            {
+                                "deployment": {
+                                    "environment": {
+                                        "id": "708b6cc2-a7be-48ba-91b3-cdc6d3bd9d65",
+                                        "code": "br-sxdDUHVifBIxMf6Vi2",
+                                        "name": "LIVE 4.5.0",
+                                        "__typename": "EnvironmentDescriptor"
+                                    },
+                                    "release": {
+                                        "id": "fcf304b8-4ebc-4140-b1b1-fc56e8ac6672",
+                                        "code": "XTYKXmT1W3UVVvekPSKko",
+                                        "version": {
+                                            "code": "4.5.0-live.11010425",
+                                            "__typename": "Version"
+                                        },
+                                        "__typename": "ReleaseDescriptor"
+                                    },
+                                    "__typename": "IssueDeploymentDescriptor"
+                                },
+                                "contributionCount": 2,
+                                "assessmentTypeDistribution": {
+                                    "reproductionCount": 2,
+                                    "entries": [
+                                        {
+                                            "assessmentType": "CAN_REPRODUCE",
+                                            "count": 2,
+                                            "__typename": "IssueAssessmentTypeDistributionEntry"
+                                        }
+                                    ],
+                                    "__typename": "IssueAssessmentTypeDistribution"
+                                },
+                                "__typename": "IssueDeploymentDistributionEntry"
+                            },
+                            {
+                                "deployment": {
+                                    "environment": {
+                                        "id": "ed0dd952-8bd9-48e5-8f63-8891e154ec35",
+                                        "code": "8l0QeSIKkh413Udh_uGCv",
+                                        "name": "LIVE 4.6.0",
+                                        "__typename": "EnvironmentDescriptor"
+                                    },
+                                    "release": {
+                                        "id": "1b150ce5-1bec-4cc0-9da2-293aab68d276",
+                                        "code": "UGpgKGITRZXGmNXy1Segq",
+                                        "version": {
+                                            "code": "4.6.0-live.11218823",
+                                            "__typename": "Version"
+                                        },
+                                        "__typename": "ReleaseDescriptor"
+                                    },
+                                    "__typename": "IssueDeploymentDescriptor"
+                                },
+                                "contributionCount": 1,
+                                "assessmentTypeDistribution": {
+                                    "reproductionCount": 1,
+                                    "entries": [
+                                        {
+                                            "assessmentType": "CAN_REPRODUCE",
+                                            "count": 1,
+                                            "__typename": "IssueAssessmentTypeDistributionEntry"
+                                        }
+                                    ],
+                                    "__typename": "IssueAssessmentTypeDistribution"
+                                },
+                                "__typename": "IssueDeploymentDistributionEntry"
+                            }
+                        ],
+                        "__typename": "IssueDeploymentDistribution"
+                    },
+                    "__typename": "IssueCommunityStatistics"
+                },
+                "voteCount": 36,
+                "possibleDuplicateIssuesCount": 0,
+                "lastContribution": {
+                    "id": "241b9b4e-dfa4-49cd-aede-9576d8678ee9",
+                    "submittedOn": "2026-02-15T13:31:54.848Z",
+                    "__typename": "IssueContribution"
+                },
+                "__typename": "IssueCommunityDetails"
+            },
+            "confirmedDetails": {
+                "confirmedOn": "2025-11-30T01:41:20.627Z",
+                "additionalInfo": null,
+                "__typename": "ConfirmedIssueDetails"
+            },
+            "archivedDetails": null,
+            "underInvestigationDetails": null,
+            "fixedDetails": null,
+            "viewerProperties": {
+                "canDelete": false,
+                "canModify": false,
+                "canContribute": true,
+                "contributions": [],
+                "contributionActivities": [],
+                "hasVoted": false,
+                "canVote": true,
+                "canCancelVote": false,
+                "favourited": false,
+                "__typename": "IssueViewerProperties"
+            },
+            "externalIssue": {
+                "code": "BUG-356357",
+                "url": "https://cloudimperiumgames.atlassian.net/browse/BUG-356357",
+                "fixedInReleaseCode": "",
+                "metadata": [
+                    {
+                        "key": "externalIssueLinkId",
+                        "value": "e758edbd-3bc0-4fd4-85c0-d1a984d52b42",
+                        "__typename": "IssueExternalIssueMetadata"
+                    }
+                ],
+                "__typename": "IssueExternalIssue"
+            },
+            "visibility": {
+                "level": "PROTECTED",
+                "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                "restrictedTo": [],
+                "__typename": "SecurityVisibility"
+            },
+            "promotionDetails": {
+                "status": "INACTIVE",
+                "promotedOn": null,
+                "unpromotedOn": null,
+                "additionalInfo": null,
+                "__typename": "IssuePromotionDetails"
+            },
+            "tags": [],
+            "__typename": "Issue"
+        }
+    }
+}

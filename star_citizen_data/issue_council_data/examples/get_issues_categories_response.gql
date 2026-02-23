@@ -1,0 +1,515 @@
+{
+    "data": {
+        "project": {
+            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+            "filteredCategories": {
+                "edges": [
+                    {
+                        "cursor": "eyJvZmZzZXQiOjB9",
+                        "node": {
+                            "id": "1638ef9e-a6c9-4584-9be1-f1aefab8a3d4",
+                            "code": "ai-behavior",
+                            "name": "AI Behavior",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 3746,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjF9",
+                        "node": {
+                            "id": "2a80fb9a-d436-44f6-9d9b-0b5bedd1291f",
+                            "code": "anticheat",
+                            "name": "Anticheat",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 660,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjJ9",
+                        "node": {
+                            "id": "edfa8276-06b6-43b3-b568-b506bdf2c8be",
+                            "code": "arena-commander",
+                            "name": "Arena Commander",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 2114,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjN9",
+                        "node": {
+                            "id": "bfb0acc7-f1e2-4e70-b656-69019991abbf",
+                            "code": "characters-animation",
+                            "name": "Characters/Animation",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 7736,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjR9",
+                        "node": {
+                            "id": "1932a6df-e9cc-46fd-8374-58051ec00506",
+                            "code": "commodity-trading",
+                            "name": "Commodity Trading",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 3162,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjV9",
+                        "node": {
+                            "id": "aa758f97-aab3-4ac5-96c7-25d658b5ba6c",
+                            "code": "azLJfNJ71T61GXyLlnmll",
+                            "name": "Experimental VR",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 111,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjZ9",
+                        "node": {
+                            "id": "2a0cde42-e20b-42b0-9f35-136281951137",
+                            "code": "qw4UK08scgwTjy8FB870s",
+                            "name": "Exploit / Account Issue",
+                            "intent": "EXPLOIT",
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 2786,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjd9",
+                        "node": {
+                            "id": "0e1bf738-fd25-46de-8cd9-d25f60886283",
+                            "code": "fps-weapons-and-gadgets",
+                            "name": "FPS Weapons and Gadgets",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 4616,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjh9",
+                        "node": {
+                            "id": "6dec52e6-2ebb-4af5-8229-eff17d9020da",
+                            "code": "game-audio",
+                            "name": "Game Audio",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 1810,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjl9",
+                        "node": {
+                            "id": "f6cf2d36-eaa2-48a9-9215-52cf2388250d",
+                            "code": "general-ui",
+                            "name": "General UI",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 7309,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjEwfQ==",
+                        "node": {
+                            "id": "e630e7c9-d7e7-4eac-b4c3-752d44ef7566",
+                            "code": "q23OzhYIl8NkHBfrnQXe0",
+                            "name": "Graphics / Game Client Framerate",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 4162,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjExfQ==",
+                        "node": {
+                            "id": "5e59ff82-87b4-4659-bb5e-9c12d68e7e81",
+                            "code": "inventory",
+                            "name": "Inventory",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 10128,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjEyfQ==",
+                        "node": {
+                            "id": "244ea338-7d17-40f4-b100-c5506aa9db50",
+                            "code": "keybinds-and-controls",
+                            "name": "Keybinds and Controls",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 2820,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjEzfQ==",
+                        "node": {
+                            "id": "53412acf-cab6-449f-b096-537b9d415aa1",
+                            "code": "law-system-and-criminality",
+                            "name": "Law System and Criminality",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 3105,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjE0fQ==",
+                        "node": {
+                            "id": "8b83680a-a7b1-44e1-9de5-a5ef0037dffc",
+                            "code": "pm0l4oregZoQs1KXSyLjj",
+                            "name": "Localization",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 528,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjE1fQ==",
+                        "node": {
+                            "id": "7f47455f-7460-45a6-af04-cc2fa60261c1",
+                            "code": "locations-and-environments",
+                            "name": "Locations and Environments",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 20860,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjE2fQ==",
+                        "node": {
+                            "id": "1664b98b-b294-4c0d-ac0a-983979808701",
+                            "code": "66kIgbKtcgGktd7WDcCUK",
+                            "name": "Login and Disconnect Errors",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 5641,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjE3fQ==",
+                        "node": {
+                            "id": "0da209f3-925f-4237-82a9-5eaa60b0d193",
+                            "code": "long-term-persistence",
+                            "name": "Long Term Persistence",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 1969,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjE4fQ==",
+                        "node": {
+                            "id": "5fc6418b-d450-4ea2-998e-098d9d2ab549",
+                            "code": "mining-refining-and-harvesting",
+                            "name": "Mining, Refining, and Harvesting",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 3370,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjE5fQ==",
+                        "node": {
+                            "id": "8ecd33da-fa48-44bf-88ff-8c054185ded3",
+                            "code": "mobiglas",
+                            "name": "mobiGlas",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 3059,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjIwfQ==",
+                        "node": {
+                            "id": "941b2244-1a42-4705-a180-fe76125283d2",
+                            "code": "iYcglDZZaBUNUjAcPC5T-",
+                            "name": "Object dropping / spawning and cleanup",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 2613,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjIxfQ==",
+                        "node": {
+                            "id": "96e90f21-b12b-41df-9c98-9cf6a3f2d611",
+                            "code": "other",
+                            "name": "Other",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 16140,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjIyfQ==",
+                        "node": {
+                            "id": "454f493e-3227-49bf-9343-20c33777c6f6",
+                            "code": "persistent-universe-missions",
+                            "name": "Persistent Universe Missions",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 9294,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjIzfQ==",
+                        "node": {
+                            "id": "92c5af61-9f61-4bc8-90de-1f08b2b2e566",
+                            "code": "reputation",
+                            "name": "Reputation",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 708,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjI0fQ==",
+                        "node": {
+                            "id": "b2c6526f-52b5-442f-9106-4d0ae9d329b2",
+                            "code": "hv5aeVVOtL02WtxHxqLDQ",
+                            "name": "Salvage and Repair",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 2283,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjI1fQ==",
+                        "node": {
+                            "id": "86f12803-cc52-46be-bd15-95152b669677",
+                            "code": "ship-ui",
+                            "name": "Ship UI",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 6296,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjI2fQ==",
+                        "node": {
+                            "id": "ef8b1235-7aa3-40e4-8f74-0fcb29881e64",
+                            "code": "ships-and-vehicles",
+                            "name": "Ships and Vehicles",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 51543,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    },
+                    {
+                        "cursor": "eyJvZmZzZXQiOjI3fQ==",
+                        "node": {
+                            "id": "aa0efa5e-939b-415e-beb1-746044770927",
+                            "code": "terminals-kiosks",
+                            "name": "Terminals/Kiosks",
+                            "intent": null,
+                            "status": "ACTIVE",
+                            "__typename": "IssueCategory",
+                            "statistics": {
+                                "issueCount": 8159,
+                                "__typename": "IssueCategoryStatistics"
+                            }
+                        },
+                        "__typename": "IssueCategoryEdge"
+                    }
+                ],
+                "totalCount": 28,
+                "pageInfo": {
+                    "startCursor": "eyJvZmZzZXQiOjB9",
+                    "endCursor": "eyJvZmZzZXQiOjI4fQ==",
+                    "hasNextPage": false,
+                    "hasPreviousPage": false,
+                    "__typename": "PageInfo"
+                },
+                "pages": {
+                    "current": {
+                        "pageNumber": 1,
+                        "pageInfo": {
+                            "startCursor": "eyJvZmZzZXQiOjB9",
+                            "endCursor": "eyJvZmZzZXQiOjI4fQ==",
+                            "hasNextPage": false,
+                            "hasPreviousPage": false,
+                            "__typename": "PageInfo"
+                        },
+                        "__typename": "PageCursor"
+                    },
+                    "first": {
+                        "pageNumber": 1,
+                        "pageInfo": {
+                            "startCursor": "eyJvZmZzZXQiOjB9",
+                            "endCursor": "eyJvZmZzZXQiOjI4fQ==",
+                            "hasNextPage": false,
+                            "hasPreviousPage": false,
+                            "__typename": "PageInfo"
+                        },
+                        "__typename": "PageCursor"
+                    },
+                    "last": {
+                        "pageNumber": 1,
+                        "pageInfo": {
+                            "startCursor": "eyJvZmZzZXQiOjB9",
+                            "endCursor": "eyJvZmZzZXQiOjI4fQ==",
+                            "hasNextPage": false,
+                            "hasPreviousPage": false,
+                            "__typename": "PageInfo"
+                        },
+                        "__typename": "PageCursor"
+                    },
+                    "next": null,
+                    "previous": null,
+                    "__typename": "Pages"
+                },
+                "__typename": "IssueCategoryConnection"
+            },
+            "activeCategories": {
+                "totalCount": 28,
+                "__typename": "IssueCategoryConnection"
+            },
+            "allCategories": {
+                "totalCount": 40,
+                "__typename": "IssueCategoryConnection"
+            },
+            "__typename": "Project"
+        }
+    }
+}

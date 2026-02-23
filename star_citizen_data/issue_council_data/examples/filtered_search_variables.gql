@@ -1,0 +1,29 @@
+{
+    "filteredQuery": {
+        "projectIds": [
+            "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0"
+        ],
+        "text": "vanduul",
+        "statuses": [
+            "CONFIRMED",
+            "OPEN",
+            "UNDER_INVESTIGATION"
+        ],
+        "severities": [],
+        "categoryIds": [],
+        "releaseIds": [],
+        "environmentIds": [
+            "ed0dd952-8bd9-48e5-8f63-8891e154ec35"
+        ],
+        "dateRanges": [],
+        "sortBy": {
+            "direction": "DESC",
+            "field": "RELEVANCE"
+        },
+        "paging": {
+            "first": 20
+        },
+        "placePromotedIssuesFirst": true,
+        "tags": []
+    }
+}

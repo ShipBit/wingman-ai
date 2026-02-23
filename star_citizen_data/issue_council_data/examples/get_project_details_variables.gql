@@ -1,0 +1,29 @@
+{
+    "code": "STAR-CITIZEN",
+    "environmentQueryInput": {
+        "name": "",
+        "sortBy": {
+            "field": "SCHEDULE_OPENING_ON",
+            "direction": "DESC"
+        },
+        "statuses": [
+            "OPEN"
+        ],
+        "includeIdsInResult": [],
+        "paging": {
+            "first": 50
+        }
+    },
+    "releaseDeploymentQueryInput": {
+        "statuses": [
+            "ACTIVE"
+        ],
+        "sortBy": {
+            "field": "RELEASE_CREATED_ON",
+            "direction": "DESC"
+        },
+        "paging": {
+            "first": 100
+        }
+    }
+}

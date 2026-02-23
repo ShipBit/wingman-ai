@@ -1,0 +1,2138 @@
+{
+    "data": {
+        "filteredIssues": {
+            "totalCount": 43,
+            "pages": {
+                "current": {
+                    "pageInfo": {
+                        "startCursor": "eyJvZmZzZXQiOjB9",
+                        "endCursor": "eyJvZmZzZXQiOjIwfQ==",
+                        "hasNextPage": true,
+                        "hasPreviousPage": false,
+                        "__typename": "PageInfo"
+                    },
+                    "pageNumber": 1,
+                    "__typename": "PageCursor"
+                },
+                "first": {
+                    "pageInfo": {
+                        "startCursor": "eyJvZmZzZXQiOjB9",
+                        "endCursor": "eyJvZmZzZXQiOjIwfQ==",
+                        "hasNextPage": true,
+                        "hasPreviousPage": false,
+                        "__typename": "PageInfo"
+                    },
+                    "pageNumber": 1,
+                    "__typename": "PageCursor"
+                },
+                "last": {
+                    "pageInfo": {
+                        "startCursor": "eyJvZmZzZXQiOjQwfQ==",
+                        "endCursor": "eyJvZmZzZXQiOjQzfQ==",
+                        "hasNextPage": false,
+                        "hasPreviousPage": true,
+                        "__typename": "PageInfo"
+                    },
+                    "pageNumber": 3,
+                    "__typename": "PageCursor"
+                },
+                "next": {
+                    "pageInfo": {
+                        "startCursor": "eyJvZmZzZXQiOjIwfQ==",
+                        "endCursor": "eyJvZmZzZXQiOjQwfQ==",
+                        "hasNextPage": true,
+                        "hasPreviousPage": true,
+                        "__typename": "PageInfo"
+                    },
+                    "pageNumber": 2,
+                    "__typename": "PageCursor"
+                },
+                "previous": null,
+                "__typename": "Pages"
+            },
+            "edges": [
+                {
+                    "cursor": "eyJvZmZzZXQiOjB9",
+                    "node": {
+                        "id": "1de2cff3-c552-4ccc-bb70-6db6c3c2ebc1",
+                        "code": "STARC-188247",
+                        "status": "CONFIRMED",
+                        "search": {
+                            "score": 1013.578,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.actualBehaviour.description",
+                                    "matches": [
+                                        "In the <iy9Udq>Vanduul</iy9Udq> Tech Smugglers mission, the <iy9Udq>vanduul</iy9Udq> corpses are spawning on top of each other, which makes looting very difficult."
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> Bodies Multiple Spawn"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Take <iy9Udq>Vanduul</iy9Udq> Tech Smugglers",
+                                        "Find <iy9Udq>Vanduul</iy9Udq> Body and Hold F"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "HIGH",
+                            "title": "Vanduul Bodies Multiple Spawn",
+                            "category": {
+                                "id": "941b2244-1a42-4705-a180-fe76125283d2",
+                                "code": "iYcglDZZaBUNUjAcPC5T-",
+                                "name": "Object dropping / spawning and cleanup",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "53b130c8-1c07-4978-b8bf-3836e14c2c52",
+                                "code": "QwyfB-L7bR2Njkg78-AJL",
+                                "name": "LIVE 4.4.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-11-29T21:13:03.664Z",
+                            "expiresOn": "2025-12-29T21:13:03.664Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 29,
+                            "reproductionCount": 29,
+                            "nonReproductionCount": 0,
+                            "severity": "MEDIUM",
+                            "voteCount": 36,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": {
+                            "confirmedOn": "2025-11-30T01:41:20.627Z",
+                            "__typename": "ConfirmedIssueSummaryDetails"
+                        },
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": {
+                            "code": "BUG-356357",
+                            "url": "https://cloudimperiumgames.atlassian.net/browse/BUG-356357",
+                            "fixedInReleaseCode": "",
+                            "metadata": [
+                                {
+                                    "key": "externalIssueLinkId",
+                                    "value": "e758edbd-3bc0-4fd4-85c0-d1a984d52b42",
+                                    "__typename": "IssueExternalIssueMetadata"
+                                }
+                            ],
+                            "__typename": "IssueExternalIssue"
+                        },
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjF9",
+                    "node": {
+                        "id": "cecc0e33-bc7b-4f4b-9f02-746827858f5b",
+                        "code": "STARC-196972",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 992.28516,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.actualBehaviour.description",
+                                    "matches": [
+                                        "As usual <iy9Udq>Vanduul</iy9Udq> Mission QV Logistics Station Inventory and Lifts are broken. I think its a feature not a bug...."
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> smuggler inventory"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Accept <iy9Udq>Vanduul</iy9Udq> Smuggler Mission"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "Vanduul smuggler inventory",
+                            "category": {
+                                "id": "5e59ff82-87b4-4659-bb5e-9c12d68e7e81",
+                                "code": "inventory",
+                                "name": "Inventory",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "ed0dd952-8bd9-48e5-8f63-8891e154ec35",
+                                "code": "8l0QeSIKkh413Udh_uGCv",
+                                "name": "LIVE 4.6.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-02-17T14:37:13.764Z",
+                            "expiresOn": "2026-03-19T14:37:13.764Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 3,
+                            "reproductionCount": 2,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 2,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjJ9",
+                    "node": {
+                        "id": "c13f8da8-4afe-4f22-b024-8fa873b3842a",
+                        "code": "STARC-189594",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 984.36993,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.expectedBehaviour.description",
+                                    "matches": [
+                                        "they should be <iy9Udq>Vanduul</iy9Udq> ships"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> Attack on Pilot not <iy9Udq>Vanduul</iy9Udq>"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "accept any mission that is a ship under attack from <iy9Udq>Vanduul</iy9Udq>"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "MEDIUM",
+                            "title": "Vanduul Attack on Pilot not Vanduul",
+                            "category": {
+                                "id": "454f493e-3227-49bf-9343-20c33777c6f6",
+                                "code": "persistent-universe-missions",
+                                "name": "Persistent Universe Missions",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "53b130c8-1c07-4978-b8bf-3836e14c2c52",
+                                "code": "QwyfB-L7bR2Njkg78-AJL",
+                                "name": "LIVE 4.4.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-12-07T11:05:05.761Z",
+                            "expiresOn": "2026-01-06T11:05:05.761Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 8,
+                            "reproductionCount": 8,
+                            "nonReproductionCount": 0,
+                            "severity": "MEDIUM",
+                            "voteCount": 8,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjN9",
+                    "node": {
+                        "id": "bd2eadfe-d6e3-4c03-8a0f-740d1db8a66a",
+                        "code": "STARC-185635",
+                        "status": "CONFIRMED",
+                        "search": {
+                            "score": 899.8682,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.actualBehaviour.description",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> items for trading with collection contracts/Wikelo are not tagged for persistence so vanish with a new build"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> Metal/Plating not LTP enabled"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Obtain <iy9Udq>Vanduul</iy9Udq> Metal & Plating from <iy9Udq>Vanduul</iy9Udq>-Tech Smugglers auxiliary station"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "HIGH",
+                            "title": "Vanduul Metal/Plating not LTP enabled",
+                            "category": {
+                                "id": "0da209f3-925f-4237-82a9-5eaa60b0d193",
+                                "code": "long-term-persistence",
+                                "name": "Long Term Persistence",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "76056cfb-d67b-4975-849a-909ec8fb80ab",
+                                "code": "PQoOUQDxgqeR1vVLQQfpl",
+                                "name": "PTU 4.4.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-11-10T21:39:21.930Z",
+                            "expiresOn": "2025-11-20T21:39:21.930Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 51,
+                            "reproductionCount": 46,
+                            "nonReproductionCount": 4,
+                            "severity": "HIGH",
+                            "voteCount": 58,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": {
+                            "confirmedOn": "2025-11-11T07:32:23.485Z",
+                            "__typename": "ConfirmedIssueSummaryDetails"
+                        },
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": {
+                            "code": "BUG-343656",
+                            "url": "https://cloudimperiumgames.atlassian.net/browse/BUG-343656",
+                            "fixedInReleaseCode": "",
+                            "metadata": [
+                                {
+                                    "key": "externalIssueLinkId",
+                                    "value": "35801e59-8c4f-423f-921c-3c649b14c44f",
+                                    "__typename": "IssueExternalIssueMetadata"
+                                }
+                            ],
+                            "__typename": "IssueExternalIssue"
+                        },
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjR9",
+                    "node": {
+                        "id": "b8136ed0-67a7-4d28-b2ea-af07508afec9",
+                        "code": "STARC-193743",
+                        "status": "CONFIRMED",
+                        "search": {
+                            "score": 848.3827,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.actualBehaviour.description",
+                                    "matches": [
+                                        "The <iy9Udq>vanduul</iy9Udq> at the Tech Smugglers' missions are not engaging the player."
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.expectedBehaviour.description",
+                                    "matches": [
+                                        "the <iy9Udq>vanduul</iy9Udq> should be engaging the player"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "tech smugglers <iy9Udq>vanduul</iy9Udq> ships dont move 4.6tpu"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "enter range of the <iy9Udq>vanduul</iy9Udq> ships"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "MEDIUM",
+                            "title": "tech smugglers vanduul ships dont move 4.6tpu",
+                            "category": {
+                                "id": "1638ef9e-a6c9-4584-9be1-f1aefab8a3d4",
+                                "code": "ai-behavior",
+                                "name": "AI Behavior",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "729d1e6e-f31a-450c-8f23-d9372bcdada4",
+                                "code": "7Tkz1rwXZxy9CLROosW53",
+                                "name": "PTU 4.6.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-01-17T10:05:28.912Z",
+                            "expiresOn": "2026-02-16T10:05:28.912Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 16,
+                            "reproductionCount": 15,
+                            "nonReproductionCount": 1,
+                            "severity": "MEDIUM",
+                            "voteCount": 18,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": {
+                            "confirmedOn": "2026-02-09T00:42:10.399Z",
+                            "__typename": "ConfirmedIssueSummaryDetails"
+                        },
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjV9",
+                    "node": {
+                        "id": "04d4a344-fc69-4f14-aa8a-bada3ec6fe69",
+                        "code": "STARC-196486",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 836.4137,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> tech smugglers"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Take on the <iy9Udq>Vanduul</iy9Udq> Tech Smuggler mission in nyx"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "MEDIUM",
+                            "title": "Vanduul tech smugglers",
+                            "category": {
+                                "id": "1638ef9e-a6c9-4584-9be1-f1aefab8a3d4",
+                                "code": "ai-behavior",
+                                "name": "AI Behavior",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "ed0dd952-8bd9-48e5-8f63-8891e154ec35",
+                                "code": "8l0QeSIKkh413Udh_uGCv",
+                                "name": "LIVE 4.6.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-02-12T11:08:51.324Z",
+                            "expiresOn": "2026-03-14T11:08:51.324Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 5,
+                            "reproductionCount": 4,
+                            "nonReproductionCount": 1,
+                            "severity": "HIGH",
+                            "voteCount": 4,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjZ9",
+                    "node": {
+                        "id": "73818eb2-df53-49b4-a48f-2a0addbcc034",
+                        "code": "STARC-192047",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 800.8279,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> smuggler lieutenant"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Take on <iy9Udq>Vanduul</iy9Udq> Smugglers contract"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "HIGH",
+                            "title": "Vanduul smuggler lieutenant",
+                            "category": {
+                                "id": "7f47455f-7460-45a6-af04-cc2fa60261c1",
+                                "code": "locations-and-environments",
+                                "name": "Locations and Environments",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "708b6cc2-a7be-48ba-91b3-cdc6d3bd9d65",
+                                "code": "br-sxdDUHVifBIxMf6Vi2",
+                                "name": "LIVE 4.5.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-12-23T21:09:55.106Z",
+                            "expiresOn": "2026-01-22T21:09:55.106Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 8,
+                            "reproductionCount": 8,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 9,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjd9",
+                    "node": {
+                        "id": "6aaca5b2-bdd4-4900-a779-9190e1cefbb7",
+                        "code": "STARC-191784",
+                        "status": "CONFIRMED",
+                        "search": {
+                            "score": 789.9458,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.actualBehaviour.description",
+                                    "matches": [
+                                        "Unable to get past the \"Investigate the station\" step of the <iy9Udq>vanduul</iy9Udq>-tech smugglers mission, Ive tried about 10 times since 4.5 release with same result every time"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "Stuck on \"investigate station\" step of <iy9Udq>Vanduul</iy9Udq>-Tech Smuggler"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Make it to the \"Investigate the station\" step of the <iy9Udq>Vanduul</iy9Udq>-Tech Smugglers mission"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "HIGH",
+                            "title": "Stuck on \"investigate station\" step of Vanduul-Tech Smuggler",
+                            "category": {
+                                "id": "454f493e-3227-49bf-9343-20c33777c6f6",
+                                "code": "persistent-universe-missions",
+                                "name": "Persistent Universe Missions",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "708b6cc2-a7be-48ba-91b3-cdc6d3bd9d65",
+                                "code": "br-sxdDUHVifBIxMf6Vi2",
+                                "name": "LIVE 4.5.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-12-21T23:43:37.783Z",
+                            "expiresOn": "2026-01-20T23:43:37.783Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 20,
+                            "reproductionCount": 20,
+                            "nonReproductionCount": 0,
+                            "severity": "HIGH",
+                            "voteCount": 26,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": {
+                            "confirmedOn": "2026-01-19T21:19:40.342Z",
+                            "__typename": "ConfirmedIssueSummaryDetails"
+                        },
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": {
+                            "code": "BUG-380339",
+                            "url": "https://cloudimperiumgames.atlassian.net/browse/BUG-380339",
+                            "fixedInReleaseCode": "",
+                            "metadata": [
+                                {
+                                    "key": "externalIssueLinkId",
+                                    "value": "24f3b8bc-974c-488c-801c-e3bcb5f7c532",
+                                    "__typename": "IssueExternalIssueMetadata"
+                                }
+                            ],
+                            "__typename": "IssueExternalIssue"
+                        },
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [
+                            {
+                                "id": "ff1cd8be-eb43-439a-9c13-1159b8515d8a",
+                                "type": "NEED_MORE_INFO",
+                                "__typename": "IssueTag"
+                            }
+                        ],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjh9",
+                    "node": {
+                        "id": "51c6c4a3-4142-45eb-880f-060021dda6cf",
+                        "code": "STARC-193720",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 779.9317,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.actualBehaviour.description",
+                                    "matches": [
+                                        "The <iy9Udq>Vanduul</iy9Udq> Mission quest activation trip is able to be avoided and the warehouse farmed with nearly no effort.  This broken mission lets anyone have the best gear currently"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> Tech Smuggler Mission NPC and Trips Broken"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "Vanduul Tech Smuggler Mission NPC and Trips Broken",
+                            "category": {
+                                "id": "7f47455f-7460-45a6-af04-cc2fa60261c1",
+                                "code": "locations-and-environments",
+                                "name": "Locations and Environments",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "708b6cc2-a7be-48ba-91b3-cdc6d3bd9d65",
+                                "code": "br-sxdDUHVifBIxMf6Vi2",
+                                "name": "LIVE 4.5.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-01-17T03:39:26.007Z",
+                            "expiresOn": "2026-02-16T03:39:26.007Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 2,
+                            "reproductionCount": 2,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 3,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjl9",
+                    "node": {
+                        "id": "76e5a7bf-c17c-44b5-b404-1d20c34933ea",
+                        "code": "STARC-196938",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 738.9931,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.workaround.description",
+                                    "matches": [
+                                        "no tried different servers all the same the <iy9Udq>vanduul</iy9Udq> tech mission is bugged at mo"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>vanduul</iy9Udq> tech mission not working"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "started <iy9Udq>vanduul</iy9Udq> tech mission went to enviroment"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "HIGH",
+                            "title": "vanduul tech mission not working",
+                            "category": {
+                                "id": "7f47455f-7460-45a6-af04-cc2fa60261c1",
+                                "code": "locations-and-environments",
+                                "name": "Locations and Environments",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "ed0dd952-8bd9-48e5-8f63-8891e154ec35",
+                                "code": "8l0QeSIKkh413Udh_uGCv",
+                                "name": "LIVE 4.6.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-02-16T21:52:07.346Z",
+                            "expiresOn": "2026-03-18T21:52:07.346Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 3,
+                            "reproductionCount": 3,
+                            "nonReproductionCount": 0,
+                            "severity": "HIGH",
+                            "voteCount": 5,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjEwfQ==",
+                    "node": {
+                        "id": "63ae7da7-37ad-40d8-9d60-67ea77faf2cd",
+                        "code": "STARC-188919",
+                        "status": "CONFIRMED",
+                        "search": {
+                            "score": 731.31573,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> corpses delivery mission"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "take any mission to deliver <iy9Udq>Vanduul</iy9Udq> corpses"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "Vanduul corpses delivery mission",
+                            "category": {
+                                "id": "454f493e-3227-49bf-9343-20c33777c6f6",
+                                "code": "persistent-universe-missions",
+                                "name": "Persistent Universe Missions",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "53b130c8-1c07-4978-b8bf-3836e14c2c52",
+                                "code": "QwyfB-L7bR2Njkg78-AJL",
+                                "name": "LIVE 4.4.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-12-03T19:51:31.445Z",
+                            "expiresOn": "2026-01-02T19:51:31.445Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 12,
+                            "reproductionCount": 12,
+                            "nonReproductionCount": 0,
+                            "severity": "HIGH",
+                            "voteCount": 14,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": {
+                            "confirmedOn": "2025-12-17T07:09:32.396Z",
+                            "__typename": "ConfirmedIssueSummaryDetails"
+                        },
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": {
+                            "code": "BUG-388330",
+                            "url": "https://cloudimperiumgames.atlassian.net/browse/BUG-388330",
+                            "fixedInReleaseCode": "",
+                            "metadata": [
+                                {
+                                    "key": "externalIssueLinkId",
+                                    "value": "14cf094d-ecbf-402e-a151-416767fd5f81",
+                                    "__typename": "IssueExternalIssueMetadata"
+                                }
+                            ],
+                            "__typename": "IssueExternalIssue"
+                        },
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjExfQ==",
+                    "node": {
+                        "id": "3b84a2c5-74d2-4feb-85fa-eafbc9bbf925",
+                        "code": "STARC-194483",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 711.917,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.actualBehaviour.description",
+                                    "matches": [
+                                        "Reproduction Steps\n\nAccept and start the <iy9Udq>Vanduul</iy9Udq>-Tech Smugglers mission.\n\nTravel to QV and enable the Search Derelict objective.\n\nCheck spawn locations A, B, and C for the"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq>-Tech Smugglers QV airlock card despawns"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Select <iy9Udq>Vanduul</iy9Udq>-Tech Smugglers missinon"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "HIGH",
+                            "title": "Vanduul-Tech Smugglers QV airlock card despawns",
+                            "category": {
+                                "id": "96e90f21-b12b-41df-9c98-9cf6a3f2d611",
+                                "code": "other",
+                                "name": "Other",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "708b6cc2-a7be-48ba-91b3-cdc6d3bd9d65",
+                                "code": "br-sxdDUHVifBIxMf6Vi2",
+                                "name": "LIVE 4.5.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-01-26T11:00:19.076Z",
+                            "expiresOn": "2026-02-25T11:00:19.076Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 4,
+                            "reproductionCount": 4,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 4,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjEyfQ==",
+                    "node": {
+                        "id": "5bc69dfd-2715-4835-b5c8-32b662129d87",
+                        "code": "STARC-187930",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 706.5437,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq>-Tech Smugglers  [ Land in Hangar ]"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Contract:  <iy9Udq>Vanduul</iy9Udq>-Tech Smugglers"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "Vanduul-Tech Smugglers  [ Land in Hangar ]",
+                            "category": {
+                                "id": "7f47455f-7460-45a6-af04-cc2fa60261c1",
+                                "code": "locations-and-environments",
+                                "name": "Locations and Environments",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "53b130c8-1c07-4978-b8bf-3836e14c2c52",
+                                "code": "QwyfB-L7bR2Njkg78-AJL",
+                                "name": "LIVE 4.4.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-11-28T15:56:12.225Z",
+                            "expiresOn": "2025-12-28T15:56:12.225Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 6,
+                            "reproductionCount": 5,
+                            "nonReproductionCount": 1,
+                            "severity": "CRITICAL",
+                            "voteCount": 5,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjEzfQ==",
+                    "node": {
+                        "id": "b4644be0-43dc-4efb-b511-25ce11945695",
+                        "code": "STARC-196609",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 694.4845,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> Tech Storage and Cargo Elevator"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [
+                                {
+                                    "field": "issue.actualBehaviour.description",
+                                    "content": "storage not open",
+                                    "__typename": "IssueSummaryExcerpt"
+                                }
+                            ],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "Vanduul Tech Storage and Cargo Elevator",
+                            "category": {
+                                "id": "7f47455f-7460-45a6-af04-cc2fa60261c1",
+                                "code": "locations-and-environments",
+                                "name": "Locations and Environments",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "ed0dd952-8bd9-48e5-8f63-8891e154ec35",
+                                "code": "8l0QeSIKkh413Udh_uGCv",
+                                "name": "LIVE 4.6.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-02-13T09:14:49.104Z",
+                            "expiresOn": "2026-03-15T09:14:49.104Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 6,
+                            "reproductionCount": 4,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 6,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjE0fQ==",
+                    "node": {
+                        "id": "24f69632-59e9-4067-8dba-0007ff825735",
+                        "code": "STARC-195199",
+                        "status": "CONFIRMED",
+                        "search": {
+                            "score": 683.3745,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> QV station Code wrong"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Play <iy9Udq>Vanduul</iy9Udq> Smuggler Mission"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "HIGH",
+                            "title": "Vanduul QV station Code wrong",
+                            "category": {
+                                "id": "454f493e-3227-49bf-9343-20c33777c6f6",
+                                "code": "persistent-universe-missions",
+                                "name": "Persistent Universe Missions",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "ed0dd952-8bd9-48e5-8f63-8891e154ec35",
+                                "code": "8l0QeSIKkh413Udh_uGCv",
+                                "name": "LIVE 4.6.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-01-31T19:57:42.354Z",
+                            "expiresOn": "2026-03-02T19:57:42.354Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 14,
+                            "reproductionCount": 14,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 14,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": {
+                            "confirmedOn": "2026-02-06T22:35:39.456Z",
+                            "__typename": "ConfirmedIssueSummaryDetails"
+                        },
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": {
+                            "code": "BUG-385905",
+                            "url": "https://cloudimperiumgames.atlassian.net/browse/BUG-385905",
+                            "fixedInReleaseCode": "",
+                            "metadata": [
+                                {
+                                    "key": "externalIssueLinkId",
+                                    "value": "2a3cd879-77a0-438d-80ee-5f4f57f578f6",
+                                    "__typename": "IssueExternalIssueMetadata"
+                                }
+                            ],
+                            "__typename": "IssueExternalIssue"
+                        },
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjE1fQ==",
+                    "node": {
+                        "id": "97dd9617-ffaf-4cd2-8509-4cf36d51e549",
+                        "code": "STARC-187495",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 678.7203,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "Softlocking <iy9Udq>Vanduul</iy9Udq> Tech Smugglers Mission"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Initiate <iy9Udq>Vanduul</iy9Udq> Tech Smugglers.",
+                                        "You know where the 4 other Lieutenants are. Hunt them, the <iy9Udq>vanduul</iy9Udq>, their henchmen, and whatever it takes to get those 4 other keys and Mobi Downloads"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "Softlocking Vanduul Tech Smugglers Mission",
+                            "category": {
+                                "id": "454f493e-3227-49bf-9343-20c33777c6f6",
+                                "code": "persistent-universe-missions",
+                                "name": "Persistent Universe Missions",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "53b130c8-1c07-4978-b8bf-3836e14c2c52",
+                                "code": "QwyfB-L7bR2Njkg78-AJL",
+                                "name": "LIVE 4.4.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-11-25T01:01:19.877Z",
+                            "expiresOn": "2025-12-25T01:01:19.877Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 8,
+                            "reproductionCount": 8,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 10,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjE2fQ==",
+                    "node": {
+                        "id": "cc0efa14-ec91-4d02-83c5-00c08733904d",
+                        "code": "STARC-190877",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 675.644,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq> Tech Smugglers missing mission markers"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Accept <iy9Udq>Vanduul</iy9Udq>-Tech Smuggler mission in Nyx"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "HIGH",
+                            "title": "Vanduul Tech Smugglers missing mission markers",
+                            "category": {
+                                "id": "454f493e-3227-49bf-9343-20c33777c6f6",
+                                "code": "persistent-universe-missions",
+                                "name": "Persistent Universe Missions",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "708b6cc2-a7be-48ba-91b3-cdc6d3bd9d65",
+                                "code": "br-sxdDUHVifBIxMf6Vi2",
+                                "name": "LIVE 4.5.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-12-18T08:35:29.037Z",
+                            "expiresOn": "2026-01-17T08:35:29.037Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 8,
+                            "reproductionCount": 7,
+                            "nonReproductionCount": 0,
+                            "severity": "HIGH",
+                            "voteCount": 9,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjE3fQ==",
+                    "node": {
+                        "id": "ef973423-45cc-4751-98d0-a23015a132c5",
+                        "code": "STARC-196968",
+                        "status": "CONFIRMED",
+                        "search": {
+                            "score": 673.797,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq>-Tech Smugglers leaders in Cargo Deck A not there"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Accept <iy9Udq>Vanduul</iy9Udq>-Tech Smugglers mission",
+                                        "Arrive on location, kill <iy9Udq>Vanduul</iy9Udq>, land"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "Vanduul-Tech Smugglers leaders in Cargo Deck A not there",
+                            "category": {
+                                "id": "454f493e-3227-49bf-9343-20c33777c6f6",
+                                "code": "persistent-universe-missions",
+                                "name": "Persistent Universe Missions",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "ed0dd952-8bd9-48e5-8f63-8891e154ec35",
+                                "code": "8l0QeSIKkh413Udh_uGCv",
+                                "name": "LIVE 4.6.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-02-17T11:37:42.754Z",
+                            "expiresOn": "2026-03-19T11:37:42.754Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 14,
+                            "reproductionCount": 14,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 17,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": {
+                            "confirmedOn": "2026-02-18T08:42:14.709Z",
+                            "__typename": "ConfirmedIssueSummaryDetails"
+                        },
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjE4fQ==",
+                    "node": {
+                        "id": "12fe36f6-a547-4e5b-8304-2a9e654f8df3",
+                        "code": "STARC-195187",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 665.6868,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "AI in <iy9Udq>Vanduul</iy9Udq> Tech Smugglers not spawning consistently"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "pick <iy9Udq>Vanduul</iy9Udq> tech smugglers mission"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "AI in Vanduul Tech Smugglers not spawning consistently",
+                            "category": {
+                                "id": "1638ef9e-a6c9-4584-9be1-f1aefab8a3d4",
+                                "code": "ai-behavior",
+                                "name": "AI Behavior",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "ed0dd952-8bd9-48e5-8f63-8891e154ec35",
+                                "code": "8l0QeSIKkh413Udh_uGCv",
+                                "name": "LIVE 4.6.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2026-01-31T18:17:58.924Z",
+                            "expiresOn": "2026-03-02T18:17:58.924Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 6,
+                            "reproductionCount": 5,
+                            "nonReproductionCount": 0,
+                            "severity": "CRITICAL",
+                            "voteCount": 5,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                },
+                {
+                    "cursor": "eyJvZmZzZXQiOjE5fQ==",
+                    "node": {
+                        "id": "4e6fb849-0243-412c-b72f-3253e5679911",
+                        "code": "STARC-187247",
+                        "status": "OPEN",
+                        "search": {
+                            "score": 636.09625,
+                            "relevanceScore": null,
+                            "highlights": [
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.title",
+                                    "matches": [
+                                        "<iy9Udq>Vanduul</iy9Udq>-tech smugglers, impossible to complete solo"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                },
+                                {
+                                    "tag": "iy9Udq",
+                                    "field": "issue.reproductionSteps.description",
+                                    "matches": [
+                                        "Accept <iy9Udq>Vanduul</iy9Udq>-tech smugglers mission"
+                                    ],
+                                    "__typename": "IssueSummaryHighlight"
+                                }
+                            ],
+                            "excerpts": [],
+                            "__typename": "IssueSummarySearch"
+                        },
+                        "project": {
+                            "id": "5bb2df28-5a58-4d02-84b4-c28cce4e1fa0",
+                            "code": "STAR-CITIZEN",
+                            "name": "Star Citizen",
+                            "__typename": "ProjectDescriptor"
+                        },
+                        "details": {
+                            "severity": "CRITICAL",
+                            "title": "Vanduul-tech smugglers, impossible to complete solo",
+                            "category": {
+                                "id": "1638ef9e-a6c9-4584-9be1-f1aefab8a3d4",
+                                "code": "ai-behavior",
+                                "name": "AI Behavior",
+                                "__typename": "IssueCategoryDescriptor"
+                            },
+                            "environment": {
+                                "id": "53b130c8-1c07-4978-b8bf-3836e14c2c52",
+                                "code": "QwyfB-L7bR2Njkg78-AJL",
+                                "name": "LIVE 4.4.0",
+                                "__typename": "EnvironmentDescriptor"
+                            },
+                            "__typename": "IssueSummaryDetails"
+                        },
+                        "openDetails": {
+                            "confirmationThreshold": 10,
+                            "openedOn": "2025-11-23T14:24:30.972Z",
+                            "expiresOn": "2025-12-23T14:24:30.972Z",
+                            "__typename": "OpenedIssueSummaryDetails"
+                        },
+                        "community": {
+                            "contributionCount": 29,
+                            "reproductionCount": 6,
+                            "nonReproductionCount": 23,
+                            "severity": "CRITICAL",
+                            "voteCount": 10,
+                            "__typename": "IssueSummaryCommunityDetails"
+                        },
+                        "confirmedDetails": null,
+                        "archivedDetails": null,
+                        "underInvestigationDetails": null,
+                        "fixedDetails": null,
+                        "externalIssue": null,
+                        "viewerProperties": {
+                            "canContribute": true,
+                            "cannotContributeReason": null,
+                            "favourited": false,
+                            "__typename": "IssueSummaryViewerProperties"
+                        },
+                        "visibility": {
+                            "level": "PROTECTED",
+                            "inheritancePolicy": "INHERIT_FROM_OPENED_ON_ENVIRONMENT",
+                            "restrictedTo": [],
+                            "__typename": "SecurityVisibility"
+                        },
+                        "promotionDetails": {
+                            "status": "INACTIVE",
+                            "promotedOn": null,
+                            "unpromotedOn": null,
+                            "additionalInfo": null,
+                            "__typename": "IssueSummaryPromotionDetails"
+                        },
+                        "tags": [],
+                        "__typename": "IssueSummary"
+                    },
+                    "__typename": "IssueSummaryEdge"
+                }
+            ],
+            "__typename": "IssueSummaryConnection"
+        }
+    }
+}

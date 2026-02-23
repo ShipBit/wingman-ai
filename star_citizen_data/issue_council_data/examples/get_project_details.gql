@@ -1,0 +1,187 @@
+query Project($code: String!, $environmentQueryInput: EnvironmentQueryInput!, $releaseDeploymentQueryInput: ReleaseDeploymentQueryInput!) {
+  projectByCode(code: $code) {
+    id
+    environments(query: $environmentQueryInput) {
+      edges {
+        cursor
+        node {
+          ...EnvironmentFragment
+          deployments(query: $releaseDeploymentQueryInput) {
+            edges {
+              cursor
+              node {
+                ...ReleaseDeploymentFragment
+                __typename
+              }
+              __typename
+            }
+            pageInfo {
+              ...PageInfoFragment
+              __typename
+            }
+            totalCount
+            pages {
+              ...PagesFragment
+              __typename
+            }
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      pageInfo {
+        ...PageInfoFragment
+        __typename
+      }
+      totalCount
+      pages {
+        ...PagesFragment
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+}
+
+fragment EnvironmentFragment on Environment {
+  id
+  code
+  name
+  status
+  provisionedOn
+  schedule {
+    openingOn
+    closingOn
+    __typename
+  }
+  settings {
+    issueConfirmationThreshold
+    issueExpirationDelay
+    __typename
+  }
+  visibility {
+    ...SecurityVisibilityFragment
+    __typename
+  }
+  viewerProperties {
+    canOpenIssue
+    canPostContribution
+    __typename
+  }
+  __typename
+}
+
+fragment SecurityVisibilityFragment on SecurityVisibility {
+  level
+  inheritancePolicy
+  restrictedTo {
+    ... on SecurityUserTrustee {
+      type
+      user {
+        id
+        displayName
+        avatarUrl
+        __typename
+      }
+      __typename
+    }
+    ... on SecurityGroupTrustee {
+      type
+      group {
+        id
+        code
+        name
+        role
+        isDeleted
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment ReleaseDeploymentFragment on ReleaseDeployment {
+  id
+  isCurrent
+  release {
+    ...ReleaseFragment
+    __typename
+  }
+  environment {
+    ...EnvironmentFragment
+    __typename
+  }
+  status
+  completedOn
+  __typename
+}
+
+fragment ReleaseFragment on Release {
+  id
+  code
+  version {
+    code
+    __typename
+  }
+  createdOn
+  updatedOn
+  publishedOn
+  hasCurrentDeployment
+  __typename
+}
+
+fragment PagesFragment on Pages {
+  current {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  first {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  last {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  next {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  previous {
+    pageNumber
+    pageInfo {
+      ...PageInfoFragment
+      __typename
+    }
+    __typename
+  }
+  __typename
+}
+
+fragment PageInfoFragment on PageInfo {
+  startCursor
+  endCursor
+  hasNextPage
+  hasPreviousPage
+  __typename
+}

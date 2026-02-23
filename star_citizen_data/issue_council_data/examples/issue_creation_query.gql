@@ -1,0 +1,103 @@
+mutation OpenIssue($input: OpenIssueInput!) {
+  openIssue(input: $input) {
+    code
+    success
+    message
+    issue {
+      id
+      code
+      status
+      project {
+        id
+        code
+        name
+        __typename
+      }
+      details {
+        title
+        category {
+          id
+          code
+          name
+          __typename
+        }
+        environment {
+          id
+          code
+          name
+          __typename
+        }
+        release {
+          id
+          code
+          version {
+            code
+            __typename
+          }
+          __typename
+        }
+        severity
+        systemConfiguration {
+          id
+          name
+          platform {
+            id
+            code
+            name
+            __typename
+          }
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    problem {
+      ...ProblemDetails
+      __typename
+    }
+    __typename
+  }
+}
+
+fragment ProblemDetails on ProblemDetail {
+  type
+  title
+  status
+  instance
+  help
+  debug {
+    name
+    message
+    stack
+    __typename
+  }
+  data {
+    ... on ValidationErrors {
+      errors {
+        field
+        code
+        message
+        help
+        fieldSpec {
+          minLength
+          maxLength
+          pattern
+          required
+          __typename
+        }
+        __typename
+      }
+      __typename
+    }
+    ... on ConflictErrors {
+      errors {
+        field
+        __typename
+      }
+      __typename
+    }
+    __typename
+  }
+  __typename
+}

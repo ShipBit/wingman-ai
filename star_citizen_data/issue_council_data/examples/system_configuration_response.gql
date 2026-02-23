@@ -1,0 +1,68 @@
+{
+    "data": {
+        "viewer": {
+            "id": "294f602e-3d77-4525-ae1e-ebdb2c976b9c",
+            "suggestedSystemConfiguration": {
+                "id": "0638d4aa-c9e2-4da3-aba0-e7dd7def0852",
+                "name": "PC NEW Graka",
+                "platform": {
+                    "id": "5b912d7c-7474-493a-b2e6-6a2cfc99f117",
+                    "code": "pc-windows",
+                    "name": "PC Windows",
+                    "createdOn": "2021-02-08T18:48:46.491Z",
+                    "updatedOn": "2026-02-16T21:05:37.578Z",
+                    "__typename": "Platform"
+                },
+                "operatingSystem": {
+                    "type": null,
+                    "name": "Windows 11 Pro 64-bit",
+                    "language": "German",
+                    "__typename": "OperatingSystem"
+                },
+                "hardware": {
+                    "version": null,
+                    "processor": {
+                        "model": "AMD Ryzen 7 5800X 8-Core Processor              (16 CPUs), ~3.8GHz",
+                        "__typename": "Processor"
+                    },
+                    "memory": {
+                        "quantity": 32,
+                        "unit": "GIGABYTE",
+                        "__typename": "Memory"
+                    },
+                    "__typename": "HardwareConfig"
+                },
+                "graphics": {
+                    "card": {
+                        "manufacturer": "NVIDIA",
+                        "model": "NVIDIA GeForce RTX 4070 Ti SUPER",
+                        "chipType": "NVIDIA GeForce RTX 4070 Ti SUPER",
+                        "memory": {
+                            "quantity": 16,
+                            "unit": "GIGABYTE",
+                            "__typename": "Memory"
+                        },
+                        "driver": {
+                            "name": "C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_3cae04f75ee04f42\\nvldumdx.dll,C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd64_3cae04f75ee04f42\\nvldumdx.dll,C:\\WINDOWS\\System32\\DriverStore\\FileRepository\\nv_dispi.inf_amd",
+                            "version": "32.0.15.7602",
+                            "__typename": "Driver"
+                        },
+                        "__typename": "GraphicsCard"
+                    },
+                    "directX": {
+                        "version": "DirectX 12",
+                        "__typename": "DirectXConfig"
+                    },
+                    "__typename": "GraphicsConfig"
+                },
+                "peripherals": [],
+                "network": null,
+                "additionalInfo": null,
+                "createdOn": "2025-04-26T12:39:10.323Z",
+                "updatedOn": "2025-04-26T12:39:10.323Z",
+                "__typename": "SystemConfiguration"
+            },
+            "__typename": "UserAccount"
+        }
+    }
+}
