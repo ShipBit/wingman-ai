@@ -361,7 +361,7 @@ class CommandHandler:
         await asyncio.sleep(timeout)
         await self.handle_stop_recording(None, None)
 
-    def _get_actions_from_recorded_keys(self, recorded):
+    def _get_actions_from_recorded_keys(self, recorded, compressed=False):
         actions: list[CommandActionConfig] = []
 
         def add_action(name, code, extended, press, release, hold):
@@ -432,7 +432,7 @@ class CommandHandler:
             # check if last key was down event
             if last_key_data and last_key_data[3] == "down":
                 # same key?
-                if key_data[1] == last_key_data[1] and key_data[2] == last_key_data[2]:
+                if compressed and key_data[1] == last_key_data[1] and key_data[2] == last_key_data[2]:
                     # write as compressed action
                     add_wait(last_key_data[5])
                     add_action(
@@ -453,8 +453,13 @@ class CommandHandler:
             if last_key_data and last_key_data[3] == "up":
                 if (
                     last_last_key_data
-                    and last_last_key_data[1] != last_key_data[1]
-                    or last_last_key_data[2] != last_key_data[2]
+                    and (
+                        not compressed
+                        or (
+                            last_last_key_data[1] != last_key_data[1]
+                            or last_last_key_data[2] != last_key_data[2]
+                        )
+                    )
                 ):
                     add_wait(last_key_data[5])
                     add_action(
@@ -479,8 +484,11 @@ class CommandHandler:
             and last_last_key_data
             and key_data[3] == "up"
             and (
-                last_last_key_data[1] != last_key_data[1]
-                or last_last_key_data[2] != last_key_data[2]
+                not compressed
+                or (
+                    last_last_key_data[1] != last_key_data[1]
+                    or last_last_key_data[2] != last_key_data[2]
+                )
             )
         ):
             add_wait(key_data[5])
@@ -510,7 +518,7 @@ class CommandHandler:
                 extended = key_extended
             elif extended != key_extended:
                 # fallback to advanced mode, if mixed extended flags are detected
-                return self._get_actions_from_recorded_keys(recorded)
+                return self._get_actions_from_recorded_keys(recorded, True)
             if key.event_type == "down":
                 # Ignore further processing if 'esc' was pressed
                 if key_name == "esc":
