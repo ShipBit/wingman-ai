@@ -49,4 +49,18 @@ class Migration200To210(BaseMigration):
             del old["elevenlabs"]["latency"]
             self.log("- removed elevenlabs.latency from wingman config")
 
+        # Migrate hotkey names for numpad keys
+        if "commands" in old:
+            for command in old["commands"]:
+                if "actions" in command:
+                    for action in command["actions"]:
+                        if "keyboard" in action:
+                            keyboard = action["keyboard"]
+                            if "hotkey_codes" in keyboard and keyboard["hotkey_codes"]:
+                                if keyboard["hotkey_codes"][0] > 70:
+                                    hotkey = keyboard.get("hotkey", "")
+                                    if hotkey in ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"]:
+                                        keyboard["hotkey"] = f"num {hotkey}"
+                                        self.log(f"- migrated hotkey from '{hotkey}' to 'num {hotkey}' for command '{command['name']}'")
+
         return old

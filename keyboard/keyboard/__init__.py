@@ -458,7 +458,7 @@ def parse_hotkey(hotkey):
 
         # ((alt_codes, shift_codes, a_codes), (alt_codes, b_codes), (c_codes,))
     """
-    if _is_number(hotkey) or len(hotkey) == 1:
+    if _is_number(hotkey) or len(hotkey) == 1 or hotkey == 'num +':
         scan_codes = key_to_scan_codes(hotkey)
         step = (scan_codes,)
         steps = (step,)

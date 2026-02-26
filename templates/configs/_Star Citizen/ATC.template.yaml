@@ -31,17 +31,23 @@ prompts:
 record_key: delete
 inworld:
   voice_id: Clive
+pocket_tts:
+  voice: azelma
 sound:
   effects: [LOW_QUALITY_RADIO]
   play_beep_apollo: true
 openai:
   tts_voice: onyx
 commands:
-  - name: RequestLandingPermission
+  - name: Request Landing Permission
     actions:
       - keyboard:
           hotkey: alt+n
-  - name: RequestDeparture
+  - name: Request Departure
+    actions:
+      - keyboard:
+          hotkey: alt+n
+  - name: Contact ATC
     actions:
       - keyboard:
           hotkey: alt+n

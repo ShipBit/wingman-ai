@@ -537,9 +537,9 @@ def map_name(name, yield_extended=False):
     for i, entry in entries:
         scan_code, vk, is_extended, modifiers = entry
         if yield_extended:
-            yield scan_code or -vk, modifiers, is_extended
+            yield scan_code if (scan_code and not name.startswith('num')) else -vk, modifiers, is_extended
         else:
-            yield scan_code or -vk, modifiers
+            yield scan_code if (scan_code and not name.startswith('num')) else -vk, modifiers
 
 def direct_event(code, event_type):
     _send_event(code, event_type)

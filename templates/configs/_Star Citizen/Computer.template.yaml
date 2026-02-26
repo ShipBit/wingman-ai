@@ -33,303 +33,591 @@ record_key: end
 is_voice_activation_default: True
 inworld:
   voice_id: Olivia
+pocket_tts:
+  voice: fantine
+command_categories:
+  - id: 8483a2f5-5273-435f-82ee-561c5a485317
+    name: Vehicles - Seats and Operator Modes
+  - id: 01120b29-2487-422e-82ff-6327eacbd7fe
+    name: Vehicles - Cockpit
+  - id: 5b30e3f5-1600-42fd-92f8-70a4eca4d8f5
+    name: Vehicles - Multi Function Displays (MFDs)
+  - id: f65a8f08-4c7d-4a33-8473-96e00614504d
+    name: Vehicles - View
+  - id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    name: Flight - Movement
+  - id: d5d831d2-3990-41c8-afc3-c205c83f39b0
+    name: Flight - Quantum Travel
+  - id: 4e9a4be4-a6e6-4052-9f5e-d84b2313cc33
+    name: Flight - Docking
+  - id: eb2b63a4-251b-44f1-b6d2-3627e8e66083
+    name: Vehicle - Targeting
+  - id: 05b98dde-b8b3-4bcc-85e5-50f60dfaa819
+    name: Vehicles - Target Cycling
+  - id: 3282fd5c-9c32-4d27-adfa-d94f6f40e43e
+    name: Flight - Target Hailing
+  - id: 8878cd3f-e81d-4cc5-b2ed-dd9337b52456
+    name: Flight - Rader
+  - id: 971fcc06-4bb7-4cd7-b400-fefff52895de
+    name: Vehicles - Scanning
+  - id: 59a1060a-0ea0-4a78-9d67-c56ad94b1e35
+    name: Vehicles - Mining
+  - id: fb06c1c1-1816-4762-b260-d92d982c08d7
+    name: Vehicles - Salvage
+  - id: 72be05a7-901f-4434-9f46-0e8e7d23b2f4
+    name: Turret Movement
+  - id: 2e6724e6-3c0e-46b4-8fa8-3ca421817a2b
+    name: Turret Advanced
+  - id: a0479a7c-e43f-427c-b626-a1a6ca1a7aef
+    name: Vehicles - Weapons
+  - id: eafa5454-bb05-4e9a-821d-1495af21aeec
+    name: Vehicles - Missiles
+  - id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
+    name: Vehicles - Shields and Countermeasures
+  - id: 58262631-2984-4bf0-99ee-f409a753df44
+    name: Flight - Power
+  - id: 03a87693-6612-4e26-b12a-9a5e373e3908
+    name: Flight - HUD
+  - id: 7b4d2e70-c42d-4b43-8266-b82b39e6c9b9
+    name: Lights
+  - id: 694101c8-03e2-409a-a72d-fb91257cdfc9
+    name: Vehicle - Mobiglas
+  - id: 637bc298-676a-4db0-9b15-672851556c4b
+    name: Stop Watch
+  - id: 4071a26c-8eb8-4957-b020-fb0b33c88fc6
+    name: On Foot - All
+  - id: ed0f344b-15b1-4137-b082-4af9146f860a
+    name: E.V.A - All
+  - id: 1432a1a3-ba9a-44f2-bf09-51c4f031e083
+    name: EVA - Zero-G Traversal
+  - id: fb157d39-721c-4a2e-b647-03ad086f8eae
+    name: Ground Vehicle - General
+  - id: cad82bbb-9265-4f60-9d1e-7eac1212ea4a
+    name: Ground Vehicle - Movement
+  - id: 0906b726-4b7c-454f-b801-addaf11cb5e0
+    name: Electronic Access - Spectator
+  - id: f3b10db4-70ca-4759-9ba6-83410b7d20d8
+    name: Social - General
+  - id: 835b529f-0e16-487b-b480-6da182f25963
+    name: Social - Invites
+  - id: 7bb8abde-743b-4928-aa44-1b5381e7ef65
+    name: Social - Emotes
+  - id: b34906b8-0153-47cc-839e-df7e0d9e4625
+    name: Voip, Foip and Head Tracking
+  - id: 90f81cd0-4aff-44cc-a4ef-43c73ec8d6e1
+    name: Quick Keys, Interactions, and Inner Thought
+  - id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
+    name: Camera - Advanced Camera Controls
 commands:
-  - name: ToggleCruiseControlOrToggleHoldCurrentSpeed
-    actions:
-      - keyboard:
-          hotkey: alt+c
-  - name: FlightReady
-    actions:
-      - keyboard:
-          hotkey: alt gr+r
+  - name: Flight Ready
+    category_id: 01120b29-2487-422e-82ff-6327eacbd7fe
+    is_system_command: false
     instant_activation:
       - Power up the ship
       - Start the ship
       - Flight Ready
-    responses:
-      - Powering up the ship. All systems online. Ready for takeoff.
-      - Start sequence initiated. All systems online. Ready for takeoff.
-  - name: ScanArea
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: tab
-    instant_activation:
-      - Scan Area
-      - Scan the area
-      - Initiate scan
-  - name: ToggleMasterModeScmAndNav
-    actions:
+          hotkey: alt gr
+          press: true
+      - wait: 0.55
       - keyboard:
-          hotkey: b
-          hold: 0.6
-  - name: NextOperatorModeWeaponsMissilesScanningMiningSalvagingQuantumFlight
+          hotkey: r
+          hold: 0.1
+      - wait: 0.15
+      - keyboard:
+          hotkey: alt gr
+          release: true
+  - name: Next Operator Mode
+    category_id: 8483a2f5-5273-435f-82ee-561c5a485317
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - mouse:
           button: middle
-  - name: ToggleMiningOperatorMode
+  - name: Toggle Light Amplification
+    category_id: 8483a2f5-5273-435f-82ee-561c5a485317
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: m
-  - name: ToggleSalvageOperatorMode
-    actions:
-      - keyboard:
-          hotkey: m
-  - name: ToggleScanningOperatorMode
-    actions:
-      - keyboard:
-          hotkey: v
-  - name: UseOrActivateWeapons
-    actions:
-      - mouse:
-          button: left
-          hold: 0.4
-  - name: UseOrActivateMissiles
-    actions:
-      - mouse:
-          button: left
-          hold: 0.4
-  - name: UseOrActivateScanning
-    actions:
-      - mouse:
-          button: left
-          hold: 0.4
-  - name: UseOrActivateMining
-    actions:
-      - mouse:
-          button: left
-          hold: 0.4
-  - name: UseOrActivateSalvaging
-    actions:
-      - mouse:
-          button: left
-          hold: 0.4
-  - name: UseOrActivateQuantumFlight
-    actions:
-      - mouse:
-          button: left
-          hold: 0.4
-  - name: InitiateStartSequence
-    actions:
-      - keyboard:
-          hotkey: alt gr+r
-      - wait: 3
-      - keyboard:
-          hotkey: alt+n
-  - name: DeployLandingGear
-    actions:
-      - keyboard:
-          hotkey: n
-  - name: RetractLandingGear
-    actions:
-      - keyboard:
-          hotkey: n
-  - name: HeadLightsOn
-    actions:
+          hotkey: alt gr
+          press: true
+      - wait: 0.25
       - keyboard:
           hotkey: l
-  - name: HeadLightsOff
+          hold: 0.15
+      - wait: 0.2
+      - keyboard:
+          hotkey: alt gr
+          release: true
+  - name: Toggle Hardpoint Lock
+    category_id: 01120b29-2487-422e-82ff-6327eacbd7fe
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: l
-  - name: WipeVisor
-    actions:
-      - keyboard:
-          hotkey: alt+x
-  - name: PowerShields
-    actions:
-      - keyboard:
-          hotkey: o
-  - name: PowerShip
-    actions:
-      - keyboard:
-          hotkey: u
-  - name: PowerEngines
-    actions:
-      - keyboard:
-          hotkey: i
-  - name: OpenMobiGlass
-    actions:
-      - keyboard:
-          hotkey: f1
-  - name: OpenStarMap
-    actions:
-      - keyboard:
-          hotkey: f2
-  - name: IncreasePowerToShields
-    actions:
-      - keyboard:
-          hotkey: f7
-  - name: IncreasePowerToEngines
-    actions:
-      - keyboard:
-          hotkey: f6
-  - name: IncreasePowerToWeapons
-    actions:
-      - keyboard:
-          hotkey: f5
-  - name: MaximumPowerToShields
-    actions:
-      - keyboard:
-          hotkey: f7
-          hold: 0.8
-  - name: MaximumPowerToEngines
-    actions:
-      - keyboard:
-          hotkey: f6
-          hold: 0.8
-  - name: MaximumPowerToWeapons
-    actions:
-      - keyboard:
-          hotkey: f5
-          hold: 0.8
-  - name: ToggleVTOL
-    actions:
+          hotkey: alt gr
+          press: true
+      - wait: 0.35
       - keyboard:
           hotkey: k
-  - name: ResetPowerPriority
-    actions:
+          hold: 0.1
+      - wait: 0.1
       - keyboard:
-          hotkey: f8
-  - name: CycleCamera
+          hotkey: alt gr
+          release: true
+  - name: Cycle Camera View
+    category_id: f65a8f08-4c7d-4a33-8473-96e00614504d
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
           hotkey: f4
-  - name: SideArm
+  - name: Toggle Cruise Mode
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: "1"
-  - name: PrimaryWeapon
+          hotkey: alt+c
+  - name: Toggle Decoupled Mode
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: "2"
-  - name: SecondaryWeapon
+          hotkey: c
+  - name: Toggle Landing System
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: "3"
-  - name: HolsterWeapon
+          hotkey: n
+  - name: Toggle VToL
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: r
-          hold: 0.6
-  - name: Reload
+          hotkey: k
+  - name: Cycle Configuration
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: r
-  - name: UseMedPen
+          hotkey: alt+k
+  - name: Autoland
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    instant_activation:
+      - Autoland
+      - Autoland the ship
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: "4"
-      - wait: 0.8
+          hotkey: n
+          hold: 2.0
+  - name: Contact ATC
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: alt+n
+  - name: Cycle Master Mode
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: b
+          hold: 2.0
+  - name: Open Jump Gate
+    category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
+    is_system_command: false
+    force_instant_activation: false
+    actions:
       - mouse:
           button: left
-  - name: UseFlashLight
+  - name: Engage Quantum Drive
+    category_id: d5d831d2-3990-41c8-afc3-c205c83f39b0
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - mouse:
+          button: left
+          hold: 2.0
+  - name: Clear Target
+    category_id: eb2b63a4-251b-44f1-b6d2-3627e8e66083
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: alt+t
+  - name: Autodock
+    category_id: 4e9a4be4-a6e6-4052-9f5e-d84b2313cc33
+    is_system_command: false
+    instant_activation:
+      - Dock
+      - Autodock
+      - Autodock the ship
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: n
+          hold: 2.0
+  - name: Cycle Target
+    category_id: 05b98dde-b8b3-4bcc-85e5-50f60dfaa819
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
           hotkey: t
-  - name: OpenInventory
+  - name: Cycle Attacker
+    category_id: 05b98dde-b8b3-4bcc-85e5-50f60dfaa819
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: i
-  - name: DeployDecoy
+          hotkey: "4"
+  - name: Cycle Hostile
+    category_id: 05b98dde-b8b3-4bcc-85e5-50f60dfaa819
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: h
-  - name: DeployNoise
+          hotkey: "5"
+  - name: Ping the area
+    category_id: 8878cd3f-e81d-4cc5-b2ed-dd9337b52456
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: j
-  - name: EmergencyEject
+          hotkey: tab
+  - name: Switch Mining Laser
+    category_id: 59a1060a-0ea0-4a78-9d67-c56ad94b1e35
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: right alt+y
-  - name: SelfDestruct
-    force_instant_activation: true
-    instant_activation:
-      - initiate self destruct
-      - activate self destruct
-    responses:
-      - Self-destruct engaged. Evacuation procedures recommended.
-      - Confirmed. Self-destruct in progress.
+          hotkey: alt
+          press: true
+      - mouse:
+          button: left
+      - keyboard:
+          hotkey: alt
+          release: true
+  - name: Jettison Cargo
+    category_id: 59a1060a-0ea0-4a78-9d67-c56ad94b1e35
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: backspace
-          hold: 0.8
-  - name: SpaceBrake
+          hotkey: alt+j
+  - name: Cycle Turret Mode
+    category_id: 72be05a7-901f-4434-9f46-0e8e7d23b2f4
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: x
-  - name: ExitSeat
+          hotkey: q
+  - name: Toggle Gyro
+    category_id: 72be05a7-901f-4434-9f46-0e8e7d23b2f4
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: y
-          hold: 0.8
-  - name: CycleGimbalAssist
+          hotkey: e
+  - name: Recenter Turret
+    category_id: 2e6724e6-3c0e-46b4-8fa8-3ca421817a2b
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: c
+          hold: 3.0
+  - name: Change Turret Position
+    category_id: 2e6724e6-3c0e-46b4-8fa8-3ca421817a2b
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: s
+  - name: Toggle Gimbals
+    category_id: a0479a7c-e43f-427c-b626-a1a6ca1a7aef
+    is_system_command: false
+    force_instant_activation: false
     actions:
       - keyboard:
           hotkey: g
-  - name: RequestLandingPermission
+  - name: Cycle Aim Mode
+    category_id: a0479a7c-e43f-427c-b626-a1a6ca1a7aef
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: alt gr
+          press: true
+      - wait: 0.1
+      - keyboard:
+          hotkey: g
+          hold: 0.0
+      - wait: 0.05
+      - keyboard:
+          hotkey: alt gr
+          release: true
+  - name: More missiles
+    category_id: eafa5454-bb05-4e9a-821d-1495af21aeec
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: g
+  - name: Reset missiles
+    category_id: eafa5454-bb05-4e9a-821d-1495af21aeec
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: alt+g
+  - name: Launch Decoy
+    category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: h
+  - name: Increase Decoys
+    category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: alt gr
+          press: true
+      - wait: 0.2
+      - keyboard:
+          hotkey: h
+          hold: 0.1
+      - wait: 0.05
+      - keyboard:
+          hotkey: alt gr
+          release: true
+  - name: Decrease Decoys
+    category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: alt+h
+  - name: Launch Noise
+    category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: j
+  - name: Toggle Power
+    category_id: 58262631-2984-4bf0-99ee-f409a753df44
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: u
+  - name: Toggle Thrusters
+    category_id: 58262631-2984-4bf0-99ee-f409a753df44
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: i
+  - name: Toggle Shields
+    category_id: 58262631-2984-4bf0-99ee-f409a753df44
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: o
+  - name: Toggle Weapons
+    category_id: 58262631-2984-4bf0-99ee-f409a753df44
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: p
+  - name: Toggle Headlights
+    category_id: 7b4d2e70-c42d-4b43-8266-b82b39e6c9b9
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: l
+  - name: PIT
+    category_id: 90f81cd0-4aff-44cc-a4ef-43c73ec8d6e1
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: alt+f
+  - name: Inventory
+    category_id: 90f81cd0-4aff-44cc-a4ef-43c73ec8d6e1
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: i
+  - name: Loot
+    category_id: 90f81cd0-4aff-44cc-a4ef-43c73ec8d6e1
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: i
+          hold: 3.0
+  - name: Save View 1
+    category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: f4
+          press: true
+      - wait: 1.4
+      - keyboard:
+          hotkey: "num 1"
+          hold: 4.0
+      - wait: 0.65
+      - keyboard:
+          hotkey: f4
+          release: true
+  - name: Save View 2
+    category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: f4
+          press: true
+      - wait: 0.65
+      - keyboard:
+          hotkey: "num 2"
+          hold: 4.0
+      - wait: 0.2
+      - keyboard:
+          hotkey: f4
+          release: true
+  - name: Save View 3
+    category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: f4
+          press: true
+      - wait: 0.8
+      - keyboard:
+          hotkey: "num 3"
+          hold: 4.0
+      - wait: 0.35
+      - keyboard:
+          hotkey: f4
+          release: true
+  - name: View 1
+    category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: f4
+          press: true
+      - wait: 0.55
+      - keyboard:
+          hotkey: "num 1"
+          hold: 0.1
+      - wait: 0.3
+      - keyboard:
+          hotkey: f4
+          release: true
+  - name: Launch Sequence
+    is_system_command: false
+    instant_activation:
+      - Launch Sequence
+    force_instant_activation: false
     actions:
       - keyboard:
           hotkey: alt+n
-  - name: RequestDeparture
-    actions:
       - keyboard:
-          hotkey: alt+n
-  - name: DisplayDebuggingInfo
-    actions:
+          hotkey: u
       - keyboard:
-          hotkey: ^
-          hotkey_codes:
-            - 41
-          hotkey_extended: false
-      - wait: 0.5
-      - write: r_DisplayInfo 2
-      - wait: 0.5
+          hotkey: i
+      - wait: 4.0
       - keyboard:
-          hotkey: enter
-          hotkey_codes:
-            - 28
-          hotkey_extended: false
+          hotkey: space
+          hold: 0.75
+      - wait: 2.0
       - keyboard:
-          hotkey: ^
-          hotkey_codes:
-            - 41
-          hotkey_extended: false
+          hotkey: n
+      - keyboard:
+          hotkey: k
+  - name: Landing Sequence
     is_system_command: false
     instant_activation:
-      - Display info
-      - Display debugging information
-      - Display debug information
-  - name: HideDebuggingInfo
+      - Landing Sequence
+    force_instant_activation: false
     actions:
       - keyboard:
-          hotkey: ^
-          hotkey_codes:
-            - 41
-          hotkey_extended: false
-      - wait: 0.5
-      - write: r_DisplayInfo 0
-      - wait: 0.5
+          hotkey: k
       - keyboard:
-          hotkey: enter
-          hotkey_codes:
-            - 28
-          hotkey_extended: false
+          hotkey: n
+      - wait: 7.0
       - keyboard:
-          hotkey: ^
-          hotkey_codes:
-            - 41
-          hotkey_extended: false
+          hotkey: n
+          hold: 5.0
+      - wait: 7.0
+      - keyboard:
+          hotkey: i
+      - keyboard:
+          hotkey: u
+  - name: View 2
+    category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
     is_system_command: false
-    instant_activation:
-      - Hide info
-      - Hide debugging information
-      - Hide debug information
-  - name: SwitchMiningLaser
+    force_instant_activation: false
     actions:
-      - mouse:
-          button: right
-          hold: 0.6
-    instant_activation:
-      - Change mining laser
-      - Switch mining laser
+      - keyboard:
+          hotkey: f4
+          press: true
+      - wait: 0.6
+      - keyboard:
+          hotkey: "num 2"
+          hold: 0.1
+      - wait: 0.15
+      - keyboard:
+          hotkey: f4
+          release: true
+  - name: View 3
+    category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: f4
+          press: true
+      - wait: 0.6
+      - keyboard:
+          hotkey: "num 3"
+          hold: 0.1
+      - wait: 0.15
+      - keyboard:
+          hotkey: f4
+          release: true
+  - name: Clear Saved View
+    category_id: 072f382d-9a38-49b6-9ad6-90a4adf7a9a4
+    is_system_command: false
+    force_instant_activation: false
+    actions:
+      - keyboard:
+          hotkey: "num 0"

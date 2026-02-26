@@ -751,12 +751,18 @@ class Wingman:
         try:
             for action in command.actions:
                 if action.keyboard:
+                    if action.keyboard.hotkey_codes and not action.keyboard.hotkey.startswith('num'):
+                        code = action.keyboard.hotkey_codes
+                    else:
+                        code = action.keyboard.hotkey
+
                     if action.keyboard.press == action.keyboard.release:
                         # compressed key events
                         hold = action.keyboard.hold or 0.1
                         if (
                             action.keyboard.hotkey_codes
                             and len(action.keyboard.hotkey_codes) == 1
+                            and not action.keyboard.hotkey.startswith('num')
                         ):
                             keyboard.direct_event(
                                 action.keyboard.hotkey_codes[0],
@@ -768,18 +774,15 @@ class Wingman:
                                 2 + (1 if action.keyboard.hotkey_extended else 0),
                             )
                         else:
-                            keyboard.press(
-                                action.keyboard.hotkey_codes or action.keyboard.hotkey
-                            )
+                            keyboard.press(code)
                             time.sleep(hold)
-                            keyboard.release(
-                                action.keyboard.hotkey_codes or action.keyboard.hotkey
-                            )
+                            keyboard.release(code)
                     else:
                         # single key events
                         if (
                             action.keyboard.hotkey_codes
                             and len(action.keyboard.hotkey_codes) == 1
+                            and not action.keyboard.hotkey.startswith('num')
                         ):
                             keyboard.direct_event(
                                 action.keyboard.hotkey_codes[0],
@@ -788,7 +791,7 @@ class Wingman:
                             )
                         else:
                             keyboard.send(
-                                action.keyboard.hotkey_codes or action.keyboard.hotkey,
+                                code,
                                 action.keyboard.press,
                                 action.keyboard.release,
                             )
