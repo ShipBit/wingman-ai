@@ -58,6 +58,14 @@ class OverlayPopup(tk.Toplevel):
         "price_per_unit",
         "multiplier",
     )
+    DISPLAY_COLUMNS = (
+        "transmit",
+        "commodity_name",
+        "inventory_scu",
+        "inventory_state",
+        "price_per_unit",
+        "multiplier",
+    )
     VALIDATION_COLUMN = "#0"
     I18N = {
         "en": {
@@ -72,6 +80,7 @@ class OverlayPopup(tk.Toplevel):
             "workflow_text": (
                 "Switch BUY/SELL using the toggle.\n"
                 "Edit terminal name by clicking the name or pencil icon.\n"
+                "Type at least three letters to get matching terminal suggestions.\n"
                 "Transmit toggles upload, Double-Click edits table values."
             ),
             "send_button": "Send to UEX",
@@ -104,6 +113,7 @@ class OverlayPopup(tk.Toplevel):
             "workflow_text": (
                 "BUY/SELL per Toggle wechseln.\n"
                 "Terminalname mit Klick auf Name oder Stift bearbeiten.\n"
+                "Ab drei Buchstaben erscheinen passende Terminal-Vorschläge.\n"
                 "Transmit toggelt den Upload, Double-Click bearbeitet Tabellenfelder."
             ),
             "send_button": "An UEX senden",
@@ -128,6 +138,8 @@ class OverlayPopup(tk.Toplevel):
 
     def __init__(self, master, terminal_prices, operation, screenshot_prices, cropped_screenshot_prices, cropped_screenshot_location):
         super().__init__(master)
+        self.withdraw()
+        self._ui_ready = False
 
         self.theme = self.THEME
         self.lang = self._detect_language()
@@ -144,6 +156,11 @@ class OverlayPopup(tk.Toplevel):
         self.icon_images = {}
         self.validation_icon_images = {}
         self.button_icon_images = {}
+        self.uex_service = None
+        self.terminals_by_id = {}
+        self.terminal_catalog = []
+        self.tradeport_suggestion_terminals = []
+        self._tradeport_suggestion_click_active = False
 
         print_debug(f"got data to validate: \n{json.dumps(self.updated_data, indent=2)}")
 
@@ -156,8 +173,6 @@ class OverlayPopup(tk.Toplevel):
         self._drag_offset_x = 0
         self._drag_offset_y = 0
 
-        # Erstelle ein temporäres Fenster, um Bildschirmabmessungen zu erhalten
-        self.screen_width, self.screen_height = self.get_primary_monitor_resolution()
         self._load_ui_icons()
 
         self.main_frame = tk.Frame(
@@ -344,6 +359,28 @@ class OverlayPopup(tk.Toplevel):
         self.tradeport_entry.bind("<Return>", self._submit_tradeport_edit)
         self.tradeport_entry.bind("<FocusOut>", self._submit_tradeport_edit)
         self.tradeport_entry.bind("<Escape>", self._cancel_tradeport_edit)
+        self.tradeport_entry.bind("<KeyRelease>", self._on_tradeport_entry_key_release)
+        self.tradeport_entry.bind("<Down>", self._on_tradeport_entry_down_key)
+        self.tradeport_suggestion_listbox = tk.Listbox(
+            terminal_value_frame,
+            height=6,
+            bg=self.theme["entry_bg"],
+            fg=self.theme["text"],
+            selectbackground=self.theme["accent"],
+            selectforeground=self.theme["bg"],
+            relief=tk.FLAT,
+            bd=0,
+            highlightthickness=1,
+            highlightbackground=self.theme["entry_border"],
+            font=("Segoe UI", 11),
+        )
+        self.tradeport_suggestion_listbox.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6, 0))
+        self.tradeport_suggestion_listbox.grid_remove()
+        self.tradeport_suggestion_listbox.bind("<ButtonPress-1>", self._on_tradeport_suggestion_press)
+        self.tradeport_suggestion_listbox.bind("<ButtonRelease-1>", self._on_tradeport_suggestion_click)
+        self.tradeport_suggestion_listbox.bind("<Double-Button-1>", self._on_tradeport_suggestion_click)
+        self.tradeport_suggestion_listbox.bind("<Return>", self._on_tradeport_suggestion_enter)
+        self.tradeport_suggestion_listbox.bind("<Escape>", self._cancel_tradeport_edit)
         self._tradeport_edit_active = False
 
         prices_card = tk.Frame(
@@ -375,6 +412,7 @@ class OverlayPopup(tk.Toplevel):
             style=self.TREE_STYLE,
             height=visible_rows,
             columns=self.TABLE_COLUMNS,
+            displaycolumns=self.DISPLAY_COLUMNS,
             show="tree headings",
         )
         self.data_table.heading("#0", text=self._t("col_validation"))
@@ -384,7 +422,7 @@ class OverlayPopup(tk.Toplevel):
 
         self.data_table.column("transmit", width=90, anchor=tk.CENTER)
         self.data_table.column("commodity_name", width=250, anchor=tk.W)
-        self.data_table.column("code", width=85, anchor=tk.CENTER)
+        self.data_table.column("code", width=0, minwidth=0, anchor=tk.CENTER)
         self.data_table.column("inventory_scu", width=120, anchor=tk.CENTER)
         self.data_table.column("inventory_state", width=170, anchor=tk.CENTER)
         self.data_table.column("price_per_unit", width=130, anchor=tk.CENTER)
@@ -522,15 +560,13 @@ class OverlayPopup(tk.Toplevel):
         self._set_operation(self.operation, trigger_revalidation=False)
         self._set_terminal_name_display(self.selected_terminal_name)
 
-        self.update()
-        pos_x = max(20, (self.screen_width - self.winfo_width()) // 2)
-        pos_y = max(20, (self.screen_height - self.winfo_height()) // 2)
-        self.geometry(f"+{pos_x}+{pos_y}")
+        self._center_popup_on_active_monitor()
         self.bind("<Escape>", lambda _event: self.abort_process())
 
         self.setup_treeview_for_editing()
 
         self.protocol("WM_DELETE_WINDOW", self.abort_process)
+        self._ui_ready = True
 
 
     @staticmethod
@@ -546,10 +582,16 @@ class OverlayPopup(tk.Toplevel):
         return popup.get_updated_data()
         
     def show_popup(self):
-    
-        # Open the popup
-        self.update()
+        # Show popup only after full UI build to avoid progressive rendering artifacts.
+        if not self._ui_ready:
+            self.update_idletasks()
         self.deiconify()
+        self._center_popup_on_active_monitor()
+        self.lift()
+        try:
+            self.focus_force()
+        except Exception:
+            pass
 
     def abort_process(self):
         self.user_updated_data = "aborted"
@@ -560,7 +602,13 @@ class OverlayPopup(tk.Toplevel):
         # Ensure current tradeport entry text is applied even if user confirms immediately.
         if self._tradeport_edit_active:
             self.tradeport_update()
-        self.user_updated_data = [data for data in self.updated_data if data.get('transmit', True)]
+        normalized_data = []
+        for data in self.updated_data:
+            item = data.copy()
+            item.setdefault("transmit", True)
+            if item["transmit"]:
+                normalized_data.append(item)
+        self.user_updated_data = normalized_data
         self._hide_validation_tooltip()
         self.destroy()
 
@@ -581,6 +629,55 @@ class OverlayPopup(tk.Toplevel):
             primary_monitor = monitors[0]  # Erster Monitor in der Liste
             return primary_monitor.width, primary_monitor.height
         return self.winfo_screenwidth(), self.winfo_screenheight()
+
+    def _active_monitor_bounds(self):
+        monitors = get_monitors()
+        if not monitors:
+            return 0, 0, self.winfo_screenwidth(), self.winfo_screenheight()
+        try:
+            pointer_x = self.winfo_pointerx()
+            pointer_y = self.winfo_pointery()
+        except Exception:
+            pointer_x = None
+            pointer_y = None
+
+        if pointer_x is not None and pointer_y is not None:
+            for monitor in monitors:
+                min_x = monitor.x
+                min_y = monitor.y
+                max_x = monitor.x + monitor.width
+                max_y = monitor.y + monitor.height
+                if min_x <= pointer_x < max_x and min_y <= pointer_y < max_y:
+                    return monitor.x, monitor.y, monitor.width, monitor.height
+
+        monitor = monitors[0]
+        return monitor.x, monitor.y, monitor.width, monitor.height
+
+    def _center_popup_on_active_monitor(self):
+        self.update_idletasks()
+        window_width = max(self.winfo_width(), self.winfo_reqwidth())
+        window_height = max(self.winfo_height(), self.winfo_reqheight())
+        mon_x, mon_y, mon_width, mon_height = self._active_monitor_bounds()
+        margin = 20
+
+        pos_x = mon_x + (mon_width - window_width) // 2
+        pos_y = mon_y + (mon_height - window_height) // 2
+
+        min_x = mon_x + margin
+        max_x = mon_x + mon_width - window_width - margin
+        min_y = mon_y + margin
+        max_y = mon_y + mon_height - window_height - margin
+
+        if max_x < min_x:
+            min_x = mon_x
+            max_x = mon_x
+        if max_y < min_y:
+            min_y = mon_y
+            max_y = mon_y
+
+        pos_x = min(max(pos_x, min_x), max_x)
+        pos_y = min(max(pos_y, min_y), max_y)
+        self.geometry(f"{window_width}x{window_height}+{int(pos_x)}+{int(pos_y)}")
 
     def _configure_tree_style(self):
         style = ttk.Style(self)
@@ -672,6 +769,179 @@ class OverlayPopup(tk.Toplevel):
         self.tradeport_entry.delete(0, tk.END)
         self.tradeport_entry.insert(0, terminal_name)
 
+    def _get_uex_service(self):
+        if self.uex_service is None:
+            self.uex_service = UEXApi2()
+        return self.uex_service
+
+    def _ensure_terminal_catalog(self):
+        if self.terminals_by_id:
+            return
+        try:
+            terminals = self._get_uex_service().get_data("terminals") or {}
+        except Exception:
+            terminals = {}
+        if not isinstance(terminals, dict):
+            terminals = {}
+        self.terminals_by_id = terminals
+        self.terminal_catalog = [
+            terminal
+            for terminal in terminals.values()
+            if str(terminal.get("type", "")).lower() == "commodity"
+        ]
+
+    @staticmethod
+    def _terminal_location_anchor(terminal):
+        for field in ("id_city", "id_outpost", "id_space_station", "id_orbit", "id_moon", "id_planet"):
+            value = terminal.get(field)
+            if value:
+                return field, value
+        return None, None
+
+    def _terminals_near_selected_location(self):
+        self._ensure_terminal_catalog()
+        selected_terminal = self.terminals_by_id.get(self.selected_terminal_id)
+        if not selected_terminal:
+            selected_terminal = self.terminals_by_id.get(str(self.selected_terminal_id))
+        if not selected_terminal:
+            try:
+                selected_id_int = int(self.selected_terminal_id)
+            except (TypeError, ValueError):
+                selected_id_int = None
+            if selected_id_int is not None:
+                selected_terminal = self.terminals_by_id.get(selected_id_int)
+        if not selected_terminal:
+            return self.terminal_catalog
+
+        anchor_field, anchor_value = self._terminal_location_anchor(selected_terminal)
+        if not anchor_field or not anchor_value:
+            return self.terminal_catalog
+
+        same_location = [
+            terminal
+            for terminal in self.terminal_catalog
+            if terminal.get(anchor_field) == anchor_value
+            and terminal.get("id_star_system") == selected_terminal.get("id_star_system")
+        ]
+        return same_location or self.terminal_catalog
+
+    def _rank_tradeport_suggestions(self, query_text, terminals):
+        query = query_text.strip().lower()
+        ranked = []
+        for terminal in terminals:
+            name = str(terminal.get("name", ""))
+            nickname = str(terminal.get("nickname", ""))
+            displayname = str(terminal.get("displayname", ""))
+            fullname = str(terminal.get("fullname", ""))
+            searchable = [name, nickname, displayname, fullname]
+            searchable_lower = [value.lower() for value in searchable if value]
+
+            if not any(query in value for value in searchable_lower):
+                continue
+
+            score = 0
+            name_lower = name.lower()
+            nickname_lower = nickname.lower()
+            displayname_lower = displayname.lower()
+            if name_lower.startswith(query):
+                score += 320
+            if nickname_lower.startswith(query):
+                score += 250
+            if displayname_lower.startswith(query):
+                score += 180
+            if query in name_lower:
+                score += 140
+            if query in nickname_lower:
+                score += 90
+            if query in displayname_lower:
+                score += 70
+            if query in fullname.lower():
+                score += 40
+
+            ranked.append((score, name.lower(), terminal))
+
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        return [item[2] for item in ranked[:10]]
+
+    def _build_tradeport_suggestion_label(self, terminal):
+        name = str(terminal.get("name", ""))
+        nickname = str(terminal.get("nickname", "")).strip()
+        if nickname and nickname.lower() not in name.lower():
+            return f"{name} ({nickname})"
+        return name
+
+    def _show_tradeport_suggestions(self):
+        if self.tradeport_suggestion_terminals:
+            self.tradeport_suggestion_listbox.grid()
+        else:
+            self.tradeport_suggestion_listbox.grid_remove()
+
+    def _hide_tradeport_suggestions(self):
+        self.tradeport_suggestion_listbox.grid_remove()
+        self.tradeport_suggestion_listbox.selection_clear(0, tk.END)
+        self.tradeport_suggestion_terminals = []
+
+    def _update_tradeport_suggestions(self):
+        if not self._tradeport_edit_active:
+            self._hide_tradeport_suggestions()
+            return
+
+        query = self.tradeport_entry.get().strip()
+        if len(query) < 3:
+            self._hide_tradeport_suggestions()
+            return
+
+        candidates = self._terminals_near_selected_location()
+        suggestions = self._rank_tradeport_suggestions(query, candidates)
+        self.tradeport_suggestion_terminals = suggestions
+        self.tradeport_suggestion_listbox.delete(0, tk.END)
+
+        for terminal in suggestions:
+            self.tradeport_suggestion_listbox.insert(tk.END, self._build_tradeport_suggestion_label(terminal))
+
+        self._show_tradeport_suggestions()
+
+    def _apply_selected_tradeport_suggestion(self):
+        selected = self.tradeport_suggestion_listbox.curselection()
+        if not selected:
+            return
+        selected_terminal = self.tradeport_suggestion_terminals[selected[0]]
+        terminal_name = selected_terminal.get("name", "").strip()
+        if not terminal_name:
+            return
+
+        self.tradeport_entry.delete(0, tk.END)
+        self.tradeport_entry.insert(0, terminal_name)
+        self._hide_tradeport_suggestions()
+        self.tradeport_update()
+
+    def _on_tradeport_entry_key_release(self, event=None):
+        ignored_keys = {"Return", "Escape", "Up", "Down", "Left", "Right", "Tab"}
+        if event and event.keysym in ignored_keys:
+            return
+        self._update_tradeport_suggestions()
+
+    def _on_tradeport_entry_down_key(self, _event=None):
+        if not self.tradeport_suggestion_terminals:
+            return
+        self.tradeport_suggestion_listbox.focus_set()
+        self.tradeport_suggestion_listbox.selection_clear(0, tk.END)
+        self.tradeport_suggestion_listbox.selection_set(0)
+        self.tradeport_suggestion_listbox.activate(0)
+        return "break"
+
+    def _on_tradeport_suggestion_press(self, _event=None):
+        self._tradeport_suggestion_click_active = True
+
+    def _on_tradeport_suggestion_click(self, _event=None):
+        self._tradeport_suggestion_click_active = False
+        self._apply_selected_tradeport_suggestion()
+        return "break"
+
+    def _on_tradeport_suggestion_enter(self, _event=None):
+        self._apply_selected_tradeport_suggestion()
+        return "break"
+
     def _activate_tradeport_edit(self, _event=None):
         if self._tradeport_edit_active:
             return
@@ -681,10 +951,12 @@ class OverlayPopup(tk.Toplevel):
         self.tradeport_entry.focus_set()
         self.tradeport_entry.icursor(tk.END)
         self.tradeport_entry.selection_range(0, tk.END)
+        self._update_tradeport_suggestions()
 
     def _deactivate_tradeport_edit(self):
         if not self._tradeport_edit_active:
             return
+        self._hide_tradeport_suggestions()
         self.tradeport_entry.grid_remove()
         self.tradeport_name_label.grid(row=0, column=0, sticky="ew")
         self._tradeport_edit_active = False
@@ -692,6 +964,11 @@ class OverlayPopup(tk.Toplevel):
     def _submit_tradeport_edit(self, _event=None):
         if not self._tradeport_edit_active:
             return
+        if self._tradeport_suggestion_click_active:
+            return
+        if self.focus_get() == self.tradeport_suggestion_listbox:
+            return
+        self._hide_tradeport_suggestions()
         self.tradeport_update()
 
     def _cancel_tradeport_edit(self, _event=None):
@@ -758,6 +1035,34 @@ class OverlayPopup(tk.Toplevel):
             item.get("multiplier", ""),
         )
 
+    def _table_value_index(self, column_name):
+        try:
+            return self.TABLE_COLUMNS.index(column_name)
+        except ValueError:
+            return None
+
+    def _visible_table_columns(self):
+        display_columns = self.data_table["displaycolumns"]
+        if display_columns == "#all":
+            return list(self.TABLE_COLUMNS)
+        if isinstance(display_columns, str):
+            return list(self.tk.splitlist(display_columns))
+        return list(display_columns)
+
+    def _column_name_from_tree_id(self, tree_column):
+        if not tree_column or tree_column == self.VALIDATION_COLUMN:
+            return None
+        if not tree_column.startswith("#"):
+            return tree_column
+        try:
+            visual_index = int(tree_column[1:]) - 1
+        except (TypeError, ValueError):
+            return None
+        visible_columns = self._visible_table_columns()
+        if visual_index < 0 or visual_index >= len(visible_columns):
+            return None
+        return visible_columns[visual_index]
+
     def _validation_key_for_text(self, validation_text):
         normalized = str(validation_text).strip().lower()
         if not normalized or "all plausible" in normalized:
@@ -823,7 +1128,9 @@ class OverlayPopup(tk.Toplevel):
         }
 
         column_widths = {}
-        for col_index, col_name in enumerate(self.TABLE_COLUMNS):
+        visible_columns = self._visible_table_columns()
+        for col_name in visible_columns:
+            col_index = self.TABLE_COLUMNS.index(col_name)
             max_px = heading_font.measure(self._t(f"col_{col_name}"))
             for item in self.updated_data:
                 row_values = self._build_table_row(item)
@@ -841,7 +1148,7 @@ class OverlayPopup(tk.Toplevel):
             available_width = self.data_table.winfo_width()
 
         total_width = validation_width + sum(column_widths.values())
-        if available_width > total_width:
+        if available_width > total_width and "commodity_name" in column_widths:
             extra = available_width - total_width
             self.data_table.column("commodity_name", width=column_widths["commodity_name"] + extra, stretch=True)
 
@@ -983,24 +1290,26 @@ class OverlayPopup(tk.Toplevel):
         # Get the item clicked
         item = self.data_table.identify('item', event.x, event.y)
         column = self.data_table.identify_column(event.x)
+        column_name = self._column_name_from_tree_id(column)
         if not item or not column:
             return
-        if column in ("#1", self.VALIDATION_COLUMN):
+        if column == self.VALIDATION_COLUMN or column_name in (None, "transmit"):
             return
-        self.edit_item(item, column)
+        self.edit_item(item, column, column_name)
 
     def on_table_click(self, event):
         region = self.data_table.identify("region", event.x, event.y)
         if region == "cell":
             row_id = self.data_table.identify_row(event.y)
             column = self.data_table.identify_column(event.x)
+            column_name = self._column_name_from_tree_id(column)
             if not row_id or not column:
                 return
-            if column == "#1":
+            if column_name == "transmit":
                 self.toggle_checkbox(row_id)
-            if column == "#7":
+            if column_name == "multiplier":
                 self.toggle_multiplier(row_id, column)
-            if column == "#5":
+            if column_name == "inventory_state":
                 self.toggle_inventory_state(row_id, column)
                 
     def tradeport_update(self, event=None):
@@ -1018,7 +1327,7 @@ class OverlayPopup(tk.Toplevel):
             self._deactivate_tradeport_edit()
             return
         
-        uex = UEXApi2()
+        uex = self._get_uex_service()
 
         uex_terminal = uex.get_terminal(updated_tradeport_name, search_fields=["nickname", "name", "space_station_name", "outpost_name", "city_name"], cutoff=50)
         
@@ -1056,9 +1365,12 @@ class OverlayPopup(tk.Toplevel):
 
     def toggle_checkbox(self, row_id):
         item = self.data_table.item(row_id)
-        checkbox_value = item['values'][0]
+        transmit_idx = self._table_value_index("transmit")
+        if transmit_idx is None:
+            return
+        checkbox_value = item['values'][transmit_idx]
         new_value = 'No' if checkbox_value == 'Yes' else 'Yes'
-        item['values'][0] = new_value
+        item['values'][transmit_idx] = new_value
         self.data_table.item(row_id, values=item['values'])
         self._apply_row_style(row_id)
 
@@ -1070,10 +1382,13 @@ class OverlayPopup(tk.Toplevel):
         next_value_map = {"None": "k", "k": "M", "M": "None"}
 
         item = self.data_table.item(row_id)
-        multiplier_value = item['values'][6]
+        multiplier_idx = self._table_value_index("multiplier")
+        if multiplier_idx is None:
+            return
+        multiplier_value = item['values'][multiplier_idx]
         new_value = next_value_map.get(multiplier_value, "None")
         index = int(row_id)
-        item['values'][6] = new_value
+        item['values'][multiplier_idx] = new_value
         self.update_price_by_multipler(new_value=new_value, row_index=index)
         self.updated_data[index]['multiplier'] = new_value
         self.updated_data[index]["validation_result"] = "user updated"
@@ -1095,9 +1410,12 @@ class OverlayPopup(tk.Toplevel):
             }
 
         item = self.data_table.item(row_id)
-        inventory_state = item['values'][4]
+        inventory_state_idx = self._table_value_index("inventory_state")
+        if inventory_state_idx is None:
+            return
+        inventory_state = item['values'][inventory_state_idx]
         new_value = next_value_map.get(inventory_state, "OUT OF STOCK")
-        item['values'][4] = new_value
+        item['values'][inventory_state_idx] = new_value
 
         # Aktualisieren des 'inventory_state'-Werts in self.updated_data
         index = int(row_id)
@@ -1108,18 +1426,18 @@ class OverlayPopup(tk.Toplevel):
         self.data_table.item(row_id, values=item['values'])
         self._apply_row_style(row_id)
 
-    def edit_item(self, item, column):
+    def edit_item(self, item, column, column_name):
         # Get the bounds and value of the cell to edit
-        if not item or not column:
+        if not item or not column or not column_name:
             return
         bbox = self.data_table.bbox(item, column)
         if not bbox:
             return
         x, y, width, height = bbox
-        
-        # column gibt '#n' zurück, wobei 'n' die Spaltennummer ist (beginnend mit 1)
-        # Entferne das '#' und subtrahiere 1, um den korrekten Index zu erhalten
-        column_index = int(column.strip('#')) - 1
+
+        column_index = self._table_value_index(column_name)
+        if column_index is None:
+            return
         value = self.data_table.item(item, 'values')[column_index]
 
         # Create an entry widget for editing
@@ -1138,29 +1456,33 @@ class OverlayPopup(tk.Toplevel):
         entry.place(x=x, y=y, width=width, height=height)
         entry.insert(0, value)
         entry.focus()
-        entry.bind('<Return>', lambda e: self.save_edit(item, column_index, entry))
+        entry.bind('<Return>', lambda e: self.save_edit(item, column_name, entry))
         entry.bind('<Escape>', lambda e: entry.destroy())
-        entry.bind('<FocusOut>', lambda e: self.save_edit(item, column_index, entry))
+        entry.bind('<FocusOut>', lambda e: self.save_edit(item, column_name, entry))
     
-    def save_edit(self, item, column_index, entry_widget):
+    def save_edit(self, item, column_name, entry_widget):
         new_value = entry_widget.get()
         
         # Update the item with the new value
         row_index = int(item)  # Convert the row ID back to an integer
+        column_index = self._table_value_index(column_name)
+        if column_index is None:
+            entry_widget.destroy()
+            return
         table_values = list(self.data_table.item(item, 'values'))
         table_values[column_index] = new_value
         
         # Map Treeview column names to updated_data keys
         column_mapping = {
-            1: "commodity_name",
-            2: "code",
-            3: "available_SCU_quantity",
-            4: "inventory_state",
-            5: "price_per_unit",
-            6: "multiplier",
+            "commodity_name": "commodity_name",
+            "code": "code",
+            "inventory_scu": "available_SCU_quantity",
+            "inventory_state": "inventory_state",
+            "price_per_unit": "price_per_unit",
+            "multiplier": "multiplier",
         }
 
-        column_key = column_mapping.get(column_index)
+        column_key = column_mapping.get(column_name)
 
         if column_key:
             # Update the corresponding item in updated_data
@@ -1208,9 +1530,13 @@ class OverlayPopup(tk.Toplevel):
                 
                 uex_commodity_price_object = match_result["root_object"]
                 self.updated_data[row_index]['commodity_name'] = uex_commodity_price_object["commodity_name"]
-                table_values[1] = uex_commodity_price_object["commodity_name"]
+                commodity_idx = self._table_value_index("commodity_name")
+                code_idx = self._table_value_index("code")
+                if commodity_idx is not None:
+                    table_values[commodity_idx] = uex_commodity_price_object["commodity_name"]
                 self.updated_data[row_index]['code'] = uex_commodity_price_object["id_commodity"]
-                table_values[2] = uex_commodity_price_object["id_commodity"]
+                if code_idx is not None:
+                    table_values[code_idx] = uex_commodity_price_object["id_commodity"]
                 unit_price = self.updated_data[row_index]["price_per_unit"]
                 multiplier = self.updated_data[row_index]["multiplier"]
                 if multiplier and multiplier.lower()[0] == "m":

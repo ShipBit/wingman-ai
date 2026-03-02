@@ -85,6 +85,8 @@ class MiningValidationPopup(tk.Toplevel):
         validation_context=None,
     ):
         super().__init__(master)
+        self.withdraw()
+        self._ui_ready = False
         self.theme = self.THEME
         self.lang = self._detect_language()
         self.translations = self.I18N.get(self.lang, self.I18N["en"])
@@ -534,6 +536,7 @@ class MiningValidationPopup(tk.Toplevel):
         self.bind_all("<ButtonRelease>", self._on_first_mouse_release, add="+")
         self.after(0, self._restore_game_focus_if_locked)
         self.after(80, self._start_global_click_watch)
+        self._ui_ready = True
 
     def _configure_scrollbar_style(self):
         style = ttk.Style(self)
@@ -620,6 +623,14 @@ class MiningValidationPopup(tk.Toplevel):
             config_dir=config_dir,
             validation_context=validation_context,
         )
+        if not popup._ui_ready:
+            popup.update_idletasks()
+        popup.deiconify()
+        popup.lift()
+        try:
+            popup.focus_force()
+        except Exception:
+            pass
         root.wait_window(popup)
         return popup.validated_data, popup.operation
 

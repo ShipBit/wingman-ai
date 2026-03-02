@@ -111,8 +111,6 @@ class UexDataRunnerManager(FunctionManager):
         """ 
         Provides the openai function definition for this manager. 
         """
-        tradeport_names = self.uex2_service.get_category_names(category="terminals", field_name="name")
-
         tools = [
             {
                 "type": "function",
@@ -125,18 +123,21 @@ class UexDataRunnerManager(FunctionManager):
                         "properties": {
                             "player_provided_terminal_name": {
                                 "type": "string",
-                                "description": "The terminal name provided by the user. Ask, if he didn't provide a terminal / tradeport name.",
-                                "enum": tradeport_names
+                                "description": (
+                                    "The terminal name provided by the user. "
+                                    "Accept exact names and short aliases like 'CRU-L5' or 'Area 18'. "
+                                    "Ask, if he didn't provide a terminal / tradeport name."
+                                ),
                             },
                             "terminal_type": {
                                 "type": "string",
                                 "description": "The type of terminal that the user is asking for. ",
-                                "enum": ["commodity","item","commodity_raw","vehicle_buy","vehicle_rent","fuel","refinery_audit", None]
+                                "enum": ["commodity", "item", "commodity_raw", "vehicle_buy", "vehicle_rent", "fuel", "refinery_audit"]
                             },
                             "operation": {
                                 "type": "string",
                                 "description": "What kind of prices the user want to transmit. 'buy' is for buyable commodities at the location, 'sell' are for sellable commodities.",
-                                "enum": ["sell", "buy", None]
+                                "enum": ["sell", "buy"]
                             }
                         },
                     }
@@ -313,7 +314,7 @@ class UexDataRunnerManager(FunctionManager):
         
         self.overlay.display_overlay_text(f'UEX Corp: acknowledged the data transmittion. ', display_duration=1500)
         
-        return {"success": True, "instruction": "data transmitted"}  # we don't want cora to repeat what we see on screen, if everything was fine
+        return {"success": True, "instruction": "just confirm that all price information have been accepted by uex"}  # we don't want cora to repeat what we see on screen, if everything was fine
 
     @staticmethod
     def _get_terminal_by_id(terminals: dict, terminal_id):

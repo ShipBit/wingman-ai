@@ -1529,7 +1529,7 @@ class UEXApi2():
             #     "validation_result": "all plausible",
             #     "transmit": true
             # }
-            if commodity_info["transmit"] is False:
+            if commodity_info.get("transmit", True) is False:
                 continue
 
             if commodity_info["commodity_name"] not in self.name_mapping[CATEGORY_COMMODITIES]:
