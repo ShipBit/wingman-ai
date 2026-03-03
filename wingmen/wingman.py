@@ -748,10 +748,24 @@ class Wingman:
         if not command or not command.actions:
             return
 
+        def contains_numpad_key(hotkey: str) -> bool:
+            """Check if the hotkey string contains a numpad key anywhere in the chord.
+
+            Args:
+                hotkey: The hotkey string (e.g., 'num 1', 'ctrl+num 1', 'alt+num 2')
+
+            Returns:
+                True if any token in the chord is a numpad key (num 0 - num 9)
+            """
+            if not hotkey:
+                return False
+            tokens = hotkey.lower().split('+')
+            return any(token.startswith('num ') for token in tokens)
+
         try:
             for action in command.actions:
                 if action.keyboard:
-                    if action.keyboard.hotkey_codes and not action.keyboard.hotkey.startswith('num'):
+                    if action.keyboard.hotkey_codes and not contains_numpad_key(action.keyboard.hotkey):
                         code = action.keyboard.hotkey_codes
                     else:
                         code = action.keyboard.hotkey
@@ -762,7 +776,7 @@ class Wingman:
                         if (
                             action.keyboard.hotkey_codes
                             and len(action.keyboard.hotkey_codes) == 1
-                            and not action.keyboard.hotkey.startswith('num')
+                            and not contains_numpad_key(action.keyboard.hotkey)
                         ):
                             keyboard.direct_event(
                                 action.keyboard.hotkey_codes[0],
@@ -782,7 +796,7 @@ class Wingman:
                         if (
                             action.keyboard.hotkey_codes
                             and len(action.keyboard.hotkey_codes) == 1
-                            and not action.keyboard.hotkey.startswith('num')
+                            and not contains_numpad_key(action.keyboard.hotkey)
                         ):
                             keyboard.direct_event(
                                 action.keyboard.hotkey_codes[0],
