@@ -2,7 +2,7 @@ import re
 from io import StringIO
 from markdown import Markdown
 
-# Maximum number of total list items (across all lists) before stripping entirely
+# Maximum number of list items per list block before stripping that list for TTS
 MAX_LIST_ITEMS_FOR_TTS = 15
 
 
@@ -204,7 +204,8 @@ def convert_lists_for_tts(text: str) -> str:
     """Converts markdown lists to TTS-friendly natural language.
 
     Short lists are converted to spoken enumerations.
-    Long lists (> MAX_LIST_ITEMS_FOR_TTS total items) are stripped entirely.
+    Long lists (> MAX_LIST_ITEMS_FOR_TTS total items in a single list block)
+    are stripped entirely.
 
     Tolerates blank lines between list items (common in LLM output).
 
@@ -262,7 +263,17 @@ def convert_lists_for_tts(text: str) -> str:
     return "\n".join(result_lines)
 
 
-def unmark_element(element, stream=None):
+def _write_with_tracking(
+    stream: StringIO, text: str, last_emitted_char: list[str | None]
+):
+    """Write text to stream and track the last emitted character."""
+    if not text:
+        return
+    stream.write(text)
+    last_emitted_char[0] = text[-1]
+
+
+def unmark_element(element, stream=None, last_emitted_char=None):
     """Convert a Markdown HTML element tree to plain text with proper spacing.
 
     Inserts spaces/newlines between block-level elements so that TTS
@@ -270,6 +281,8 @@ def unmark_element(element, stream=None):
     """
     if stream is None:
         stream = StringIO()
+    if last_emitted_char is None:
+        last_emitted_char = [None]
 
     # Block-level tags that need separation
     block_tags = {
@@ -290,19 +303,24 @@ def unmark_element(element, stream=None):
     }
 
     if element.text:
-        stream.write(element.text)
+        _write_with_tracking(stream, element.text, last_emitted_char)
 
     for sub in element:
         sub_tag = getattr(sub, "tag", None)
         # Add spacing before block-level child elements
         if sub_tag in block_tags:
-            current = stream.getvalue()
-            if current and not current.endswith(("\n", " ")):
-                stream.write(". ")
-        unmark_element(sub, stream)
+            last_char = last_emitted_char[0]
+            if last_char and last_char not in ("\n", " "):
+                # If we already end with sentence-ending punctuation, add a space.
+                # Otherwise add a sentence boundary to prevent word run-on.
+                if last_char in (".", "!", "?"):
+                    _write_with_tracking(stream, " ", last_emitted_char)
+                else:
+                    _write_with_tracking(stream, ". ", last_emitted_char)
+        unmark_element(sub, stream, last_emitted_char)
 
     if element.tail:
-        stream.write(element.tail)
+        _write_with_tracking(stream, element.tail, last_emitted_char)
 
     return stream.getvalue()
 
@@ -330,7 +348,7 @@ def cleanup_text(text: str):
     - Removes code blocks (``` ... ```)
     - Removes tables entirely
     - Converts short lists to natural speech enumerations
-    - Strips long lists entirely
+    - Strips long lists per list block
     - Extracts link text from Markdown links [text](url) → text
     - Removes standalone URLs
     - Removes remaining Markdown formatting
