@@ -8,8 +8,8 @@ tags:
   - Game
   - MSFS
 description:
-  en: Control and retrieve data from MSFS2020 dynamically using SimConnect.
-  de: Steuern und Abrufen von Daten aus MSFS2020 dynamisch mit SimConnect.
+  en: Control and retrieve data from MSFS2020/2024 dynamically using SimConnect.
+  de: Steuern und Abrufen von Daten aus MSFS2020/2024 dynamisch mit SimConnect.
 discovery_keywords:
   - flight simulator
   - altitude
@@ -19,10 +19,13 @@ discovery_keywords:
   - instruments
   - aircraft
   - heading
+  - plane
+  - throttle
+  - flaps
 discoverable_by_default: false
 hint:
-  en: This skill can retrieve data and perform actions in the MSFS2020 simulator based on dynamic inputs.
-  de: Dieser Skill kann Daten abrufen und Aktionen im MSFS2020-Simulator basierend auf dynamischen Eingaben ausführen.
+  en: This skill can retrieve data and perform actions in the MSFS2020/2024 simulator based on dynamic inputs.
+  de: Dieser Skill kann Daten abrufen und Aktionen im MSFS2020/2024-Simulator basierend auf dynamischen Eingaben ausführen.
 custom_properties:
   - hint: Whether to try to autostart data monitoring mode (tour guide mode), which automatically monitors for latitude, longitude and altitude. This can also be toggled with a voice command to start or end data monitoring mode.
     id: autostart_data_monitoring_loop_mode
