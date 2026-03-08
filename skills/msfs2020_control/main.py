@@ -1,6 +1,8 @@
+import os
 import time
 import random
 import requests
+import sys
 from typing import TYPE_CHECKING
 from SimConnect import *
 from api.interface import (
@@ -11,6 +13,13 @@ from api.interface import (
 from api.enums import LogType
 from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
+
+
+# add skill to sys path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Import msfs2020 command processer helper
+from skills.msfs2020_control.command_matcher.command_matcher import CommandMatcher
 
 if TYPE_CHECKING:
     from wingmen.open_ai_wingman import OpenAiWingman
@@ -28,6 +37,7 @@ class Msfs2020Control(Skill):
         self.aq = None  # Same
         self.ae = None  # Same
         self.data_monitoring_loop_running = False
+        self.command_matcher = CommandMatcher()
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -78,7 +88,27 @@ class Msfs2020Control(Skill):
         )
 
     @tool(
-        description="Retrieve data from MSFS2020 via SimConnect. Examples: PLANE_ALTITUDE, AIRSPEED_INDICATED, FUEL_TOTAL_QUANTITY, GEAR_HANDLE_POSITION. Use :index suffix for multi-engine (e.g., GENERAL_ENG_RPM:1)."
+        description="Retrieve the list of potential matching SimConnect commands (events) or data points (SimVars) to accomplish the user's intent."
+    )
+    async def get_potential_matching_commands(self, user_intent: str) -> str:
+        """
+        Retrieve the list of potential matching SimConnect commands (events) or data points (SimVars) to accomplish the user's intent. For use in get_data_from_sim and set_data_or_perform_action_in_sim.
+        Automatically use if there is a problem fetching data or accomplishing an action in the Sim to ensure the proper Event or SimVar is used.
+        Args:
+            user_intent: The user's intent expressed as a brief string, e.g., "set the heading to 270 degrees", "turn on autopilot", "set full throttle".
+        """
+        
+        matches = self.command_matcher.find_matches(user_intent)
+        matches_string = self.command_matcher.matches_as_string(matches)
+        if self.settings.debug_mode:
+            await self.printr.print_async(
+                f"Found potential matching commands for intent {user_intent}: {matches_string}",
+                color=LogType.INFO,
+            )
+        return matches_string
+
+    @tool(
+        description="Retrieve data from MSFS2020 via SimConnect SimVars. Examples: PLANE_ALTITUDE, AIRSPEED_INDICATED, FUEL_TOTAL_QUANTITY, GEAR_HANDLE_POSITION. Use :index suffix for multi-engine (e.g., GENERAL_ENG_RPM:1)."
     )
     async def get_data_from_sim(self, data_point: str) -> str:
         """
@@ -87,11 +117,17 @@ class Msfs2020Control(Skill):
         Args:
             data_point: The data point to retrieve, such as 'PLANE_ALTITUDE', 'PLANE_HEADING_DEGREES_TRUE'.
         """
+        
         value = self.aq.get(data_point)
+        if self.settings.debug_mode:
+            await self.printr.print_async(
+                f"Retrieving data point from sim: {data_point}; value returned: {value}",
+                color=LogType.INFO,
+            )
         return f"{data_point} value is: {value}"
 
     @tool(
-        description="Control MSFS2020 aircraft via SimConnect. Examples: THROTTLE_FULL, FLAPS_UP, GEAR_TOGGLE, AP_MASTER, TOGGLE_BEACON_LIGHTS. Use TOGGLE_ prefix for switches, _INCR/_DECR for adjustments. Pass argument for SET commands (0-16383)."
+        description="Control MSFS2020 aircraft via SimConnect Events. Examples: THROTTLE_FULL, FLAPS_UP, GEAR_TOGGLE, AP_MASTER, TOGGLE_BEACON_LIGHTS. Use TOGGLE_ prefix for switches, _INCR/_DECR for adjustments. Pass argument for SET commands (0-16383)."
     )
     async def set_data_or_perform_action_in_sim(
         self, action: str, argument: float = None
@@ -103,6 +139,11 @@ class Msfs2020Control(Skill):
             action: The action to perform or data point to set, such as 'TOGGLE_MASTER_BATTERY', 'THROTTLE_SET'.
             argument: The argument to pass for the action, if any.
         """
+        if self.settings.debug_mode:
+            await self.printr.print_async(
+                f"Attempting to perform action/set data in sim: {action} with argument: {argument}",
+                color=LogType.INFO,
+            )
         try:
             if argument is not None:
                 self.aq.set(action, argument)
