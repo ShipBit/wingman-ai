@@ -111,6 +111,7 @@ command_categories:
     name: Camera - Advanced Camera Controls
 commands:
   - name: Flight Ready
+    additional_context: All ship systems turned on and ready for takeoff
     category_id: 01120b29-2487-422e-82ff-6327eacbd7fe
     is_system_command: false
     instant_activation:
@@ -223,6 +224,7 @@ commands:
           hotkey: n
           hold: 2.0
   - name: Contact ATC
+    additional_context: Contacting ATC for clearance
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
@@ -238,6 +240,7 @@ commands:
           hotkey: b
           hold: 2.0
   - name: Open Jump Gate
+    additional_context: Energy burst fired, jump gate is opening
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
@@ -372,6 +375,7 @@ commands:
           hotkey: alt gr
           release: true
   - name: More missiles
+    additional_context: Missle salvo size cycled by +1
     category_id: eafa5454-bb05-4e9a-821d-1495af21aeec
     is_system_command: false
     force_instant_activation: false
@@ -379,6 +383,7 @@ commands:
       - keyboard:
           hotkey: g
   - name: Reset missiles
+    additional_context: Missle salvo size set to one
     category_id: eafa5454-bb05-4e9a-821d-1495af21aeec
     is_system_command: false
     force_instant_activation: false
@@ -392,7 +397,8 @@ commands:
     actions:
       - keyboard:
           hotkey: h
-  - name: Increase Decoys for next Launch
+  - name: Increase Decoys
+    additional_context: Decoy count configuration increased for next use of decoy countermeassures
     category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
     is_system_command: false
     force_instant_activation: false
@@ -408,7 +414,8 @@ commands:
       - keyboard:
           hotkey: alt gr
           release: true
-  - name: Decrease Decoys for next Launch
+  - name: Decrease Decoys
+    additional_context: Decoy count configuration decreased for next use of decoy countermeassures
     category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
     is_system_command: false
     force_instant_activation: false
@@ -423,6 +430,7 @@ commands:
       - keyboard:
           hotkey: j
   - name: Toggle Main Power On or Off
+    additional_context: Vehicles power generators turned off. Vehicle is without power now.
     category_id: 58262631-2984-4bf0-99ee-f409a753df44
     is_system_command: false
     force_instant_activation: false
@@ -543,7 +551,8 @@ commands:
       - keyboard:
           hotkey: f4
           release: true
-  - name: Launch Sequence including Liftoff
+  - name: Launch Sequence
+    additional_context: Start-request sent to ATC, energy systems and engines turned on, Liftoff completed, landing gear retracted and VTOL disabled
     is_system_command: false
     instant_activation:
       - Launch Sequence
@@ -564,7 +573,8 @@ commands:
           hotkey: n
       - keyboard:
           hotkey: k
-  - name: Landing Sequence including Touchdown
+  - name: Landing Sequence
+    additional_context: VTOL enabled, landing gear deployed, ship landed and engines and energy systems turned off. Touchdown and landing sequence complete
     is_system_command: false
     instant_activation:
       - Landing Sequence

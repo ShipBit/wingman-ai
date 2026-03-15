@@ -49,6 +49,7 @@ commands:
       - keyboard:
           hotkey: alt+n
   - name: Contact ATC
+    additional_context: Contacting ATC for clearance
     actions:
       - keyboard:
           hotkey: alt+n

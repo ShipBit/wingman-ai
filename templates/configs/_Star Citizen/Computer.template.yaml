@@ -224,6 +224,7 @@ commands:
           hotkey: n
           hold: 2.0
   - name: Contact ATC
+    additional_context: Contacting ATC for clearance
     category_id: 59907f6d-16e2-4bc5-8cb0-676ff78f94b0
     is_system_command: false
     force_instant_activation: false
