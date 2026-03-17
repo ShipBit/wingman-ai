@@ -13,6 +13,7 @@ from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from services.config_manager import ConfigManager
+from services.local_ai_service import LocalAiService
 from services.config_service import ConfigService
 from services.printr import Printr
 from services.pub_sub import PubSub
@@ -30,6 +31,7 @@ class SettingsService:
         self.fasterwhisper: FasterWhisper = None
         self.xvasynth: XVASynth = None
         self.pocket_tts: PocketTTS = None
+        self.local_ai_service: LocalAiService = None
 
         self.router = APIRouter()
         tags = ["settings"]
@@ -60,11 +62,13 @@ class SettingsService:
         fasterwhisper: FasterWhisper,
         xvasynth: XVASynth,
         pocket_tts: PocketTTS,
+        local_ai_service: LocalAiService = None,
     ):
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
+        self.local_ai_service = local_ai_service
 
     # GET /settings
     def get_settings(self):
@@ -129,6 +133,11 @@ class SettingsService:
             return
         self.pocket_tts.update_settings(settings=settings.pocket_tts)
         self.config_manager.settings_config.pocket_tts = settings.pocket_tts
+
+        # Local AI (llama.cpp)
+        if self.local_ai_service:
+            self.local_ai_service.update_settings(settings.llama_cpp)
+            self.config_manager.settings_config.llama_cpp = settings.llama_cpp
 
         # voice activation
         self.config_manager.settings_config.voice_activation = settings.voice_activation

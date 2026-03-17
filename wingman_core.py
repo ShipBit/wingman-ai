@@ -7,14 +7,18 @@ import threading
 from typing import Optional
 import pygame
 from google.genai import types
-from fastapi import APIRouter, Body, File, UploadFile
+from fastapi import APIRouter, Body, File, HTTPException, UploadFile
 import requests
 import sounddevice as sd
 from showinfm import show_in_file_manager
 import azure.cognitiveservices.speech as speechsdk
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
-from api.commands import AudioLibraryPlaybackFinishedCommand, CoreStateChangedCommand, VoiceActivationMutedCommand
+from api.commands import (
+    AudioLibraryPlaybackFinishedCommand,
+    CoreStateChangedCommand,
+    VoiceActivationMutedCommand,
+)
 from api.enums import (
     AzureRegion,
     CommandTag,
@@ -57,6 +61,8 @@ from api.interface import (
 from providers.elevenlabs import ElevenLabs
 from providers.faster_whisper import FasterWhisper
 from providers.google import GoogleGenAI
+from providers.llama_cpp_provider import LlamaCppProvider
+from providers.llama_cpp_remote import LlamaCppRemote
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
 from providers.wingman_pro import WingmanPro
@@ -64,7 +70,14 @@ from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
-from services.file import get_writable_dir, get_audio_library_dir, get_custom_voices_dir, get_lore_library_dir
+from services.file import (
+    get_writable_dir,
+    get_audio_library_dir,
+    get_custom_voices_dir,
+    get_lore_library_dir,
+)
+from services.local_ai_service import LocalAiService
+from services.local_model_manager import LocalModelManager
 from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
@@ -465,6 +478,19 @@ class WingmanCore(WebSocketUser):
             endpoint=self.generate_lore_backstory,
             tags=tags,
         )
+        # ── Local AI Routes ──────────────────────────────────────────
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/settings/local-ai/status",
+            endpoint=self.get_local_ai_status,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/download-models",
+            endpoint=self.download_local_ai_models,
+            tags=tags,
+        )
         self.router.add_api_route(
             methods=["POST"],
             path="/elevenlabs/generate-sfx",
@@ -578,11 +604,27 @@ class WingmanCore(WebSocketUser):
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.pocket_tts = PocketTTS(settings=self.settings_service.settings.pocket_tts)
+
+        # Local AI (llama.cpp for summarization + embedding)
+        llama_cpp_settings = self.settings_service.settings.llama_cpp
+        self.local_model_manager = LocalModelManager(settings=llama_cpp_settings)
+        self.llama_cpp_provider = LlamaCppProvider(
+            settings=llama_cpp_settings,
+            model_manager=self.local_model_manager,
+        )
+        self.llama_cpp_remote = LlamaCppRemote(settings=llama_cpp_settings)
+        self.local_ai_service = LocalAiService(
+            provider=self.llama_cpp_provider,
+            remote=self.llama_cpp_remote,
+            settings=llama_cpp_settings,
+        )
+
         self.settings_service.initialize(
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
+            local_ai_service=self.local_ai_service,
         )
 
         self.voice_service = VoiceService(
@@ -1877,7 +1919,11 @@ class WingmanCore(WebSocketUser):
             command = AudioLibraryPlaybackFinishedCommand(audio_file=audio_file)
             self.ensure_async(self._connection_manager.broadcast(command))
 
-    # ── Lore Library Endpoints ────────────────────────────────────────
+    # ── Lore Library Endpoints (501 — pending rebuild) ─────────────
+
+    _LORE_501 = (
+        "Lore Library is being rebuilt. This feature is temporarily unavailable."
+    )
 
     async def get_lore_universes(self) -> list[LoreUniverse]:
         return self.lore_library.get_universes()
@@ -1885,43 +1931,41 @@ class WingmanCore(WebSocketUser):
     async def create_lore_universe(
         self, data: LoreUniverseCreate = Body(...)
     ) -> LoreUniverse:
-        return self.lore_library.create_universe(data)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def update_lore_universe(
         self, universe_id: str, data: LoreUniverseUpdate = Body(...)
     ) -> LoreUniverse:
-        return self.lore_library.update_universe(universe_id, data)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def delete_lore_universe(self, universe_id: str):
-        self.lore_library.delete_universe(universe_id)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
-    async def get_lore_characters(
-        self, universe_id: str
-    ) -> list[LoreCharacter]:
+    async def get_lore_characters(self, universe_id: str) -> list[LoreCharacter]:
         return self.lore_library.get_characters(universe_id)
 
     async def get_lore_character(self, character_id: str) -> LoreCharacter:
-        return self.lore_library.get_character(character_id)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def create_lore_character(
         self, universe_id: str, data: LoreCharacterCreate = Body(...)
     ) -> LoreCharacter:
-        return self.lore_library.create_character(universe_id, data)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def update_lore_character(
         self, character_id: str, data: LoreCharacterUpdate = Body(...)
     ) -> LoreCharacter:
-        return self.lore_library.update_character(character_id, data)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def delete_lore_character(self, character_id: str):
-        self.lore_library.delete_character(character_id)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def set_lore_character_axes(
         self,
         character_id: str,
         axes: list[LorePersonalityAxisCreate] = Body(...),
     ) -> list[LorePersonalityAxis]:
-        return self.lore_library.set_character_axes(character_id, axes)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def get_lore_codex_entries(
         self, universe_id: str, category: Optional[str] = None
@@ -1929,24 +1973,22 @@ class WingmanCore(WebSocketUser):
         return self.lore_library.get_codex_entries(universe_id, category)
 
     async def get_lore_codex_entry(self, entry_id: str) -> LoreCodexEntry:
-        return self.lore_library.get_codex_entry(entry_id)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def create_lore_codex_entry(
         self, universe_id: str, data: LoreCodexEntryCreate = Body(...)
     ) -> LoreCodexEntry:
-        return self.lore_library.create_codex_entry(universe_id, data)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def update_lore_codex_entry(
         self, entry_id: str, data: LoreCodexEntryUpdate = Body(...)
     ) -> LoreCodexEntry:
-        return self.lore_library.update_codex_entry(entry_id, data)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def delete_lore_codex_entry(self, entry_id: str):
-        self.lore_library.delete_codex_entry(entry_id)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
-    async def get_lore_relationships(
-        self, universe_id: str
-    ) -> list[LoreRelationship]:
+    async def get_lore_relationships(self, universe_id: str) -> list[LoreRelationship]:
         return self.lore_library.get_relationships(universe_id)
 
     async def get_lore_entity_relationships(
@@ -1957,22 +1999,36 @@ class WingmanCore(WebSocketUser):
     async def create_lore_relationship(
         self, universe_id: str, data: LoreRelationshipCreate = Body(...)
     ) -> LoreRelationship:
-        return self.lore_library.create_relationship(universe_id, data)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def update_lore_relationship(
         self, relationship_id: str, data: LoreRelationshipUpdate = Body(...)
     ) -> LoreRelationship:
-        return self.lore_library.update_relationship(relationship_id, data)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def delete_lore_relationship(self, relationship_id: str):
-        self.lore_library.delete_relationship(relationship_id)
+        raise HTTPException(status_code=501, detail=self._LORE_501)
 
     async def generate_lore_backstory(
         self, data: GenerateBackstoryRequest = Body(...)
     ) -> GenerateBackstoryResponse:
-        return self.lore_library.generate_backstory(
-            data.character_id, data.universe_id
-        )
+        return self.lore_library.generate_backstory(data.character_id, data.universe_id)
+
+    # ── Local AI Endpoints ────────────────────────────────────────
+
+    # GET /settings/local-ai/status
+    async def get_local_ai_status(self) -> dict:
+        status = self.local_model_manager.get_status()
+        status["is_ready"] = self.local_ai_service.is_ready()
+        return status
+
+    # POST /settings/local-ai/download-models
+    async def download_local_ai_models(self) -> dict:
+        success = await self.local_model_manager.download_models()
+        return {
+            "success": success,
+            **self.local_model_manager.get_status(),
+        }
 
     # POST /elevenlabs/generate-sfx
     async def generate_sfx_elevenlabs(

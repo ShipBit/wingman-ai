@@ -35,5 +35,14 @@ cmd = [
     f"audio_samples{os.pathsep}audio_samples",
     "--add-data",
     f"LICENSE{os.pathsep}.",
+    # Local AI (llama.cpp + sqlite-vec)
+    "--hidden-import",
+    "llama_cpp",
+    "--collect-binaries",
+    "llama_cpp",
+    "--hidden-import",
+    "sqlite_vec",
+    "--collect-all",
+    "sqlite_vec",
 ]
 subprocess.call(cmd)

@@ -1097,12 +1097,23 @@ class HudServerSettings(BaseModel):
     """Which screen/monitor to render the HUD on (1 = primary, 2 = secondary, etc.)."""
 
 
+class LlamaCppSettings(BaseModel):
+    run_locally: bool = True
+    summarize_model: str = "qwen3.5-0.8b-q4_k_m.gguf"
+    embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
+    summarize_remote_host: str = "http://127.0.0.1"
+    summarize_remote_port: int = 49152
+    embed_remote_host: str = "http://127.0.0.1"
+    embed_remote_port: int = 49153
+
+
 class SettingsConfig(BaseModel):
     audio: Optional[AudioSettings] = None
     voice_activation: VoiceActivationSettings
     wingman_pro: WingmanProSettings
     xvasynth: XVASynthSettings
     pocket_tts: PocketTTSSettings
+    llama_cpp: LlamaCppSettings = LlamaCppSettings()
     hud_server: HudServerSettings
     debug_mode: bool
     streamer_mode: bool

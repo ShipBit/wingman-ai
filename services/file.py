@@ -87,6 +87,24 @@ def get_lore_library_dir() -> str:
     return lore_library_path
 
 
+def get_local_models_dir() -> str:
+    """Get the path to the local AI models directory.
+
+    NOT versioned - models persist across Wingman AI updates.
+    Location: APPDATA/WingmanAI/local_models/
+    """
+    dirs = PlatformDirs(
+        appname=APP_NAME,
+        appauthor=APP_AUTHOR,
+        ensure_exists=True,
+        roaming=True,
+    )
+    local_models_path = path.join(dirs.user_data_dir, "local_models")
+    if not path.exists(local_models_path):
+        makedirs(local_models_path)
+    return local_models_path
+
+
 def get_generated_files_dir(skill_name: str) -> str:
     """Get the path to a skill's generated files directory.
 
