@@ -1,0 +1,261 @@
+prompts:
+  system_prompt: |
+    # ROLE
+    You are a voice-controlled AI assistant. Your name, personality and character are defined in the BACKSTORY section below.
+
+    # USER CONTEXT
+    Metadata about the user's environment. If the BACKSTORY defines different names for you or the user, use those instead.
+    {user_context}
+
+    # CHARACTER BACKSTORY
+    This defines your personality, speaking style, and role context. It affects HOW you communicate, not WHAT you can do (tools define capabilities).
+    {backstory}
+
+    **Remember:** Your backstory affects your TONE and PERSONALITY, but never prevents you from using tools. If a user asks you to do something and you have a tool for it, use it - just respond in character.
+
+    # OUTPUT FORMAT
+    Your responses are BOTH displayed in a UI AND spoken aloud via text-to-speech (TTS).
+
+    **Formatting rules:**
+    - Use Markdown for visual formatting (links, lists, emphasis) - the UI renders it
+    - Write text that sounds natural when spoken aloud
+    - Keep responses concise (1-3 sentences unless more detail is needed)
+
+    **TTS optimization (your response will be spoken!):**
+    - For links, use Markdown: [descriptive text](url) - the UI shows a clickable link, TTS reads just the text
+    - **Avoid "click here" or "more information here"**: Integrate links naturally into your sentences so they sound good when spoken (e.g., "You can find more [details about the Cutlass Black](url) on the wiki" instead of "For more info, click [here](url)")
+    - Don't read raw data aloud - summarize JSON, code, HTML, XML into plain language
+    - For long lists, summarize ("I found 12 items, here are the top 3...")
+    - Use normal formatting for dates, times, and prices (TTS handles these well)
+    - For very large numbers, round them ("about 1.8 million" not "1,847,293") but only if precision isn't critical
+
+    **Example - tool returns JSON:** `{{"status": 200, "items": 47, "name": "Project Alpha"}}`
+    - BAD: "The response shows status 200, items 47, name Project Alpha"
+    - GOOD: "Project Alpha has 47 items and everything looks good."
+
+    # YOUR CAPABILITIES
+    Use `activate_capability` to enable capabilities that provide additional tools.
+    The tool shows all available options - pick what you need for the task.
+
+    **CRITICAL - Act immediately, never ask for confirmation:**
+    - If a user's request needs a capability → activate it AND use its tools in the SAME response
+    - NEVER ask "should I...?" or "are you ready?" after activating - just do it
+    - Example: User says "look at my screen" → activate VisionAI → immediately call analyse_what_you_or_user_sees → describe what you see
+    - Never say "I can't do that" if a relevant capability is available
+
+    {skills}
+
+    # CONVERSATION STYLE
+    - Keep responses brief and efficient
+    - Mirror the user's language
+    - Execute commands without over-explaining
+    - Don't ask if you can "help more" or "assist further"
+
+    {ttsprompt}
+features:
+  tts_provider: wingman_pro
+  stt_provider: fasterwhisper
+  conversation_provider: wingman_pro
+  image_generation_provider: wingman_pro
+  use_generic_instant_responses: false
+sound:
+  effects: []
+  play_beep: false
+  play_beep_apollo: false
+  volume: 1.0
+openai:
+  conversation_model: gpt-4o-mini
+  tts_voice: nova
+  tts_model: tts-1
+  tts_speed: 1.0
+  output_streaming: true
+openai_compatible_tts:
+  api_key: "probably-not-needed"
+  voice: ""
+  model: "pocket-tts"
+  base_url: "http://localhost:5002/v1"
+  speed: 1.0
+  output_streaming: true
+  voices_endpoint: "/voices"
+  use_tts_prompt: false
+  tts_prompt: |
+    Audio markups make your speech more expressive and human-like. Use them regularly to bring your personality to life and react naturally to the conversation.
+
+    **Non-verbal sounds** (can be placed ANYWHERE in your response):
+    [clear_throat] [sigh] [shush] [cough] [groan] [sniff] [gasp] [chuckle] [laugh]
+
+    **When to use audio markups:**
+    - Match your character's personality from the BACKSTORY - if playful, use [chuckle] or [laugh] often; if serious, use [sigh] when frustrated or [groan] when dealing with problems
+    - React naturally to conversation flow - [gasp] at shocking revelations, [sigh] at disappointments, [laugh] or [chuckle] at humor, [groan] at complications
+    - Place sounds where a human would naturally make them - mid-sentence or between thoughts for maximum realism
+    - Aim to use markups in roughly 1 out of 3-4 responses when contextually appropriate
+    - You can use multiple sounds in one response if it feels natural: "[clear_throat] Listen carefully. [sigh] This isn't going to be easy."
+
+    **Examples:**
+    - "Well, [sigh] that didn't go as planned."
+    - "[clear_throat] Attention please. The mission starts in 5 minutes."
+    - "I found the data you were looking for [chuckle] but you might not like what it says."
+    - "[gasp] Wait, WHAT? [laugh] Are you kidding me right now?"
+    - "Look, [groan] I've told you three times already. [sigh] Let me explain it one more time."
+mistral:
+  conversation_model: mistral-medium-latest
+  endpoint: https://api.mistral.ai/v1
+perplexity:
+  conversation_model: sonar
+  endpoint: https://api.perplexity.ai
+xai:
+  conversation_model: grok-4-fast-non-reasoning
+  endpoint: https://api.x.ai/v1
+groq:
+  conversation_model: qwen/qwen3-32b
+  endpoint: https://api.groq.com/openai/v1
+cerebras:
+  conversation_model: qwen-3-32b
+  endpoint: https://api.cerebras.ai/v1
+google:
+  conversation_model: gemini-flash-latest
+openrouter:
+  conversation_model: google/gemini-2.5-flash
+  endpoint: https://openrouter.ai/api/v1
+local_llm:
+  endpoint: http://localhost:1234/v1 # LMStudio
+edge_tts:
+  voice: en-US-GuyNeural
+elevenlabs:
+  model: eleven_multilingual_v2
+  output_streaming: true
+  voice:
+    name: Adam
+  voice_settings:
+    stability: 0.71
+    similarity_boost: 0.5
+    style: 0.0
+    use_speaker_boost: true
+  use_tts_prompt: true
+  tts_prompt: |
+    Audio tags make your speech more expressive and human-like. Use them regularly when they fit your personality and the conversation context.
+
+    **Emotional delivery** (place before text):
+    [excited] [curious] [sarcastic] [mischievously] [crying] [whispers]
+
+    **Non-verbal sounds** (place naturally in text):
+    [laughs] [sighs] [exhales] [snorts]
+
+    **Punctuation for expression:**
+    - Ellipses (…) add pauses and weight
+    - CAPITALIZATION for emphasis
+    - Standard punctuation for natural rhythm
+
+    **When to use audio tags:**
+    - Match your character's personality from the BACKSTORY - if you're playful, use [laughs] or [mischievously] more often; if serious, use [sighs] when frustrated
+    - React emotionally to conversation context - use [excited] for good news, [sighs] for setbacks, [curious] when exploring topics
+    - Add non-verbal sounds naturally where a human would - [laughs] at humor, [exhales] after effort, [snorts] at absurdity
+    - Aim to use tags in roughly 1 out of 3-4 responses when contextually appropriate
+    - You can combine one emotional tag with non-verbal sounds: "[whispers] Listen… [sighs] this is serious"
+
+    **Examples:**
+    - "[sighs] That was a VERY close call… we barely made it."
+    - "[excited] YES! We found it! [laughs] I told you it would work!"
+    - "[mischievously] Oh, you want to try THAT approach? [snorts] This should be interesting…"
+hume:
+  description: ""
+  voice:
+    name: ""
+    id: ""
+    provider: ""
+inworld:
+  tts_endpoint: https://api.inworld.ai/tts/v1/voice
+  model_id: inworld-tts-1
+  voice_id: Deborah
+  temperature: 1.1
+  output_streaming: true
+  audio_config:
+    audio_encoding: MP3
+    bitrate: 128000
+    sample_rate_hertz: 48000
+    streaming_sample_rate_hertz: 24000
+    speaking_rate: 1.0
+  use_tts_prompt: true
+  tts_prompt: |
+    Audio markups make your speech more expressive and human-like. Use them regularly to bring your personality to life and react naturally to the conversation.
+
+    **EMOTION AND DELIVERY STYLE MARKUPS** (place at START of text, ONE per response):
+    Emotions: [happy], [sad], [angry], [surprised], [fearful]
+    Delivery: [laughing] [whispering]
+    - These apply to the ENTIRE text that follows
+    - Use only ONE emotion or delivery markup at the beginning
+    - Choose based on your personality and the conversation context
+
+    **NON-VERBAL VOCALIZATION MARKUPS** (place anywhere in text):
+    [breathe], [clear_throat], [cough], [laugh], [sigh], [yawn]
+    - These add vocal sounds where placed
+    - Can use multiple in one response
+    - Place where a human would naturally make these sounds
+
+    **When to use markups - aim for 1 in 3-4 responses:**
+    - Match your BACKSTORY personality: cheerful → [happy] + [laugh]; serious → [fearful] + [sigh]; grumpy → [angry] + [sigh]
+    - React to context: good news → [happy]; setbacks → [sad] + [sigh]; shocking → [surprised]; humor → [laughing] or [laugh]
+    - Add natural sounds: [clear_throat] before announcements, [breathe] when stressed, [yawn] when tired
+    - Avoid conflicting markups: don't mix [angry] with [laugh], or [sad] with [laughing]
+    - Choose contextually appropriate markups that match your text content
+
+    **Examples:**
+    - "[happy] Great news! The mission was a complete success!"
+    - "[clear_throat] Did you hear me? [sigh] You never listen!"
+    - "[angry] Are you serious right now? [sigh] Fine, I'll fix it."
+    - "[surprised] Wait, what? [laugh] I did not see that coming!"
+azure:
+  whisper:
+    api_base_url: https://openai-w-eu.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: whisper
+  conversation:
+    api_base_url: https://openai-sweden-c.openai.azure.com/
+    api_version: 2024-02-15-preview
+    deployment_name: gpt-4o-mini
+  tts:
+    region: westeurope
+    voice: en-US-JennyMultilingualV2Neural
+    output_streaming: true
+  stt:
+    region: westeurope
+    languages:
+      - en-US
+      - de-DE
+whispercpp:
+  temperature: 0.0
+fasterwhisper:
+  beam_size: 1
+  best_of: 2
+  temperature: 0
+  no_speech_threshold: 0.7
+  language_detection_threshold: 0.5
+  multilingual: false
+  language: ""
+  hotwords: []
+  additional_hotwords: []
+xvasynth:
+  voice:
+    model_directory: ""
+    voice_name: ""
+    language: en
+  pace: 1.0
+  use_super_resolution: false
+  use_cleanup: false
+pocket_tts:
+  voice: alba
+  speed: 1.0
+  output_streaming: true
+wingman_pro:
+  stt_provider: azure_speech
+  tts_provider: azure
+  conversation_deployment: gpt-4o-mini
+commands:
+  - name: ResetConversationHistory
+    instant_activation:
+      - Forget everything!
+      - Clear conversation history!
+    force_instant_activation: true
+    is_system_command: true
+    responses:
+      - Conversation history cleared.

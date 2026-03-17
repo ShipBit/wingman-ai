@@ -1,0 +1,85 @@
+servers:
+  - name: wingman_date_time
+    display_name: Wingman Date Time
+    description: Get current date and time. Convert between timezones. What time is it? What day is today?
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/time/mcp
+    discoverable_by_default: true
+
+  - name: wingman_websearch
+    display_name: Wingman Web Search
+    description: Search the web with Brave or Tavily. Fetch and read web pages. Extract content from URLs.
+    discovery_keywords:
+      - internet
+      - Google
+      - research
+      - find information
+      - lookup
+      - online search
+      - web pages
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/mcp
+    discoverable_by_default: false
+
+  - name: wingman_perplexity
+    display_name: Perplexity Web Search
+    description: Perplexity AI web search with citations. Deep internet research and fact-checking. Synthesized answers from multiple online sources.
+    discovery_keywords:
+      - research
+      - citations
+      - fact-check
+      - sources
+      - internet research
+      - deep search
+      - verification
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/perplexity/mcp
+    discoverable_by_default: false
+
+  - name: wingman_starhead
+    display_name: StarHead - Star Citizen
+    description: Star Citizen game data. Ship info, trading routes, commodity prices. StarHead API for live SC data.
+    discovery_keywords:
+      - Star Citizen
+      - SC
+      - trading
+      - ships
+      - commodities
+      - routes
+      - cargo
+      - profit
+      - market prices
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/starhead/mcp
+    discoverable_by_default: false
+
+  - name: wingman_versetime
+    display_name: VerseTime - Star Citizen Time
+    description: Star Citizen local time and day/night for locations (e.g., Orison on Crusader). Sunrise and sunset timing.
+    discovery_keywords:
+      - verse time
+      - star citizen time
+      - sunrise
+      - sunset
+      - day or night
+      - daylight
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/versetime/mcp
+    discoverable_by_default: false
+
+  - name: wingman_no_mans_sky
+    display_name: No Man's Sky Assistant
+    description: No Man's Sky game data. Item lookup, refiner recipes, cooking recipes. Expeditions, community missions, patch notes.
+    discovery_keywords:
+      - No Man's Sky
+      - NMS
+      - refiner
+      - crafting
+      - recipes
+      - cooking
+      - items
+      - materials
+      - expeditions
+    type: http
+    url: https://wingman-ai-mcp-servers.wingman-ai.workers.dev/no-mans-sky-assistant/mcp
+    discoverable_by_default: false
