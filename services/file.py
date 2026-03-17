@@ -69,6 +69,24 @@ def get_audio_library_dir() -> str:
     return audio_library_path
 
 
+def get_lore_library_dir() -> str:
+    """Get the path to the lore library directory.
+
+    Unlike get_writable_dir(), this is NOT versioned - lore library persists
+    across Wingman AI updates. Location: APPDATA/WingmanAI/lore_library/
+    """
+    dirs = PlatformDirs(
+        appname=APP_NAME,
+        appauthor=APP_AUTHOR,
+        ensure_exists=True,
+        roaming=True,
+    )
+    lore_library_path = path.join(dirs.user_data_dir, "lore_library")
+    if not path.exists(lore_library_path):
+        makedirs(lore_library_path)
+    return lore_library_path
+
+
 def get_generated_files_dir(skill_name: str) -> str:
     """Get the path to a skill's generated files directory.
 

@@ -112,6 +112,7 @@ class AudioLibraryPlaybackFinishedCommand(WebSocketCommandModel):
     audio_file: AudioFile
 
 
+
 class CoreStateChangedCommand(WebSocketCommandModel):
     """Sent when the Core lifecycle state changes.
 

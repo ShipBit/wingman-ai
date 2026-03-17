@@ -45,6 +45,7 @@ from providers.open_ai import OpenAi, OpenAiAzure
 from providers.x_ai import XAi
 from providers.wingman_pro import WingmanPro
 from api.commands import McpStateChangedCommand
+from services.lore_library import LoreLibraryService, LORE_TOOL_NAMES
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
 from services.printr import Printr
@@ -127,6 +128,9 @@ class OpenAiWingman(Wingman):
         self.capability_registry = CapabilityRegistry(
             self.skill_registry, self.mcp_registry
         )
+
+        # Lore Library — set externally by WingmanCore if available
+        self.lore_library_service: LoreLibraryService | None = None
 
     def _broadcast_mcp_state_changed(self):
         """Broadcast MCP state change to UI via WebSocket."""
@@ -1601,8 +1605,22 @@ class OpenAiWingman(Wingman):
         # Build user context with environment metadata
         user_context = self._build_user_context()
 
+        # Determine backstory: Lore Library (generated from DB) or manual
+        backstory = self.config.prompts.backstory
+        if (
+            self.config.prompts.use_lore_library
+            and self.lore_library_service
+            and self.config.prompts.lore_character_id
+            and self.config.prompts.lore_universe_id
+        ):
+            result = self.lore_library_service.generate_backstory(
+                self.config.prompts.lore_character_id,
+                self.config.prompts.lore_universe_id,
+            )
+            backstory = result.backstory
+
         context = self.config.prompts.system_prompt.format(
-            backstory=self.config.prompts.backstory,
+            backstory=backstory,
             skills=skill_prompts,
             ttsprompt=tts_prompt,
             user_context=user_context,
@@ -2080,6 +2098,26 @@ class OpenAiWingman(Wingman):
 
                 return function_response, None, None, tool_label
 
+        # Handle Lore Library tool calls
+        if (
+            self.config.prompts.use_lore_library
+            and self.lore_library_service
+            and function_name in LORE_TOOL_NAMES
+        ):
+            tool_label = f"Lore: {function_name}"
+            await printr.print_async(
+                f"Lore Library: calling `{function_name}`",
+                color=LogType.INFO,
+                server_only=True,
+            )
+            function_response = self.lore_library_service.execute_tool(
+                function_name=function_name,
+                parameters=function_args,
+                universe_id=self.config.prompts.lore_universe_id,
+                character_id=self.config.prompts.lore_character_id,
+            )
+            return function_response, None, None, tool_label
+
         # Handle command calls
         if function_name == "execute_command":
             # get the command based on the argument passed by the LLM
@@ -2413,6 +2451,14 @@ class OpenAiWingman(Wingman):
                     },
                 }
             )
+
+        # Lore Library tools — injected when Wingman is bound to a universe
+        if (
+            self.config.prompts.use_lore_library
+            and self.lore_library_service
+            and self.config.prompts.lore_universe_id
+        ):
+            tools.extend(self.lore_library_service.get_tool_schemas())
 
         # Unified capability discovery: single activate_capability meta-tool
         # Combines skills and MCP servers - LLM doesn't need to know the difference
