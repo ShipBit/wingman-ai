@@ -47,6 +47,8 @@ from providers.wingman_pro import WingmanPro
 from api.commands import McpStateChangedCommand
 from services.lore_library import LoreLibraryService, LORE_TOOL_NAMES
 from services.benchmark import Benchmark
+from services.file import get_prompt
+from services.token_utils import count_tokens, truncate_to_tokens
 from services.markdown import cleanup_text
 from services.printr import Printr
 from services.skill_registry import SkillRegistry
@@ -103,6 +105,8 @@ class OpenAiWingman(Wingman):
         self.last_used_instant_responses = []
 
         self.messages = []
+        self.conversation_summary: str = ""
+        self._is_condensing = False
         """The conversation history that is used for the GPT calls"""
 
         self.azure_api_keys = {key: None for key in self.AZURE_SERVICES}
@@ -131,6 +135,9 @@ class OpenAiWingman(Wingman):
 
         # Lore Library — set externally by WingmanCore if available
         self.lore_library_service: LoreLibraryService | None = None
+
+        # Local AI service — set externally by WingmanCore if available
+        self.local_ai_service = None
 
     def _broadcast_mcp_state_changed(self):
         """Broadcast MCP state change to UI via WebSocket."""
@@ -1376,6 +1383,7 @@ class OpenAiWingman(Wingman):
 
         msg = {"role": "user", "content": content}
         await self._cleanup_conversation_history()
+        await self._maybe_condense_history()
         self.messages.append(msg)
 
     async def add_assistant_message(self, content: str):
@@ -1460,7 +1468,9 @@ class OpenAiWingman(Wingman):
         await self._add_gpt_response(message, message.tool_calls)
         for tool_call in message.tool_calls:
             command = tool_id_to_command[tool_call.id]
-            await self._update_tool_response(tool_call.id, command.additional_context or "OK")
+            await self._update_tool_response(
+                tool_call.id, command.additional_context or "OK"
+            )
 
     async def _cleanup_conversation_history(self):
         """Cleans up the conversation history by removing messages that are too old."""
@@ -1510,6 +1520,439 @@ class OpenAiWingman(Wingman):
 
         return total_deleted_messages
 
+    async def _maybe_condense_history(self):
+        """Check if condensation should run and fire it as a background task.
+
+        Condensation is skipped when:
+        - Feature is disabled
+        - Local AI is not ready
+        - Tool calls are pending (chained tool flow)
+        - A condensation is already in progress
+        - Message count is below threshold
+        """
+        if not self.config.features.condense_conversation:
+            return
+        if not self.local_ai_service or not self.local_ai_service.is_ready():
+            return
+        if self.pending_tool_calls:
+            return  # Never interrupt chained tool calls
+        if self._is_condensing:
+            return
+
+        threshold = self.config.features.condense_threshold
+        user_msg_count = sum(
+            1 for m in self.messages if self.__get_message_role(m) == "user"
+        )
+        if user_msg_count < threshold:
+            return
+
+        # Fire and forget — runs in background so user is never blocked
+        asyncio.create_task(self._condense_history())
+
+    async def _condense_history(self, force: bool = False):
+        """Condense older conversation messages into a running summary using local AI.
+
+        This preserves the most recent messages verbatim while summarizing older ones,
+        saving tokens without losing important context. Tool call/response pairs are
+        never split.
+
+        Args:
+            force: If True, skip the threshold check (used for manual trigger).
+        """
+        if self._is_condensing:
+            await printr.print_async(
+                "Condensation skipped — already in progress.",
+                color=LogType.WARNING,
+                server_only=True,
+                source_name=self.name,
+                source=LogSource.WINGMAN,
+            )
+            return
+        if not self.local_ai_service or not self.local_ai_service.is_ready():
+            await printr.print_async(
+                "Condensation skipped — local AI service not available.",
+                color=LogType.WARNING,
+                server_only=True,
+                source_name=self.name,
+                source=LogSource.WINGMAN,
+            )
+            return
+
+        keep_recent = (
+            self.config.features.condense_keep_recent
+            if not force
+            else min(self.config.features.condense_keep_recent, 2)
+        )
+        total_msg_count = len(self.messages)
+
+        # Count user messages
+        user_msg_count = sum(
+            1 for m in self.messages if self.__get_message_role(m) == "user"
+        )
+        if not force and user_msg_count < self.config.features.condense_threshold:
+            return
+
+        # Need at least something to condense beyond what we keep
+        if total_msg_count <= keep_recent:
+            await printr.print_async(
+                f"Condensation skipped — only {total_msg_count} messages, need more than {keep_recent} to condense.",
+                color=LogType.INFO,
+                source_name=self.name,
+                source=LogSource.WINGMAN,
+            )
+            return
+
+        self._is_condensing = True
+        _condensation_finished_broadcast = False
+
+        # Broadcast start
+        from api.commands import ConversationCondensationCommand
+
+        if printr._connection_manager:
+            await printr._connection_manager.broadcast(
+                ConversationCondensationCommand(
+                    wingman_name=self.name,
+                    status="started",
+                )
+            )
+
+        await printr.print_async(
+            "Conversation condensation started.",
+            color=LogType.INFO,
+            server_only=True,
+            source_name=self.name,
+            source=LogSource.WINGMAN,
+        )
+
+        try:
+            # Wait for any pending tool calls to finish
+            for _ in range(30):  # max 15 seconds
+                if not self.pending_tool_calls:
+                    break
+                await asyncio.sleep(0.5)
+            else:
+                await printr.print_async(
+                    "Condensation aborted — tool calls still pending after 15s.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source_name=self.name,
+                    source=LogSource.WINGMAN,
+                )
+                return
+
+            # Find the cutoff: keep the most recent `keep_recent` user messages
+            kept_user_count = 0
+            cutoff_index = len(self.messages)
+            for i in range(len(self.messages) - 1, -1, -1):
+                if self.__get_message_role(self.messages[i]) == "user":
+                    kept_user_count += 1
+                    if kept_user_count == keep_recent:
+                        cutoff_index = i
+                        break
+
+            if cutoff_index <= 0:
+                await printr.print_async(
+                    f"Condensation skipped — cutoff_index={cutoff_index}, nothing to condense (kept_user_count={kept_user_count}, keep_recent={keep_recent}, total={len(self.messages)}).",
+                    color=LogType.WARNING,
+                    source_name=self.name,
+                    source=LogSource.WINGMAN,
+                )
+                return
+
+            # Adjust cutoff forward to avoid orphaning tool responses
+            while cutoff_index < len(self.messages):
+                msg = self.messages[cutoff_index]
+                if self.__get_message_role(msg) == "tool":
+                    cutoff_index += 1
+                else:
+                    break
+
+            if cutoff_index <= 0:
+                await printr.print_async(
+                    "Condensation skipped — no messages to condense after tool adjustment.",
+                    color=LogType.WARNING,
+                    source_name=self.name,
+                    source=LogSource.WINGMAN,
+                )
+                return
+
+            to_condense = self.messages[:cutoff_index]
+            condensed_text = self._messages_to_text(to_condense)
+            if not condensed_text.strip():
+                await printr.print_async(
+                    "Condensation skipped — messages produced no text content.",
+                    color=LogType.WARNING,
+                    source_name=self.name,
+                    source=LogSource.WINGMAN,
+                )
+                return
+
+            # Estimate original token count
+            estimated_original_tokens = sum(
+                count_tokens(self._message_text_content(m))
+                for m in to_condense
+            )
+
+            # Build the summarization prompt
+            existing_summary_section = ""
+            if self.conversation_summary:
+                existing_summary_section = (
+                    "EXISTING SUMMARY (incorporate and update — do not repeat verbatim):\n"
+                    + self.conversation_summary
+                    + "\n\n"
+                )
+
+            system_prompt = get_prompt("condense-conversation")
+
+            # Handle context window overflow: chunk if text is too large
+            # Reserve ~300 tokens for system prompt + ~512 for output
+            n_ctx = (
+                self.settings.llama_cpp.n_ctx
+                if hasattr(self.settings, "llama_cpp")
+                else 2048
+            )
+            max_input_tokens = n_ctx - 812  # system prompt + output budget
+
+            user_prompt_prefix = (
+                existing_summary_section + "CONVERSATION TO SUMMARIZE:\n"
+            )
+            user_prompt_suffix = (
+                "\n\n---\n"
+                "Now list every fact from the conversation above as bullet points.\n"
+                "Start from the FIRST message, end at the LAST. Include all secrets, names, preferences, and creative content:"
+            )
+            available_tokens = (
+                max_input_tokens
+                - count_tokens(user_prompt_prefix)
+                - count_tokens(user_prompt_suffix)
+            )
+
+            if count_tokens(condensed_text) > available_tokens:
+                # Chunk: summarize in segments, then merge
+                summary = await self._chunked_summarize(
+                    condensed_text,
+                    system_prompt,
+                    existing_summary_section,
+                    available_tokens,
+                )
+            else:
+                user_prompt = (
+                    f"{user_prompt_prefix}{condensed_text}{user_prompt_suffix}"
+                )
+                summary = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: self.local_ai_service.summarize(
+                        text=user_prompt, system_prompt=system_prompt
+                    ),
+                )
+
+            if not summary:
+                await printr.print_async(
+                    "Conversation condensation failed — local AI returned no result.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                    source_name=self.name,
+                    source=LogSource.WINGMAN,
+                )
+                return
+
+            # Clean pending tool calls being removed
+            for msg in to_condense:
+                if (
+                    self.__get_message_role(msg) == "tool"
+                    and msg.get("tool_call_id") in self.pending_tool_calls
+                ):
+                    self.pending_tool_calls.remove(msg.get("tool_call_id"))
+
+            # Replace old messages
+            del self.messages[:cutoff_index]
+            self.conversation_summary = summary
+
+            estimated_summary_tokens = count_tokens(summary)
+            estimated_tokens_saved = max(
+                0, estimated_original_tokens - estimated_summary_tokens
+            )
+
+            await printr.print_async(
+                f"Condensed {cutoff_index} messages into summary "
+                f"({len(summary)} chars, ~{estimated_summary_tokens} tokens). "
+                f"{len(self.messages)} messages remaining. "
+                f"~{estimated_tokens_saved} tokens saved.",
+                color=LogType.INFO,
+                server_only=True,
+                source_name=self.name,
+                source=LogSource.WINGMAN,
+            )
+
+            # Broadcast finish with stats
+            _condensation_finished_broadcast = True
+            if printr._connection_manager:
+                await printr._connection_manager.broadcast(
+                    ConversationCondensationCommand(
+                        wingman_name=self.name,
+                        status="finished",
+                        messages_condensed=cutoff_index,
+                        messages_remaining=len(self.messages),
+                        summary_length=len(summary),
+                        estimated_tokens_saved=estimated_tokens_saved,
+                        summary_text=summary,
+                    )
+                )
+
+        except Exception as e:
+            await printr.print_async(
+                f"Conversation condensation error: {e}",
+                color=LogType.ERROR,
+                server_only=True,
+                source_name=self.name,
+                source=LogSource.WINGMAN,
+            )
+        finally:
+            self._is_condensing = False
+            # Always broadcast finished so the client UI doesn't get stuck
+            if not _condensation_finished_broadcast and printr._connection_manager:
+                try:
+                    await printr._connection_manager.broadcast(
+                        ConversationCondensationCommand(
+                            wingman_name=self.name,
+                            status="finished",
+                        )
+                    )
+                except Exception:
+                    pass
+
+    async def _chunked_summarize(
+        self,
+        full_text: str,
+        system_prompt: str,
+        existing_summary_section: str,
+        chunk_max_tokens: int,
+    ) -> Optional[str]:
+        """Summarize text that exceeds the model's context window by chunking.
+
+        Each chunk is summarized independently, then summaries are merged into one final summary.
+        """
+        # Convert token budget to approximate char limit for splitting
+        # (splitting needs char positions; we use ~4 chars/token as a rough guide,
+        # then verify with count_tokens)
+        approx_chunk_chars = chunk_max_tokens * 4
+        chunks = []
+        remaining = full_text
+        while remaining:
+            if count_tokens(remaining) <= chunk_max_tokens:
+                chunks.append(remaining)
+                break
+            # Try to split at a newline boundary
+            split_at = remaining.rfind("\n", 0, approx_chunk_chars)
+            if split_at <= 0:
+                split_at = approx_chunk_chars
+            chunks.append(remaining[:split_at])
+            remaining = remaining[split_at:].lstrip()
+
+        loop = asyncio.get_event_loop()
+        chunk_summaries = []
+        for i, chunk in enumerate(chunks):
+            user_prompt = (
+                f"{existing_summary_section if i == 0 else ''}"
+                f"CONVERSATION TO SUMMARIZE (part {i + 1}/{len(chunks)}):\n{chunk}\n\n"
+                "---\nList every fact from the above as bullet points. Include all secrets, names, preferences, and creative content:"
+            )
+            result = await loop.run_in_executor(
+                None,
+                lambda p=user_prompt: self.local_ai_service.summarize(
+                    text=p, system_prompt=system_prompt
+                ),
+            )
+            if result:
+                chunk_summaries.append(result)
+
+        if not chunk_summaries:
+            return None
+        if len(chunk_summaries) == 1:
+            return chunk_summaries[0]
+
+        # Merge all chunk summaries into one final summary
+        combined = "\n\n".join(
+            f"Part {i + 1}:\n{s}" for i, s in enumerate(chunk_summaries)
+        )
+        merge_prompt = (
+            f"{existing_summary_section}"
+            f"PARTIAL SUMMARIES TO MERGE:\n{combined}\n\n"
+            "Merge these into a single coherent summary. Keep all key facts. Maximum 300 words:"
+        )
+        return await loop.run_in_executor(
+            None,
+            lambda: self.local_ai_service.summarize(
+                text=merge_prompt, system_prompt=system_prompt
+            ),
+        )
+
+    def _extract_text_content(self, content) -> str:
+        """Extract text from message content, handling both string and multimodal list formats."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            # Multimodal content: extract text parts only
+            parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    parts.append(part.get("text", ""))
+                elif isinstance(part, str):
+                    parts.append(part)
+            return " ".join(parts)
+        return ""
+
+    def _message_text_content(self, msg) -> str:
+        """Extract text content from a message for token estimation."""
+        if isinstance(msg, Mapping):
+            return self._extract_text_content(msg.get("content", "")) or ""
+        elif hasattr(msg, "content"):
+            return self._extract_text_content(msg.content) or ""
+        return ""
+
+    def _messages_to_text(self, messages: list) -> str:
+        """Convert a list of conversation messages to plain text for summarization."""
+        lines = []
+        for msg in messages:
+            role = self.__get_message_role(msg)
+            content = ""
+            if isinstance(msg, Mapping):
+                content = self._extract_text_content(msg.get("content", ""))
+            elif hasattr(msg, "content"):
+                content = self._extract_text_content(msg.content) or ""
+
+            if role == "user":
+                lines.append(f"User: {content}")
+            elif role == "assistant":
+                if content:
+                    lines.append(f"Assistant: {content}")
+                # Include tool call info
+                tool_calls = None
+                if isinstance(msg, Mapping):
+                    tool_calls = msg.get("tool_calls")
+                elif hasattr(msg, "tool_calls"):
+                    tool_calls = msg.tool_calls
+                if tool_calls:
+                    for tc in tool_calls:
+                        fn = (
+                            tc.function
+                            if hasattr(tc, "function")
+                            else tc.get("function", {})
+                        )
+                        name = fn.name if hasattr(fn, "name") else fn.get("name", "?")
+                        args = (
+                            fn.arguments
+                            if hasattr(fn, "arguments")
+                            else fn.get("arguments", "")
+                        )
+                        lines.append(f"  [Tool call: {name}({args})]")
+            elif role == "tool":
+                tool_name = (
+                    msg.get("name", "tool") if isinstance(msg, Mapping) else "tool"
+                )
+                lines.append(f"  [Tool result ({tool_name}): {content[:200]}]")
+        return "\n".join(lines)
+
     def reset_conversation_history(self):
         """Resets the conversation history and skill activation state.
 
@@ -1518,6 +1961,7 @@ class OpenAiWingman(Wingman):
         registry to ensure the progressive disclosure state matches the LLM's memory.
         """
         self.messages = []
+        self.conversation_summary = ""
         self.skill_registry.reset_activations()
         self.mcp_registry.reset_activations()
 
@@ -1606,6 +2050,8 @@ class OpenAiWingman(Wingman):
         user_context = self._build_user_context()
 
         # Determine backstory: Lore Library (generated from DB) or manual
+        # Sanity check: truncate if someone bypasses the client's 2048-token limit
+        MAX_BACKSTORY_TOKENS = 2048
         backstory = self.config.prompts.backstory
         if (
             self.config.prompts.use_lore_library
@@ -1619,12 +2065,42 @@ class OpenAiWingman(Wingman):
             )
             backstory = result.backstory
 
+        if backstory and count_tokens(backstory) > MAX_BACKSTORY_TOKENS:
+            original_tokens = count_tokens(backstory)
+            backstory = truncate_to_tokens(backstory, MAX_BACKSTORY_TOKENS)
+            await printr.print_async(
+                f"Backstory will be truncated to {MAX_BACKSTORY_TOKENS} tokens for conversations (is {original_tokens}). "
+                f"Your saved backstory is unchanged. Consider shortening it or moving world lore to the Lore Library.",
+                color=LogType.WARNING,
+                source_name=self.name,
+                source=LogSource.WINGMAN,
+            )
+
+        # Build conversation summary section
+        conversation_summary = ""
+        if self.conversation_summary:
+            conversation_summary = (
+                "# CONVERSATION SUMMARY\n"
+                "The following is a summary of earlier parts of this conversation. "
+                "Treat it as factual context — the user and you discussed these topics previously.\n\n"
+                + self.conversation_summary
+            )
+
         context = self.config.prompts.system_prompt.format(
             backstory=backstory,
             skills=skill_prompts,
             ttsprompt=tts_prompt,
             user_context=user_context,
+            conversation_summary=conversation_summary,
         )
+
+        # If the system prompt template doesn't include {conversation_summary},
+        # append the summary at the end so it's never lost.
+        if (
+            conversation_summary
+            and "{conversation_summary}" not in self.config.prompts.system_prompt
+        ):
+            context += "\n\n" + conversation_summary
 
         return context
 
@@ -2378,7 +2854,9 @@ class OpenAiWingman(Wingman):
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
-    async def _execute_command(self, command: CommandConfig, is_instant=False) -> tuple[str | None, str]:
+    async def _execute_command(
+        self, command: CommandConfig, is_instant=False
+    ) -> tuple[str | None, str]:
         """Executes a command by delegating to the Wingman base implementation.
 
         Returns:
