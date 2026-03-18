@@ -650,6 +650,22 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
+        # Auto-download local AI models if run_locally is on but models are missing
+        llama_settings = self.settings_service.settings.llama_cpp
+        if (
+            llama_settings.run_locally
+            and not self.local_model_manager.models_available()
+        ):
+            await self.printr.print_async(
+                "Local AI models not found — downloading automatically...",
+                color=LogType.INFO,
+                server_only=True,
+            )
+            await self.local_model_manager.download_models()
+
+        # Initialize local AI service (loads models if run_locally + available)
+        await self.local_ai_service.initialize()
+
         # Start HUD Server if enabled
         await self._start_hud_server_if_enabled()
 
@@ -2025,6 +2041,8 @@ class WingmanCore(WebSocketUser):
     # POST /settings/local-ai/download-models
     async def download_local_ai_models(self) -> dict:
         success = await self.local_model_manager.download_models()
+        if success:
+            await self.local_ai_service.initialize()
         return {
             "success": success,
             **self.local_model_manager.get_status(),
@@ -2107,6 +2125,10 @@ class WingmanCore(WebSocketUser):
             self.stop_xvasynth()
         if self.settings_service.settings.pocket_tts.enable:
             self.stop_pocket_tts()
+
+        # Stop managed llama-server processes
+        self.llama_cpp_provider.unload_models()
+
         await self.unload_tower()
 
         self.printr.print(

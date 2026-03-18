@@ -136,7 +136,7 @@ class SettingsService:
 
         # Local AI (llama.cpp)
         if self.local_ai_service:
-            self.local_ai_service.update_settings(settings.llama_cpp)
+            await self.local_ai_service.update_settings_async(settings.llama_cpp)
             self.config_manager.settings_config.llama_cpp = settings.llama_cpp
 
         # voice activation

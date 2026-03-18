@@ -1,5 +1,11 @@
 import gc
+import os
+import subprocess
+import time
 from typing import Optional
+
+import requests as http_requests
+from openai import OpenAI
 
 from api.enums import LogType
 from api.interface import LlamaCppSettings
@@ -8,9 +14,18 @@ from services.printr import Printr
 
 printr = Printr()
 
+# Fixed ports for managed llama-server instances (offset from remote defaults)
+MANAGED_SUMMARIZE_PORT = 49172
+MANAGED_EMBED_PORT = 49173
+
 
 class LlamaCppProvider:
-    """Local llama.cpp provider for summarization and embedding using GGUF models."""
+    """Local llama.cpp provider using managed llama-server subprocesses.
+
+    Instead of loading models in-process via the stale llama-cpp-python package,
+    this provider starts llama-server binaries (from official llama.cpp releases)
+    as subprocesses and communicates via the OpenAI-compatible HTTP API.
+    """
 
     def __init__(
         self,
@@ -19,13 +34,122 @@ class LlamaCppProvider:
     ):
         self.settings = settings
         self.model_manager = model_manager
-        self._summarize_model = None
-        self._embed_model = None
+        self._summarize_process: Optional[subprocess.Popen] = None
+        self._embed_process: Optional[subprocess.Popen] = None
+        self._summarize_client: Optional[OpenAI] = None
+        self._embed_client: Optional[OpenAI] = None
+
+    def _resolve_n_threads(self) -> int:
+        """Resolve thread count: 0 means auto (half of logical cores, min 2, max 4)."""
+        n = self.settings.n_threads
+        if n > 0:
+            return n
+        cores = os.cpu_count() or 4
+        return max(2, min(cores // 2, 4))
+
+    def _start_server(
+        self,
+        model_path: str,
+        port: int,
+        embedding: bool = False,
+        n_ctx: int = 4096,
+        reasoning_budget: int = -1,
+    ) -> Optional[subprocess.Popen]:
+        """Start a llama-server process bound to localhost.
+
+        Args:
+            reasoning_budget: Token budget for thinking. 0 = disable thinking entirely.
+                              -1 = use model default.
+        """
+        binary_path = self.model_manager.get_llama_server_path()
+        if not binary_path or not os.path.exists(binary_path):
+            printr.print(
+                "llama-server binary not found.",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return None
+
+        cmd = [
+            binary_path,
+            "--model",
+            model_path,
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--ctx-size",
+            str(n_ctx),
+            "--threads",
+            str(self._resolve_n_threads()),
+            "-ngl",
+            "99",
+        ]
+        if embedding:
+            cmd.append("--embeddings")
+        if reasoning_budget >= 0:
+            cmd.extend(["--reasoning-budget", str(reasoning_budget)])
+
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            return process
+        except Exception as e:
+            printr.print(
+                f"Failed to start llama-server: {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            return None
+
+    def _wait_for_server(
+        self, port: int, process: subprocess.Popen, timeout: int = 120
+    ) -> bool:
+        """Wait for server to become healthy, checking that the process is still alive."""
+        url = f"http://127.0.0.1:{port}/health"
+        start = time.time()
+        while time.time() - start < timeout:
+            # Check if the process died
+            if process.poll() is not None:
+                return False
+            try:
+                r = http_requests.get(url, timeout=2)
+                if r.status_code == 200:
+                    return True
+            except Exception:
+                pass
+            time.sleep(0.5)
+        return False
+
+    def _stop_process(self, process: Optional[subprocess.Popen]):
+        """Gracefully stop a server process."""
+        if process is None:
+            return
+        try:
+            process.terminate()
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+        except Exception:
+            pass
+
+    def _ensure_binary(self) -> bool:
+        """Ensure llama-server binary is available, downloading if needed."""
+        if self.model_manager.llama_server_available():
+            return True
+        return self.model_manager.download_llama_server_sync()
 
     def load_summarize_model(self) -> bool:
-        """Load the summarization model. Returns True on success."""
-        if self._summarize_model is not None:
+        """Start the summarization server. Returns True on success."""
+        if self._summarize_process is not None:
             return True
+
+        if not self._ensure_binary():
+            return False
 
         if not self.model_manager.summarize_model_available():
             printr.print(
@@ -35,40 +159,54 @@ class LlamaCppProvider:
             )
             return False
 
-        try:
-            from llama_cpp import Llama
+        model_path = self.model_manager.get_summarize_model_path()
+        n_ctx = self.settings.n_ctx
+        n_threads = self._resolve_n_threads()
+        printr.print(
+            f"Starting summarize server: {model_path} (n_ctx={n_ctx}, n_threads={n_threads})",
+            color=LogType.INFO,
+            server_only=True,
+        )
 
-            model_path = self.model_manager.get_summarize_model_path()
-            printr.print(
-                f"Loading summarize model: {model_path}",
-                color=LogType.INFO,
-                server_only=True,
+        # reasoning_budget: 0 = disable thinking (fast), >0 = allow thinking tokens
+        rb = 0 if self.settings.reasoning_effort == 0 else -1
+        self._summarize_process = self._start_server(
+            model_path=model_path,
+            port=MANAGED_SUMMARIZE_PORT,
+            n_ctx=n_ctx,
+            reasoning_budget=rb,
+        )
+        if self._summarize_process is None:
+            return False
+
+        if self._wait_for_server(MANAGED_SUMMARIZE_PORT, self._summarize_process):
+            self._summarize_client = OpenAI(
+                base_url=f"http://127.0.0.1:{MANAGED_SUMMARIZE_PORT}/v1",
+                api_key="not-needed",
             )
-            self._summarize_model = Llama(
-                model_path=model_path,
-                n_ctx=4096,
-                n_threads=4,
-                verbose=False,
-            )
             printr.print(
-                "Summarize model loaded successfully.",
+                "Summarize server ready.",
                 color=LogType.INFO,
                 server_only=True,
             )
             return True
-        except Exception as e:
+        else:
             printr.print(
-                f"Failed to load summarize model: {e}",
+                "Summarize server failed to start. Check model compatibility with llama-server.",
                 color=LogType.ERROR,
                 server_only=True,
             )
-            self._summarize_model = None
+            self._stop_process(self._summarize_process)
+            self._summarize_process = None
             return False
 
     def load_embed_model(self) -> bool:
-        """Load the embedding model. Returns True on success."""
-        if self._embed_model is not None:
+        """Start the embedding server. Returns True on success."""
+        if self._embed_process is not None:
             return True
+
+        if not self._ensure_binary():
+            return False
 
         if not self.model_manager.embed_model_available():
             printr.print(
@@ -78,90 +216,105 @@ class LlamaCppProvider:
             )
             return False
 
-        try:
-            from llama_cpp import Llama
+        model_path = self.model_manager.get_embed_model_path()
+        n_threads = self._resolve_n_threads()
+        printr.print(
+            f"Starting embed server: {model_path} (n_threads={n_threads})",
+            color=LogType.INFO,
+            server_only=True,
+        )
 
-            model_path = self.model_manager.get_embed_model_path()
-            printr.print(
-                f"Loading embed model: {model_path}",
-                color=LogType.INFO,
-                server_only=True,
+        self._embed_process = self._start_server(
+            model_path=model_path,
+            port=MANAGED_EMBED_PORT,
+            embedding=True,
+            n_ctx=2048,
+        )
+        if self._embed_process is None:
+            return False
+
+        if self._wait_for_server(MANAGED_EMBED_PORT, self._embed_process):
+            self._embed_client = OpenAI(
+                base_url=f"http://127.0.0.1:{MANAGED_EMBED_PORT}/v1",
+                api_key="not-needed",
             )
-            self._embed_model = Llama(
-                model_path=model_path,
-                n_ctx=2048,
-                n_threads=4,
-                embedding=True,
-                verbose=False,
-            )
             printr.print(
-                "Embed model loaded successfully.",
+                "Embed server ready.",
                 color=LogType.INFO,
                 server_only=True,
             )
             return True
-        except Exception as e:
+        else:
             printr.print(
-                f"Failed to load embed model: {e}",
+                "Embed server failed to start. Check model compatibility with llama-server.",
                 color=LogType.ERROR,
                 server_only=True,
             )
-            self._embed_model = None
+            self._stop_process(self._embed_process)
+            self._embed_process = None
             return False
 
     def unload_models(self):
-        """Unload both models and free memory."""
-        if self._summarize_model is not None:
-            del self._summarize_model
-            self._summarize_model = None
+        """Stop both server processes and free resources."""
+        if self._summarize_process is not None:
+            self._stop_process(self._summarize_process)
+            self._summarize_process = None
+            self._summarize_client = None
             printr.print(
-                "Summarize model unloaded.",
+                "Summarize server stopped.",
                 color=LogType.INFO,
                 server_only=True,
             )
-        if self._embed_model is not None:
-            del self._embed_model
-            self._embed_model = None
+        if self._embed_process is not None:
+            self._stop_process(self._embed_process)
+            self._embed_process = None
+            self._embed_client = None
             printr.print(
-                "Embed model unloaded.",
+                "Embed server stopped.",
                 color=LogType.INFO,
                 server_only=True,
             )
         gc.collect()
 
     def update_settings(self, new_settings: LlamaCppSettings):
-        """Update settings. If run_locally changed or models changed, handle load/unload."""
+        """Update settings. If run_locally changed or models changed, handle restart."""
         old = self.settings
         self.settings = new_settings
         self.model_manager.update_settings(new_settings)
 
         if old.run_locally and not new_settings.run_locally:
-            # Switched from local to remote — unload models
             self.unload_models()
         elif new_settings.run_locally:
-            # If model files changed, unload so they reload on next use
-            if old.summarize_model != new_settings.summarize_model:
-                if self._summarize_model is not None:
-                    del self._summarize_model
-                    self._summarize_model = None
-                    gc.collect()
-            if old.embed_model != new_settings.embed_model:
-                if self._embed_model is not None:
-                    del self._embed_model
-                    self._embed_model = None
-                    gc.collect()
+            summarize_changed = (
+                old.summarize_model != new_settings.summarize_model
+                or old.n_ctx != new_settings.n_ctx
+                or old.n_threads != new_settings.n_threads
+            )
+            if summarize_changed and self._summarize_process is not None:
+                self._stop_process(self._summarize_process)
+                self._summarize_process = None
+                self._summarize_client = None
+            embed_changed = (
+                old.embed_model != new_settings.embed_model
+                or old.n_threads != new_settings.n_threads
+            )
+            if embed_changed and self._embed_process is not None:
+                self._stop_process(self._embed_process)
+                self._embed_process = None
+                self._embed_client = None
 
     def summarize(
         self,
         text: str,
         system_prompt: str = "You are a helpful assistant that summarizes text concisely.",
     ) -> Optional[str]:
-        """Summarize text using the local Qwen model. Loads model on first call."""
+        """Summarize text using the managed llama-server."""
         if not self.load_summarize_model():
             return None
 
         try:
-            result = self._summarize_model.create_chat_completion(
+            result = self._summarize_client.chat.completions.create(
+                model="local-model",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text},
@@ -169,7 +322,7 @@ class LlamaCppProvider:
                 max_tokens=512,
                 temperature=0.3,
             )
-            return result["choices"][0]["message"]["content"]
+            return result.choices[0].message.content
         except Exception as e:
             printr.print(
                 f"Summarization failed: {e}",
@@ -179,20 +332,16 @@ class LlamaCppProvider:
             return None
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
-        """Generate embeddings for a list of texts. Loads model on first call."""
+        """Generate embeddings via the managed llama-server."""
         if not self.load_embed_model():
             return None
 
         try:
-            results = []
-            for text in texts:
-                embedding = self._embed_model.embed(text)
-                # llama-cpp-python returns list[float] for single text
-                if isinstance(embedding[0], list):
-                    results.append(embedding[0])
-                else:
-                    results.append(embedding)
-            return results
+            response = self._embed_client.embeddings.create(
+                model="local-model",
+                input=texts,
+            )
+            return [item.embedding for item in response.data]
         except Exception as e:
             printr.print(
                 f"Embedding failed: {e}",
@@ -202,5 +351,5 @@ class LlamaCppProvider:
             return None
 
     def is_ready(self) -> bool:
-        """Check if models are loaded and responsive."""
-        return self._summarize_model is not None or self._embed_model is not None
+        """Check if server processes are running."""
+        return self._summarize_process is not None or self._embed_process is not None

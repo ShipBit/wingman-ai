@@ -1098,9 +1098,14 @@ class HudServerSettings(BaseModel):
 
 
 class LlamaCppSettings(BaseModel):
-    run_locally: bool = True
-    summarize_model: str = "qwen3.5-0.8b-q4_k_m.gguf"
+    run_locally: bool = False
+    summarize_model: str = "Qwen3.5-0.8B-Q4_K_M.gguf"
     embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
+    n_ctx: int = 4096
+    n_threads: int = 0
+    """Number of CPU threads for local inference. 0 = auto (half of logical cores, max 4)."""
+    reasoning_effort: int = 0
+    """Reasoning effort for the summarize model. 0 = disabled (fastest), 1 = enabled (slow)."""
     summarize_remote_host: str = "http://127.0.0.1"
     summarize_remote_port: int = 49152
     embed_remote_host: str = "http://127.0.0.1"
