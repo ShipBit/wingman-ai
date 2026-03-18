@@ -31,12 +31,28 @@ DEFAULT_EMBED_MODEL = {
 
 # llama-server binary release — update this to get newer llama.cpp features
 LLAMA_SERVER_VERSION = "b8400"
-LLAMA_SERVER_ASSETS = {
-    "Darwin_arm64": f"llama-{LLAMA_SERVER_VERSION}-bin-macos-arm64.tar.gz",
-    "Darwin_x86_64": f"llama-{LLAMA_SERVER_VERSION}-bin-macos-x64.tar.gz",
-    "Windows_AMD64": f"llama-{LLAMA_SERVER_VERSION}-bin-win-vulkan-x64.zip",
-    "Linux_x86_64": f"llama-{LLAMA_SERVER_VERSION}-bin-ubuntu-x64.tar.gz",
+
+# Platform + backend → release asset name
+# On Windows, multiple backends are available; macOS/Linux use one universal build.
+LLAMA_SERVER_ASSETS: dict[str, dict[str, str]] = {
+    "Darwin_arm64": {
+        "default": f"llama-{LLAMA_SERVER_VERSION}-bin-macos-arm64.tar.gz",
+    },
+    "Darwin_x86_64": {
+        "default": f"llama-{LLAMA_SERVER_VERSION}-bin-macos-x64.tar.gz",
+    },
+    "Windows_AMD64": {
+        "vulkan": f"llama-{LLAMA_SERVER_VERSION}-bin-win-vulkan-x64.zip",
+        "cuda": f"llama-{LLAMA_SERVER_VERSION}-bin-win-cuda-12.4-x64.zip",
+        "cpu": f"llama-{LLAMA_SERVER_VERSION}-bin-win-cpu-x64.zip",
+    },
+    "Linux_x86_64": {
+        "default": f"llama-{LLAMA_SERVER_VERSION}-bin-ubuntu-x64.tar.gz",
+    },
 }
+
+# CUDA runtime DLLs asset (needed alongside the CUDA llama-server binary on Windows)
+LLAMA_SERVER_CUDA_RUNTIME = f"cudart-llama-bin-win-cuda-12.4-x64.zip"
 
 
 class LocalModelManager:
@@ -148,8 +164,12 @@ class LocalModelManager:
                     pass
             return False
 
-    async def download_models(self) -> bool:
-        """Download both models and llama-server binary asynchronously. Returns True if all succeed."""
+    async def download_models(self, cuda_available: bool = False) -> bool:
+        """Download models and llama-server binaries asynchronously.
+
+        Downloads the active backend binary plus CUDA if cuda_available is True.
+        Returns True if all succeed.
+        """
         if self._downloading:
             printr.print(
                 "Model download already in progress.",
@@ -167,7 +187,26 @@ class LocalModelManager:
             embed_ok = await loop.run_in_executor(
                 None, self._download_model, DEFAULT_EMBED_MODEL
             )
-            server_ok = await loop.run_in_executor(None, self._download_llama_server)
+
+            # Determine which backends to download
+            backends_to_download: set[str] = set()
+            available = self.get_available_backends()
+            if "default" in available:
+                # macOS / Linux — single universal build
+                backends_to_download.add("default")
+            else:
+                # Windows — always download vulkan + cpu; add cuda if available
+                backends_to_download.add("vulkan")
+                backends_to_download.add("cpu")
+                if cuda_available:
+                    backends_to_download.add("cuda")
+
+            server_ok = True
+            for bk in backends_to_download:
+                ok = await loop.run_in_executor(None, self._download_llama_server, bk)
+                if not ok:
+                    server_ok = False
+
             return summarize_ok and embed_ok and server_ok
         finally:
             self._downloading = False
@@ -179,19 +218,29 @@ class LocalModelManager:
             "summarize_available": self.summarize_model_available(),
             "embed_available": self.embed_model_available(),
             "llama_server_available": self.llama_server_available(),
+            "gpu_backend": self._get_active_backend(),
+            "available_backends": self.get_available_backends(),
             "is_downloading": self._downloading,
             "models_dir": self.models_dir,
         }
 
     # ── llama-server binary management ──────────────────────────────────
 
-    def get_llama_server_dir(self) -> str:
-        """Return the directory containing the extracted llama-server binary."""
-        return path.join(self.models_dir, f"llama-server-{LLAMA_SERVER_VERSION}")
+    def _get_active_backend(self) -> str:
+        """Return the effective backend name for the current platform."""
+        system = platform.system()
+        if system != "Windows":
+            return "default"
+        return self.settings.gpu_backend or "vulkan"
 
-    def get_llama_server_path(self) -> str:
+    def get_llama_server_dir(self, backend: Optional[str] = None) -> str:
+        """Return the directory containing the extracted llama-server binary for a backend."""
+        bk = backend or self._get_active_backend()
+        return path.join(self.models_dir, f"llama-server-{LLAMA_SERVER_VERSION}-{bk}")
+
+    def get_llama_server_path(self, backend: Optional[str] = None) -> str:
         """Return the full path to the llama-server binary, searching recursively."""
-        server_dir = self.get_llama_server_dir()
+        server_dir = self.get_llama_server_dir(backend)
         binary_name = (
             "llama-server.exe" if platform.system() == "Windows" else "llama-server"
         )
@@ -202,16 +251,31 @@ class LocalModelManager:
         # Fallback — will fail the exists() check, triggering download
         return path.join(server_dir, binary_name)
 
-    def llama_server_available(self) -> bool:
-        """Check if the llama-server binary exists."""
-        return path.exists(self.get_llama_server_path())
+    def llama_server_available(self, backend: Optional[str] = None) -> bool:
+        """Check if the llama-server binary exists for the given (or active) backend."""
+        return path.exists(self.get_llama_server_path(backend))
 
-    def _get_platform_asset_name(self) -> Optional[str]:
+    def _get_platform_asset_name(self, backend: Optional[str] = None) -> Optional[str]:
         """Get the platform-specific release asset filename."""
         system = platform.system()
         machine = platform.machine()
-        key = f"{system}_{machine}"
-        return LLAMA_SERVER_ASSETS.get(key)
+        platform_key = f"{system}_{machine}"
+        backends = LLAMA_SERVER_ASSETS.get(platform_key)
+        if not backends:
+            return None
+        bk = backend or self._get_active_backend()
+        return backends.get(bk)
+
+    def get_available_backends(self) -> list[str]:
+        """Return the list of backends available for the current platform.
+
+        On macOS/Linux there's only 'default'. On Windows: vulkan, cuda, cpu.
+        """
+        system = platform.system()
+        machine = platform.machine()
+        platform_key = f"{system}_{machine}"
+        backends = LLAMA_SERVER_ASSETS.get(platform_key, {})
+        return list(backends.keys())
 
     @staticmethod
     def _safe_extract_tar(tar_path: str, target_dir: str):
@@ -243,61 +307,53 @@ class LocalModelManager:
                     )
             zf.extractall(target_dir)
 
-    def _download_llama_server(self) -> bool:
-        """Download and extract the llama-server binary for the current platform."""
-        if self.llama_server_available():
+    def _download_llama_server(self, backend: Optional[str] = None) -> bool:
+        """Download and extract the llama-server binary for a specific backend."""
+        bk = backend or self._get_active_backend()
+        if self.llama_server_available(bk):
             return True
 
-        asset_name = self._get_platform_asset_name()
+        asset_name = self._get_platform_asset_name(bk)
         if not asset_name:
             printr.print(
-                f"No llama-server binary available for {platform.system()} {platform.machine()}",
+                f"No llama-server binary available for {platform.system()} {platform.machine()} ({bk})",
                 color=LogType.ERROR,
                 server_only=True,
             )
             return False
 
         url = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_SERVER_VERSION}/{asset_name}"
-        server_dir = self.get_llama_server_dir()
+        server_dir = self.get_llama_server_dir(bk)
         temp_path = path.join(self.models_dir, asset_name + ".part")
 
         printr.print(
-            f"Downloading llama-server {LLAMA_SERVER_VERSION} for {platform.system()} {platform.machine()}...",
+            f"Downloading llama-server {LLAMA_SERVER_VERSION} ({bk}) for {platform.system()} {platform.machine()}...",
             color=LogType.INFO,
             server_only=True,
         )
 
         try:
-            response = requests.get(url, stream=True, timeout=30, allow_redirects=True)
-            response.raise_for_status()
+            self._download_and_extract(
+                url, temp_path, server_dir, f"llama-server ({bk})"
+            )
 
-            total_size = int(response.headers.get("content-length", 0))
-            downloaded = 0
-            last_logged_pct = -10
-
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total_size > 0:
-                        pct = int(downloaded / total_size * 100)
-                        if pct - last_logged_pct >= 10:
-                            printr.print(
-                                f"  llama-server: {pct}% ({downloaded // (1024*1024)} MB / {total_size // (1024*1024)} MB)",
-                                color=LogType.INFO,
-                                server_only=True,
-                            )
-                            last_logged_pct = pct
-
-            # Extract archive
-            os.makedirs(server_dir, exist_ok=True)
-            if asset_name.endswith(".tar.gz"):
-                self._safe_extract_tar(temp_path, server_dir)
-            elif asset_name.endswith(".zip"):
-                self._safe_extract_zip(temp_path, server_dir)
+            # CUDA backend on Windows also needs the CUDA runtime DLLs
+            if bk == "cuda" and platform.system() == "Windows":
+                cudart_url = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_SERVER_VERSION}/{LLAMA_SERVER_CUDA_RUNTIME}"
+                cudart_temp = path.join(
+                    self.models_dir, LLAMA_SERVER_CUDA_RUNTIME + ".part"
+                )
+                printr.print(
+                    "Downloading CUDA runtime libraries...",
+                    color=LogType.INFO,
+                    server_only=True,
+                )
+                self._download_and_extract(
+                    cudart_url, cudart_temp, server_dir, "CUDA runtime"
+                )
 
             # Make binary executable on Unix
-            binary_path = self.get_llama_server_path()
+            binary_path = self.get_llama_server_path(bk)
             if platform.system() != "Windows" and path.exists(binary_path):
                 os.chmod(
                     binary_path,
@@ -307,11 +363,8 @@ class LocalModelManager:
                     | stat.S_IXOTH,
                 )
 
-            # Clean up archive
-            os.remove(temp_path)
-
             printr.print(
-                f"llama-server {LLAMA_SERVER_VERSION} ready.",
+                f"llama-server {LLAMA_SERVER_VERSION} ({bk}) ready.",
                 color=LogType.INFO,
                 server_only=True,
             )
@@ -319,7 +372,7 @@ class LocalModelManager:
 
         except Exception as e:
             printr.print(
-                f"Failed to download llama-server: {e}",
+                f"Failed to download llama-server ({bk}): {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
@@ -330,6 +383,41 @@ class LocalModelManager:
                     pass
             return False
 
-    def download_llama_server_sync(self) -> bool:
-        """Synchronous wrapper for downloading the llama-server binary."""
-        return self._download_llama_server()
+    def _download_and_extract(
+        self, url: str, temp_path: str, target_dir: str, label: str
+    ):
+        """Download a file and extract it into target_dir."""
+        response = requests.get(url, stream=True, timeout=30, allow_redirects=True)
+        response.raise_for_status()
+
+        total_size = int(response.headers.get("content-length", 0))
+        downloaded = 0
+        last_logged_pct = -10
+
+        with open(temp_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total_size > 0:
+                    pct = int(downloaded / total_size * 100)
+                    if pct - last_logged_pct >= 10:
+                        printr.print(
+                            f"  {label}: {pct}% ({downloaded // (1024*1024)} MB / {total_size // (1024*1024)} MB)",
+                            color=LogType.INFO,
+                            server_only=True,
+                        )
+                        last_logged_pct = pct
+
+        # Extract archive
+        os.makedirs(target_dir, exist_ok=True)
+        if temp_path.rstrip(".part").endswith(".tar.gz"):
+            self._safe_extract_tar(temp_path, target_dir)
+        elif temp_path.rstrip(".part").endswith(".zip"):
+            self._safe_extract_zip(temp_path, target_dir)
+
+        # Clean up archive
+        os.remove(temp_path)
+
+    def download_llama_server_sync(self, backend: Optional[str] = None) -> bool:
+        """Synchronous wrapper for downloading a llama-server binary."""
+        return self._download_llama_server(backend)

@@ -1099,6 +1099,8 @@ class HudServerSettings(BaseModel):
 
 class LlamaCppSettings(BaseModel):
     run_locally: bool = False
+    gpu_backend: str = "vulkan"
+    """GPU backend for llama-server: 'vulkan' (default, works on all GPUs), 'cuda' (NVIDIA only, fastest), 'cpu' (no GPU)."""
     summarize_model: str = "Qwen3.5-0.8B-Q4_K_M.gguf"
     embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
     n_ctx: int = 4096

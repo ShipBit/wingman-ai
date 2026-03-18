@@ -135,9 +135,7 @@ class ConfigManager:
 
             if err_type == "missing":
                 field = loc[-1] if loc else "?"
-                lines.append(
-                    f"  • {path_str}: required field '{field}' is missing"
-                )
+                lines.append(f"  • {path_str}: required field '{field}' is missing")
             else:
                 lines.append(f"  • {path_str}: {raw_msg}")
 
@@ -446,7 +444,9 @@ class ConfigManager:
                 if filename.endswith(".yaml") and not filename.startswith("."):
                     wingman_config = self.read_config(path.join(root, filename))
                     try:
-                        merged_config = self.merge_configs(default_config, wingman_config)
+                        merged_config = self.merge_configs(
+                            default_config, wingman_config
+                        )
                     except ConfigValidationError as e:
                         # Re-raise with the source YAML file name prepended so the
                         # user immediately knows which file to open and fix.
@@ -1385,6 +1385,7 @@ class ConfigManager:
         if system_manager.is_cuda_available():
             self.settings_config.voice_activation.fasterwhisper.device = "cuda"
             self.settings_config.voice_activation.fasterwhisper.compute_type = "auto"
+            self.settings_config.llama_cpp.gpu_backend = "cuda"
             self.printr.print(
                 f"- GPU detected: {system_manager.get_gpu_name()}",
                 color=LogType.STARTUP,
@@ -1394,6 +1395,13 @@ class ConfigManager:
             )
             self.printr.print(
                 "- Auto-configured FasterWhisper to use CUDA",
+                color=LogType.STARTUP,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+            self.printr.print(
+                "- Auto-configured Local AI to use CUDA",
                 color=LogType.STARTUP,
                 server_only=True,
                 source=LogSource.SYSTEM,

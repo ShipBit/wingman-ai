@@ -492,6 +492,12 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
+            methods=["GET"],
+            path="/settings/local-ai/backends",
+            endpoint=self.get_local_ai_backends,
+            tags=tags,
+        )
+        self.router.add_api_route(
             methods=["POST"],
             path="/elevenlabs/generate-sfx",
             endpoint=self.generate_sfx_elevenlabs,
@@ -2036,11 +2042,22 @@ class WingmanCore(WebSocketUser):
     async def get_local_ai_status(self) -> dict:
         status = self.local_model_manager.get_status()
         status["is_ready"] = self.local_ai_service.is_ready()
+        status["cuda_available"] = self.system_manager.is_cuda_available()
         return status
+
+    # GET /settings/local-ai/backends
+    def get_local_ai_backends(self) -> list[str]:
+        backends = self.local_model_manager.get_available_backends()
+        # Filter CUDA out if not available on this machine
+        if not self.system_manager.is_cuda_available():
+            backends = [b for b in backends if b != "cuda"]
+        return backends
 
     # POST /settings/local-ai/download-models
     async def download_local_ai_models(self) -> dict:
-        success = await self.local_model_manager.download_models()
+        success = await self.local_model_manager.download_models(
+            cuda_available=self.system_manager.is_cuda_available()
+        )
         if success:
             await self.local_ai_service.initialize()
         return {

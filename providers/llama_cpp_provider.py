@@ -277,7 +277,7 @@ class LlamaCppProvider:
         gc.collect()
 
     def update_settings(self, new_settings: LlamaCppSettings):
-        """Update settings. If run_locally changed or models changed, handle restart."""
+        """Update settings. If run_locally changed or models/backend changed, handle restart."""
         old = self.settings
         self.settings = new_settings
         self.model_manager.update_settings(new_settings)
@@ -285,7 +285,9 @@ class LlamaCppProvider:
         if old.run_locally and not new_settings.run_locally:
             self.unload_models()
         elif new_settings.run_locally:
-            summarize_changed = (
+            # Backend change requires full restart of both servers
+            backend_changed = old.gpu_backend != new_settings.gpu_backend
+            summarize_changed = backend_changed or (
                 old.summarize_model != new_settings.summarize_model
                 or old.n_ctx != new_settings.n_ctx
                 or old.n_threads != new_settings.n_threads
@@ -294,7 +296,7 @@ class LlamaCppProvider:
                 self._stop_process(self._summarize_process)
                 self._summarize_process = None
                 self._summarize_client = None
-            embed_changed = (
+            embed_changed = backend_changed or (
                 old.embed_model != new_settings.embed_model
                 or old.n_threads != new_settings.n_threads
             )
