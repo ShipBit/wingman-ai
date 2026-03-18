@@ -549,6 +549,16 @@ class FeaturesConfig(BaseModel):
     remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
     use_generic_instant_responses: bool
+    condense_conversation: bool = False
+    """Enable automatic conversation condensation using the local summarization model.
+    When enabled, older messages are periodically summarized and replaced with a compact summary,
+    saving tokens while preserving key information."""
+    condense_threshold: int = 20
+    """Number of user messages before triggering condensation. Only messages beyond the
+    most recent `condense_keep_recent` messages will be summarized."""
+    condense_keep_recent: int = 6
+    """Number of recent user messages (and their associated assistant/tool messages) to
+    always keep verbatim. Older messages get condensed into the running summary."""
 
 
 class AudioFile(BaseModel):
@@ -1097,15 +1107,20 @@ class HudServerSettings(BaseModel):
     """Which screen/monitor to render the HUD on (1 = primary, 2 = secondary, etc.)."""
 
 
+class PlaygroundChatRequest(BaseModel):
+    system_message: str
+    user_message: str
+
+
 class LlamaCppSettings(BaseModel):
     run_locally: bool = False
     gpu_backend: str = "vulkan"
     """GPU backend for llama-server: 'vulkan' (default, works on all GPUs), 'cuda' (NVIDIA only, fastest), 'cpu' (no GPU)."""
-    summarize_model: str = "Qwen3.5-0.8B-Q4_K_M.gguf"
+    summarize_model: str = "Qwen3.5-2B-Q4_K_M.gguf"
     embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
     n_ctx: int = 4096
     n_threads: int = 0
-    """Number of CPU threads for local inference. 0 = auto (half of logical cores, max 4)."""
+    """Number of CPU threads for local inference. 0 = auto (half of logical cores, max 8)."""
     reasoning_effort: int = 0
     """Reasoning effort for the summarize model. 0 = disabled (fastest), 1 = enabled (slow)."""
     summarize_remote_host: str = "http://127.0.0.1"

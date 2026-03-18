@@ -108,9 +108,10 @@ class McpStateChangedCommand(WebSocketCommandModel):
 
 
 class AudioLibraryPlaybackFinishedCommand(WebSocketCommandModel):
-    command: Literal["audio_library_playback_finished"] = "audio_library_playback_finished"
+    command: Literal["audio_library_playback_finished"] = (
+        "audio_library_playback_finished"
+    )
     audio_file: AudioFile
-
 
 
 class CoreStateChangedCommand(WebSocketCommandModel):
@@ -125,3 +126,23 @@ class CoreStateChangedCommand(WebSocketCommandModel):
     command: Literal["core_state_changed"] = "core_state_changed"
     state: CoreState
     """The current state of Wingman AI Core."""
+
+
+class ConversationCondensationCommand(WebSocketCommandModel):
+    """Sent when conversation condensation starts or finishes for a wingman."""
+
+    command: Literal["conversation_condensation"] = "conversation_condensation"
+    wingman_name: str
+    """The wingman whose conversation is being condensed."""
+    status: str
+    """'started' or 'finished'."""
+    messages_condensed: Optional[int] = None
+    """Number of messages that were condensed (only on finish)."""
+    messages_remaining: Optional[int] = None
+    """Number of messages remaining after condensation (only on finish)."""
+    summary_length: Optional[int] = None
+    """Character length of the summary (only on finish)."""
+    estimated_tokens_saved: Optional[int] = None
+    """Rough estimate of tokens saved by condensation (only on finish)."""
+    summary_text: Optional[str] = None
+    """The actual summary text (only on finish)."""

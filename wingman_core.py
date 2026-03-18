@@ -55,6 +55,7 @@ from api.interface import (
     MigrateBackstoryRequest,
     MigrateBackstoryResponse,
     OpenRouterEndpointResult,
+    PlaygroundChatRequest,
     VoiceActivationSettings,
     WingmanInitializationError,
 )
@@ -75,14 +76,17 @@ from services.file import (
     get_audio_library_dir,
     get_custom_voices_dir,
     get_lore_library_dir,
+    get_prompt,
 )
 from services.local_ai_service import LocalAiService
+from services.token_utils import count_tokens
 from services.local_model_manager import LocalModelManager
 from services.voice_service import VoiceService
 from services.settings_service import SettingsService
 from services.config_service import ConfigService
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
+from services.benchmark import Benchmark
 from services.lore_library import LoreLibraryService
 from services.audio_recorder import RECORDING_PATH, AudioRecorder
 from services.config_manager import ConfigManager
@@ -166,6 +170,12 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/reset-conversation-history",
             endpoint=self.reset_conversation_history,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/condense-conversation",
+            endpoint=self.condense_conversation,
             tags=tags,
         )
         self.router.add_api_route(
@@ -495,6 +505,54 @@ class WingmanCore(WebSocketUser):
             methods=["GET"],
             path="/settings/local-ai/backends",
             endpoint=self.get_local_ai_backends,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/settings/local-ai/summarize-models",
+            endpoint=self.get_local_ai_summarize_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/playground/chat",
+            endpoint=self.playground_chat,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/playground/embed",
+            endpoint=self.playground_embed,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/local-ai/playground/benchmark",
+            endpoint=self.playground_benchmark,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/local-ai/summarize",
+            endpoint=self.api_summarize,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/local-ai/enhance-backstory",
+            endpoint=self.api_enhance_backstory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/local-ai/enhance-backstory-budget",
+            endpoint=self.api_enhance_backstory_budget,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/local-ai/embed",
+            endpoint=self.api_embed,
             tags=tags,
         )
         self.router.add_api_route(
@@ -1086,6 +1144,7 @@ class WingmanCore(WebSocketUser):
         for wingman in self.tower.wingmen:
             if isinstance(wingman, OpenAiWingman):
                 wingman.lore_library_service = self.lore_library
+                wingman.local_ai_service = self.local_ai_service
 
         # Only show toast errors for non-MCP errors (MCP errors are already logged in mcp_client.py)
         for error in self.tower_errors:
@@ -1629,6 +1688,16 @@ class WingmanCore(WebSocketUser):
             )
         return True
 
+    # POST /condense-conversation
+    async def condense_conversation(self, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman:
+            return False
+        if not hasattr(wingman, "_condense_history"):
+            return False
+        await wingman._condense_history(force=True)
+        return True
+
     # GET /fasterwhisper/modelsizes
     def get_fasterwhisper_modelsizes(self):
         model_sizes = [
@@ -2053,6 +2122,10 @@ class WingmanCore(WebSocketUser):
             backends = [b for b in backends if b != "cuda"]
         return backends
 
+    # GET /settings/local-ai/summarize-models
+    def get_local_ai_summarize_models(self) -> list[dict]:
+        return self.local_model_manager.get_summarize_models()
+
     # POST /settings/local-ai/download-models
     async def download_local_ai_models(self) -> dict:
         success = await self.local_model_manager.download_models(
@@ -2064,6 +2137,266 @@ class WingmanCore(WebSocketUser):
             "success": success,
             **self.local_model_manager.get_status(),
         }
+
+    # POST /settings/local-ai/playground/chat
+    async def playground_chat(self, request: PlaygroundChatRequest) -> dict:
+        """Test the summarization model with a system + user message."""
+        if not self.local_ai_service.is_ready():
+            return {
+                "success": False,
+                "error": "Local AI service is not ready. Make sure models are loaded.",
+            }
+
+        benchmark = Benchmark("playground_chat")
+        benchmark.start_snapshot("inference")
+        result = self.local_ai_service.summarize(
+            text=request.user_message,
+            system_prompt=request.system_message,
+        )
+        benchmark.finish_snapshot()
+        bench_result = benchmark.finish()
+
+        if result is None:
+            return {"success": False, "error": "Summarization returned no result."}
+
+        return {
+            "success": True,
+            "response": result,
+            "benchmark": bench_result.model_dump(),
+        }
+
+    # POST /settings/local-ai/playground/embed
+    async def playground_embed(self, texts: list[str] = Body(...)) -> dict:
+        """Test the embedding model with one or more texts."""
+        if not self.local_ai_service.is_ready():
+            return {
+                "success": False,
+                "error": "Local AI service is not ready. Make sure models are loaded.",
+            }
+
+        benchmark = Benchmark("playground_embed")
+        benchmark.start_snapshot("inference")
+        result = self.local_ai_service.embed(texts)
+        benchmark.finish_snapshot()
+        bench_result = benchmark.finish()
+
+        if result is None:
+            return {"success": False, "error": "Embedding returned no result."}
+
+        return {
+            "success": True,
+            "embeddings": [
+                {"text": t, "dimensions": len(e), "preview": e[:8]}
+                for t, e in zip(texts, result)
+            ],
+            "benchmark": bench_result.model_dump(),
+        }
+
+    # POST /settings/local-ai/playground/benchmark
+    async def playground_benchmark(
+        self,
+        iterations: int = 3,
+    ) -> dict:
+        """Run an automated benchmark suite over both models."""
+        if not self.local_ai_service.is_ready():
+            return {
+                "success": False,
+                "error": "Local AI service is not ready. Make sure models are loaded.",
+            }
+
+        iterations = max(1, min(iterations, 20))
+
+        benchmark = Benchmark("full_benchmark")
+        results = {"summarize_runs": [], "embed_runs": []}
+
+        # Summarize benchmark
+        test_texts = [
+            "The quick brown fox jumps over the lazy dog. This is a short test sentence.",
+            "Artificial intelligence is transforming how we interact with technology. Large language models can understand and generate human-like text, while embedding models convert text into numerical vectors that capture semantic meaning. These capabilities enable powerful applications like semantic search, text summarization, and conversational AI assistants.",
+            "In a galaxy far, far away, there existed a civilization that had mastered the art of faster-than-light travel. Their ships could traverse the vast emptiness between star systems in mere hours. The key to their technology was a crystal found only in the deepest mines of their home world. This crystal, when properly refined and charged, could bend the fabric of spacetime itself, creating tunnels through which spacecraft could pass almost instantaneously. However, the supply of this precious mineral was dwindling, and the civilization faced an existential crisis as they searched for alternatives.",
+        ]
+
+        for i in range(iterations):
+            for j, text in enumerate(test_texts):
+                label = f"summarize_iter{i+1}_text{j+1}_{len(text)}chars"
+                benchmark.start_snapshot(label)
+                res = self.local_ai_service.summarize(text)
+                benchmark.finish_snapshot()
+                results["summarize_runs"].append(
+                    {
+                        "iteration": i + 1,
+                        "input_length": len(text),
+                        "output_length": len(res) if res else 0,
+                        "label": label,
+                    }
+                )
+
+        # Embed benchmark
+        embed_inputs = [
+            ["Hello world"],
+            ["The quick brown fox", "jumps over the lazy dog"],
+            [
+                "Artificial intelligence",
+                "machine learning",
+                "deep neural networks",
+                "natural language processing",
+            ],
+        ]
+
+        for i in range(iterations):
+            for j, texts in enumerate(embed_inputs):
+                label = f"embed_iter{i+1}_batch{j+1}_{len(texts)}texts"
+                benchmark.start_snapshot(label)
+                res = self.local_ai_service.embed(texts)
+                benchmark.finish_snapshot()
+                results["embed_runs"].append(
+                    {
+                        "iteration": i + 1,
+                        "num_texts": len(texts),
+                        "dimensions": len(res[0]) if res else 0,
+                        "label": label,
+                    }
+                )
+
+        bench_result = benchmark.finish()
+        snapshots = bench_result.snapshots or []
+
+        # Calculate averages
+        sum_times = [
+            s.execution_time_ms for s in snapshots if s.label.startswith("summarize_")
+        ]
+        emb_times = [
+            s.execution_time_ms for s in snapshots if s.label.startswith("embed_")
+        ]
+
+        return {
+            "success": True,
+            "iterations": iterations,
+            "total_time_ms": bench_result.execution_time_ms,
+            "formatted_total_time": bench_result.formatted_execution_time,
+            "summarize_avg_ms": sum(sum_times) / len(sum_times) if sum_times else 0,
+            "embed_avg_ms": sum(emb_times) / len(emb_times) if emb_times else 0,
+            "snapshots": [s.model_dump() for s in snapshots],
+            "runs": results,
+        }
+
+    # POST /local-ai/summarize
+    async def api_summarize(
+        self,
+        text: str = Body(..., embed=True),
+        system_prompt: str = Body(
+            "",
+            embed=True,
+        ),
+        max_tokens: int = Body(
+            512,
+            embed=True,
+        ),
+    ) -> dict:
+        """Public API: Summarize text using the local AI service."""
+        if not self.local_ai_service.is_ready():
+            raise HTTPException(
+                status_code=503,
+                detail="Local AI service is not ready. Make sure models are loaded.",
+            )
+        result = self.local_ai_service.summarize(
+            text=text, system_prompt=system_prompt, max_tokens=max_tokens
+        )
+        if result is None:
+            raise HTTPException(status_code=500, detail="Summarization failed.")
+        return {"result": result}
+
+    # POST /local-ai/enhance-backstory
+    async def api_enhance_backstory(
+        self,
+        backstory: str = Body(..., embed=True),
+    ) -> dict:
+        """Enhance a wingman backstory using the local AI service."""
+        if not self.local_ai_service.is_ready():
+            raise HTTPException(
+                status_code=503,
+                detail="Local AI service is not ready. Make sure models are loaded.",
+            )
+        system_prompt = get_prompt("enhance-backstory")
+
+        # Hard cap on backstory size (cost control + conversation model budget)
+        MAX_BACKSTORY_TOKENS = 2048
+        prompt_tokens = count_tokens(system_prompt)
+        backstory_tokens = count_tokens(backstory)
+
+        if backstory_tokens > MAX_BACKSTORY_TOKENS:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Backstory too long: ~{backstory_tokens} tokens "
+                    f"(max {MAX_BACKSTORY_TOKENS}). "
+                    f"Consider moving world lore to the Lore Library."
+                ),
+            )
+
+        # Validate token budget and scale output dynamically
+        n_ctx = self.local_ai_service.settings.n_ctx
+        available = n_ctx - prompt_tokens - backstory_tokens
+
+        if available < 256:
+            max_input = n_ctx - prompt_tokens - 256
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Backstory too long: ~{backstory_tokens} tokens "
+                    f"(max ~{max_input} for current context size of {n_ctx}). "
+                    f"Shorten the backstory or increase the Local AI context size."
+                ),
+            )
+
+        # Give the model enough room: at least as many tokens as the input,
+        # but cap at what's available after prompt + input
+        max_output_tokens = min(available, max(backstory_tokens, 1024))
+
+        result = self.local_ai_service.summarize(
+            text=backstory,
+            system_prompt=system_prompt,
+            max_tokens=max_output_tokens,
+        )
+        if result is None:
+            raise HTTPException(
+                status_code=500, detail="Backstory enhancement failed."
+            )
+        return {"result": result}
+
+    # GET /local-ai/enhance-backstory-budget
+    async def api_enhance_backstory_budget(self) -> dict:
+        """Return the max backstory tokens for enhancement based on current settings.
+
+        The output scales dynamically (model gets as many output tokens as input tokens),
+        so the max input is roughly half the available space after the prompt.
+        We reserve a minimum of 256 output tokens.
+        """
+        system_prompt = get_prompt("enhance-backstory")
+        prompt_tokens = count_tokens(system_prompt)
+        n_ctx = self.local_ai_service.settings.n_ctx
+        # Hard cap for cost control, also limited by local AI context
+        MAX_BACKSTORY_TOKENS = 2048
+        usable = n_ctx - prompt_tokens
+        max_backstory_tokens = min(MAX_BACKSTORY_TOKENS, usable // 2)
+        return {
+            "max_backstory_tokens": max_backstory_tokens,
+            "n_ctx": n_ctx,
+            "prompt_tokens": prompt_tokens,
+        }
+
+    # POST /local-ai/embed
+    async def api_embed(self, texts: list[str] = Body(...)) -> dict:
+        """Public API: Generate embeddings using the local AI service."""
+        if not self.local_ai_service.is_ready():
+            raise HTTPException(
+                status_code=503,
+                detail="Local AI service is not ready. Make sure models are loaded.",
+            )
+        result = self.local_ai_service.embed(texts)
+        if result is None:
+            raise HTTPException(status_code=500, detail="Embedding failed.")
+        return {"embeddings": result}
 
     # POST /elevenlabs/generate-sfx
     async def generate_sfx_elevenlabs(
