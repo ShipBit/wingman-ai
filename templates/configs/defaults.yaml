@@ -45,6 +45,8 @@ prompts:
 
     {skills}
 
+    {conversation_summary}
+
     # CONVERSATION STYLE
     - Keep responses brief and efficient
     - Mirror the user's language
@@ -58,6 +60,9 @@ features:
   conversation_provider: wingman_pro
   image_generation_provider: wingman_pro
   use_generic_instant_responses: false
+  condense_conversation: false
+  condense_threshold: 20
+  condense_keep_recent: 6
 sound:
   effects: []
   play_beep: false
