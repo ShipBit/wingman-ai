@@ -43,6 +43,7 @@ datas = [
     ('templates/configs', 'templates/configs'),
     ('templates/migration', 'templates/migration'),
     ('audio_samples', 'audio_samples'),
+    ('prompts', 'prompts'),
     ('LICENSE', '.'),
 ]
 
@@ -186,7 +187,7 @@ hiddenimports = [
 
     # ctranslate2 for FasterWhisper
     'ctranslate2',
-	
+
 	# for pocket-tts
 	'engineio.async_drivers.threading',
     'torch',

@@ -1,5 +1,6 @@
 import gc
 import os
+import platform
 import subprocess
 import time
 from typing import Optional
@@ -40,12 +41,12 @@ class LlamaCppProvider:
         self._embed_client: Optional[OpenAI] = None
 
     def _resolve_n_threads(self) -> int:
-        """Resolve thread count: 0 means auto (half of logical cores, min 2, max 4)."""
+        """Resolve thread count: 0 means auto (half of logical cores, min 2, max 8)."""
         n = self.settings.n_threads
         if n > 0:
             return n
         cores = os.cpu_count() or 4
-        return max(2, min(cores // 2, 4))
+        return max(2, min(cores // 2, 8))
 
     def _start_server(
         self,
@@ -162,14 +163,19 @@ class LlamaCppProvider:
         model_path = self.model_manager.get_summarize_model_path()
         n_ctx = self.settings.n_ctx
         n_threads = self._resolve_n_threads()
+        rb = 0 if self.settings.reasoning_effort == 0 else -1
+        backend = self.model_manager._get_active_backend()
+        gpu_label = "metal" if platform.system() == "Darwin" else backend
+        model_name = os.path.basename(model_path)
         printr.print(
-            f"Starting summarize server: {model_path} (n_ctx={n_ctx}, n_threads={n_threads})",
+            f"Starting summarize server: {model_name} "
+            f"(n_ctx={n_ctx}, n_threads={n_threads}, gpu={gpu_label}, "
+            f"reasoning={'off' if rb == 0 else 'on'}, port={MANAGED_SUMMARIZE_PORT})",
             color=LogType.INFO,
             server_only=True,
         )
 
         # reasoning_budget: 0 = disable thinking (fast), >0 = allow thinking tokens
-        rb = 0 if self.settings.reasoning_effort == 0 else -1
         self._summarize_process = self._start_server(
             model_path=model_path,
             port=MANAGED_SUMMARIZE_PORT,
@@ -218,8 +224,12 @@ class LlamaCppProvider:
 
         model_path = self.model_manager.get_embed_model_path()
         n_threads = self._resolve_n_threads()
+        backend = self.model_manager._get_active_backend()
+        gpu_label = "metal" if platform.system() == "Darwin" else backend
+        model_name = os.path.basename(model_path)
         printr.print(
-            f"Starting embed server: {model_path} (n_threads={n_threads})",
+            f"Starting embed server: {model_name} "
+            f"(n_ctx=2048, n_threads={n_threads}, gpu={gpu_label}, port={MANAGED_EMBED_PORT})",
             color=LogType.INFO,
             server_only=True,
         )
@@ -308,9 +318,14 @@ class LlamaCppProvider:
     def summarize(
         self,
         text: str,
-        system_prompt: str = "You are a helpful assistant that summarizes text concisely.",
+        system_prompt: str = "",
+        max_tokens: int = 512,
     ) -> Optional[str]:
         """Summarize text using the managed llama-server."""
+        if not system_prompt:
+            from services.file import get_prompt
+
+            system_prompt = get_prompt("summarize-default")
         if not self.load_summarize_model():
             return None
 
@@ -321,10 +336,13 @@ class LlamaCppProvider:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text},
                 ],
-                max_tokens=512,
+                max_tokens=max_tokens,
                 temperature=0.3,
+                frequency_penalty=0.5,
+                presence_penalty=0.3,
             )
-            return result.choices[0].message.content
+            raw = result.choices[0].message.content
+            return self._deduplicate_lines(raw) if raw else None
         except Exception as e:
             printr.print(
                 f"Summarization failed: {e}",
@@ -355,3 +373,15 @@ class LlamaCppProvider:
     def is_ready(self) -> bool:
         """Check if server processes are running."""
         return self._summarize_process is not None or self._embed_process is not None
+
+    @staticmethod
+    def _deduplicate_lines(text: str) -> str:
+        """Remove duplicate lines from model output to fix small-model repetition loops."""
+        seen = set()
+        result = []
+        for line in text.split("\n"):
+            normalized = line.strip().lower()
+            if not normalized or normalized not in seen:
+                seen.add(normalized)
+                result.append(line)
+        return "\n".join(result).strip()

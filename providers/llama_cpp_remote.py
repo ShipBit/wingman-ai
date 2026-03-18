@@ -50,9 +50,14 @@ class LlamaCppRemote:
     def summarize(
         self,
         text: str,
-        system_prompt: str = "You are a helpful assistant that summarizes text concisely.",
+        system_prompt: str = "",
+        max_tokens: int = 512,
     ) -> Optional[str]:
         """Summarize text via remote llama-server."""
+        if not system_prompt:
+            from services.file import get_prompt
+
+            system_prompt = get_prompt("summarize-default")
         try:
             response = self._summarize_client.chat.completions.create(
                 model="local-model",
@@ -60,10 +65,13 @@ class LlamaCppRemote:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text},
                 ],
-                max_tokens=512,
+                max_tokens=max_tokens,
                 temperature=0.3,
+                frequency_penalty=0.5,
+                presence_penalty=0.3,
             )
-            return response.choices[0].message.content
+            raw = response.choices[0].message.content
+            return self._deduplicate_lines(raw) if raw else None
         except Exception as e:
             printr.print(
                 f"Remote summarization failed: {e}",
@@ -96,3 +104,15 @@ class LlamaCppRemote:
             return True
         except Exception:
             return False
+
+    @staticmethod
+    def _deduplicate_lines(text: str) -> str:
+        """Remove duplicate lines from model output to fix small-model repetition loops."""
+        seen = set()
+        result = []
+        for line in text.split("\n"):
+            normalized = line.strip().lower()
+            if not normalized or normalized not in seen:
+                seen.add(normalized)
+                result.append(line)
+        return "\n".join(result).strip()

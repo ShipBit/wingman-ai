@@ -1,9 +1,27 @@
 from os import makedirs, path
+from functools import lru_cache
 from platformdirs import PlatformDirs
 from services.system_manager import LOCAL_VERSION
 
 APP_NAME = "WingmanAI"
 APP_AUTHOR = "ShipBit"
+
+_PROMPTS_DIR = path.join(path.abspath(path.dirname(__file__)), "..", "prompts")
+
+
+@lru_cache(maxsize=None)
+def get_prompt(name: str) -> str:
+    """Load a prompt template from the prompts/ directory.
+
+    Args:
+        name: Filename without extension, e.g. 'condense-conversation'.
+
+    Returns:
+        The prompt text with leading/trailing whitespace stripped.
+    """
+    filepath = path.join(_PROMPTS_DIR, f"{name}.md")
+    with open(filepath, "r", encoding="utf-8") as f:
+        return f.read().strip()
 
 
 def get_writable_dir(subdir: str = None) -> str:

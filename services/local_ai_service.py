@@ -43,12 +43,17 @@ class LocalAiService:
     def summarize(
         self,
         text: str,
-        system_prompt: str = "You are a helpful assistant that summarizes text concisely.",
+        system_prompt: str = "",
+        max_tokens: int = 512,
     ) -> Optional[str]:
         """Summarize text using the active provider (local or remote)."""
+        if not system_prompt:
+            from services.file import get_prompt
+
+            system_prompt = get_prompt("summarize-default")
         if self.settings.run_locally:
-            return self.provider.summarize(text, system_prompt)
-        return self.remote.summarize(text, system_prompt)
+            return self.provider.summarize(text, system_prompt, max_tokens)
+        return self.remote.summarize(text, system_prompt, max_tokens)
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
         """Generate embeddings using the active provider (local or remote)."""

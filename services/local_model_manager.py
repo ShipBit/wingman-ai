@@ -16,12 +16,23 @@ from services.printr import Printr
 
 printr = Printr()
 
-# Default model definitions used for auto-download
-DEFAULT_SUMMARIZE_MODEL = {
-    "repo": "unsloth/Qwen3.5-0.8B-GGUF",
-    "filename": "Qwen3.5-0.8B-Q4_K_M.gguf",
-    "expected_size_mb": 500,
+# Available summarize models — keyed by GGUF filename
+SUMMARIZE_MODELS: dict[str, dict] = {
+    "Qwen3.5-2B-Q4_K_M.gguf": {
+        "repo": "unsloth/Qwen3.5-2B-GGUF",
+        "filename": "Qwen3.5-2B-Q4_K_M.gguf",
+        "expected_size_mb": 1280,
+        "label": "Qwen 3.5 2B (recommended)",
+    },
+    "Qwen3.5-0.8B-Q4_K_M.gguf": {
+        "repo": "unsloth/Qwen3.5-0.8B-GGUF",
+        "filename": "Qwen3.5-0.8B-Q4_K_M.gguf",
+        "expected_size_mb": 500,
+        "label": "Qwen 3.5 0.8B (lightweight)",
+    },
 }
+
+DEFAULT_SUMMARIZE_MODEL = SUMMARIZE_MODELS["Qwen3.5-2B-Q4_K_M.gguf"]
 
 DEFAULT_EMBED_MODEL = {
     "repo": "nomic-ai/nomic-embed-text-v1.5-GGUF",
@@ -181,8 +192,12 @@ class LocalModelManager:
         self._downloading = True
         try:
             loop = asyncio.get_event_loop()
+            # Download the summarize model matching the current settings selection
+            active_model = SUMMARIZE_MODELS.get(
+                self.settings.summarize_model, DEFAULT_SUMMARIZE_MODEL
+            )
             summarize_ok = await loop.run_in_executor(
-                None, self._download_model, DEFAULT_SUMMARIZE_MODEL
+                None, self._download_model, active_model
             )
             embed_ok = await loop.run_in_executor(
                 None, self._download_model, DEFAULT_EMBED_MODEL
@@ -223,6 +238,20 @@ class LocalModelManager:
             "is_downloading": self._downloading,
             "models_dir": self.models_dir,
         }
+
+    def get_summarize_models(self) -> list[dict]:
+        """Return the list of available summarize models for the UI dropdown."""
+        result = []
+        for filename, model_def in SUMMARIZE_MODELS.items():
+            result.append(
+                {
+                    "filename": filename,
+                    "label": model_def["label"],
+                    "size_mb": model_def["expected_size_mb"],
+                    "downloaded": path.exists(path.join(self.models_dir, filename)),
+                }
+            )
+        return result
 
     # ── llama-server binary management ──────────────────────────────────
 
