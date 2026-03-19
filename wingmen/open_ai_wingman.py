@@ -1705,14 +1705,13 @@ class OpenAiWingman(Wingman):
             system_prompt = get_prompt("condense-conversation")
 
             # Handle context window overflow: chunk if text is too large
-            # Reserve ~300 tokens for system prompt + ~512 for output
             n_ctx = (
                 self.settings.llama_cpp.n_ctx
                 if hasattr(self.settings, "llama_cpp")
                 else 2048
             )
-            max_input_tokens = n_ctx - 812  # system prompt + output budget
 
+            system_prompt_tokens = count_tokens(system_prompt)
             user_prompt_prefix = (
                 existing_summary_section + "CONVERSATION TO SUMMARIZE:\n"
             )
@@ -1721,11 +1720,17 @@ class OpenAiWingman(Wingman):
                 "Now list every fact from the conversation above as bullet points.\n"
                 "Start from the FIRST message, end at the LAST. Include all secrets, names, preferences, and creative content:"
             )
-            available_tokens = (
-                max_input_tokens
-                - count_tokens(user_prompt_prefix)
-                - count_tokens(user_prompt_suffix)
+            prefix_suffix_tokens = (
+                count_tokens(user_prompt_prefix)
+                + count_tokens(user_prompt_suffix)
             )
+
+            # Reserve enough output tokens: at least 512, up to 40% of context
+            min_output_tokens = 512
+            max_output_tokens = max(min_output_tokens, n_ctx * 2 // 5)
+            # Input budget = context - system prompt - output budget
+            max_input_tokens = n_ctx - system_prompt_tokens - max_output_tokens
+            available_tokens = max_input_tokens - prefix_suffix_tokens
 
             if count_tokens(condensed_text) > available_tokens:
                 # Chunk: summarize in segments, then merge
@@ -1739,10 +1744,15 @@ class OpenAiWingman(Wingman):
                 user_prompt = (
                     f"{user_prompt_prefix}{condensed_text}{user_prompt_suffix}"
                 )
+                # Calculate actual output budget based on remaining context
+                input_tokens = system_prompt_tokens + count_tokens(user_prompt)
+                output_budget = max(min_output_tokens, n_ctx - input_tokens)
                 summary = await asyncio.get_event_loop().run_in_executor(
                     None,
                     lambda: self.local_ai_service.summarize(
-                        text=user_prompt, system_prompt=system_prompt
+                        text=user_prompt,
+                        system_prompt=system_prompt,
+                        max_tokens=output_budget,
                     ),
                 )
 
@@ -1878,12 +1888,12 @@ class OpenAiWingman(Wingman):
         merge_prompt = (
             f"{existing_summary_section}"
             f"PARTIAL SUMMARIES TO MERGE:\n{combined}\n\n"
-            "Merge these into a single coherent summary. Keep all key facts. Maximum 300 words:"
+            "Merge these into a single coherent summary. Keep all key facts:"
         )
         return await loop.run_in_executor(
             None,
             lambda: self.local_ai_service.summarize(
-                text=merge_prompt, system_prompt=system_prompt
+                text=merge_prompt, system_prompt=system_prompt, max_tokens=1024,
             ),
         )
 
