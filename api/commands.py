@@ -146,3 +146,17 @@ class ConversationCondensationCommand(WebSocketCommandModel):
     """Rough estimate of tokens saved by condensation (only on finish)."""
     summary_text: Optional[str] = None
     """The actual summary text (only on finish)."""
+
+
+class ConversationTokenUsageCommand(WebSocketCommandModel):
+    """Sent after each LLM call with actual API-reported token usage."""
+
+    command: Literal["conversation_token_usage"] = "conversation_token_usage"
+    wingman_name: str
+    """The wingman that made the LLM call."""
+    prompt_tokens: int
+    """Tokens sent to the LLM (system prompt + history + tools)."""
+    completion_tokens: int
+    """Tokens in the LLM response."""
+    is_local: bool = False
+    """True for LOCAL_LLM provider (free, not billed)."""

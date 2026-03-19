@@ -1069,7 +1069,11 @@ class OpenAiWingman(Wingman):
             )
             return None, None, None, True
 
-        response_message, tool_calls = await self._process_completion(completion, instant_command_executed is False)
+        response_message, tool_calls, usage = await self._process_completion(completion, instant_command_executed is False)
+
+        # Track token usage across the turn (last prompt_tokens, summed completion_tokens)
+        turn_prompt_tokens = usage[0]
+        turn_completion_tokens = usage[1]
 
         # add message and dummy tool responses to conversation history
         is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
@@ -1117,6 +1121,7 @@ class OpenAiWingman(Wingman):
                     self._add_tool_execution_snapshot(
                         benchmark, tool_execution_time_ms, tool_timings
                     )
+                await self._broadcast_token_usage(turn_prompt_tokens, turn_completion_tokens)
                 return None, instant_response, None, interrupt
 
             if is_summarize_needed:
@@ -1133,11 +1138,16 @@ class OpenAiWingman(Wingman):
                         self._add_tool_execution_snapshot(
                             benchmark, tool_execution_time_ms, tool_timings
                         )
+                    await self._broadcast_token_usage(turn_prompt_tokens, turn_completion_tokens)
                     return None, None, None, True
 
-                response_message, tool_calls = await self._process_completion(
+                response_message, tool_calls, usage = await self._process_completion(
                     completion
                 )
+                # Last call's prompt_tokens is most meaningful (includes full context)
+                turn_prompt_tokens = usage[0]
+                turn_completion_tokens += usage[1]
+
                 is_waiting_response_needed, is_summarize_needed = (
                     await self._add_gpt_response(response_message, tool_calls)
                 )
@@ -1151,6 +1161,7 @@ class OpenAiWingman(Wingman):
                     self._add_tool_execution_snapshot(
                         benchmark, tool_execution_time_ms, tool_timings
                     )
+                await self._broadcast_token_usage(turn_prompt_tokens, turn_completion_tokens)
                 return None, None, None, interrupt
 
         # Add final snapshots
@@ -1161,6 +1172,7 @@ class OpenAiWingman(Wingman):
             self._add_tool_execution_snapshot(
                 benchmark, tool_execution_time_ms, tool_timings
             )
+        await self._broadcast_token_usage(turn_prompt_tokens, turn_completion_tokens)
         return response_message.content, response_message.content, None, interrupt
 
     def _add_benchmark_snapshot(
@@ -1217,6 +1229,27 @@ class OpenAiWingman(Wingman):
                 execution_time_ms=total_time_ms,
                 formatted_execution_time=formatted_time,
                 snapshots=nested_snapshots if nested_snapshots else None,
+            )
+        )
+
+    async def _broadcast_token_usage(self, prompt_tokens: int, completion_tokens: int):
+        """Broadcast actual API-reported token usage to the client."""
+        if prompt_tokens == 0 and completion_tokens == 0:
+            return
+        if not printr._connection_manager:
+            return
+
+        from api.commands import ConversationTokenUsageCommand
+
+        is_local = (
+            self.config.features.conversation_provider == ConversationProvider.LOCAL_LLM
+        )
+        await printr._connection_manager.broadcast(
+            ConversationTokenUsageCommand(
+                wingman_name=self.name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                is_local=is_local,
             )
         )
 
@@ -2107,11 +2140,11 @@ class OpenAiWingman(Wingman):
             original_tokens = count_tokens(backstory)
             backstory = truncate_to_tokens(backstory, MAX_BACKSTORY_TOKENS)
             await printr.print_async(
-                f"Backstory will be truncated to {MAX_BACKSTORY_TOKENS} tokens for conversations (is {original_tokens}). "
+                f"[{self.name}] Backstory will be truncated to {MAX_BACKSTORY_TOKENS} tokens for conversations (is {original_tokens}). "
                 f"Your saved backstory is unchanged. Consider shortening it or moving world lore to the Lore Library.",
                 color=LogType.WARNING,
                 source_name=self.name,
-                source=LogSource.WINGMAN,
+                source=LogSource.SYSTEM,
             )
 
         # Build conversation summary section
@@ -2384,7 +2417,7 @@ class OpenAiWingman(Wingman):
             completion: The completion object from an OpenAI call.
 
         Returns:
-            A tuple containing the message response and tool calls from the completion.
+            A tuple containing the message response, tool calls, and usage (prompt_tokens, completion_tokens) from the completion.
         """
 
         response_message = completion.choices[0].message
@@ -2403,7 +2436,14 @@ class OpenAiWingman(Wingman):
                 response_message.tool_calls
             )
 
-        return response_message, response_message.tool_calls
+        # Extract token usage from the API response
+        prompt_tokens = 0
+        completion_tokens = 0
+        if completion.usage:
+            prompt_tokens = completion.usage.prompt_tokens or 0
+            completion_tokens = completion.usage.completion_tokens or 0
+
+        return response_message, response_message.tool_calls, (prompt_tokens, completion_tokens)
 
     async def _handle_tool_calls(self, tool_calls):
         """Processes all the tool calls identified in the response message.
