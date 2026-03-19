@@ -1520,15 +1520,34 @@ class OpenAiWingman(Wingman):
 
         return total_deleted_messages
 
+    def _estimate_conversation_tokens(self) -> int:
+        """Estimate the total token count of the current conversation history."""
+        return sum(
+            count_tokens(self._message_text_content(m)) for m in self.messages
+        )
+
+    def _get_summarize_capacity(self) -> int:
+        """Get the effective input capacity of the summarize model for a single pass.
+
+        Returns the number of conversation tokens that can fit in one summarization
+        pass, accounting for system prompt, framing text, and output budget.
+        """
+        n_ctx = (
+            self.settings.llama_cpp.n_ctx
+            if hasattr(self.settings, "llama_cpp")
+            else 2048
+        )
+        # Reserve: system prompt (~100 tok) + framing text (~80 tok) + output budget (40% of n_ctx)
+        output_budget = max(512, n_ctx * 2 // 5)
+        overhead = 180  # system prompt + prefix/suffix framing
+        return max(0, n_ctx - output_budget - overhead)
+
     async def _maybe_condense_history(self):
         """Check if condensation should run and fire it as a background task.
 
-        Condensation is skipped when:
-        - Feature is disabled
-        - Local AI is not ready
-        - Tool calls are pending (chained tool flow)
-        - A condensation is already in progress
-        - Message count is below threshold
+        Uses a token-based trigger: condenses when the conversation approaches
+        70% of what the summarize model can handle in a single pass, so we
+        avoid chunking. Also has a message count safety cap.
         """
         if not self.config.features.condense_conversation:
             return
@@ -1539,11 +1558,19 @@ class OpenAiWingman(Wingman):
         if self._is_condensing:
             return
 
-        threshold = self.config.features.condense_threshold
+        # Token-based trigger: condense when conversation reaches 70% of
+        # what the summarize model can handle in one pass
+        capacity = self._get_summarize_capacity()
+        conversation_tokens = self._estimate_conversation_tokens()
+        token_trigger = conversation_tokens >= int(capacity * 0.7)
+
+        # Message count safety cap
         user_msg_count = sum(
             1 for m in self.messages if self.__get_message_role(m) == "user"
         )
-        if user_msg_count < threshold:
+        message_trigger = user_msg_count >= self.config.features.condense_max_messages
+
+        if not token_trigger and not message_trigger:
             return
 
         # Fire and forget — runs in background so user is never blocked
@@ -1584,13 +1611,6 @@ class OpenAiWingman(Wingman):
             else min(self.config.features.condense_keep_recent, 2)
         )
         total_msg_count = len(self.messages)
-
-        # Count user messages
-        user_msg_count = sum(
-            1 for m in self.messages if self.__get_message_role(m) == "user"
-        )
-        if not force and user_msg_count < self.config.features.condense_threshold:
-            return
 
         # Need at least something to condense beyond what we keep
         if total_msg_count <= keep_recent:
@@ -1867,10 +1887,18 @@ class OpenAiWingman(Wingman):
                 f"CONVERSATION TO SUMMARIZE (part {i + 1}/{len(chunks)}):\n{chunk}\n\n"
                 "---\nList every fact from the above as bullet points. Include all secrets, names, preferences, and creative content:"
             )
+            # Give each chunk a generous output budget
+            chunk_input_tokens = count_tokens(system_prompt) + count_tokens(user_prompt)
+            n_ctx = (
+                self.settings.llama_cpp.n_ctx
+                if hasattr(self.settings, "llama_cpp")
+                else 2048
+            )
+            chunk_output_budget = max(512, n_ctx - chunk_input_tokens)
             result = await loop.run_in_executor(
                 None,
-                lambda p=user_prompt: self.local_ai_service.summarize(
-                    text=p, system_prompt=system_prompt
+                lambda p=user_prompt, mt=chunk_output_budget: self.local_ai_service.summarize(
+                    text=p, system_prompt=system_prompt, max_tokens=mt,
                 ),
             )
             if result:

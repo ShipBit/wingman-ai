@@ -551,11 +551,12 @@ class FeaturesConfig(BaseModel):
     use_generic_instant_responses: bool
     condense_conversation: bool = False
     """Enable automatic conversation condensation using the local summarization model.
-    When enabled, older messages are periodically summarized and replaced with a compact summary,
-    saving tokens while preserving key information."""
-    condense_threshold: int = 20
-    """Number of user messages before triggering condensation. Only messages beyond the
-    most recent `condense_keep_recent` messages will be summarized."""
+    When enabled, older messages are automatically summarized when the conversation
+    approaches the summarize model's context window capacity, saving tokens while
+    preserving key information."""
+    condense_max_messages: int = 50
+    """Maximum number of user messages before forcing condensation, regardless of token count.
+    Acts as a safety cap to prevent unbounded message list growth."""
     condense_keep_recent: int = 6
     """Number of recent user messages (and their associated assistant/tool messages) to
     always keep verbatim. Older messages get condensed into the running summary."""
@@ -1119,6 +1120,7 @@ class LlamaCppSettings(BaseModel):
     summarize_model: str = "Qwen3.5-2B-Q4_K_M.gguf"
     embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
     n_ctx: int = 4096
+    """Context window size for the summarize model. Minimum 2048."""
     n_threads: int = 0
     """Number of CPU threads for local inference. 0 = auto (half of logical cores, max 8)."""
     reasoning_effort: int = 0
