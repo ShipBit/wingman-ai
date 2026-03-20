@@ -2156,12 +2156,12 @@ class WingmanCore(WebSocketUser):
         benchmark.finish_snapshot()
         bench_result = benchmark.finish()
 
-        if result is None:
+        if result.text is None:
             return {"success": False, "error": "Summarization returned no result."}
 
         return {
             "success": True,
-            "response": result,
+            "response": result.text,
             "benchmark": bench_result.model_dump(),
         }
 
@@ -2226,7 +2226,7 @@ class WingmanCore(WebSocketUser):
                     {
                         "iteration": i + 1,
                         "input_length": len(text),
-                        "output_length": len(res) if res else 0,
+                        "output_length": len(res.text) if res.text else 0,
                         "label": label,
                     }
                 )
@@ -2302,9 +2302,9 @@ class WingmanCore(WebSocketUser):
         result = self.local_ai_service.summarize(
             text=text, system_prompt=system_prompt, max_tokens=max_tokens
         )
-        if result is None:
+        if result.text is None:
             raise HTTPException(status_code=500, detail="Summarization failed.")
-        return {"result": result}
+        return {"result": result.text}
 
     # POST /local-ai/enhance-backstory
     async def api_enhance_backstory(
@@ -2358,11 +2358,11 @@ class WingmanCore(WebSocketUser):
             system_prompt=system_prompt,
             max_tokens=max_output_tokens,
         )
-        if result is None:
+        if result.text is None:
             raise HTTPException(
                 status_code=500, detail="Backstory enhancement failed."
             )
-        return {"result": result}
+        return {"result": result.text}
 
     # GET /local-ai/enhance-backstory-budget
     async def api_enhance_backstory_budget(self) -> dict:

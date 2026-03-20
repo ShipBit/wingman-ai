@@ -52,8 +52,10 @@ class LlamaCppRemote:
         text: str,
         system_prompt: str = "",
         max_tokens: int = 512,
-    ) -> Optional[str]:
+    ) -> "SummarizeResult":
         """Summarize text via remote llama-server."""
+        from providers.llama_cpp_provider import SummarizeResult
+
         if not system_prompt:
             from services.file import get_prompt
 
@@ -71,14 +73,33 @@ class LlamaCppRemote:
                 presence_penalty=0.3,
             )
             raw = response.choices[0].message.content
-            return self._deduplicate_lines(raw) if raw else None
+            cleaned = self._deduplicate_lines(raw) if raw else None
+
+            prompt_tokens = 0
+            completion_tokens = 0
+            if response.usage:
+                prompt_tokens = response.usage.prompt_tokens or 0
+                completion_tokens = response.usage.completion_tokens or 0
+
+            truncated = (
+                response.choices[0].finish_reason == "length"
+                if response.choices
+                else False
+            )
+
+            return SummarizeResult(
+                text=cleaned,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                truncated=truncated,
+            )
         except Exception as e:
             printr.print(
                 f"Remote summarization failed: {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
-            return None
+            return SummarizeResult(text=None)
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
         """Generate embeddings via remote llama-server."""

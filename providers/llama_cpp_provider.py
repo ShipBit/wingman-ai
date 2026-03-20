@@ -3,7 +3,7 @@ import os
 import platform
 import subprocess
 import time
-from typing import Optional
+from typing import NamedTuple, Optional
 
 import requests as http_requests
 from openai import OpenAI
@@ -18,6 +18,15 @@ printr = Printr()
 # Fixed ports for managed llama-server instances (offset from remote defaults)
 MANAGED_SUMMARIZE_PORT = 49172
 MANAGED_EMBED_PORT = 49173
+
+
+class SummarizeResult(NamedTuple):
+    """Result from a summarize call with model-reported token usage."""
+
+    text: Optional[str]
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    truncated: bool = False
 
 
 class LlamaCppProvider:
@@ -320,14 +329,18 @@ class LlamaCppProvider:
         text: str,
         system_prompt: str = "",
         max_tokens: int = 512,
-    ) -> Optional[str]:
-        """Summarize text using the managed llama-server."""
+    ) -> SummarizeResult:
+        """Summarize text using the managed llama-server.
+
+        Returns a SummarizeResult with text, token usage from the model's own
+        tokenizer, and whether the output was truncated (finish_reason=length).
+        """
         if not system_prompt:
             from services.file import get_prompt
 
             system_prompt = get_prompt("summarize-default")
         if not self.load_summarize_model():
-            return None
+            return SummarizeResult(text=None)
 
         try:
             result = self._summarize_client.chat.completions.create(
@@ -342,14 +355,34 @@ class LlamaCppProvider:
                 presence_penalty=0.3,
             )
             raw = result.choices[0].message.content
-            return self._deduplicate_lines(raw) if raw else None
+            cleaned = self._deduplicate_lines(raw) if raw else None
+
+            # Extract real token counts from the model's native tokenizer
+            prompt_tokens = 0
+            completion_tokens = 0
+            if result.usage:
+                prompt_tokens = result.usage.prompt_tokens or 0
+                completion_tokens = result.usage.completion_tokens or 0
+
+            truncated = (
+                result.choices[0].finish_reason == "length"
+                if result.choices
+                else False
+            )
+
+            return SummarizeResult(
+                text=cleaned,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                truncated=truncated,
+            )
         except Exception as e:
             printr.print(
                 f"Summarization failed: {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
-            return None
+            return SummarizeResult(text=None)
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
         """Generate embeddings via the managed llama-server."""

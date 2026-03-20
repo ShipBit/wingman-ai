@@ -45,8 +45,13 @@ class LocalAiService:
         text: str,
         system_prompt: str = "",
         max_tokens: int = 512,
-    ) -> Optional[str]:
-        """Summarize text using the active provider (local or remote)."""
+    ) -> "SummarizeResult":
+        """Summarize text using the active provider (local or remote).
+
+        Returns a SummarizeResult with text, token usage, and truncation flag.
+        """
+        from providers.llama_cpp_provider import SummarizeResult
+
         if not system_prompt:
             from services.file import get_prompt
 
