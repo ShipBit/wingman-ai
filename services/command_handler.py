@@ -59,8 +59,12 @@ class CommandHandler:
                     RecordMouseActionsCommand(**command), websocket
                 )
             elif command_name == "record_joystick_actions":
-                await self.handle_record_joystick_actions(
-                    RecordJoystickActionsCommand(**command), websocket
+                # Run as background task so the websocket loop stays responsive
+                # and can still process stop_recording commands.
+                asyncio.ensure_future(
+                    self.handle_record_joystick_actions(
+                        RecordJoystickActionsCommand(**command), websocket
+                    )
                 )
             elif command_name == "stop_recording":
                 await self.handle_stop_recording(

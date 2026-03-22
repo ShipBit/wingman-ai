@@ -642,8 +642,11 @@ class WingmanCore(WebSocketUser):
                                     )
                                 )
 
-            # Add a small sleep to prevent the loop from consuming too much CPU
-            await asyncio.sleep(0.01)
+            # Sleep longer when idle (no configs and not recording) to reduce CPU usage
+            if not self._joystick_configs and not self._joystick_recording_active:
+                await asyncio.sleep(0.1)
+            else:
+                await asyncio.sleep(0.01)
 
     def _build_joystick_configs(self, config: Config) -> list:
         """Build the list of joystick configs from wingman and settings config."""
@@ -678,9 +681,20 @@ class WingmanCore(WebSocketUser):
             asyncio.set_event_loop(loop)
             self._joystick_loop = loop  # Store reference for cleanup
             try:
-                # Create a task for start_joysticks instead of running it directly
                 self._joystick_task = loop.create_task(self.start_joysticks())
-                # Run the event loop forever instead of running until complete
+
+                # Stop the loop if the task finishes unexpectedly (e.g. exception)
+                # so the finally block runs and the thread exits cleanly.
+                def on_task_done(task):
+                    if task.exception():
+                        self.printr.print(
+                            f"Joystick event loop error: {task.exception()}",
+                            color=LogType.WARNING,
+                            server_only=True,
+                        )
+                    loop.call_soon_threadsafe(loop.stop)
+
+                self._joystick_task.add_done_callback(on_task_done)
                 loop.run_forever()
             finally:
                 # Ensure the task is cancelled and awaited before closing the loop.
