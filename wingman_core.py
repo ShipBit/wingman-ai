@@ -382,7 +382,11 @@ class WingmanCore(WebSocketUser):
         self._joystick_thread: Optional[threading.Thread] = None
         self._joystick_loop: Optional[asyncio.AbstractEventLoop] = None
         self._joystick_task: Optional[asyncio.Task] = None
+        self._joystick_configs: list = []
         self._mouse_hook_registered: bool = False
+        self._joystick_recording_active: bool = False
+        self._joystick_recording_event: Optional[threading.Event] = None
+        self._joystick_recording_result: Optional[dict] = None
 
         self.settings_service = SettingsService(
             config_manager=config_manager, config_service=self.config_service
@@ -593,31 +597,15 @@ class WingmanCore(WebSocketUser):
 
         return is_any_wingman_joystick_configured or is_cancel_tts_joystick_configured
 
-    async def start_joysticks(self, config: Config):
+    async def start_joysticks(self):
         pygame.init()
-        # Get all joystick configs
-        joystick_configs: list[CommandJoystickConfig] = [
-            config.wingmen[wingman].record_joystick_button
-            for wingman in config.wingmen
-            if config.wingmen[wingman].record_joystick_button
-        ]
-
-        cancel_tts_joystick_button = getattr(
-            self.settings_service.settings, "cancel_tts_joystick_button", None
-        )
-        if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
-            joystick_configs.append(cancel_tts_joystick_button)
-
+        # Initialize ALL joysticks upfront so they generate events for both
+        # normal operation and recording mode.
         joysticks = [
             pygame.joystick.Joystick(x) for x in range(pygame.joystick.get_count())
         ]
         for joystick in joysticks:
-            if any(
-                joystick.get_guid() == joystick_config.guid
-                for joystick_config in joystick_configs
-                if joystick_config is not None and joystick_config.guid is not None
-            ):
-                joystick.init()
+            joystick.init()
 
         running = True
         while running and pygame.joystick.get_init():
@@ -626,29 +614,64 @@ class WingmanCore(WebSocketUser):
                     running = False
                 elif event.type == pygame.JOYBUTTONDOWN:
                     joystick_origin = pygame.joystick.Joystick(event.joy)
-                    for joystick_config in joystick_configs:
-                        if joystick_origin.get_guid() == joystick_config.guid:
-                            self.on_press(
-                                joystick_config=CommandJoystickConfig(
-                                    guid=joystick_config.guid, button=event.button
+                    # In recording mode, skip normal press handling
+                    if not self._joystick_recording_active:
+                        for joystick_config in self._joystick_configs:
+                            if joystick_origin.get_guid() == joystick_config.guid:
+                                self.on_press(
+                                    joystick_config=CommandJoystickConfig(
+                                        guid=joystick_config.guid, button=event.button
+                                    )
                                 )
-                            )
                 elif event.type == pygame.JOYBUTTONUP:
                     joystick_origin = pygame.joystick.Joystick(event.joy)
-                    for joystick_config in joystick_configs:
-                        if joystick_origin.get_guid() == joystick_config.guid:
-                            self.on_release(
-                                joystick_config=CommandJoystickConfig(
-                                    guid=joystick_config.guid, button=event.button
+                    # In recording mode, capture the button press and signal the caller
+                    if self._joystick_recording_active and self._joystick_recording_event:
+                        self._joystick_recording_result = {
+                            "button": event.button,
+                            "guid": joystick_origin.get_guid(),
+                            "name": joystick_origin.get_name(),
+                        }
+                        self._joystick_recording_event.set()
+                    else:
+                        for joystick_config in self._joystick_configs:
+                            if joystick_origin.get_guid() == joystick_config.guid:
+                                self.on_release(
+                                    joystick_config=CommandJoystickConfig(
+                                        guid=joystick_config.guid, button=event.button
+                                    )
                                 )
-                            )
 
             # Add a small sleep to prevent the loop from consuming too much CPU
             await asyncio.sleep(0.01)
 
+    def _build_joystick_configs(self, config: Config) -> list:
+        """Build the list of joystick configs from wingman and settings config."""
+        joystick_configs: list[CommandJoystickConfig] = [
+            config.wingmen[wingman].record_joystick_button
+            for wingman in config.wingmen
+            if config.wingmen[wingman].record_joystick_button
+        ]
+        cancel_tts_joystick_button = getattr(
+            self.settings_service.settings, "cancel_tts_joystick_button", None
+        )
+        if cancel_tts_joystick_button is not None and cancel_tts_joystick_button.guid:
+            joystick_configs.append(cancel_tts_joystick_button)
+        return joystick_configs
+
     async def init_joystick(self, config: Config):
-        # Stop any existing joystick thread first to prevent thread accumulation
-        await self._stop_joystick_thread()
+        # Update the configs that the joystick loop reads dynamically
+        self._joystick_configs = self._build_joystick_configs(config)
+
+        # If the thread is already running, no need to restart it.
+        # The loop reads _joystick_configs on every iteration.
+        if self._joystick_thread and self._joystick_thread.is_alive():
+            return
+
+        # Clear stale references from a previously dead thread
+        self._joystick_thread = None
+        self._joystick_loop = None
+        self._joystick_task = None
 
         def run_async_process():
             loop = asyncio.new_event_loop()
@@ -656,7 +679,7 @@ class WingmanCore(WebSocketUser):
             self._joystick_loop = loop  # Store reference for cleanup
             try:
                 # Create a task for start_joysticks instead of running it directly
-                self._joystick_task = loop.create_task(self.start_joysticks(config))
+                self._joystick_task = loop.create_task(self.start_joysticks())
                 # Run the event loop forever instead of running until complete
                 loop.run_forever()
             finally:
@@ -676,34 +699,41 @@ class WingmanCore(WebSocketUser):
         self._joystick_thread.name = "JoystickEventLoop"
         self._joystick_thread.start()
 
-    async def _stop_joystick_thread(self):
-        """Stop the joystick event loop and thread."""
-        stopped_cleanly = True
-        if self._joystick_loop and self._joystick_loop.is_running():
-            # Cancel the task thread-safely on the joystick loop
-            if self._joystick_task and not self._joystick_task.done():
-                self._joystick_loop.call_soon_threadsafe(self._joystick_task.cancel)
+    async def record_joystick_action(self) -> dict:
+        """Record a single joystick button press using the existing joystick event loop.
 
-            # Schedule the loop to stop from another thread
-            try:
-                self._joystick_loop.call_soon_threadsafe(self._joystick_loop.stop)
-            except RuntimeError:
-                pass  # Loop may already be closed
+        If no joystick thread is running, starts one for recording.
+        Returns a dict with 'button', 'guid', and 'name' keys, or None if cancelled.
+        """
+        if not self._joystick_thread or not self._joystick_thread.is_alive():
+            config = (
+                self.tower.config
+                if self.tower
+                else self.config_service.current_config
+            )
+            await self.init_joystick(config)
 
-        if self._joystick_thread and self._joystick_thread.is_alive():
-            await asyncio.to_thread(self._joystick_thread.join, 1.0)
-            if self._joystick_thread.is_alive():
-                stopped_cleanly = False
-                self.printr.print(
-                    "Warning: Joystick thread did not stop within timeout and may still be running.",
-                    color=LogType.WARNING,
-                    server_only=True,
-                )
+        # Use a threading.Event to synchronize across event loops instead of
+        # asyncio futures, which cannot be awaited from a different loop.
+        self._joystick_recording_event = threading.Event()
+        self._joystick_recording_result = None
+        self._joystick_recording_active = True
 
-        if stopped_cleanly:
-            self._joystick_thread = None
-            self._joystick_loop = None
-            self._joystick_task = None
+        try:
+            # Poll the threading event from the caller's async loop
+            while not self._joystick_recording_event.is_set():
+                await asyncio.sleep(0.01)
+            return self._joystick_recording_result
+        finally:
+            self._joystick_recording_active = False
+            self._joystick_recording_event = None
+            self._joystick_recording_result = None
+
+    def cancel_joystick_recording(self):
+        """Cancel an in-progress joystick recording."""
+        self._joystick_recording_active = False
+        if self._joystick_recording_event:
+            self._joystick_recording_event.set()
 
     async def refresh_input_hooks(self):
         """Refresh mouse and joystick hooks based on current wingman configurations.
@@ -749,9 +779,8 @@ class WingmanCore(WebSocketUser):
         )
 
         if needs_joystick:
-            # Restart joystick thread to pick up new button configurations
-            # The joystick loop uses a static list of configs, so we must restart it
-            # Build current config from tower wingmen since tower.config may be stale
+            # Update joystick configs dynamically — no thread restart needed.
+            # The joystick loop reads _joystick_configs on every iteration.
             current_wingmen = {
                 wingman.name: wingman.config for wingman in self.tower.wingmen
             }
@@ -765,8 +794,9 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
         elif joystick_running and not needs_joystick:
-            # No joystick needed anymore, stop the thread
-            await self._stop_joystick_thread()
+            # No joystick needed anymore — clear configs so the loop idles,
+            # but keep the thread alive for future recordings.
+            self._joystick_configs = []
 
     async def on_wingman_config_saved(self, wingman_config):
         """Called when a wingman config is saved. Refreshes input hooks if needed."""
@@ -832,8 +862,10 @@ class WingmanCore(WebSocketUser):
             self.tower = None
             self.config_service.set_tower(None)
 
-            # Stop joystick thread to prevent thread accumulation on reload
-            await self._stop_joystick_thread()
+            # Clear joystick configs so the loop idles, but keep the thread
+            # alive. Restarting it on a new thread breaks pygame's DirectInput
+            # handles which are bound to the thread that created them.
+            self._joystick_configs = []
 
             # Unhook mouse to prevent duplicate hooks
             try:
