@@ -699,7 +699,7 @@ class WingmanCore(WebSocketUser):
         self._joystick_thread.name = "JoystickEventLoop"
         self._joystick_thread.start()
 
-    async def record_joystick_action(self) -> dict:
+    async def record_joystick_action(self) -> dict|None:
         """Record a single joystick button press using the existing joystick event loop.
 
         If no joystick thread is running, starts one for recording.
