@@ -8,7 +8,7 @@ from packaging import version
 from api.enums import LogType
 from api.interface import SystemCore, SystemInfo
 
-LOCAL_VERSION = "2.1.0"
+LOCAL_VERSION = "2.1.1"
 VERSION_ENDPOINT = "https://wingman-ai.com/api/version"
 
 

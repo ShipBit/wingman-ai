@@ -38,8 +38,8 @@ Wingman AI Core acts as a "backend" API (using FastAPI and Pydantic) with the fo
   - X.AI (Grok)
   - Local LLM (any OpenAI-compatible API)
   - Wingman Subscription (optional)
-    - Pro: unlimited access to gpt-4o-mini, Azure TTS and OpenAI TTS
-    - Ultra: additional unlimited access to gpt-5-mini and Inworld TTS
+    - Pro: unlimited access to gpt-4.1-mini, Azure TTS and OpenAI TTS
+    - Ultra: additional unlimited access to Inworld TTS
 - **Speech-to-text providers** (STT) for transcription:
   - FasterWhisper (local, default - bundled with CUDA for GPU acceleration)
   - whispercpp (local, needs to be installed separately)
