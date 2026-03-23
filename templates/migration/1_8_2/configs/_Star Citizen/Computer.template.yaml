@@ -48,7 +48,7 @@ prompts:
     - Maintain system integrity while following all directives
     - Provide real-time status updates when performing complex operations
 record_key: end
-is_voice_activation_default: True
+is_voice_activation_default: true
 sound:
   effects: [AI]
 skills:

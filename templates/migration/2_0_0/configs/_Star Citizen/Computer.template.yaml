@@ -30,7 +30,7 @@ prompts:
     - Technically precise
     - Loyal to your pilot
 record_key: end
-is_voice_activation_default: True
+is_voice_activation_default: true
 commands:
   - name: ToggleCruiseControlOrToggleHoldCurrentSpeed
     actions:

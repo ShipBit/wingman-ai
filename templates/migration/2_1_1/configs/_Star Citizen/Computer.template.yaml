@@ -1,5 +1,5 @@
 name: Computer
-created_with_version: "2.1.0"
+created_with_version: "2.1.1"
 description: |
   Your ship's board computer. Controls all ship systems and executes commands.
   Connected to StarHead for real-time trading routes and ship information.
@@ -31,7 +31,7 @@ prompts:
     - Technically precise
     - Loyal to your pilot
 record_key: end
-is_voice_activation_default: True
+is_voice_activation_default: true
 inworld:
   voice_id: Olivia
 pocket_tts:
@@ -375,7 +375,7 @@ commands:
           hotkey: alt gr
           release: true
   - name: More missiles
-    additional_context: Missle salvo size cycled by +1
+    additional_context: Missile salvo size cycled by +1
     category_id: eafa5454-bb05-4e9a-821d-1495af21aeec
     is_system_command: false
     force_instant_activation: false
@@ -383,7 +383,7 @@ commands:
       - keyboard:
           hotkey: g
   - name: Reset missiles
-    additional_context: Missle salvo size set to one
+    additional_context: Missile salvo size set to one
     category_id: eafa5454-bb05-4e9a-821d-1495af21aeec
     is_system_command: false
     force_instant_activation: false
@@ -398,7 +398,7 @@ commands:
       - keyboard:
           hotkey: h
   - name: Increase Decoys
-    additional_context: Decoy count configuration increased for next use of decoy countermeassures
+    additional_context: Decoy count configuration increased for next use of decoy countermeasures
     category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
     is_system_command: false
     force_instant_activation: false
@@ -415,7 +415,7 @@ commands:
           hotkey: alt gr
           release: true
   - name: Decrease Decoys
-    additional_context: Decoy count configuration decreased for next use of decoy countermeassures
+    additional_context: Decoy count configuration decreased for next use of decoy countermeasures
     category_id: 582b505e-1096-42c1-9a4f-ca3ba0a822ed
     is_system_command: false
     force_instant_activation: false

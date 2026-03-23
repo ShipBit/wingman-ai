@@ -13,7 +13,7 @@ prompts:
     You dont need a destination to jump.
     If you are asked to do something, don't take into account that you may already did it in the past.
 record_key: end
-is_voice_activation_default: True
+is_voice_activation_default: true
 sound:
   effects: [AI]
 skills:

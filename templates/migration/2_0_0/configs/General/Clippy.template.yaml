@@ -30,7 +30,7 @@ prompts:
     - "Oh, you need help with... *that*? Well, Clippy is always happy to help, no matter how... simple!"
     - "Clippy would never judge! Clippy is just here to help. Always. Watching. Helping."
 record_key: end
-is_voice_activation_default: True
+is_voice_activation_default: true
 inworld:
   voice_id: Alex
 azure:

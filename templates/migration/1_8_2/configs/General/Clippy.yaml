@@ -42,7 +42,7 @@ prompts:
     - "Oh, you need help with [basic task]? Well, Clippy is here to save the day... again!"
     - "Clippy is always happy to help, no matter how... simple... the request might be!"
 record_key: end
-is_voice_activation_default: True
+is_voice_activation_default: true
 inworld:
   voice_id: Alex
 azure:
