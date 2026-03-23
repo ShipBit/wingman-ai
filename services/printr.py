@@ -205,14 +205,20 @@ class Printr(WebSocketUser):
         skill_name: str = "",
         additional_data: dict = None,
         benchmark_result: BenchmarkResult = None,
+        token_usage: tuple[int, int] = None,
     ):
+        # Build the server (terminal) display string
+        server_text = text
+        suffix_parts = []
+        if benchmark_result:
+            suffix_parts.append(benchmark_result.formatted_execution_time)
+        if token_usage:
+            suffix_parts.append(f"{token_usage[0]} in / {token_usage[1]} out")
+        if suffix_parts:
+            server_text = f"{text} ({' | '.join(suffix_parts)})"
         # print to server (terminal) with source_name prefix
         self.print_colored(
-            (
-                text
-                if not benchmark_result
-                else f"{text} ({benchmark_result.formatted_execution_time})"
-            ),
+            server_text,
             color=self.get_terminal_color(color),
             source_name=source_name,
         )

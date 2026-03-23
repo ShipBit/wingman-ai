@@ -53,7 +53,7 @@ pocket_tts:
   enable: true
   custom_model_path: ""
 llama_cpp:
-  run_locally: false
+  run_locally: true
   summarize_model: "Qwen3.5-2B-Q4_K_M.gguf"
   embed_model: "nomic-embed-text-v1.5.f16.gguf"
   n_ctx: 4096
