@@ -1132,7 +1132,7 @@ class OpenAiWingman(Wingman):
             tool_timings.extend(iteration_timings)
 
             if instant_response:
-                self._trim_tool_responses()
+                await self._trim_tool_responses()
                 # Add snapshots before returning
                 self._add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
@@ -1153,7 +1153,7 @@ class OpenAiWingman(Wingman):
                 llm_processing_time_ms += (time.perf_counter() - llm_start) * 1000
 
                 if completion is None:
-                    self._trim_tool_responses()
+                    await self._trim_tool_responses()
                     self._add_benchmark_snapshot(
                         benchmark, "LLM Processing", llm_processing_time_ms
                     )
@@ -1180,7 +1180,7 @@ class OpenAiWingman(Wingman):
                 if tool_calls:
                     interrupt = False
             elif is_waiting_response_needed:
-                self._trim_tool_responses()
+                await self._trim_tool_responses()
                 self._add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -1194,7 +1194,7 @@ class OpenAiWingman(Wingman):
                 return None, None, None, interrupt
 
         # Trim oversized tool responses now that the LLM has processed them
-        self._trim_tool_responses()
+        await self._trim_tool_responses()
 
         # Add final snapshots
         self._add_benchmark_snapshot(
@@ -1437,13 +1437,17 @@ class OpenAiWingman(Wingman):
 
         return False
 
-    def _trim_tool_responses(self, max_tokens: int = 500):
+    async def _trim_tool_responses(self, max_tokens: int = 500):
         """Trim oversized tool responses in conversation history.
 
         Called after the LLM has finished processing a turn with tool calls.
         The LLM already had full access to the data; this just prevents stale
         bulk data from inflating the context on subsequent turns.
+
+        If significant trimming occurs, broadcasts a condensation notification
+        so the client UI can display a summary indicator.
         """
+        total_tokens_saved = 0
         for msg in self.messages:
             if self.__get_message_role(msg) != "tool":
                 continue
@@ -1453,11 +1457,46 @@ class OpenAiWingman(Wingman):
             token_count = count_tokens(content)
             if token_count <= max_tokens:
                 continue
+            total_tokens_saved += token_count - max_tokens
             trimmed = truncate_to_tokens(content, max_tokens)
             msg["content"] = (
                 f"{trimmed}\n\n[...trimmed from ~{token_count} to "
                 f"~{max_tokens} tokens for conversation history. "
                 f"Full response was processed.]"
+            )
+
+        # Notify the client when significant trimming occurs so the UI can
+        # show a "Show history" indicator explaining the token drop.
+        # Skip if condensation is already running to avoid interfering with
+        # its own started/finished broadcast cycle.
+        if (
+            total_tokens_saved > 1000
+            and printr._connection_manager
+            and not self._is_condensing
+        ):
+            from api.commands import ConversationCondensationCommand
+
+            if self.conversation_summary:
+                summary = (
+                    f"{self.conversation_summary}\n\n---\n\n"
+                    f"[Latest turn: tool responses trimmed — ~{total_tokens_saved:,} tokens saved]"
+                )
+            else:
+                summary = (
+                    f"Tool responses were automatically trimmed after LLM processing.\n"
+                    f"~{total_tokens_saved:,} tokens saved.\n\n"
+                    f"The LLM had full access to the complete data when generating "
+                    f"its response. Responses are trimmed afterwards to keep the "
+                    f"conversation context efficient."
+                )
+
+            await printr._connection_manager.broadcast(
+                ConversationCondensationCommand(
+                    wingman_name=self.name,
+                    status="finished",
+                    estimated_tokens_saved=total_tokens_saved,
+                    summary_text=summary,
+                )
             )
 
     async def add_user_message(self, content: str):
@@ -1672,7 +1711,9 @@ class OpenAiWingman(Wingman):
         # Runs in background so user is never blocked.
         # Store the task reference to prevent garbage collection mid-execution.
         self._condense_task = asyncio.create_task(self._condense_history())
-        self._condense_task.add_done_callback(lambda _: setattr(self, "_condense_task", None))
+        self._condense_task.add_done_callback(
+            lambda _: setattr(self, "_condense_task", None)
+        )
 
     async def _condense_history(self, force: bool = False):
         """Condense older conversation messages into a running summary using local AI.
@@ -2025,12 +2066,8 @@ class OpenAiWingman(Wingman):
             )
             # Estimate input tokens using cl100k_base, then apply ratio
             # for the model's actual tokenizer when computing output budget.
-            cl100k_input = count_tokens(system_prompt) + count_tokens(
-                user_prompt
-            )
-            chunk_input_tokens = int(
-                cl100k_input * self._summarize_token_ratio
-            )
+            cl100k_input = count_tokens(system_prompt) + count_tokens(user_prompt)
+            chunk_input_tokens = int(cl100k_input * self._summarize_token_ratio)
             n_ctx = (
                 self.settings.llama_cpp.n_ctx
                 if hasattr(self.settings, "llama_cpp")
@@ -2042,9 +2079,11 @@ class OpenAiWingman(Wingman):
             max_input = n_ctx - min_output_tokens
             if chunk_input_tokens > max_input:
                 # Re-derive how many cl100k text tokens we can afford
-                overhead_cl100k = count_tokens(system_prompt) + count_tokens(
-                    user_prompt
-                ) - count_tokens(chunk)
+                overhead_cl100k = (
+                    count_tokens(system_prompt)
+                    + count_tokens(user_prompt)
+                    - count_tokens(chunk)
+                )
                 safe_text_tokens = int(
                     (max_input / self._summarize_token_ratio) - overhead_cl100k
                 )
@@ -2055,12 +2094,10 @@ class OpenAiWingman(Wingman):
                         f"CONVERSATION TO SUMMARIZE (part {i + 1}/{len(chunks)}):\n{chunk}\n\n"
                         "---\nList every fact from the above as bullet points. Include all secrets, names, preferences, and creative content:"
                     )
-                    cl100k_input = count_tokens(
-                        system_prompt
-                    ) + count_tokens(user_prompt)
-                    chunk_input_tokens = int(
-                        cl100k_input * self._summarize_token_ratio
+                    cl100k_input = count_tokens(system_prompt) + count_tokens(
+                        user_prompt
                     )
+                    chunk_input_tokens = int(cl100k_input * self._summarize_token_ratio)
                 await printr.print_async(
                     f"Chunk {i + 1}/{len(chunks)} input ({chunk_input_tokens} tokens) "
                     f"exceeded context budget ({max_input}), truncated to fit.",
@@ -2070,9 +2107,7 @@ class OpenAiWingman(Wingman):
                     source=LogSource.WINGMAN,
                 )
 
-            chunk_output_budget = max(
-                min_output_tokens, n_ctx - chunk_input_tokens
-            )
+            chunk_output_budget = max(min_output_tokens, n_ctx - chunk_input_tokens)
             result = await loop.run_in_executor(
                 None,
                 lambda p=user_prompt, mt=chunk_output_budget: self.local_ai_service.summarize(
@@ -2088,9 +2123,7 @@ class OpenAiWingman(Wingman):
                 # Use raw cl100k_input (NOT ratio-corrected chunk_input_tokens)
                 # so the ratio = model_tokens / cl100k_tokens.
                 if result.prompt_tokens > 0 and cl100k_input > 0:
-                    self._summarize_token_ratio = (
-                        result.prompt_tokens / cl100k_input
-                    )
+                    self._summarize_token_ratio = result.prompt_tokens / cl100k_input
 
                 if result.truncated:
                     await printr.print_async(
@@ -2118,12 +2151,8 @@ class OpenAiWingman(Wingman):
             "Merge these into a single coherent summary. Keep all key facts:"
         )
         # Dynamic merge budget (apply ratio to input estimate)
-        merge_cl100k_input = count_tokens(system_prompt) + count_tokens(
-            merge_prompt
-        )
-        merge_input_tokens = int(
-            merge_cl100k_input * self._summarize_token_ratio
-        )
+        merge_cl100k_input = count_tokens(system_prompt) + count_tokens(merge_prompt)
+        merge_input_tokens = int(merge_cl100k_input * self._summarize_token_ratio)
 
         # Safety: truncate combined summaries if they exceed context budget
         min_output_tokens = 512
@@ -2131,8 +2160,7 @@ class OpenAiWingman(Wingman):
         if merge_input_tokens > max_merge_input:
             overhead_cl100k = merge_cl100k_input - count_tokens(combined)
             safe_combined_tokens = int(
-                (max_merge_input / self._summarize_token_ratio)
-                - overhead_cl100k
+                (max_merge_input / self._summarize_token_ratio) - overhead_cl100k
             )
             if safe_combined_tokens > 0:
                 combined = truncate_to_tokens(combined, safe_combined_tokens)
@@ -2141,9 +2169,9 @@ class OpenAiWingman(Wingman):
                     f"PARTIAL SUMMARIES TO MERGE:\n{combined}\n\n"
                     "Merge these into a single coherent summary. Keep all key facts:"
                 )
-                merge_cl100k_input = count_tokens(
-                    system_prompt
-                ) + count_tokens(merge_prompt)
+                merge_cl100k_input = count_tokens(system_prompt) + count_tokens(
+                    merge_prompt
+                )
                 merge_input_tokens = int(
                     merge_cl100k_input * self._summarize_token_ratio
                 )
