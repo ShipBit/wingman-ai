@@ -1721,7 +1721,7 @@ class OpenAiWingman(Wingman):
             return
 
         self._is_condensing = True
-        _condensation_finished_broadcast = False
+        _condensation_stats: dict = {}
 
         # Broadcast start
         from api.commands import ConversationCondensationCommand
@@ -1950,20 +1950,14 @@ class OpenAiWingman(Wingman):
                 source=LogSource.WINGMAN,
             )
 
-            # Broadcast finish with stats
-            _condensation_finished_broadcast = True
-            if printr._connection_manager:
-                await printr._connection_manager.broadcast(
-                    ConversationCondensationCommand(
-                        wingman_name=self.name,
-                        status="finished",
-                        messages_condensed=cutoff_index,
-                        messages_remaining=len(self.messages),
-                        summary_length=len(summary),
-                        estimated_tokens_saved=estimated_tokens_saved,
-                        summary_text=summary,
-                    )
-                )
+            # Record stats for the broadcast in finally
+            _condensation_stats = {
+                "messages_condensed": cutoff_index,
+                "messages_remaining": len(self.messages),
+                "summary_length": len(summary),
+                "estimated_tokens_saved": estimated_tokens_saved,
+                "summary_text": summary,
+            }
 
         except Exception as e:
             await printr.print_async(
@@ -1975,13 +1969,16 @@ class OpenAiWingman(Wingman):
             )
         finally:
             self._is_condensing = False
-            # Always broadcast finished so the client UI doesn't get stuck
-            if not _condensation_finished_broadcast and printr._connection_manager:
+            # Always broadcast finished so the client UI doesn't get stuck.
+            # Include summary_text if condensation produced one (even if a
+            # later step failed), so the client can show the view-history button.
+            if printr._connection_manager:
                 try:
                     await printr._connection_manager.broadcast(
                         ConversationCondensationCommand(
                             wingman_name=self.name,
                             status="finished",
+                            **_condensation_stats,
                         )
                     )
                 except Exception:
