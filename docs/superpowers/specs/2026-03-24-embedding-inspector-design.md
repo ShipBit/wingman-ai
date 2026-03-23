@@ -40,7 +40,7 @@ Button in ConfigBar (right side, near condense/copy/clear buttons). Uses `drawer
 - **Skeleton UI TabGroup**: One `Tab` per source type. Currently only "Tool Responses" is active; "Tags" and "Memory" show disabled/coming-soon state
 - **Entry cards**: One per cached tool response. Shows:
   - Tool name (with globe icon for MCP tools)
-  - `cache_id` (truncated)
+  - `cache_id` (truncated) — this is the `tool_call_id` internally, exposed as `cache_id` in the API
   - Original token count, compressed token count, chunk count, embedding count
   - Relative timestamp
   - Delete button (variant-ghost-error)
@@ -56,17 +56,19 @@ When no embeddings exist: centered message "No embeddings yet. Large tool respon
 
 ### Models (`api/interface.py`)
 
+Note: `cache_id` in these models maps to `tool_call_id` internally in `CachedResponse`. The API uses `cache_id` for consistency with the LLM-facing retrieval tool schema.
+
 ```python
 class EmbeddingEntryStats(BaseModel):
-    cache_id: str
+    cache_id: str              # maps to CachedResponse.tool_call_id
     tool_name: str
     original_token_count: int
-    summary_token_count: int
+    summary_token_count: int   # stored at creation time in CachedResponse
     chunk_count: int
     embedding_count: int
     embedding_dimensions: int
     summary: str
-    chunks: list[str]
+    chunks: list[str]          # truncated to first 200 chars each in response
     timestamp: float
 
 class EmbeddingSourceStats(BaseModel):
@@ -89,13 +91,13 @@ class EmbeddingStatsResponse(BaseModel):
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/embedding-stats` | Get stats for all wingmen (or `?wingman_name=X` for one) |
-| `DELETE` | `/embedding-cache/{wingman_name}/{cache_id}` | Delete a single cached entry |
-| `DELETE` | `/embedding-cache/{wingman_name}` | Clear all entries for a wingman |
+| `GET` | `/embedding-inspector/stats` | Get stats for all wingmen (or `?wingman_name=X` for one). `response_model=EmbeddingStatsResponse` |
+| `DELETE` | `/embedding-inspector/cache/{wingman_name}/{cache_id}` | Delete a single cached entry |
+| `DELETE` | `/embedding-inspector/cache/{wingman_name}` | Clear all entries for a wingman |
 
-### `ToolResponseCache.get_stats()` → `EmbeddingSourceStats`
+### `ToolResponseCache.get_stats()` → `dict`
 
-New method on `ToolResponseCache` that returns stats for all cached entries. Iterates `self._cache`, builds `EmbeddingEntryStats` for each entry including chunk content and embedding dimensions.
+New method on `ToolResponseCache` that returns stats for all cached entries. Iterates `self._cache`, builds entry dicts for each entry. Chunk content is truncated to first 200 chars each. `summary_token_count` is stored in `CachedResponse` at creation time (already computed during `compress_and_cache`).
 
 ### Memory estimation
 
@@ -105,25 +107,37 @@ New method on `ToolResponseCache` that returns stats for all cached entries. Ite
 
 ### Embedding model name
 
-Retrieved from `local_ai_service.get_embed_model_name()` or similar. If local AI is not ready, return `None`.
+Derived from the embed model path via `local_ai_service.provider.model_manager.get_embed_model_path()` — extract the filename/stem. If local AI is not ready or the path is not set, return `None`. A convenience method `get_embed_model_name()` should be added to `LocalAiService` to encapsulate this.
 
 ## Backend Integration Points
 
+### `CachedResponse` additions
+
+- Add `summary_token_count: int` field — computed and stored during `compress_and_cache()`
+
 ### `ToolResponseCache` additions
 
-- `get_stats() -> dict`: Returns source stats with all entry metadata
-- `delete_entry(cache_id: str) -> bool`: Delete single entry, return success
+- `get_stats() -> dict`: Returns source stats with all entry metadata, chunk text truncated to 200 chars
+- `delete_entry(cache_id: str) -> bool`: Returns `True` if the entry existed and was deleted, `False` if not found (wraps `dict.pop` with existence check)
+
+### `OpenAiWingman` public API additions
+
+To avoid breaking encapsulation by accessing `_tool_response_cache` from outside, add public methods:
+
+- `get_embedding_stats() -> dict`: Delegates to `self._tool_response_cache.get_stats()`
+- `delete_embedding_cache_entry(cache_id: str) -> bool`: Delegates to `self._tool_response_cache.delete_entry(cache_id)`
+- `clear_embedding_cache()`: Delegates to `self._tool_response_cache.clear()`
 
 ### `WingmanCore` additions
 
-- `get_embedding_stats(wingman_name: str | None) -> EmbeddingStatsResponse`: Iterates `tower.wingmen`, collects stats from each `OpenAiWingman._tool_response_cache`, aggregates totals
-- `delete_embedding_cache_entry(wingman_name: str, cache_id: str)`: Finds wingman, calls `evict(cache_id)`
-- `clear_embedding_cache(wingman_name: str)`: Finds wingman, calls `clear()`
+- `get_embedding_stats(wingman_name: str | None) -> EmbeddingStatsResponse`: If `self.tower is None`, returns empty response. Otherwise iterates `tower.wingmen`, calls `wingman.get_embedding_stats()` on each `OpenAiWingman`, aggregates totals.
+- `delete_embedding_cache_entry(wingman_name: str, cache_id: str)`: Finds wingman, calls public method
+- `clear_embedding_cache(wingman_name: str)`: Finds wingman, calls public method
 - Three new routes registered via `self.router.add_api_route()`
 
-### Accessing the cache from WingmanCore
+### Accessing wingmen from WingmanCore
 
-`WingmanCore` gets wingmen via `self.tower.wingmen`. Each wingman is cast/checked for `OpenAiWingman` (which has `_tool_response_cache`). Base `Wingman` class does not have embeddings.
+`WingmanCore` gets wingmen via `self.tower.wingmen`. Uses `isinstance(wingman, OpenAiWingman)` to check for embedding support — base `Wingman` class does not have embeddings. Returns empty stats for non-OpenAiWingman instances.
 
 ## Frontend Implementation
 
@@ -150,7 +164,7 @@ New button in the right-side controls area (near condense/copy/clear). Uses `Dat
 ### i18n keys (all 4 locales)
 
 Keys prefixed with `embedding_inspector_*`:
-- `embedding_inspector` — "Embedding Inspector"
+- `embedding_inspector` — "Embedding Inspector" (also used as ConfigBar button tooltip)
 - `embedding_inspector_indices` — "Indices"
 - `embedding_inspector_chunks` — "Chunks"
 - `embedding_inspector_embeddings` — "Embeddings"
@@ -180,9 +194,11 @@ After backend endpoints are added, run `npm run generate:api` to auto-generate `
 
 | File | Action |
 |------|--------|
-| `services/tool_response_cache.py` | Add `get_stats()`, `delete_entry()` |
+| `services/tool_response_cache.py` | Add `get_stats()`, `delete_entry()`, `summary_token_count` to `CachedResponse` |
 | `api/interface.py` | Add Pydantic models |
+| `wingmen/open_ai_wingman.py` | Add public embedding stat/delete/clear methods |
 | `wingman_core.py` | Add 3 endpoints + handler methods |
+| `services/local_ai_service.py` | Add `get_embed_model_name()` convenience method |
 | **Client** | |
 | `src/lib/EmbeddingInspector.svelte` | Create drawer component |
 | `src/routes/+layout.svelte` | Add drawer ID case + import |
