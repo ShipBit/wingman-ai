@@ -17,12 +17,20 @@ DEPRECATED_WINGMAN_PRO_MODELS = [
     "gpt-5-mini",
 ]
 
+NEW_PRO_MODEL_FALLBACK = "gpt-4.1-mini"
+NEW_OPENAI_MODEL_FALLBACK = "gpt-4.1-mini"
+
 
 class Migration210To211(BaseMigration):
     """Migration from 2.1.0 to 2.1.1."""
 
     old_version = "2_1_0"
     new_version = "2_1_1"
+
+    def __init__(self, service):
+        super().__init__(service)
+        self._new_pro_model = NEW_PRO_MODEL_FALLBACK
+        self._new_openai_model = NEW_OPENAI_MODEL_FALLBACK
 
     def migrate_defaults(self, old: dict, new: dict) -> dict:
         """Migrate defaults.yaml from 2.1.0 to 2.1.1."""
