@@ -107,6 +107,7 @@ class OpenAiWingman(Wingman):
         self.messages = []
         self.conversation_summary: str = ""
         self._is_condensing = False
+        self._condense_task: asyncio.Task | None = None
         self._last_prompt_tokens: int = 0
         """Last API-reported prompt_tokens from the conversation LLM."""
         self._summarize_token_ratio: float = 1.35
@@ -1668,8 +1669,10 @@ class OpenAiWingman(Wingman):
         if not token_trigger and not message_trigger:
             return
 
-        # Fire and forget — runs in background so user is never blocked
-        asyncio.create_task(self._condense_history())
+        # Runs in background so user is never blocked.
+        # Store the task reference to prevent garbage collection mid-execution.
+        self._condense_task = asyncio.create_task(self._condense_history())
+        self._condense_task.add_done_callback(lambda _: setattr(self, "_condense_task", None))
 
     async def _condense_history(self, force: bool = False):
         """Condense older conversation messages into a running summary using local AI.
