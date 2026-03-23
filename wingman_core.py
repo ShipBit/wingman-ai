@@ -61,6 +61,7 @@ from api.interface import (
 )
 from providers.elevenlabs import ElevenLabs
 from providers.faster_whisper import FasterWhisper
+from providers.parakeet import Parakeet
 from providers.google import GoogleGenAI
 from providers.llama_cpp_provider import LlamaCppProvider
 from providers.llama_cpp_remote import LlamaCppRemote
@@ -666,6 +667,9 @@ class WingmanCore(WebSocketUser):
             app_root_path=app_root_path,
             app_is_bundled=app_is_bundled,
         )
+        self.parakeet = Parakeet(
+            settings=self.settings_service.settings.voice_activation.parakeet,
+        )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.pocket_tts = PocketTTS(settings=self.settings_service.settings.pocket_tts)
 
@@ -686,6 +690,7 @@ class WingmanCore(WebSocketUser):
         self.settings_service.initialize(
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
+            parakeet=self.parakeet,
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
             local_ai_service=self.local_ai_service,
@@ -1133,6 +1138,7 @@ class WingmanCore(WebSocketUser):
             audio_library=self.audio_library,
             whispercpp=self.whispercpp,
             fasterwhisper=self.fasterwhisper,
+            parakeet=self.parakeet,
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
         )
@@ -1431,6 +1437,13 @@ class WingmanCore(WebSocketUser):
                 hotwords=list(set(combined_hotwords)),
             )
             text = transcription.text
+        elif provider == VoiceActivationSttProvider.PARAKEET:
+            transcription = self.parakeet.transcribe(
+                config=self.settings_service.settings.voice_activation.parakeet_config,
+                filename=recording_file,
+            )
+            if transcription:
+                text = transcription.text
 
         if text:
             wingman = self.tower.get_wingman_from_text(text)

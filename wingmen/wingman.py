@@ -28,6 +28,7 @@ from api.enums import (
     WingmanInitializationErrorType,
 )
 from providers.faster_whisper import FasterWhisper
+from providers.parakeet import Parakeet
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
@@ -65,6 +66,7 @@ class Wingman:
         audio_library: AudioLibrary,
         whispercpp: Whispercpp,
         fasterwhisper: FasterWhisper,
+        parakeet: Parakeet,
         xvasynth: XVASynth,
         pocket_tts: PocketTTS,
         tower: "Tower",
@@ -105,6 +107,9 @@ class Wingman:
 
         self.fasterwhisper = fasterwhisper
         """A class that handles local transcriptions using FasterWhisper."""
+
+        self.parakeet = parakeet
+        """A class that handles local transcriptions using NVIDIA Parakeet TDT via ONNX Runtime."""
 
         self.xvasynth = xvasynth
         """A class that handles the communication with the XVASynth server for TTS."""

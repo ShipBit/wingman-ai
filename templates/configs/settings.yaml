@@ -32,6 +32,14 @@ voice_activation:
     multilingual: false
     hotwords: []
     additional_hotwords: []
+  parakeet:
+    enable: false
+    model_variant: v2
+    execution_provider: cpu
+    host: http://127.0.0.1
+    port: 9876
+  parakeet_config:
+    temperature: 0.0
 wingman_pro:
   base_url: https://wingman-api-europe.azurewebsites.net
   region: europe

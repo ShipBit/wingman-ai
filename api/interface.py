@@ -174,6 +174,25 @@ class FasterWhisperTranscript(BaseModel):
     language_probability: float
 
 
+class ParakeetSettings(BaseModel):
+    enable: bool
+    model_variant: str
+    """v2 (English) or v3 (Multilingual, 25 languages)"""
+    execution_provider: str
+    """cpu, directml, coreml, or cuda"""
+    host: str
+    port: int
+
+
+class ParakeetSttConfig(BaseModel):
+    language: Optional[str] = None
+    temperature: float
+
+
+class ParakeetTranscript(BaseModel):
+    text: str
+
+
 class AzureInstanceConfig(BaseModel):
     api_base_url: str
     """https://xxx.openai.azure.com/"""
@@ -533,8 +552,10 @@ class VoiceActivationSettings(BaseModel):
     azure: AzureSttConfig
     whispercpp: WhispercppSettings
     fasterwhisper: FasterWhisperSettings
+    parakeet: ParakeetSettings
     whispercpp_config: WhispercppSttConfig
     fasterwhisper_config: FasterWhisperSttConfig
+    parakeet_config: ParakeetSttConfig
 
 
 class FeaturesConfig(BaseModel):
@@ -989,6 +1010,7 @@ class NestedConfig(BaseModel):
     pocket_tts: PocketTTSConfig
     whispercpp: WhispercppSttConfig
     fasterwhisper: FasterWhisperSttConfig
+    parakeet: ParakeetSttConfig
     wingman_pro: WingmanProConfig
     perplexity: PerplexityConfig
     xai: XaiConfig

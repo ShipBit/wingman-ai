@@ -15,6 +15,7 @@ from api.interface import (
     WingmanConfig,
 )
 from providers.faster_whisper import FasterWhisper
+from providers.parakeet import Parakeet
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from services.audio_library import AudioLibrary
@@ -72,6 +73,7 @@ class ModuleManager:
         audio_library: AudioLibrary,
         whispercpp: Whispercpp,
         fasterwhisper: FasterWhisper,
+        parakeet: Parakeet,
         xvasynth: XVASynth,
         tower: "Tower",
     ):
@@ -85,6 +87,7 @@ class ModuleManager:
             audio_library (AudioLibrary): The audio library handling the storage and retrieval of audio files.
             whispercpp (Whispercpp): The Whispercpp provider for speech-to-text.
             fasterwhisper (FasterWhisper): The FasterWhisper provider for speech-to-text.
+            parakeet (Parakeet): The Parakeet provider for speech-to-text via ONNX Runtime.
             xvasynth (XVASynth): The XVASynth provider for text-to-speech.
             tower (Tower): The Tower instance, that manages loaded Wingmen.
         """
@@ -111,6 +114,7 @@ class ModuleManager:
             audio_library=audio_library,
             whispercpp=whispercpp,
             fasterwhisper=fasterwhisper,
+            parakeet=parakeet,
             xvasynth=xvasynth,
             tower=tower,
         )

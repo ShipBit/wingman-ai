@@ -1660,6 +1660,7 @@ class ConfigManager:
             "pocket_tts",
             "wingman_pro",
             "perplexity",
+            "parakeet",
             "xai",
             "openai_compatible_tts",
         ]:

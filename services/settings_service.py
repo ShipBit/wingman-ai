@@ -9,6 +9,7 @@ from api.interface import (
     SettingsConfig,
 )
 from providers.faster_whisper import FasterWhisper
+from providers.parakeet import Parakeet
 from providers.whispercpp import Whispercpp
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
@@ -29,6 +30,7 @@ class SettingsService:
         self.settings_events = PubSub()
         self.whispercpp: Whispercpp = None
         self.fasterwhisper: FasterWhisper = None
+        self.parakeet: Parakeet = None
         self.xvasynth: XVASynth = None
         self.pocket_tts: PocketTTS = None
         self.local_ai_service: LocalAiService = None
@@ -60,12 +62,14 @@ class SettingsService:
         self,
         whispercpp: Whispercpp,
         fasterwhisper: FasterWhisper,
+        parakeet: Parakeet,
         xvasynth: XVASynth,
         pocket_tts: PocketTTS,
         local_ai_service: LocalAiService = None,
     ):
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
+        self.parakeet = parakeet
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
         self.local_ai_service = local_ai_service
@@ -115,6 +119,12 @@ class SettingsService:
         self.fasterwhisper.update_settings(
             settings=settings.voice_activation.fasterwhisper
         )
+
+        # Parakeet
+        if self.parakeet:
+            self.parakeet.update_settings(
+                settings=settings.voice_activation.parakeet
+            )
 
         # XVASynth
         if not self.xvasynth:

@@ -22,10 +22,25 @@ class Migration210To300(BaseMigration):
             llama["summarize_model"] = "Qwen3.5-2B-Q4_K_M.gguf"
             self.log("- upgraded summarize model: Qwen3.5-0.8B → Qwen3.5-2B")
 
+        # Add Parakeet STT settings
+        va = old.get("voice_activation", {})
+        new_va = new.get("voice_activation", {})
+        if "parakeet" not in va and "parakeet" in new_va:
+            va["parakeet"] = new_va["parakeet"]
+            self.log("- added new voice activation setting: parakeet")
+        if "parakeet_config" not in va and "parakeet_config" in new_va:
+            va["parakeet_config"] = new_va["parakeet_config"]
+            self.log("- added new voice activation setting: parakeet_config")
+
         return old
 
     def migrate_defaults(self, old: dict, new: dict) -> dict:
         """Migrate defaults.yaml from 2.1.0 to 3.0.0."""
+        # Add per-wingman Parakeet STT config
+        if "parakeet" not in old and "parakeet" in new:
+            old["parakeet"] = new["parakeet"]
+            self.log("- added new default: parakeet (STT config)")
+
         return old
 
     def migrate_wingman(self, old: dict, new: dict) -> dict:
