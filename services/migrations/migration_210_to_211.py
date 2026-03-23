@@ -34,8 +34,14 @@ class Migration210To211(BaseMigration):
 
     def migrate_defaults(self, old: dict, new: dict) -> dict:
         """Migrate defaults.yaml from 2.1.0 to 2.1.1."""
-        new_pro_model = new["wingman_pro"]["conversation_deployment"]
-        new_openai_model = new["openai"]["conversation_model"]
+        new_pro_model = new.get("wingman_pro", {}).get(
+            "conversation_deployment",
+            self._new_pro_model,
+        )
+        new_openai_model = new.get("openai", {}).get(
+            "conversation_model",
+            self._new_openai_model,
+        )
 
         # Migrate Wingman Pro default conversation model
         if "wingman_pro" in old and "conversation_deployment" in old["wingman_pro"]:
