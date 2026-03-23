@@ -58,7 +58,7 @@ command_categories:
   - id: 3282fd5c-9c32-4d27-adfa-d94f6f40e43e
     name: Flight - Target Hailing
   - id: 8878cd3f-e81d-4cc5-b2ed-dd9337b52456
-    name: Flight - Rader
+    name: Flight - Radar
   - id: 971fcc06-4bb7-4cd7-b400-fefff52895de
     name: Vehicles - Scanning
   - id: 59a1060a-0ea0-4a78-9d67-c56ad94b1e35
