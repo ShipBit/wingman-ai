@@ -72,9 +72,16 @@ class GoogleGenAI:
             # Flash and other non-Pro 2.5 variants allow disabling thinking.
             return {"reasoning_effort": "none"}
 
+        if "3.1" in normalized:
+            if "pro" in normalized:
+                return {"reasoning_effort": "low"}
+            return {"reasoning_effort": "minimal"}
+
         # Gemini 3 models: minimal is not a valid value; use the lowest supported value.
-        if re.search(r"(^|[^0-9])3([^0-9]|$)", normalized):
-            return {"reasoning_effort": "low"}
+        if "-3-" in normalized:
+            if "pro" in normalized:
+                return {"reasoning_effort": "low"}
+            return {"reasoning_effort": "minimal"}
 
         # Other Gemini aliases (e.g. gemini-flash-latest / gemini-pro-latest) may vary.
         # Don't send reasoning_effort unless we know it's supported.
