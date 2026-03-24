@@ -1,0 +1,209 @@
+<h2>Embedding Inspector — Drawer Mockup</h2>
+<p class="subtitle">Tabbed layout with Skeleton UI components. Focused wingman: "ATC"</p>
+
+<div class="mockup" style="max-width: 700px; margin: 0 auto;">
+  <div class="mockup-header">Drawer: Embedding Inspector</div>
+  <div class="mockup-body" style="background: #1e1e2e; color: #cdd6f4; padding: 0; font-family: system-ui, sans-serif; font-size: 13px;">
+
+    <!-- Header bar -->
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: #313244; border-bottom: 1px solid #45475a;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="color: #89b4fa;">&#x1F4E6;</span>
+        <span style="font-size: 16px; font-weight: 600;">Embedding Inspector</span>
+        <span style="font-size: 11px; background: #45475a; padding: 2px 8px; border-radius: 10px; color: #a6adc8;">ATC</span>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <button style="background: #45475a; border: none; color: #cdd6f4; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;">&#x21BB; Refresh</button>
+        <button style="background: #45475a; border: none; color: #cdd6f4; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer;">&#x2715; Close</button>
+      </div>
+    </div>
+
+    <!-- Summary stats bar -->
+    <div style="display: flex; gap: 16px; padding: 12px 20px; background: #181825; border-bottom: 1px solid #45475a;">
+      <div style="text-align: center;">
+        <div style="font-size: 18px; font-weight: 700; color: #89b4fa;">3</div>
+        <div style="font-size: 10px; color: #6c7086; text-transform: uppercase;">Indices</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 18px; font-weight: 700; color: #a6e3a1;">47</div>
+        <div style="font-size: 10px; color: #6c7086; text-transform: uppercase;">Chunks</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 18px; font-weight: 700; color: #f9e2af;">47</div>
+        <div style="font-size: 10px; color: #6c7086; text-transform: uppercase;">Embeddings</div>
+      </div>
+      <div style="text-align: center;">
+        <div style="font-size: 18px; font-weight: 700; color: #f38ba8;">~2.4 MB</div>
+        <div style="font-size: 10px; color: #6c7086; text-transform: uppercase;">Est. Memory</div>
+      </div>
+      <div style="flex:1;"></div>
+      <div style="text-align: center;">
+        <div style="font-size: 12px; color: #a6adc8;">nomic-embed-text</div>
+        <div style="font-size: 10px; color: #6c7086; text-transform: uppercase;">Model</div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div style="display: flex; border-bottom: 2px solid #45475a; padding: 0 20px;">
+      <div style="padding: 10px 16px; font-size: 13px; font-weight: 600; color: #89b4fa; border-bottom: 2px solid #89b4fa; margin-bottom: -2px; cursor: pointer;">
+        Tool Responses <span style="font-size: 11px; background: #89b4fa22; color: #89b4fa; padding: 1px 6px; border-radius: 8px; margin-left: 4px;">3</span>
+      </div>
+      <div style="padding: 10px 16px; font-size: 13px; color: #6c7086; cursor: pointer;">
+        Tags <span style="font-size: 10px; color: #45475a;">soon</span>
+      </div>
+      <div style="padding: 10px 16px; font-size: 13px; color: #6c7086; cursor: pointer;">
+        Memory <span style="font-size: 10px; color: #45475a;">soon</span>
+      </div>
+    </div>
+
+    <!-- Tab content: Tool Responses -->
+    <div style="padding: 16px 20px; overflow-y: auto;">
+
+      <!-- Entry card 1 -->
+      <div style="background: #313244; border-radius: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid #45475a;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="font-weight: 600; color: #cdd6f4; font-size: 13px;">
+              &#x1F310; sc_location_shops
+            </div>
+            <div style="font-size: 11px; color: #6c7086; margin-top: 2px;">
+              tool_call_id: call_abc123...
+            </div>
+          </div>
+          <button style="background: #f38ba822; border: 1px solid #f38ba844; color: #f38ba8; padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+            &#x1F5D1; Delete
+          </button>
+        </div>
+        <div style="display: flex; gap: 16px; margin-top: 10px; font-size: 11px;">
+          <div><span style="color: #6c7086;">Original:</span> <span style="color: #f9e2af;">~49,200 tok</span></div>
+          <div><span style="color: #6c7086;">Compressed:</span> <span style="color: #a6e3a1;">~850 tok</span></div>
+          <div><span style="color: #6c7086;">Chunks:</span> <span style="color: #89b4fa;">28</span></div>
+          <div><span style="color: #6c7086;">Embeddings:</span> <span style="color: #89b4fa;">28</span></div>
+        </div>
+        <div style="font-size: 10px; color: #6c7086; margin-top: 6px;">2 min ago</div>
+
+        <!-- Expandable chunk preview (shown expanded) -->
+        <div style="margin-top: 10px; border-top: 1px solid #45475a; padding-top: 10px;">
+          <div style="font-size: 11px; font-weight: 600; color: #a6adc8; margin-bottom: 6px;">Summary:</div>
+          <div style="font-size: 11px; color: #bac2de; background: #181825; padding: 8px; border-radius: 4px; line-height: 1.5;">
+            Star Citizen location shops data — 28 shop entries across multiple locations. Includes shops at Port Olisar, GrimHEX, Area18, Lorville. Each entry contains shop name, location, inventory categories, price ranges...
+          </div>
+          <div style="font-size: 11px; font-weight: 600; color: #a6adc8; margin-top: 8px; margin-bottom: 6px;">Chunks (28):</div>
+          <div style="font-size: 11px; color: #bac2de; background: #181825; padding: 8px; border-radius: 4px; margin-bottom: 4px; font-family: monospace; line-height: 1.4;">
+            <span style="color: #6c7086;">#1</span> {"shop_name": "Garrity Defense", "location": "Port Olisar", "category": "Weapons", "items": [{"name": "Arrowhead", "price": 5400}...
+          </div>
+          <div style="font-size: 11px; color: #bac2de; background: #181825; padding: 8px; border-radius: 4px; margin-bottom: 4px; font-family: monospace; line-height: 1.4;">
+            <span style="color: #6c7086;">#2</span> {"shop_name": "Live Fire Weapons", "location": "GrimHEX", "category": "Weapons & Armor"...
+          </div>
+          <div style="font-size: 11px; color: #6c7086; text-align: center; padding: 4px;">... 26 more chunks</div>
+        </div>
+      </div>
+
+      <!-- Entry card 2 (collapsed) -->
+      <div style="background: #313244; border-radius: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid #45475a;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="font-weight: 600; color: #cdd6f4; font-size: 13px;">
+              &#x1F310; sc_vehicle_list
+            </div>
+            <div style="font-size: 11px; color: #6c7086; margin-top: 2px;">
+              tool_call_id: call_def456...
+            </div>
+          </div>
+          <button style="background: #f38ba822; border: 1px solid #f38ba844; color: #f38ba8; padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+            &#x1F5D1; Delete
+          </button>
+        </div>
+        <div style="display: flex; gap: 16px; margin-top: 10px; font-size: 11px;">
+          <div><span style="color: #6c7086;">Original:</span> <span style="color: #f9e2af;">~12,800 tok</span></div>
+          <div><span style="color: #6c7086;">Compressed:</span> <span style="color: #a6e3a1;">~620 tok</span></div>
+          <div><span style="color: #6c7086;">Chunks:</span> <span style="color: #89b4fa;">15</span></div>
+          <div><span style="color: #6c7086;">Embeddings:</span> <span style="color: #89b4fa;">15</span></div>
+        </div>
+        <div style="font-size: 10px; color: #6c7086; margin-top: 6px;">5 min ago</div>
+        <div style="text-align: center; margin-top: 8px;">
+          <span style="font-size: 11px; color: #89b4fa; cursor: pointer;">&#x25BC; Show details</span>
+        </div>
+      </div>
+
+      <!-- Entry card 3 (collapsed) -->
+      <div style="background: #313244; border-radius: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid #45475a;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          <div>
+            <div style="font-weight: 600; color: #cdd6f4; font-size: 13px;">
+              &#x1F310; sc_commodity_prices
+            </div>
+            <div style="font-size: 11px; color: #6c7086; margin-top: 2px;">
+              tool_call_id: call_ghi789...
+            </div>
+          </div>
+          <button style="background: #f38ba822; border: 1px solid #f38ba844; color: #f38ba8; padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">
+            &#x1F5D1; Delete
+          </button>
+        </div>
+        <div style="display: flex; gap: 16px; margin-top: 10px; font-size: 11px;">
+          <div><span style="color: #6c7086;">Original:</span> <span style="color: #f9e2af;">~4,300 tok</span></div>
+          <div><span style="color: #6c7086;">Compressed:</span> <span style="color: #a6e3a1;">~380 tok</span></div>
+          <div><span style="color: #6c7086;">Chunks:</span> <span style="color: #89b4fa;">4</span></div>
+          <div><span style="color: #6c7086;">Embeddings:</span> <span style="color: #89b4fa;">4</span></div>
+        </div>
+        <div style="font-size: 10px; color: #6c7086; margin-top: 6px;">8 min ago</div>
+        <div style="text-align: center; margin-top: 8px;">
+          <span style="font-size: 11px; color: #89b4fa; cursor: pointer;">&#x25BC; Show details</span>
+        </div>
+      </div>
+
+      <!-- Clear all button -->
+      <div style="text-align: center; margin-top: 16px; padding-top: 12px; border-top: 1px solid #45475a;">
+        <button style="background: #f38ba822; border: 1px solid #f38ba844; color: #f38ba8; padding: 6px 16px; border-radius: 6px; font-size: 12px; cursor: pointer;">
+          Clear all tool response embeddings
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div style="max-width: 700px; margin: 20px auto 0;">
+  <h3>"View All" Mode</h3>
+  <p class="subtitle">When no wingman is focused, entries from all wingmen are shown with wingman badges on each card</p>
+</div>
+
+<div class="mockup" style="max-width: 700px; margin: 10px auto 0;">
+  <div class="mockup-header">Drawer: View All mode</div>
+  <div class="mockup-body" style="background: #1e1e2e; color: #cdd6f4; padding: 16px 20px; font-family: system-ui, sans-serif; font-size: 13px;">
+    <!-- Entry with wingman badge -->
+    <div style="background: #313244; border-radius: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid #45475a;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 10px; background: #89b4fa33; color: #89b4fa; padding: 2px 8px; border-radius: 10px; font-weight: 600;">ATC</span>
+            <span style="font-weight: 600; color: #cdd6f4; font-size: 13px;">&#x1F310; sc_location_shops</span>
+          </div>
+        </div>
+        <button style="background: #f38ba822; border: 1px solid #f38ba844; color: #f38ba8; padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">&#x1F5D1;</button>
+      </div>
+      <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 11px;">
+        <div><span style="color: #6c7086;">Original:</span> <span style="color: #f9e2af;">~49,200 tok</span></div>
+        <div><span style="color: #6c7086;">Compressed:</span> <span style="color: #a6e3a1;">~850 tok</span></div>
+        <div><span style="color: #6c7086;">Chunks:</span> <span style="color: #89b4fa;">28</span></div>
+      </div>
+    </div>
+    <div style="background: #313244; border-radius: 8px; padding: 12px; margin-bottom: 10px; border: 1px solid #45475a;">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span style="font-size: 10px; background: #a6e3a133; color: #a6e3a1; padding: 2px 8px; border-radius: 10px; font-weight: 600;">StarHead</span>
+            <span style="font-weight: 600; color: #cdd6f4; font-size: 13px;">&#x1F310; sc_trade_routes</span>
+          </div>
+        </div>
+        <button style="background: #f38ba822; border: 1px solid #f38ba844; color: #f38ba8; padding: 3px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">&#x1F5D1;</button>
+      </div>
+      <div style="display: flex; gap: 16px; margin-top: 8px; font-size: 11px;">
+        <div><span style="color: #6c7086;">Original:</span> <span style="color: #f9e2af;">~8,100 tok</span></div>
+        <div><span style="color: #6c7086;">Compressed:</span> <span style="color: #a6e3a1;">~450 tok</span></div>
+        <div><span style="color: #6c7086;">Chunks:</span> <span style="color: #89b4fa;">9</span></div>
+      </div>
+    </div>
+  </div>
+</div>
