@@ -194,27 +194,64 @@ After backend endpoints are added, run `npm run generate:api` to auto-generate `
 
 Two new toggle switches in the Wingman configuration's LLM Provider section (`AiModelProviders.svelte`).
 
-### New field in `FeaturesConfig` (`api/interface.py`)
+### Fields in `FeaturesConfig` (`api/interface.py`)
+
+Both fields are **required** (no default value) — the migration ensures they exist in all configs.
 
 ```python
 class FeaturesConfig(BaseModel):
     # ... existing fields ...
-    condense_conversation: bool = True  # changed default from False to True
-    compress_tool_responses: bool = True
+    condense_conversation: bool  # remove default, make required
+    compress_tool_responses: bool
     """Compress large tool/MCP responses using local AI embeddings and summarization.
     Reduces token usage by replacing large responses with summaries while preserving
     detail access via semantic retrieval."""
 ```
 
-Note: `condense_conversation` already exists but defaults to `False`. Change default to `True`. Add new `compress_tool_responses` field defaulting to `True`.
+### Default templates update
 
-### Default template update (`templates/configs/defaults.yaml`)
-
+**`templates/configs/defaults.yaml`** (live template):
 ```yaml
 features:
   condense_conversation: true   # was: false
   compress_tool_responses: true  # new
 ```
+
+**`templates/migration/3_0_0/configs/defaults.yaml`** (migration template):
+```yaml
+features:
+  condense_conversation: true   # add (was missing from migration template)
+  compress_tool_responses: true  # new
+```
+
+### Migration (`services/migrations/migration_211_to_300.py`)
+
+Add to `migrate_defaults()`:
+```python
+# Add/update conversation optimization features
+features = old.setdefault("features", {})
+if "condense_conversation" not in features:
+    features["condense_conversation"] = True
+    self.log("- added new feature: condense_conversation = true")
+if "compress_tool_responses" not in features:
+    features["compress_tool_responses"] = True
+    self.log("- added new feature: compress_tool_responses = true")
+```
+
+Add to `migrate_wingman()`:
+```python
+# Add conversation optimization features to wingman overrides if features section exists
+features = old.get("features")
+if features is not None:
+    if "condense_conversation" not in features:
+        features["condense_conversation"] = True
+        self.log("- added new feature: condense_conversation = true")
+    if "compress_tool_responses" not in features:
+        features["compress_tool_responses"] = True
+        self.log("- added new feature: compress_tool_responses = true")
+```
+
+Note: `migrate_wingman` only adds the fields if the wingman already has a `features` section (i.e., overrides defaults). Wingmen without explicit features inherit from defaults, which are migrated separately.
 
 ### Backend gating (`wingmen/open_ai_wingman.py`)
 
@@ -285,17 +322,15 @@ After the model selection area and before the closing `</ConfigSection>`, inside
 - `config_compress_tool_responses_hint` — "Use local AI to compress large tool/MCP responses before sending to the conversation LLM. Full details remain accessible via semantic retrieval."
 - `config_compress_tool_responses_warning` — "Disabling this means large tool responses (e.g., from MCP servers) will be sent in full to the LLM, which can consume massive amounts of tokens."
 
-### Migration consideration
-
-Existing wingman configs that don't have `compress_tool_responses` will get the Pydantic default (`True`). Existing configs with `condense_conversation: false` will keep their value — only newly created configs get the new default of `True`.
-
 ## Files to Create/Modify
 
 | File | Action |
 |------|--------|
 | `services/tool_response_cache.py` | Add `get_stats()`, `delete_entry()`, `summary_token_count` to `CachedResponse` |
-| `api/interface.py` | Add Pydantic models + `compress_tool_responses` field, change `condense_conversation` default |
+| `api/interface.py` | Add Pydantic models + required `compress_tool_responses` field, remove `condense_conversation` default |
 | `templates/configs/defaults.yaml` | Update defaults for both toggles |
+| `templates/migration/3_0_0/configs/defaults.yaml` | Add both toggle fields to migration template |
+| `services/migrations/migration_211_to_300.py` | Add migration steps for both fields in `migrate_defaults` and `migrate_wingman` |
 | `wingmen/open_ai_wingman.py` | Add public embedding stat/delete/clear methods + gate compression behind config flag |
 | `wingman_core.py` | Add 3 endpoints + handler methods |
 | `services/local_ai_service.py` | Add `get_embed_model_name()` convenience method |
