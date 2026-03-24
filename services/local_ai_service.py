@@ -72,6 +72,15 @@ class LocalAiService:
             return self.provider.is_ready()
         return self.remote.is_ready()
 
+    def get_embed_model_name(self) -> str | None:
+        """Return the embed model filename, or None if not configured."""
+        name = getattr(self.settings, "embed_model", None)
+        if not name:
+            return None
+        # Strip path and extension for display
+        from os.path import basename, splitext
+        return splitext(basename(name))[0]
+
     async def initialize(self):
         """Eagerly load local models if run_locally is on and models are available."""
         if not self.settings.run_locally:

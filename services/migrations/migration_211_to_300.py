@@ -41,8 +41,27 @@ class Migration211To300(BaseMigration):
             old["parakeet"] = new["parakeet"]
             self.log("- added new default: parakeet (STT config)")
 
+        # Add conversation optimization features
+        features = old.setdefault("features", {})
+        if "condense_conversation" not in features:
+            features["condense_conversation"] = True
+            self.log("- added new feature: condense_conversation = true")
+        if "compress_tool_responses" not in features:
+            features["compress_tool_responses"] = True
+            self.log("- added new feature: compress_tool_responses = true")
+
         return old
 
     def migrate_wingman(self, old: dict, new: dict) -> dict:
         """Migrate wingman configs from 2.1.1 to 3.0.0."""
+        # Add conversation optimization features if wingman has feature overrides
+        features = old.get("features")
+        if features is not None:
+            if "condense_conversation" not in features:
+                features["condense_conversation"] = True
+                self.log("- added new feature: condense_conversation = true")
+            if "compress_tool_responses" not in features:
+                features["compress_tool_responses"] = True
+                self.log("- added new feature: compress_tool_responses = true")
+
         return old

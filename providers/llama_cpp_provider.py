@@ -97,6 +97,7 @@ class LlamaCppProvider:
         ]
         if embedding:
             cmd.append("--embeddings")
+            cmd.extend(["--ubatch-size", str(n_ctx)])
         if reasoning_budget >= 0:
             cmd.extend(["--reasoning-budget", str(reasoning_budget)])
 
@@ -399,7 +400,6 @@ class LlamaCppProvider:
             printr.print(
                 f"Embedding failed: {e}",
                 color=LogType.ERROR,
-                server_only=True,
             )
             return None
 

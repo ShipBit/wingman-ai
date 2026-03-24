@@ -55,7 +55,7 @@ from services.skill_registry import SkillRegistry
 from services.mcp_client import McpClient
 from services.mcp_registry import McpRegistry
 from services.capability_registry import CapabilityRegistry
-from services.tool_response_cache import ToolResponseCache
+from services.tool_response_cache import ToolResponseCompressor
 from skills.skill_base import Skill
 from wingmen.wingman import Wingman
 
@@ -148,9 +148,9 @@ class OpenAiWingman(Wingman):
         # Local AI service — set externally by WingmanCore if available
         self.local_ai_service = None
 
-        # Tool response compression cache — compresses large tool/MCP responses
-        # via local AI before the cloud LLM sees them, with embedding-based retrieval
-        self._tool_response_cache = ToolResponseCache()
+        # Stateless tool response compressor — summarizes large tool/MCP responses
+        # via local AI before the cloud LLM sees them
+        self._tool_response_compressor = ToolResponseCompressor()
 
     def _broadcast_mcp_state_changed(self):
         """Broadcast MCP state change to UI via WebSocket."""
@@ -1470,9 +1470,6 @@ class OpenAiWingman(Wingman):
                 f"Full response was processed.]"
             )
 
-        # Evict cached tool responses that are no longer referenced
-        self._tool_response_cache.evict_stale(self.messages)
-
         # Notify the client when significant trimming occurs so the UI can
         # show a "Show history" indicator explaining the token drop.
         # Skip if condensation is already running to avoid interfering with
@@ -1648,9 +1645,6 @@ class OpenAiWingman(Wingman):
 
         # Remove the messages before the cutoff index, exclusive of the system message.
         del self.messages[:cutoff_index]
-
-        # Evict cached tool responses no longer referenced by remaining messages
-        self._tool_response_cache.evict_stale(self.messages)
 
         # Optional debugging printout.
         if self.settings.debug_mode and total_deleted_messages > 0:
@@ -1985,9 +1979,6 @@ class OpenAiWingman(Wingman):
             del self.messages[:cutoff_index]
             self.conversation_summary = summary
 
-            # Evict cached tool responses no longer referenced by remaining messages
-            self._tool_response_cache.evict_stale(self.messages)
-
             estimated_summary_tokens = count_tokens(summary)
             estimated_tokens_saved = max(
                 0, estimated_original_tokens - estimated_summary_tokens
@@ -2285,7 +2276,6 @@ class OpenAiWingman(Wingman):
         self.conversation_summary = ""
         self._last_prompt_tokens = 0
         # Keep _summarize_token_ratio — it's model-specific, not conversation-specific
-        self._tool_response_cache.clear()
         self.skill_registry.reset_activations()
         self.mcp_registry.reset_activations()
 
@@ -2482,7 +2472,9 @@ class OpenAiWingman(Wingman):
         return "No additional context available."
 
     async def add_context(self, messages):
-        messages.insert(0, {"role": "system", "content": (await self.get_context())})
+        context = await self.get_context()
+
+        messages.insert(0, {"role": "system", "content": context})
 
     async def generate_image(self, text: str) -> str:
         """
@@ -2747,22 +2739,22 @@ class OpenAiWingman(Wingman):
                 # Compress large tool responses via local AI before the cloud LLM sees them
                 if (
                     tool_call.id
+                    and self.config.features.compress_tool_responses
                     and self.local_ai_service
                     and self.local_ai_service.is_ready()
-                    and self._tool_response_cache.should_compress(str(function_response))
+                    and self._tool_response_compressor.should_compress(str(function_response))
                 ):
                     n_ctx = (
                         self.settings.llama_cpp.n_ctx
                         if hasattr(self.settings, "llama_cpp")
                         else 2048
                     )
-                    function_response = await self._tool_response_cache.compress_and_cache(
-                        tool_call_id=tool_call.id,
-                        tool_name=function_name,
+                    function_response = await self._tool_response_compressor.compress(
                         response_text=str(function_response),
                         local_ai_service=self.local_ai_service,
                         n_ctx=n_ctx,
                         wingman_name=self.name,
+                        tool_name=function_name,
                     )
 
                 if tool_call.id:
@@ -2802,17 +2794,6 @@ class OpenAiWingman(Wingman):
         instant_response = ""
         used_skill = None
         tool_label = None
-
-        # Handle tool response retrieval (RAG for compressed tool responses)
-        if function_name == "retrieve_tool_response_details":
-            cache_id = function_args.get("cache_id", "")
-            query = function_args.get("query", "")
-            return (
-                self._tool_response_cache.retrieve(cache_id, query, self.local_ai_service),
-                None,
-                None,
-                "RAG: retrieve details",
-            )
 
         # Handle unified capability meta-tools (activate_capability, list_active_capabilities)
         if self.capability_registry.is_meta_tool(function_name):
@@ -3316,10 +3297,6 @@ class OpenAiWingman(Wingman):
 
         for _, tool in self.mcp_registry.get_active_tools():
             tools.append(tool)
-
-        # Inject retrieval tool when compressed tool responses are cached
-        if self._tool_response_cache.has_cached_responses():
-            tools.append(self._tool_response_cache.get_tool_schema())
 
         return tools
 

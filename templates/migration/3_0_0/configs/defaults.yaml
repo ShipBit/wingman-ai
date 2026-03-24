@@ -58,6 +58,8 @@ features:
   conversation_provider: wingman_pro
   image_generation_provider: wingman_pro
   use_generic_instant_responses: false
+  condense_conversation: true
+  compress_tool_responses: true
 sound:
   effects: []
   play_beep: false

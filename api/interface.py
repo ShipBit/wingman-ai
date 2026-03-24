@@ -570,11 +570,15 @@ class FeaturesConfig(BaseModel):
     remember_messages: Optional[int] = None
     image_generation_provider: ImageGenerationProvider
     use_generic_instant_responses: bool
-    condense_conversation: bool = False
+    condense_conversation: bool
     """Enable automatic conversation condensation using the local summarization model.
     When enabled, older messages are automatically summarized when the conversation
     approaches the summarize model's context window capacity, saving tokens while
     preserving key information."""
+    compress_tool_responses: bool
+    """Compress large tool/MCP responses using local AI embeddings and summarization.
+    Reduces token usage by replacing large responses with summaries while preserving
+    detail access via semantic retrieval."""
     condense_max_messages: int = 50
     """Maximum number of user messages before forcing condensation, regardless of token count.
     Acts as a safety cap to prevent unbounded message list growth."""
