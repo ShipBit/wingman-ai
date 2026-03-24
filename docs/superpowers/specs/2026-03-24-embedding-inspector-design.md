@@ -190,19 +190,120 @@ Keys prefixed with `embedding_inspector_*`:
 
 After backend endpoints are added, run `npm run generate:api` to auto-generate `CoreService.getEmbeddingStats()`, `CoreService.deleteEmbeddingCacheEntry()`, `CoreService.clearEmbeddingCache()` and the TypeScript models.
 
+## Configuration Toggles
+
+Two new toggle switches in the Wingman configuration's LLM Provider section (`AiModelProviders.svelte`).
+
+### New field in `FeaturesConfig` (`api/interface.py`)
+
+```python
+class FeaturesConfig(BaseModel):
+    # ... existing fields ...
+    condense_conversation: bool = True  # changed default from False to True
+    compress_tool_responses: bool = True
+    """Compress large tool/MCP responses using local AI embeddings and summarization.
+    Reduces token usage by replacing large responses with summaries while preserving
+    detail access via semantic retrieval."""
+```
+
+Note: `condense_conversation` already exists but defaults to `False`. Change default to `True`. Add new `compress_tool_responses` field defaulting to `True`.
+
+### Default template update (`templates/configs/defaults.yaml`)
+
+```yaml
+features:
+  condense_conversation: true   # was: false
+  compress_tool_responses: true  # new
+```
+
+### Backend gating (`wingmen/open_ai_wingman.py`)
+
+`compress_tool_responses` gates the compression intercept in `_handle_tool_calls`:
+
+```python
+if (
+    tool_call.id
+    and self.config.features.compress_tool_responses  # NEW gate
+    and self.local_ai_service
+    and self.local_ai_service.is_ready()
+    and self._tool_response_cache.should_compress(str(function_response))
+):
+```
+
+`condense_conversation` already gates `_maybe_condense_history()` at line 1695 — no change needed.
+
+### UI behavior
+
+**When `conversation_provider === 'wingman_pro'`**: Both toggles are hidden. Both features are always enabled. The Wingman subscription service handles token management server-side, so users should not be able to disable these optimizations.
+
+**For all other providers**: Both toggles are visible, enabled by default. When a toggle is disabled, show a warning:
+
+```svelte
+{#if config.features.conversation_provider !== 'wingman_pro'}
+  <HintedSlideToggle
+    name="condense-conversation"
+    hint={m.config_condense_conversation_hint()}
+    bind:checked={config.features.condense_conversation}
+    on:change={() => dispatch('condensationChanged')}
+  >
+    <span>{m.config_condense_conversation()}</span>
+  </HintedSlideToggle>
+  {#if !config.features.condense_conversation}
+    <aside class="alert variant-ghost-warning p-2 text-xs">
+      <AlertTriangle size={14} />
+      <span>{m.config_condense_conversation_warning()}</span>
+    </aside>
+  {/if}
+
+  <HintedSlideToggle
+    name="compress-tool-responses"
+    hint={m.config_compress_tool_responses_hint()}
+    bind:checked={config.features.compress_tool_responses}
+    on:change={() => dispatch('compressToolResponsesChanged')}
+  >
+    <span>{m.config_compress_tool_responses()}</span>
+  </HintedSlideToggle>
+  {#if !config.features.compress_tool_responses}
+    <aside class="alert variant-ghost-warning p-2 text-xs">
+      <AlertTriangle size={14} />
+      <span>{m.config_compress_tool_responses_warning()}</span>
+    </aside>
+  {/if}
+{/if}
+```
+
+### Placement in AiModelProviders.svelte
+
+After the model selection area and before the closing `</ConfigSection>`, inside the existing TourItem block. Near line 923 (after the commented-out instant responses toggle).
+
+### Additional i18n keys (all 4 locales)
+
+- `config_condense_conversation` — "Auto-summarize conversations"
+- `config_condense_conversation_hint` — "Automatically summarize older messages using the local AI model to keep conversations efficient."
+- `config_condense_conversation_warning` — "Disabling this can lead to very large context windows and significant token costs over long conversations."
+- `config_compress_tool_responses` — "Compress large tool responses"
+- `config_compress_tool_responses_hint` — "Use local AI to compress large tool/MCP responses before sending to the conversation LLM. Full details remain accessible via semantic retrieval."
+- `config_compress_tool_responses_warning` — "Disabling this means large tool responses (e.g., from MCP servers) will be sent in full to the LLM, which can consume massive amounts of tokens."
+
+### Migration consideration
+
+Existing wingman configs that don't have `compress_tool_responses` will get the Pydantic default (`True`). Existing configs with `condense_conversation: false` will keep their value — only newly created configs get the new default of `True`.
+
 ## Files to Create/Modify
 
 | File | Action |
 |------|--------|
 | `services/tool_response_cache.py` | Add `get_stats()`, `delete_entry()`, `summary_token_count` to `CachedResponse` |
-| `api/interface.py` | Add Pydantic models |
-| `wingmen/open_ai_wingman.py` | Add public embedding stat/delete/clear methods |
+| `api/interface.py` | Add Pydantic models + `compress_tool_responses` field, change `condense_conversation` default |
+| `templates/configs/defaults.yaml` | Update defaults for both toggles |
+| `wingmen/open_ai_wingman.py` | Add public embedding stat/delete/clear methods + gate compression behind config flag |
 | `wingman_core.py` | Add 3 endpoints + handler methods |
 | `services/local_ai_service.py` | Add `get_embed_model_name()` convenience method |
 | **Client** | |
 | `src/lib/EmbeddingInspector.svelte` | Create drawer component |
 | `src/routes/+layout.svelte` | Add drawer ID case + import |
-| `src/lib/ConfigBar.svelte` | Add trigger button |
+| `src/lib/ConfigBar.svelte` | Add drawer trigger button |
+| `src/lib/Configuration/AiModelProviders.svelte` | Add two toggle switches with warnings |
 | `messages/en.json` | Add i18n keys |
 | `messages/de.json` | Add i18n keys (German) |
 | `messages/it.json` | Add i18n keys (Italian) |
