@@ -1856,7 +1856,7 @@ class OpenAiWingman(Wingman):
         if content is None:
             response_message.content = ""
 
-        # remove hallucinated tools, if non were allowed
+        # remove hallucinated tools, if none were allowed
         if not allow_tool_calls:
             response_message.tool_calls = None
 
