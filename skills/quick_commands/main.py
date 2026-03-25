@@ -66,13 +66,15 @@ class QuickCommands(Skill):
     ) -> None:
         """Add an instant activation phrase."""
         changed = False
+        phrase_lower = phrase.lower()
 
         for command in commands:
             command = self.wingman.get_command(command)
             if not command.instant_activation:
                 command.instant_activation = []
 
-            if phrase.lower() not in [p.lower() for p in command.instant_activation]:
+            existing = {p.lower() for p in command.instant_activation}
+            if phrase_lower not in existing:
                 command.instant_activation.append(phrase)
                 changed = True
 
@@ -123,14 +125,6 @@ class QuickCommands(Skill):
         if not phrase or not command_names:
             return
 
-        # Skip learning if phrase matches an existing instant activation phrase
-        # (means this was triggered by instant activation, not AI)
-        for command_name in command_names:
-            command = self.wingman.get_command(command_name)
-            if command and command.instant_activation:
-                if phrase.lower() in [p.lower() for p in command.instant_activation]:
-                    return
-
         await self._learn_phrase(phrase.lower(), command_names)
 
     async def _cleanup_learning_data(self) -> None:
@@ -178,7 +172,7 @@ class QuickCommands(Skill):
             if not command:
                 # AI probably hallucinated
                 return
-            if command.instant_activation and phrase.lower() in [
+            if command.instant_activation and phrase in [
                 p.lower() for p in command.instant_activation
             ]:
                 # phrase is already learned
