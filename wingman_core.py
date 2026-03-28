@@ -623,6 +623,8 @@ class WingmanCore(WebSocketUser):
         self.is_started = False
         self.core_state: CoreState = CoreState.STARTING
         self._last_logged_state: Optional[CoreState] = None
+        self.core_state_message: str | None = None
+        self.core_state_progress: float | None = None
         self.startup_errors: list[WingmanInitializationError] = []
         self.tower_errors: list[WingmanInitializationError] = []
 
@@ -834,20 +836,31 @@ class WingmanCore(WebSocketUser):
             await self._hud_server.stop()
             self._hud_server = None
 
-    async def set_core_state(self, state: CoreState) -> None:
+    async def set_core_state(
+        self,
+        state: CoreState,
+        message: str | None = None,
+        progress: float | None = None,
+    ) -> None:
         """Update the core state and broadcast to all connected clients.
 
         Args:
             state: The new CoreState
+            message: Optional human-readable sub-step detail
+            progress: Optional 0.0-1.0 progress for operations with known duration
         """
         self.core_state = state
+        self.core_state_message = message
+        self.core_state_progress = progress
 
         # Update is_started for backwards compatibility
         self.is_started = state == CoreState.READY
 
         # Broadcast state change to connected clients
         if self._connection_manager:
-            command = CoreStateChangedCommand(state=state)
+            command = CoreStateChangedCommand(
+                state=state, message=message, progress=progress
+            )
             await self._connection_manager.broadcast(command)
 
         # Only log actual state changes, not progress updates within the same state
@@ -863,6 +876,8 @@ class WingmanCore(WebSocketUser):
         """Get the current core status for the /ping endpoint."""
         return CoreStatusResponse(
             state=self.core_state,
+            message=self.core_state_message,
+            progress=self.core_state_progress,
         )
 
     def is_mouse_configured(self, config: Config) -> bool:
