@@ -220,6 +220,12 @@ datas += ptts_datas
 binaries += ptts_binaries
 hiddenimports += ptts_hidden
 
+# Collect tiktoken encoding data (e.g. cl100k_base BPE ranks)
+tiktoken_datas, tiktoken_binaries, tiktoken_hidden = collect_all('tiktoken')
+datas += tiktoken_datas
+binaries += tiktoken_binaries
+hiddenimports += tiktoken_hidden
+
 # Collect all onnx-asr (Parakeet STT)
 onnx_asr_datas, onnx_asr_binaries, onnx_asr_hidden = collect_all('onnx_asr')
 datas += onnx_asr_datas
