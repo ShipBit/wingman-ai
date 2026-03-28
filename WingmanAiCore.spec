@@ -176,6 +176,7 @@ hiddenimports = [
     'llvmlite',
     'tokenizers',
     'onnxruntime',
+    'onnx_asr',
     'huggingface_hub',
 
     # NVIDIA packages (ensure they're included even if DLL collection fails)
