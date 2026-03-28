@@ -176,7 +176,6 @@ hiddenimports = [
     'llvmlite',
     'tokenizers',
     'onnxruntime',
-    'onnx_asr',
     'huggingface_hub',
 
     # NVIDIA packages (ensure they're included even if DLL collection fails)
@@ -220,6 +219,12 @@ ptts_datas, ptts_binaries, ptts_hidden = collect_all('pocket_tts')
 datas += ptts_datas
 binaries += ptts_binaries
 hiddenimports += ptts_hidden
+
+# Collect all onnx-asr (Parakeet STT)
+onnx_asr_datas, onnx_asr_binaries, onnx_asr_hidden = collect_all('onnx_asr')
+datas += onnx_asr_datas
+binaries += onnx_asr_binaries
+hiddenimports += onnx_asr_hidden
 
 # ============================================================================
 # ANALYSIS
