@@ -73,6 +73,7 @@ class LocalModelManager:
         self.settings = settings
         self.models_dir = get_local_models_dir()
         self._downloading = False
+        self._download_progress: dict = {}  # {file, pct, downloaded_mb, total_mb}
 
     def update_settings(self, new_settings: LlamaCppSettings):
         self.settings = new_settings
@@ -104,7 +105,7 @@ class LocalModelManager:
     def is_downloading(self) -> bool:
         return self._downloading
 
-    def _download_model(self, model_def: dict) -> bool:
+    def _download_model(self, model_def: dict, on_progress: callable = None) -> bool:
         """Download a single GGUF model from HuggingFace. Returns True on success."""
         repo = model_def["repo"]
         filename = model_def["filename"]
@@ -134,6 +135,14 @@ class LocalModelManager:
             total_size = int(response.headers.get("content-length", 0))
             downloaded = 0
             last_logged_pct = -10
+            last_callback_pct = -2
+            total_mb = total_size // (1024 * 1024) if total_size > 0 else 0
+            self._download_progress = {
+                "file": filename,
+                "pct": 0,
+                "downloaded_mb": 0,
+                "total_mb": total_mb,
+            }
 
             with open(temp_path, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
@@ -141,19 +150,30 @@ class LocalModelManager:
                     downloaded += len(chunk)
                     if total_size > 0:
                         pct = int(downloaded / total_size * 100)
+                        downloaded_mb = downloaded // (1024 * 1024)
+                        self._download_progress = {
+                            "file": filename,
+                            "pct": pct,
+                            "downloaded_mb": downloaded_mb,
+                            "total_mb": total_mb,
+                        }
                         if pct - last_logged_pct >= 10:
                             printr.print(
-                                f"  {filename}: {pct}% ({downloaded // (1024*1024)} MB / {total_size // (1024*1024)} MB)",
+                                f"  {filename}: {pct}% ({downloaded_mb} MB / {total_mb} MB)",
                                 color=LogType.INFO,
                                 server_only=True,
                             )
                             last_logged_pct = pct
+                        if on_progress and pct - last_callback_pct >= 2:
+                            on_progress(filename, pct, downloaded_mb, total_mb)
+                            last_callback_pct = pct
 
             # Rename temp to final
             if path.exists(target_path):
                 os.remove(target_path)
             os.rename(temp_path, target_path)
 
+            self._download_progress = {}
             printr.print(
                 f"Download complete: {filename}",
                 color=LogType.INFO,
@@ -162,6 +182,7 @@ class LocalModelManager:
             return True
 
         except Exception as e:
+            self._download_progress = {}
             printr.print(
                 f"Failed to download {filename}: {e}",
                 color=LogType.ERROR,
@@ -175,7 +196,7 @@ class LocalModelManager:
                     pass
             return False
 
-    async def download_models(self, cuda_available: bool = False) -> bool:
+    async def download_models(self, cuda_available: bool = False, on_progress: callable = None) -> bool:
         """Download models and llama-server binaries asynchronously.
 
         Downloads the active backend binary plus CUDA if cuda_available is True.
@@ -197,10 +218,10 @@ class LocalModelManager:
                 self.settings.summarize_model, DEFAULT_SUMMARIZE_MODEL
             )
             summarize_ok = await loop.run_in_executor(
-                None, self._download_model, active_model
+                None, self._download_model, active_model, on_progress
             )
             embed_ok = await loop.run_in_executor(
-                None, self._download_model, DEFAULT_EMBED_MODEL
+                None, self._download_model, DEFAULT_EMBED_MODEL, on_progress
             )
 
             # Determine which backends to download
@@ -225,10 +246,11 @@ class LocalModelManager:
             return summarize_ok and embed_ok and server_ok
         finally:
             self._downloading = False
+            self._download_progress = {}
 
     def get_status(self) -> dict:
         """Return current model status for the API."""
-        return {
+        status = {
             "models_available": self.models_available(),
             "summarize_available": self.summarize_model_available(),
             "embed_available": self.embed_model_available(),
@@ -238,6 +260,9 @@ class LocalModelManager:
             "is_downloading": self._downloading,
             "models_dir": self.models_dir,
         }
+        if self._downloading and self._download_progress:
+            status["download_progress"] = self._download_progress
+        return status
 
     def get_summarize_models(self) -> list[dict]:
         """Return the list of available summarize models for the UI dropdown."""
@@ -422,6 +447,13 @@ class LocalModelManager:
         total_size = int(response.headers.get("content-length", 0))
         downloaded = 0
         last_logged_pct = -10
+        total_mb = total_size // (1024 * 1024) if total_size > 0 else 0
+        self._download_progress = {
+            "file": label,
+            "pct": 0,
+            "downloaded_mb": 0,
+            "total_mb": total_mb,
+        }
 
         with open(temp_path, "wb") as f:
             for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
@@ -429,9 +461,15 @@ class LocalModelManager:
                 downloaded += len(chunk)
                 if total_size > 0:
                     pct = int(downloaded / total_size * 100)
+                    self._download_progress = {
+                        "file": label,
+                        "pct": pct,
+                        "downloaded_mb": downloaded // (1024 * 1024),
+                        "total_mb": total_mb,
+                    }
                     if pct - last_logged_pct >= 10:
                         printr.print(
-                            f"  {label}: {pct}% ({downloaded // (1024*1024)} MB / {total_size // (1024*1024)} MB)",
+                            f"  {label}: {pct}% ({downloaded // (1024*1024)} MB / {total_mb} MB)",
                             color=LogType.INFO,
                             server_only=True,
                         )
