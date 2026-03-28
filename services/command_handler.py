@@ -13,7 +13,7 @@ from api.commands import (
     WebSocketCommandModel,
     ClientLoggedInCommand,
 )
-from api.enums import KeyboardRecordingType, LogSource, RecordingDevice, ToastType
+from api.enums import CoreState, KeyboardRecordingType, LogSource, RecordingDevice, ToastType
 from api.interface import (
     CommandActionConfig,
     CommandJoystickConfig,
@@ -277,6 +277,15 @@ class CommandHandler:
         if self.core.is_client_logged_in:
             # retrieved keepalive / token refresh from Azure but Tower is still initialized
             return
+
+        # Wait until config is loaded before proceeding — the server now starts
+        # before startup completes, so this command may arrive early.
+        while self.core.core_state in (
+            CoreState.STARTING,
+            CoreState.MIGRATING,
+            CoreState.LOADING_CONFIG,
+        ):
+            await asyncio.sleep(0.1)
 
         self.core.is_client_logged_in = True
         self.core.client_plan = command.plan
