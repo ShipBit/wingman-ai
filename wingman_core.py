@@ -732,12 +732,56 @@ class WingmanCore(WebSocketUser):
                 color=LogType.INFO,
                 server_only=True,
             )
-            await self.local_model_manager.download_models()
+
+            # Progress callback — store latest progress, then flush to clients
+            progress_state = {}
+
+            def on_download_progress(filename, pct, downloaded_mb, total_mb):
+                progress_state["filename"] = filename
+                progress_state["pct"] = pct
+                progress_state["downloaded_mb"] = downloaded_mb
+                progress_state["total_mb"] = total_mb
+
+            # Kick off download with progress callback
+            download_task = asyncio.create_task(
+                self.local_model_manager.download_models(
+                    on_progress=on_download_progress
+                )
+            )
+
+            # Poll progress_state and broadcast updates while download runs
+            while not download_task.done():
+                if progress_state:
+                    fname = progress_state.get("filename", "")
+                    pct = progress_state.get("pct", 0)
+                    dl_mb = progress_state.get("downloaded_mb", 0)
+                    t_mb = progress_state.get("total_mb", 0)
+                    short_name = fname.split("-")[0] if "-" in fname else fname.replace(".gguf", "")
+                    await self.set_core_state(
+                        CoreState.LOADING_CONFIG,
+                        message=f"Downloading {short_name}... ({dl_mb} / {t_mb} MB)",
+                        progress=pct / 100.0 if pct else None,
+                    )
+                await asyncio.sleep(0.5)
+
+            # Await to propagate exceptions
+            await download_task
 
         # Initialize local AI service (loads models if run_locally + available)
+        if llama_settings.run_locally and self.local_model_manager.models_available():
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message="Loading local AI models...",
+            )
         await self.local_ai_service.initialize()
 
         # Start HUD Server if enabled
+        hud_settings = getattr(self.settings_service.settings, "hud_server", None)
+        if hud_settings and hud_settings.enabled:
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message="Starting HUD server...",
+            )
         await self._start_hud_server_if_enabled()
 
     def _get_validated_hud_settings(
