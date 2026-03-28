@@ -126,6 +126,10 @@ class CoreStateChangedCommand(WebSocketCommandModel):
     command: Literal["core_state_changed"] = "core_state_changed"
     state: CoreState
     """The current state of Wingman AI Core."""
+    message: Optional[str] = None
+    """Human-readable sub-step detail (e.g. 'Downloading Qwen3.5-2B...')."""
+    progress: Optional[float] = None
+    """0.0–1.0 progress for operations with known duration (e.g. downloads)."""
 
 
 class ConversationCondensationCommand(WebSocketCommandModel):

@@ -79,6 +79,10 @@ class CoreStatusResponse(BaseModel):
 
     state: CoreState
     """The current lifecycle state of Wingman AI Core."""
+    message: Optional[str] = None
+    """Human-readable sub-step detail for the current state."""
+    progress: Optional[float] = None
+    """0.0–1.0 progress for operations with known duration."""
 
 
 class VoiceInfo(BaseModel):
