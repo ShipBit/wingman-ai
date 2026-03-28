@@ -438,12 +438,32 @@ async def get_dummy_benchmark():
 
 
 async def async_main(host: str, port: int, sidecar: bool):
+    # Start uvicorn FIRST so Client can connect and see progress updates
+    try:
+        uvi_config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
+        server = uvicorn.Server(uvi_config)
+        server_task = asyncio.create_task(server.serve())
+
+        # Wait for server to bind the port
+        while not server.started:
+            await asyncio.sleep(0.05)
+
+        printr.print(
+            f"Server listening on {host}:{port}",
+            color=LogType.STARTUP,
+            server_only=True,
+        )
+    except Exception as e:
+        printr.print(f"Error starting uvicorn server: {str(e)}", color=LogType.ERROR)
+        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        return
+
     # Set MIGRATING state before migrations
-    await core.set_core_state(CoreState.MIGRATING)
+    await core.set_core_state(CoreState.MIGRATING, message="Migrating configurations...")
     await core.config_service.migrate_configs(system_manager)
 
     # Set LOADING_CONFIG state
-    await core.set_core_state(CoreState.LOADING_CONFIG)
+    await core.set_core_state(CoreState.LOADING_CONFIG, message="Loading configuration...")
     await core.config_service.load_config()
 
     saved_secrets: list[str] = []
@@ -475,14 +495,8 @@ async def async_main(host: str, port: int, sidecar: bool):
         printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
         return
 
-    try:
-        config = uvicorn.Config(app=app, host=host, port=port, lifespan="on")
-        server = uvicorn.Server(config)
-        await server.serve()
-    except Exception as e:
-        printr.print(f"Error starting uvicorn server: {str(e)}", color=LogType.ERROR)
-        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-        return
+    # Keep process alive via the server task
+    await server_task
 
 
 if __name__ == "__main__":
