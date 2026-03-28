@@ -439,9 +439,10 @@ class LocalModelManager:
 
         # Extract archive
         os.makedirs(target_dir, exist_ok=True)
-        if temp_path.rstrip(".part").endswith(".tar.gz"):
+        archive_name = temp_path.removesuffix(".part")
+        if archive_name.endswith(".tar.gz"):
             self._safe_extract_tar(temp_path, target_dir)
-        elif temp_path.rstrip(".part").endswith(".zip"):
+        elif archive_name.endswith(".zip"):
             self._safe_extract_zip(temp_path, target_dir)
 
         # Clean up archive
