@@ -78,11 +78,11 @@ openai:
 openai_compatible_tts:
   api_key: "probably-not-needed"
   voice: ""
-  model: "pocket-tts"
-  base_url: "http://localhost:5002/v1"
+  model: ""
+  base_url: ""
   speed: 1.0
   output_streaming: true
-  voices_endpoint: "/voices"
+  voices_endpoint: ""
   use_tts_prompt: false
   tts_prompt: |
     Audio markups make your speech more expressive and human-like. Use them regularly to bring your personality to life and react naturally to the conversation.
