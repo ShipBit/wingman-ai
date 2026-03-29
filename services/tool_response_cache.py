@@ -8,7 +8,7 @@ from services.token_utils import count_tokens, truncate_to_tokens
 printr = Printr()
 
 # Prompt name loaded via get_prompt() — separate from conversation condensation prompts
-TOOL_RESPONSE_PROMPT_NAME = "summarize-tool-response"
+TOOL_RESPONSE_PROMPT_NAME = "support-tool-response"
 
 
 class ToolResponseCompressor:
@@ -43,7 +43,8 @@ class ToolResponseCompressor:
         original_tokens = count_tokens(response_text)
 
         token_label = (
-            f"~{original_tokens // 1000}k" if original_tokens >= 1000
+            f"~{original_tokens // 1000}k"
+            if original_tokens >= 1000
             else f"~{original_tokens}"
         )
         tool_info = f" from '{tool_name}'" if tool_name else ""
@@ -131,9 +132,7 @@ class ToolResponseCompressor:
             chunks = []
             if isinstance(data, list):
                 for item in data:
-                    item_text = json.dumps(
-                        item, indent=2, ensure_ascii=False
-                    )
+                    item_text = json.dumps(item, indent=2, ensure_ascii=False)
                     if count_tokens(item_text) <= self.CHUNK_TARGET_TOKENS:
                         chunks.append(item_text)
                     else:
@@ -142,9 +141,7 @@ class ToolResponseCompressor:
                     return chunks
             elif isinstance(data, dict):
                 for key, value in data.items():
-                    item_text = json.dumps(
-                        {key: value}, indent=2, ensure_ascii=False
-                    )
+                    item_text = json.dumps({key: value}, indent=2, ensure_ascii=False)
                     if count_tokens(item_text) <= self.CHUNK_TARGET_TOKENS:
                         chunks.append(item_text)
                     else:
@@ -211,7 +208,10 @@ class ToolResponseCompressor:
 
         for chunk in chunks:
             chunk_tokens = count_tokens(chunk)
-            if current_batch_parts and current_batch_tokens + chunk_tokens > data_budget:
+            if (
+                current_batch_parts
+                and current_batch_tokens + chunk_tokens > data_budget
+            ):
                 batches.append("\n\n".join(current_batch_parts))
                 current_batch_parts = []
                 current_batch_tokens = 0
@@ -240,8 +240,10 @@ class ToolResponseCompressor:
             try:
                 result = await loop.run_in_executor(
                     None,
-                    lambda p=user_prompt, mt=output_budget: local_ai_service.summarize(
-                        text=p, system_prompt=system_prompt, max_tokens=mt,
+                    lambda p=user_prompt, mt=output_budget: local_ai_service.support(
+                        text=p,
+                        system_prompt=system_prompt,
+                        max_tokens=mt,
                     ),
                 )
                 if result and result.text:
@@ -277,7 +279,7 @@ class ToolResponseCompressor:
         try:
             result = await loop.run_in_executor(
                 None,
-                lambda: local_ai_service.summarize(
+                lambda: local_ai_service.support(
                     text=merge_prompt,
                     system_prompt=system_prompt,
                     max_tokens=merge_output,

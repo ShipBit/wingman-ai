@@ -111,10 +111,10 @@ class OpenAiWingman(Wingman):
         self._condense_task: asyncio.Task | None = None
         self._last_prompt_tokens: int = 0
         """Last API-reported prompt_tokens from the conversation LLM."""
-        self._summarize_token_ratio: float = 1.35
-        """Calibration ratio: summarize-model tokens / cl100k_base tokens.
+        self._support_token_ratio: float = 1.35
+        """Calibration ratio: support-model tokens / cl100k_base tokens.
         Starts at 1.35 (conservative — Qwen typically tokenizes English text
-        ~20-40% heavier than cl100k_base). Updated after the first summarize
+        ~20-40% heavier than cl100k_base). Updated after the first support
         call using real usage reported by the model's own tokenizer."""
         """The conversation history that is used for the GPT calls"""
 
@@ -1092,7 +1092,9 @@ class OpenAiWingman(Wingman):
             )
             return None, None, None, True
 
-        response_message, tool_calls, usage = await self._process_completion(completion, instant_command_executed is False)
+        response_message, tool_calls, usage = await self._process_completion(
+            completion, instant_command_executed is False
+        )
 
         # Track token usage across the turn (last prompt_tokens, summed completion_tokens)
         turn_prompt_tokens = usage[0]
@@ -1659,8 +1661,8 @@ class OpenAiWingman(Wingman):
         """Estimate the total token count of the current conversation history."""
         return sum(count_tokens(self._message_text_content(m)) for m in self.messages)
 
-    def _get_summarize_capacity(self) -> int:
-        """Get the effective input capacity of the summarize model for a single pass.
+    def _get_support_capacity(self) -> int:
+        """Get the effective input capacity of the support model for a single pass.
 
         Returns the number of conversation tokens that can fit in one summarization
         pass, accounting for system prompt, framing text, and output budget.
@@ -1679,11 +1681,11 @@ class OpenAiWingman(Wingman):
         """Check if condensation should run and fire it as a background task.
 
         Uses a token-based trigger: condenses when the conversation approaches
-        70% of what the summarize model can handle in a single pass, so we
+        70% of what the support model can handle in a single pass, so we
         avoid chunking. Also has a message count safety cap.
 
-        The cl100k_base token estimate is multiplied by _summarize_token_ratio
-        (calibrated from real summarize model usage) to account for tokenizer
+        The cl100k_base token estimate is multiplied by _support_token_ratio
+        (calibrated from real support model usage) to account for tokenizer
         differences between the estimation tokenizer and the actual model.
         """
         if not self.config.features.condense_conversation:
@@ -1696,12 +1698,12 @@ class OpenAiWingman(Wingman):
             return
 
         # Token-based trigger: condense when conversation reaches 70% of
-        # what the summarize model can handle in one pass.
-        # Apply _summarize_token_ratio to correct for tokenizer differences
+        # what the support model can handle in one pass.
+        # Apply _support_token_ratio to correct for tokenizer differences
         # between cl100k_base (used for estimation) and the actual model.
-        capacity = self._get_summarize_capacity()
+        capacity = self._get_support_capacity()
         cl100k_tokens = self._estimate_conversation_tokens()
-        conversation_tokens = int(cl100k_tokens * self._summarize_token_ratio)
+        conversation_tokens = int(cl100k_tokens * self._support_token_ratio)
         token_trigger = conversation_tokens >= int(capacity * 0.7)
 
         # Message count safety cap
@@ -1898,13 +1900,13 @@ class OpenAiWingman(Wingman):
             # Also correct available_tokens: the overhead (system prompt,
             # framing) is also underestimated by cl100k_base.
             corrected_text_tokens = int(
-                count_tokens(condensed_text) * self._summarize_token_ratio
+                count_tokens(condensed_text) * self._support_token_ratio
             )
-            corrected_available = int(available_tokens / self._summarize_token_ratio)
+            corrected_available = int(available_tokens / self._support_token_ratio)
 
             if corrected_text_tokens > available_tokens:
                 # Chunk: summarize in segments, then merge
-                summarize_result = await self._chunked_summarize(
+                support_result = await self._chunked_support(
                     condensed_text,
                     system_prompt,
                     existing_summary_section,
@@ -1918,39 +1920,39 @@ class OpenAiWingman(Wingman):
                 # what the model can actually produce (avoids false truncation)
                 input_tokens = int(
                     (system_prompt_tokens + count_tokens(user_prompt))
-                    * self._summarize_token_ratio
+                    * self._support_token_ratio
                 )
                 output_budget = max(min_output_tokens, n_ctx - input_tokens)
-                summarize_result = await asyncio.get_event_loop().run_in_executor(
+                support_result = await asyncio.get_event_loop().run_in_executor(
                     None,
-                    lambda: self.local_ai_service.summarize(
+                    lambda: self.local_ai_service.support(
                         text=user_prompt,
                         system_prompt=system_prompt,
                         max_tokens=output_budget,
                     ),
                 )
 
-            summary = summarize_result.text if summarize_result else None
+            summary = support_result.text if support_result else None
 
             # Calibrate tokenizer ratio from real model usage
-            if summarize_result and summarize_result.prompt_tokens > 0:
+            if support_result and support_result.prompt_tokens > 0:
                 cl100k_input = (
                     system_prompt_tokens
                     + count_tokens(condensed_text)
                     + prefix_suffix_tokens
                 )
                 if cl100k_input > 0:
-                    self._summarize_token_ratio = (
-                        summarize_result.prompt_tokens / cl100k_input
+                    self._support_token_ratio = (
+                        support_result.prompt_tokens / cl100k_input
                     )
 
             # Detect truncated output
-            if summarize_result and summarize_result.truncated:
+            if support_result and support_result.truncated:
                 await printr.print_async(
                     f"Condensation output was truncated (finish_reason=length). "
-                    f"Model used {summarize_result.prompt_tokens} prompt tokens, "
-                    f"generated {summarize_result.completion_tokens} tokens. "
-                    f"Token ratio calibrated to {self._summarize_token_ratio:.2f}.",
+                    f"Model used {support_result.prompt_tokens} prompt tokens, "
+                    f"generated {support_result.completion_tokens} tokens. "
+                    f"Token ratio calibrated to {self._support_token_ratio:.2f}.",
                     color=LogType.WARNING,
                     server_only=True,
                     source_name=self.name,
@@ -1989,7 +1991,7 @@ class OpenAiWingman(Wingman):
                 f"({len(summary)} chars, ~{estimated_summary_tokens} tokens). "
                 f"{len(self.messages)} messages remaining. "
                 f"~{estimated_tokens_saved} tokens saved. "
-                f"Token ratio: {self._summarize_token_ratio:.2f}.",
+                f"Token ratio: {self._support_token_ratio:.2f}.",
                 color=LogType.INFO,
                 server_only=True,
                 source_name=self.name,
@@ -2030,19 +2032,19 @@ class OpenAiWingman(Wingman):
                 except Exception:
                     pass
 
-    async def _chunked_summarize(
+    async def _chunked_support(
         self,
         full_text: str,
         system_prompt: str,
         existing_summary_section: str,
         chunk_max_tokens: int,
-    ) -> "SummarizeResult":
-        """Summarize text that exceeds the model's context window by chunking.
+    ) -> "SupportResult":
+        """Process text that exceeds the model's context window by chunking.
 
-        Each chunk is summarized independently, then summaries are merged into
-        one final summary. Returns a SummarizeResult from the merge step.
+        Each chunk is processed independently, then results are merged into
+        one final summary. Returns a SupportResult from the merge step.
         """
-        from providers.llama_cpp_provider import SummarizeResult
+        from providers.llama_cpp_provider import SupportResult
 
         # Convert token budget to approximate char limit for splitting
         # (splitting needs char positions; we use ~4 chars/token as a rough guide,
@@ -2072,7 +2074,7 @@ class OpenAiWingman(Wingman):
             # Estimate input tokens using cl100k_base, then apply ratio
             # for the model's actual tokenizer when computing output budget.
             cl100k_input = count_tokens(system_prompt) + count_tokens(user_prompt)
-            chunk_input_tokens = int(cl100k_input * self._summarize_token_ratio)
+            chunk_input_tokens = int(cl100k_input * self._support_token_ratio)
             n_ctx = (
                 self.settings.llama_cpp.n_ctx
                 if hasattr(self.settings, "llama_cpp")
@@ -2090,7 +2092,7 @@ class OpenAiWingman(Wingman):
                     - count_tokens(chunk)
                 )
                 safe_text_tokens = int(
-                    (max_input / self._summarize_token_ratio) - overhead_cl100k
+                    (max_input / self._support_token_ratio) - overhead_cl100k
                 )
                 if safe_text_tokens > 0:
                     chunk = truncate_to_tokens(chunk, safe_text_tokens)
@@ -2102,7 +2104,7 @@ class OpenAiWingman(Wingman):
                     cl100k_input = count_tokens(system_prompt) + count_tokens(
                         user_prompt
                     )
-                    chunk_input_tokens = int(cl100k_input * self._summarize_token_ratio)
+                    chunk_input_tokens = int(cl100k_input * self._support_token_ratio)
                 await printr.print_async(
                     f"Chunk {i + 1}/{len(chunks)} input ({chunk_input_tokens} tokens) "
                     f"exceeded context budget ({max_input}), truncated to fit.",
@@ -2115,7 +2117,7 @@ class OpenAiWingman(Wingman):
             chunk_output_budget = max(min_output_tokens, n_ctx - chunk_input_tokens)
             result = await loop.run_in_executor(
                 None,
-                lambda p=user_prompt, mt=chunk_output_budget: self.local_ai_service.summarize(
+                lambda p=user_prompt, mt=chunk_output_budget: self.local_ai_service.support(
                     text=p,
                     system_prompt=system_prompt,
                     max_tokens=mt,
@@ -2128,7 +2130,7 @@ class OpenAiWingman(Wingman):
                 # Use raw cl100k_input (NOT ratio-corrected chunk_input_tokens)
                 # so the ratio = model_tokens / cl100k_tokens.
                 if result.prompt_tokens > 0 and cl100k_input > 0:
-                    self._summarize_token_ratio = result.prompt_tokens / cl100k_input
+                    self._support_token_ratio = result.prompt_tokens / cl100k_input
 
                 if result.truncated:
                     await printr.print_async(
@@ -2142,9 +2144,9 @@ class OpenAiWingman(Wingman):
                     )
 
         if not chunk_summaries:
-            return SummarizeResult(text=None)
+            return SupportResult(text=None)
         if len(chunk_summaries) == 1:
-            return SummarizeResult(text=chunk_summaries[0])
+            return SupportResult(text=chunk_summaries[0])
 
         # Merge all chunk summaries into one final summary
         combined = "\n\n".join(
@@ -2157,7 +2159,7 @@ class OpenAiWingman(Wingman):
         )
         # Dynamic merge budget (apply ratio to input estimate)
         merge_cl100k_input = count_tokens(system_prompt) + count_tokens(merge_prompt)
-        merge_input_tokens = int(merge_cl100k_input * self._summarize_token_ratio)
+        merge_input_tokens = int(merge_cl100k_input * self._support_token_ratio)
 
         # Safety: truncate combined summaries if they exceed context budget
         min_output_tokens = 512
@@ -2165,7 +2167,7 @@ class OpenAiWingman(Wingman):
         if merge_input_tokens > max_merge_input:
             overhead_cl100k = merge_cl100k_input - count_tokens(combined)
             safe_combined_tokens = int(
-                (max_merge_input / self._summarize_token_ratio) - overhead_cl100k
+                (max_merge_input / self._support_token_ratio) - overhead_cl100k
             )
             if safe_combined_tokens > 0:
                 combined = truncate_to_tokens(combined, safe_combined_tokens)
@@ -2177,9 +2179,7 @@ class OpenAiWingman(Wingman):
                 merge_cl100k_input = count_tokens(system_prompt) + count_tokens(
                     merge_prompt
                 )
-                merge_input_tokens = int(
-                    merge_cl100k_input * self._summarize_token_ratio
-                )
+                merge_input_tokens = int(merge_cl100k_input * self._support_token_ratio)
             await printr.print_async(
                 f"Merge input ({merge_input_tokens} tokens) exceeded context "
                 f"budget ({max_merge_input}), truncated to fit.",
@@ -2192,7 +2192,7 @@ class OpenAiWingman(Wingman):
         merge_output_budget = max(min_output_tokens, n_ctx - merge_input_tokens)
         return await loop.run_in_executor(
             None,
-            lambda: self.local_ai_service.summarize(
+            lambda: self.local_ai_service.support(
                 text=merge_prompt,
                 system_prompt=system_prompt,
                 max_tokens=merge_output_budget,
@@ -2275,7 +2275,7 @@ class OpenAiWingman(Wingman):
         self.messages = []
         self.conversation_summary = ""
         self._last_prompt_tokens = 0
-        # Keep _summarize_token_ratio — it's model-specific, not conversation-specific
+        # Keep _support_token_ratio — it's model-specific, not conversation-specific
         self.skill_registry.reset_activations()
         self.mcp_registry.reset_activations()
 
@@ -2655,7 +2655,9 @@ class OpenAiWingman(Wingman):
 
         return completion
 
-    async def _process_completion(self, completion: ChatCompletion, allow_tool_calls: bool = True):
+    async def _process_completion(
+        self, completion: ChatCompletion, allow_tool_calls: bool = True
+    ):
         """Processes the completion returned by the LLM call.
 
         Args:
@@ -2742,7 +2744,9 @@ class OpenAiWingman(Wingman):
                     and self.config.features.compress_tool_responses
                     and self.local_ai_service
                     and self.local_ai_service.is_ready()
-                    and self._tool_response_compressor.should_compress(str(function_response))
+                    and self._tool_response_compressor.should_compress(
+                        str(function_response)
+                    )
                 ):
                     n_ctx = (
                         self.settings.llama_cpp.n_ctx

@@ -16,12 +16,12 @@ from services.printr import Printr
 printr = Printr()
 
 # Fixed ports for managed llama-server instances (offset from remote defaults)
-MANAGED_SUMMARIZE_PORT = 49172
+MANAGED_SUPPORT_PORT = 49172
 MANAGED_EMBED_PORT = 49173
 
 
-class SummarizeResult(NamedTuple):
-    """Result from a summarize call with model-reported token usage."""
+class SupportResult(NamedTuple):
+    """Result from a support model call with model-reported token usage."""
 
     text: Optional[str]
     prompt_tokens: int = 0
@@ -44,9 +44,9 @@ class LlamaCppProvider:
     ):
         self.settings = settings
         self.model_manager = model_manager
-        self._summarize_process: Optional[subprocess.Popen] = None
+        self._support_process: Optional[subprocess.Popen] = None
         self._embed_process: Optional[subprocess.Popen] = None
-        self._summarize_client: Optional[OpenAI] = None
+        self._support_client: Optional[OpenAI] = None
         self._embed_client: Optional[OpenAI] = None
 
     def _resolve_n_threads(self) -> int:
@@ -154,23 +154,23 @@ class LlamaCppProvider:
             return True
         return self.model_manager.download_llama_server_sync()
 
-    def load_summarize_model(self) -> bool:
-        """Start the summarization server. Returns True on success."""
-        if self._summarize_process is not None:
+    def load_support_model(self) -> bool:
+        """Start the support model server. Returns True on success."""
+        if self._support_process is not None:
             return True
 
         if not self._ensure_binary():
             return False
 
-        if not self.model_manager.summarize_model_available():
+        if not self.model_manager.support_model_available():
             printr.print(
-                "Summarize model not downloaded yet.",
+                "Support model not downloaded yet.",
                 color=LogType.WARNING,
                 server_only=True,
             )
             return False
 
-        model_path = self.model_manager.get_summarize_model_path()
+        model_path = self.model_manager.get_support_model_path()
         n_ctx = self.settings.n_ctx
         n_threads = self._resolve_n_threads()
         rb = 0 if self.settings.reasoning_effort == 0 else -1
@@ -178,42 +178,42 @@ class LlamaCppProvider:
         gpu_label = "metal" if platform.system() == "Darwin" else backend
         model_name = os.path.basename(model_path)
         printr.print(
-            f"Starting summarize server: {model_name} "
+            f"Starting support server: {model_name} "
             f"(n_ctx={n_ctx}, n_threads={n_threads}, gpu={gpu_label}, "
-            f"reasoning={'off' if rb == 0 else 'on'}, port={MANAGED_SUMMARIZE_PORT})",
+            f"reasoning={'off' if rb == 0 else 'on'}, port={MANAGED_SUPPORT_PORT})",
             color=LogType.INFO,
             server_only=True,
         )
 
         # reasoning_budget: 0 = disable thinking (fast), >0 = allow thinking tokens
-        self._summarize_process = self._start_server(
+        self._support_process = self._start_server(
             model_path=model_path,
-            port=MANAGED_SUMMARIZE_PORT,
+            port=MANAGED_SUPPORT_PORT,
             n_ctx=n_ctx,
             reasoning_budget=rb,
         )
-        if self._summarize_process is None:
+        if self._support_process is None:
             return False
 
-        if self._wait_for_server(MANAGED_SUMMARIZE_PORT, self._summarize_process):
-            self._summarize_client = OpenAI(
-                base_url=f"http://127.0.0.1:{MANAGED_SUMMARIZE_PORT}/v1",
+        if self._wait_for_server(MANAGED_SUPPORT_PORT, self._support_process):
+            self._support_client = OpenAI(
+                base_url=f"http://127.0.0.1:{MANAGED_SUPPORT_PORT}/v1",
                 api_key="not-needed",
             )
             printr.print(
-                "Summarize server ready.",
+                "Support server ready.",
                 color=LogType.INFO,
                 server_only=True,
             )
             return True
         else:
             printr.print(
-                "Summarize server failed to start. Check model compatibility with llama-server.",
+                "Support server failed to start. Check model compatibility with llama-server.",
                 color=LogType.ERROR,
                 server_only=True,
             )
-            self._stop_process(self._summarize_process)
-            self._summarize_process = None
+            self._stop_process(self._support_process)
+            self._support_process = None
             return False
 
     def load_embed_model(self) -> bool:
@@ -276,12 +276,12 @@ class LlamaCppProvider:
 
     def unload_models(self):
         """Stop both server processes and free resources."""
-        if self._summarize_process is not None:
-            self._stop_process(self._summarize_process)
-            self._summarize_process = None
-            self._summarize_client = None
+        if self._support_process is not None:
+            self._stop_process(self._support_process)
+            self._support_process = None
+            self._support_client = None
             printr.print(
-                "Summarize server stopped.",
+                "Support server stopped.",
                 color=LogType.INFO,
                 server_only=True,
             )
@@ -307,15 +307,15 @@ class LlamaCppProvider:
         elif new_settings.run_locally:
             # Backend change requires full restart of both servers
             backend_changed = old.gpu_backend != new_settings.gpu_backend
-            summarize_changed = backend_changed or (
-                old.summarize_model != new_settings.summarize_model
+            support_changed = backend_changed or (
+                old.support_model != new_settings.support_model
                 or old.n_ctx != new_settings.n_ctx
                 or old.n_threads != new_settings.n_threads
             )
-            if summarize_changed and self._summarize_process is not None:
-                self._stop_process(self._summarize_process)
-                self._summarize_process = None
-                self._summarize_client = None
+            if support_changed and self._support_process is not None:
+                self._stop_process(self._support_process)
+                self._support_process = None
+                self._support_client = None
             embed_changed = backend_changed or (
                 old.embed_model != new_settings.embed_model
                 or old.n_threads != new_settings.n_threads
@@ -325,26 +325,26 @@ class LlamaCppProvider:
                 self._embed_process = None
                 self._embed_client = None
 
-    def summarize(
+    def support(
         self,
         text: str,
         system_prompt: str = "",
         max_tokens: int = 512,
-    ) -> SummarizeResult:
-        """Summarize text using the managed llama-server.
+    ) -> SupportResult:
+        """Process text using the managed llama-server support model.
 
-        Returns a SummarizeResult with text, token usage from the model's own
+        Returns a SupportResult with text, token usage from the model's own
         tokenizer, and whether the output was truncated (finish_reason=length).
         """
         if not system_prompt:
             from services.file import get_prompt
 
-            system_prompt = get_prompt("summarize-default")
-        if not self.load_summarize_model():
-            return SummarizeResult(text=None)
+            system_prompt = get_prompt("support-default")
+        if not self.load_support_model():
+            return SupportResult(text=None)
 
         try:
-            result = self._summarize_client.chat.completions.create(
+            result = self._support_client.chat.completions.create(
                 model="local-model",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -366,12 +366,10 @@ class LlamaCppProvider:
                 completion_tokens = result.usage.completion_tokens or 0
 
             truncated = (
-                result.choices[0].finish_reason == "length"
-                if result.choices
-                else False
+                result.choices[0].finish_reason == "length" if result.choices else False
             )
 
-            return SummarizeResult(
+            return SupportResult(
                 text=cleaned,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
@@ -379,11 +377,11 @@ class LlamaCppProvider:
             )
         except Exception as e:
             printr.print(
-                f"Summarization failed: {e}",
+                f"Support model call failed: {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
-            return SummarizeResult(text=None)
+            return SupportResult(text=None)
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
         """Generate embeddings via the managed llama-server."""
@@ -405,7 +403,7 @@ class LlamaCppProvider:
 
     def is_ready(self) -> bool:
         """Check if server processes are running."""
-        return self._summarize_process is not None or self._embed_process is not None
+        return self._support_process is not None or self._embed_process is not None
 
     @staticmethod
     def _deduplicate_lines(text: str) -> str:

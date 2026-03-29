@@ -14,19 +14,19 @@ class LlamaCppRemote:
 
     def __init__(self, settings: LlamaCppSettings):
         self.settings = settings
-        self._summarize_client: Optional[OpenAI] = None
+        self._support_client: Optional[OpenAI] = None
         self._embed_client: Optional[OpenAI] = None
         self._init_clients()
 
     def _init_clients(self):
         """Initialize OpenAI clients pointing at remote llama-server endpoints."""
-        summarize_url = f"{self.settings.summarize_remote_host}:{self.settings.summarize_remote_port}/v1"
+        support_url = f"{self.settings.support_remote_host}:{self.settings.support_remote_port}/v1"
         embed_url = (
             f"{self.settings.embed_remote_host}:{self.settings.embed_remote_port}/v1"
         )
 
-        self._summarize_client = OpenAI(
-            base_url=summarize_url,
+        self._support_client = OpenAI(
+            base_url=support_url,
             api_key="not-needed",
         )
         self._embed_client = OpenAI(
@@ -40,28 +40,28 @@ class LlamaCppRemote:
         self.settings = new_settings
 
         if (
-            old.summarize_remote_host != new_settings.summarize_remote_host
-            or old.summarize_remote_port != new_settings.summarize_remote_port
+            old.support_remote_host != new_settings.support_remote_host
+            or old.support_remote_port != new_settings.support_remote_port
             or old.embed_remote_host != new_settings.embed_remote_host
             or old.embed_remote_port != new_settings.embed_remote_port
         ):
             self._init_clients()
 
-    def summarize(
+    def support(
         self,
         text: str,
         system_prompt: str = "",
         max_tokens: int = 512,
-    ) -> "SummarizeResult":
-        """Summarize text via remote llama-server."""
-        from providers.llama_cpp_provider import SummarizeResult
+    ) -> "SupportResult":
+        """Process text via remote llama-server support model."""
+        from providers.llama_cpp_provider import SupportResult
 
         if not system_prompt:
             from services.file import get_prompt
 
-            system_prompt = get_prompt("summarize-default")
+            system_prompt = get_prompt("support-default")
         try:
-            response = self._summarize_client.chat.completions.create(
+            response = self._support_client.chat.completions.create(
                 model="local-model",
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -87,7 +87,7 @@ class LlamaCppRemote:
                 else False
             )
 
-            return SummarizeResult(
+            return SupportResult(
                 text=cleaned,
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
@@ -95,11 +95,11 @@ class LlamaCppRemote:
             )
         except Exception as e:
             printr.print(
-                f"Remote summarization failed: {e}",
+                f"Remote support model call failed: {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
-            return SummarizeResult(text=None)
+            return SupportResult(text=None)
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
         """Generate embeddings via remote llama-server."""
@@ -120,8 +120,8 @@ class LlamaCppRemote:
     def is_ready(self) -> bool:
         """Non-blocking connectivity check. Logs warnings but doesn't block."""
         try:
-            # Quick health check on summarize endpoint
-            self._summarize_client.models.list()
+            # Quick health check on support endpoint
+            self._support_client.models.list()
             return True
         except Exception:
             return False

@@ -56,6 +56,8 @@ from api.interface import (
     MigrateBackstoryResponse,
     OpenRouterEndpointResult,
     PlaygroundChatRequest,
+    ParakeetSttConfig,
+    TestConnectionResult,
     VoiceActivationSettings,
     WingmanInitializationError,
 )
@@ -510,8 +512,8 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["GET"],
-            path="/settings/local-ai/summarize-models",
-            endpoint=self.get_local_ai_summarize_models,
+            path="/settings/local-ai/support-models",
+            endpoint=self.get_local_ai_support_models,
             tags=tags,
         )
         self.router.add_api_route(
@@ -532,10 +534,55 @@ class WingmanCore(WebSocketUser):
             endpoint=self.playground_benchmark,
             tags=tags,
         )
+
+        # Connection test endpoints
         self.router.add_api_route(
             methods=["POST"],
-            path="/local-ai/summarize",
-            endpoint=self.api_summarize,
+            path="/settings/test/whispercpp",
+            endpoint=self.test_whispercpp,
+            response_model=TestConnectionResult,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/test/parakeet",
+            endpoint=self.test_parakeet,
+            response_model=TestConnectionResult,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/test/xvasynth",
+            endpoint=self.test_xvasynth,
+            response_model=TestConnectionResult,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/test/local-ai/support",
+            endpoint=self.test_local_ai_support,
+            response_model=TestConnectionResult,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/test/local-ai/embed",
+            endpoint=self.test_local_ai_embed,
+            response_model=TestConnectionResult,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/test/hud-server",
+            endpoint=self.test_hud_server,
+            response_model=TestConnectionResult,
+            tags=tags,
+        )
+
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/local-ai/support",
+            endpoint=self.api_support,
             tags=tags,
         )
         self.router.add_api_route(
@@ -756,7 +803,11 @@ class WingmanCore(WebSocketUser):
                     pct = progress_state.get("pct", 0)
                     dl_mb = progress_state.get("downloaded_mb", 0)
                     t_mb = progress_state.get("total_mb", 0)
-                    short_name = fname.split("-")[0] if "-" in fname else fname.replace(".gguf", "")
+                    short_name = (
+                        fname.split("-")[0]
+                        if "-" in fname
+                        else fname.replace(".gguf", "")
+                    )
                     await self.set_core_state(
                         CoreState.LOADING_CONFIG,
                         message=f"Downloading {short_name}... ({dl_mb} / {t_mb} MB)",
@@ -976,7 +1027,10 @@ class WingmanCore(WebSocketUser):
                 elif event.type == pygame.JOYBUTTONUP:
                     joystick_origin = pygame.joystick.Joystick(event.joy)
                     # In recording mode, capture the button press and signal the caller
-                    if self._joystick_recording_active and self._joystick_recording_event:
+                    if (
+                        self._joystick_recording_active
+                        and self._joystick_recording_event
+                    ):
                         self._joystick_recording_result = {
                             "button": event.button,
                             "guid": joystick_origin.get_guid(),
@@ -1054,7 +1108,9 @@ class WingmanCore(WebSocketUser):
                 if task and not task.done():
                     task.cancel()
                     try:
-                        loop.run_until_complete(asyncio.gather(task, return_exceptions=True))
+                        loop.run_until_complete(
+                            asyncio.gather(task, return_exceptions=True)
+                        )
                     except Exception:
                         pass
                 loop.close()
@@ -1063,7 +1119,7 @@ class WingmanCore(WebSocketUser):
         self._joystick_thread.name = "JoystickEventLoop"
         self._joystick_thread.start()
 
-    async def record_joystick_action(self) -> dict|None:
+    async def record_joystick_action(self) -> dict | None:
         """Record a single joystick button press using the existing joystick event loop.
 
         If no joystick thread is running, starts one for recording.
@@ -1071,9 +1127,7 @@ class WingmanCore(WebSocketUser):
         """
         if not self._joystick_thread or not self._joystick_thread.is_alive():
             config = (
-                self.tower.config
-                if self.tower
-                else self.config_service.current_config
+                self.tower.config if self.tower else self.config_service.current_config
             )
             await self.init_joystick(config)
 
@@ -2194,9 +2248,9 @@ class WingmanCore(WebSocketUser):
             backends = [b for b in backends if b != "cuda"]
         return backends
 
-    # GET /settings/local-ai/summarize-models
-    def get_local_ai_summarize_models(self) -> list[dict]:
-        return self.local_model_manager.get_summarize_models()
+    # GET /settings/local-ai/support-models
+    def get_local_ai_support_models(self) -> list[dict]:
+        return self.local_model_manager.get_support_models()
 
     # POST /settings/local-ai/download-models
     async def download_local_ai_models(self) -> dict:
@@ -2212,7 +2266,7 @@ class WingmanCore(WebSocketUser):
 
     # POST /settings/local-ai/playground/chat
     async def playground_chat(self, request: PlaygroundChatRequest) -> dict:
-        """Test the summarization model with a system + user message."""
+        """Test the support model with a system + user message."""
         if not self.local_ai_service.is_ready():
             return {
                 "success": False,
@@ -2221,7 +2275,7 @@ class WingmanCore(WebSocketUser):
 
         benchmark = Benchmark("playground_chat")
         benchmark.start_snapshot("inference")
-        result = self.local_ai_service.summarize(
+        result = self.local_ai_service.support(
             text=request.user_message,
             system_prompt=request.system_message,
         )
@@ -2229,7 +2283,7 @@ class WingmanCore(WebSocketUser):
         bench_result = benchmark.finish()
 
         if result.text is None:
-            return {"success": False, "error": "Summarization returned no result."}
+            return {"success": False, "error": "Support model returned no result."}
 
         return {
             "success": True,
@@ -2279,9 +2333,9 @@ class WingmanCore(WebSocketUser):
         iterations = max(1, min(iterations, 20))
 
         benchmark = Benchmark("full_benchmark")
-        results = {"summarize_runs": [], "embed_runs": []}
+        results = {"support_runs": [], "embed_runs": []}
 
-        # Summarize benchmark
+        # Support model benchmark
         test_texts = [
             "The quick brown fox jumps over the lazy dog. This is a short test sentence.",
             "Artificial intelligence is transforming how we interact with technology. Large language models can understand and generate human-like text, while embedding models convert text into numerical vectors that capture semantic meaning. These capabilities enable powerful applications like semantic search, text summarization, and conversational AI assistants.",
@@ -2290,15 +2344,31 @@ class WingmanCore(WebSocketUser):
 
         for i in range(iterations):
             for j, text in enumerate(test_texts):
-                label = f"summarize_iter{i+1}_text{j+1}_{len(text)}chars"
+                label = f"support_iter{i+1}_text{j+1}_{len(text)}chars"
                 benchmark.start_snapshot(label)
-                res = self.local_ai_service.summarize(text)
+                res = self.local_ai_service.support(text)
                 benchmark.finish_snapshot()
-                results["summarize_runs"].append(
+
+                # Compute tokens/sec from the snapshot we just finished
+                snap = benchmark.snapshots[-1] if benchmark.snapshots else None
+                elapsed_sec = (snap.execution_time_ms / 1000.0) if snap else 0
+                completion_tokens = (
+                    res.completion_tokens if res.completion_tokens else 0
+                )
+                tokens_per_sec = (
+                    completion_tokens / elapsed_sec
+                    if elapsed_sec > 0 and completion_tokens > 0
+                    else 0
+                )
+
+                results["support_runs"].append(
                     {
                         "iteration": i + 1,
                         "input_length": len(text),
                         "output_length": len(res.text) if res.text else 0,
+                        "prompt_tokens": res.prompt_tokens if res.prompt_tokens else 0,
+                        "completion_tokens": completion_tokens,
+                        "tokens_per_sec": round(tokens_per_sec, 1),
                         "label": label,
                     }
                 )
@@ -2335,25 +2405,202 @@ class WingmanCore(WebSocketUser):
 
         # Calculate averages
         sum_times = [
-            s.execution_time_ms for s in snapshots if s.label.startswith("summarize_")
+            s.execution_time_ms for s in snapshots if s.label.startswith("support_")
         ]
         emb_times = [
             s.execution_time_ms for s in snapshots if s.label.startswith("embed_")
         ]
+
+        # Tokens/sec stats from support runs
+        tps_values = [
+            r["tokens_per_sec"]
+            for r in results["support_runs"]
+            if r["tokens_per_sec"] > 0
+        ]
+        avg_tokens_per_sec = (
+            round(sum(tps_values) / len(tps_values), 1) if tps_values else 0
+        )
 
         return {
             "success": True,
             "iterations": iterations,
             "total_time_ms": bench_result.execution_time_ms,
             "formatted_total_time": bench_result.formatted_execution_time,
-            "summarize_avg_ms": sum(sum_times) / len(sum_times) if sum_times else 0,
+            "support_avg_ms": sum(sum_times) / len(sum_times) if sum_times else 0,
             "embed_avg_ms": sum(emb_times) / len(emb_times) if emb_times else 0,
+            "avg_tokens_per_sec": avg_tokens_per_sec,
             "snapshots": [s.model_dump() for s in snapshots],
             "runs": results,
         }
 
-    # POST /local-ai/summarize
-    async def api_summarize(
+    # POST /settings/test/whispercpp
+    async def test_whispercpp(self) -> TestConnectionResult:
+        """Test the whisper.cpp server by sending a short audio file for transcription."""
+        settings = self.settings_service.settings.voice_activation.whispercpp
+        try:
+            response = requests.get(
+                url=f"{settings.host}:{settings.port}",
+                timeout=5,
+            )
+            if response.ok:
+                return TestConnectionResult(success=True, provider="whispercpp")
+            return TestConnectionResult(
+                success=False,
+                provider="whispercpp",
+                error=f"Server returned status {response.status_code}",
+            )
+        except requests.ConnectionError:
+            return TestConnectionResult(
+                success=False,
+                provider="whispercpp",
+                error=f"Could not connect to {settings.host}:{settings.port}. Is the server running?",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="whispercpp", error=str(e)
+            )
+
+    # POST /settings/test/parakeet
+    async def test_parakeet(self) -> TestConnectionResult:
+        """Test Parakeet by transcribing a short audio sample."""
+        if not self.parakeet.model:
+            return TestConnectionResult(
+                success=False,
+                provider="parakeet",
+                error="Parakeet model is not loaded. Enable Parakeet in settings first.",
+            )
+        try:
+            wav_path = os.path.join(self.app_root_path, "audio_samples", "beep.wav")
+            config = ParakeetSttConfig(temperature=0.0)
+            result = self.parakeet.transcribe(config=config, filename=wav_path)
+            if result and result.text is not None:
+                return TestConnectionResult(success=True, provider="parakeet")
+            return TestConnectionResult(
+                success=False,
+                provider="parakeet",
+                error="Transcription returned no result.",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="parakeet", error=str(e)
+            )
+
+    # POST /settings/test/xvasynth
+    async def test_xvasynth(self) -> TestConnectionResult:
+        """Test the XVASynth server connection."""
+        settings = self.settings_service.settings.xvasynth
+        try:
+            response = requests.get(
+                url=f"{settings.host}:{settings.port}",
+                timeout=10,
+            )
+            if response.ok:
+                return TestConnectionResult(success=True, provider="xvasynth")
+            return TestConnectionResult(
+                success=False,
+                provider="xvasynth",
+                error=f"Server returned status {response.status_code}",
+            )
+        except requests.ConnectionError:
+            return TestConnectionResult(
+                success=False,
+                provider="xvasynth",
+                error=f"Could not connect to {settings.host}:{settings.port}. Is the server running?",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="xvasynth", error=str(e)
+            )
+
+    # POST /settings/test/local-ai/support
+    async def test_local_ai_support(self) -> TestConnectionResult:
+        """Test the local AI support model."""
+        if not self.local_ai_service.is_ready():
+            return TestConnectionResult(
+                success=False,
+                provider="local_ai_support",
+                error="Local AI service is not ready. Make sure models are loaded.",
+            )
+        try:
+            result = self.local_ai_service.support(
+                text="The quick brown fox jumps over the lazy dog.",
+            )
+            if result and result.text:
+                return TestConnectionResult(success=True, provider="local_ai_support")
+            return TestConnectionResult(
+                success=False,
+                provider="local_ai_support",
+                error="Support model returned no result.",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="local_ai_support", error=str(e)
+            )
+
+    # POST /settings/test/local-ai/embed
+    async def test_local_ai_embed(self) -> TestConnectionResult:
+        """Test the local AI embedding model."""
+        if not self.local_ai_service.is_ready():
+            return TestConnectionResult(
+                success=False,
+                provider="local_ai_embed",
+                error="Local AI service is not ready. Make sure models are loaded.",
+            )
+        try:
+            result = self.local_ai_service.embed(["hello world"])
+            if result and len(result) > 0:
+                return TestConnectionResult(success=True, provider="local_ai_embed")
+            return TestConnectionResult(
+                success=False,
+                provider="local_ai_embed",
+                error="Embedding returned no result.",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="local_ai_embed", error=str(e)
+            )
+
+    # POST /settings/test/hud-server
+    async def test_hud_server(self) -> TestConnectionResult:
+        """Test the HUD server connection via its health endpoint."""
+        settings = self.settings_service.settings.hud_server
+        try:
+            host = settings.host or "127.0.0.1"
+            port = settings.port or 7862
+            # Ensure host has a scheme
+            if not host.startswith("http"):
+                host = f"http://{host}"
+            response = requests.get(
+                url=f"{host}:{port}/health",
+                timeout=5,
+            )
+            if response.ok:
+                data = response.json()
+                if data.get("status") == "healthy":
+                    return TestConnectionResult(success=True, provider="hud_server")
+                return TestConnectionResult(
+                    success=False,
+                    provider="hud_server",
+                    error=f"HUD server responded but status is '{data.get('status', 'unknown')}'",
+                )
+            return TestConnectionResult(
+                success=False,
+                provider="hud_server",
+                error=f"Server returned status {response.status_code}",
+            )
+        except requests.ConnectionError:
+            return TestConnectionResult(
+                success=False,
+                provider="hud_server",
+                error=f"Could not connect to HUD server. Is it running?",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="hud_server", error=str(e)
+            )
+
+    # POST /local-ai/support
+    async def api_support(
         self,
         text: str = Body(..., embed=True),
         system_prompt: str = Body(
@@ -2365,17 +2612,17 @@ class WingmanCore(WebSocketUser):
             embed=True,
         ),
     ) -> dict:
-        """Public API: Summarize text using the local AI service."""
+        """Public API: Process text using the local AI support model."""
         if not self.local_ai_service.is_ready():
             raise HTTPException(
                 status_code=503,
                 detail="Local AI service is not ready. Make sure models are loaded.",
             )
-        result = self.local_ai_service.summarize(
+        result = self.local_ai_service.support(
             text=text, system_prompt=system_prompt, max_tokens=max_tokens
         )
         if result.text is None:
-            raise HTTPException(status_code=500, detail="Summarization failed.")
+            raise HTTPException(status_code=500, detail="Support model call failed.")
         return {"result": result.text}
 
     # POST /local-ai/enhance-backstory
@@ -2425,15 +2672,13 @@ class WingmanCore(WebSocketUser):
         # but cap at what's available after prompt + input
         max_output_tokens = min(available, max(backstory_tokens, 1024))
 
-        result = self.local_ai_service.summarize(
+        result = self.local_ai_service.support(
             text=backstory,
             system_prompt=system_prompt,
             max_tokens=max_output_tokens,
         )
         if result.text is None:
-            raise HTTPException(
-                status_code=500, detail="Backstory enhancement failed."
-            )
+            raise HTTPException(status_code=500, detail="Backstory enhancement failed.")
         return {"result": result.text}
 
     # GET /local-ai/enhance-backstory-budget

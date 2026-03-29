@@ -54,13 +54,13 @@ pocket_tts:
   custom_model_path: ""
 llama_cpp:
   run_locally: true
-  summarize_model: "Qwen3.5-2B-Q4_K_M.gguf"
+  support_model: "Qwen3.5-2B-Q4_K_M.gguf"
   embed_model: "nomic-embed-text-v1.5.f16.gguf"
   n_ctx: 4096
   n_threads: 0
   reasoning_effort: 0
-  summarize_remote_host: "http://127.0.0.1"
-  summarize_remote_port: 49152
+  support_remote_host: "http://127.0.0.1"
+  support_remote_port: 49152
   embed_remote_host: "http://127.0.0.1"
   embed_remote_port: 49153
 hud_server:

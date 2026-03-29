@@ -575,9 +575,9 @@ class FeaturesConfig(BaseModel):
     image_generation_provider: ImageGenerationProvider
     use_generic_instant_responses: bool
     condense_conversation: bool
-    """Enable automatic conversation condensation using the local summarization model.
+    """Enable automatic conversation condensation using the local support model.
     When enabled, older messages are automatically summarized when the conversation
-    approaches the summarize model's context window capacity, saving tokens while
+    approaches the support model's context window capacity, saving tokens while
     preserving key information."""
     compress_tool_responses: bool
     """Compress large tool/MCP responses using local AI embeddings and summarization.
@@ -970,6 +970,19 @@ class McpServerState(BaseModel):
     """Error message if connection failed."""
 
 
+class TestConnectionResult(BaseModel):
+    """Result of testing a provider connection."""
+
+    success: bool
+    """Whether the connection test succeeded."""
+
+    provider: str
+    """The provider/secret name that was tested."""
+
+    error: Optional[str] = None
+    """Error message if the test failed."""
+
+
 class McpConnectResult(BaseModel):
     """Result of attempting to connect to an MCP server."""
 
@@ -1147,16 +1160,16 @@ class LlamaCppSettings(BaseModel):
     run_locally: bool = False
     gpu_backend: str = "vulkan"
     """GPU backend for llama-server: 'vulkan' (default, works on all GPUs), 'cuda' (NVIDIA only, fastest), 'cpu' (no GPU)."""
-    summarize_model: str = "Qwen3.5-2B-Q4_K_M.gguf"
+    support_model: str = "Qwen3.5-2B-Q4_K_M.gguf"
     embed_model: str = "nomic-embed-text-v1.5.f16.gguf"
     n_ctx: int = 4096
-    """Context window size for the summarize model. Minimum 2048."""
+    """Context window size for the support model. Minimum 2048."""
     n_threads: int = 0
     """Number of CPU threads for local inference. 0 = auto (half of logical cores, max 8)."""
     reasoning_effort: int = 0
-    """Reasoning effort for the summarize model. 0 = disabled (fastest), 1 = enabled (slow)."""
-    summarize_remote_host: str = "http://127.0.0.1"
-    summarize_remote_port: int = 49152
+    """Reasoning effort for the support model. 0 = disabled (fastest), 1 = enabled (slow)."""
+    support_remote_host: str = "http://127.0.0.1"
+    support_remote_port: int = 49152
     embed_remote_host: str = "http://127.0.0.1"
     embed_remote_port: int = 49153
 

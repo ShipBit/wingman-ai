@@ -22,6 +22,17 @@ class Migration211To300(BaseMigration):
             llama["summarize_model"] = "Qwen3.5-2B-Q4_K_M.gguf"
             self.log("- upgraded summarize model: Qwen3.5-0.8B → Qwen3.5-2B")
 
+        # Rename summarize_* fields to support_*
+        if "summarize_model" in llama:
+            llama["support_model"] = llama.pop("summarize_model")
+            self.log("- renamed llama_cpp.summarize_model → support_model")
+        if "summarize_remote_host" in llama:
+            llama["support_remote_host"] = llama.pop("summarize_remote_host")
+            self.log("- renamed llama_cpp.summarize_remote_host → support_remote_host")
+        if "summarize_remote_port" in llama:
+            llama["support_remote_port"] = llama.pop("summarize_remote_port")
+            self.log("- renamed llama_cpp.summarize_remote_port → support_remote_port")
+
         # Add Parakeet STT settings
         va = old.get("voice_activation", {})
         new_va = new.get("voice_activation", {})

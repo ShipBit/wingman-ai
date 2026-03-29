@@ -11,7 +11,7 @@ printr = Printr()
 
 
 class LocalAiService:
-    """Unified facade that routes summarize/embed calls to local or remote provider."""
+    """Unified facade that routes support/embed calls to local or remote provider."""
 
     def __init__(
         self,
@@ -25,40 +25,55 @@ class LocalAiService:
 
     async def update_settings_async(self, new_settings: LlamaCppSettings):
         """Handle settings changes including local↔remote toggle."""
-        old_run_locally = self.settings.run_locally
+        old = self.settings
         self.settings = new_settings
 
         self.provider.update_settings(new_settings)
         self.remote.update_settings(new_settings)
 
-        if old_run_locally and not new_settings.run_locally:
+        if old.run_locally and not new_settings.run_locally:
             await printr.print_async(
                 "Switched to remote mode — local models unloaded.",
                 color=LogType.INFO,
                 server_only=True,
             )
-        elif not old_run_locally and new_settings.run_locally:
+        elif not old.run_locally and new_settings.run_locally:
             await self.initialize()
+        elif old.run_locally and new_settings.run_locally:
+            # Backend or model changed while staying in local mode —
+            # provider already killed old processes, now re-initialize.
+            backend_changed = old.gpu_backend != new_settings.gpu_backend
+            model_changed = (
+                old.support_model != new_settings.support_model
+                or old.embed_model != new_settings.embed_model
+            )
+            config_changed = (
+                old.n_ctx != new_settings.n_ctx
+                or old.n_threads != new_settings.n_threads
+                or old.reasoning_effort != new_settings.reasoning_effort
+            )
+            if backend_changed or model_changed or config_changed:
+                await self.initialize()
 
-    def summarize(
+    def support(
         self,
         text: str,
         system_prompt: str = "",
         max_tokens: int = 512,
-    ) -> "SummarizeResult":
-        """Summarize text using the active provider (local or remote).
+    ) -> "SupportResult":
+        """Process text using the active provider's support model (local or remote).
 
-        Returns a SummarizeResult with text, token usage, and truncation flag.
+        Returns a SupportResult with text, token usage, and truncation flag.
         """
-        from providers.llama_cpp_provider import SummarizeResult
+        from providers.llama_cpp_provider import SupportResult
 
         if not system_prompt:
             from services.file import get_prompt
 
-            system_prompt = get_prompt("summarize-default")
+            system_prompt = get_prompt("support-default")
         if self.settings.run_locally:
-            return self.provider.summarize(text, system_prompt, max_tokens)
-        return self.remote.summarize(text, system_prompt, max_tokens)
+            return self.provider.support(text, system_prompt, max_tokens)
+        return self.remote.support(text, system_prompt, max_tokens)
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
         """Generate embeddings using the active provider (local or remote)."""
@@ -79,6 +94,7 @@ class LocalAiService:
             return None
         # Strip path and extension for display
         from os.path import basename, splitext
+
         return splitext(basename(name))[0]
 
     async def initialize(self):
@@ -99,7 +115,7 @@ class LocalAiService:
             color=LogType.INFO,
             server_only=True,
         )
-        ok_sum = self.provider.load_summarize_model()
+        ok_sum = self.provider.load_support_model()
         ok_emb = self.provider.load_embed_model()
         if ok_sum and ok_emb:
             await printr.print_async(
@@ -109,7 +125,7 @@ class LocalAiService:
             )
         else:
             await printr.print_async(
-                f"[Local AI] Model loading incomplete (summarize={'ok' if ok_sum else 'FAILED'}, embed={'ok' if ok_emb else 'FAILED'}).",
+                f"[Local AI] Model loading incomplete (support={'ok' if ok_sum else 'FAILED'}, embed={'ok' if ok_emb else 'FAILED'}).",
                 color=LogType.WARNING,
                 server_only=True,
             )

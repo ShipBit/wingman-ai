@@ -16,8 +16,14 @@ from services.printr import Printr
 
 printr = Printr()
 
-# Available summarize models — keyed by GGUF filename
-SUMMARIZE_MODELS: dict[str, dict] = {
+# Available support models — keyed by GGUF filename
+SUPPORT_MODELS: dict[str, dict] = {
+    "Qwen3.5-4B-Q4_K_M.gguf": {
+        "repo": "unsloth/Qwen3.5-4B-GGUF",
+        "filename": "Qwen3.5-4B-Q4_K_M.gguf",
+        "expected_size_mb": 2740,
+        "label": "Qwen 3.5 4B (powerful)",
+    },
     "Qwen3.5-2B-Q4_K_M.gguf": {
         "repo": "unsloth/Qwen3.5-2B-GGUF",
         "filename": "Qwen3.5-2B-Q4_K_M.gguf",
@@ -32,7 +38,7 @@ SUMMARIZE_MODELS: dict[str, dict] = {
     },
 }
 
-DEFAULT_SUMMARIZE_MODEL = SUMMARIZE_MODELS["Qwen3.5-2B-Q4_K_M.gguf"]
+DEFAULT_SUPPORT_MODEL = SUPPORT_MODELS["Qwen3.5-2B-Q4_K_M.gguf"]
 
 DEFAULT_EMBED_MODEL = {
     "repo": "nomic-ai/nomic-embed-text-v1.5-GGUF",
@@ -78,9 +84,9 @@ class LocalModelManager:
     def update_settings(self, new_settings: LlamaCppSettings):
         self.settings = new_settings
 
-    def get_summarize_model_path(self) -> str:
-        """Return the full path to the summarize model GGUF file."""
-        filename = self.settings.summarize_model
+    def get_support_model_path(self) -> str:
+        """Return the full path to the support model GGUF file."""
+        filename = self.settings.support_model
         if path.isabs(filename):
             return filename
         return path.join(self.models_dir, filename)
@@ -93,10 +99,10 @@ class LocalModelManager:
         return path.join(self.models_dir, filename)
 
     def models_available(self) -> bool:
-        return self.summarize_model_available() and self.embed_model_available()
+        return self.support_model_available() and self.embed_model_available()
 
-    def summarize_model_available(self) -> bool:
-        return path.exists(self.get_summarize_model_path())
+    def support_model_available(self) -> bool:
+        return path.exists(self.get_support_model_path())
 
     def embed_model_available(self) -> bool:
         return path.exists(self.get_embed_model_path())
@@ -196,7 +202,9 @@ class LocalModelManager:
                     pass
             return False
 
-    async def download_models(self, cuda_available: bool = False, on_progress: callable = None) -> bool:
+    async def download_models(
+        self, cuda_available: bool = False, on_progress: callable = None
+    ) -> bool:
         """Download models and llama-server binaries asynchronously.
 
         Downloads the active backend binary plus CUDA if cuda_available is True.
@@ -213,11 +221,11 @@ class LocalModelManager:
         self._downloading = True
         try:
             loop = asyncio.get_event_loop()
-            # Download the summarize model matching the current settings selection
-            active_model = SUMMARIZE_MODELS.get(
-                self.settings.summarize_model, DEFAULT_SUMMARIZE_MODEL
+            # Download the support model matching the current settings selection
+            active_model = SUPPORT_MODELS.get(
+                self.settings.support_model, DEFAULT_SUPPORT_MODEL
             )
-            summarize_ok = await loop.run_in_executor(
+            support_ok = await loop.run_in_executor(
                 None, self._download_model, active_model, on_progress
             )
             embed_ok = await loop.run_in_executor(
@@ -243,7 +251,7 @@ class LocalModelManager:
                 if not ok:
                     server_ok = False
 
-            return summarize_ok and embed_ok and server_ok
+            return support_ok and embed_ok and server_ok
         finally:
             self._downloading = False
             self._download_progress = {}
@@ -252,7 +260,7 @@ class LocalModelManager:
         """Return current model status for the API."""
         status = {
             "models_available": self.models_available(),
-            "summarize_available": self.summarize_model_available(),
+            "support_available": self.support_model_available(),
             "embed_available": self.embed_model_available(),
             "llama_server_available": self.llama_server_available(),
             "gpu_backend": self._get_active_backend(),
@@ -264,10 +272,10 @@ class LocalModelManager:
             status["download_progress"] = self._download_progress
         return status
 
-    def get_summarize_models(self) -> list[dict]:
-        """Return the list of available summarize models for the UI dropdown."""
+    def get_support_models(self) -> list[dict]:
+        """Return the list of available support models for the UI dropdown."""
         result = []
-        for filename, model_def in SUMMARIZE_MODELS.items():
+        for filename, model_def in SUPPORT_MODELS.items():
             result.append(
                 {
                     "filename": filename,
