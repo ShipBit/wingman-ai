@@ -23,6 +23,7 @@ from api.enums import (
     AzureRegion,
     CommandTag,
     CoreState,
+    LogSource,
     LogType,
     VoiceActivationSttProvider,
     WingmanInitializationErrorType,
@@ -150,6 +151,12 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/send-text-to-wingman",
             endpoint=self.send_text_to_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/generate-greeting",
+            endpoint=self.generate_greeting,
             tags=tags,
         )
         self.router.add_api_route(
@@ -1785,6 +1792,61 @@ class WingmanCore(WebSocketUser):
         if wingman and text:
             play_thread = threading.Thread(target=run_async_process)
             play_thread.start()
+
+    # POST /generate-greeting
+    async def generate_greeting(self, wingman_name: str):
+        """Generate an in-character greeting using the support model. UI-only — not sent to TTS or conversation history."""
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman:
+            return
+
+        config = wingman.config
+
+        # Build context about how the user communicates with this wingman
+        settings = self.config_manager.settings_config
+        va_enabled = settings.voice_activation.enabled if settings.voice_activation else False
+
+        if va_enabled and config.is_voice_activation_default:
+            comm_context = "You are always listening — the user just speaks naturally to talk to you."
+        elif va_enabled:
+            comm_context = f"The user must say your name '{config.name}' somewhere in their sentence to talk to you."
+        else:
+            key = config.record_key or config.record_mouse_button or "a key"
+            comm_context = f"The user talks to you by holding the '{key}' key."
+
+        backstory = ""
+        if config.prompts and config.prompts.backstory:
+            backstory = config.prompts.backstory
+
+        system_prompt = f"""You are {config.name}. Here is your backstory:
+
+{backstory}
+
+Generate a short, creative, in-character greeting (1-2 sentences) for the user who just opened the app. Be creative and vary it each time. Stay in character.
+
+You MUST naturally include how the user can communicate with you: {comm_context}
+
+Keep it concise — this is a chat channel greeting, not a monologue."""
+
+        try:
+            response = self.local_ai_service.support(
+                text="Generate your greeting.",
+                system_prompt=system_prompt,
+            )
+
+            if response:
+                await self.printr.print_async(
+                    text=response.text,
+                    color=LogType.GREETING,
+                    source=LogSource.WINGMAN,
+                    source_name=wingman_name,
+                )
+        except Exception as e:
+            await self.printr.print_async(
+                text=f"Could not generate greeting: {e}",
+                color=LogType.WARNING,
+                source=LogSource.SYSTEM,
+            )
 
     # POST /send-audio-to-wingman
     async def send_audio_to_wingman(

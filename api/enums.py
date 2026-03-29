@@ -16,6 +16,7 @@ class LogType(Enum):
     SKILL = "skill"  # Dedicated color for Skills-related messages (system-level)
     COMMAND = "command"  # Dedicated color for Command execution messages
     WINGMAN = "wingman"  # Dedicated color for Wingman-specific status messages
+    GREETING = "greeting"  # In-character greeting, UI-only (no TTS, no conversation history)
 
     # Conversation messages
     USER = "user"  # Pink/Purple - user speech/input
