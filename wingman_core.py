@@ -2462,16 +2462,28 @@ class WingmanCore(WebSocketUser):
 
     # POST /settings/test/parakeet
     async def test_parakeet(self) -> TestConnectionResult:
-        """Test Parakeet by transcribing a short audio sample."""
-        if not self.parakeet.model:
+        """Test Parakeet by transcribing a short audio sample (locally or remotely)."""
+        settings = self.settings_service.settings.voice_activation.parakeet
+
+        if not settings.enable:
             return TestConnectionResult(
                 success=False,
                 provider="parakeet",
-                error="Parakeet model is not loaded. Enable Parakeet in settings first.",
+                error="Parakeet is not enabled.",
             )
+
+        wav_path = os.path.join(self.app_root_path, "audio_samples", "beep.wav")
+        config = ParakeetSttConfig(temperature=0.0)
+
+        if settings.run_locally:
+            if not self.parakeet.model:
+                return TestConnectionResult(
+                    success=False,
+                    provider="parakeet",
+                    error="Parakeet model is not loaded. Enable Parakeet in settings first.",
+                )
+
         try:
-            wav_path = os.path.join(self.app_root_path, "audio_samples", "beep.wav")
-            config = ParakeetSttConfig(temperature=0.0)
             result = self.parakeet.transcribe(config=config, filename=wav_path)
             if result and result.text is not None:
                 return TestConnectionResult(success=True, provider="parakeet")
