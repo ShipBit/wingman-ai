@@ -177,6 +177,6 @@ faster-whisper-models/
 pocket-tts-models/
 pocket-tts-voices/
 .superpowers/
-
+docs/superpowers/**/**
 
 .claude/settings.json

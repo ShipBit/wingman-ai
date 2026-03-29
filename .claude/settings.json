@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(/Users/shackles/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.5/skills/brainstorming/scripts/stop-server.sh /Users/shackles/Source/wingman-ai/.superpowers/brainstorm/83204-1774309040)"
+      "Read(//Users/shackles/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.6/skills/brainstorming/**)"
     ]
   }
 }
