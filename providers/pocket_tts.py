@@ -19,6 +19,7 @@ from api.interface import (
 from services.file import get_custom_voices_dir
 from services.audio_player import AudioPlayer
 from services.printr import Printr
+from providers.open_ai import OpenAiCompatibleTts
 
 
 MODELS_DIR = "pocket-tts-models"
@@ -29,40 +30,82 @@ INCLUDED_VOICES_DIR = "pocket-tts-voices"
 class PocketTTS:
     def __init__(self, settings: Optional[PocketTTSSettings] = None):
         if settings is None:
-            settings = PocketTTSSettings(enable=False)
+            settings = PocketTTSSettings(enable=False, host="localhost", port=5002)
         self.settings = settings
         self.printr = Printr()
         self.model: Optional[TTSModel] = None
+        self.remote_client: Optional[OpenAiCompatibleTts] = None
         self.voices_dir = get_custom_voices_dir()
         self.wingman_included_voices_dir = self._get_wingman_included_voices_dir()
         self.voice_cache = {}
         self._playback_buffer = bytearray()
 
-        # Initialize the model
+        # Initialize based on mode
         if self.settings.enable:
-            self.load_model()
+            if self.settings.run_locally:
+                self.load_model()
+            else:
+                self._init_remote_client()
+
+    def _init_remote_client(self):
+        """Initialize the OpenAI-compatible client for remote PocketTTS."""
+        base_url = f"http://{self.settings.host}:{self.settings.port}/v1"
+        self.remote_client = OpenAiCompatibleTts(
+            api_key="not-needed",
+            base_url=base_url,
+        )
+        self.printr.print(
+            f"PocketTTS remote client initialized: {base_url}",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+    def _destroy_remote_client(self):
+        """Tear down the remote client."""
+        self.remote_client = None
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass
 
     def update_settings(self, settings: PocketTTSSettings):
-        requires_reload = self.settings.custom_model_path != settings.custom_model_path
-        requires_restart = (
-            self.settings.enable != settings.enable
-            or self.settings.custom_model_path != settings.custom_model_path
-            or requires_reload
-        )
-
+        old = self.settings
         self.settings = settings
         self.voices_dir = get_custom_voices_dir()
         self.wingman_included_voices_dir = self._get_wingman_included_voices_dir()
 
-        if self.settings.enable:
-            if requires_restart:
-                self.unload_model()  # Clean up old model if any
+        if not settings.enable:
+            # Disabled — tear down everything
+            if old.enable and old.run_locally:
+                self.unload_model()
+            self._destroy_remote_client()
+            self.printr.print("PocketTTS disabled.", server_only=True)
+            return
+
+        if settings.run_locally:
+            # Local mode
+            if self.remote_client:
+                self._destroy_remote_client()
+            needs_reload = (
+                not old.enable
+                or not old.run_locally
+                or old.custom_model_path != settings.custom_model_path
+            )
+            if needs_reload:
+                self.unload_model()
                 self.load_model()
         else:
-            self.unload_model()
+            # Remote mode
+            if old.run_locally and old.enable:
+                self.unload_model()
+            needs_reconnect = (
+                not old.enable
+                or old.run_locally
+                or old.host != settings.host
+                or old.port != settings.port
+            )
+            if needs_reconnect:
+                self._destroy_remote_client()
+                self._init_remote_client()
 
         self.printr.print("PocketTTS settings updated.", server_only=True)
 
@@ -155,6 +198,12 @@ class PocketTTS:
 
     async def get_available_voices(self) -> list[VoiceInfo]:
         """List available voices for API: Built-ins (provider: pocket_tts) + Custom (provider: custom_voices)."""
+        # Remote mode — fetch from server
+        if not self.settings.run_locally and self.remote_client:
+            return await self.remote_client.get_available_voices(
+                voices_endpoint="/voices"
+            )
+
         builtin_map = {
             "alba": "alba",
             "marius": "marius",
@@ -286,6 +335,20 @@ class PocketTTS:
         wingman_name: str,
     ):
         if not text:
+            return
+
+        # Remote mode — delegate to OpenAI-compatible client
+        if not self.settings.run_locally and self.remote_client:
+            await self.remote_client.play_audio(
+                text=text,
+                voice=config.voice or "alba",
+                model="pocket-tts",
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+                stream=config.output_streaming,
+                speed=config.speed,
+            )
             return
 
         if not self.model:
