@@ -52,7 +52,10 @@ xvasynth:
   process_device: cpu
 pocket_tts:
   enable: true
+  run_locally: true
   custom_model_path: ""
+  host: "localhost"
+  port: 5002
 llama_cpp:
   run_locally: true
   support_model: "Qwen3.5-2B-Q4_K_M.gguf"

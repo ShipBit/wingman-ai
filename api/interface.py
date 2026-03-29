@@ -149,7 +149,10 @@ class XVASynthSettings(BaseModel):
 
 class PocketTTSSettings(BaseModel):
     enable: bool
+    run_locally: bool = True
     custom_model_path: Optional[str] = None
+    host: str
+    port: int
 
 
 class WhispercppSttConfig(BaseModel):
