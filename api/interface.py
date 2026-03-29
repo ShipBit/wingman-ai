@@ -180,6 +180,7 @@ class FasterWhisperTranscript(BaseModel):
 
 class ParakeetSettings(BaseModel):
     enable: bool
+    run_locally: bool = True
     model_variant: str
     """v2 (English) or v3 (Multilingual, 25 languages)"""
     execution_provider: str
