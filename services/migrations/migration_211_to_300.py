@@ -43,6 +43,12 @@ class Migration211To300(BaseMigration):
             va["parakeet_config"] = new_va["parakeet_config"]
             self.log("- added new voice activation setting: parakeet_config")
 
+        # Ensure existing Parakeet configs have the run_locally field
+        parakeet = va.get("parakeet", {})
+        if parakeet and "run_locally" not in parakeet:
+            parakeet["run_locally"] = True
+            self.log("- added parakeet.run_locally = true")
+
         return old
 
     def migrate_defaults(self, old: dict, new: dict) -> dict:

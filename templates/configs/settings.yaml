@@ -34,6 +34,7 @@ voice_activation:
     additional_hotwords: []
   parakeet:
     enable: false
+    run_locally: true
     model_variant: v2
     execution_provider: cpu
     host: http://127.0.0.1
