@@ -28,6 +28,36 @@ INCLUDED_VOICES_DIR = "pocket-tts-voices"
 
 
 class PocketTTS:
+    @staticmethod
+    def normalize_remote_url(host: str, port: int) -> str:
+        """Build a clean base URL from possibly messy user input.
+
+        Handles all common mistakes:
+          - scheme included (http://, https://)
+          - port embedded in host (host:8000)
+          - /v1 path appended
+          - trailing slashes
+          - leading/trailing whitespace
+
+        Returns ``http://<host>:<port>`` (no trailing slash, no /v1).
+        """
+        url = (host or "localhost").strip()
+        # strip scheme
+        for scheme in ("https://", "http://"):
+            if url.lower().startswith(scheme):
+                url = url[len(scheme) :]
+                break
+        # strip paths like /v1, /v1/, or just /
+        url = url.rstrip("/")
+        if url.endswith("/v1"):
+            url = url[:-3].rstrip("/")
+        # if user embedded port in host (e.g. "myhost:8000"), use it
+        if ":" in url:
+            host_part, port_str = url.rsplit(":", 1)
+            if port_str.isdigit():
+                return f"http://{host_part}:{port_str}"
+        return f"http://{url}:{port}"
+
     def __init__(self, settings: Optional[PocketTTSSettings] = None):
         if settings is None:
             settings = PocketTTSSettings(enable=False, host="localhost", port=5002)
@@ -49,7 +79,9 @@ class PocketTTS:
 
     def _init_remote_client(self):
         """Initialize the OpenAI-compatible client for remote PocketTTS."""
-        base_url = f"http://{self.settings.host}:{self.settings.port}/v1"
+        base_url = (
+            self.normalize_remote_url(self.settings.host, self.settings.port) + "/v1"
+        )
         self.remote_client = OpenAiCompatibleTts(
             api_key="not-needed",
             base_url=base_url,

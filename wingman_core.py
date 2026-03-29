@@ -78,6 +78,7 @@ from services.file import (
     get_writable_dir,
     get_audio_library_dir,
     get_custom_voices_dir,
+    get_local_models_dir,
     get_lore_library_dir,
     get_prompt,
 )
@@ -268,6 +269,12 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/open-filemanager/custom-voices",
             endpoint=self.open_custom_voices_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/local-models",
+            endpoint=self.open_local_models_directory,
             tags=tags,
         )
         self.router.add_api_route(
@@ -517,6 +524,12 @@ class WingmanCore(WebSocketUser):
             tags=tags,
         )
         self.router.add_api_route(
+            methods=["GET"],
+            path="/settings/local-ai/embed-models",
+            endpoint=self.get_local_ai_embed_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
             methods=["POST"],
             path="/settings/local-ai/playground/chat",
             endpoint=self.playground_chat,
@@ -575,6 +588,13 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/settings/test/hud-server",
             endpoint=self.test_hud_server,
+            response_model=TestConnectionResult,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/settings/test/pocket-tts",
+            endpoint=self.test_pocket_tts,
             response_model=TestConnectionResult,
             tags=tags,
         )
@@ -1951,6 +1971,10 @@ class WingmanCore(WebSocketUser):
     def open_custom_voices_directory(self):
         show_in_file_manager(get_custom_voices_dir())
 
+    # POST /open-filemanager/local-models
+    def open_local_models_directory(self):
+        show_in_file_manager(get_local_models_dir())
+
     # GET /models/openrouter
     async def get_openrouter_models(self):
         response = requests.get(url="https://openrouter.ai/api/v1/models", timeout=10)
@@ -2251,6 +2275,10 @@ class WingmanCore(WebSocketUser):
     # GET /settings/local-ai/support-models
     def get_local_ai_support_models(self) -> list[dict]:
         return self.local_model_manager.get_support_models()
+
+    # GET /settings/local-ai/embed-models
+    def get_local_ai_embed_models(self) -> list[dict]:
+        return self.local_model_manager.get_embed_models()
 
     # POST /settings/local-ai/download-models
     async def download_local_ai_models(self) -> dict:
@@ -2609,6 +2637,51 @@ class WingmanCore(WebSocketUser):
         except Exception as e:
             return TestConnectionResult(
                 success=False, provider="hud_server", error=str(e)
+            )
+
+    # POST /settings/test/pocket-tts
+    async def test_pocket_tts(self) -> TestConnectionResult:
+        """Test PocketTTS: check local model is loaded or remote server is reachable."""
+        settings = self.settings_service.settings.pocket_tts
+        if not settings.enable:
+            return TestConnectionResult(
+                success=False,
+                provider="pocket_tts",
+                error="PocketTTS is not enabled.",
+            )
+
+        if settings.run_locally:
+            if self.pocket_tts.model is not None:
+                return TestConnectionResult(success=True, provider="pocket_tts")
+            return TestConnectionResult(
+                success=False,
+                provider="pocket_tts",
+                error="PocketTTS model is not loaded. Try toggling PocketTTS off and on.",
+            )
+
+        # Remote mode — hit the server's health endpoint
+        try:
+            base = PocketTTS.normalize_remote_url(settings.host, settings.port)
+            response = requests.get(
+                url=f"{base}/health",
+                timeout=5,
+            )
+            if response.ok:
+                return TestConnectionResult(success=True, provider="pocket_tts")
+            return TestConnectionResult(
+                success=False,
+                provider="pocket_tts",
+                error=f"Server returned status {response.status_code}",
+            )
+        except requests.ConnectionError:
+            return TestConnectionResult(
+                success=False,
+                provider="pocket_tts",
+                error=f"Could not connect to PocketTTS server at {base}. Is it running?",
+            )
+        except Exception as e:
+            return TestConnectionResult(
+                success=False, provider="pocket_tts", error=str(e)
             )
 
     # POST /local-ai/support

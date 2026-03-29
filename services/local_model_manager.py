@@ -40,11 +40,16 @@ SUPPORT_MODELS: dict[str, dict] = {
 
 DEFAULT_SUPPORT_MODEL = SUPPORT_MODELS["Qwen3.5-2B-Q4_K_M.gguf"]
 
-DEFAULT_EMBED_MODEL = {
-    "repo": "nomic-ai/nomic-embed-text-v1.5-GGUF",
-    "filename": "nomic-embed-text-v1.5.f16.gguf",
-    "expected_size_mb": 250,
+EMBED_MODELS: dict[str, dict] = {
+    "nomic-embed-text-v1.5.f16.gguf": {
+        "repo": "nomic-ai/nomic-embed-text-v1.5-GGUF",
+        "filename": "nomic-embed-text-v1.5.f16.gguf",
+        "expected_size_mb": 250,
+        "label": "Nomic Embed Text v1.5 (recommended)",
+    },
 }
+
+DEFAULT_EMBED_MODEL = EMBED_MODELS["nomic-embed-text-v1.5.f16.gguf"]
 
 # llama-server binary release — update this to get newer llama.cpp features
 LLAMA_SERVER_VERSION = "b8400"
@@ -228,8 +233,11 @@ class LocalModelManager:
             support_ok = await loop.run_in_executor(
                 None, self._download_model, active_model, on_progress
             )
+            active_embed = EMBED_MODELS.get(
+                self.settings.embed_model, DEFAULT_EMBED_MODEL
+            )
             embed_ok = await loop.run_in_executor(
-                None, self._download_model, DEFAULT_EMBED_MODEL, on_progress
+                None, self._download_model, active_embed, on_progress
             )
 
             # Determine which backends to download
@@ -272,6 +280,30 @@ class LocalModelManager:
             status["download_progress"] = self._download_progress
         return status
 
+    def _scan_custom_gguf(self, exclude: set[str]) -> list[dict]:
+        """Scan models_dir for .gguf files not in the given exclude set."""
+        custom = []
+        if not path.isdir(self.models_dir):
+            return custom
+        for entry in sorted(os.listdir(self.models_dir)):
+            if not entry.lower().endswith(".gguf"):
+                continue
+            if entry in exclude:
+                continue
+            full = path.join(self.models_dir, entry)
+            if not path.isfile(full):
+                continue
+            size_mb = os.path.getsize(full) // (1024 * 1024)
+            custom.append(
+                {
+                    "filename": entry,
+                    "label": entry,
+                    "size_mb": size_mb,
+                    "downloaded": True,
+                }
+            )
+        return custom
+
     def get_support_models(self) -> list[dict]:
         """Return the list of available support models for the UI dropdown."""
         result = []
@@ -284,6 +316,24 @@ class LocalModelManager:
                     "downloaded": path.exists(path.join(self.models_dir, filename)),
                 }
             )
+        known = set(SUPPORT_MODELS.keys()) | set(EMBED_MODELS.keys())
+        result.extend(self._scan_custom_gguf(known))
+        return result
+
+    def get_embed_models(self) -> list[dict]:
+        """Return the list of available embed models for the UI dropdown."""
+        result = []
+        for filename, model_def in EMBED_MODELS.items():
+            result.append(
+                {
+                    "filename": filename,
+                    "label": model_def["label"],
+                    "size_mb": model_def["expected_size_mb"],
+                    "downloaded": path.exists(path.join(self.models_dir, filename)),
+                }
+            )
+        known = set(SUPPORT_MODELS.keys()) | set(EMBED_MODELS.keys())
+        result.extend(self._scan_custom_gguf(known))
         return result
 
     # ── llama-server binary management ──────────────────────────────────
