@@ -1,5 +1,8 @@
 import platform
 from typing import Optional
+
+import requests
+
 from api.enums import LogType
 from api.interface import (
     ParakeetSettings,
@@ -30,7 +33,7 @@ class Parakeet:
         self.model = None
         self.is_windows = platform.system() == "Windows"
 
-        if settings.enable:
+        if settings.enable and settings.run_locally:
             self.__load_model()
 
     def __load_model(self):
@@ -71,11 +74,53 @@ class Parakeet:
             del self.model
             self.model = None
 
+    def __transcribe_remote(self, filename: str) -> Optional[ParakeetTranscript]:
+        """POST audio file to remote Parakeet server for transcription."""
+        url = f"{self.settings.host}:{self.settings.port}/v1/audio/transcriptions"
+        try:
+            with open(filename, "rb") as f:
+                response = requests.post(
+                    url=url,
+                    files={"file": f},
+                    data={
+                        "model": "parakeet",
+                        "response_format": "json",
+                    },
+                    timeout=30,
+                )
+                response.raise_for_status()
+                text = response.json().get("text", "").strip()
+                return ParakeetTranscript(text=text)
+        except requests.ConnectionError:
+            self.printr.toast_error(
+                f"Parakeet remote: Could not connect to {self.settings.host}:{self.settings.port}. Is the server running?"
+            )
+        except requests.Timeout:
+            self.printr.toast_error(
+                f"Parakeet remote: Request timed out after 30s."
+            )
+        except requests.HTTPError as e:
+            self.printr.toast_error(
+                f"Parakeet remote: Server returned error: {e}"
+            )
+        except FileNotFoundError:
+            self.printr.toast_error(
+                f"Parakeet: File to transcribe '{filename}' not found."
+            )
+        except Exception as e:
+            self.printr.toast_error(
+                f"Parakeet remote transcription failed: {e}"
+            )
+        return None
+
     def transcribe(
         self,
         config: ParakeetSttConfig,
         filename: str,
     ) -> Optional[ParakeetTranscript]:
+        if not self.settings.run_locally:
+            return self.__transcribe_remote(filename)
+
         if not self.model:
             self.printr.toast_error(
                 "Parakeet model is not loaded. Enable Parakeet in settings first."
@@ -100,25 +145,37 @@ class Parakeet:
         return None
 
     def update_settings(self, settings: ParakeetSettings):
-        old_enable = self.settings.enable
-        old_variant = self.settings.model_variant
-        old_provider = self.settings.execution_provider
+        old = self.settings
         self.settings = settings
 
-        if settings.enable and (
-            not old_enable
-            or old_variant != settings.model_variant
-            or old_provider != settings.execution_provider
-        ):
+        if not settings.enable:
+            # Disabled — unload if needed
+            if old.enable and old.run_locally:
+                self.__unload_model()
+            return
+
+        if settings.run_locally:
+            # Local mode — load model if switching to local or settings changed
+            needs_reload = (
+                not old.enable
+                or not old.run_locally
+                or old.model_variant != settings.model_variant
+                or old.execution_provider != settings.execution_provider
+            )
+            if needs_reload:
+                self.printr.print(
+                    "Parakeet settings changed, reloading model...",
+                    server_only=True,
+                )
+                self.__load_model()
+        else:
+            # Remote mode — unload local model if it was loaded
+            if old.run_locally:
+                self.__unload_model()
             self.printr.print(
-                "Parakeet settings changed, reloading model...",
+                f"Parakeet remote mode: {settings.host}:{settings.port}",
                 server_only=True,
             )
-            self.__load_model()
-        elif not settings.enable and old_enable:
-            self.__unload_model()
-        else:
-            self.printr.print("Parakeet settings updated.", server_only=True)
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass
