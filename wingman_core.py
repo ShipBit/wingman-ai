@@ -17,6 +17,7 @@ import mouse.mouse as mouse
 from api.commands import (
     AudioLibraryPlaybackFinishedCommand,
     CoreStateChangedCommand,
+    LogCommand,
     VoiceActivationMutedCommand,
 )
 from api.enums import (
@@ -1834,12 +1835,17 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
                 system_prompt=system_prompt,
             )
 
-            if response:
-                await self.printr.print_async(
-                    text=response.text,
-                    color=LogType.GREETING,
-                    source=LogSource.WINGMAN,
-                    source_name=wingman_name,
+            if response and self._connection_manager:
+                # Broadcast directly to set wingman_name explicitly
+                # (printr uses stack inspection which won't find a Wingman instance here)
+                await self._connection_manager.broadcast(
+                    LogCommand(
+                        text=response.text,
+                        log_type=LogType.GREETING,
+                        source=LogSource.WINGMAN,
+                        source_name=wingman_name,
+                        wingman_name=wingman_name,
+                    )
                 )
         except Exception as e:
             await self.printr.print_async(
