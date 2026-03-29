@@ -5,6 +5,7 @@ import keyboard.keyboard as keyboard
 from api.commands import (
     ActionsRecordedCommand,
     ClientLoggedOutCommand,
+    CoreStateChangedCommand,
     RecordJoystickActionsCommand,
     RecordKeyboardActionsCommand,
     RecordMouseActionsCommand,
@@ -86,6 +87,15 @@ class CommandHandler:
 
     async def handle_client_ready(self, websocket: WebSocket):
         await self.connection_manager.client_ready(websocket)
+
+        # Send current core state so late-connecting clients get the right status
+        # (core_state_changed is not queued when no clients are connected)
+        state_command = CoreStateChangedCommand(
+            state=self.core.core_state,
+            message=self.core.core_state_message,
+            progress=self.core.core_state_progress,
+        )
+        await self.connection_manager.send_to(state_command, websocket)
 
     # todo: make this a POST request - was just a demo for commands with params
     async def handle_secret(self, command: SaveSecretCommand, websocket: WebSocket):

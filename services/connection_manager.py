@@ -94,6 +94,13 @@ class ConnectionManager:
                 async with self._lock:
                     self.message_queue.append(command)
 
+    async def send_to(self, command: WebSocketCommandModel, websocket: WebSocket) -> None:
+        """Send a command to a specific client."""
+        try:
+            await websocket.send_text(command.model_dump_json())
+        except (RuntimeError, WebSocketDisconnect, OSError):
+            await self.disconnect(websocket)
+
     async def disconnect(self, websocket: WebSocket) -> None:
         async with self._lock:
             if websocket in self.active_connections:
