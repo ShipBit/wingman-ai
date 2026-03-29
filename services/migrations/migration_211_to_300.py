@@ -49,6 +49,19 @@ class Migration211To300(BaseMigration):
             parakeet["run_locally"] = True
             self.log("- added parakeet.run_locally = true")
 
+        # Ensure existing PocketTTS configs have run_locally, host, port fields
+        pocket_tts = old.get("pocket_tts", {})
+        if pocket_tts:
+            if "run_locally" not in pocket_tts:
+                pocket_tts["run_locally"] = True
+                self.log("- added pocket_tts.run_locally = true")
+            if "host" not in pocket_tts:
+                pocket_tts["host"] = "localhost"
+                self.log("- added pocket_tts.host = localhost")
+            if "port" not in pocket_tts:
+                pocket_tts["port"] = 5002
+                self.log("- added pocket_tts.port = 5002")
+
         return old
 
     def migrate_defaults(self, old: dict, new: dict) -> dict:
