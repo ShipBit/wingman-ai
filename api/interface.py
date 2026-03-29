@@ -1130,6 +1130,13 @@ class DuplicateWingmanResult(BaseModel):
     wingman_file: WingmanConfigFileInfo
 
 
+class DuplicateConfigRequest(BaseModel):
+    """Request payload for duplicating an entire config/context."""
+
+    source_config_dir: ConfigDirInfo
+    new_name: str
+
+
 class HudServerSettings(BaseModel):
     """HUD Server settings for global configuration."""
 

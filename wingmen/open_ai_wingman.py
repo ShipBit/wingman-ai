@@ -1762,7 +1762,7 @@ class OpenAiWingman(Wingman):
         if total_msg_count <= keep_recent:
             await printr.print_async(
                 f"Condensation skipped — only {total_msg_count} messages, need more than {keep_recent} to condense.",
-                color=LogType.INFO,
+                color=LogType.GREETING,
                 source_name=self.name,
                 source=LogSource.WINGMAN,
             )
@@ -1819,7 +1819,7 @@ class OpenAiWingman(Wingman):
             if cutoff_index <= 0:
                 await printr.print_async(
                     f"Condensation skipped — cutoff_index={cutoff_index}, nothing to condense (kept_user_count={kept_user_count}, keep_recent={keep_recent}, total={len(self.messages)}).",
-                    color=LogType.WARNING,
+                    color=LogType.GREETING,
                     source_name=self.name,
                     source=LogSource.WINGMAN,
                 )
@@ -1836,7 +1836,7 @@ class OpenAiWingman(Wingman):
             if cutoff_index <= 0:
                 await printr.print_async(
                     "Condensation skipped — no messages to condense after tool adjustment.",
-                    color=LogType.WARNING,
+                    color=LogType.GREETING,
                     source_name=self.name,
                     source=LogSource.WINGMAN,
                 )
@@ -1847,7 +1847,7 @@ class OpenAiWingman(Wingman):
             if not condensed_text.strip():
                 await printr.print_async(
                     "Condensation skipped — messages produced no text content.",
-                    color=LogType.WARNING,
+                    color=LogType.GREETING,
                     source_name=self.name,
                     source=LogSource.WINGMAN,
                 )

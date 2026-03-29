@@ -7,6 +7,7 @@ from api.interface import (
     ConfigDirInfo,
     ConfigWithDirInfo,
     ConfigsInfo,
+    DuplicateConfigRequest,
     DuplicateWingmanRequest,
     DuplicateWingmanResult,
     McpConfig,
@@ -138,6 +139,12 @@ class ConfigService:
             methods=["POST"],
             path="/config/create",
             endpoint=self.create_config,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/config/duplicate",
+            endpoint=self.duplicate_config,
             tags=tags,
         )
         self.router.add_api_route(
@@ -1009,6 +1016,21 @@ class ConfigService:
             config_name=config_name, template=template
         )
         await self.load_config(new_dir)
+
+    # POST config/duplicate
+    async def duplicate_config(self, request: DuplicateConfigRequest):
+        try:
+            new_dir = self.config_manager.duplicate_config(
+                source_config_dir=request.source_config_dir,
+                new_name=request.new_name,
+            )
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e)) from e
+        except FileExistsError as e:
+            raise HTTPException(status_code=409, detail=str(e)) from e
+
+        await self.load_config(new_dir)
+        return new_dir
 
     # POST config/rename
     async def rename_config(self, config_dir: ConfigDirInfo, new_name: str):

@@ -212,6 +212,26 @@ class ConfigManager:
             is_deleted=False,
         )
 
+    def duplicate_config(self, source_config_dir: ConfigDirInfo, new_name: str) -> ConfigDirInfo:
+        source_path = path.join(self.config_dir, source_config_dir.directory)
+        if not path.isdir(source_path):
+            raise FileNotFoundError(
+                f"Source config directory not found: {source_config_dir.directory}"
+            )
+
+        dest_path = path.join(self.config_dir, new_name)
+        if path.exists(dest_path):
+            raise FileExistsError(f"Config '{new_name}' already exists.")
+
+        shutil.copytree(source_path, dest_path)
+
+        return ConfigDirInfo(
+            name=new_name,
+            directory=new_name,
+            is_default=False,
+            is_deleted=False,
+        )
+
     def get_config_dir_path(self, config_name: Optional[str] = "") -> str:
         return (
             path.join(self.config_dir, config_name) if config_name else self.config_dir

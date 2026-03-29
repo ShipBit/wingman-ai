@@ -1813,7 +1813,7 @@ class WingmanCore(WebSocketUser):
             comm_context = f"The user must say your name '{config.name}' somewhere in their sentence to talk to you."
         else:
             key = config.record_key or config.record_mouse_button or "a key"
-            comm_context = f"The user talks to you by holding the '{key}' key."
+            comm_context = f"The user talks to you by holding the `{key}` key."
 
         backstory = ""
         if config.prompts and config.prompts.backstory:
