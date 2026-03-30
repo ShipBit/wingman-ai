@@ -94,6 +94,7 @@ from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
 from services.lore_library import LoreLibraryService
+from services.model_metadata import ModelMetadataService
 from services.audio_recorder import RECORDING_PATH, AudioRecorder
 from services.config_manager import ConfigManager
 from services.printr import Printr
@@ -346,6 +347,18 @@ class WingmanCore(WebSocketUser):
             path="/models/google",
             response_model=list[types.Model],
             endpoint=self.get_google_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/metadata",
+            endpoint=self.get_model_metadata_all,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/models/metadata/{model_id:path}",
+            endpoint=self.get_model_metadata,
             tags=tags,
         )
         # TODO: Refactor - move these to a new AudioLibrary service:
@@ -779,6 +792,8 @@ class WingmanCore(WebSocketUser):
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
         )
+
+        self.model_metadata_service = ModelMetadataService()
 
         # restore settings
         self.audio_recorder = AudioRecorder(
@@ -2210,6 +2225,17 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
         except ValueError as e:
             self.printr.toast_error(f"Google: \n{str(e)}")
             return []
+
+    # GET /models/metadata
+    async def get_model_metadata_all(self):
+        return await self.model_metadata_service.get_all()
+
+    # GET /models/metadata/{model_id}
+    async def get_model_metadata(self, model_id: str):
+        result = await self.model_metadata_service.get(model_id)
+        if result is None:
+            return {}
+        return result
 
     # GET /audio-library
     async def get_audio_library(self):
