@@ -76,7 +76,10 @@ class Parakeet:
 
     def __transcribe_remote(self, filename: str) -> Optional[ParakeetTranscript]:
         """POST audio file to remote Parakeet server for transcription."""
-        url = f"{self.settings.host}:{self.settings.port}/v1/audio/transcriptions"
+        host = (self.settings.host or "localhost").strip().rstrip("/")
+        if not host.startswith(("http://", "https://")):
+            host = f"http://{host}"
+        url = f"{host}:{self.settings.port}/v1/audio/transcriptions"
         try:
             with open(filename, "rb") as f:
                 response = requests.post(
