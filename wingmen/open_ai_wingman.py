@@ -148,6 +148,9 @@ class OpenAiWingman(Wingman):
         # Local AI service — set externally by WingmanCore if available
         self.local_ai_service = None
 
+        # Persistent memory — initialized lazily when local_ai_service is available
+        self.persistent_memory_service = None
+
         # Stateless tool response compressor — summarizes large tool/MCP responses
         # via local AI before the cloud LLM sees them
         self._tool_response_compressor = ToolResponseCompressor()
@@ -1057,6 +1060,19 @@ class OpenAiWingman(Wingman):
         Returns:
             tuple[str | None, str | None, Skill | None, bool]: A tuple containing the final response, the instant response (if any), the skill that was used, and a boolean indicating whether the current audio should be interrupted.
         """
+        # Lazy init: persistent memory (needs local_ai_service which is set after __init__)
+        if (
+            self.config.persistent_memory
+            and self.local_ai_service
+            and not self.persistent_memory_service
+        ):
+            from services.persistent_memory import PersistentMemoryService
+            self.persistent_memory_service = PersistentMemoryService(
+                wingman_name=self.name,
+                local_ai_service=self.local_ai_service,
+            )
+            self.persistent_memory_service.initialize()
+
         await self.add_user_message(transcript)
 
         benchmark.start_snapshot("Instant activation commands")
@@ -2400,6 +2416,23 @@ class OpenAiWingman(Wingman):
                 + self.conversation_summary
             )
 
+        # Persistent memory injection
+        persistent_memory_context = ""
+        if self.persistent_memory_service and self.messages:
+            # Use the most recent user message as the query
+            last_user_msg = ""
+            for msg in reversed(self.messages):
+                role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+                content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                if role == "user" and content:
+                    last_user_msg = content
+                    break
+            if last_user_msg:
+                try:
+                    persistent_memory_context = await self.persistent_memory_service.build_memory_context(last_user_msg)
+                except Exception:
+                    pass  # Don't let memory failures break conversation
+
         context = self.config.prompts.system_prompt.format(
             backstory=backstory,
             skills=skill_prompts,
@@ -2415,6 +2448,21 @@ class OpenAiWingman(Wingman):
             and "{conversation_summary}" not in self.config.prompts.system_prompt
         ):
             context += "\n\n" + conversation_summary
+
+        # Append persistent memory context
+        if persistent_memory_context:
+            context += "\n\n" + persistent_memory_context
+
+        # Persistent memory tool instructions
+        if self.persistent_memory_service:
+            context += (
+                "\n\n# PERSISTENT MEMORY\n"
+                "You have persistent memory. Important facts and past conversation summaries "
+                "are provided in the [Memory] sections above (if any). "
+                "You can use the `remember`, `recall`, and `forget` tools when the user "
+                "explicitly asks you to remember, recall, or forget something. "
+                "You don't need to use `remember` for routine information — that is handled automatically."
+            )
 
         return context
 
