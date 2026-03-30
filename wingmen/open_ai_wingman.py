@@ -370,6 +370,21 @@ class OpenAiWingman(Wingman):
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
+    async def unload(self):
+        """Extract memories and close DB before unloading."""
+        if self.persistent_memory_service:
+            from services.persistent_memory import MIN_MESSAGES_FOR_EXTRACTION
+
+            if len(self.messages) >= MIN_MESSAGES_FOR_EXTRACTION:
+                try:
+                    await self.persistent_memory_service.extract_memories(
+                        self.messages, generate_summary=True
+                    )
+                except Exception:
+                    pass
+            self.persistent_memory_service.close()
+        await super().unload()
+
     async def unload_skills(self):
         await super().unload_skills()
         self.tool_skills = {}
