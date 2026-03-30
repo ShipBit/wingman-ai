@@ -26,6 +26,16 @@ This guide explains how skills work in Wingman AI and how to create your own cus
 - [Bundling Dependencies](#bundling-dependencies)
 - [Skill Directory Structure](#skill-directory-structure)
 - [AI Agent Bootstrap Checklist](#ai-agent-bootstrap-checklist)
+- [Local AI API](#local-ai-api-selflocal_ai)
+  - [Overview](#overview)
+  - [Checking Availability](#checking-availability)
+  - [Support Model](#support-model)
+  - [Summarizing Large Text](#summarizing-large-text)
+  - [Embeddings](#embeddings)
+  - [Persistent Memory](#persistent-memory)
+  - [Token Budget (Advanced)](#token-budget-advanced)
+  - [Complete API Reference](#complete-api-reference)
+  - [Full Example: Game Stats Tracker](#full-example-game-stats-tracker)
 - [Additional Resources](#additional-resources)
   - [Example Skills to Study](#example-skills-to-study)
   - [Key APIs](#key-apis)
@@ -423,16 +433,16 @@ Before creating a skill, decide whether your functionality should be:
 
 ### Decision Matrix
 
-| Feature                | Skill               | Local MCP  | Remote MCP    |
-| ---------------------- | ------------------- | ---------- | ------------- |
-| Wingman Runtime Access | Yes                 | No         | No            |
-| Lifecycle Hooks        | Yes                 | No         | No            |
-| Easy Sharing           | Manual (Discord)    | Complex    | URL only      |
-| Maintains State        | Yes                 | Yes        | No            |
-| Updates                | Manual              | Manual     | Automatic     |
-| User Setup Complexity  | Medium              | High       | Low           |
-| Hosting Required       | No                  | No         | Yes           |
-| Dependencies           | Bundled             | Separate   | None (remote) |
+| Feature                | Skill            | Local MCP | Remote MCP    |
+| ---------------------- | ---------------- | --------- | ------------- |
+| Wingman Runtime Access | Yes              | No        | No            |
+| Lifecycle Hooks        | Yes              | No        | No            |
+| Easy Sharing           | Manual (Discord) | Complex   | URL only      |
+| Maintains State        | Yes              | Yes       | No            |
+| Updates                | Manual           | Manual    | Automatic     |
+| User Setup Complexity  | Medium           | High      | Low           |
+| Hosting Required       | No               | No        | Yes           |
+| Dependencies           | Bundled          | Separate  | None (remote) |
 
 **TL;DR:** If you need Wingman integration → **Skill**. If you need easy sharing and updates → **Remote MCP**. Avoid Local MCP unless you have a specific reason.
 
@@ -883,14 +893,14 @@ custom_properties:
   - id: accent_color
     name: Accent Color
     hint: Accent color for highlights (hex format).
-    value: "#00aaff"
+    value: '#00aaff'
     required: false
     property_type: color
 
   - id: bg_color
     name: Background Color
     hint: Background color (hex format, e.g. #1e212b or #1e212b80 for 50% transparent).
-    value: "#1e212b"
+    value: '#1e212b'
     required: false
     property_type: color
 ```
@@ -1052,7 +1062,6 @@ def _get_my_setting(self):
    ```
 
 2. **Create the required files:**
-
    - `main.py` (your Skill class)
    - `default_config.yaml` (configuration)
    - `logo.png` (icon)
@@ -1209,7 +1218,6 @@ Wingman AI loads skills from multiple locations with a specific priority order:
 ### Load Priority (Later Overrides Earlier)
 
 1. **Bundled skills** (built into the app)
-
    - Release: `_internal/skills/`
    - Dev mode: `./skills/`
 
@@ -1346,6 +1354,525 @@ If you're using an AI agent to create a skill, use this checklist to ensure ever
 - [ ] Example use cases
 - [ ] Known limitations documented
 - [ ] Platform compatibility noted (if relevant)
+
+---
+
+## Local AI API (`self.local_ai`)
+
+Every skill has access to a `self.local_ai` facade that provides a stable, safe interface to the local AI capabilities: the support model (small local LLM), embeddings, and persistent memory.
+
+### Overview
+
+The local AI features run entirely on the user's machine via llama.cpp. Users enable and configure them in Settings (model selection, context window size, GPU backend). Your skill doesn't need to worry about any of that — `self.local_ai` handles everything internally.
+
+**Key principles:**
+
+- **Always available on `self`** — no imports needed, lazily initialized
+- **Safe by default** — all methods handle errors internally, log them to the client, and return `None` or empty results. Skills never need `try/except` around these calls.
+- **Both async and sync** — async is preferred, sync variants have a `_sync` suffix
+- **Stable contract** — the internal implementation may change across versions, but this API won't break
+
+```python
+# Quick taste — that's really all it takes:
+result = await self.local_ai.support("Summarize this text", "You are a summarizer.")
+if result:
+    print(result.text)
+```
+
+### Checking Availability
+
+Local AI is optional — users may not have it enabled or models may not be downloaded yet. Always check before using:
+
+```python
+@tool()
+async def my_tool(self, query: str) -> str:
+    if not self.local_ai.available:
+        return "Local AI is not enabled. Please enable it in Settings."
+
+    result = await self.local_ai.support(query, "Answer concisely.")
+    return result.text if result else "Processing failed."
+```
+
+**Availability properties:**
+
+```python
+self.local_ai.available        # Support model is loaded and ready
+self.local_ai.embed_available  # Embedding model is loaded and ready
+self.local_ai.memory_available # Persistent memory is available (requires local AI + wingman config)
+```
+
+> **Tip:** `memory_available` implies `embed_available` (memory needs embeddings). `available` and `embed_available` are independent — both models load separately.
+
+### Support Model
+
+The support model is a small local LLM (e.g., Qwen 3.5 2B) that runs on the user's machine. Use it for text processing tasks like extraction, classification, summarization, or reformatting. It's fast, free, and private — no API calls leave the machine.
+
+```python
+async def support(text: str, system_prompt: str = "") -> SupportResponse | None
+def support_sync(text: str, system_prompt: str = "") -> SupportResponse | None
+```
+
+**Parameters:**
+
+| Parameter       | Type  | Description                                                    |
+| --------------- | ----- | -------------------------------------------------------------- |
+| `text`          | `str` | The input text / user prompt                                   |
+| `system_prompt` | `str` | Instructions for the model. If empty, a default prompt is used |
+
+**Returns `SupportResponse`:**
+
+```python
+@dataclass(frozen=True)
+class SupportResponse:
+    text: str | None         # The model's response
+    prompt_tokens: int       # Tokens used by the input
+    completion_tokens: int   # Tokens generated
+    truncated: bool          # True if output was cut off by context limit
+```
+
+Returns `None` if local AI is unavailable or an error occurs (error is logged to client automatically).
+
+**Examples:**
+
+```python
+# Simple text processing
+result = await self.local_ai.support(
+    text=user_message,
+    system_prompt="Extract the player name and ship type from this message. Return as JSON."
+)
+if result and result.text:
+    data = json.loads(result.text)
+
+# Check if output was truncated
+result = await self.local_ai.support(text=very_long_input, system_prompt="Summarize.")
+if result and result.truncated:
+    # The model ran out of context — consider using summarize() instead
+    pass
+```
+
+> **Important:** The support model has a limited context window (user-configurable, default 4096 tokens). If your input is too large, the model silently loses data beyond its context limit. For potentially large inputs, use `summarize()` instead.
+
+### Summarizing Large Text
+
+When you have text that might exceed the model's context window (e.g., API responses, large documents), use `summarize()`. It automatically chunks the text, summarizes each chunk, and merges the results.
+
+```python
+async def summarize(text: str, instruction: str = "") -> SupportResponse | None
+def summarize_sync(text: str, instruction: str = "") -> SupportResponse | None
+```
+
+**Parameters:**
+
+| Parameter     | Type  | Description                                                                 |
+| ------------- | ----- | --------------------------------------------------------------------------- |
+| `text`        | `str` | The text to summarize. Can be arbitrarily large                             |
+| `instruction` | `str` | Optional focus instruction (e.g., "Focus on combat stats and ship loadout") |
+
+If the text fits in the context window, it's processed in a single call (same as `support()`). If it's too large, chunking and merging happen automatically.
+
+**Common pattern — API call → summarize → remember:**
+
+```python
+@tool(wait_response=True)
+async def fetch_player_stats(self, player_name: str) -> str:
+    """Fetch and remember player statistics."""
+    if not self.local_ai.available:
+        return "Local AI is not enabled."
+
+    # 1. Fetch (could be huge)
+    async with aiohttp.ClientSession() as session:
+        resp = await session.get(f"https://api.game.com/stats/{player_name}")
+        raw = await resp.text()
+
+    # 2. Summarize — handles any size automatically
+    summary = await self.local_ai.summarize(
+        text=raw,
+        instruction="Extract key stats: rank, wins, losses, favorite loadout."
+    )
+    if not summary or not summary.text:
+        return "Failed to process stats."
+
+    # 3. Remember for future conversations
+    if self.local_ai.memory_available:
+        await self.local_ai.remember_fact(
+            f"{player_name}'s stats: {summary.text}"
+        )
+
+    return summary.text
+```
+
+**When to use `support()` vs `summarize()`:**
+
+| Use `support()` when                         | Use `summarize()` when                     |
+| -------------------------------------------- | ------------------------------------------ |
+| Input size is predictable and small          | Input size is unknown or potentially large |
+| You need precise control over the prompt     | You want a hands-off summary               |
+| Doing extraction, classification, formatting | Condensing API responses, documents, logs  |
+
+### Embeddings
+
+Generate vector embeddings for semantic search, similarity comparison, or custom RAG workflows. Embeddings are 768-dimensional vectors from the Nomic Embed v1.5 model.
+
+```python
+async def embed(texts: list[str]) -> list[list[float]] | None
+def embed_sync(texts: list[str]) -> list[list[float]] | None
+```
+
+**Example:**
+
+```python
+# Generate embeddings for custom similarity search
+embeddings = await self.local_ai.embed([
+    "The user prefers stealth gameplay",
+    "The user likes aggressive combat tactics",
+])
+if embeddings:
+    # embeddings[0] = 768-dim vector for first text
+    # embeddings[1] = 768-dim vector for second text
+    similarity = cosine_similarity(embeddings[0], embeddings[1])
+```
+
+> **Tip:** For most use cases, the persistent memory API (below) handles embeddings automatically. Only use `embed()` directly if you're building custom search or similarity features.
+
+### Persistent Memory
+
+Persistent memory lets your skill remember facts about the user across conversations. Memories are stored locally in a SQLite database with vector embeddings for semantic search.
+
+#### Remembering Facts
+
+```python
+async def remember_fact(
+    content: str,
+    entry_type: MemoryType = MemoryType.FACT,
+) -> int | None
+def remember_fact_sync(...) -> int | None
+```
+
+**Automatic deduplication:** When you save a fact that's semantically similar (>90%) to an existing one, it **updates** the existing entry instead of creating a duplicate. This means you can safely call `remember_fact()` repeatedly without worrying about duplicates.
+
+```python
+# First call: creates a new entry
+await self.local_ai.remember_fact("Player rank: Gold 3")
+
+# Later: player ranks up — this UPDATES the existing entry (>90% similar)
+await self.local_ai.remember_fact("Player rank: Platinum 1")
+```
+
+**Memory types:**
+
+```python
+from services.skill_local_ai import MemoryType
+
+MemoryType.FACT             # Durable facts about the user (default)
+MemoryType.SESSION_SUMMARY  # Conversation session summaries
+```
+
+**Returns** the entry ID (`int`) on success, or `None` on failure.
+
+#### Recalling Memories
+
+```python
+async def recall_memory(
+    query: str,
+    limit: int = 5,
+    entry_type: MemoryType | None = None,
+) -> list[MemorySearchResult]
+def recall_memory_sync(...) -> list[MemorySearchResult]
+```
+
+Search memories by semantic similarity. Returns results sorted by relevance.
+
+```python
+@dataclass(frozen=True)
+class MemorySearchResult:
+    id: int                     # Entry ID (for update/delete)
+    content: str                # The memory text
+    entry_type: str             # "fact" or "session_summary"
+    source_wingman: str | None  # Which wingman stored this
+    created_at: float           # Unix timestamp
+```
+
+**Always returns a list** — empty on failure or no matches. Safe to iterate without None checks.
+
+```python
+# Search for relevant memories
+results = await self.local_ai.recall_memory("player's ship and loadout", limit=3)
+for memory in results:
+    print(f"[{memory.entry_type}] {memory.content}")
+
+# Filter by type
+facts_only = await self.local_ai.recall_memory(
+    "combat preferences",
+    entry_type=MemoryType.FACT
+)
+```
+
+#### Getting Memory Context for Prompts
+
+```python
+async def memory_context(query: str, max_tokens: int = 500) -> str
+def memory_context_sync(...) -> str
+```
+
+Returns a **pre-formatted string** of relevant memories, ready to inject into a system prompt. Combines facts and recent session summaries, formatted with headers.
+
+**Always returns a string** — empty on failure. Safe to concatenate directly.
+
+```python
+# Build context-aware prompts
+async def get_prompt(self) -> str | None:
+    """Inject relevant memories into the wingman's system prompt."""
+    if not self.local_ai.memory_available:
+        return None
+
+    context = await self.local_ai.memory_context("user preferences and history")
+    if context:
+        return f"What you remember about this user:\n{context}"
+    return None
+```
+
+#### Updating and Deleting Memories
+
+```python
+# Update a specific memory (re-embeds automatically)
+async def update_memory(entry_id: int, new_content: str) -> bool
+def update_memory_sync(...) -> bool
+
+# Delete by ID (deterministic)
+async def forget_memory_by_id(entry_id: int) -> bool
+def forget_memory_by_id_sync(...) -> bool
+
+# Delete by semantic search (fuzzy — finds closest match)
+async def memory_forget(query: str) -> bool
+def memory_forget_sync(...) -> bool
+```
+
+**Two deletion strategies:**
+
+```python
+# Strategy 1: Track the ID from remember_fact() — deterministic
+entry_id = await self.local_ai.remember_fact("Player owns a Cutlass Black")
+# ... later ...
+await self.local_ai.forget_memory_by_id(entry_id)  # Exactly this entry
+
+# Strategy 2: Fuzzy search — deletes the closest semantic match
+await self.local_ai.memory_forget("Cutlass Black")  # Finds and deletes closest match
+```
+
+> **When to use which:** Use `forget_memory_by_id()` when you tracked the ID. Use `memory_forget()` when you want to delete "anything about X" without tracking IDs. Deduplication in `remember_fact()` often makes explicit deletion unnecessary — just save the updated fact and the old one gets replaced.
+
+### Token Budget (Advanced)
+
+Most skills don't need this. Use it only if you're sending large amounts of text and need to chunk it yourself (e.g., processing documents in batches).
+
+```python
+def get_support_model_token_budget(system_prompt: str = "") -> TokenBudget | None
+```
+
+```python
+@dataclass(frozen=True)
+class TokenBudget:
+    n_ctx: int              # Raw context window from user settings
+    safe_ctx: int           # Usable context after 10% safety margin
+    system_tokens: int      # Tokens consumed by the system prompt
+    max_input_tokens: int   # Max user-text tokens (with MIN_OUTPUT_TOKENS reserved)
+    min_output_tokens: int  # Minimum guaranteed output tokens (256)
+```
+
+#### Example: Custom Chunking
+
+```python
+budget = self.local_ai.get_support_model_token_budget("You are a summarizer.")
+if not budget:
+    return "Local AI not available."
+
+# budget.max_input_tokens tells you how much text fits per call
+chunk_size = budget.max_input_tokens
+for chunk in split_text(document, chunk_size):
+    result = await self.local_ai.support(chunk, "You are a summarizer.")
+    # ... process result
+```
+
+> **Tip:** If you just want to summarize large text, use `summarize()` instead — it handles all of this automatically.
+
+### Complete API Reference
+
+```text
+self.local_ai
+│
+├── Properties
+│   ├── .available          → bool    # Support model ready?
+│   ├── .embed_available    → bool    # Embedding model ready?
+│   └── .memory_available   → bool    # Persistent memory ready?
+│
+├── Support Model
+│   ├── .support(text, system_prompt)             → SupportResponse | None
+│   ├── .support_sync(text, system_prompt)        → SupportResponse | None
+│   ├── .summarize(text, instruction)             → SupportResponse | None
+│   └── .summarize_sync(text, instruction)        → SupportResponse | None
+│
+├── Embeddings
+│   ├── .embed(texts)                             → list[list[float]] | None
+│   └── .embed_sync(texts)                        → list[list[float]] | None
+│
+├── Memory
+│   ├── .remember_fact(content, entry_type)       → int | None
+│   ├── .remember_fact_sync(content, entry_type)  → int | None
+│   ├── .recall_memory(query, limit, entry_type)  → list[MemorySearchResult]
+│   ├── .recall_memory_sync(query, limit, entry_type) → list[MemorySearchResult]
+│   ├── .memory_context(query, max_tokens)        → str
+│   ├── .memory_context_sync(query, max_tokens)   → str
+│   ├── .update_memory(entry_id, new_content)     → bool
+│   ├── .update_memory_sync(entry_id, new_content) → bool
+│   ├── .forget_memory_by_id(entry_id)            → bool
+│   ├── .forget_memory_by_id_sync(entry_id)       → bool
+│   ├── .memory_forget(query)                     → bool
+│   └── .memory_forget_sync(query)                → bool
+│
+└── Advanced
+    └── .get_support_model_token_budget(system_prompt) → TokenBudget | None
+```
+
+**Return type conventions:**
+
+| Return type       | On failure            |
+| ----------------- | --------------------- |
+| `SupportResponse` | `None` (error logged) |
+| `list[...]`       | Empty list `[]`       |
+| `str`             | Empty string `""`     |
+| `bool`            | `False`               |
+| `int` (entry ID)  | `None`                |
+| `TokenBudget`     | `None`                |
+
+### Full Example: Game Stats Tracker
+
+A complete skill that fetches player stats from an API, summarizes them with the local support model, and remembers key facts for future conversations.
+
+```python
+from typing import TYPE_CHECKING
+from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
+from skills.skill_base import Skill, tool
+from services.skill_local_ai import MemoryType
+
+if TYPE_CHECKING:
+    from wingmen.open_ai_wingman import OpenAiWingman
+
+
+class GameStatsTracker(Skill):
+    """Tracks and remembers player game statistics."""
+
+    def __init__(
+        self,
+        config: SkillConfig,
+        settings: SettingsConfig,
+        wingman: "OpenAiWingman",
+    ) -> None:
+        super().__init__(config=config, settings=settings, wingman=wingman)
+
+    async def validate(self) -> list[WingmanInitializationError]:
+        errors = await super().validate()
+        self.retrieve_custom_property_value("api_base_url", errors)
+        return errors
+
+    def _get_api_base_url(self) -> str:
+        errors = []
+        return self.retrieve_custom_property_value("api_base_url", errors)
+
+    async def get_prompt(self) -> str | None:
+        """Inject remembered player facts into every conversation."""
+        if not self.local_ai.memory_available:
+            return None
+
+        context = await self.local_ai.memory_context("player stats and preferences")
+        if context:
+            return f"What you remember about this player:\n{context}"
+        return None
+
+    @tool(
+        description="""Fetch and remember a player's current game statistics.
+
+        WHEN TO USE:
+        - User asks about their stats, rank, or performance
+        - User wants to check their current standing
+        - User mentions a player name and wants info about them""",
+        wait_response=True,
+    )
+    async def fetch_player_stats(self, player_name: str) -> str:
+        """
+        Args:
+            player_name: The in-game player name to look up.
+        """
+        if not self.local_ai.available:
+            return "Local AI is not enabled. Enable it in Settings to use this feature."
+
+        # 1. Fetch from API
+        import aiohttp
+        base_url = self._get_api_base_url()
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{base_url}/players/{player_name}") as resp:
+                if resp.status != 200:
+                    return f"Could not find player '{player_name}'."
+                raw = await resp.text()
+
+        # 2. Summarize (handles large responses automatically)
+        summary = await self.local_ai.summarize(
+            text=raw,
+            instruction="Extract: player rank, win/loss ratio, favorite loadout, "
+                        "notable achievements. Be concise.",
+        )
+        if not summary or not summary.text:
+            return "Failed to process the stats response."
+
+        # 3. Remember for future conversations
+        if self.local_ai.memory_available:
+            await self.local_ai.remember_fact(
+                f"{player_name}: {summary.text}"
+            )
+
+        return summary.text
+
+    @tool(
+        description="""Recall what you remember about a player.
+
+        WHEN TO USE:
+        - User asks "what do you remember about..."
+        - User references a player you've looked up before
+        - User wants historical stats comparison""",
+    )
+    async def recall_player_info(self, query: str) -> str:
+        """
+        Args:
+            query: What to search for (e.g., "player rank", "combat stats").
+        """
+        if not self.local_ai.memory_available:
+            return "Memory is not available. Enable Local AI and Persistent Memory in Settings."
+
+        results = await self.local_ai.recall_memory(query, limit=5)
+        if not results:
+            return "No matching memories found."
+
+        return "\n".join(
+            f"- {r.content}" for r in results
+        )
+
+    @tool(
+        description="""Forget stored information about a player.
+
+        WHEN TO USE:
+        - User explicitly asks to forget or delete player data
+        - User wants to clear outdated information""",
+    )
+    async def forget_player_info(self, query: str) -> str:
+        """
+        Args:
+            query: What to forget (e.g., "player stats for Marcus").
+        """
+        if not self.local_ai.memory_available:
+            return "Memory is not available."
+
+        deleted = await self.local_ai.memory_forget(query)
+        return "Done, I've forgotten that." if deleted else "No matching memory found."
+```
 
 ---
 

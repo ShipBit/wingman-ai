@@ -48,11 +48,6 @@ cmd = [
     os.pathsep.join(["audio_samples", "audio_samples"]),
     "--add-data",
     os.pathsep.join(["LICENSE", "."]),
-    # Local AI (sqlite-vec for vector search; llama-server binary is bundled separately)
-    "--hidden-import",
-    "sqlite_vec",
-    "--collect-all",
-    "sqlite_vec",
 ]
 
 subprocess.call(cmd)

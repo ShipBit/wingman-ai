@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Optional
 
 from api.enums import LogType
@@ -6,12 +7,57 @@ from providers.llama_cpp_provider import LlamaCppProvider
 from providers.llama_cpp_remote import LlamaCppRemote
 from services.local_model_manager import LocalModelManager
 from services.printr import Printr
+from services.token_utils import count_tokens, truncate_to_tokens
 
 printr = Printr()
 
+# ── Constants ──────────────────────────────────────────────────────
+
+SAFETY_MARGIN = 0.9
+"""10% safety buffer to account for tokenizer differences between
+cl100k_base (used for estimation) and the model's actual tokenizer."""
+
+MIN_OUTPUT_TOKENS = 256
+"""Minimum output tokens guaranteed even when input is large."""
+
+
+# ── Token Budget ───────────────────────────────────────────────────
+
+@dataclass(frozen=True)
+class TokenBudget:
+    """Token budget computed from the model's context window.
+
+    Use ``max_input_tokens`` to decide how much text fits in a single call
+    (for chunking decisions). The actual output budget is computed per-call
+    inside ``support()`` based on the real input size.
+    """
+
+    n_ctx: int
+    """Raw context window from user settings."""
+
+    safe_ctx: int
+    """Usable context after safety margin (n_ctx * SAFETY_MARGIN)."""
+
+    system_tokens: int
+    """Estimated tokens consumed by the system prompt."""
+
+    max_input_tokens: int
+    """Maximum user-text tokens that fit alongside the system prompt,
+    with ``MIN_OUTPUT_TOKENS`` reserved for the response."""
+
+    min_output_tokens: int
+    """Minimum output tokens guaranteed (``MIN_OUTPUT_TOKENS``)."""
+
+
+# ── Service ────────────────────────────────────────────────────────
 
 class LocalAiService:
-    """Unified facade that routes support/embed calls to local or remote provider."""
+    """Unified facade that routes support/embed calls to local or remote provider.
+
+    All token budget calculations are centralised here. Callers should never
+    access ``n_ctx`` or compute output budgets themselves — use
+    ``get_token_budget()`` for planning and ``support()`` for execution.
+    """
 
     def __init__(
         self,
@@ -55,31 +101,66 @@ class LocalAiService:
             if backend_changed or model_changed or config_changed:
                 await self.initialize()
 
-    def support(
-        self,
-        text: str,
-        system_prompt: str = "",
-        max_tokens: int = 512,
-    ) -> "SupportResult":
-        """Process text using the active provider's support model (local or remote).
+    # ── Token budget API ───────────────────────────────────────────
 
-        Returns a SupportResult with text, token usage, and truncation flag.
+    def get_token_budget(self, system_prompt: str = "") -> TokenBudget:
+        """Compute the token budget for a support model call.
+
+        Returns a ``TokenBudget`` telling callers how much input text they can
+        send alongside the given ``system_prompt``.  Use this for planning
+        (e.g. deciding whether to chunk) — the actual output cap is computed
+        inside ``support()`` per-call.
+        """
+        safe_ctx = int(self.settings.n_ctx * SAFETY_MARGIN)
+        system_tokens = count_tokens(system_prompt) if system_prompt else 0
+        max_input = max(0, safe_ctx - system_tokens - MIN_OUTPUT_TOKENS)
+
+        return TokenBudget(
+            n_ctx=self.settings.n_ctx,
+            safe_ctx=safe_ctx,
+            system_tokens=system_tokens,
+            max_input_tokens=max_input,
+            min_output_tokens=MIN_OUTPUT_TOKENS,
+        )
+
+    # ── Support model call ─────────────────────────────────────────
+
+    def support(self, text: str, system_prompt: str = "") -> "SupportResult":
+        """Process text using the support model (local or remote).
+
+        The output token budget is always computed automatically from the
+        context window (``n_ctx``):
+
+            max_output = safe_ctx − system_tokens − input_tokens
+
+        Callers never need to (and cannot) specify ``max_tokens``.
+        Use ``get_token_budget()`` beforehand if you need to plan chunking.
+
+        Returns a ``SupportResult`` with text, token usage, and truncation flag.
         """
         from providers.llama_cpp_provider import SupportResult
 
         if not system_prompt:
             from services.file import get_prompt
-
             system_prompt = get_prompt("support-default")
+
+        safe_ctx = int(self.settings.n_ctx * SAFETY_MARGIN)
+        input_tokens = count_tokens(system_prompt) + count_tokens(text)
+        max_tokens = max(MIN_OUTPUT_TOKENS, safe_ctx - input_tokens)
+
         if self.settings.run_locally:
             return self.provider.support(text, system_prompt, max_tokens)
         return self.remote.support(text, system_prompt, max_tokens)
+
+    # ── Embeddings ─────────────────────────────────────────────────
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
         """Generate embeddings using the active provider (local or remote)."""
         if self.settings.run_locally:
             return self.provider.embed(texts)
         return self.remote.embed(texts)
+
+    # ── Status ─────────────────────────────────────────────────────
 
     def is_ready(self) -> bool:
         """Check if the active provider is ready."""

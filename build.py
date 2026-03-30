@@ -35,10 +35,5 @@ cmd = [
     f"audio_samples{os.pathsep}audio_samples",
     "--add-data",
     f"LICENSE{os.pathsep}.",
-    # Local AI (sqlite-vec for vector search; llama-server binary is bundled separately)
-    "--hidden-import",
-    "sqlite_vec",
-    "--collect-all",
-    "sqlite_vec",
 ]
 subprocess.call(cmd)

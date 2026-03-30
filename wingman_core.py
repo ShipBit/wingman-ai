@@ -705,6 +705,12 @@ class WingmanCore(WebSocketUser):
             endpoint=self.clear_memories,
             tags=tags,
         )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/memories/{wingman_name}/test-extraction",
+            endpoint=self.test_memory_extraction,
+            tags=tags,
+        )
 
         self.config_manager = config_manager
         self.config_manager.perform_hardware_scan(self.system_manager)
@@ -1948,7 +1954,7 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
                 await self._connection_manager.broadcast(
                     LogCommand(
                         text=response.text,
-                        log_type=LogType.GREETING,
+                        log_type=LogType.LOCALMODEL,
                         source=LogSource.WINGMAN,
                         source_name=wingman_name,
                         wingman_name=wingman_name,
@@ -2878,19 +2884,18 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
             "",
             embed=True,
         ),
-        max_tokens: int = Body(
-            512,
-            embed=True,
-        ),
     ) -> dict:
-        """Public API: Process text using the local AI support model."""
+        """Public API: Process text using the local AI support model.
+
+        Output token budget is computed automatically from the context window.
+        """
         if not self.local_ai_service.is_ready():
             raise HTTPException(
                 status_code=503,
                 detail="Local AI service is not ready. Make sure models are loaded.",
             )
         result = self.local_ai_service.support(
-            text=text, system_prompt=system_prompt, max_tokens=max_tokens
+            text=text, system_prompt=system_prompt
         )
         if result.text is None:
             raise HTTPException(status_code=500, detail="Support model call failed.")
@@ -2908,10 +2913,10 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
                 detail="Local AI service is not ready. Make sure models are loaded.",
             )
         system_prompt = get_prompt("enhance-backstory")
+        budget = self.local_ai_service.get_token_budget(system_prompt)
 
         # Hard cap on backstory size (cost control + conversation model budget)
         MAX_BACKSTORY_TOKENS = 2048
-        prompt_tokens = count_tokens(system_prompt)
         backstory_tokens = count_tokens(backstory)
 
         if backstory_tokens > MAX_BACKSTORY_TOKENS:
@@ -2924,29 +2929,20 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
                 ),
             )
 
-        # Validate token budget and scale output dynamically
-        n_ctx = self.local_ai_service.settings.n_ctx
-        available = n_ctx - prompt_tokens - backstory_tokens
-
-        if available < 256:
-            max_input = n_ctx - prompt_tokens - 256
+        if backstory_tokens > budget.max_input_tokens:
             raise HTTPException(
                 status_code=400,
                 detail=(
                     f"Backstory too long: ~{backstory_tokens} tokens "
-                    f"(max ~{max_input} for current context size of {n_ctx}). "
+                    f"(max ~{budget.max_input_tokens} for current context size "
+                    f"of {budget.n_ctx}). "
                     f"Shorten the backstory or increase the Local AI context size."
                 ),
             )
 
-        # Give the model enough room: at least as many tokens as the input,
-        # but cap at what's available after prompt + input
-        max_output_tokens = min(available, max(backstory_tokens, 1024))
-
         result = self.local_ai_service.support(
             text=backstory,
             system_prompt=system_prompt,
-            max_tokens=max_output_tokens,
         )
         if result.text is None:
             raise HTTPException(status_code=500, detail="Backstory enhancement failed.")
@@ -2961,16 +2957,14 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
         We reserve a minimum of 256 output tokens.
         """
         system_prompt = get_prompt("enhance-backstory")
-        prompt_tokens = count_tokens(system_prompt)
-        n_ctx = self.local_ai_service.settings.n_ctx
+        budget = self.local_ai_service.get_token_budget(system_prompt)
         # Hard cap for cost control, also limited by local AI context
         MAX_BACKSTORY_TOKENS = 2048
-        usable = n_ctx - prompt_tokens
-        max_backstory_tokens = min(MAX_BACKSTORY_TOKENS, usable // 2)
+        max_backstory_tokens = min(MAX_BACKSTORY_TOKENS, budget.max_input_tokens)
         return {
             "max_backstory_tokens": max_backstory_tokens,
-            "n_ctx": n_ctx,
-            "prompt_tokens": prompt_tokens,
+            "n_ctx": budget.n_ctx,
+            "system_tokens": budget.system_tokens,
         }
 
     # POST /local-ai/embed
@@ -3078,7 +3072,10 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
     # GET /memories/{wingman_name}
     def get_memories(self, wingman_name: str):
         wingman = self.tower.get_wingman_by_name(wingman_name)
-        if not wingman or not hasattr(wingman, "persistent_memory_service") or not wingman.persistent_memory_service:
+        if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
+            return []
+        wingman.ensure_memory_initialized()
+        if not wingman.persistent_memory_service:
             return []
         entries = wingman.persistent_memory_service.get_all()
         return [
@@ -3123,3 +3120,66 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
             self.printr.toast(f"All memories cleared for {wingman_name}.")
             return True
         return False
+
+    # POST /memories/{wingman_name}/test-extraction
+    async def test_memory_extraction(
+        self,
+        wingman_name: str,
+        messages: list[dict] = Body(...),
+    ):
+        """Test memory extraction with a canned conversation.
+
+        Send a list of messages like:
+        [
+            {"role": "user", "content": "I was born in 1986."},
+            {"role": "assistant", "content": "Noted! I'll remember that."},
+            {"role": "user", "content": "I fly a Constellation Taurus."},
+            ...
+        ]
+
+        Returns the raw extraction result (facts + summary) without storing anything.
+        """
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "ensure_memory_initialized"):
+            raise HTTPException(404, f"Wingman '{wingman_name}' not found")
+
+        wingman.ensure_memory_initialized()
+        svc = wingman.persistent_memory_service
+        if not svc:
+            raise HTTPException(400, f"Persistent memory not enabled for '{wingman_name}'")
+
+        from services.file import get_prompt
+
+        # Format messages the same way extract_memories does
+        text_parts = []
+        for msg in messages:
+            role = msg.get("role", "unknown")
+            content = msg.get("content", "")
+            if content and role in ("user", "assistant"):
+                text_parts.append(f"{role}: {content}")
+
+        if not text_parts:
+            raise HTTPException(400, "No valid user/assistant messages provided")
+
+        conversation_text = "\n".join(text_parts)
+        system_prompt = get_prompt("extract-memories")
+
+        # Call the support model (sync, run in thread)
+        result = await asyncio.to_thread(
+            svc.local_ai_service.support,
+            text=conversation_text,
+            system_prompt=system_prompt,
+        )
+
+        if not result or not result.text:
+            return {"raw_response": None, "parsed": None, "error": "No response from support model"}
+
+        # Parse JSON (with repair for small-model quirks)
+        parsed = svc._parse_json_response(result.text)
+
+        return {
+            "raw_response": result.text,
+            "parsed": parsed,
+            "message_count": len(messages),
+            "conversation_length": len(conversation_text),
+        }

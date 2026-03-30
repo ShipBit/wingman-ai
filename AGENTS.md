@@ -36,6 +36,19 @@ All output goes through the `Printr` singleton (`services/printr.py`). The two m
 
 If you use `printr.print()` without `server_only=True`, it sends to the client synchronously via `ensure_async()` — prefer the explicit async version when you want client visibility.
 
+### LogType.LOCALMODEL — local support/embedding model messages
+
+Use `LogType.LOCALMODEL` for any message originating from the local support model or embedding model (greetings, memory operations, condensation status, etc.). The client renders these with a distinct dashed-border style and a label ("Generated locally — not part of the conversation with your AI provider") to distinguish them from conversation messages with the main AI provider. Example:
+
+```python
+await printr.print_async(
+    "Memory stored: user prefers dark mode",
+    color=LogType.LOCALMODEL,
+    source_name=self.name,
+    source=LogSource.WINGMAN,
+)
+```
+
 ## Config Properties — interface.py
 
 New fields in Pydantic models should almost never be `Optional`. The correct pattern:

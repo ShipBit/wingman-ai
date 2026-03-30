@@ -32,7 +32,6 @@ class ToolResponseCompressor:
         self,
         response_text: str,
         local_ai_service,
-        n_ctx: int,
         wingman_name: str = "",
         tool_name: str = "",
     ) -> str:
@@ -52,7 +51,7 @@ class ToolResponseCompressor:
             f"Compressing massive tool response{tool_info} with {token_label} tokens "
             f"before sending it to the LLM. If this is coming from a custom "
             f"skill, please contact the author and ask them to optimize token usage.",
-            color=LogType.INFO,
+            color=LogType.LOCALMODEL,
             source_name=wingman_name,
             source=LogSource.WINGMAN,
         )
@@ -77,7 +76,7 @@ class ToolResponseCompressor:
             summarize_count = min(total_chunks, self.MAX_SUMMARIZE_CHUNKS)
             capped = total_chunks > self.MAX_SUMMARIZE_CHUNKS
             summary = await self._summarize_chunks(
-                chunks[:summarize_count], local_ai_service, n_ctx
+                chunks[:summarize_count], local_ai_service
             )
             if not summary:
                 summary = truncate_to_tokens(response_text, 500)
@@ -98,7 +97,7 @@ class ToolResponseCompressor:
         await printr.print_async(
             f"Tool response compressed "
             f"(~{original_tokens} → ~{summary_tokens} tokens).",
-            color=LogType.INFO,
+            color=LogType.LOCALMODEL,
             source_name=wingman_name,
             source=LogSource.WINGMAN,
         )
@@ -175,21 +174,17 @@ class ToolResponseCompressor:
         self,
         chunks: list[str],
         local_ai_service,
-        n_ctx: int,
     ) -> str | None:
         """Summarize chunks by batching as many as fit per LLM call.
 
         Instead of one LLM call per chunk, packs multiple chunks into each
         prompt up to the context budget. This dramatically reduces round-trips.
+        Token budget is obtained from ``local_ai_service.get_token_budget()``.
         """
         from services.file import get_prompt
 
         system_prompt = get_prompt(TOOL_RESPONSE_PROMPT_NAME)
-        system_tokens = count_tokens(system_prompt)
-        min_output = 512
-        # 10% safety margin — tiktoken undercounts vs llama.cpp tokenizer
-        safe_ctx = int(n_ctx * 0.9)
-        max_input = safe_ctx - system_tokens - min_output
+        budget = local_ai_service.get_token_budget(system_prompt)
 
         # Overhead tokens for the prompt wrapper (excluding actual data)
         wrapper_overhead = count_tokens(
@@ -197,7 +192,7 @@ class ToolResponseCompressor:
             "Summarize the above data. Preserve all key facts, "
             "numbers, names, IDs, and status values:"
         )
-        data_budget = max_input - wrapper_overhead
+        data_budget = budget.max_input_tokens - wrapper_overhead
         if data_budget <= 0:
             return None
 
@@ -234,16 +229,13 @@ class ToolResponseCompressor:
                 "Summarize the above data. Preserve all key facts, "
                 "numbers, names, IDs, and status values:"
             )
-            user_tokens = count_tokens(user_prompt)
-            output_budget = max(min_output, safe_ctx - system_tokens - user_tokens)
 
             try:
                 result = await loop.run_in_executor(
                     None,
-                    lambda p=user_prompt, mt=output_budget: local_ai_service.support(
+                    lambda p=user_prompt: local_ai_service.support(
                         text=p,
                         system_prompt=system_prompt,
-                        max_tokens=mt,
                     ),
                 )
                 if result and result.text:
@@ -264,17 +256,17 @@ class ToolResponseCompressor:
             f"PARTIAL SUMMARIES TO MERGE:\n{combined}\n\n"
             "Merge into a single coherent summary. Keep all key facts:"
         )
-        merge_tokens = count_tokens(merge_prompt)
 
-        if merge_tokens > max_input:
-            combined = truncate_to_tokens(combined, max_input - 100)
+        # Safety: truncate if merge input exceeds budget
+        merge_tokens = count_tokens(merge_prompt)
+        if merge_tokens > budget.max_input_tokens:
+            combined = truncate_to_tokens(
+                combined, budget.max_input_tokens - 100
+            )
             merge_prompt = (
                 f"PARTIAL SUMMARIES TO MERGE:\n{combined}\n\n"
                 "Merge into a single coherent summary. Keep all key facts:"
             )
-            merge_tokens = count_tokens(merge_prompt)
-
-        merge_output = max(min_output, safe_ctx - system_tokens - merge_tokens)
 
         try:
             result = await loop.run_in_executor(
@@ -282,7 +274,6 @@ class ToolResponseCompressor:
                 lambda: local_ai_service.support(
                     text=merge_prompt,
                     system_prompt=system_prompt,
-                    max_tokens=merge_output,
                 ),
             )
             if result and result.text:

@@ -47,8 +47,7 @@ nvidia-cuda-runtime-cu12>=12.4.99,<13.0
 nvidia-cudnn-cu12>=9.1.0,<10.0
 nvidia-cuda-nvrtc-cu12>=12.4.99,<13.0
 
-# Local AI (sqlite-vec for vector search; llama-server binary is auto-downloaded)
-sqlite-vec>=0.1.6
+# Local AI (llama-server binary is auto-downloaded)
 tiktoken>=0.9.0
 
 # Parakeet STT (NVIDIA Parakeet TDT via ONNX Runtime)
