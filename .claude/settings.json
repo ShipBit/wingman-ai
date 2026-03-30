@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//Users/shackles/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.6/skills/brainstorming/**)"
-    ]
-  }
-}
