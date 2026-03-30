@@ -1,39 +1,5 @@
 # Wingman AI Core — Agent Development Guide
 
-## Repository and git worktree
-
-Wingman AI consists of 2 separate repositories, both combined into a single VSCode workspace:
-
-- **Core** — `/Users/shackles/Source/wingman-ai` — Python backend
-- **Client** — `/Users/shackles/Source/wingman-client` — Svelte frontend
-
-### Setting up worktrees
-
-Before you start coding a new feature, create a git worktree **in both repos** with the same branch name (e.g., `feature/awesome`). Ask which branch to base it on — usually `feature/local-ai` or `main`.
-
-```bash
-# Core
-cd /Users/shackles/Source/wingman-ai
-git worktree add .worktrees/my-feature -b feature/my-feature <base-branch>
-
-# Client
-cd /Users/shackles/Source/wingman-client
-git worktree add .worktrees/my-feature -b feature/my-feature <base-branch>
-```
-
-Both repos have `.worktrees/` in their `.gitignore`.
-
-### CRITICAL: Always work in your worktree
-
-**Multiple agents work on this codebase simultaneously.** Each agent has their own worktree and feature branch. The base branch (e.g., `feature/local-ai`) is shared — never commit directly to it.
-
-**All edits, reads, and commits MUST happen in your worktree paths:**
-
-- Core: `/Users/shackles/Source/wingman-ai/.worktrees/<your-feature>/`
-- Client: `/Users/shackles/Source/wingman-client/.worktrees/<your-feature>/`
-
-**Never** `cd` to or edit files in the main checkout paths (`/Users/shackles/Source/wingman-ai/` or `/Users/shackles/Source/wingman-client/`) — those are the shared base branches. If you edit there, you'll overwrite or conflict with other agents' work.
-
 ### Merging and testing
 
 When the user wants to test, merge your feature branch into the base branch:
