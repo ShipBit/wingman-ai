@@ -1044,7 +1044,7 @@ class OpenAiWingman(Wingman):
         return result
 
     async def _get_response_for_transcript(
-        self, transcript: str, benchmark: Benchmark
+        self, transcript: str, benchmark: Benchmark, images: list[tuple[str, str]] = None
     ) -> tuple[str | None, str | None, Skill | None, bool]:
         """Gets the response for a given transcript.
 
@@ -1057,7 +1057,7 @@ class OpenAiWingman(Wingman):
         Returns:
             tuple[str | None, str | None, Skill | None, bool]: A tuple containing the final response, the instant response (if any), the skill that was used, and a boolean indicating whether the current audio should be interrupted.
         """
-        await self.add_user_message(transcript)
+        await self.add_user_message(transcript, images=images)
 
         benchmark.start_snapshot("Instant activation commands")
         instant_response, instant_command_executed = await self._try_instant_activation(
@@ -1506,18 +1506,32 @@ class OpenAiWingman(Wingman):
                 )
             )
 
-    async def add_user_message(self, content: str):
+    async def add_user_message(self, content: str, images: list[tuple[str, str]] = None):
         """Shortens the conversation history if needed and adds a user message to it.
 
         Args:
             content (str): The message content to add.
+            images (list[tuple[str, str]]): Optional list of (base64_data, mime_type) tuples to attach.
         """
         # call skill hooks (only for prepared/activated skills)
         for skill in self.skills:
             if skill.is_prepared:
                 await skill.on_add_user_message(content)
 
-        msg = {"role": "user", "content": content}
+        if images:
+            msg_content = []
+            for img_b64, mime in images:
+                msg_content.append({
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:{mime};base64,{img_b64}",
+                        "detail": "auto",
+                    },
+                })
+            msg_content.append({"type": "text", "text": content})
+            msg = {"role": "user", "content": msg_content}
+        else:
+            msg = {"role": "user", "content": content}
         await self._cleanup_conversation_history()
         await self._maybe_condense_history()
         self.messages.append(msg)
