@@ -115,10 +115,10 @@ class PersistentMemoryService:
         entry_type: str,
         content: str,
         session_id: str | None = None,
-    ) -> int:
+    ) -> int | None:
         embeddings = self.local_ai_service.embed([content])
         if not embeddings or not embeddings[0]:
-            return -1
+            return None
         embedding = embeddings[0]
 
         if entry_type == "fact":
@@ -443,10 +443,10 @@ class PersistentMemoryService:
         entry_type: str,
         content: str,
         session_id: str | None = None,
-    ) -> int:
+    ) -> int | None:
         """Add a memory entry with embedding. Deduplicates facts automatically.
 
-        Returns the entry ID (new or updated).
+        Returns the entry ID (new or updated), or None on failure.
         """
         return await asyncio.to_thread(
             self._add_memory_impl, entry_type, content, session_id
@@ -499,7 +499,7 @@ class PersistentMemoryService:
         entry_type: str,
         content: str,
         session_id: str | None = None,
-    ) -> int:
+    ) -> int | None:
         """Sync version of add_memory."""
         return self._add_memory_impl(entry_type, content, session_id)
 
