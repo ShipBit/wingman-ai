@@ -1,5 +1,20 @@
 # Wingman AI Core — Agent Development Guide
 
+## Repository and git worktree
+
+Wingman AI consists of 2 separate repositories, both combined into a single VSCode workspace:
+
+- **Core** (`wingman-core/`) — the Python backend that runs the AI, manages configs, and serves the API
+- **Client** (`wingman-client/`) — the Svelte frontend that users interact with
+
+If you start developing a new feature, create a new git worktree in both repos with the same name (e.g., `feature/awesome`) to keep changes organized. Use `git worktree` to have both branches checked out simultaneously for easy switching. Always ask from which branch you should start the new worktree — usually it's `develop`, but if you're working on a related feature, it might make sense to branch off that instead.
+Make sure you create worktrees in both repos. If you're done with your work and I have approved that we're all ready, create a pull request in both repos. If you didn't change anything in one of the repos, just dump the worktree and create the PR in the repo where you made changes.
+
+In **Core** (`wingman-core/`): Ask me if there is a GH issue to link the PR to, and if not, create one and link it.
+**Client** (`wingman-client/`) does not have issue tracking and is closed source, so just create the PR without an issue.
+
+Before you start coding, reassure me that you are working on your own worktree in both Core and Client repositories and make sure to only apply changes there. This is important because there are multiple agents working on the same codebase, and we want to avoid conflicts and ensure a smooth development process.
+
 ## Logging — Never use bare `print()`
 
 All output goes through the `Printr` singleton (`services/printr.py`). The two modes have different calling conventions:
@@ -73,4 +88,4 @@ Update `README.md` and `docs/` when new providers, major features, or setup chan
 
 ## Skills
 
-**Read [skills/AGENTS.md](skills/AGENTS.md) before creating or modifying any skill.** It contains critical rules about token budgets, the mandatory Skill-vs-MCP triage, and implementation patterns.
+**Read [skills/AGENTS.md](skills/AGENTS.md) before creating or modifying any skill.** It contains critical rules about token budgets, the mandatory Skill-vs-MCP triage, and implementation patterns. Ignore these docs if you're not working on skills, but if you are, read them carefully.
