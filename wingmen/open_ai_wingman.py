@@ -2523,6 +2523,27 @@ class OpenAiWingman(Wingman):
         """Return the last compiled system context (cached from the most recent LLM call)."""
         return self._last_compiled_context
 
+    def get_conversation_messages(self, strip_nulls: bool = True) -> list[dict]:
+        """Return the conversation messages as a list of plain dicts for debugging."""
+
+        def _strip_none(obj):
+            if isinstance(obj, dict):
+                return {k: _strip_none(v) for k, v in obj.items() if v is not None}
+            if isinstance(obj, list):
+                return [_strip_none(item) for item in obj]
+            return obj
+
+        result = []
+        for msg in self.messages:
+            if hasattr(msg, "model_dump"):
+                d = msg.model_dump()
+            else:
+                d = msg
+            if strip_nulls:
+                d = _strip_none(d)
+            result.append(d)
+        return result
+
     def _build_user_context(self) -> str:
         """Build user context metadata for the system prompt.
 
