@@ -14,6 +14,7 @@ from os import path
 from api.enums import LogType
 from services.file import get_persistent_memory_dir
 from services.printr import Printr
+from services.token_utils import count_tokens
 
 printr = Printr()
 
@@ -385,7 +386,7 @@ class PersistentMemoryService:
             fact_lines = []
             for fact in facts:
                 line = f"- {fact.content}"
-                line_tokens = len(line) // 4
+                line_tokens = count_tokens(line)
                 if token_count + line_tokens > max_tokens:
                     break
                 fact_lines.append(line)
@@ -398,7 +399,7 @@ class PersistentMemoryService:
 
         if summaries:
             summary = summaries[0]
-            summary_tokens = len(summary.content) // 4
+            summary_tokens = count_tokens(summary.content)
             if token_count + summary_tokens <= max_tokens:
                 parts.append(
                     f"[Memory - Recent session]\n{summary.content}"
