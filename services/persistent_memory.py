@@ -11,10 +11,15 @@ import uuid
 from dataclasses import dataclass
 from os import path
 
+from api.enums import LogType
 from services.file import get_persistent_memory_dir
+from services.printr import Printr
+
+printr = Printr()
 
 # Named constants
 MEMORY_MAX_TOKENS = 1024
+MEMORY_MIN_SIMILARITY = 0.5
 DEDUP_THRESHOLD = 0.9
 MAX_SESSION_SUMMARIES = 20
 MIN_MESSAGES_FOR_EXTRACTION = 4
@@ -152,6 +157,7 @@ class PersistentMemoryService:
         query_text: str,
         limit: int = 10,
         entry_type: str | None = None,
+        min_similarity: float = 0.0,
     ) -> list[MemoryEntry]:
         embeddings = self.local_ai_service.embed([query_text])
         if not embeddings or not embeddings[0]:
@@ -180,7 +186,8 @@ class PersistentMemoryService:
         for r in rows:
             stored_embedding = _deserialize_embedding(r[4])
             similarity = _cosine_similarity(query_embedding, stored_embedding)
-            scored.append((similarity, r))
+            if similarity >= min_similarity:
+                scored.append((similarity, r))
 
         scored.sort(key=lambda x: x[0], reverse=True)
 
@@ -215,6 +222,21 @@ class PersistentMemoryService:
         except json.JSONDecodeError:
             return None
 
+    @staticmethod
+    def _extract_text_content(content) -> str:
+        """Extract plain text from message content (string or multimodal list)."""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    parts.append(part.get("text", ""))
+                elif isinstance(part, str):
+                    parts.append(part)
+            return " ".join(parts)
+        return ""
+
     def _extract_memories_impl(
         self, messages: list, generate_summary: bool = False
     ) -> None:
@@ -228,11 +250,12 @@ class PersistentMemoryService:
                 if isinstance(msg, dict)
                 else getattr(msg, "role", "unknown")
             )
-            content = (
+            raw_content = (
                 msg.get("content", "")
                 if isinstance(msg, dict)
                 else getattr(msg, "content", "")
             )
+            content = self._extract_text_content(raw_content)
             if content and role in ("user", "assistant"):
                 text_parts.append(f"{role}: {content}")
 
@@ -242,13 +265,79 @@ class PersistentMemoryService:
         conversation_text = "\n".join(text_parts)
 
         from services.file import get_prompt
+        from services.token_utils import count_tokens, truncate_to_tokens
 
         system_prompt = get_prompt("extract-memories")
-        result = self.local_ai_service.support(
-            text=conversation_text,
-            system_prompt=system_prompt,
-        )
+        budget = self.local_ai_service.get_token_budget(system_prompt)
+        text_tokens = count_tokens(conversation_text)
 
+        if text_tokens <= budget.max_input_tokens:
+            # Fits in one pass
+            result = self.local_ai_service.support(
+                text=conversation_text,
+                system_prompt=system_prompt,
+            )
+            self._process_extraction_result(result, generate_summary)
+        else:
+            # Chunk: split into segments that fit the context window
+            chunk_max_tokens = budget.max_input_tokens
+            approx_chunk_chars = chunk_max_tokens * 4
+            chunks = []
+            remaining = conversation_text
+            while remaining:
+                if count_tokens(remaining) <= chunk_max_tokens:
+                    chunks.append(remaining)
+                    break
+                split_at = remaining.rfind("\n", 0, approx_chunk_chars)
+                if split_at <= 0:
+                    split_at = approx_chunk_chars
+                chunks.append(remaining[:split_at])
+                remaining = remaining[split_at:].lstrip()
+
+            printr.print(
+                f"Memory extraction: chunking {text_tokens} tokens into {len(chunks)} parts.",
+                color=LogType.MEMORY,
+                server_only=True,
+            )
+
+            all_facts = []
+            last_summary = ""
+            for i, chunk in enumerate(chunks):
+                # Safety: truncate if chunk still exceeds budget
+                if count_tokens(chunk) > chunk_max_tokens:
+                    chunk = truncate_to_tokens(chunk, chunk_max_tokens)
+                result = self.local_ai_service.support(
+                    text=chunk,
+                    system_prompt=system_prompt,
+                )
+                if result and result.text:
+                    data = self._parse_json_response(result.text)
+                    if data:
+                        all_facts.extend(data.get("facts", []))
+                        s = data.get("summary", "")
+                        if s:
+                            last_summary = s
+
+            # Store collected facts
+            for fact in all_facts:
+                if fact and isinstance(fact, str) and len(fact.strip()) > 5:
+                    self._add_memory_impl(
+                        entry_type="fact",
+                        content=fact.strip(),
+                        session_id=self.session_id,
+                    )
+
+            if generate_summary and last_summary and len(last_summary.strip()) > 10:
+                self._add_memory_impl(
+                    entry_type="session_summary",
+                    content=last_summary.strip(),
+                    session_id=self.session_id,
+                )
+
+    def _process_extraction_result(
+        self, result, generate_summary: bool
+    ) -> None:
+        """Process a support model result from memory extraction."""
         if not result or not result.text:
             return
 
@@ -277,9 +366,13 @@ class PersistentMemoryService:
     def _build_memory_context_impl(
         self, query_text: str, max_tokens: int = MEMORY_MAX_TOKENS
     ) -> str:
-        facts = self._search_impl(query_text, limit=20, entry_type="fact")
+        facts = self._search_impl(
+            query_text, limit=20, entry_type="fact",
+            min_similarity=MEMORY_MIN_SIMILARITY,
+        )
         summaries = self._search_impl(
-            query_text, limit=2, entry_type="session_summary"
+            query_text, limit=2, entry_type="session_summary",
+            min_similarity=MEMORY_MIN_SIMILARITY,
         )
 
         if not facts and not summaries:

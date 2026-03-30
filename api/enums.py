@@ -17,6 +17,7 @@ class LogType(Enum):
     COMMAND = "command"  # Dedicated color for Command execution messages
     WINGMAN = "wingman"  # Dedicated color for Wingman-specific status messages
     LOCALMODEL = "localmodel"  # Messages from the local support/embedding model — not part of conversation history
+    MEMORY = "memory"  # Persistent memory operations (recall, store, forget)
 
     # Conversation messages
     USER = "user"  # Pink/Purple - user speech/input

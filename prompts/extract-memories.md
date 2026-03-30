@@ -10,12 +10,12 @@ Do NOT include as facts:
 - What the assistant said or recommended
 - Game lore or mechanics
 
-Examples of good facts:
-- "User flies a Cutlass Black"
-- "User is in an org called Stellar Dynamics with 20 members"
-- "User uses Virpil HOSAS dual stick controls"
-- "User has a friend named Marcus who trades cargo"
-- "User is saving up for a Reclaimer"
+Examples of good fact FORMAT (do NOT output these, they are format examples only):
+- "User flies a [ship name]"
+- "User is in an org called [name] with [N] members"
+- "User uses [hardware] controls"
+- "User has a friend named [name] who [activity]"
+- "User is saving up for a [goal]"
 
 Output COMPACT valid JSON on a single line. No newlines inside the JSON:
 {"summary": "summary here", "facts": ["fact1", "fact2"]}

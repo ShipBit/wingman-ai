@@ -12,6 +12,7 @@ from api.enums import LogType
 from api.interface import LlamaCppSettings
 from services.local_model_manager import LocalModelManager
 from services.printr import Printr
+from services.token_utils import count_tokens
 
 printr = Printr()
 
@@ -376,8 +377,9 @@ class LlamaCppProvider:
                 truncated=truncated,
             )
         except Exception as e:
+            input_tokens = count_tokens(system_prompt) + count_tokens(text) if text else 0
             printr.print(
-                f"Support model call failed: {e}",
+                f"Local support model call failed (~{input_tokens} input tokens, n_ctx={self.settings.n_ctx}): {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
@@ -388,16 +390,22 @@ class LlamaCppProvider:
         if not self.load_embed_model():
             return None
 
+        # Ensure all inputs are non-empty strings (guards against multimodal content lists)
+        sanitized = [t if isinstance(t, str) and t.strip() else "" for t in texts]
+        if not any(sanitized):
+            return None
+
         try:
             response = self._embed_client.embeddings.create(
                 model="local-model",
-                input=texts,
+                input=sanitized,
             )
             return [item.embedding for item in response.data]
         except Exception as e:
             printr.print(
                 f"Embedding failed: {e}",
                 color=LogType.ERROR,
+                server_only=True,
             )
             return None
 

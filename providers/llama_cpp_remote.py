@@ -94,8 +94,11 @@ class LlamaCppRemote:
                 truncated=truncated,
             )
         except Exception as e:
+            from services.token_utils import count_tokens as _count
+
+            input_tokens = _count(system_prompt) + _count(text) if text else 0
             printr.print(
-                f"Remote support model call failed: {e}",
+                f"Remote support model call failed (~{input_tokens} input tokens): {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
@@ -103,15 +106,20 @@ class LlamaCppRemote:
 
     def embed(self, texts: list[str]) -> Optional[list[list[float]]]:
         """Generate embeddings via remote llama-server."""
+        # Ensure all inputs are non-empty strings (guards against multimodal content lists)
+        sanitized = [t if isinstance(t, str) and t.strip() else "" for t in texts]
+        if not any(sanitized):
+            return None
+
         try:
             response = self._embed_client.embeddings.create(
                 model="local-model",
-                input=texts,
+                input=sanitized,
             )
             return [item.embedding for item in response.data]
         except Exception as e:
             printr.print(
-                f"Remote embedding failed: {e}",
+                f"Embedding failed: {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )

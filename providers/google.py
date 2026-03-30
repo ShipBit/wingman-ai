@@ -18,6 +18,17 @@ class GoogleGenAI:
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         )
 
+    async def aclose(self):
+        """Close underlying HTTP clients to prevent 'Task was destroyed' warnings."""
+        try:
+            api_client = getattr(self.client, "_api_client", None)
+            if api_client and hasattr(api_client, "aclose"):
+                await api_client.aclose()
+            elif hasattr(self.client, "close"):
+                self.client.close()
+        except Exception:
+            pass
+
     def _handle_key_error(self):
         printr.toast_error(
             "The Gemini API key you provided is invalid. Please check the GUI settings or your 'secrets.yaml'"

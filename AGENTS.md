@@ -38,14 +38,17 @@ If you use `printr.print()` without `server_only=True`, it sends to the client s
 
 ### LogType.LOCALMODEL — local support/embedding model messages
 
-Use `LogType.LOCALMODEL` for any message originating from the local support model or embedding model (greetings, memory operations, condensation status, etc.). The client renders these with a distinct dashed-border style and a label ("Generated locally — not part of the conversation with your AI provider") to distinguish them from conversation messages with the main AI provider. Example:
+Use `LogType.LOCALMODEL` for any message originating from the local support model or embedding model (greetings, condensation status, etc.). The client renders these with a distinct dashed-border style and a label ("Generated locally — not part of the conversation with your AI provider") to distinguish them from conversation messages with the main AI provider.
+
+### LogType.MEMORY — persistent memory operations
+
+Use `LogType.MEMORY` for memory recall/store/forget messages. The client renders these as system pills with a brain icon and pink accent — distinct from LOCALMODEL chat bubbles. Example:
 
 ```python
 await printr.print_async(
     "Memory stored: user prefers dark mode",
-    color=LogType.LOCALMODEL,
+    color=LogType.MEMORY,
     source_name=self.name,
-    source=LogSource.WINGMAN,
 )
 ```
 
