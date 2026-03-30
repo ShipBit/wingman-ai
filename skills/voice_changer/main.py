@@ -155,7 +155,7 @@ class VoiceChanger(Skill):
         if self._get_context_prompt():
             messages.append(self._switch_personality())
         if self._get_clear_history():
-            self.wingman.reset_conversation_history()
+            await self.wingman.reset_conversation_history()
 
         # sort out empty messages
         messages = [await message for message in messages if message]

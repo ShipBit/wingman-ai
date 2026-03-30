@@ -1886,17 +1886,17 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
             play_thread.start()
 
     # POST /reset-conversation-history
-    def reset_conversation_history(self, wingman_name: Optional[str] = None):
+    async def reset_conversation_history(self, wingman_name: Optional[str] = None):
         if wingman_name:
             wingman = self.tower.get_wingman_by_name(wingman_name)
             if wingman:
-                wingman.reset_conversation_history()
+                await wingman.reset_conversation_history()
                 self.printr.toast(
                     f"Conversation history cleared for {wingman_name}.",
                 )
         else:
             for wingman in self.tower.wingmen:
-                wingman.reset_conversation_history()
+                await wingman.reset_conversation_history()
             self.printr.toast(
                 "Conversation history cleared.",
             )
