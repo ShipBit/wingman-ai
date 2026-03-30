@@ -505,7 +505,7 @@ class Wingman:
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return False, error_msg
 
-    def reset_conversation_history(self):
+    async def reset_conversation_history(self):
         """This function is called when the user triggers the ResetConversationHistory command.
         It's a global command that should be implemented by every Wingman that keeps a message history.
         """
@@ -761,7 +761,7 @@ class Wingman:
 
             # handle the global special commands:
             if command.name == "ResetConversationHistory":
-                self.reset_conversation_history()
+                await self.reset_conversation_history()
                 await printr.print_async(
                     f"Executed command: {command.name}", color=LogType.COMMAND
                 )

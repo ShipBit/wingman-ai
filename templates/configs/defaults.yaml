@@ -54,6 +54,7 @@ prompts:
     - Don't ask if you can "help more" or "assist further"
 
     {ttsprompt}
+persistent_memory: true
 features:
   tts_provider: wingman_pro
   stt_provider: fasterwhisper

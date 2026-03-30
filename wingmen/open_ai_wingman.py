@@ -148,6 +148,9 @@ class OpenAiWingman(Wingman):
         # Local AI service — set externally by WingmanCore if available
         self.local_ai_service = None
 
+        # Persistent memory — initialized lazily when local_ai_service is available
+        self.persistent_memory_service = None
+
         # Stateless tool response compressor — summarizes large tool/MCP responses
         # via local AI before the cloud LLM sees them
         self._tool_response_compressor = ToolResponseCompressor()
@@ -366,6 +369,21 @@ class OpenAiWingman(Wingman):
                 color=LogType.ERROR,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+
+    async def unload(self):
+        """Extract memories and close DB before unloading."""
+        if self.persistent_memory_service:
+            from services.persistent_memory import MIN_MESSAGES_FOR_EXTRACTION
+
+            if len(self.messages) >= MIN_MESSAGES_FOR_EXTRACTION:
+                try:
+                    await self.persistent_memory_service.extract_memories(
+                        self.messages, generate_summary=True
+                    )
+                except Exception:
+                    pass
+            self.persistent_memory_service.close()
+        await super().unload()
 
     async def unload_skills(self):
         await super().unload_skills()
@@ -1057,6 +1075,19 @@ class OpenAiWingman(Wingman):
         Returns:
             tuple[str | None, str | None, Skill | None, bool]: A tuple containing the final response, the instant response (if any), the skill that was used, and a boolean indicating whether the current audio should be interrupted.
         """
+        # Lazy init: persistent memory (needs local_ai_service which is set after __init__)
+        if (
+            self.config.persistent_memory
+            and self.local_ai_service
+            and not self.persistent_memory_service
+        ):
+            from services.persistent_memory import PersistentMemoryService
+            self.persistent_memory_service = PersistentMemoryService(
+                wingman_name=self.name,
+                local_ai_service=self.local_ai_service,
+            )
+            self.persistent_memory_service.initialize()
+
         await self.add_user_message(transcript, images=images)
 
         benchmark.start_snapshot("Instant activation commands")
@@ -1857,6 +1888,18 @@ class OpenAiWingman(Wingman):
                 return
 
             to_condense = self.messages[:cutoff_index]
+
+            # Extract memories from messages about to be condensed (background, non-blocking)
+            if self.persistent_memory_service:
+                try:
+                    asyncio.create_task(
+                        self.persistent_memory_service.extract_memories(
+                            to_condense, generate_summary=False
+                        )
+                    )
+                except Exception:
+                    pass  # Don't let memory extraction block condensation
+
             condensed_text = self._messages_to_text(to_condense)
             if not condensed_text.strip():
                 await printr.print_async(
@@ -2279,13 +2322,22 @@ class OpenAiWingman(Wingman):
                 lines.append(f"  [Tool result ({tool_name}): {content[:200]}]")
         return "\n".join(lines)
 
-    def reset_conversation_history(self):
+    async def reset_conversation_history(self):
         """Resets the conversation history and skill activation state.
 
         When the conversation is reset, the LLM loses all memory of which skills
         were activated and why. So we must also reset the skill registry and MCP
         registry to ensure the progressive disclosure state matches the LLM's memory.
         """
+        # Extract memories before clearing (if enabled and enough messages)
+        if self.persistent_memory_service and len(self.messages) >= 4:
+            try:
+                await self.persistent_memory_service.extract_memories(
+                    self.messages, generate_summary=True
+                )
+            except Exception:
+                pass  # Don't let extraction failure prevent reset
+
         self.messages = []
         self.conversation_summary = ""
         self._last_prompt_tokens = 0
@@ -2414,6 +2466,23 @@ class OpenAiWingman(Wingman):
                 + self.conversation_summary
             )
 
+        # Persistent memory injection
+        persistent_memory_context = ""
+        if self.persistent_memory_service and self.messages:
+            # Use the most recent user message as the query
+            last_user_msg = ""
+            for msg in reversed(self.messages):
+                role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
+                content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                if role == "user" and content:
+                    last_user_msg = content
+                    break
+            if last_user_msg:
+                try:
+                    persistent_memory_context = await self.persistent_memory_service.build_memory_context(last_user_msg)
+                except Exception:
+                    pass  # Don't let memory failures break conversation
+
         context = self.config.prompts.system_prompt.format(
             backstory=backstory,
             skills=skill_prompts,
@@ -2429,6 +2498,21 @@ class OpenAiWingman(Wingman):
             and "{conversation_summary}" not in self.config.prompts.system_prompt
         ):
             context += "\n\n" + conversation_summary
+
+        # Append persistent memory context
+        if persistent_memory_context:
+            context += "\n\n" + persistent_memory_context
+
+        # Persistent memory tool instructions
+        if self.persistent_memory_service:
+            context += (
+                "\n\n# PERSISTENT MEMORY\n"
+                "You have persistent memory. Important facts and past conversation summaries "
+                "are provided in the [Memory] sections above (if any). "
+                "You can use the `remember`, `recall`, and `forget` tools when the user "
+                "explicitly asks you to remember, recall, or forget something. "
+                "You don't need to use `remember` for routine information — that is handled automatically."
+            )
 
         return context
 
@@ -2812,6 +2896,49 @@ class OpenAiWingman(Wingman):
         instant_response = ""
         used_skill = None
         tool_label = None
+
+        # Handle persistent memory tools
+        if function_name in ("memory_remember", "memory_recall", "memory_forget") and self.persistent_memory_service:
+            if function_name == "memory_remember":
+                text = function_args.get("text", "")
+                if text:
+                    await self.persistent_memory_service.add_memory(
+                        entry_type="fact", content=text
+                    )
+                    function_response = f"I'll remember that: \"{text}\""
+                    await printr.print_async(
+                        f"Memory stored: {text}",
+                        color=LogType.INFO,
+                        source_name=self.name,
+                        source=LogSource.WINGMAN,
+                    )
+                else:
+                    function_response = "Nothing to remember — no text provided."
+
+            elif function_name == "memory_recall":
+                query = function_args.get("query", "")
+                if query:
+                    results = await self.persistent_memory_service.search(query, limit=10)
+                    if results:
+                        lines = [f"- {r.content}" for r in results]
+                        function_response = "Here's what I remember:\n" + "\n".join(lines)
+                    else:
+                        function_response = "I don't have any memories matching that."
+                else:
+                    function_response = "No query provided for memory recall."
+
+            elif function_name == "memory_forget":
+                query = function_args.get("query", "")
+                if query:
+                    deleted = await self.persistent_memory_service.forget_by_query(query)
+                    if deleted:
+                        function_response = f"Done — I've forgotten the memory related to \"{query}\"."
+                    else:
+                        function_response = "I couldn't find a memory closely matching that to forget."
+                else:
+                    function_response = "No query provided for memory forget."
+
+            return function_response, None, None, f"💾 memory: {function_name}"
 
         # Handle unified capability meta-tools (activate_capability, list_active_capabilities)
         if self.capability_registry.is_meta_tool(function_name):
@@ -3315,6 +3442,60 @@ class OpenAiWingman(Wingman):
 
         for _, tool in self.mcp_registry.get_active_tools():
             tools.append(tool)
+
+        # Persistent memory tools — auto-injected when enabled
+        if self.persistent_memory_service:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "memory_remember",
+                    "description": "Store an important fact or detail for future reference. Use when the user explicitly asks you to remember something.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": "The fact or detail to remember.",
+                            },
+                        },
+                        "required": ["text"],
+                    },
+                },
+            })
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "memory_recall",
+                    "description": "Search your memory for relevant information. Use when the user asks what you remember or know about a topic.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "What to search for in memory.",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            })
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "memory_forget",
+                    "description": "Remove a specific memory. Use when the user explicitly asks you to forget something.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Description of the memory to forget.",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            })
 
         return tools
 

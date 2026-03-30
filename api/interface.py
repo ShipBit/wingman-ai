@@ -1086,6 +1086,8 @@ class WingmanConfig(NestedConfig):
     """The "push-to-talk" joystick config for this wingman. Keep it pressed while talking! Don't use the same button for multiple wingmen!"""
     is_voice_activation_default: Optional[bool] = None
     """If voice activation is enabled and this is true, the Wingman will listen to your voice by default and without saying its name."""
+    persistent_memory: bool = True
+    """Enable persistent memory — automatically remember and recall facts across sessions using local AI."""
     created_with_version: Optional[str] = None
     """The version of Wingman AI that created this configuration. Used to detect configs that may benefit from restoring updated defaults."""
 
@@ -1097,6 +1099,23 @@ class Config(NestedConfig):
 
     wingmen: Optional[dict[str, WingmanConfig]] = None
     """The Wingmen in this config. You can add as many as you want!"""
+
+
+class MemoryEntryResponse(BaseModel):
+    """A persistent memory entry returned from the API."""
+    id: int
+    collection: str
+    entry_type: str
+    content: str
+    source_wingman: str | None = None
+    session_id: str | None = None
+    created_at: float
+    updated_at: float
+
+
+class MemoryUpdateRequest(BaseModel):
+    """Request to update a memory entry's content."""
+    content: str
 
 
 class ConfigsInfo(BaseModel):
