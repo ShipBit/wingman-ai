@@ -7,7 +7,7 @@ import threading
 from typing import Optional
 import pygame
 from google.genai import types
-from fastapi import APIRouter, Body, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
 import requests
 import sounddevice as sd
 from showinfm import show_in_file_manager
@@ -23,6 +23,7 @@ from api.commands import (
 from api.enums import (
     AzureRegion,
     CommandTag,
+    ConversationProvider,
     CoreState,
     LogSource,
     LogType,
@@ -94,6 +95,7 @@ from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
 from services.lore_library import LoreLibraryService
+from services.image_processing import process_image, validate_image_mime
 from services.model_metadata import ModelMetadataService
 from services.audio_recorder import RECORDING_PATH, AudioRecorder
 from services.config_manager import ConfigManager
@@ -1794,20 +1796,84 @@ class WingmanCore(WebSocketUser):
         return None
 
     # POST /send-text-to-wingman
-    async def send_text_to_wingman(self, text: str, wingman_name: str):
+    async def send_text_to_wingman(
+        self,
+        text: str = Form(""),
+        wingman_name: str = Form(""),
+        images: list[UploadFile] = None,
+    ):
         wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not text:
+            return
+
+        processed_images = None
+        if images:
+            if len(images) > 2:
+                raise HTTPException(
+                    status_code=422, detail="Maximum 2 images allowed per message."
+                )
+
+            # Resolve the active conversation model ID from the wingman config.
+            # The model lives under the provider-specific sub-config, not features.
+            model_id = ""
+            if hasattr(wingman, "config") and hasattr(wingman.config, "features"):
+                provider = wingman.config.features.conversation_provider
+                cfg = wingman.config
+                if provider == ConversationProvider.OPENAI and cfg.openai:
+                    model_id = cfg.openai.conversation_model or ""
+                elif provider == ConversationProvider.MISTRAL and cfg.mistral:
+                    model_id = cfg.mistral.conversation_model or ""
+                elif provider == ConversationProvider.GROQ and cfg.groq:
+                    model_id = cfg.groq.conversation_model or ""
+                elif provider == ConversationProvider.CEREBRAS and cfg.cerebras:
+                    model_id = cfg.cerebras.conversation_model or ""
+                elif provider == ConversationProvider.GOOGLE and cfg.google:
+                    model_id = cfg.google.conversation_model or ""
+                elif provider == ConversationProvider.OPENROUTER and cfg.openrouter:
+                    model_id = cfg.openrouter.conversation_model or ""
+                elif provider == ConversationProvider.LOCAL_LLM and cfg.local_llm:
+                    model_id = cfg.local_llm.conversation_model or ""
+                elif provider == ConversationProvider.WINGMAN_PRO and cfg.wingman_pro:
+                    model_id = cfg.wingman_pro.conversation_deployment or ""
+                elif provider == ConversationProvider.AZURE and cfg.azure and cfg.azure.conversation:
+                    model_id = cfg.azure.conversation.deployment_name or ""
+                elif provider == ConversationProvider.PERPLEXITY and cfg.perplexity:
+                    pmodel = cfg.perplexity.conversation_model
+                    model_id = pmodel.value if hasattr(pmodel, "value") else str(pmodel)
+                elif provider == ConversationProvider.XAI and cfg.xai:
+                    model_id = cfg.xai.conversation_model or ""
+
+            if model_id:
+                supports_vision = await self.model_metadata_service.supports_vision(model_id)
+                if not supports_vision:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="The configured conversation model does not support vision/images.",
+                    )
+
+            processed_images = []
+            for img_file in images:
+                if not validate_image_mime(img_file.content_type or ""):
+                    raise HTTPException(
+                        status_code=422,
+                        detail=f"Unsupported image type: {img_file.content_type}. Allowed: PNG, JPEG, WebP, GIF.",
+                    )
+                img_bytes = await img_file.read()
+                b64, mime = process_image(img_bytes)
+                processed_images.append((b64, mime))
 
         def run_async_process():
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(wingman.process(transcript=text))
+                loop.run_until_complete(
+                    wingman.process(transcript=text, images=processed_images)
+                )
             finally:
                 loop.close()
 
-        if wingman and text:
-            play_thread = threading.Thread(target=run_async_process)
-            play_thread.start()
+        play_thread = threading.Thread(target=run_async_process)
+        play_thread.start()
 
     # POST /generate-greeting
     async def generate_greeting(self, wingman_name: str):
