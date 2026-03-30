@@ -197,6 +197,20 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["GET"],
+            path="/wingman-context",
+            response_model=str,
+            endpoint=self.get_wingman_context,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/wingman-conversation",
+            response_model=list[dict],
+            endpoint=self.get_wingman_conversation,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
             path="/fasterwhisper/modelsizes",
             response_model=list[str],
             endpoint=self.get_fasterwhisper_modelsizes,
@@ -1932,15 +1946,30 @@ class WingmanCore(WebSocketUser):
         if config.prompts and config.prompts.backstory:
             backstory = config.prompts.backstory
 
-        system_prompt = f"""You are {config.name}. Here is your backstory:
+        # Check for a previous session summary to personalize the greeting
+        session_summary = ""
+        mem_service = getattr(wingman, "persistent_memory_service", None)
+        if mem_service:
+            try:
+                summaries = mem_service.get_all(entry_type="session_summary")
+                if summaries:
+                    session_summary = summaries[0].content
+            except Exception:
+                pass
 
-{backstory}
-
-Generate a short, creative, in-character greeting (1-2 sentences) for the user who just opened the app. Be creative and vary it each time. Stay in character.
-
-You MUST naturally include how the user can communicate with you: {comm_context}
-
-Keep it concise — this is a chat channel greeting, not a monologue."""
+        if session_summary:
+            system_prompt = get_prompt("greeting-returning").format(
+                name=config.name,
+                backstory=backstory,
+                session_summary=session_summary,
+                comm_context=comm_context,
+            )
+        else:
+            system_prompt = get_prompt("greeting-default").format(
+                name=config.name,
+                backstory=backstory,
+                comm_context=comm_context,
+            )
 
         try:
             response = self.local_ai_service.support(
@@ -2024,6 +2053,22 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
             return False
         await wingman._condense_history(force=True)
         return True
+
+    # GET /wingman-context
+    def get_wingman_context(self, wingman_name: str) -> str:
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "get_last_context"):
+            return ""
+        return wingman.get_last_context()
+
+    # GET /wingman-conversation
+    def get_wingman_conversation(
+        self, wingman_name: str, strip_nulls: bool = True
+    ) -> list[dict]:
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "get_conversation_messages"):
+            return []
+        return wingman.get_conversation_messages(strip_nulls=strip_nulls)
 
     # GET /fasterwhisper/modelsizes
     def get_fasterwhisper_modelsizes(self):
@@ -2323,6 +2368,8 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
         except ValueError as e:
             self.printr.toast_error(f"Google: \n{str(e)}")
             return []
+        finally:
+            await google.aclose()
 
     # GET /models/metadata
     async def get_model_metadata_all(self):
