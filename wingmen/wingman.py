@@ -512,7 +512,7 @@ class Wingman:
 
     # ──────────────────────────── The main processing loop ──────────────────────────── #
 
-    async def process(self, audio_input_wav: str = None, transcript: str = None):
+    async def process(self, audio_input_wav: str = None, transcript: str = None, images: list[tuple[str, str]] = None):
         """The main method that gets called when the wingman is activated. This method controls what your wingman actually does and you can override it if you want to.
 
         The base implementation here triggers the transcription and processing of the given audio input.
@@ -540,6 +540,9 @@ class Wingman:
 
             interrupt = None
             if transcript:
+                additional_data = None
+                if images:
+                    additional_data = {"images": [b64 for b64, _mime in images]}
                 await printr.print_async(
                     f"{transcript}",
                     color=LogType.USER,
@@ -548,6 +551,7 @@ class Wingman:
                     benchmark_result=(
                         benchmark_transcribe.finish() if benchmark_transcribe else None
                     ),
+                    additional_data=additional_data,
                 )
 
                 # Further process the transcript.
@@ -556,7 +560,7 @@ class Wingman:
                 benchmark_llm = Benchmark(label="Command/AI Processing")
                 process_result, instant_response, skill, interrupt = (
                     await self._get_response_for_transcript(
-                        transcript=transcript, benchmark=benchmark_llm
+                        transcript=transcript, benchmark=benchmark_llm, images=images
                     )
                 )
 
@@ -608,7 +612,7 @@ class Wingman:
         return None
 
     async def _get_response_for_transcript(
-        self, transcript: str, benchmark: Benchmark
+        self, transcript: str, benchmark: Benchmark, images: list[tuple[str, str]] = None
     ) -> tuple[str | None, str | None, Skill | None, bool | None]:
         """Processes the transcript and return a response as text. This where you'll do most of your work.
         Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
