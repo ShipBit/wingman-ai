@@ -80,6 +80,11 @@ class Migration211To300(BaseMigration):
             features["compress_tool_responses"] = True
             self.log("- added new feature: compress_tool_responses = true")
 
+        # Add persistent memory (enabled by default)
+        if "persistent_memory" not in old:
+            old["persistent_memory"] = True
+            self.log("- added new default: persistent_memory = true")
+
         return old
 
     def migrate_wingman(self, old: dict, new: dict) -> dict:
@@ -93,5 +98,10 @@ class Migration211To300(BaseMigration):
             if "compress_tool_responses" not in features:
                 features["compress_tool_responses"] = True
                 self.log("- added new feature: compress_tool_responses = true")
+
+        # Add persistent memory (enabled by default)
+        if "persistent_memory" not in old:
+            old["persistent_memory"] = True
+            self.log("- added new setting: persistent_memory = true")
 
         return old
