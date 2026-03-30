@@ -1452,6 +1452,17 @@ if result and result.truncated:
 
 > **Important:** The support model has a limited context window (user-configurable, default 4096 tokens). If your input is too large, the model silently loses data beyond its context limit. For potentially large inputs, use `summarize()` instead.
 
+#### Prompt Writing Guidelines for Small Models
+
+The support model is a 2B-parameter model with limited instruction-following ability. Prompts that work well with large cloud models (GPT-4, Claude) will often fail here. Follow these rules when writing `system_prompt` strings:
+
+- **Be direct and literal.** Use short, imperative sentences. Avoid nuance, hedging, or nested clauses.
+- **Use labeled sections** (`Backstory:`, `Input:`, `Rules:`) instead of prose paragraphs. The model parses structured prompts more reliably.
+- **Say "EXACT words"** when you want the model to reference source material. Without this, it will paraphrase loosely and hallucinate details (e.g., turning "gift ideas" into "gift cards").
+- **Say "IN CHARACTER" explicitly** when the model must rephrase instructions in its persona's voice. Otherwise it will dump template text verbatim (e.g., outputting "The user talks to you by holding the home key" instead of weaving it into a natural sentence).
+- **Constrain what it may NOT do.** Small models are prone to confabulation — add explicit "Do NOT add anything not in [source]" rules.
+- **Keep prompts short.** Every token of system prompt reduces the budget available for input and output. Aim for under 200 tokens.
+
 ### Summarizing Large Text
 
 When you have text that might exceed the model's context window (e.g., API responses, large documents), use `summarize()`. It automatically chunks the text, summarizes each chunk, and merges the results.

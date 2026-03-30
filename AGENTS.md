@@ -52,6 +52,22 @@ await printr.print_async(
 )
 ```
 
+## Writing Prompts for the Support Model
+
+The local support model is a small 2B-parameter LLM (llama.cpp). It does not follow instructions as reliably as cloud models. When writing or editing prompt templates in `prompts/` or `system_prompt` strings for `local_ai_service.support()`, follow these rules:
+
+**Use prompt templates with `{variables}`, not hard-coded strings.** Prompt files live in `prompts/*.md` and use Python `str.format()` placeholders (e.g., `{name}`, `{backstory}`, `{comm_context}`). The calling code fills them in via `.format(name=..., backstory=...)`. Never hard-code values that should come from config or runtime — always use a `{variable}` and pass it in from the caller.
+
+**Structure for small models:**
+
+- **Use labeled sections** (`Backstory:`, `Rules:`, `Input:`) instead of prose paragraphs. Small models parse structure better than flowing text.
+- **Say "EXACT words"** when the model should reference source material. Without this, it paraphrases loosely and hallucinates details (e.g., turning "gift ideas" into "gift cards").
+- **Say "IN CHARACTER"** when the model must rephrase injected text in its persona's voice. Otherwise it dumps `{variable}` content verbatim instead of weaving it naturally.
+- **Add explicit "Do NOT" constraints.** Small models confabulate freely unless told not to.
+- **Keep prompts under ~200 tokens.** Every system-prompt token reduces the budget available for input and output.
+
+See also: [skills/README.md — Prompt Writing Guidelines](skills/README.md#prompt-writing-guidelines-for-small-models) for the full reference.
+
 ## Config Properties — interface.py
 
 New fields in Pydantic models should almost never be `Optional`. The correct pattern:

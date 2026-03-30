@@ -1948,14 +1948,28 @@ class WingmanCore(WebSocketUser):
 
         # Check for a previous session summary to personalize the greeting
         session_summary = ""
+        if hasattr(wingman, "ensure_memory_initialized"):
+            wingman.ensure_memory_initialized()
         mem_service = getattr(wingman, "persistent_memory_service", None)
         if mem_service:
             try:
                 summaries = mem_service.get_all(entry_type="session_summary")
                 if summaries:
                     session_summary = summaries[0].content
-            except Exception:
-                pass
+            except Exception as e:
+                await self.printr.print_async(
+                    text=f"[{wingman_name}] Failed to retrieve session summary: {e}",
+                    color=LogType.WARNING,
+                    source=LogSource.SYSTEM,
+                    server_only=True,
+                )
+
+        await self.printr.print_async(
+            text=f"[{wingman_name}] Greeting: mem_service={'yes' if mem_service else 'no'}, session_summary={'yes' if session_summary else 'no'}",
+            color=LogType.INFO,
+            source=LogSource.SYSTEM,
+            server_only=True,
+        )
 
         if session_summary:
             system_prompt = get_prompt("greeting-returning").format(
