@@ -1,6 +1,7 @@
 """Persistent memory service using sqlite-vec for vector similarity search."""
 
 import json
+import re
 import sqlite3
 import struct
 import time
@@ -243,6 +244,154 @@ class PersistentMemoryService:
             )
             for r in rows
         ]
+
+    async def extract_memories(self, messages: list, generate_summary: bool = False) -> None:
+        """Extract atomic facts (and optionally a session summary) from conversation messages.
+
+        Args:
+            messages: The conversation messages to extract from.
+            generate_summary: If True, also generate and store a session summary.
+        """
+        if len(messages) < MIN_MESSAGES_FOR_EXTRACTION:
+            return
+
+        # Format messages into readable text
+        text_parts = []
+        for msg in messages:
+            role = msg.get("role", "unknown") if isinstance(msg, dict) else getattr(msg, "role", "unknown")
+            content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+            if content and role in ("user", "assistant"):
+                text_parts.append(f"{role}: {content}")
+
+        if not text_parts:
+            return
+
+        conversation_text = "\n".join(text_parts)
+
+        # Call support model with extraction prompt
+        from services.file import get_prompt
+
+        system_prompt = get_prompt("extract-memories")
+        result = await self.local_ai_service.support(
+            text=conversation_text,
+            system_prompt=system_prompt,
+            max_tokens=512,
+        )
+
+        if not result or not result.text:
+            return
+
+        # Parse JSON response
+        try:
+            data = json.loads(result.text)
+        except json.JSONDecodeError:
+            # Try to extract JSON from the response if wrapped in markdown
+            match = re.search(r"\{.*\}", result.text, re.DOTALL)
+            if match:
+                try:
+                    data = json.loads(match.group())
+                except json.JSONDecodeError:
+                    return
+            else:
+                return
+
+        # Store extracted facts
+        facts = data.get("facts", [])
+        for fact in facts:
+            if fact and isinstance(fact, str) and len(fact.strip()) > 5:
+                await self.add_memory(
+                    entry_type="fact",
+                    content=fact.strip(),
+                    session_id=self.session_id,
+                )
+
+        # Store session summary if requested
+        if generate_summary:
+            summary = data.get("summary", "")
+            if summary and isinstance(summary, str) and len(summary.strip()) > 10:
+                await self.add_memory(
+                    entry_type="session_summary",
+                    content=summary.strip(),
+                    session_id=self.session_id,
+                )
+
+    async def build_memory_context(self, query_text: str, max_tokens: int = MEMORY_MAX_TOKENS) -> str:
+        """Build a formatted memory context string for injection into the system prompt.
+
+        Args:
+            query_text: The user's current message to find relevant memories.
+            max_tokens: Maximum tokens to use for memory context.
+
+        Returns:
+            Formatted memory string, or empty string if no relevant memories.
+        """
+        # Search for relevant facts
+        facts = await self.search(query_text, limit=20, entry_type="fact")
+
+        # Get most recent session summary
+        summaries = await self.search(query_text, limit=2, entry_type="session_summary")
+
+        if not facts and not summaries:
+            return ""
+
+        parts = []
+        token_count = 0
+
+        # Add facts first (compact, high-value)
+        if facts:
+            fact_lines = []
+            for fact in facts:
+                line = f"- {fact.content}"
+                line_tokens = len(line) // 4
+                if token_count + line_tokens > max_tokens:
+                    break
+                fact_lines.append(line)
+                token_count += line_tokens
+
+            if fact_lines:
+                parts.append("[Memory - Relevant facts]\n" + "\n".join(fact_lines))
+
+        # Add session summary if room
+        if summaries:
+            summary = summaries[0]
+            summary_tokens = len(summary.content) // 4
+            if token_count + summary_tokens <= max_tokens:
+                parts.append(f"[Memory - Recent session]\n{summary.content}")
+
+        return "\n\n".join(parts)
+
+    async def forget_by_query(self, query_text: str) -> bool:
+        """Find and delete the closest matching memory to the query.
+
+        Returns True if a memory was deleted, False if no close match found.
+        """
+        embeddings = await self.local_ai_service.embed([query_text])
+        if not embeddings or not embeddings[0]:
+            return False
+
+        rows = self._db.execute(
+            """
+            SELECT e.id, e.content, v.distance
+            FROM memory_vec v
+            JOIN memory_entries e ON e.id = v.entry_id
+            WHERE e.collection = ?
+            AND v.embedding MATCH ?
+            ORDER BY v.distance
+            LIMIT 1
+            """,
+            (self.collection, _serialize_embedding(embeddings[0])),
+        ).fetchall()
+
+        if not rows:
+            return False
+
+        entry_id, content, distance = rows[0]
+        similarity = 1.0 - (distance / 2.0)
+
+        if similarity >= FORGET_SIMILARITY_THRESHOLD:
+            self.delete_memory(entry_id)
+            return True
+        return False
 
     def close(self) -> None:
         """Close the database connection."""
