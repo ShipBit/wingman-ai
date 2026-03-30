@@ -61,6 +61,9 @@ from wingmen.wingman import Wingman
 
 printr = Printr()
 
+# Max seconds to wait for the local support model during conversation condensation.
+_CONDENSE_TIMEOUT = 120.0
+
 
 class OpenAiWingman(Wingman):
     """Our OpenAI Wingman base gives you everything you need to interact with OpenAI's various APIs.
@@ -107,6 +110,7 @@ class OpenAiWingman(Wingman):
 
         self.messages = []
         self.conversation_summary: str = ""
+        self._last_compiled_context: str = ""
         self._is_condensing = False
         self._condense_task: asyncio.Task | None = None
         self._last_prompt_tokens: int = 0
@@ -150,6 +154,7 @@ class OpenAiWingman(Wingman):
 
         # Persistent memory — initialized lazily when local_ai_service is available
         self.persistent_memory_service = None
+        self._memory_recall_notified = False
         self._background_tasks: set[asyncio.Task] = set()
 
         # Stateless tool response compressor — summarizes large tool/MCP responses
@@ -390,7 +395,7 @@ class OpenAiWingman(Wingman):
         return False
 
     async def unload(self):
-        """Extract memories and close DB before unloading."""
+        """Extract memories, close clients, and close DB before unloading."""
         # Wait for any background memory extraction tasks to finish
         if self._background_tasks:
             await asyncio.gather(*self._background_tasks, return_exceptions=True)
@@ -407,6 +412,11 @@ class OpenAiWingman(Wingman):
                 except Exception:
                     pass
             self.persistent_memory_service.close()
+
+        if self.google:
+            await self.google.aclose()
+            self.google = None
+
         await super().unload()
 
     async def unload_skills(self):
@@ -777,6 +787,8 @@ class OpenAiWingman(Wingman):
     async def validate_and_set_google(self, errors: list[WingmanInitializationError]):
         api_key = await self.retrieve_secret("google", errors)
         if api_key:
+            if self.google:
+                await self.google.aclose()
             self.google = GoogleGenAI(api_key=api_key)
 
     async def validate_and_set_openrouter(
@@ -1557,6 +1569,8 @@ class OpenAiWingman(Wingman):
             content (str): The message content to add.
             images (list[tuple[str, str]]): Optional list of (base64_data, mime_type) tuples to attach.
         """
+        self._memory_recall_notified = False
+
         # call skill hooks (only for prepared/activated skills)
         for skill in self.skills:
             if skill.is_prepared:
@@ -1961,22 +1975,28 @@ class OpenAiWingman(Wingman):
 
             if corrected_text_tokens > available_tokens:
                 # Chunk: summarize in segments, then merge
-                support_result = await self._chunked_support(
-                    condensed_text,
-                    system_prompt,
-                    existing_summary_section,
-                    corrected_available,
+                support_result = await asyncio.wait_for(
+                    self._chunked_support(
+                        condensed_text,
+                        system_prompt,
+                        existing_summary_section,
+                        corrected_available,
+                    ),
+                    timeout=_CONDENSE_TIMEOUT,
                 )
             else:
                 user_prompt = (
                     f"{user_prompt_prefix}{condensed_text}{user_prompt_suffix}"
                 )
-                support_result = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: self.local_ai_service.support(
-                        text=user_prompt,
-                        system_prompt=system_prompt,
+                support_result = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: self.local_ai_service.support(
+                            text=user_prompt,
+                            system_prompt=system_prompt,
+                        ),
                     ),
+                    timeout=_CONDENSE_TIMEOUT,
                 )
 
             summary = support_result.text if support_result else None
@@ -2054,6 +2074,14 @@ class OpenAiWingman(Wingman):
                 "summary_text": summary,
             }
 
+        except asyncio.TimeoutError:
+            await printr.print_async(
+                "Condensation timed out — local model took too long.",
+                color=LogType.WARNING,
+                server_only=True,
+                source_name=self.name,
+                source=LogSource.WINGMAN,
+            )
         except Exception as e:
             await printr.print_async(
                 f"Conversation condensation error: {e}",
@@ -2076,8 +2104,14 @@ class OpenAiWingman(Wingman):
                             **_condensation_stats,
                         )
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    await printr.print_async(
+                        f"Failed to broadcast condensation finish: {e}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                        source_name=self.name,
+                        source=LogSource.WINGMAN,
+                    )
 
     async def _chunked_support(
         self,
@@ -2426,13 +2460,28 @@ class OpenAiWingman(Wingman):
             last_user_msg = ""
             for msg in reversed(self.messages):
                 role = msg.get("role") if isinstance(msg, dict) else getattr(msg, "role", None)
-                content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                raw_content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                # Extract plain text from multimodal content (images etc.)
+                content = self._extract_text_content(raw_content) if raw_content else ""
                 if role == "user" and content:
                     last_user_msg = content
                     break
             if last_user_msg:
                 try:
                     persistent_memory_context = await self.persistent_memory_service.build_memory_context(last_user_msg)
+                    if persistent_memory_context and not self._memory_recall_notified:
+                        self._memory_recall_notified = True
+                        # Count restored fact lines (lines starting with "- ")
+                        fact_count = sum(
+                            1 for line in persistent_memory_context.splitlines()
+                            if line.startswith("- ")
+                        )
+                        if fact_count > 0:
+                            await printr.print_async(
+                                f"Memory recalled: {fact_count} relevant {'memory' if fact_count == 1 else 'memories'} loaded.",
+                                color=LogType.MEMORY,
+                                source_name=self.name,
+                            )
                 except Exception:
                     pass  # Don't let memory failures break conversation
 
@@ -2467,7 +2516,12 @@ class OpenAiWingman(Wingman):
                 "You don't need to use `remember` for routine information — that is handled automatically."
             )
 
+        self._last_compiled_context = context
         return context
+
+    def get_last_context(self) -> str:
+        """Return the last compiled system context (cached from the most recent LLM call)."""
+        return self._last_compiled_context
 
     def _build_user_context(self) -> str:
         """Build user context metadata for the system prompt.
@@ -2855,9 +2909,8 @@ class OpenAiWingman(Wingman):
                     function_response = f"I'll remember that: \"{text}\""
                     await printr.print_async(
                         f"Memory stored: {text}",
-                        color=LogType.LOCALMODEL,
+                        color=LogType.MEMORY,
                         source_name=self.name,
-                        source=LogSource.WINGMAN,
                     )
                 else:
                     function_response = "Nothing to remember — no text provided."
