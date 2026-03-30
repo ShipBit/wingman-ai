@@ -1101,6 +1101,23 @@ class Config(NestedConfig):
     """The Wingmen in this config. You can add as many as you want!"""
 
 
+class MemoryEntryResponse(BaseModel):
+    """A persistent memory entry returned from the API."""
+    id: int
+    collection: str
+    entry_type: str
+    content: str
+    source_wingman: str | None = None
+    session_id: str | None = None
+    created_at: float
+    updated_at: float
+
+
+class MemoryUpdateRequest(BaseModel):
+    """Request to update a memory entry's content."""
+    content: str
+
+
 class ConfigsInfo(BaseModel):
     config_dirs: list[ConfigDirInfo]
     current_config_dir: ConfigDirInfo

@@ -54,6 +54,8 @@ from api.interface import (
     LoreUniverse,
     LoreUniverseCreate,
     LoreUniverseUpdate,
+    MemoryEntryResponse,
+    MemoryUpdateRequest,
     MigrateBackstoryRequest,
     MigrateBackstoryResponse,
     OpenRouterEndpointResult,
@@ -662,6 +664,30 @@ class WingmanCore(WebSocketUser):
             path="/regions/wingman-pro",
             response_model=list,
             endpoint=self.get_wingman_pro_regions,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/memories/{wingman_name}",
+            endpoint=self.get_memories,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["PUT"],
+            path="/memories/{entry_id}",
+            endpoint=self.update_memory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/memories/{entry_id}",
+            endpoint=self.delete_memory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["DELETE"],
+            path="/memories/{wingman_name}/all",
+            endpoint=self.clear_memories,
             tags=tags,
         )
 
@@ -2956,3 +2982,52 @@ Keep it concise — this is a chat channel greeting, not a monologue."""
             server_only=True,
             color=LogType.SYSTEM,
         )
+
+    # GET /memories/{wingman_name}
+    def get_memories(self, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman or not hasattr(wingman, "persistent_memory_service") or not wingman.persistent_memory_service:
+            return []
+        entries = wingman.persistent_memory_service.get_all()
+        return [
+            MemoryEntryResponse(
+                id=e.id,
+                collection=e.collection,
+                entry_type=e.entry_type,
+                content=e.content,
+                source_wingman=e.source_wingman,
+                session_id=e.session_id,
+                created_at=e.created_at,
+                updated_at=e.updated_at,
+            )
+            for e in entries
+        ]
+
+    # PUT /memories/{entry_id}
+    async def update_memory(self, entry_id: int, request: MemoryUpdateRequest):
+        for wingman in self.tower.wingmen:
+            if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
+                entries = wingman.persistent_memory_service.get_all()
+                if any(e.id == entry_id for e in entries):
+                    await wingman.persistent_memory_service.update_memory(entry_id, request.content)
+                    return True
+        return False
+
+    # DELETE /memories/{entry_id}
+    def delete_memory(self, entry_id: int):
+        for wingman in self.tower.wingmen:
+            if hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
+                entries = wingman.persistent_memory_service.get_all()
+                if any(e.id == entry_id for e in entries):
+                    wingman.persistent_memory_service.delete_memory(entry_id)
+                    return True
+        return False
+
+    # DELETE /memories/{wingman_name}/all
+    def clear_memories(self, wingman_name: str):
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if wingman and hasattr(wingman, "persistent_memory_service") and wingman.persistent_memory_service:
+            wingman.persistent_memory_service.clear_collection()
+            self.printr.toast(f"All memories cleared for {wingman_name}.")
+            return True
+        return False
