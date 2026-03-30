@@ -39,26 +39,8 @@ from api.interface import (
     ConfigWithDirInfo,
     CoreStatusResponse,
     ElevenlabsModel,
-    GenerateBackstoryRequest,
-    GenerateBackstoryResponse,
-    LoreCharacter,
-    LoreCharacterCreate,
-    LoreCharacterUpdate,
-    LoreCodexEntry,
-    LoreCodexEntryCreate,
-    LoreCodexEntryUpdate,
-    LorePersonalityAxis,
-    LorePersonalityAxisCreate,
-    LoreRelationship,
-    LoreRelationshipCreate,
-    LoreRelationshipUpdate,
-    LoreUniverse,
-    LoreUniverseCreate,
-    LoreUniverseUpdate,
     MemoryEntryResponse,
     MemoryUpdateRequest,
-    MigrateBackstoryRequest,
-    MigrateBackstoryResponse,
     OpenRouterEndpointResult,
     PlaygroundChatRequest,
     ParakeetSttConfig,
@@ -84,7 +66,6 @@ from services.file import (
     get_audio_library_dir,
     get_custom_voices_dir,
     get_local_models_dir,
-    get_lore_library_dir,
     get_prompt,
 )
 from services.local_ai_service import LocalAiService
@@ -96,7 +77,6 @@ from services.config_service import ConfigService
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.benchmark import Benchmark
-from services.lore_library import LoreLibraryService
 from services.image_processing import process_image, validate_image_mime
 from services.model_metadata import ModelMetadataService
 from services.audio_recorder import RECORDING_PATH, AudioRecorder
@@ -393,150 +373,6 @@ class WingmanCore(WebSocketUser):
             endpoint=self.play_from_audio_library,
             tags=tags,
         )
-        # ── Lore Library Routes ──────────────────────────────────────
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/lore-library/universes",
-            response_model=list[LoreUniverse],
-            endpoint=self.get_lore_universes,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/lore-library/universes",
-            response_model=LoreUniverse,
-            endpoint=self.create_lore_universe,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["PUT"],
-            path="/lore-library/universes/{universe_id}",
-            response_model=LoreUniverse,
-            endpoint=self.update_lore_universe,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["DELETE"],
-            path="/lore-library/universes/{universe_id}",
-            endpoint=self.delete_lore_universe,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/lore-library/universes/{universe_id}/characters",
-            response_model=list[LoreCharacter],
-            endpoint=self.get_lore_characters,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/lore-library/characters/{character_id}",
-            response_model=LoreCharacter,
-            endpoint=self.get_lore_character,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/lore-library/universes/{universe_id}/characters",
-            response_model=LoreCharacter,
-            endpoint=self.create_lore_character,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["PUT"],
-            path="/lore-library/characters/{character_id}",
-            response_model=LoreCharacter,
-            endpoint=self.update_lore_character,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["DELETE"],
-            path="/lore-library/characters/{character_id}",
-            endpoint=self.delete_lore_character,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["PUT"],
-            path="/lore-library/characters/{character_id}/axes",
-            response_model=list[LorePersonalityAxis],
-            endpoint=self.set_lore_character_axes,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/lore-library/universes/{universe_id}/codex",
-            response_model=list[LoreCodexEntry],
-            endpoint=self.get_lore_codex_entries,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/lore-library/codex/{entry_id}",
-            response_model=LoreCodexEntry,
-            endpoint=self.get_lore_codex_entry,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/lore-library/universes/{universe_id}/codex",
-            response_model=LoreCodexEntry,
-            endpoint=self.create_lore_codex_entry,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["PUT"],
-            path="/lore-library/codex/{entry_id}",
-            response_model=LoreCodexEntry,
-            endpoint=self.update_lore_codex_entry,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["DELETE"],
-            path="/lore-library/codex/{entry_id}",
-            endpoint=self.delete_lore_codex_entry,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/lore-library/universes/{universe_id}/relationships",
-            response_model=list[LoreRelationship],
-            endpoint=self.get_lore_relationships,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["GET"],
-            path="/lore-library/relationships/entity/{entity_type}/{entity_id}",
-            response_model=list[LoreRelationship],
-            endpoint=self.get_lore_entity_relationships,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/lore-library/universes/{universe_id}/relationships",
-            response_model=LoreRelationship,
-            endpoint=self.create_lore_relationship,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["PUT"],
-            path="/lore-library/relationships/{relationship_id}",
-            response_model=LoreRelationship,
-            endpoint=self.update_lore_relationship,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["DELETE"],
-            path="/lore-library/relationships/{relationship_id}",
-            endpoint=self.delete_lore_relationship,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/lore-library/generate-backstory",
-            response_model=GenerateBackstoryResponse,
-            endpoint=self.generate_lore_backstory,
-            tags=tags,
-        )
         # ── Local AI Routes ──────────────────────────────────────────
         self.router.add_api_route(
             methods=["GET"],
@@ -747,7 +583,6 @@ class WingmanCore(WebSocketUser):
         self.audio_library = AudioLibrary(
             callback_playback_finished=self.on_audio_library_playback_finished,
         )
-        self.lore_library = LoreLibraryService()
 
         self.tower: Tower = None
 
@@ -1350,10 +1185,8 @@ class WingmanCore(WebSocketUser):
             self.config_manager.settings_config
         )
 
-        # Inject lore library service into wingmen that use it
         for wingman in self.tower.wingmen:
             if isinstance(wingman, OpenAiWingman):
-                wingman.lore_library_service = self.lore_library
                 wingman.local_ai_service = self.local_ai_service
 
         # Only show toast errors for non-MCP errors (MCP errors are already logged in mcp_client.py)
@@ -2413,101 +2246,6 @@ class WingmanCore(WebSocketUser):
             command = AudioLibraryPlaybackFinishedCommand(audio_file=audio_file)
             self.ensure_async(self._connection_manager.broadcast(command))
 
-    # ── Lore Library Endpoints (501 — pending rebuild) ─────────────
-
-    _LORE_501 = (
-        "Lore Library is being rebuilt. This feature is temporarily unavailable."
-    )
-
-    async def get_lore_universes(self) -> list[LoreUniverse]:
-        return self.lore_library.get_universes()
-
-    async def create_lore_universe(
-        self, data: LoreUniverseCreate = Body(...)
-    ) -> LoreUniverse:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def update_lore_universe(
-        self, universe_id: str, data: LoreUniverseUpdate = Body(...)
-    ) -> LoreUniverse:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def delete_lore_universe(self, universe_id: str):
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def get_lore_characters(self, universe_id: str) -> list[LoreCharacter]:
-        return self.lore_library.get_characters(universe_id)
-
-    async def get_lore_character(self, character_id: str) -> LoreCharacter:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def create_lore_character(
-        self, universe_id: str, data: LoreCharacterCreate = Body(...)
-    ) -> LoreCharacter:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def update_lore_character(
-        self, character_id: str, data: LoreCharacterUpdate = Body(...)
-    ) -> LoreCharacter:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def delete_lore_character(self, character_id: str):
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def set_lore_character_axes(
-        self,
-        character_id: str,
-        axes: list[LorePersonalityAxisCreate] = Body(...),
-    ) -> list[LorePersonalityAxis]:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def get_lore_codex_entries(
-        self, universe_id: str, category: Optional[str] = None
-    ) -> list[LoreCodexEntry]:
-        return self.lore_library.get_codex_entries(universe_id, category)
-
-    async def get_lore_codex_entry(self, entry_id: str) -> LoreCodexEntry:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def create_lore_codex_entry(
-        self, universe_id: str, data: LoreCodexEntryCreate = Body(...)
-    ) -> LoreCodexEntry:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def update_lore_codex_entry(
-        self, entry_id: str, data: LoreCodexEntryUpdate = Body(...)
-    ) -> LoreCodexEntry:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def delete_lore_codex_entry(self, entry_id: str):
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def get_lore_relationships(self, universe_id: str) -> list[LoreRelationship]:
-        return self.lore_library.get_relationships(universe_id)
-
-    async def get_lore_entity_relationships(
-        self, entity_type: str, entity_id: str
-    ) -> list[LoreRelationship]:
-        return self.lore_library.get_entity_relationships(entity_type, entity_id)
-
-    async def create_lore_relationship(
-        self, universe_id: str, data: LoreRelationshipCreate = Body(...)
-    ) -> LoreRelationship:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def update_lore_relationship(
-        self, relationship_id: str, data: LoreRelationshipUpdate = Body(...)
-    ) -> LoreRelationship:
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def delete_lore_relationship(self, relationship_id: str):
-        raise HTTPException(status_code=501, detail=self._LORE_501)
-
-    async def generate_lore_backstory(
-        self, data: GenerateBackstoryRequest = Body(...)
-    ) -> GenerateBackstoryResponse:
-        return self.lore_library.generate_backstory(data.character_id, data.universe_id)
-
     # ── Local AI Endpoints ────────────────────────────────────────
 
     # GET /settings/local-ai/status
@@ -2986,7 +2724,7 @@ class WingmanCore(WebSocketUser):
                 detail=(
                     f"Backstory too long: ~{backstory_tokens} tokens "
                     f"(max {MAX_BACKSTORY_TOKENS}). "
-                    f"Consider moving world lore to the Lore Library."
+                    f"Consider shortening your backstory."
                 ),
             )
 

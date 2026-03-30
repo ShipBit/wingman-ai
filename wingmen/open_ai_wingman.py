@@ -45,7 +45,6 @@ from providers.open_ai import OpenAi, OpenAiAzure
 from providers.x_ai import XAi
 from providers.wingman_pro import WingmanPro
 from api.commands import McpStateChangedCommand
-from services.lore_library import LoreLibraryService, LORE_TOOL_NAMES
 from services.benchmark import Benchmark
 from services.file import get_prompt
 from services.token_utils import count_tokens, truncate_to_tokens
@@ -145,9 +144,6 @@ class OpenAiWingman(Wingman):
         self.capability_registry = CapabilityRegistry(
             self.skill_registry, self.mcp_registry
         )
-
-        # Lore Library — set externally by WingmanCore if available
-        self.lore_library_service: LoreLibraryService | None = None
 
         # Local AI service — set externally by WingmanCore if available
         self.local_ai_service = None
@@ -2416,28 +2412,16 @@ class OpenAiWingman(Wingman):
         # Build user context with environment metadata
         user_context = self._build_user_context()
 
-        # Determine backstory: Lore Library (generated from DB) or manual
         # Sanity check: truncate if someone bypasses the client's 2048-token limit
         MAX_BACKSTORY_TOKENS = 2048
         backstory = self.config.prompts.backstory
-        if (
-            self.config.prompts.use_lore_library
-            and self.lore_library_service
-            and self.config.prompts.lore_character_id
-            and self.config.prompts.lore_universe_id
-        ):
-            result = self.lore_library_service.generate_backstory(
-                self.config.prompts.lore_character_id,
-                self.config.prompts.lore_universe_id,
-            )
-            backstory = result.backstory
 
         if backstory and count_tokens(backstory) > MAX_BACKSTORY_TOKENS:
             original_tokens = count_tokens(backstory)
             backstory = truncate_to_tokens(backstory, MAX_BACKSTORY_TOKENS)
             await printr.print_async(
                 f"[{self.name}] Backstory will be truncated to {MAX_BACKSTORY_TOKENS} tokens for conversations (is {original_tokens}). "
-                f"Your saved backstory is unchanged. Consider shortening it or moving world lore to the Lore Library.",
+                f"Your saved backstory is unchanged. Consider shortening it.",
                 color=LogType.WARNING,
                 source_name=self.name,
                 source=LogSource.SYSTEM,
@@ -3088,26 +3072,6 @@ class OpenAiWingman(Wingman):
 
                 return function_response, None, None, tool_label
 
-        # Handle Lore Library tool calls
-        if (
-            self.config.prompts.use_lore_library
-            and self.lore_library_service
-            and function_name in LORE_TOOL_NAMES
-        ):
-            tool_label = f"Lore: {function_name}"
-            await printr.print_async(
-                f"Lore Library: calling `{function_name}`",
-                color=LogType.INFO,
-                server_only=True,
-            )
-            function_response = self.lore_library_service.execute_tool(
-                function_name=function_name,
-                parameters=function_args,
-                universe_id=self.config.prompts.lore_universe_id,
-                character_id=self.config.prompts.lore_character_id,
-            )
-            return function_response, None, None, tool_label
-
         # Handle command calls
         if function_name == "execute_command":
             # get the command based on the argument passed by the LLM
@@ -3443,14 +3407,6 @@ class OpenAiWingman(Wingman):
                     },
                 }
             )
-
-        # Lore Library tools — injected when Wingman is bound to a universe
-        if (
-            self.config.prompts.use_lore_library
-            and self.lore_library_service
-            and self.config.prompts.lore_universe_id
-        ):
-            tools.extend(self.lore_library_service.get_tool_schemas())
 
         # Unified capability discovery: single activate_capability meta-tool
         # Combines skills and MCP servers - LLM doesn't need to know the difference
