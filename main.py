@@ -458,45 +458,49 @@ async def async_main(host: str, port: int, sidecar: bool):
         printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
         return
 
-    # Set MIGRATING state before migrations
-    await core.set_core_state(CoreState.MIGRATING, message="Migrating configurations...")
-    await core.config_service.migrate_configs(system_manager)
-
-    # Set LOADING_CONFIG state
-    await core.set_core_state(CoreState.LOADING_CONFIG, message="Loading configuration...")
-    await core.config_service.load_config()
-
-    saved_secrets: list[str] = []
-    for error in core.tower_errors:
-        if (
-            not sidecar  # running standalone
-            and error.error_type == WingmanInitializationErrorType.MISSING_SECRET
-            and not error.secret_name in saved_secrets
-        ):
-            secret = input(f"Please enter your '{error.secret_name}' API key/secret: ")
-            if secret:
-                secret_keeper.secrets[error.secret_name] = secret
-                await secret_keeper.save()
-                saved_secrets.append(error.secret_name)
-            else:
-                return
-        else:
-            core.startup_errors.append(error)
-
     try:
-        await core.startup()
-        event_loop = asyncio.get_running_loop()
-        core.audio_player.set_event_loop(event_loop)
-        asyncio.create_task(core.process_events())
-        # Set READY state - this also sets is_started = True
-        await core.set_core_state(CoreState.READY)
-    except Exception as e:
-        printr.print(f"Error starting Wingman AI Core: {str(e)}", color=LogType.ERROR)
-        printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-        return
+        # Set MIGRATING state before migrations
+        await core.set_core_state(CoreState.MIGRATING, message="Migrating configurations...")
+        await core.config_service.migrate_configs(system_manager)
 
-    # Keep process alive via the server task
-    await server_task
+        # Set LOADING_CONFIG state
+        await core.set_core_state(CoreState.LOADING_CONFIG, message="Loading configuration...")
+        await core.config_service.load_config()
+
+        saved_secrets: list[str] = []
+        for error in core.tower_errors:
+            if (
+                not sidecar  # running standalone
+                and error.error_type == WingmanInitializationErrorType.MISSING_SECRET
+                and not error.secret_name in saved_secrets
+            ):
+                secret = input(f"Please enter your '{error.secret_name}' API key/secret: ")
+                if secret:
+                    secret_keeper.secrets[error.secret_name] = secret
+                    await secret_keeper.save()
+                    saved_secrets.append(error.secret_name)
+                else:
+                    return
+            else:
+                core.startup_errors.append(error)
+
+        try:
+            await core.startup()
+            event_loop = asyncio.get_running_loop()
+            core.audio_player.set_event_loop(event_loop)
+            asyncio.create_task(core.process_events())
+            # Set READY state - this also sets is_started = True
+            await core.set_core_state(CoreState.READY)
+        except Exception as e:
+            printr.print(f"Error starting Wingman AI Core: {str(e)}", color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return
+
+        # Keep process alive via the server task
+        await server_task
+    finally:
+        server.should_exit = True
+        await server_task
 
 
 if __name__ == "__main__":
