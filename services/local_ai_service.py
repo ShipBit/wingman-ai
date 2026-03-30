@@ -145,7 +145,11 @@ class LocalAiService:
             system_prompt = get_prompt("support-default")
 
         safe_ctx = int(self.settings.n_ctx * SAFETY_MARGIN)
-        input_tokens = count_tokens(system_prompt) + count_tokens(text)
+        system_tokens = count_tokens(system_prompt)
+        max_input = safe_ctx - system_tokens - MIN_OUTPUT_TOKENS
+        if count_tokens(text) > max_input:
+            text = truncate_to_tokens(text, max(0, max_input))
+        input_tokens = system_tokens + count_tokens(text)
         max_tokens = max(MIN_OUTPUT_TOKENS, safe_ctx - input_tokens)
 
         if self.settings.run_locally:
