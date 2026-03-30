@@ -67,8 +67,8 @@ class ModelMetadataService:
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                LITELLM_URL, timeout=aiohttp.ClientTimeout(total=15)
-            ) as resp:
+                    LITELLM_URL, timeout=aiohttp.ClientTimeout(total=15)
+                ) as resp:
                     resp.raise_for_status()
                     raw = await resp.json(content_type=None)
         except Exception as e:
