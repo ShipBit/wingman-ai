@@ -180,23 +180,19 @@ class SkillLocalAI:
                 # Fits in one call
                 return await self.support(text, system_prompt=instruction)
 
-            # Too large — use ToolResponseCompressor for chunked summarization
+            # Too large — compress first, then apply instruction in a final pass
             from services.tool_response_cache import ToolResponseCompressor
 
             compressor = ToolResponseCompressor()
-            # Prepend instruction to system prompt for focused summary
             compressed = await compressor.compress(
                 response_text=text,
                 local_ai_service=svc,
                 wingman_name=self._wingman.name,
                 tool_name="summarize",
             )
-            return SupportResponse(
-                text=compressed,
-                prompt_tokens=0,
-                completion_tokens=0,
-                truncated=False,
-            )
+            # The compressed text should now fit; run a final pass with the
+            # caller's instruction so it's not silently dropped.
+            return await self.support(compressed, system_prompt=instruction)
         except Exception as e:
             await self._log_error("summarize", e)
             return None
