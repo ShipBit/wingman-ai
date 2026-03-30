@@ -166,6 +166,24 @@ def get_custom_voices_dir() -> str:
     return custom_voices_path
 
 
+def get_persistent_memory_dir() -> str:
+    """Get the path to the persistent memory directory.
+
+    NOT versioned - persistent memory survives across Wingman AI updates.
+    Location: APPDATA/WingmanAI/persistent_memory/
+    """
+    dirs = PlatformDirs(
+        appname=APP_NAME,
+        appauthor=APP_AUTHOR,
+        ensure_exists=True,
+        roaming=True,
+    )
+    persistent_memory_path = path.join(dirs.user_data_dir, "persistent_memory")
+    if not path.exists(persistent_memory_path):
+        makedirs(persistent_memory_path)
+    return persistent_memory_path
+
+
 def _create_custom_voices_readme(custom_voices_path: str) -> None:
     """Create a readme file in the custom voices directory with instructions in all supported languages."""
     content = """# Voice Cloning
