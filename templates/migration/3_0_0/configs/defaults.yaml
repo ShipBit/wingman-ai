@@ -45,6 +45,8 @@ prompts:
 
     {skills}
 
+    {conversation_summary}
+
     # CONVERSATION STYLE
     - Keep responses brief and efficient
     - Mirror the user's language
@@ -61,13 +63,15 @@ features:
   use_generic_instant_responses: false
   condense_conversation: true
   compress_tool_responses: true
+  condense_max_messages: 50
+  condense_keep_recent: 6
 sound:
   effects: []
   play_beep: false
   play_beep_apollo: false
   volume: 1.0
 openai:
-  conversation_model: gpt-4o-mini
+  conversation_model: gpt-4.1-mini
   tts_voice: nova
   tts_model: tts-1
   tts_speed: 1.0
@@ -75,11 +79,11 @@ openai:
 openai_compatible_tts:
   api_key: "probably-not-needed"
   voice: ""
-  model: "pocket-tts"
-  base_url: "http://localhost:5002/v1"
+  model: ""
+  base_url: ""
   speed: 1.0
   output_streaming: true
-  voices_endpoint: "/voices"
+  voices_endpoint: ""
   use_tts_prompt: false
   tts_prompt: |
     Audio markups make your speech more expressive and human-like. Use them regularly to bring your personality to life and react naturally to the conversation.
@@ -237,6 +241,8 @@ fasterwhisper:
   language: ""
   hotwords: []
   additional_hotwords: []
+parakeet:
+  temperature: 0.0
 xvasynth:
   voice:
     model_directory: ""
@@ -252,7 +258,7 @@ pocket_tts:
 wingman_pro:
   stt_provider: azure_speech
   tts_provider: azure
-  conversation_deployment: gpt-4o-mini
+  conversation_deployment: gpt-4.1-mini
 commands:
   - name: ResetConversationHistory
     instant_activation:
