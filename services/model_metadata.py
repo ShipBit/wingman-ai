@@ -1,6 +1,12 @@
 import time
-import aiohttp
 from typing import Optional
+
+import aiohttp
+
+from api.enums import LogType
+from services.printr import Printr
+
+printr = Printr()
 
 LITELLM_URL = "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json"
 CACHE_TTL_SECONDS = 3600  # 1 hour
@@ -60,12 +66,17 @@ class ModelMetadataService:
 
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(LITELLM_URL, timeout=aiohttp.ClientTimeout(total=15)) as resp:
+                async with session.get(
+                LITELLM_URL, timeout=aiohttp.ClientTimeout(total=15)
+            ) as resp:
                     resp.raise_for_status()
                     raw = await resp.json(content_type=None)
-        except Exception:
-            if not self._cache:
-                self._cache = {}
+        except Exception as e:
+            printr.print(
+                f"Failed to fetch model metadata: {e}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
             return
 
         self._cache = {}
@@ -86,7 +97,7 @@ class ModelMetadataService:
             return meta.to_dict()
         # Prefix match (e.g., "gpt-4o" matches "gpt-4o-2024-...")
         for cached_id, meta in self._cache.items():
-            if cached_id.startswith(model_id) or model_id.startswith(cached_id):
+            if cached_id.startswith(model_id):
                 return meta.to_dict()
         return None
 
