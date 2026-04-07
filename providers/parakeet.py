@@ -1,4 +1,5 @@
 import asyncio
+import gc
 import platform
 import threading
 from typing import Optional
@@ -27,6 +28,9 @@ MODEL_VARIANT_MAP = {
     "v3": "nemo-parakeet-tdt-0.6b-v3",
 }
 
+# CoreML is excluded for TDT models — they use external data files that CoreML can't handle
+COREML_EXCLUDED_PROVIDERS = ["CoreMLExecutionProvider"]
+
 
 class Parakeet:
     def __init__(self, settings: ParakeetSettings):
@@ -37,16 +41,22 @@ class Parakeet:
         self._loading = False
         self._load_lock = threading.Lock()
 
-        if settings.enable and settings.run_locally:
-            self.__load_model()
+    def load(self, model_path: Optional[str] = None):
+        """Load the Parakeet model. Called by SttProviderManager.
 
-    def __load_model(self):
+        Args:
+            model_path: Local directory containing model files (from ModelDownloader).
+                        If None, onnx_asr downloads internally.
+        """
         with self._load_lock:
             self._loading = True
-            self.__load_model_inner()
+            try:
+                self._load_model_inner(model_path)
+            finally:
+                self._loading = False
 
-    def __load_model_inner(self):
-        self.__unload_model()
+    def _load_model_inner(self, model_path: Optional[str] = None):
+        self.unload()
 
         try:
             import onnx_asr
@@ -58,7 +68,18 @@ class Parakeet:
                 self.settings.execution_provider, ["CPUExecutionProvider"]
             )
 
-            self.model = onnx_asr.load_model(model_name, providers=providers)
+            # Exclude CoreML for TDT models — crashes with external data files
+            providers = [
+                p for p in providers if p not in COREML_EXCLUDED_PROVIDERS
+            ]
+            if not providers:
+                providers = ["CPUExecutionProvider"]
+
+            load_kwargs = {"providers": providers}
+            if model_path:
+                load_kwargs["path"] = model_path
+
+            self.model = onnx_asr.load_model(model_name, **load_kwargs)
 
             # Check if requested CUDA provider was actually available
             if self.settings.execution_provider == "cuda":
@@ -89,10 +110,9 @@ class Parakeet:
             self.printr.toast_error(
                 f"Failed to initialize Parakeet: {e}"
             )
-        finally:
-            self._loading = False
 
-    def __unload_model(self):
+    def unload(self):
+        """Unload the model and free all resources. Called by SttProviderManager."""
         if self.model is not None:
             self.printr.print(
                 "Parakeet: Unloading current model...",
@@ -100,8 +120,46 @@ class Parakeet:
             )
             del self.model
             self.model = None
+            gc.collect()
 
-    def __transcribe_remote(self, filename: str) -> Optional[ParakeetTranscript]:
+    def transcribe(
+        self,
+        config: ParakeetSttConfig,
+        filename: str,
+    ) -> Optional[ParakeetTranscript]:
+        if not self.settings.run_locally:
+            return self._transcribe_remote(filename)
+
+        if self._loading:
+            self.printr.toast_error(
+                "Parakeet model is still loading. Please wait and try again."
+            )
+            return None
+
+        if not self.model:
+            self.printr.toast_error(
+                "Parakeet model is not loaded. Check STT settings."
+            )
+            return None
+
+        try:
+            text = self.model.recognize(filename)
+
+            if isinstance(text, list):
+                text = " ".join(text)
+
+            return ParakeetTranscript(text=text.strip())
+
+        except FileNotFoundError:
+            self.printr.toast_error(
+                f"Parakeet: file to transcribe '{filename}' not found."
+            )
+        except Exception as e:
+            self.printr.toast_error(f"Parakeet failed to transcribe. Error: {e}")
+
+        return None
+
+    def _transcribe_remote(self, filename: str) -> Optional[ParakeetTranscript]:
         """POST audio file to remote Parakeet server for transcription."""
         host = (self.settings.host or "localhost").strip().rstrip("/")
         if not host.startswith(("http://", "https://")):
@@ -127,7 +185,7 @@ class Parakeet:
             )
         except requests.Timeout:
             self.printr.toast_error(
-                f"Parakeet remote: Request timed out after 30s."
+                "Parakeet remote: Request timed out after 30s."
             )
         except requests.HTTPError as e:
             self.printr.toast_error(
@@ -142,107 +200,6 @@ class Parakeet:
                 f"Parakeet remote transcription failed: {e}"
             )
         return None
-
-    def transcribe(
-        self,
-        config: ParakeetSttConfig,
-        filename: str,
-    ) -> Optional[ParakeetTranscript]:
-        if not self.settings.run_locally:
-            return self.__transcribe_remote(filename)
-
-        if self._loading:
-            self.printr.toast_error(
-                "Parakeet model is still loading. Please wait and try again."
-            )
-            return None
-
-        if not self.model:
-            self.printr.toast_error(
-                "Parakeet model is not loaded. Enable Parakeet in settings first."
-            )
-            return None
-
-        try:
-            text = self.model.recognize(filename)
-
-            if isinstance(text, list):
-                text = " ".join(text)
-
-            return ParakeetTranscript(text=text.strip())
-
-        except FileNotFoundError:
-            self.printr.toast_error(
-                f"Parakeet: file to transcribe '{filename}' not found."
-            )
-        except Exception as e:
-            self.printr.toast_error(f"Parakeet failed to transcribe. Error: {e}")
-
-        return None
-
-    async def update_settings_async(self, settings: ParakeetSettings):
-        """Async version that runs model loading in a thread to avoid blocking the event loop."""
-        old = self.settings
-        self.settings = settings
-
-        if not settings.enable:
-            if old.enable and old.run_locally:
-                self.__unload_model()
-            return
-
-        if settings.run_locally:
-            needs_reload = (
-                not old.enable
-                or not old.run_locally
-                or old.model_variant != settings.model_variant
-                or old.execution_provider != settings.execution_provider
-            )
-            if needs_reload:
-                self.printr.print(
-                    "Parakeet settings changed, reloading model...",
-                    server_only=True,
-                )
-                await asyncio.to_thread(self.__load_model)
-        else:
-            if old.run_locally:
-                self.__unload_model()
-            self.printr.print(
-                f"Parakeet remote mode: {settings.host}:{settings.port}",
-                server_only=True,
-            )
-
-    def update_settings(self, settings: ParakeetSettings):
-        old = self.settings
-        self.settings = settings
-
-        if not settings.enable:
-            # Disabled — unload if needed
-            if old.enable and old.run_locally:
-                self.__unload_model()
-            return
-
-        if settings.run_locally:
-            # Local mode — load model if switching to local or settings changed
-            needs_reload = (
-                not old.enable
-                or not old.run_locally
-                or old.model_variant != settings.model_variant
-                or old.execution_provider != settings.execution_provider
-            )
-            if needs_reload:
-                self.printr.print(
-                    "Parakeet settings changed, reloading model...",
-                    server_only=True,
-                )
-                self.__load_model()
-        else:
-            # Remote mode — unload local model if it was loaded
-            if old.run_locally:
-                self.__unload_model()
-            self.printr.print(
-                f"Parakeet remote mode: {settings.host}:{settings.port}",
-                server_only=True,
-            )
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass
