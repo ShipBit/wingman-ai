@@ -11,61 +11,22 @@ from api.interface import (
 )
 from services.printr import Printr
 
-MODELS_DIR = "faster-whisper-models"
-
 
 class FasterWhisper:
-    def __init__(
-        self,
-        settings: FasterWhisperSettings,
-        app_root_path: str,
-        app_is_bundled: bool,
-    ):
+    def __init__(self, settings: FasterWhisperSettings):
         self.printr = Printr()
         self.settings = settings
         self.model: Optional[WhisperModel] = None
 
-        # move one dir up, out of _internal (if bundled)
-        app_dir = path.dirname(app_root_path) if app_is_bundled else app_root_path
-        self.models_dir = path.join(app_dir, MODELS_DIR)
+    def load(self, model_dir: str):
+        """Load the FasterWhisper model. Called by SttProviderManager.
 
-        if self.settings.enable:
-            self.__update_model()
+        Args:
+            model_dir: Directory containing model files (from ModelDownloader).
+        """
+        self.unload()
 
-    def __unload_model(self):
-        """Unload the current model to free VRAM."""
-        if self.model is not None:
-            self.printr.print(
-                "FasterWhisper: Unloading current model to free VRAM...",
-                server_only=True,
-            )
-            del self.model
-            self.model = None
-
-            # Force garbage collection to release memory
-            gc.collect()
-
-            # Clear CUDA cache if using GPU
-            try:
-                import torch
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()
-            except ImportError:
-                pass  # torch not available, skip CUDA cleanup
-            except Exception as e:
-                # any other CUDA-related cleanup error should not crash model reload
-                self.printr.print(
-                    f"FasterWhisper: CUDA cleanup failed during model unload: {e}",
-                    server_only=True,
-                    color=LogType.WARNING,
-                )
-
-    def __update_model(self):
-        # Unload the existing model first to free VRAM
-        self.__unload_model()
-
-        model_file = path.join(self.models_dir, self.settings.model_size)
+        model_file = path.join(model_dir, self.settings.model_size)
         model = model_file if path.exists(model_file) else self.settings.model_size
 
         try:
@@ -83,6 +44,32 @@ class FasterWhisper:
             self.printr.toast_error(
                 f"Failed to initialize FasterWhisper with model {model_file}. Error: {e}"
             )
+
+    def unload(self):
+        """Unload the current model to free VRAM. Called by SttProviderManager."""
+        if self.model is not None:
+            self.printr.print(
+                "FasterWhisper: Unloading current model to free VRAM...",
+                server_only=True,
+            )
+            del self.model
+            self.model = None
+
+            gc.collect()
+
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()
+            except ImportError:
+                pass
+            except Exception as e:
+                self.printr.print(
+                    f"FasterWhisper: CUDA cleanup failed during model unload: {e}",
+                    server_only=True,
+                    color=LogType.WARNING,
+                )
 
     def transcribe(
         self,
@@ -126,29 +113,6 @@ class FasterWhisper:
             self.printr.toast_error(f"FasterWhisper failed to transcribe. Error: {e}")
 
         return None
-
-    def update_settings(self, settings: FasterWhisperSettings):
-        if self.settings == settings:
-            self.printr.print("FasterWhisper settings unchanged.", server_only=True)
-            return
-
-        was_enabled = self.settings.enable
-        self.settings = settings
-
-        if not settings.enable:
-            if was_enabled:
-                self.printr.print(
-                    "FasterWhisper disabled, unloading model...",
-                    server_only=True,
-                )
-                self.__unload_model()
-            return
-
-        self.printr.print(
-            "FasterWhisper settings updated, reloading model...",
-            server_only=True,
-        )
-        self.__update_model()
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass
