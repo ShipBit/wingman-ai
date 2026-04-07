@@ -66,6 +66,7 @@ class SettingsService:
         xvasynth: XVASynth,
         pocket_tts: PocketTTS,
         local_ai_service: LocalAiService = None,
+        stt_provider_manager=None,
     ):
         self.whispercpp = whispercpp
         self.fasterwhisper = fasterwhisper
@@ -73,6 +74,7 @@ class SettingsService:
         self.xvasynth = xvasynth
         self.pocket_tts = pocket_tts
         self.local_ai_service = local_ai_service
+        self.stt_provider_manager = stt_provider_manager
 
     # GET /settings
     def get_settings(self):
@@ -87,26 +89,41 @@ class SettingsService:
     async def save_settings(self, settings: SettingsConfig):
         old = deepcopy(self.config_manager.settings_config)
 
-        # Mutual exclusion: FasterWhisper and Parakeet
-        fw = settings.voice_activation.fasterwhisper
-        pk = settings.voice_activation.parakeet
-        old_fw = old.voice_activation.fasterwhisper
-        old_pk = old.voice_activation.parakeet
-
-        if fw.enable and not old_fw.enable:
-            # FasterWhisper was just enabled -> disable Parakeet
-            pk.enable = False
-            settings.voice_activation.stt_provider = (
-                VoiceActivationSttProvider.FASTER_WHISPER
-            )
-            self.config_manager.cascade_local_stt_provider(SttProvider.FASTER_WHISPER)
-        elif pk.enable and not old_pk.enable:
-            # Parakeet was just enabled -> disable FasterWhisper
-            fw.enable = False
-            settings.voice_activation.stt_provider = (
-                VoiceActivationSttProvider.PARAKEET
-            )
-            self.config_manager.cascade_local_stt_provider(SttProvider.PARAKEET)
+        # STT provider switch — route through SttProviderManager
+        old_stt = old.voice_activation.stt_provider
+        new_stt = settings.voice_activation.stt_provider
+        if new_stt != old_stt and self.stt_provider_manager:
+            # Provider changed — let the manager handle unload/load
+            await self.stt_provider_manager.switch_provider(new_stt)
+            # Cascade the local stt_provider to wingman configs
+            if new_stt == VoiceActivationSttProvider.PARAKEET:
+                self.config_manager.cascade_local_stt_provider(SttProvider.PARAKEET)
+            elif new_stt == VoiceActivationSttProvider.FASTER_WHISPER:
+                self.config_manager.cascade_local_stt_provider(SttProvider.FASTER_WHISPER)
+        elif new_stt == VoiceActivationSttProvider.PARAKEET:
+            # Same provider, check if parakeet settings changed
+            old_pk = old.voice_activation.parakeet
+            new_pk = settings.voice_activation.parakeet
+            if (old_pk.model_variant != new_pk.model_variant
+                or old_pk.execution_provider != new_pk.execution_provider
+                or old_pk.run_locally != new_pk.run_locally):
+                self.parakeet.settings = new_pk
+                if self.stt_provider_manager:
+                    await self.stt_provider_manager.switch_provider(new_stt)
+            else:
+                self.parakeet.settings = new_pk
+        elif new_stt == VoiceActivationSttProvider.FASTER_WHISPER:
+            # Same provider, check if fasterwhisper settings changed
+            old_fw = old.voice_activation.fasterwhisper
+            new_fw = settings.voice_activation.fasterwhisper
+            if (old_fw.model_size != new_fw.model_size
+                or old_fw.device != new_fw.device
+                or old_fw.compute_type != new_fw.compute_type):
+                self.fasterwhisper.settings = new_fw
+                if self.stt_provider_manager:
+                    await self.stt_provider_manager.switch_provider(new_stt)
+            else:
+                self.fasterwhisper.settings = new_fw
 
         # audio devices
         if (
@@ -130,22 +147,6 @@ class SettingsService:
             )
             return
         self.whispercpp.update_settings(settings=settings.voice_activation.whispercpp)
-
-        # FasterWhisper
-        if not self.fasterwhisper:
-            self.printr.toast_error(
-                "FasterWhisper is not initialized. Please run SettingsService.initialize()",
-            )
-            return
-        self.fasterwhisper.update_settings(
-            settings=settings.voice_activation.fasterwhisper
-        )
-
-        # Parakeet (async to avoid blocking event loop during model downloads)
-        if self.parakeet:
-            await self.parakeet.update_settings_async(
-                settings=settings.voice_activation.parakeet
-            )
 
         # XVASynth
         if not self.xvasynth:
@@ -220,6 +221,10 @@ class SettingsService:
         # update running wingmen
         for wingman in self.config_service.tower.wingmen:
             await wingman.update_settings(settings=self.config_manager.settings_config)
+
+    def save_settings_to_disk(self):
+        """Persist current settings to disk without triggering provider updates."""
+        self.config_manager.save_settings_config()
 
     async def set_audio_devices(
         self, input_device: Optional[int] = None, output_device: Optional[int] = None
