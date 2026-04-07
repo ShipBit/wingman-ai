@@ -1,0 +1,180 @@
+import asyncio
+import os
+from os import path
+from typing import Callable, Optional
+
+import requests
+
+from api.enums import LogType
+from services.printr import Printr
+
+printr = Printr()
+
+
+class ModelDownloader:
+    """Generic model download service with progress reporting.
+
+    Manages the unified models/ directory and handles downloads from
+    HuggingFace Hub and direct URLs with consistent progress callbacks.
+    """
+
+    def __init__(self, models_root: str):
+        self.models_root = models_root
+        if not path.exists(models_root):
+            os.makedirs(models_root)
+
+    def get_model_dir(self, category: str) -> str:
+        """Return the subdirectory for a model category, creating it if needed.
+
+        Args:
+            category: Subdirectory name (e.g., "parakeet", "faster-whisper", "local-ai")
+        """
+        category_dir = path.join(self.models_root, category)
+        if not path.exists(category_dir):
+            os.makedirs(category_dir)
+        return category_dir
+
+    def models_exist(self, category: str, expected_files: list[str]) -> bool:
+        """Check if all expected model files exist in the category directory."""
+        category_dir = self.get_model_dir(category)
+        return all(path.exists(path.join(category_dir, f)) for f in expected_files)
+
+    async def download_huggingface(
+        self,
+        repo_id: str,
+        category: str,
+        allow_patterns: list[str] | None = None,
+        on_progress: Optional[Callable[[str, float, float, float], None]] = None,
+    ) -> str:
+        """Download model from HuggingFace Hub with progress tracking.
+
+        Args:
+            repo_id: HuggingFace repository ID (e.g., "istupakov/parakeet-tdt-0.6b-v3-onnx")
+            category: Subdirectory name under models/
+            allow_patterns: File patterns to download (None = all)
+            on_progress: Callback (filename, percent, downloaded_mb, total_mb)
+
+        Returns:
+            Local directory path where files were downloaded.
+        """
+        local_dir = self.get_model_dir(category)
+        loop = asyncio.get_event_loop()
+
+        def _download():
+            from huggingface_hub import snapshot_download
+
+            return snapshot_download(
+                repo_id,
+                local_dir=local_dir,
+                allow_patterns=allow_patterns,
+            )
+
+        printr.print(
+            f"Downloading model from {repo_id}...",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+        try:
+            result_path = await loop.run_in_executor(None, _download)
+            printr.print(
+                f"Download complete: {repo_id}",
+                color=LogType.POSITIVE,
+                server_only=True,
+            )
+            return result_path
+        except Exception as e:
+            printr.print(
+                f"Failed to download {repo_id}: {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            raise
+
+    async def download_file(
+        self,
+        url: str,
+        category: str,
+        filename: str,
+        on_progress: Optional[Callable[[str, float, float, float], None]] = None,
+    ) -> str:
+        """Download a single file via HTTP with progress tracking.
+
+        Args:
+            url: Direct download URL
+            category: Subdirectory name under models/
+            filename: Target filename
+            on_progress: Callback (filename, percent, downloaded_mb, total_mb)
+
+        Returns:
+            Local file path.
+        """
+        category_dir = self.get_model_dir(category)
+        target_path = path.join(category_dir, filename)
+
+        if path.exists(target_path):
+            printr.print(
+                f"Model already exists: {filename}",
+                color=LogType.INFO,
+                server_only=True,
+            )
+            return target_path
+
+        loop = asyncio.get_event_loop()
+
+        def _download():
+            temp_path = target_path + ".part"
+            try:
+                response = requests.get(url, stream=True, timeout=30)
+                response.raise_for_status()
+
+                total_size = int(response.headers.get("content-length", 0))
+                downloaded = 0
+                last_callback_pct = -2
+                total_mb = total_size // (1024 * 1024) if total_size > 0 else 0
+
+                with open(temp_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            pct = int(downloaded / total_size * 100)
+                            downloaded_mb = downloaded // (1024 * 1024)
+                            if on_progress and pct - last_callback_pct >= 2:
+                                on_progress(filename, pct, downloaded_mb, total_mb)
+                                last_callback_pct = pct
+
+                if path.exists(target_path):
+                    os.remove(target_path)
+                os.rename(temp_path, target_path)
+                return target_path
+
+            except Exception:
+                if path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+                raise
+
+        printr.print(
+            f"Downloading {filename}...",
+            color=LogType.INFO,
+            server_only=True,
+        )
+
+        try:
+            result = await loop.run_in_executor(None, _download)
+            printr.print(
+                f"Download complete: {filename}",
+                color=LogType.POSITIVE,
+                server_only=True,
+            )
+            return result
+        except Exception as e:
+            printr.print(
+                f"Failed to download {filename}: {e}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            raise
