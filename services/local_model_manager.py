@@ -11,7 +11,6 @@ import requests
 
 from api.enums import LogType
 from api.interface import LlamaCppSettings
-from services.file import get_local_models_dir
 from services.printr import Printr
 
 printr = Printr()
@@ -82,9 +81,18 @@ class LocalModelManager:
 
     def __init__(self, settings: LlamaCppSettings):
         self.settings = settings
-        self.models_dir = get_local_models_dir()
+        self.models_dir = self._get_models_dir()
         self._downloading = False
         self._download_progress: dict = {}  # {file, pct, downloaded_mb, total_mb}
+
+    @staticmethod
+    def _get_models_dir() -> str:
+        from services.file import get_models_dir
+        models_root = get_models_dir()
+        local_ai_dir = os.path.join(models_root, "local-ai")
+        if not os.path.exists(local_ai_dir):
+            os.makedirs(local_ai_dir)
+        return local_ai_dir
 
     def update_settings(self, new_settings: LlamaCppSettings):
         self.settings = new_settings
