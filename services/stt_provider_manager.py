@@ -1,12 +1,12 @@
 import asyncio
 import os
 import platform
-from typing import Callable, Optional
+from typing import Awaitable, Callable, Optional
 
 from api.enums import LogType, VoiceActivationSttProvider
 from api.interface import ParakeetSttConfig, FasterWhisperSttConfig
 from providers.faster_whisper import FasterWhisper
-from providers.parakeet import Parakeet, MODEL_VARIANT_MAP
+from providers.parakeet import Parakeet
 from services.model_downloader import ModelDownloader
 from services.printr import Printr
 from services.system_manager import SystemManager
@@ -42,12 +42,12 @@ class SttProviderManager:
 
     async def initialize(
         self,
-        on_status: Optional[Callable[[str, float | None], None]] = None,
+        on_status: Optional[Callable[[str, float | None], Awaitable[None] | None]] = None,
     ):
         """Full STT startup sequence.
 
         Args:
-            on_status: Callback (message, progress_or_none) for UI updates.
+            on_status: Async callback (message, progress_or_none) for UI updates.
         """
         va_settings = self.settings_service.settings.voice_activation
         provider = va_settings.stt_provider
@@ -69,7 +69,7 @@ class SttProviderManager:
 
     async def _initialize_parakeet(
         self,
-        on_status: Optional[Callable[[str, float | None], None]] = None,
+        on_status: Optional[Callable[[str, float | None], Awaitable[None] | None]] = None,
     ):
         """Download and initialize Parakeet."""
         pk_settings = self.settings_service.settings.voice_activation.parakeet
@@ -79,7 +79,7 @@ class SttProviderManager:
 
         # Download model
         if on_status:
-            on_status("Downloading STT model (Parakeet)...", None)
+            await on_status("Downloading STT model (Parakeet)...", None)
 
         variant = pk_settings.model_variant
         repo_id = PARAKEET_REPO_MAP.get(variant)
@@ -91,14 +91,34 @@ class SttProviderManager:
 
         model_path = None
         try:
-            model_path = await self.model_downloader.download_huggingface(
-                repo_id=repo_id,
-                category="parakeet",
-                on_progress=lambda f, pct, dl, total: (
-                    on_status(f"Downloading STT model... ({dl} / {total} MB)", pct / 100.0)
-                    if on_status else None
-                ),
+            # Progress polling (same pattern as Local AI download in wingman_core)
+            progress_state = {}
+
+            def on_download_progress(filename, pct, downloaded_mb, total_mb):
+                progress_state["pct"] = pct
+                progress_state["dl"] = downloaded_mb
+                progress_state["total"] = total_mb
+
+            download_task = asyncio.create_task(
+                self.model_downloader.download_huggingface(
+                    repo_id=repo_id,
+                    category="parakeet",
+                    on_progress=on_download_progress,
+                )
             )
+
+            while not download_task.done():
+                if progress_state and on_status:
+                    pct = progress_state.get("pct", 0)
+                    dl = progress_state.get("dl", 0)
+                    total = progress_state.get("total", 0)
+                    await on_status(
+                        f"Downloading STT model... ({dl} / {total} MB)",
+                        pct / 100.0 if pct else None,
+                    )
+                await asyncio.sleep(0.5)
+
+            model_path = await download_task
         except Exception as e:
             self.printr.toast_error(
                 f"Could not download the Parakeet STT model. "
@@ -110,7 +130,7 @@ class SttProviderManager:
 
         # Load model
         if on_status:
-            on_status("Initializing speech-to-text...", None)
+            await on_status("Initializing speech-to-text...", None)
 
         # Add brief delay for CUDA to allow GPU memory cleanup
         if pk_settings.execution_provider == "cuda":
@@ -122,17 +142,17 @@ class SttProviderManager:
 
         # Health check
         if on_status:
-            on_status("Verifying speech-to-text...", None)
+            await on_status("Verifying speech-to-text...", None)
 
         await self._health_check_parakeet()
 
     async def _initialize_fasterwhisper(
         self,
-        on_status: Optional[Callable[[str, float | None], None]] = None,
+        on_status: Optional[Callable[[str, float | None], Awaitable[None] | None]] = None,
     ):
         """Download and initialize FasterWhisper."""
         if on_status:
-            on_status("Initializing speech-to-text (FasterWhisper)...", None)
+            await on_status("Initializing speech-to-text (FasterWhisper)...", None)
 
         model_dir = self.model_downloader.get_model_dir("faster-whisper")
 
@@ -142,7 +162,7 @@ class SttProviderManager:
 
         # Health check
         if on_status:
-            on_status("Verifying speech-to-text...", None)
+            await on_status("Verifying speech-to-text...", None)
 
         await self._health_check_fasterwhisper()
 

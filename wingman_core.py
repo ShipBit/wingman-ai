@@ -70,8 +70,11 @@ from services.file import (
     get_custom_voices_dir,
     get_custom_skills_dir,
     get_local_models_dir,
+    get_models_dir,
     get_prompt,
 )
+from services.model_downloader import ModelDownloader
+from services.stt_provider_manager import SttProviderManager
 from services.local_ai_service import LocalAiService
 from services.token_utils import count_tokens
 from services.local_model_manager import LocalModelManager
@@ -671,14 +674,25 @@ class WingmanCore(WebSocketUser):
         )
         self.fasterwhisper = FasterWhisper(
             settings=self.settings_service.settings.voice_activation.fasterwhisper,
-            app_root_path=app_root_path,
-            app_is_bundled=app_is_bundled,
         )
         self.parakeet = Parakeet(
             settings=self.settings_service.settings.voice_activation.parakeet,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
         self.pocket_tts = PocketTTS(settings=self.settings_service.settings.pocket_tts)
+
+        # Unified model management
+        self.model_downloader = ModelDownloader(models_root=get_models_dir())
+
+        # STT provider lifecycle manager
+        self.stt_provider_manager = SttProviderManager(
+            settings_service=self.settings_service,
+            system_manager=self.system_manager,
+            model_downloader=self.model_downloader,
+            parakeet=self.parakeet,
+            fasterwhisper=self.fasterwhisper,
+            app_root_path=app_root_path,
+        )
 
         # Local AI (llama.cpp for summarization + embedding)
         llama_cpp_settings = self.settings_service.settings.llama_cpp
@@ -701,6 +715,7 @@ class WingmanCore(WebSocketUser):
             xvasynth=self.xvasynth,
             pocket_tts=self.pocket_tts,
             local_ai_service=self.local_ai_service,
+            stt_provider_manager=self.stt_provider_manager,
         )
 
         self.voice_service = VoiceService(
@@ -725,10 +740,36 @@ class WingmanCore(WebSocketUser):
             self.audio_recorder.update_input_stream()
 
     async def startup(self):
+        # 1. Detect hardware
+        await self.set_core_state(
+            CoreState.LOADING_CONFIG,
+            message="Detecting hardware...",
+        )
+        self.system_manager._detect_gpu()
+
+        # 2. STT initialization (settings-aware)
+        async def stt_status(message: str, progress: float | None = None):
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message=message,
+                progress=progress,
+            )
+
+        await self.stt_provider_manager.initialize(on_status=stt_status)
+
+        # 3. Voice activation
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
-        # Auto-download local AI models if run_locally is on but models are missing
+        # 4. TTS initialization (settings-aware)
+        pocket_settings = self.settings_service.settings.pocket_tts
+        if pocket_settings.run_locally:
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message="Initializing text-to-speech...",
+            )
+
+        # 5. Local AI download + init (settings-aware)
         llama_settings = self.settings_service.settings.llama_cpp
         if (
             llama_settings.run_locally
@@ -740,7 +781,6 @@ class WingmanCore(WebSocketUser):
                 server_only=True,
             )
 
-            # Progress callback — store latest progress, then flush to clients
             progress_state = {}
 
             def on_download_progress(filename, pct, downloaded_mb, total_mb):
@@ -749,14 +789,13 @@ class WingmanCore(WebSocketUser):
                 progress_state["downloaded_mb"] = downloaded_mb
                 progress_state["total_mb"] = total_mb
 
-            # Kick off download with progress callback
             download_task = asyncio.create_task(
                 self.local_model_manager.download_models(
-                    on_progress=on_download_progress
+                    cuda_available=self.system_manager.is_cuda_available(),
+                    on_progress=on_download_progress,
                 )
             )
 
-            # Poll progress_state and broadcast updates while download runs
             while not download_task.done():
                 if progress_state:
                     fname = progress_state.get("filename", "")
@@ -770,23 +809,21 @@ class WingmanCore(WebSocketUser):
                     )
                     await self.set_core_state(
                         CoreState.LOADING_CONFIG,
-                        message=f"Downloading {short_name}... ({dl_mb} / {t_mb} MB)",
+                        message=f"Downloading Local AI model ({short_name})... ({dl_mb} / {t_mb} MB)",
                         progress=pct / 100.0 if pct else None,
                     )
                 await asyncio.sleep(0.5)
 
-            # Await to propagate exceptions
             await download_task
 
-        # Initialize local AI service (loads models if run_locally + available)
         if llama_settings.run_locally and self.local_model_manager.models_available():
             await self.set_core_state(
                 CoreState.LOADING_CONFIG,
-                message="Loading local AI models...",
+                message="Initializing Local AI...",
             )
         await self.local_ai_service.initialize()
 
-        # Start HUD Server if enabled
+        # 6. HUD server
         hud_settings = getattr(self.settings_service.settings, "hud_server", None)
         if hud_settings and hud_settings.enabled:
             await self.set_core_state(
@@ -2700,11 +2737,12 @@ class WingmanCore(WebSocketUser):
         """Test Parakeet by transcribing a short audio sample (locally or remotely)."""
         settings = self.settings_service.settings.voice_activation.parakeet
 
-        if not settings.enable:
+        stt_provider = self.settings_service.settings.voice_activation.stt_provider
+        if stt_provider != VoiceActivationSttProvider.PARAKEET:
             return TestConnectionResult(
                 success=False,
                 provider="parakeet",
-                error="Parakeet is not enabled.",
+                error="Parakeet is not the active STT provider.",
             )
 
         wav_path = os.path.join(self.app_root_path, "audio_samples", "beep.wav")
@@ -2721,7 +2759,7 @@ class WingmanCore(WebSocketUser):
                 return TestConnectionResult(
                     success=False,
                     provider="parakeet",
-                    error="Parakeet model is not loaded. Enable Parakeet in settings first.",
+                    error="Parakeet model is not loaded. Check STT settings.",
                 )
 
         try:
