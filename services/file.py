@@ -105,6 +105,24 @@ def get_local_models_dir() -> str:
     return local_models_path
 
 
+def get_models_dir() -> str:
+    """Get the path to the unified models directory.
+
+    NOT versioned - models persist across Wingman AI updates.
+    Location: APPDATA/WingmanAI/models/
+    """
+    dirs = PlatformDirs(
+        appname=APP_NAME,
+        appauthor=APP_AUTHOR,
+        ensure_exists=True,
+        roaming=True,
+    )
+    models_path = path.join(dirs.user_data_dir, "models")
+    if not path.exists(models_path):
+        makedirs(models_path)
+    return models_path
+
+
 def get_generated_files_dir(skill_name: str) -> str:
     """Get the path to a skill's generated files directory.
 
