@@ -95,11 +95,19 @@ class SettingsService:
         if new_stt != old_stt and self.stt_provider_manager:
             # Provider changed — let the manager handle unload/load
             await self.stt_provider_manager.switch_provider(new_stt)
-            # Cascade the local stt_provider to wingman configs
+            # Cascade the local stt_provider to wingman configs (disk + defaults)
             if new_stt == VoiceActivationSttProvider.PARAKEET:
-                self.config_manager.cascade_local_stt_provider(SttProvider.PARAKEET)
+                new_stt_provider = SttProvider.PARAKEET
+                self.config_manager.cascade_local_stt_provider(new_stt_provider)
             elif new_stt == VoiceActivationSttProvider.FASTER_WHISPER:
-                self.config_manager.cascade_local_stt_provider(SttProvider.FASTER_WHISPER)
+                new_stt_provider = SttProvider.FASTER_WHISPER
+                self.config_manager.cascade_local_stt_provider(new_stt_provider)
+            else:
+                new_stt_provider = None
+            # Also update running wingmen's in-memory config
+            if new_stt_provider and self.config_service.tower:
+                for wingman in self.config_service.tower.wingmen:
+                    wingman.config.features.stt_provider = new_stt_provider
         elif new_stt == VoiceActivationSttProvider.PARAKEET:
             # Same provider, check if parakeet settings changed
             old_pk = old.voice_activation.parakeet
