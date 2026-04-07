@@ -42,7 +42,7 @@ class SttProviderManager:
 
     async def initialize(
         self,
-        on_status: Optional[Callable[[str, float | None], Awaitable[None] | None]] = None,
+        on_status: Optional[Callable[[str, float | None], Awaitable[None]]] = None,
     ):
         """Full STT startup sequence.
 
@@ -69,7 +69,7 @@ class SttProviderManager:
 
     async def _initialize_parakeet(
         self,
-        on_status: Optional[Callable[[str, float | None], Awaitable[None] | None]] = None,
+        on_status: Optional[Callable[[str, float | None], Awaitable[None]]] = None,
     ):
         """Download and initialize Parakeet."""
         pk_settings = self.settings_service.settings.voice_activation.parakeet
@@ -78,9 +78,6 @@ class SttProviderManager:
         self._auto_detect_execution_provider(pk_settings)
 
         # Download model
-        if on_status:
-            await on_status("Downloading STT model (Parakeet)...", None)
-
         variant = pk_settings.model_variant
         repo_id = PARAKEET_REPO_MAP.get(variant)
         if not repo_id:
@@ -91,34 +88,13 @@ class SttProviderManager:
 
         model_path = None
         try:
-            # Progress polling (same pattern as Local AI download in wingman_core)
-            progress_state = {}
+            if on_status:
+                await on_status("Downloading STT model (Parakeet)...", None)
 
-            def on_download_progress(filename, pct, downloaded_mb, total_mb):
-                progress_state["pct"] = pct
-                progress_state["dl"] = downloaded_mb
-                progress_state["total"] = total_mb
-
-            download_task = asyncio.create_task(
-                self.model_downloader.download_huggingface(
-                    repo_id=repo_id,
-                    category="parakeet",
-                    on_progress=on_download_progress,
-                )
+            model_path = await self.model_downloader.download_huggingface(
+                repo_id=repo_id,
+                category="parakeet",
             )
-
-            while not download_task.done():
-                if progress_state and on_status:
-                    pct = progress_state.get("pct", 0)
-                    dl = progress_state.get("dl", 0)
-                    total = progress_state.get("total", 0)
-                    await on_status(
-                        f"Downloading STT model... ({dl} / {total} MB)",
-                        pct / 100.0 if pct else None,
-                    )
-                await asyncio.sleep(0.5)
-
-            model_path = await download_task
         except Exception as e:
             self.printr.toast_error(
                 f"Could not download the Parakeet STT model. "
@@ -148,7 +124,7 @@ class SttProviderManager:
 
     async def _initialize_fasterwhisper(
         self,
-        on_status: Optional[Callable[[str, float | None], Awaitable[None] | None]] = None,
+        on_status: Optional[Callable[[str, float | None], Awaitable[None]]] = None,
     ):
         """Download and initialize FasterWhisper."""
         if on_status:

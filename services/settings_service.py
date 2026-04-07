@@ -93,6 +93,10 @@ class SettingsService:
         old_stt = old.voice_activation.stt_provider
         new_stt = settings.voice_activation.stt_provider
         if new_stt != old_stt and self.stt_provider_manager:
+            # Apply new settings BEFORE switching so the manager reads fresh values
+            self.parakeet.settings = settings.voice_activation.parakeet
+            self.fasterwhisper.settings = settings.voice_activation.fasterwhisper
+            self.config_manager.settings_config.voice_activation = settings.voice_activation
             # Provider changed — let the manager handle unload/load
             await self.stt_provider_manager.switch_provider(new_stt)
             # Cascade the local stt_provider to wingman configs (disk + defaults)

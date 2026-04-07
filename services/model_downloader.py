@@ -44,15 +44,13 @@ class ModelDownloader:
         repo_id: str,
         category: str,
         allow_patterns: list[str] | None = None,
-        on_progress: Optional[Callable[[str, float, float, float], None]] = None,
     ) -> str:
-        """Download model from HuggingFace Hub with progress tracking.
+        """Download model from HuggingFace Hub.
 
         Args:
             repo_id: HuggingFace repository ID (e.g., "istupakov/parakeet-tdt-0.6b-v3-onnx")
             category: Subdirectory name under models/
             allow_patterns: File patterns to download (None = all)
-            on_progress: Callback (filename, percent, downloaded_mb, total_mb)
 
         Returns:
             Local directory path where files were downloaded.
@@ -61,7 +59,13 @@ class ModelDownloader:
         loop = asyncio.get_event_loop()
 
         def _download():
-            from huggingface_hub import snapshot_download
+            try:
+                from huggingface_hub import snapshot_download
+            except ImportError as e:
+                raise ImportError(
+                    "huggingface_hub is required for HuggingFace downloads. "
+                    "Install it with: pip install huggingface_hub"
+                ) from e
 
             return snapshot_download(
                 repo_id,

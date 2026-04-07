@@ -745,7 +745,7 @@ class WingmanCore(WebSocketUser):
             CoreState.LOADING_CONFIG,
             message="Detecting hardware...",
         )
-        self.system_manager._detect_gpu()
+        self.system_manager.is_cuda_available()
 
         # 2. STT initialization (settings-aware)
         async def stt_status(message: str, progress: float | None = None):
