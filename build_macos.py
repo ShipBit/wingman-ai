@@ -41,10 +41,6 @@ cmd = [
         ["templates/configs", "templates/configs"]
     ),  # Config templates only
     "--add-data",
-    os.pathsep.join(
-        ["templates/migration", "templates/migration"]
-    ),  # Migration templates
-    "--add-data",
     os.pathsep.join(["audio_samples", "audio_samples"]),
     "--add-data",
     os.pathsep.join(["LICENSE", "."]),
