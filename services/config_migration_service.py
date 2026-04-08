@@ -780,9 +780,9 @@ class ConfigMigrationService:
         self,
         old_version: str,
         new_version: str,
-        migrate_settings: Callable[[dict, dict], dict],
-        migrate_defaults: Callable[[dict, dict], dict],
-        migrate_wingman: Callable[[dict, Optional[dict]], dict],
+        migrate_settings: Callable[[dict], dict],
+        migrate_defaults: Callable[[dict], dict],
+        migrate_wingman: Callable[[dict], dict],
         migrate_secrets: Optional[Callable[[dict], dict]] = None,
         migrate_mcp: Optional[Callable[[dict, dict], dict]] = None,
     ) -> None:
@@ -791,64 +791,57 @@ class ConfigMigrationService:
         new_config_path = path.join(users_dir, new_version, CONFIGS_DIR)
 
         if not path.exists(path.join(users_dir, new_version)):
-            migration_template_path = path.join(
-                self.templates_dir, "migration", new_version
-            )
-            if path.exists(migration_template_path):
-                # Get list of config directories from old version (normalized names)
-                # Include ALL configs regardless of their state (default, undefaulted, or deleted)
-                # because if ANY version exists, we should skip the template
-                old_config_normalized = set()
-                if path.exists(old_config_path):
-                    for item in os.listdir(old_config_path):
-                        item_path = path.join(old_config_path, item)
-                        if path.isdir(item_path) and not item.startswith("."):
-                            # Add ALL configs (including deleted ones) after normalizing
-                            normalized = self.normalize_config_name(item)
-                            old_config_normalized.add(normalized)
-                            self.log(
-                                f"Old config found: {item} (normalized: {normalized})"
+            os.makedirs(new_config_path, exist_ok=True)
+
+            # Build set of normalized old config names for deduplication
+            old_config_normalized = set()
+            if path.exists(old_config_path):
+                for item in os.listdir(old_config_path):
+                    item_path = path.join(old_config_path, item)
+                    if path.isdir(item_path) and not item.startswith("."):
+                        normalized = self.normalize_config_name(item)
+                        old_config_normalized.add(normalized)
+                        self.log(
+                            f"Old config found: {item} (normalized: {normalized})"
+                        )
+
+            # Copy settings.yaml and defaults.yaml from old version
+            # (they'll be transformed by migration callbacks)
+            for config_file in ("settings.yaml", "defaults.yaml"):
+                old_file = path.join(old_config_path, config_file)
+                new_file = path.join(new_config_path, config_file)
+                if path.exists(old_file):
+                    shutil.copyfile(old_file, new_file)
+                    self.log(f"Copied {config_file} from old version")
+
+            # Copy wingman template configs and assets from current templates
+            # (templates/configs/) — only for wingmen the user doesn't already have
+            current_templates_path = path.join(self.templates_dir, CONFIGS_DIR)
+            if path.exists(current_templates_path):
+                for item in os.listdir(current_templates_path):
+                    src_path = path.join(current_templates_path, item)
+                    dst_path = path.join(new_config_path, item)
+                    if item.startswith("."):
+                        continue
+                    if path.isdir(src_path):
+                        # Wingman config directory — skip if user already has it
+                        normalized = self.normalize_config_name(item)
+                        if normalized in old_config_normalized:
+                            self.log_highlight(
+                                f"Skipped template config '{item}' - config exists in old version (normalized: {normalized})"
                             )
+                            continue
+                        shutil.copytree(src_path, dst_path)
+                        self.log(f"Copied new wingman template '{item}' from current templates")
+                    elif not path.isdir(src_path):
+                        # Non-directory files (mcp.template.yaml, default-wingman-avatar.png, etc.)
+                        shutil.copyfile(src_path, dst_path)
+                        self.log(f"Copied '{item}' from current templates")
 
-                # Copy migration template but skip configs that exist in old version (in any state)
-                template_config_path = path.join(migration_template_path, CONFIGS_DIR)
-                new_version_path = path.join(users_dir, new_version)
-
-                # First, copy the entire template structure
-                shutil.copytree(migration_template_path, new_version_path)
-                self.log(
-                    f"{new_version} configs not found during multi-step migration. Copied migration templates from {migration_template_path}."
-                )
-
-                # Now remove template configs that have any version in old configs
-                # (whether default, undefaulted, or deleted)
-                if path.exists(template_config_path):
-                    for item in os.listdir(template_config_path):
-                        item_path = path.join(template_config_path, item)
-                        new_item_path = path.join(new_version_path, CONFIGS_DIR, item)
-                        if path.isdir(item_path) and not item.startswith("."):
-                            normalized = self.normalize_config_name(item)
-                            if normalized in old_config_normalized:
-                                # This template config exists in old version (in some form)
-                                # Remove template to avoid duplicates - old version will be migrated
-                                if path.exists(new_item_path):
-                                    shutil.rmtree(new_item_path)
-                                    self.log_highlight(
-                                        f"Skipped template config '{item}' - config exists in old version (normalized: {normalized})"
-                                    )
-                                # Also remove associated avatar if it exists
-                                avatar_path = path.join(
-                                    new_version_path,
-                                    CONFIGS_DIR,
-                                    item.replace(".yaml", ".png"),
-                                )
-                                if path.exists(avatar_path):
-                                    os.remove(avatar_path)
-            else:
-                self.err(f"Migration template not found: {migration_template_path}")
-                raise FileNotFoundError(
-                    f"Migration template not found: {migration_template_path}"
-                )
+            self.log(
+                f"{new_version} configs not found during multi-step migration. "
+                f"Built from old version configs + current templates."
+            )
 
         already_migrated = path.exists(path.join(new_config_path, MIGRATION_LOG))
         if already_migrated:
@@ -892,7 +885,6 @@ class ConfigMigrationService:
                     self.log_highlight("Migrating settings.yaml...")
                     migrated_settings = migrate_settings(
                         old=self.config_manager.read_config(old_file),
-                        new=self.config_manager.read_config(new_file),
                     )
                     try:
                         if new_config_path == self.latest_config_path:
@@ -907,7 +899,6 @@ class ConfigMigrationService:
                     self.log_highlight("Migrating defaults.yaml...")
                     migrated_defaults = migrate_defaults(
                         old=self.config_manager.read_config(old_file),
-                        new=self.config_manager.read_config(new_file),
                     )
                     try:
                         # Only validate on final migration step (current schema may not match intermediate versions)
@@ -941,11 +932,6 @@ class ConfigMigrationService:
                         default_config = self.config_manager.read_default_config()
                         migrated_wingman = migrate_wingman(
                             old=self.config_manager.read_config(old_file),
-                            new=(
-                                self.config_manager.read_config(new_file)
-                                if path.exists(new_file)
-                                else None
-                            ),
                         )
                         # validate the merged config
                         if new_config_path == self.latest_config_path:
