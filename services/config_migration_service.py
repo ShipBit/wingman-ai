@@ -832,6 +832,12 @@ class ConfigMigrationService:
                             )
                             continue
                         shutil.copytree(src_path, dst_path)
+                        # Stamp created_with_version on copied wingman configs
+                        for yaml_file in os.listdir(dst_path):
+                            if yaml_file.endswith(".yaml"):
+                                self.config_manager._stamp_created_with_version(
+                                    path.join(dst_path, yaml_file)
+                                )
                         self.log(f"Copied new wingman template '{item}' from current templates")
                     elif not path.isdir(src_path):
                         # Non-directory files (mcp.template.yaml, default-wingman-avatar.png, etc.)

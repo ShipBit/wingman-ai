@@ -202,10 +202,9 @@ class ConfigManager:
             ):
                 for filename in files:
                     if filename.endswith("template.yaml"):
-                        shutil.copyfile(
-                            path.join(root, filename),
-                            path.join(new_dir, filename.replace(".template", "")),
-                        )
+                        target = path.join(new_dir, filename.replace(".template", ""))
+                        shutil.copyfile(path.join(root, filename), target)
+                        self._stamp_created_with_version(target)
         return ConfigDirInfo(
             name=config_name,
             directory=config_name,
@@ -300,6 +299,8 @@ class ConfigManager:
 
                     if force or (not already_exists and not logical_deleted):
                         shutil.copyfile(path.join(root, filename), new_filepath)
+                        if filename.endswith("template.yaml"):
+                            self._stamp_created_with_version(new_filepath)
                         self.printr.print(
                             f"Created config {new_filepath} from template.",
                             color=LogType.INFO,
@@ -1025,6 +1026,14 @@ class ConfigManager:
             avatar_path if create or path.exists(avatar_path) else default_avatar_path
         )
 
+    def _stamp_created_with_version(self, yaml_path: str) -> None:
+        """Stamp a wingman config file with the current Core version."""
+        with open(yaml_path, "r", encoding="UTF-8") as f:
+            data = yaml.safe_load(f) or {}
+        data["created_with_version"] = LOCAL_VERSION
+        with open(yaml_path, "w", encoding="UTF-8") as f:
+            yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+
     def restore_wingman_from_template(
         self, config_dir: ConfigDirInfo, wingman_file: WingmanConfigFileInfo
     ) -> None:
@@ -1057,11 +1066,7 @@ class ConfigManager:
         shutil.copyfile(template_yaml_path, target_yaml_path)
 
         # Stamp with the current Core version so migrations treat it as fresh.
-        with open(target_yaml_path, "r", encoding="UTF-8") as f:
-            data = yaml.safe_load(f) or {}
-        data["created_with_version"] = LOCAL_VERSION
-        with open(target_yaml_path, "w", encoding="UTF-8") as f:
-            yaml.safe_dump(data, f, sort_keys=False, allow_unicode=True)
+        self._stamp_created_with_version(target_yaml_path)
 
         self.printr.print(
             f"Restored Wingman '{wingman_file.name}' in '{config_dir.name}' from template.",
