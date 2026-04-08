@@ -841,6 +841,9 @@ class ConfigMigrationService:
                         self.log(f"Copied new wingman template '{item}' from current templates")
                     elif not path.isdir(src_path):
                         # Non-directory files (mcp.template.yaml, default-wingman-avatar.png, etc.)
+                        # Skip settings/defaults — already copied from old version above
+                        if item in ("settings.yaml", "defaults.yaml"):
+                            continue
                         shutil.copyfile(src_path, dst_path)
                         self.log(f"Copied '{item}' from current templates")
 
