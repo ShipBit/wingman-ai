@@ -9,38 +9,60 @@ class Migration211To300(BaseMigration):
     old_version = "2_1_1"
     new_version = "3_0_0"
 
-    def migrate_settings(self, old: dict, new: dict) -> dict:
+    def migrate_settings(self, old: dict) -> dict:
         """Migrate settings.yaml from 2.1.1 to 3.0.0."""
         # Add Local AI (llama.cpp) settings
-        if "llama_cpp" not in old and "llama_cpp" in new:
-            old["llama_cpp"] = new["llama_cpp"]
+        if "llama_cpp" not in old:
+            old["llama_cpp"] = {
+                "run_locally": True,
+                "gpu_backend": "cpu",
+                "support_model": "Qwen3.5-2B-Q4_K_M.gguf",
+                "embed_model": "nomic-embed-text-v1.5.f16.gguf",
+                "n_ctx": 4096,
+                "n_threads": 0,
+                "reasoning_effort": 0,
+                "temperature": 0.3,
+                "top_p": 1.0,
+                "support_remote_host": "http://127.0.0.1",
+                "support_remote_port": 49152,
+                "embed_remote_host": "http://127.0.0.1",
+                "embed_remote_port": 49153,
+            }
             self.log("- added new setting: llama_cpp (local AI)")
 
         # Upgrade default summarize model from 0.8B to 2B
         llama = old.get("llama_cpp", {})
         if llama.get("summarize_model") == "Qwen3.5-0.8B-Q4_K_M.gguf":
             llama["summarize_model"] = "Qwen3.5-2B-Q4_K_M.gguf"
-            self.log("- upgraded summarize model: Qwen3.5-0.8B → Qwen3.5-2B")
+            self.log("- upgraded summarize model: Qwen3.5-0.8B \u2192 Qwen3.5-2B")
 
         # Rename summarize_* fields to support_*
         if "summarize_model" in llama:
             llama["support_model"] = llama.pop("summarize_model")
-            self.log("- renamed llama_cpp.summarize_model → support_model")
+            self.log("- renamed llama_cpp.summarize_model \u2192 support_model")
         if "summarize_remote_host" in llama:
             llama["support_remote_host"] = llama.pop("summarize_remote_host")
-            self.log("- renamed llama_cpp.summarize_remote_host → support_remote_host")
+            self.log("- renamed llama_cpp.summarize_remote_host \u2192 support_remote_host")
         if "summarize_remote_port" in llama:
             llama["support_remote_port"] = llama.pop("summarize_remote_port")
-            self.log("- renamed llama_cpp.summarize_remote_port → support_remote_port")
+            self.log("- renamed llama_cpp.summarize_remote_port \u2192 support_remote_port")
 
         # Add Parakeet STT settings
         va = old.get("voice_activation", {})
-        new_va = new.get("voice_activation", {})
-        if "parakeet" not in va and "parakeet" in new_va:
-            va["parakeet"] = new_va["parakeet"]
+        if "parakeet" not in va:
+            va["parakeet"] = {
+                "enable": False,
+                "run_locally": True,
+                "model_variant": "v3",
+                "execution_provider": "cpu",
+                "host": "http://127.0.0.1",
+                "port": 9876,
+            }
             self.log("- added new voice activation setting: parakeet")
-        if "parakeet_config" not in va and "parakeet_config" in new_va:
-            va["parakeet_config"] = new_va["parakeet_config"]
+        if "parakeet_config" not in va:
+            va["parakeet_config"] = {
+                "temperature": 0.0,
+            }
             self.log("- added new voice activation setting: parakeet_config")
 
         # Ensure existing Parakeet configs have the run_locally field
@@ -64,11 +86,13 @@ class Migration211To300(BaseMigration):
 
         return old
 
-    def migrate_defaults(self, old: dict, new: dict) -> dict:
+    def migrate_defaults(self, old: dict) -> dict:
         """Migrate defaults.yaml from 2.1.1 to 3.0.0."""
         # Add per-wingman Parakeet STT config
-        if "parakeet" not in old and "parakeet" in new:
-            old["parakeet"] = new["parakeet"]
+        if "parakeet" not in old:
+            old["parakeet"] = {
+                "temperature": 0.0,
+            }
             self.log("- added new default: parakeet (STT config)")
 
         # Add conversation optimization features
@@ -87,7 +111,7 @@ class Migration211To300(BaseMigration):
 
         return old
 
-    def migrate_wingman(self, old: dict, new: dict) -> dict:
+    def migrate_wingman(self, old: dict) -> dict:
         """Migrate wingman configs from 2.1.1 to 3.0.0."""
         # Add conversation optimization features if wingman has feature overrides
         features = old.get("features")

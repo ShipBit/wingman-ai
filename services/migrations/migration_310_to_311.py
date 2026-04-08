@@ -13,7 +13,7 @@ class Migration310To311(BaseMigration):
     old_version = "3_1_0"
     new_version = "3_1_1"
 
-    def migrate_settings(self, old: dict, new: dict) -> dict:
+    def migrate_settings(self, old: dict) -> dict:
         """Switch STT provider to Parakeet and remove enable flags."""
         va = old.get("voice_activation", {})
 
@@ -37,7 +37,7 @@ class Migration310To311(BaseMigration):
 
         return old
 
-    def migrate_defaults(self, old: dict, new: dict) -> dict:
+    def migrate_defaults(self, old: dict) -> dict:
         """Update defaults stt_provider to parakeet."""
         features = old.get("features", {})
         old_provider = features.get("stt_provider", "fasterwhisper")

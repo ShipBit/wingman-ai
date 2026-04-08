@@ -12,7 +12,7 @@ class Migration300To301(BaseMigration):
     old_version = "3_0_0"
     new_version = "3_0_1"
 
-    def migrate_settings(self, old: dict, new: dict) -> dict:
+    def migrate_settings(self, old: dict) -> dict:
         """Force Qwen3.5-recommended sampling defaults on all users."""
         llama = old.get("llama_cpp", {})
 

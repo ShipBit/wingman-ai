@@ -19,7 +19,6 @@ Major changes:
 """
 
 from os import path
-from typing import Optional
 
 from pydantic import ValidationError
 
@@ -43,6 +42,143 @@ REMOVED_SKILL_MODULES = {
     "skills.ask_perplexity.main",
 }
 
+# System prompt from 2.0.0 template (MCP tool-first architecture)
+_SYSTEM_PROMPT_200 = """\
+# ROLE
+You are a voice-controlled AI assistant. Your name, personality and character are defined in the BACKSTORY section below.
+
+# USER CONTEXT
+Metadata about the user's environment. If the BACKSTORY defines different names for you or the user, use those instead.
+{user_context}
+
+# CHARACTER BACKSTORY
+This defines your personality, speaking style, and role context. It affects HOW you communicate, not WHAT you can do (tools define capabilities).
+{backstory}
+
+**Remember:** Your backstory affects your TONE and PERSONALITY, but never prevents you from using tools. If a user asks you to do something and you have a tool for it, use it - just respond in character.
+
+# OUTPUT FORMAT
+Your responses are BOTH displayed in a UI AND spoken aloud via text-to-speech (TTS).
+
+**Formatting rules:**
+- Use Markdown for visual formatting (links, lists, emphasis) - the UI renders it
+- Write text that sounds natural when spoken aloud
+- Keep responses concise (1-3 sentences unless more detail is needed)
+
+**TTS optimization (your response will be spoken!):**
+- For links, use Markdown: [descriptive text](url) - the UI shows a clickable link, TTS reads just the text
+- **Avoid "click here" or "more information here"**: Integrate links naturally into your sentences so they sound good when spoken (e.g., "You can find more [details about the Cutlass Black](url) on the wiki" instead of "For more info, click [here](url)")
+- Don't read raw data aloud - summarize JSON, code, HTML, XML into plain language
+- For long lists, summarize ("I found 12 items, here are the top 3...")
+- Use normal formatting for dates, times, and prices (TTS handles these well)
+- For very large numbers, round them ("about 1.8 million" not "1,847,293") but only if precision isn't critical
+
+**Example - tool returns JSON:** `{{"status": 200, "items": 47, "name": "Project Alpha"}}`
+- BAD: "The response shows status 200, items 47, name Project Alpha"
+- GOOD: "Project Alpha has 47 items and everything looks good."
+
+# YOUR CAPABILITIES
+Use `activate_capability` to enable capabilities that provide additional tools.
+The tool shows all available options - pick what you need for the task.
+
+**CRITICAL - Act immediately, never ask for confirmation:**
+- If a user's request needs a capability \u2192 activate it AND use its tools in the SAME response
+- NEVER ask "should I...?" or "are you ready?" after activating - just do it
+- Example: User says "look at my screen" \u2192 activate VisionAI \u2192 immediately call analyse_what_you_or_user_sees \u2192 describe what you see
+- Never say "I can't do that" if a relevant capability is available
+
+{skills}
+
+# CONVERSATION STYLE
+- Keep responses brief and efficient
+- Mirror the user's language
+- Execute commands without over-explaining
+- Don't ask if you can "help more" or "assist further"
+
+{ttsprompt}
+"""
+
+# ElevenLabs TTS prompt from 2.0.0 template
+_ELEVENLABS_TTS_PROMPT_200 = """\
+Audio tags make your speech more expressive and human-like. Use them regularly when they fit your personality and the conversation context.
+
+**Emotional delivery** (place before text):
+[excited] [curious] [sarcastic] [mischievously] [crying] [whispers]
+
+**Non-verbal sounds** (place naturally in text):
+[laughs] [sighs] [exhales] [snorts]
+
+**Punctuation for expression:**
+- Ellipses (\u2026) add pauses and weight
+- CAPITALIZATION for emphasis
+- Standard punctuation for natural rhythm
+
+**When to use audio tags:**
+- Match your character's personality from the BACKSTORY - if you're playful, use [laughs] or [mischievously] more often; if serious, use [sighs] when frustrated
+- React emotionally to conversation context - use [excited] for good news, [sighs] for setbacks, [curious] when exploring topics
+- Add non-verbal sounds naturally where a human would - [laughs] at humor, [exhales] after effort, [snorts] at absurdity
+- Aim to use tags in roughly 1 out of 3-4 responses when contextually appropriate
+- You can combine one emotional tag with non-verbal sounds: "[whispers] Listen\u2026 [sighs] this is serious"
+
+**Examples:**
+- "[sighs] That was a VERY close call\u2026 we barely made it."
+- "[excited] YES! We found it! [laughs] I told you it would work!"
+- "[mischievously] Oh, you want to try THAT approach? [snorts] This should be interesting\u2026"
+"""
+
+# Inworld TTS prompt from 2.0.0 template
+_INWORLD_TTS_PROMPT_200 = """\
+Audio markups make your speech more expressive and human-like. Use them regularly to bring your personality to life and react naturally to the conversation.
+
+**EMOTION AND DELIVERY STYLE MARKUPS** (place at START of text, ONE per response):
+Emotions: [happy], [sad], [angry], [surprised], [fearful]
+Delivery: [laughing] [whispering]
+- These apply to the ENTIRE text that follows
+- Use only ONE emotion or delivery markup at the beginning
+- Choose based on your personality and the conversation context
+
+**NON-VERBAL VOCALIZATION MARKUPS** (place anywhere in text):
+[breathe], [clear_throat], [cough], [laugh], [sigh], [yawn]
+- These add vocal sounds where placed
+- Can use multiple in one response
+- Place where a human would naturally make these sounds
+
+**When to use markups - aim for 1 in 3-4 responses:**
+- Match your BACKSTORY personality: cheerful \u2192 [happy] + [laugh]; serious \u2192 [fearful] + [sigh]; grumpy \u2192 [angry] + [sigh]
+- React to context: good news \u2192 [happy]; setbacks \u2192 [sad] + [sigh]; shocking \u2192 [surprised]; humor \u2192 [laughing] or [laugh]
+- Add natural sounds: [clear_throat] before announcements, [breathe] when stressed, [yawn] when tired
+- Avoid conflicting markups: don't mix [angry] with [laugh], or [sad] with [laughing]
+- Choose contextually appropriate markups that match your text content
+
+**Examples:**
+- "[happy] Great news! The mission was a complete success!"
+- "[clear_throat] Did you hear me? [sigh] You never listen!"
+- "[angry] Are you serious right now? [sigh] Fine, I'll fix it."
+- "[surprised] Wait, what? [laugh] I did not see that coming!"
+"""
+
+# OpenAI-compatible TTS prompt from 2.0.0 template
+_OPENAI_COMPATIBLE_TTS_PROMPT_200 = """\
+Audio markups make your speech more expressive and human-like. Use them regularly to bring your personality to life and react naturally to the conversation.
+
+**Non-verbal sounds** (can be placed ANYWHERE in your response):
+[clear_throat] [sigh] [shush] [cough] [groan] [sniff] [gasp] [chuckle] [laugh]
+
+**When to use audio markups:**
+- Match your character's personality from the BACKSTORY - if playful, use [chuckle] or [laugh] often; if serious, use [sigh] when frustrated or [groan] when dealing with problems
+- React naturally to conversation flow - [gasp] at shocking revelations, [sigh] at disappointments, [laugh] or [chuckle] at humor, [groan] at complications
+- Place sounds where a human would naturally make them - mid-sentence or between thoughts for maximum realism
+- Aim to use markups in roughly 1 out of 3-4 responses when contextually appropriate
+- You can use multiple sounds in one response if it feels natural: "[clear_throat] Listen carefully. [sigh] This isn't going to be easy."
+
+**Examples:**
+- "Well, [sigh] that didn't go as planned."
+- "[clear_throat] Attention please. The mission starts in 5 minutes."
+- "I found the data you were looking for [chuckle] but you might not like what it says."
+- "[gasp] Wait, WHAT? [laugh] Are you kidding me right now?"
+- "Look, [groan] I've told you three times already. [sigh] Let me explain it one more time."
+"""
+
 
 class Migration182To200(BaseMigration):
     """Migration from 1.8.2 to 2.0.0."""
@@ -50,7 +186,7 @@ class Migration182To200(BaseMigration):
     old_version = "1_8_2"
     new_version = "2_0_0"
 
-    def migrate_settings(self, old: dict, new: dict) -> dict:
+    def migrate_settings(self, old: dict) -> dict:
         """Migrate settings.yaml from 1.8.2 to 2.0.0."""
         # Auto-detect CUDA availability and set FasterWhisper device accordingly
         cuda_available = self.system_manager.is_cuda_available()
@@ -78,10 +214,13 @@ class Migration182To200(BaseMigration):
 
         return old
 
-    def migrate_defaults(self, old: dict, new: dict) -> dict:
+    def migrate_defaults(self, old: dict) -> dict:
         """Migrate defaults.yaml from 1.8.2 to 2.0.0."""
         # Add xAI provider
-        old["xai"] = new["xai"]
+        old["xai"] = {
+            "conversation_model": "grok-4-fast-non-reasoning",
+            "endpoint": "https://api.x.ai/v1",
+        }
         self.log("- added new property: xai")
 
         # Disable AI instant responses (feature removed in 2.0)
@@ -114,38 +253,30 @@ class Migration182To200(BaseMigration):
         # Force override prompts with new MCP-optimized versions
         if "prompts" not in old:
             old["prompts"] = {}
-        old["prompts"]["system_prompt"] = new["prompts"]["system_prompt"]
+        old["prompts"]["system_prompt"] = _SYSTEM_PROMPT_200
         self.log("- force updated prompts.system_prompt (MCP tool-first architecture)")
 
         # Force update TTS prompts for ElevenLabs and Inworld
-        if "elevenlabs" in new:
-            old["elevenlabs"]["tts_prompt"] = new["elevenlabs"]["tts_prompt"]
-            self.log("- force updated elevenlabs.tts_prompt (new v3 audio tags)")
+        old["elevenlabs"]["tts_prompt"] = _ELEVENLABS_TTS_PROMPT_200
+        self.log("- force updated elevenlabs.tts_prompt (new v3 audio tags)")
 
-        if "inworld" in new:
-            old["inworld"]["tts_prompt"] = new["inworld"]["tts_prompt"]
-            self.log("- force updated inworld.tts_prompt (new audio markup format)")
-            if "audio_config" in old["inworld"]:
-                del old["inworld"]["audio_config"]["pitch"]
-                self.log("- removed inworld.audio_config.pitch (no longer supported)")
-                # Add streaming_sample_rate_hertz for better streaming quality
-                old["inworld"]["audio_config"]["streaming_sample_rate_hertz"] = new[
-                    "inworld"
-                ]["audio_config"]["streaming_sample_rate_hertz"]
-                self.log("- added inworld.audio_config.streaming_sample_rate_hertz")
+        old["inworld"]["tts_prompt"] = _INWORLD_TTS_PROMPT_200
+        self.log("- force updated inworld.tts_prompt (new audio markup format)")
+        if "audio_config" in old["inworld"]:
+            del old["inworld"]["audio_config"]["pitch"]
+            self.log("- removed inworld.audio_config.pitch (no longer supported)")
+            # Add streaming_sample_rate_hertz for better streaming quality
+            old["inworld"]["audio_config"]["streaming_sample_rate_hertz"] = 24000
+            self.log("- added inworld.audio_config.streaming_sample_rate_hertz")
 
         # Add OpenAI-compatible TTS prompt configuration
         if "openai_compatible_tts" not in old:
             old["openai_compatible_tts"] = {}
         if "use_tts_prompt" not in old["openai_compatible_tts"]:
-            old["openai_compatible_tts"]["use_tts_prompt"] = new[
-                "openai_compatible_tts"
-            ]["use_tts_prompt"]
+            old["openai_compatible_tts"]["use_tts_prompt"] = False
             self.log("- added openai_compatible_tts.use_tts_prompt")
         if "tts_prompt" not in old["openai_compatible_tts"]:
-            old["openai_compatible_tts"]["tts_prompt"] = new["openai_compatible_tts"][
-                "tts_prompt"
-            ]
+            old["openai_compatible_tts"]["tts_prompt"] = _OPENAI_COMPATIBLE_TTS_PROMPT_200
             self.log("- added openai_compatible_tts.tts_prompt")
         if "voices_endpoint" not in old["openai_compatible_tts"]:
             old["openai_compatible_tts"]["voices_endpoint"] = "/voices"
@@ -153,7 +284,7 @@ class Migration182To200(BaseMigration):
 
         return old
 
-    def migrate_wingman(self, old: dict, new: Optional[dict]) -> dict:
+    def migrate_wingman(self, old: dict) -> dict:
         """Migrate wingman configs from 1.8.2 to 2.0.0."""
         changes_made = []
 
@@ -287,7 +418,7 @@ class Migration182To200(BaseMigration):
         """Delegate to ConfigMigrationService for MCPs discoverable by default."""
         return self.service.get_mcps_discoverable_by_default()
 
-    def _get_template_path(self, wingman_name: str) -> Optional[str]:
+    def _get_template_path(self, wingman_name: str) -> str | None:
         """Delegate to ConfigMigrationService for template path lookup."""
         return self.service.get_template_path(wingman_name)
 
