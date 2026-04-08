@@ -32,7 +32,7 @@ The migration system consists of three main components:
 Current migration chain (executed sequentially):
 
 ```
-1.7.0 → 1.8.0 → 1.8.1 → 1.8.2 → 2.0.0
+1.7.0 → 1.8.0 → 1.8.1 → 1.8.2 → 2.0.0 → 2.1.0 → 2.1.1 → 3.0.0 → 3.0.1 → 3.1.0 → 3.1.1
 ```
 
 The system automatically finds the user's current version and executes all migrations needed to reach the latest version.
@@ -62,20 +62,20 @@ Each migration can transform five types of files:
 Each migration class can override these methods:
 
 ```python
-def migrate_settings(self, old: dict, new: dict) -> dict:
+def migrate_settings(self, old: dict) -> dict:
     """Transform settings.yaml from old version to new version."""
 
-def migrate_defaults(self, old: dict, new: dict) -> dict:
+def migrate_defaults(self, old: dict) -> dict:
     """Transform defaults.yaml from old version to new version."""
 
-def migrate_wingman(self, old: dict, new: Optional[dict]) -> dict:
+def migrate_wingman(self, old: dict) -> dict:
     """Transform individual wingman config from old version to new version."""
 
 def migrate_secrets(self, old: dict) -> dict:
     """Transform secrets.yaml from old version to new version."""
 
 def migrate_mcp(self, old: dict, new: dict) -> dict:
-    """Transform mcp.yaml from old version to new version."""
+    """Transform mcp.yaml from old version to new version (new comes from mcp.template.yaml)."""
 ```
 
 **Note**: You only need to override methods that actually change configs. Methods return the old config unchanged by default.
@@ -116,7 +116,7 @@ class Migration190To200(BaseMigration):
     old_version = "1_9_0"
     new_version = "2_0_0"
 
-    def migrate_settings(self, old: dict, new: dict) -> dict:
+    def migrate_settings(self, old: dict) -> dict:
         """Migrate settings.yaml from 1.9.0 to 2.0.0."""
         # Add new settings
         old["new_feature_enabled"] = True
@@ -129,15 +129,19 @@ class Migration190To200(BaseMigration):
 
         return old
 
-    def migrate_defaults(self, old: dict, new: dict) -> dict:
+    def migrate_defaults(self, old: dict) -> dict:
         """Migrate defaults.yaml from 1.9.0 to 2.0.0."""
-        # Add new provider defaults
-        old["new_provider"] = new["new_provider"]
-        self.log("- added new_provider configuration")
+        # Inline default values for new config properties
+        if "new_provider" not in old:
+            old["new_provider"] = {
+                "api_key": "",
+                "endpoint": "https://api.example.com/v1",
+            }
+            self.log("- added new_provider configuration")
 
         return old
 
-    def migrate_wingman(self, old: dict, new: Optional[dict]) -> dict:
+    def migrate_wingman(self, old: dict) -> dict:
         """Migrate wingman configs from 1.9.0 to 2.0.0."""
         # Update wingman-specific settings
         if "deprecated_field" in old:
@@ -176,6 +180,7 @@ Update the main docstring with:
 - **Handle missing keys gracefully**: Use `.get()` with defaults for optional keys
 - **Document your changes**: Update the docstring with what changed
 - **Test thoroughly**: Migrations are critical - they must work correctly
+- **Inline default values**: Write new config property defaults directly in migration code
 
 ### DON'T ❌
 
@@ -183,7 +188,6 @@ Update the main docstring with:
 - **Don't skip versions**: Every version transition needs a migration (use no-op if needed)
 - **Don't make assumptions**: Check for key existence before accessing
 - **Don't swallow errors**: Let exceptions bubble up for proper logging
-- **Don't hardcode paths**: Use `self.templates_dir` and service utilities
 
 ## No-Op Migrations
 
@@ -221,7 +225,7 @@ class Migration190To200(BaseMigration):
     old_version = "1_9_0"
     new_version = "2_0_0"
 
-    def migrate_wingman(self, old: dict, new: Optional[dict]) -> dict:
+    def migrate_wingman(self, old: dict) -> dict:
         # Use helper method for complex transformation
         old["features"] = self._transform_features(old.get("features", []))
         return old
@@ -250,11 +254,15 @@ class Migration190To200(BaseMigration):
 
     @log_step("Migrating provider configurations")
     @handle_errors
-    def migrate_defaults(self, old: dict, new: dict) -> dict:
+    def migrate_defaults(self, old: dict) -> dict:
         # This automatically logs "Starting: Migrating provider configurations"
         # and "Completed: Migrating provider configurations"
         # Errors are logged before being re-raised
-        old["new_provider"] = new["new_provider"]
+        if "new_provider" not in old:
+            old["new_provider"] = {
+                "api_key": "",
+                "endpoint": "https://api.example.com/v1",
+            }
         return old
 ```
 
@@ -263,15 +271,12 @@ class Migration190To200(BaseMigration):
 The migration has access to all service utilities:
 
 ```python
-def migrate_settings(self, old: dict, new: dict) -> dict:
+def migrate_settings(self, old: dict) -> dict:
     # Access config manager
     template_config = self.config_manager.load_config("template_name")
 
     # Access system manager
     cuda_available = self.system_manager.has_cuda()
-
-    # Access templates directory
-    template_path = path.join(self.templates_dir, "configs", "example.yaml")
 
     # Use logging methods
     self.log("Normal message")
@@ -302,16 +307,6 @@ def migrate_mcp(self, old: dict, new: dict) -> dict:
 ```
 
 The base class automatically detects if you've overridden these methods and only calls them if needed.
-
-## Migration Templates
-
-Template configs are stored in `templates/migration/{version}/configs/`:
-
-- Used as reference for new properties
-- Provide default values for new settings
-- Ensure migrations have access to correct structure
-
-When adding new features, update the template configs for your new version!
 
 ## Troubleshooting
 
@@ -361,7 +356,13 @@ services/migrations/
 ├── migration_170_to_180.py        # 1.7.0 → 1.8.0
 ├── migration_180_to_181.py        # 1.8.0 → 1.8.1 (no-op)
 ├── migration_181_to_182.py        # 1.8.1 → 1.8.2
-└── migration_182_to_190.py        # 1.8.2 → 1.9.0
+├── migration_182_to_200.py        # 1.8.2 → 2.0.0
+├── migration_200_to_210.py        # 2.0.0 → 2.1.0
+├── migration_210_to_211.py        # 2.1.0 → 2.1.1
+├── migration_211_to_300.py        # 2.1.1 → 3.0.0
+├── migration_300_to_301.py        # 3.0.0 → 3.0.1
+├── migration_301_to_310.py        # 3.0.1 → 3.1.0
+└── migration_310_to_311.py        # 3.1.0 → 3.1.1
 ```
 
 Each migration is self-contained with all its logic and helpers.
@@ -376,6 +377,6 @@ The migration system is designed to be:
 - **Maintainable**: Clear structure, good documentation
 - **Extensible**: Easy to add new migrations
 
-When in doubt, look at existing migrations like [migration_182_to_190.py](migration_182_to_190.py) for complex examples or [migration_180_to_181.py](migration_180_to_181.py) for simple no-ops.
+When in doubt, look at existing migrations like [migration_310_to_311.py](migration_310_to_311.py) for complex examples or [migration_180_to_181.py](migration_180_to_181.py) for simple no-ops.
 
 Happy migrating! 🚀
