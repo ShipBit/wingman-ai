@@ -16,7 +16,6 @@ from providers.xvasynth import XVASynth
 from services.audio_player import AudioPlayer
 from services.audio_library import AudioLibrary
 from services.config_manager import ConfigManager
-from services.module_manager import ModuleManager
 from services.printr import Printr
 from wingmen.open_ai_wingman import OpenAiWingman
 from wingmen.wingman import Wingman
@@ -109,35 +108,19 @@ class Tower:
     ):
         wingman = None
         try:
-            # it's a custom Wingman
-            if wingman_config.custom_class:
-                wingman = ModuleManager.create_wingman_dynamically(
-                    name=wingman_name,
-                    config=wingman_config,
-                    settings=settings,
-                    audio_player=self.audio_player,
-                    audio_library=self.audio_library,
-                    whispercpp=self.whispercpp,
-                    fasterwhisper=self.fasterwhisper,
-                    parakeet=self.parakeet,
-                    xvasynth=self.xvasynth,
-                    pocket_tts=self.pocket_tts,
-                    tower=self,
-                )
-            else:
-                wingman = OpenAiWingman(
-                    name=wingman_name,
-                    config=wingman_config,
-                    settings=settings,
-                    audio_player=self.audio_player,
-                    audio_library=self.audio_library,
-                    whispercpp=self.whispercpp,
-                    fasterwhisper=self.fasterwhisper,
-                    parakeet=self.parakeet,
-                    xvasynth=self.xvasynth,
-                    pocket_tts=self.pocket_tts,
-                    tower=self,
-                )
+            wingman = OpenAiWingman(
+                name=wingman_name,
+                config=wingman_config,
+                settings=settings,
+                audio_player=self.audio_player,
+                audio_library=self.audio_library,
+                whispercpp=self.whispercpp,
+                fasterwhisper=self.fasterwhisper,
+                parakeet=self.parakeet,
+                xvasynth=self.xvasynth,
+                pocket_tts=self.pocket_tts,
+                tower=self,
+            )
         except FileNotFoundError as e:  # pylint: disable=broad-except
             wingman_config.disabled = True
             self.disabled_wingmen.append(wingman_config)

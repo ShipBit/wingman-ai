@@ -12,21 +12,13 @@ from api.interface import (
     SkillBase,
     SkillConfig,
     SkillToolInfo,
-    WingmanConfig,
 )
-from providers.faster_whisper import FasterWhisper
-from providers.parakeet import Parakeet
-from providers.whispercpp import Whispercpp
-from providers.xvasynth import XVASynth
-from services.audio_library import AudioLibrary
-from services.audio_player import AudioPlayer
-from services.file import get_writable_dir, get_custom_skills_dir
+from services.file import get_custom_skills_dir
 from services.printr import Printr
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
     from wingmen.wingman import Wingman
-    from services.tower import Tower
 
 SKILLS_DIR = "skills"
 
@@ -63,62 +55,6 @@ class ModuleManager:
             module_path = path.join(module_path, sub_dir)
         # module_path = path.join(module_path, module_name + ".py")
         return module_name, module_path
-
-    @staticmethod
-    def create_wingman_dynamically(
-        name: str,
-        config: WingmanConfig,
-        settings: SettingsConfig,
-        audio_player: AudioPlayer,
-        audio_library: AudioLibrary,
-        whispercpp: Whispercpp,
-        fasterwhisper: FasterWhisper,
-        parakeet: Parakeet,
-        xvasynth: XVASynth,
-        tower: "Tower",
-    ):
-        """Dynamically creates a Wingman instance from a module path and class name
-
-        Args:
-            name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
-            config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
-            settings (SettingsConfig): The general user settings.
-            audio_player (AudioPlayer): The audio player handling the playback of audio files.
-            audio_library (AudioLibrary): The audio library handling the storage and retrieval of audio files.
-            whispercpp (Whispercpp): The Whispercpp provider for speech-to-text.
-            fasterwhisper (FasterWhisper): The FasterWhisper provider for speech-to-text.
-            parakeet (Parakeet): The Parakeet provider for speech-to-text via ONNX Runtime.
-            xvasynth (XVASynth): The XVASynth provider for text-to-speech.
-            tower (Tower): The Tower instance, that manages loaded Wingmen.
-        """
-
-        try:
-            # try to load from app dir first
-            module = import_module(config.custom_class.module)
-        except ModuleNotFoundError:
-            # split module into name and path
-            module_name, module_path = ModuleManager.get_module_name_and_path(
-                config.custom_class.module
-            )
-            module_path = path.join(get_writable_dir(module_path), module_name + ".py")
-            # load from alternative absolute file path
-            spec = util.spec_from_file_location(module_name, module_path)
-            module = util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-        DerivedWingmanClass = getattr(module, config.custom_class.name)
-        instance = DerivedWingmanClass(
-            name=name,
-            config=config,
-            settings=settings,
-            audio_player=audio_player,
-            audio_library=audio_library,
-            whispercpp=whispercpp,
-            fasterwhisper=fasterwhisper,
-            parakeet=parakeet,
-            xvasynth=xvasynth,
-            tower=tower,
-        )
-        return instance
 
     @staticmethod
     def load_skill(
