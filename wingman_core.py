@@ -59,7 +59,7 @@ from providers.llama_cpp_provider import LlamaCppProvider
 from providers.llama_cpp_remote import LlamaCppRemote
 from providers.open_ai import OpenAi
 from providers.whispercpp import Whispercpp
-from providers.wingman_pro import WingmanPro
+from providers.wingman_subscription import WingmanSubscription
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 from wingmen.open_ai_wingman import OpenAiWingman
@@ -1464,7 +1464,7 @@ class WingmanCore(WebSocketUser):
         text = None
 
         if provider == VoiceActivationSttProvider.WINGMAN_PRO:
-            wingman_pro = WingmanPro(
+            wingman_pro = WingmanSubscription(
                 wingman_name="system",
                 settings=self.settings_service.settings.wingman_pro,
             )

@@ -1,8 +1,14 @@
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 import openai
 import requests
 from openai.types.audio import Transcription
-from api.enums import CommandTag, LogType
+from api.enums import (
+    CommandTag,
+    ConversationProvider,
+    LogType,
+    SttProvider,
+    TtsProvider,
+)
 from api.interface import (
     AzureSttConfig,
     AzureTtsConfig,
@@ -11,13 +17,25 @@ from api.interface import (
     VoiceInfo,
     WingmanProSettings,
 )
+from providers.interfaces import (
+    SttInterface,
+    TtsInterface,
+    LlmInterface,
+    Transcript,
+    stt_provider,
+    tts_provider,
+    llm_provider,
+)
 from services.audio_player import AudioPlayer
 from services.openai_utils import get_minimal_reasoning_by_model
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
-class WingmanPro:
+
+class WingmanSubscription:
     def __init__(
         self, wingman_name: str, settings: WingmanProSettings, timeout: int = 120
     ):
@@ -470,3 +488,81 @@ class WingmanPro:
             )
         else:
             return obj
+
+
+# ---------------------------------------------------------------------------
+# Adapter classes — bridge WingmanSubscription into unified provider interfaces
+# ---------------------------------------------------------------------------
+
+
+@stt_provider(SttProvider.WINGMAN_PRO)
+class WingmanSubscriptionStt(SttInterface):
+    def __init__(self, ws_instance: "WingmanSubscription", config: "WingmanConfig"):
+        self._ws = ws_instance
+        self._config = config
+
+    async def transcribe(self, filename: str) -> Transcript | None:
+        from api.enums import WingmanProSttProvider
+        if self._config.wingman_pro.stt_provider == WingmanProSttProvider.WHISPER:
+            result = self._ws.transcribe_whisper(filename=filename)
+        elif self._config.wingman_pro.stt_provider == WingmanProSttProvider.AZURE_SPEECH:
+            result = self._ws.transcribe_azure_speech(
+                filename=filename, config=self._config.azure.stt
+            )
+        else:
+            return None
+        if result is None:
+            return None
+        # WingmanSubscription might return a dict instead of a real transcript object
+        text = result.get("_text") if isinstance(result, dict) else result.text
+        return Transcript(text=text) if text else None
+
+
+@tts_provider(TtsProvider.WINGMAN_PRO)
+class WingmanSubscriptionTts(TtsInterface):
+    def __init__(self, ws_instance: "WingmanSubscription", config: "WingmanConfig"):
+        self._ws = ws_instance
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        from api.enums import WingmanProTtsProvider
+        if self._config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
+            await self._ws.generate_openai_speech(
+                text=text,
+                voice=self._config.openai.tts_voice,
+                model=self._config.openai.tts_model,
+                speed=self._config.openai.tts_speed,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+            )
+        elif self._config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+            await self._ws.generate_azure_speech(
+                text=text,
+                config=self._config.azure.tts,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+            )
+        elif self._config.wingman_pro.tts_provider == WingmanProTtsProvider.INWORLD:
+            await self._ws.generate_inworld_speech(
+                text=text,
+                config=self._config.inworld,
+                sound_config=sound_config,
+                audio_player=audio_player,
+                wingman_name=wingman_name,
+            )
+
+
+@llm_provider(ConversationProvider.WINGMAN_PRO)
+class WingmanSubscriptionLlm(LlmInterface):
+    def __init__(self, ws_instance: "WingmanSubscription", config: "WingmanConfig"):
+        self._ws = ws_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._ws.ask(
+            messages=messages,
+            deployment=self._config.wingman_pro.conversation_deployment,
+            tools=tools,
+        )

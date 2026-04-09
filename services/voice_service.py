@@ -18,7 +18,7 @@ from providers.elevenlabs import ElevenLabs
 from providers.hume import Hume
 from providers.inworld import Inworld
 from providers.open_ai import OpenAi, OpenAiAzure, OpenAiCompatibleTts
-from providers.wingman_pro import WingmanPro
+from providers.wingman_subscription import WingmanSubscription
 from providers.xvasynth import XVASynth
 from providers.pocket_tts import PocketTTS
 
@@ -245,7 +245,7 @@ class VoiceService:
 
     # GET /voices/azure/wingman-pro
     def get_wingman_pro_azure_voices(self, locale: str = ""):
-        wingman_pro = WingmanPro(
+        wingman_pro = WingmanSubscription(
             wingman_name="", settings=self.config_manager.settings_config.wingman_pro
         )
         voices = wingman_pro.get_available_voices(locale=locale)
@@ -258,7 +258,7 @@ class VoiceService:
     def get_wingman_pro_inworld_voices(
         self, filter_language: str = None
     ) -> list[VoiceInfo]:
-        wingman_pro = WingmanPro(
+        wingman_pro = WingmanSubscription(
             wingman_name="", settings=self.config_manager.settings_config.wingman_pro
         )
         voices = wingman_pro.get_available_inworld_voices(
@@ -416,7 +416,7 @@ class VoiceService:
     async def play_wingman_pro_azure(
         self, text: str, config: AzureTtsConfig, sound_config: SoundConfig
     ):
-        wingman_pro = WingmanPro(
+        wingman_pro = WingmanSubscription(
             wingman_name="system",
             settings=self.config_manager.settings_config.wingman_pro,
         )
@@ -432,7 +432,7 @@ class VoiceService:
     async def play_wingman_pro_openai(
         self, text: str, voice: str, model: str, speed: float, sound_config: SoundConfig
     ):
-        wingman_pro = WingmanPro(
+        wingman_pro = WingmanSubscription(
             wingman_name="system",
             settings=self.config_manager.settings_config.wingman_pro,
         )
@@ -453,7 +453,7 @@ class VoiceService:
         config: InworldConfig,
         sound_config: SoundConfig,
     ):
-        wingman_pro = WingmanPro(
+        wingman_pro = WingmanSubscription(
             wingman_name="system",
             settings=self.config_manager.settings_config.wingman_pro,
         )

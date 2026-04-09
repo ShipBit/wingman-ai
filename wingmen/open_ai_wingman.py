@@ -43,7 +43,7 @@ from providers.hume import Hume
 from providers.inworld import Inworld
 from providers.open_ai import OpenAi, OpenAiAzure
 from providers.x_ai import XAi
-from providers.wingman_pro import WingmanPro
+from providers.wingman_subscription import WingmanSubscription
 from api.commands import McpStateChangedCommand
 from services.benchmark import Benchmark
 from services.file import get_prompt
@@ -94,7 +94,7 @@ class OpenAiWingman(Wingman):
         self.openai_compatible_tts: OpenAiCompatibleTts | None = None
         self.hume: Hume | None = None
         self.inworld: Inworld | None = None
-        self.wingman_pro: WingmanPro | None = None
+        self.wingman_pro: WingmanSubscription | None = None
         self.google: GoogleGenAI | None = None
         self.perplexity: OpenAi | None = None
         self.xai: XAi | None = None
@@ -901,7 +901,7 @@ class OpenAiWingman(Wingman):
             self.openai_azure = OpenAiAzure()
 
     async def validate_and_set_wingman_pro(self):
-        self.wingman_pro = WingmanPro(
+        self.wingman_pro = WingmanSubscription(
             wingman_name=self.name, settings=self.settings.wingman_pro
         )
 
