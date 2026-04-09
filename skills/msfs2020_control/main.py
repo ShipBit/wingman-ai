@@ -22,13 +22,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from skills.msfs2020_control.command_matcher.command_matcher import CommandMatcher
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class Msfs2020Control(Skill):
 
     def __init__(
-        self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "WingmanContext"
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.already_initialized_simconnect = False

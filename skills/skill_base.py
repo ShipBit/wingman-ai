@@ -26,7 +26,7 @@ from services.secret_keeper import SecretKeeper
 
 if TYPE_CHECKING:
     from services.skill_local_ai import SkillLocalAI
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 # Type mapping from Python types to JSON Schema types
@@ -296,7 +296,7 @@ class Skill:
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         self.config = config
         self.settings = settings

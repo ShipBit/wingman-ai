@@ -138,3 +138,12 @@ class WingmanContext:
     @property
     def messages(self) -> list:
         return self._wingman.conversation.messages
+
+    # Expose local AI services for SkillLocalAI facade
+    @property
+    def local_ai_service(self):
+        return self._wingman.local_ai_service
+
+    @property
+    def persistent_memory_service(self):
+        return self._wingman.persistent_memory_service

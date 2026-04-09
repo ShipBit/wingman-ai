@@ -11,7 +11,7 @@ from skills.skill_base import Skill, tool
 import mouse.mouse as mouse
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class ControlWindows(Skill):
@@ -28,7 +28,7 @@ class ControlWindows(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 

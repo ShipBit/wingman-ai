@@ -10,7 +10,7 @@ from showinfm import show_in_file_manager
 from pdfminer.high_level import extract_text
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 DEFAULT_MAX_TEXT_SIZE = 24000
 SUPPORTED_FILE_EXTENSIONS = [
@@ -101,7 +101,7 @@ SUPPORTED_FILE_EXTENSIONS = [
 class FileManager(Skill):
 
     def __init__(
-        self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "WingmanContext"
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.allowed_file_extensions = SUPPORTED_FILE_EXTENSIONS

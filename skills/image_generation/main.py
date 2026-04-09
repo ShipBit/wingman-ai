@@ -7,7 +7,7 @@ from api.interface import SettingsConfig, SkillConfig, WingmanInitializationErro
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class ImageGeneration(Skill):
@@ -16,7 +16,7 @@ class ImageGeneration(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.image_path = self.get_generated_files_dir()

@@ -16,7 +16,7 @@ from services.printr import Printr
 
 if TYPE_CHECKING:
     from services.local_ai_service import TokenBudget
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 printr = Printr()
 
@@ -109,7 +109,7 @@ class SkillLocalAI:
     4. On success: convert internal types to facade types and return
     """
 
-    def __init__(self, wingman: "OpenAiWingman"):
+    def __init__(self, wingman: "WingmanContext"):
         self._wingman = wingman
 
     # ── Availability ──────────────────────────────────────────────

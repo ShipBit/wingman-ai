@@ -21,13 +21,13 @@ from skills.skill_base import Skill, tool
 
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class ATSTelemetry(Skill):
 
     def __init__(
-        self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman"
+        self, config: SkillConfig, settings: SettingsConfig, wingman: "WingmanContext"
     ) -> None:
         self.loaded = False
         self.already_initialized_telemetry = False

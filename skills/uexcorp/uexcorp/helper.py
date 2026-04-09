@@ -16,7 +16,7 @@ from skills.uexcorp.uexcorp.api.llm import Llm
 
 if TYPE_CHECKING:
     from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 printr = Printr()
 
@@ -66,7 +66,7 @@ class Helper:
         self.__request_while_not_ready = False
         self.__wingman = None
 
-    def prepare(self, threaded_execution: callable, wingman: "OpenAiWingman"):
+    def prepare(self, threaded_execution: callable, wingman: "WingmanContext"):
         from skills.uexcorp.uexcorp.handler.tool_handler import ToolHandler
 
         self.__wingman = wingman
@@ -325,7 +325,7 @@ class Helper:
     def get_default_thread_ident(self) -> int:
         return self.__default_thread
 
-    def get_wingmen(self) -> "OpenAiWingman":
+    def get_wingmen(self) -> "WingmanContext":
         return self.__wingman
 
     def toast(self, message: str):

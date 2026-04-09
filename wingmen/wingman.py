@@ -62,6 +62,7 @@ from services.capability_registry import CapabilityRegistry
 from services.tool_response_cache import ToolResponseCompressor
 from services.token_utils import count_tokens
 from skills.skill_base import Skill
+from wingmen.wingman_context import WingmanContext
 
 if TYPE_CHECKING:
     from services.tower import Tower
@@ -647,10 +648,11 @@ class Wingman:
                         )
                         continue
 
+                context = WingmanContext(self)
                 skill = ModuleManager.load_skill(
                     config=skill_config,
                     settings=self.settings,
-                    wingman=self,
+                    wingman=context,
                 )
                 if skill:
                     skill.threaded_execution = self.threaded_execution
@@ -780,10 +782,11 @@ class Wingman:
                             f"Skill '{skill_name}' is not supported on {normalized_platform}.",
                         )
 
+                context = WingmanContext(self)
                 skill = ModuleManager.load_skill(
                     config=skill_config,
                     settings=self.settings,
-                    wingman=self,
+                    wingman=context,
                 )
                 if skill:
                     skill.threaded_execution = self.threaded_execution

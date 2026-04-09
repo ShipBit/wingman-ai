@@ -31,7 +31,7 @@ from hud_server.types import Anchor, HudColor, FontFamily, LayoutMode, MessagePr
 from hud_server.validation import validate_hud_settings
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 printr = Printr()
 
@@ -50,7 +50,7 @@ class HUD(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman"
+        wingman: "WingmanContext"
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 

@@ -22,7 +22,7 @@ from services.file import get_prompt
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class RadioChatter(Skill):
@@ -31,7 +31,7 @@ class RadioChatter(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "OpenAiWingman",
+        wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
@@ -155,42 +155,8 @@ class RadioChatter(Skill):
                     )
                 )
 
-            # Initialize all providers
-            initiated_providers = []
-            for voice in voices:
-                voice_provider = voice.provider
-                if voice_provider not in initiated_providers:
-                    initiated_providers.append(voice_provider)
-
-                    if voice_provider == TtsProvider.OPENAI and not self.wingman.openai:
-                        await self.wingman.validate_and_set_openai(errors)
-                    elif (
-                        voice_provider == TtsProvider.AZURE
-                        and not self.wingman.openai_azure
-                    ):
-                        await self.wingman.validate_and_set_azure(errors)
-                    elif (
-                        voice_provider == TtsProvider.ELEVENLABS
-                        and not self.wingman.elevenlabs
-                    ):
-                        await self.wingman.validate_and_set_elevenlabs(errors)
-                    elif (
-                        voice_provider == TtsProvider.WINGMAN_PRO
-                        and not self.wingman.wingman_pro
-                    ):
-                        await self.wingman.validate_and_set_wingman_pro()
-                    elif (
-                        voice_provider == TtsProvider.INWORLD
-                        and not self.wingman.inworld
-                    ):
-                        await self.wingman.validate_and_set_inworld(errors)
-                    elif (
-                        voice_provider == TtsProvider.OPENAI_COMPATIBLE
-                        and not self.wingman.openai_compatible_tts
-                    ):
-                        await self.wingman.validate_and_set_openai_compatible_tts(
-                            errors
-                        )
+            # Provider initialization is handled by ProviderFactory via
+            # switch_tts_provider() at voice-switch time. No pre-init needed.
 
         return errors
 
@@ -605,7 +571,7 @@ class RadioChatter(Skill):
                 f"Switching voice to {voice_name} ({voice_provider.value})"
             )
 
-        self.wingman.config.features.tts_provider = voice_provider
+        await self.wingman.switch_tts_provider(voice_provider)
 
     async def _get_original_voice_setting(self) -> VoiceSelection:
         voice_provider = self.wingman.config.features.tts_provider
