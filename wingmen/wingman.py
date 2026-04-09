@@ -1,16 +1,26 @@
-import traceback
-from copy import deepcopy
-import random
+"""Unified Wingman class.
+
+Merges the former base ``Wingman`` and its only subclass ``OpenAiWingman``
+into a single class that delegates to extracted services and provider
+interfaces for STT, TTS, and LLM.
+"""
+
+import json
 import time
-import difflib
 import asyncio
+import random
+import traceback
 import threading
+from copy import deepcopy
+import difflib
 from typing import (
     Any,
     Dict,
     Optional,
     TYPE_CHECKING,
 )
+from openai import APIConnectionError
+from openai.types.chat import ChatCompletion
 import keyboard.keyboard as keyboard
 import mouse.mouse as mouse
 from api.interface import (
@@ -23,21 +33,34 @@ from api.interface import (
 )
 from api.enums import (
     CommandTag,
+    ConversationProvider,
+    ImageGenerationProvider,
     LogSource,
     LogType,
+    SttProvider,
+    TtsProvider,
     WingmanInitializationErrorType,
 )
-from providers.faster_whisper import FasterWhisper
-from providers.parakeet import Parakeet
-from providers.whispercpp import Whispercpp
-from providers.xvasynth import XVASynth
-from providers.pocket_tts import PocketTTS
+from api.commands import McpStateChangedCommand
+from providers.interfaces import LlmInterface, SttInterface, TtsInterface
 from services.audio_player import AudioPlayer
 from services.benchmark import Benchmark
+from services.markdown import cleanup_text
 from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.audio_library import AudioLibrary
+from services.conversation_manager import ConversationManager
+from services.conversation_condenser import ConversationCondenser
+from services.context_builder import ContextBuilder
+from services.tool_executor import ToolExecutor
+from services.provider_factory import ProviderFactory
+from services.skill_registry import SkillRegistry
+from services.mcp_client import McpClient
+from services.mcp_registry import McpRegistry
+from services.capability_registry import CapabilityRegistry
+from services.tool_response_cache import ToolResponseCompressor
+from services.token_utils import count_tokens
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -52,10 +75,22 @@ def _get_skill_folder_from_module(module: str) -> str:
 
 
 class Wingman:
-    """The "highest" Wingman base class in the chain. It does some very basic things but is meant to be 'virtual', and so are most its methods, so you'll probably never instantiate it directly.
+    """Unified Wingman class.
 
-    Instead, you'll create a custom wingman that inherits from this (or a another subclass of it) and override its methods if needed.
+    Handles lifecycle, process loop, audio, command execution, config
+    save/load, skill management, provider routing, conversation management,
+    tool execution, context building, and condensation.
+
+    Providers are resolved via :class:`ProviderFactory` into three
+    interface slots: ``stt``, ``tts``, ``llm``.  Heavy orchestration logic
+    is delegated to extracted service objects.
     """
+
+    AZURE_SERVICES = {
+        "tts": None,  # kept for potential future use
+        "whisper": None,
+        "conversation": None,
+    }
 
     def __init__(
         self,
@@ -64,80 +99,103 @@ class Wingman:
         settings: SettingsConfig,
         audio_player: AudioPlayer,
         audio_library: AudioLibrary,
-        whispercpp: Whispercpp,
-        fasterwhisper: FasterWhisper,
-        parakeet: Parakeet,
-        xvasynth: XVASynth,
-        pocket_tts: PocketTTS,
-        tower: "Tower",
+        whispercpp=None,
+        fasterwhisper=None,
+        parakeet=None,
+        xvasynth=None,
+        pocket_tts=None,
+        tower: "Tower" = None,
     ):
-        """The constructor of the Wingman class. You can override it in your custom wingman.
-
-        Args:
-            name (str): The name of the wingman. This is the key you gave it in the config, e.g. "atc"
-            config (WingmanConfig): All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here.
-        """
-
         self.config = config
-        """All "general" config entries merged with the specific Wingman config settings. The Wingman takes precedence and overrides the general config. You can just add new keys to the config and they will be available here."""
-
         self.settings = settings
-        """The general user settings."""
+        self.name = name
+        self.audio_player = audio_player
+        self.audio_library = audio_library
+        self.tower = tower
 
         self.secret_keeper = SecretKeeper()
-        """A service that allows you to store and retrieve secrets like API keys. It can prompt the user for secrets if necessary."""
         self.secret_keeper.secret_events.subscribe(
             "secrets_saved", self.handle_secret_saved
         )
 
-        self.name = name
-        """The name of the wingman. This is the key you gave it in the config, e.g. "atc"."""
+        # Shared provider singletons (passed from Tower)
+        self._shared_providers = {
+            "whispercpp": whispercpp,
+            "fasterwhisper": fasterwhisper,
+            "parakeet": parakeet,
+            "xvasynth": xvasynth,
+            "pocket_tts": pocket_tts,
+        }
 
-        self.audio_player = audio_player
-        """A service that allows you to play audio files and add sound effects to them."""
+        # --- Provider interface slots (populated by validate → ProviderFactory) ---
+        self.stt: SttInterface | None = None
+        self.tts: TtsInterface | None = None
+        self.llm: LlmInterface | None = None
 
-        self.audio_library = audio_library
-        """A service that allows you to play and manage audio files from the audio library."""
-
-        self.execution_start: None | float = None
-        """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
-
+        # --- Backward-compat: keep old attributes for custom wingmen / skills ---
         self.whispercpp = whispercpp
-        """A class that handles the communication with the Whispercpp server for transcription."""
-
         self.fasterwhisper = fasterwhisper
-        """A class that handles local transcriptions using FasterWhisper."""
-
         self.parakeet = parakeet
-        """A class that handles local transcriptions using NVIDIA Parakeet TDT via ONNX Runtime."""
-
         self.xvasynth = xvasynth
-        """A class that handles the communication with the XVASynth server for TTS."""
-
         self.pocket_tts = pocket_tts
-        """A class that handles the communication with the PocketTTS server for TTS."""
 
-        self.tower = tower
-        """The Tower instance that manages all Wingmen in the same config dir."""
+        # --- Extracted services ---
+        self.conversation = ConversationManager(config, settings, name)
+        self.condenser = ConversationCondenser(self.conversation, config, name)
+        self.context_builder = ContextBuilder(config, settings, name)
+        self.tool_executor = ToolExecutor(config, settings, name)
 
+        # --- Token tracking ---
         self.last_turn_prompt_tokens: int = 0
         self.last_turn_completion_tokens: int = 0
+        self.execution_start: None | float = None
+        self._last_prompt_tokens: int = 0
 
+        # --- Skills ---
         self.skills: list[Skill] = []
+        self.tool_skills: dict[str, Skill] = {}
+        self.skill_tools: list[dict] = []
+        self.skill_registry = SkillRegistry()
+
+        # --- MCP ---
+        self.mcp_client = McpClient(wingman_name=self.name)
+        self.mcp_registry = McpRegistry(
+            self.mcp_client,
+            wingman_name=self.name,
+            on_state_changed=self._broadcast_mcp_state_changed,
+        )
+
+        # --- Unified capability registry ---
+        self.capability_registry = CapabilityRegistry(
+            self.skill_registry, self.mcp_registry
+        )
+
+        # --- Local AI / persistent memory ---
+        self.local_ai_service = None
+        self.persistent_memory_service = None
+        self._memory_recall_notified = False
+        self._background_tasks: set[asyncio.Task] = set()
+        self._tool_response_compressor = ToolResponseCompressor()
+
+        # --- Conversation state ---
+        self.last_gpt_call = None
+        self.instant_responses = []
+        self.last_used_instant_responses = []
+
+    # ──────────────────────────────── Record keys ─────────────────────────────── #
 
     def get_record_key(self) -> str | int:
-        """Returns the activation or "push-to-talk" key for this Wingman."""
         return self.config.record_key_codes or self.config.record_key
 
     def get_record_mouse_button(self) -> str:
-        """Returns the activation or "push-to-talk" mouse button for this Wingman."""
         return self.config.record_mouse_button
 
     def get_record_joystick_button(self) -> str:
-        """Returns the activation or "push-to-talk" joystick button for this Wingman."""
         if not self.config.record_joystick_button:
             return None
         return f"{self.config.record_joystick_button.guid}{self.config.record_joystick_button.button}"
+
+    # ──────────────────────────────── Secrets ──────────────────────────────────── #
 
     async def handle_secret_saved(self, _secrets: Dict[str, Any]):
         await printr.print_async(
@@ -147,26 +205,7 @@ class Wingman:
         )
         await self.validate()
 
-    # ──────────────────────────────────── Hooks ─────────────────────────────────── #
-
-    async def validate(self) -> list[WingmanInitializationError]:
-        """Use this function to validate params and config before the Wingman is started.
-        If you add new config sections or entries to your custom wingman, you should validate them here.
-
-        It's a good idea to collect all errors from the base class and not to swallow them first.
-
-        If you return MISSING_SECRET errors, the user will be asked for them.
-        If you return other errors, your Wingman will not be loaded by Tower.
-
-        Returns:
-            list[WingmanInitializationError]: A list of errors or an empty list if everything is okay.
-        """
-        return []
-
     async def retrieve_secret(self, secret_name, errors, is_required=True):
-        """Use this method to retrieve secrets like API keys from the SecretKeeper.
-        If the key is missing, the user will be prompted to enter it.
-        """
         try:
             api_key = await self.secret_keeper.retrieve(
                 requester=self.name,
@@ -184,7 +223,7 @@ class Wingman:
                 )
         except Exception as e:
             printr.print(
-                f"Error retrieving secret ''{secret_name}: {e}",
+                f"Error retrieving secret '{secret_name}': {e}",
                 color=LogType.ERROR,
                 server_only=True,
             )
@@ -201,14 +240,75 @@ class Wingman:
 
         return api_key
 
-    async def prepare(self):
-        """This method is called only once when the Wingman is instantiated by Tower.
-        It is run AFTER validate() and AFTER init_skills() so you can access validated params safely here.
+    # ──────────────────────────────── Validate ─────────────────────────────────── #
 
-        You can override it if you need to load async data from an API or file."""
+    async def validate(self) -> list[WingmanInitializationError]:
+        errors: list[WingmanInitializationError] = []
+
+        try:
+            factory = ProviderFactory(
+                config=self.config,
+                settings=self.settings,
+                secret_keeper=self.secret_keeper,
+                shared_providers=self._shared_providers,
+                wingman_name=self.name,
+            )
+            self.stt = await factory.create_stt(errors)
+            self.tts = await factory.create_tts(errors)
+            self.llm = await factory.create_llm(errors)
+        except Exception as e:
+            errors.append(
+                WingmanInitializationError(
+                    wingman_name=self.name,
+                    message=f"Error during provider validation: {str(e)}",
+                    error_type=WingmanInitializationErrorType.UNKNOWN,
+                )
+            )
+            printr.print(
+                f"Error during provider validation: {str(e)}",
+                color=LogType.ERROR,
+                server_only=True,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+
+        return errors
+
+    # ──────────────────────────────── Lifecycle ─────────────────────────────────── #
+
+    async def prepare(self):
+        try:
+            if self.config.features.use_generic_instant_responses:
+                printr.print(
+                    "Generating AI instant responses...",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                self.threaded_execution(self._generate_instant_responses)
+        except Exception as e:
+            await printr.print_async(
+                f"Error while preparing wingman '{self.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     async def unload(self):
-        """This method is called when the Wingman is unloaded by Tower. You can override it if you need to clean up resources."""
+        # Wait for any background memory extraction tasks to finish
+        if self._background_tasks:
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+            self._background_tasks.clear()
+
+        if self.persistent_memory_service:
+            from services.persistent_memory import MIN_MESSAGES_FOR_EXTRACTION
+
+            if len(self.conversation.messages) >= MIN_MESSAGES_FOR_EXTRACTION:
+                try:
+                    await self.persistent_memory_service.extract_memories(
+                        self.conversation.messages, generate_summary=True
+                    )
+                except Exception:
+                    pass
+            self.persistent_memory_service.close()
+
         # Unsubscribe from secret events to prevent duplicate handlers
         self.secret_keeper.secret_events.unsubscribe(
             "secrets_saved", self.handle_secret_saved
@@ -216,10 +316,7 @@ class Wingman:
         await self.unload_skills()
 
     async def unload_skills(self):
-        """Call this to trigger unload for skills that were actually prepared/used."""
         for skill in self.skills:
-            # Only unload skills that were actually prepared (activated)
-            # Skills that were never used don't need cleanup
             if not skill.is_prepared:
                 continue
             try:
@@ -232,19 +329,270 @@ class Wingman:
                 printr.print(
                     traceback.format_exc(), color=LogType.ERROR, server_only=True
                 )
+        self.tool_skills = {}
+        self.skill_tools = []
+        self.skill_registry.clear()
+
+    async def unload_mcps(self):
+        await self.mcp_registry.clear()
+
+    # ──────────────────────────────── Memory ──────────────────────────────────── #
+
+    def ensure_memory_initialized(self) -> bool:
+        if self.persistent_memory_service and not self.config.persistent_memory:
+            self.persistent_memory_service.close()
+            self.persistent_memory_service = None
+            return False
+        if self.persistent_memory_service:
+            return True
+        if self.config.persistent_memory and self.local_ai_service:
+            from services.persistent_memory import PersistentMemoryService
+
+            self.persistent_memory_service = PersistentMemoryService(
+                wingman_name=self.name,
+                local_ai_service=self.local_ai_service,
+            )
+            self.persistent_memory_service.initialize()
+            return True
+        return False
+
+    # ──────────────────────────────── MCP ──────────────────────────────────────── #
+
+    def _broadcast_mcp_state_changed(self):
+        if printr._connection_manager:
+            printr.ensure_async(
+                printr._connection_manager.broadcast(
+                    McpStateChangedCommand(wingman_name=self.name)
+                )
+            )
+
+    async def enable_mcp(self, mcp_name: str) -> tuple[bool, str]:
+        if not self.mcp_client.is_available:
+            return False, "MCP SDK not installed."
+
+        if mcp_name in self.mcp_registry.get_connected_server_names():
+            return True, f"MCP server '{mcp_name}' is already connected."
+
+        central_mcp_config = self.tower.config_manager.mcp_config
+        mcp_configs = central_mcp_config.servers if central_mcp_config else []
+
+        mcp_config = None
+        for cfg in mcp_configs:
+            if cfg.name == mcp_name:
+                mcp_config = cfg
+                break
+
+        if not mcp_config:
+            return False, f"MCP server '{mcp_name}' not found in mcp.yaml."
+
+        try:
+            headers = {}
+            if mcp_config.headers:
+                headers.update(mcp_config.headers)
+
+            secret_key = f"mcp_{mcp_config.name}"
+            api_key = await self.secret_keeper.retrieve(
+                requester=self.name,
+                key=secret_key,
+                prompt_if_missing=False,
+            )
+            if api_key:
+                if not any(
+                    k.lower() in ["authorization", "api-key", "x-api-key"]
+                    for k in headers.keys()
+                ):
+                    headers["Authorization"] = f"Bearer {api_key}"
+
+            default_timeout = 60.0 if mcp_config.type.value == "stdio" else 30.0
+            timeout = (
+                float(mcp_config.timeout) if mcp_config.timeout else default_timeout
+            )
+
+            connection = await asyncio.wait_for(
+                self.mcp_registry.register_server(
+                    config=mcp_config,
+                    headers=headers if headers else None,
+                ),
+                timeout=timeout,
+            )
+
+            if connection.is_connected:
+                tool_count = len(connection.tools)
+                return True, f"MCP server '{mcp_name}' enabled with {tool_count} tools."
+            else:
+                error = connection.error or "Connection failed."
+                return False, f"MCP server '{mcp_name}' failed to connect: {error}"
+
+        except asyncio.TimeoutError:
+            error_msg = f"Connection timed out ({int(timeout)}s)."
+            self.mcp_registry.set_server_error(mcp_name, error_msg)
+            return False, f"MCP server '{mcp_name}': {error_msg}"
+
+        except Exception as e:
+            error_msg = f"Error enabling MCP '{mcp_name}': {str(e)}"
+            await printr.print_async(error_msg, color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return False, error_msg
+
+    async def disable_mcp(self, mcp_name: str) -> tuple[bool, str]:
+        if mcp_name not in self.mcp_registry.get_connected_server_names():
+            return True, f"MCP server '{mcp_name}' is already disconnected."
+
+        try:
+            await self.mcp_registry.unregister_server(mcp_name)
+            return True, f"MCP server '{mcp_name}' disabled."
+
+        except Exception as e:
+            error_msg = f"Error disabling MCP '{mcp_name}': {str(e)}"
+            await printr.print_async(error_msg, color=LogType.ERROR)
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return False, error_msg
+
+    async def init_mcps(self) -> list[WingmanInitializationError]:
+        errors = []
+
+        if not self.mcp_client.is_available:
+            printr.print(
+                f"[{self.name}] MCP SDK not installed, skipping MCP initialization.",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return errors
+
+        await self.unload_mcps()
+
+        central_mcp_config = self.tower.config_manager.mcp_config
+        mcp_configs = central_mcp_config.servers if central_mcp_config else []
+        if not mcp_configs:
+            return errors
+
+        discoverable_mcps = self.config.discoverable_mcps
+        mcps_to_connect = [mcp for mcp in mcp_configs if mcp.name in discoverable_mcps]
+
+        if not mcps_to_connect:
+            return errors
+
+        async def connect_mcp(mcp_config):
+            local_errors = []
+            try:
+                headers = {}
+                if mcp_config.headers:
+                    headers.update(mcp_config.headers)
+
+                secret_key = f"mcp_{mcp_config.name}"
+                api_key = await self.secret_keeper.retrieve(
+                    requester=self.name,
+                    key=secret_key,
+                    prompt_if_missing=False,
+                )
+                if api_key:
+                    printr.print(
+                        f"MCP secret '{secret_key}' found ({len(api_key)} chars)",
+                        color=LogType.INFO,
+                        source_name=self.name,
+                        server_only=True,
+                    )
+                    if not any(
+                        k.lower() in ["authorization", "api-key", "x-api-key"]
+                        for k in headers.keys()
+                    ):
+                        headers["Authorization"] = f"Bearer {api_key}"
+
+                default_timeout = 60.0 if mcp_config.type.value == "stdio" else 30.0
+                timeout = (
+                    float(mcp_config.timeout) if mcp_config.timeout else default_timeout
+                )
+
+                try:
+                    connection = await asyncio.wait_for(
+                        self.mcp_registry.register_server(
+                            config=mcp_config,
+                            headers=headers if headers else None,
+                        ),
+                        timeout=timeout,
+                    )
+                except asyncio.TimeoutError:
+                    error_msg = f"MCP '{mcp_config.display_name}' connection timed out ({int(timeout)}s)."
+                    printr.print(
+                        error_msg,
+                        color=LogType.WARNING,
+                        source_name=self.name,
+                        server_only=True,
+                    )
+                    local_errors.append(
+                        WingmanInitializationError(
+                            wingman_name=self.name,
+                            message=error_msg,
+                            error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
+                        )
+                    )
+                    return (False, None, local_errors)
+
+                if connection.is_connected:
+                    return (
+                        True,
+                        f"{mcp_config.display_name} ({len(connection.tools)} tools)",
+                        local_errors,
+                    )
+                else:
+                    error_msg = f"MCP '{mcp_config.display_name}' failed to connect: {connection.error}"
+                    local_errors.append(
+                        WingmanInitializationError(
+                            wingman_name=self.name,
+                            message=error_msg,
+                            error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
+                        )
+                    )
+                    return (False, None, local_errors)
+
+            except Exception as e:
+                error_msg = f"MCP '{mcp_config.name}' initialization error: {str(e)}"
+                printr.print(
+                    error_msg,
+                    color=LogType.ERROR,
+                    source_name=self.name,
+                    server_only=True,
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
+                local_errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.name,
+                        message=error_msg,
+                        error_type=WingmanInitializationErrorType.MCP_CONNECTION_FAILED,
+                    )
+                )
+                return (False, None, local_errors)
+
+        connection_tasks = [connect_mcp(mcp) for mcp in mcps_to_connect]
+        results = await asyncio.gather(*connection_tasks)
+
+        connected_count = 0
+        connected_names = []
+        for success, connection_info, mcp_errors in results:
+            if success:
+                connected_count += 1
+                connected_names.append(connection_info)
+            errors.extend(mcp_errors)
+
+        if connected_count > 0:
+            await printr.print_async(
+                f"Discoverable MCP servers connected ({connected_count}): {', '.join(connected_names)}",
+                color=LogType.WINGMAN,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+                server_only=not self.settings.debug_mode,
+            )
+
+        return errors
+
+    # ──────────────────────────────── Skills ───────────────────────────────────── #
 
     async def init_skills(self) -> list[WingmanInitializationError]:
-        """Load all available skills with lazy validation.
-
-        Skills are loaded but NOT validated during init. Validation happens
-        on first activation via the SkillRegistry. User config overrides from
-        self.config.skills are merged with default configs.
-
-        Platform-incompatible skills are skipped entirely.
-        """
         import sys
 
-        current_platform = sys.platform  # 'win32', 'darwin', 'linux'
+        current_platform = sys.platform
         platform_map = {"win32": "windows", "darwin": "darwin", "linux": "linux"}
         normalized_platform = platform_map.get(current_platform, current_platform)
 
@@ -254,18 +602,13 @@ class Wingman:
         errors = []
         self.skills = []
 
-        # Build a lookup of user config overrides by skill folder name
-        # The key must be the folder name (e.g., 'star_head') not the class name (e.g., 'StarHead')
         user_skill_configs: dict[str, "SkillConfig"] = {}
         if self.config.skills:
             for skill_config in self.config.skills:
                 folder_name = _get_skill_folder_from_module(skill_config.module)
                 user_skill_configs[folder_name] = skill_config
 
-        # Get all available skill configs
         available_skills = ModuleManager.read_available_skill_configs()
-
-        # Get discoverable skills list (whitelist)
         discoverable_skills = self.config.discoverable_skills
 
         for (
@@ -275,19 +618,14 @@ class Wingman:
             _is_local,
         ) in available_skills:
             try:
-                # Load default skill config first to get the display name
                 skill_config_dict = ModuleManager.read_config(skill_config_path)
                 if not skill_config_dict:
                     continue
 
-                # Import SkillConfig here to avoid circular imports
                 from api.interface import SkillConfig
 
-                # Check if user has overrides for this skill
                 if skill_folder_name in user_skill_configs:
-                    # Merge user overrides into default config
                     user_config = user_skill_configs[skill_folder_name]
-                    # User config takes precedence - merge custom_properties especially
                     if user_config.custom_properties:
                         skill_config_dict["custom_properties"] = [
                             prop.model_dump() for prop in user_config.custom_properties
@@ -297,11 +635,9 @@ class Wingman:
 
                 skill_config = SkillConfig(**skill_config_dict)
 
-                # Check if skill is discoverable for this wingman (whitelist - must be in list)
                 if skill_config.name not in discoverable_skills:
                     continue
 
-                # Check platform compatibility BEFORE loading the module
                 if skill_config.platforms:
                     if normalized_platform not in skill_config.platforms:
                         printr.print(
@@ -311,18 +647,13 @@ class Wingman:
                         )
                         continue
 
-                # Load the skill module
                 skill = ModuleManager.load_skill(
                     config=skill_config,
                     settings=self.settings,
                     wingman=self,
                 )
                 if skill:
-                    # Set up skill methods
                     skill.threaded_execution = self.threaded_execution
-
-                    # Add to skills list WITHOUT validation
-                    # Validation will happen lazily on first activation
                     self.skills.append(skill)
                     await self.prepare_skill(skill)
 
@@ -344,7 +675,6 @@ class Wingman:
                     )
                 )
 
-        # Log summary of discoverable skills for this wingman
         if self.skills:
             skill_names = [s.config.name for s in self.skills]
             await printr.print_async(
@@ -358,41 +688,58 @@ class Wingman:
         return errors
 
     async def prepare_skill(self, skill: Skill):
-        """This method is called only once when the Skill is instantiated.
-        It is run AFTER validate() so you can access validated params safely here.
+        try:
+            for tool_name, tool in skill.get_tools():
+                self.tool_skills[tool_name] = skill
+                self.skill_tools.append(tool)
 
-        You can override it if you need to react on data of this skill."""
+            self.skill_registry.register_skill(skill)
+
+            if skill.config.auto_activate:
+                success, message = await skill.ensure_activated()
+                if not success:
+                    await printr.print_async(
+                        f"Auto-activated skill '{skill.config.display_name}' failed to activate: {message}",
+                        color=LogType.ERROR,
+                    )
+        except Exception as e:
+            await printr.print_async(
+                f"Error while preparing skill '{skill.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+
+        skill.llm_call = self.actual_llm_call
 
     async def unprepare_skill(self, skill: Skill):
-        """Remove a skill's registration. Called when a skill is disabled.
-
-        Override in subclass to clean up skill-specific registrations."""
-        pass
+        try:
+            for tool_name, _ in skill.get_tools():
+                self.tool_skills.pop(tool_name, None)
+                self.skill_tools = [
+                    t
+                    for t in self.skill_tools
+                    if t.get("function", {}).get("name") != tool_name
+                ]
+            self.skill_registry.unregister_skill(skill.name)
+        except Exception as e:
+            await printr.print_async(
+                f"Error while unpreparing skill '{skill.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
     async def enable_skill(self, skill_name: str) -> tuple[bool, str]:
-        """Enable a single skill without reinitializing all skills.
-
-        Args:
-            skill_name: The display name of the skill to enable
-
-        Returns:
-            (success, message) tuple
-        """
         import sys
 
         current_platform = sys.platform
         platform_map = {"win32": "windows", "darwin": "darwin", "linux": "linux"}
         normalized_platform = platform_map.get(current_platform, current_platform)
 
-        # Check if skill is already enabled
         for existing_skill in self.skills:
             if existing_skill.config.name == skill_name:
                 return True, f"Skill '{skill_name}' is already enabled."
 
-        # Find the skill config
         available_skills = ModuleManager.read_available_skill_configs()
-
-        # Build user config lookup by skill folder name
         user_skill_configs: dict[str, "SkillConfig"] = {}
         if self.config.skills:
             for skill_config in self.config.skills:
@@ -412,7 +759,6 @@ class Wingman:
 
                 from api.interface import SkillConfig
 
-                # Apply user overrides
                 if skill_folder_name in user_skill_configs:
                     user_config = user_skill_configs[skill_folder_name]
                     if user_config.custom_properties:
@@ -427,7 +773,6 @@ class Wingman:
                 if skill_config.name != skill_name:
                     continue
 
-                # Check platform compatibility
                 if skill_config.platforms:
                     if normalized_platform not in skill_config.platforms:
                         return (
@@ -435,7 +780,6 @@ class Wingman:
                             f"Skill '{skill_name}' is not supported on {normalized_platform}.",
                         )
 
-                # Load and register the skill
                 skill = ModuleManager.load_skill(
                     config=skill_config,
                     settings=self.settings,
@@ -464,15 +808,6 @@ class Wingman:
         return False, f"Skill '{skill_name}' not found."
 
     async def disable_skill(self, skill_name: str) -> tuple[bool, str]:
-        """Disable a single skill without reinitializing all skills.
-
-        Args:
-            skill_name: The display name of the skill to disable
-
-        Returns:
-            (success, message) tuple
-        """
-        # Find the skill in our list
         skill_to_remove = None
         for skill in self.skills:
             if skill.config.name == skill_name:
@@ -483,13 +818,8 @@ class Wingman:
             return True, f"Skill '{skill_name}' is already deactivated."
 
         try:
-            # Unload the skill (cleanup resources, unsubscribe events)
             await skill_to_remove.unload()
-
-            # Remove from skill list
             self.skills.remove(skill_to_remove)
-
-            # Remove skill-specific registrations (tools, registry, etc.)
             await self.unprepare_skill(skill_to_remove)
 
             printr.print(
@@ -505,36 +835,14 @@ class Wingman:
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return False, error_msg
 
-    async def reset_conversation_history(self):
-        """This function is called when the user triggers the ResetConversationHistory command.
-        It's a global command that should be implemented by every Wingman that keeps a message history.
-        """
-
-    # ──────────────────────────── The main processing loop ──────────────────────────── #
+    # ──────────────────────────── The main processing loop ──────────────────────── #
 
     async def process(self, audio_input_wav: str = None, transcript: str = None, images: list[tuple[str, str]] = None):
-        """The main method that gets called when the wingman is activated. This method controls what your wingman actually does and you can override it if you want to.
-
-        The base implementation here triggers the transcription and processing of the given audio input.
-        If you don't need even transcription, you can just override this entire process method. If you want transcription but then do something in addition, you can override the listed hooks.
-
-        Async so you can do async processing, e.g. send a request to an API.
-
-        Args:
-            audio_input_wav (str): The path to the audio file that contains the user's speech. This is a recording of what you you said.
-
-        Hooks:
-            - async _transcribe: transcribe the audio to text
-            - async _get_response_for_transcript: process the transcript and return a text response
-            - async play_to_user: do something with the response, e.g. play it as audio
-        """
-
         try:
             process_result = None
 
             benchmark_transcribe = None
             if not transcript:
-                # transcribe the audio.
                 benchmark_transcribe = Benchmark(label="Voice transcription")
                 transcript = await self._transcribe(audio_input_wav)
 
@@ -553,9 +861,6 @@ class Wingman:
                     ),
                     additional_data=additional_data,
                 )
-
-                # Further process the transcript.
-                # Return a string that is the "answer" to your passed transcript.
 
                 benchmark_llm = Benchmark(label="Command/AI Processing")
                 process_result, instant_response, skill, interrupt = (
@@ -588,8 +893,6 @@ class Wingman:
             if process_result:
                 if self.settings.streamer_mode:
                     self.tower.save_last_message(self.name, process_result)
-
-                # the last step in the chain. You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
                 await self.play_to_user(str(process_result), not interrupt)
         except Exception as e:
             await printr.print_async(
@@ -598,33 +901,411 @@ class Wingman:
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
-    # ───────────────── virtual methods / hooks ───────────────── #
+    # ───────────────── Transcription ───────────────── #
 
     async def _transcribe(self, audio_input_wav: str) -> str | None:
-        """Transcribes the audio to text. You can override this method if you want to use a different transcription service.
-
-        Args:
-            audio_input_wav (str): The path to the audio file that contains the user's speech. This is a recording of what you you said.
-
-        Returns:
-            str | None: The transcript of the audio file and the detected language as locale (if determined).
-        """
+        if not self.stt:
+            return None
+        try:
+            transcript = await self.stt.transcribe(filename=audio_input_wav)
+            if transcript:
+                # Wingman Pro might return a serialized dict instead of a real object
+                if isinstance(transcript, dict):
+                    return transcript.get("_text")
+                return transcript.text
+        except Exception as e:
+            await printr.print_async(
+                f"Error during transcription using '{self.config.features.stt_provider}': {str(e)}",
+                color=LogType.ERROR,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
         return None
+
+    # ───────────────── Response orchestration ───────────────── #
 
     async def _get_response_for_transcript(
         self, transcript: str, benchmark: Benchmark, images: list[tuple[str, str]] = None
-    ) -> tuple[str | None, str | None, Skill | None, bool | None]:
-        """Processes the transcript and return a response as text. This where you'll do most of your work.
-        Pass the transcript to AI providers and build a conversation. Call commands or APIs. Play temporary results to the user etc.
+    ) -> tuple[str | None, str | None, Skill | None, bool]:
+        self.ensure_memory_initialized()
 
+        await self.add_user_message(transcript, images=images)
 
-        Args:
-            transcript (str): The user's spoken text transcribed as text.
+        benchmark.start_snapshot("Instant activation commands")
+        instant_response, instant_command_executed = await self._try_instant_activation(
+            transcript=transcript
+        )
+        if instant_response:
+            await self.add_assistant_message(instant_response)
+            benchmark.finish_snapshot()
+            if instant_response == ".":
+                instant_response = None
+            return instant_response, instant_response, None, True
+        benchmark.finish_snapshot()
 
-        Returns:
-            A tuple of strings representing the response to a function call and/or an instant response.
-        """
-        return "", "", None, None
+        llm_processing_time_ms = 0.0
+        tool_execution_time_ms = 0.0
+        tool_timings: list[tuple[str, float]] = []
+
+        llm_start = time.perf_counter()
+        completion = await self._llm_call(instant_command_executed is False)
+        llm_processing_time_ms += (time.perf_counter() - llm_start) * 1000
+
+        if completion is None:
+            self._add_benchmark_snapshot(
+                benchmark, "LLM Processing", llm_processing_time_ms
+            )
+            return None, None, None, True
+
+        response_message, tool_calls, usage = await self._process_completion(
+            completion, instant_command_executed is False
+        )
+
+        turn_prompt_tokens = usage[0]
+        turn_completion_tokens = usage[1]
+        self._last_prompt_tokens = turn_prompt_tokens
+
+        is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
+            response_message, tool_calls
+        )
+        interrupt = True
+
+        while tool_calls:
+            if is_waiting_response_needed:
+                message = None
+                if response_message.content:
+                    message = response_message.content
+                elif self.instant_responses:
+                    message = self._get_random_filler()
+                    is_summarize_needed = True
+                if message:
+                    self.threaded_execution(self.play_to_user, message, interrupt)
+                    await printr.print_async(
+                        f"{message}",
+                        color=LogType.POSITIVE,
+                        source=LogSource.WINGMAN,
+                        source_name=self.name,
+                        skill_name="",
+                    )
+                    interrupt = False
+                else:
+                    is_summarize_needed = True
+            else:
+                is_summarize_needed = True
+
+            tool_start = time.perf_counter()
+            instant_response, skill, iteration_timings = await self._handle_tool_calls(
+                tool_calls
+            )
+            tool_execution_time_ms += (time.perf_counter() - tool_start) * 1000
+            tool_timings.extend(iteration_timings)
+
+            if instant_response:
+                await self._trim_tool_responses()
+                self._add_benchmark_snapshot(
+                    benchmark, "LLM Processing", llm_processing_time_ms
+                )
+                if tool_execution_time_ms > 0:
+                    self._add_tool_execution_snapshot(
+                        benchmark, tool_execution_time_ms, tool_timings
+                    )
+                await self._broadcast_token_usage(
+                    turn_prompt_tokens, turn_completion_tokens
+                )
+                return None, instant_response, None, interrupt
+
+            if is_summarize_needed:
+                llm_start = time.perf_counter()
+                completion = await self._llm_call(True)
+                llm_processing_time_ms += (time.perf_counter() - llm_start) * 1000
+
+                if completion is None:
+                    await self._trim_tool_responses()
+                    self._add_benchmark_snapshot(
+                        benchmark, "LLM Processing", llm_processing_time_ms
+                    )
+                    if tool_execution_time_ms > 0:
+                        self._add_tool_execution_snapshot(
+                            benchmark, tool_execution_time_ms, tool_timings
+                        )
+                    await self._broadcast_token_usage(
+                        turn_prompt_tokens, turn_completion_tokens
+                    )
+                    return None, None, None, True
+
+                response_message, tool_calls, usage = await self._process_completion(
+                    completion
+                )
+                turn_prompt_tokens = usage[0]
+                turn_completion_tokens += usage[1]
+                self._last_prompt_tokens = turn_prompt_tokens
+
+                is_waiting_response_needed, is_summarize_needed = (
+                    await self._add_gpt_response(response_message, tool_calls)
+                )
+                if tool_calls:
+                    interrupt = False
+            elif is_waiting_response_needed:
+                await self._trim_tool_responses()
+                self._add_benchmark_snapshot(
+                    benchmark, "LLM Processing", llm_processing_time_ms
+                )
+                if tool_execution_time_ms > 0:
+                    self._add_tool_execution_snapshot(
+                        benchmark, tool_execution_time_ms, tool_timings
+                    )
+                await self._broadcast_token_usage(
+                    turn_prompt_tokens, turn_completion_tokens
+                )
+                return None, None, None, interrupt
+
+        await self._trim_tool_responses()
+
+        self._add_benchmark_snapshot(
+            benchmark, "LLM Processing", llm_processing_time_ms
+        )
+        if tool_execution_time_ms > 0:
+            self._add_tool_execution_snapshot(
+                benchmark, tool_execution_time_ms, tool_timings
+            )
+        await self._broadcast_token_usage(turn_prompt_tokens, turn_completion_tokens)
+        return response_message.content, response_message.content, None, interrupt
+
+    # ───────────────── LLM call ───────────────── #
+
+    async def actual_llm_call(self, messages, tools: list[dict] = None):
+        if not self.llm:
+            await printr.print_async(
+                f"No LLM provider configured for wingman '{self.name}'.",
+                color=LogType.ERROR,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
+            return None
+
+        try:
+            completion = await self.llm.ask(messages=messages, tools=tools)
+        except APIConnectionError as e:
+            provider = self.config.features.conversation_provider.value
+            cause = e.__cause__
+            detail = str(cause) if cause else str(e)
+            message = f"Could not connect to {provider}: {detail}"
+            await printr.print_async(
+                message,
+                color=LogType.ERROR,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return None
+        except Exception as e:
+            await printr.print_async(
+                f"Error during LLM call: {str(e)}",
+                color=LogType.ERROR,
+                source=LogSource.WINGMAN,
+                source_name=self.name,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+            return None
+
+        return completion
+
+    async def _llm_call(self, allow_tool_calls: bool = True):
+        thiscall = time.time()
+        self.last_gpt_call = thiscall
+
+        tools = self.build_tools() if allow_tool_calls else None
+
+        if self.settings.debug_mode:
+            await printr.print_async(
+                f"Calling LLM with {len(self.conversation.messages)} messages (excluding context) and {len(tools) if tools else 0} tools.",
+                color=LogType.INFO,
+            )
+
+        messages = self.conversation.messages.copy()
+        await self.add_context(messages)
+
+        completion = await self.actual_llm_call(messages, tools)
+
+        if self.last_gpt_call != thiscall:
+            await printr.print_async(
+                "LLM call was cancelled due to a new call.", color=LogType.WARNING
+            )
+            return None
+
+        return completion
+
+    async def _process_completion(
+        self, completion: ChatCompletion, allow_tool_calls: bool = True
+    ):
+        response_message = completion.choices[0].message
+
+        content = response_message.content
+        if content is None:
+            response_message.content = ""
+
+        if not allow_tool_calls:
+            response_message.tool_calls = None
+
+        if response_message.tool_calls:
+            response_message.tool_calls = await self.tool_executor.fix_tool_calls(
+                response_message.tool_calls, self.get_command
+            )
+
+        prompt_tokens = 0
+        completion_tokens = 0
+        if completion.usage:
+            prompt_tokens = completion.usage.prompt_tokens or 0
+            completion_tokens = completion.usage.completion_tokens or 0
+
+        return (
+            response_message,
+            response_message.tool_calls,
+            (prompt_tokens, completion_tokens),
+        )
+
+    # ───────────────── Tool calls ───────────────── #
+
+    async def _handle_tool_calls(self, tool_calls):
+        return await self.tool_executor.handle_tool_calls(
+            tool_calls,
+            tool_skills=self.tool_skills,
+            skill_registry=self.skill_registry,
+            mcp_registry=self.mcp_registry,
+            capability_registry=self.capability_registry,
+            persistent_memory_service=self.persistent_memory_service,
+            get_command_fn=self.get_command,
+            execute_command_fn=self._execute_command,
+            play_to_user_fn=self.play_to_user,
+            local_ai_service=self.local_ai_service,
+            update_tool_response_fn=self.conversation.update_tool_response,
+            add_tool_response_fn=self.conversation.add_tool_response,
+            pending_tool_calls=self.conversation.pending_tool_calls,
+        )
+
+    async def execute_command_by_function_call(
+        self, function_name: str, function_args: dict[str, any]
+    ) -> tuple[str, str | None, Skill | None, str | None]:
+        """Public API kept for backward compatibility with skills."""
+        return await self.tool_executor.execute_by_function_call(
+            function_name,
+            function_args,
+            tool_skills=self.tool_skills,
+            skill_registry=self.skill_registry,
+            mcp_registry=self.mcp_registry,
+            capability_registry=self.capability_registry,
+            persistent_memory_service=self.persistent_memory_service,
+            get_command_fn=self.get_command,
+            execute_command_fn=self._execute_command,
+            play_to_user_fn=self.play_to_user,
+        )
+
+    # ───────────────── Conversation delegation ───────────────── #
+
+    async def _add_gpt_response(self, message, tool_calls) -> tuple[bool, bool]:
+        return await self.conversation.add_gpt_response(
+            message,
+            tool_calls,
+            skills=self.skills,
+            skill_registry=self.skill_registry,
+            tool_skills=self.tool_skills,
+        )
+
+    async def _trim_tool_responses(self, max_tokens: int = 500):
+        await self.conversation.trim_tool_responses(
+            max_tokens=max_tokens,
+            is_condensing=self.condenser.is_condensing,
+        )
+
+    async def add_user_message(self, content: str, images: list[tuple[str, str]] = None):
+        self._memory_recall_notified = False
+        self.context_builder.reset_memory_notification()
+        await self.conversation.add_user_message(
+            content,
+            images=images,
+            skills=self.skills,
+            condense_fn=lambda: self.condenser.maybe_condense(self.local_ai_service),
+        )
+
+    async def add_assistant_message(self, content: str):
+        await self.conversation.add_assistant_message(
+            content, skills=self.skills
+        )
+
+    async def add_forced_assistant_command_calls(self, commands: list[CommandConfig]):
+        await self.conversation.add_forced_assistant_command_calls(
+            commands,
+            skills=self.skills,
+            skill_registry=self.skill_registry,
+            tool_skills=self.tool_skills,
+        )
+
+    async def reset_conversation_history(self):
+        if self.persistent_memory_service and len(self.conversation.messages) >= 4:
+            try:
+                await self.persistent_memory_service.extract_memories(
+                    self.conversation.messages, generate_summary=True
+                )
+            except Exception:
+                pass
+
+        await self.conversation.reset()
+        self._last_prompt_tokens = 0
+        self.skill_registry.reset_activations()
+        self.mcp_registry.reset_activations()
+
+    def get_conversation_messages(self, strip_nulls: bool = True) -> list[dict]:
+        return self.conversation.get_conversation_messages(strip_nulls=strip_nulls)
+
+    # ─── Backward-compat: expose messages directly for skills/services that access it ─── #
+
+    @property
+    def messages(self) -> list:
+        return self.conversation.messages
+
+    @messages.setter
+    def messages(self, value: list):
+        self.conversation.messages = value
+
+    @property
+    def conversation_summary(self) -> str:
+        return self.conversation.conversation_summary
+
+    @conversation_summary.setter
+    def conversation_summary(self, value: str):
+        self.conversation.conversation_summary = value
+
+    @property
+    def pending_tool_calls(self) -> list:
+        return self.conversation.pending_tool_calls
+
+    @property
+    def _is_condensing(self) -> bool:
+        return self.condenser.is_condensing
+
+    # ───────────────── Context ───────────────── #
+
+    async def get_context(self):
+        config_dir_name = None
+        if self.tower and self.tower.config_dir and self.tower.config_dir.name:
+            config_dir_name = self.tower.config_dir.name
+
+        return await self.context_builder.build(
+            skills=self.skills,
+            skill_registry=self.skill_registry,
+            conversation_summary=self.conversation.conversation_summary,
+            persistent_memory_service=self.persistent_memory_service,
+            messages=self.conversation.messages,
+            config_dir_name=config_dir_name,
+        )
+
+    def get_last_context(self) -> str:
+        return self.context_builder.get_last_context()
+
+    async def add_context(self, messages):
+        context = await self.get_context()
+        messages.insert(0, {"role": "system", "content": context})
+
+    # ───────────────── TTS / play_to_user ───────────────── #
 
     async def play_to_user(
         self,
@@ -632,29 +1313,406 @@ class Wingman:
         no_interrupt: bool = False,
         sound_config: Optional[SoundConfig] = None,
     ):
-        """You'll probably want to play the response to the user as audio using a TTS provider or mechanism of your choice.
+        if sound_config:
+            printr.print(
+                "Using custom sound config for playback", LogType.INFO, server_only=True
+            )
+        else:
+            sound_config = self.config.sound
 
-        Args:
-            text (str): The response of your _get_response_for_transcript. This is usually the "response" from conversation with the AI.
-            no_interrupt (bool): prevent interrupting the audio playback
-            sound_config (SoundConfig): An optional sound configuration to use for the playback. If unset, the Wingman's sound config is used.
-        """
-        pass
+        text, contains_links, contains_code_blocks = cleanup_text(text)
 
-    # ───────────────────────────────── Commands ─────────────────────────────── #
+        if no_interrupt and self.audio_player.is_playing:
+            while self.audio_player.is_playing:
+                await asyncio.sleep(0.1)
+
+        changed_text = text
+        for skill in self.skills:
+            if skill.is_prepared:
+                changed_text = await skill.on_play_to_user(text, sound_config)
+                if changed_text != text:
+                    printr.print(
+                        f"Skill '{skill.config.display_name}' modified the text to: '{changed_text}'",
+                        LogType.INFO,
+                    )
+                    text = changed_text
+
+        if sound_config.volume == 0.0:
+            printr.print(
+                "Volume modifier is set to 0. Skipping TTS processing.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
+
+        if "{SKIP-TTS}" in text:
+            printr.print(
+                "Skip TTS phrase found in input. Skipping TTS processing.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
+
+        if not self.tts:
+            printr.print(
+                f"No TTS provider configured for wingman '{self.name}'.",
+                LogType.WARNING,
+                server_only=True,
+            )
+            return
+
+        try:
+            await self.tts.play_audio(
+                text=text,
+                sound_config=sound_config,
+                audio_player=self.audio_player,
+                wingman_name=self.name,
+            )
+        except Exception as e:
+            await printr.print_async(
+                f"Error during TTS playback: {str(e)}", color=LogType.ERROR
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+
+    # ───────────────── Image generation ───────────────── #
+
+    async def generate_image(self, text: str) -> str:
+        if (
+            self.config.features.image_generation_provider
+            == ImageGenerationProvider.WINGMAN_PRO
+        ):
+            try:
+                from providers.wingman_subscription import WingmanSubscription
+
+                wingman_pro = WingmanSubscription(
+                    wingman_name=self.name, settings=self.settings.wingman_pro
+                )
+                return await wingman_pro.generate_image(text)
+            except Exception as e:
+                await printr.print_async(
+                    f"Error during image generation: {str(e)}", color=LogType.ERROR
+                )
+                printr.print(
+                    traceback.format_exc(), color=LogType.ERROR, server_only=True
+                )
+        return ""
+
+    # ───────────────── Instant activation ───────────────── #
+
+    async def _try_instant_activation(self, transcript: str) -> tuple[str, bool]:
+        commands = await self._execute_instant_activation_command(transcript)
+        if commands:
+            await self.add_forced_assistant_command_calls(commands)
+            responses = []
+            for command in commands:
+                if command.responses:
+                    responses.append(self._select_instant_command_response(command))
+
+            if len(responses) == len(commands):
+                responses = list(dict.fromkeys(responses))
+                responses = [
+                    response + "." if not response.endswith(".") else response
+                    for response in responses
+                ]
+                return " ".join(responses), True
+
+            return None, True
+
+        return None, False
+
+    # ───────────────── Instant responses ───────────────── #
+
+    async def _generate_instant_responses(self) -> None:
+        context = await self.get_context()
+        messages = [
+            {
+                "role": "system",
+                "content": """
+                Generate a list in JSON format of at least 20 short direct text responses.
+                Make sure the response only contains the JSON, no additional text.
+                They must fit the described character in the given context by the user.
+                Every generated response must be generally usable in every situation.
+                Responses must show its still in progress and not in a finished state.
+                The user request this response is used on is unknown. Therefore it must be generic.
+                Good examples:
+                    - "Processing..."
+                    - "Stand by..."
+
+                Bad examples:
+                    - "Generating route..." (too specific)
+                    - "I'm sorry, I can't do that." (too negative)
+
+                Response example:
+                [
+                    "OK",
+                    "Generating results...",
+                    "Roger that!",
+                    "Stand by..."
+                ]
+            """,
+            },
+            {"role": "user", "content": context},
+        ]
+        try:
+            completion = await self.actual_llm_call(messages)
+            if completion is None:
+                return
+            if completion.choices[0].message.content:
+                retry_limit = 3
+                retry_count = 1
+                valid = False
+                while not valid and retry_count <= retry_limit:
+                    try:
+                        responses = json.loads(completion.choices[0].message.content)
+                        valid = True
+                        for response in responses:
+                            if response not in self.instant_responses:
+                                self.instant_responses.append(str(response))
+                    except json.JSONDecodeError:
+                        messages.append(completion.choices[0].message)
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": "It was tried to handle the response in its entirety as a JSON string. Fix response to be a pure, valid JSON, it was not convertable.",
+                            }
+                        )
+                        if retry_count <= retry_limit:
+                            completion = await self.actual_llm_call(messages)
+                        retry_count += 1
+        except Exception as e:
+            await printr.print_async(
+                f"Error while generating instant responses: {str(e)}",
+                color=LogType.ERROR,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+
+    def _get_random_filler(self):
+        if len(self.last_used_instant_responses) > 2:
+            self.last_used_instant_responses = self.last_used_instant_responses[-2:]
+
+        random_index = random.randint(0, len(self.instant_responses) - 1)
+        while random_index in self.last_used_instant_responses:
+            random_index = random.randint(0, len(self.instant_responses) - 1)
+
+        self.last_used_instant_responses.append(random_index)
+        return self.instant_responses[random_index]
+
+    # ───────────────── Benchmarks / token usage ───────────────── #
+
+    def _add_benchmark_snapshot(
+        self, benchmark: Benchmark, label: str, execution_time_ms: float
+    ):
+        if execution_time_ms >= 1000:
+            formatted_time = f"{execution_time_ms/1000:.1f}s"
+        else:
+            formatted_time = f"{int(execution_time_ms)}ms"
+
+        from api.interface import BenchmarkResult
+
+        benchmark.snapshots.append(
+            BenchmarkResult(
+                label=label,
+                execution_time_ms=execution_time_ms,
+                formatted_execution_time=formatted_time,
+            )
+        )
+
+    def _add_tool_execution_snapshot(
+        self,
+        benchmark: Benchmark,
+        total_time_ms: float,
+        tool_timings: list[tuple[str, float]],
+    ):
+        from api.interface import BenchmarkResult
+
+        if total_time_ms >= 1000:
+            formatted_time = f"{total_time_ms/1000:.1f}s"
+        else:
+            formatted_time = f"{int(total_time_ms)}ms"
+
+        nested_snapshots = []
+        for label, time_ms in tool_timings:
+            if time_ms >= 1000:
+                fmt = f"{time_ms/1000:.1f}s"
+            else:
+                fmt = f"{int(time_ms)}ms"
+            nested_snapshots.append(
+                BenchmarkResult(
+                    label=label,
+                    execution_time_ms=time_ms,
+                    formatted_execution_time=fmt,
+                )
+            )
+
+        benchmark.snapshots.append(
+            BenchmarkResult(
+                label="Tool Execution",
+                execution_time_ms=total_time_ms,
+                formatted_execution_time=formatted_time,
+                snapshots=nested_snapshots if nested_snapshots else None,
+            )
+        )
+
+    async def _broadcast_token_usage(self, prompt_tokens: int, completion_tokens: int):
+        is_local = (
+            self.config.features.conversation_provider == ConversationProvider.LOCAL_LLM
+        )
+
+        if is_local and prompt_tokens == 0:
+            prompt_tokens = sum(
+                count_tokens(
+                    msg["content"]
+                    if isinstance(msg.get("content"), str)
+                    else str(msg.get("content", ""))
+                )
+                for msg in self.conversation.messages
+            )
+        if is_local and completion_tokens == 0 and self.conversation.messages:
+            last = self.conversation.messages[-1]
+            if last.get("role") == "assistant":
+                content = last.get("content", "")
+                completion_tokens = count_tokens(
+                    content if isinstance(content, str) else str(content)
+                )
+
+        self.last_turn_prompt_tokens = prompt_tokens
+        self.last_turn_completion_tokens = completion_tokens
+        if prompt_tokens == 0 and completion_tokens == 0:
+            return
+        if not printr._connection_manager:
+            return
+
+        from api.commands import ConversationTokenUsageCommand
+
+        await printr._connection_manager.broadcast(
+            ConversationTokenUsageCommand(
+                wingman_name=self.name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                is_local=is_local,
+            )
+        )
+
+    # ───────────────── Build tools ───────────────── #
+
+    def build_tools(self) -> list[dict]:
+        def _command_has_effective_actions(command: CommandConfig) -> bool:
+            if command.is_system_command:
+                return True
+            if not command.actions:
+                return False
+            for action in command.actions:
+                if not action:
+                    continue
+                if (
+                    action.keyboard is not None
+                    or action.mouse is not None
+                    or action.joystick is not None
+                    or action.audio is not None
+                    or action.write is not None
+                    or action.wait is not None
+                ):
+                    return True
+            return False
+
+        commands = [
+            command.name
+            for command in self.config.commands
+            if (not command.force_instant_activation)
+            and _command_has_effective_actions(command)
+        ]
+        tools: list[dict] = []
+        if commands:
+            tools.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "execute_command",
+                        "description": "Executes a command",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "command_name": {
+                                    "type": "string",
+                                    "description": "The name of the command to execute",
+                                    "enum": commands,
+                                },
+                            },
+                            "required": ["command_name"],
+                        },
+                    },
+                }
+            )
+
+        for _, tool in self.capability_registry.get_meta_tools():
+            tools.append(tool)
+
+        for _, tool in self.skill_registry.get_active_tools():
+            tools.append(tool)
+
+        for _, tool in self.mcp_registry.get_active_tools():
+            tools.append(tool)
+
+        if self.persistent_memory_service:
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "memory_remember",
+                    "description": "Store an important fact or detail for future reference. Use when the user explicitly asks you to remember something.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": "The fact or detail to remember.",
+                            },
+                        },
+                        "required": ["text"],
+                    },
+                },
+            })
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "memory_recall",
+                    "description": "Search your memory for relevant information. Use when the user asks what you remember or know about a topic.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "What to search for in memory.",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            })
+            tools.append({
+                "type": "function",
+                "function": {
+                    "name": "memory_forget",
+                    "description": "Remove a specific memory. Use when the user explicitly asks you to forget something.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Description of the memory to forget.",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            })
+
+        return tools
+
+    # ───────────────── Commands ─────────────────────────────── #
 
     def get_command(self, command_name: str) -> CommandConfig | None:
-        """Extracts the command with the given name
-
-        Args:
-            command_name (str): the name of the command you used in the config
-
-        Returns:
-            {}: The command object from the config
-        """
         if self.config.commands is None:
             return None
-
         command = next(
             (item for item in self.config.commands if item.name == command_name),
             None,
@@ -662,34 +1720,15 @@ class Wingman:
         return command
 
     def _select_instant_command_response(self, command: CommandConfig) -> str | None:
-        """Returns one of the configured responses of the command. This base implementation returns a random one.
-
-        Args:
-            command (dict): The command object from the config
-
-        Returns:
-            str: A random response from the command's responses list in the config.
-        """
         command_responses = command.responses
         if (command_responses is None) or (len(command_responses) == 0):
             return None
-
         return random.choice(command_responses)
 
     async def _execute_instant_activation_command(
         self, transcript: str
     ) -> list[CommandConfig] | None:
-        """Uses a fuzzy string matching algorithm to match the transcript to a configured instant_activation command and executes it immediately.
-
-        Args:
-            transcript (text): What the user said, transcripted to text. Needs to be similar to one of the defined instant_activation phrases to work.
-
-        Returns:
-            {} | None: The executed instant_activation command.
-        """
-
         try:
-            # create list with phrases pointing to commands
             commands_by_instant_activation = {}
             for command in self.config.commands:
                 if command.instant_activation:
@@ -701,7 +1740,6 @@ class Wingman:
                         else:
                             commands_by_instant_activation[phrase.lower()] = [command]
 
-            # find best matching phrase
             phrase = difflib.get_close_matches(
                 transcript.lower(),
                 commands_by_instant_activation.keys(),
@@ -709,16 +1747,13 @@ class Wingman:
                 cutoff=1,
             )
 
-            # if no phrase found, return None
             if not phrase:
                 return None
 
-            # execute all commands for the phrase
             commands = commands_by_instant_activation[phrase[0]]
             for command in commands:
                 await self._execute_command(command, True)
 
-            # return the executed command
             return commands
         except Exception as e:
             await printr.print_async(
@@ -731,18 +1766,6 @@ class Wingman:
     async def _execute_command(
         self, command: CommandConfig, is_instant=False
     ) -> tuple[str | None, str]:
-        """Triggers the execution of a command. This base implementation executes the keypresses defined in the command.
-
-        Args:
-            command (dict): The command object from the config to execute
-
-        Returns:
-            tuple[str | None, str]: A 2-tuple of:
-                - Instant response (str) to play immediately, or None if there is no instant response.
-                - Function/tool response (str) to feed back to the LLM (uses command's additional_context,
-                  falls back to "OK", or an error string on failure).
-        """
-
         if not command:
             return None, "Command not found"
 
@@ -759,7 +1782,6 @@ class Wingman:
                     color=LogType.COMMAND,
                 )
 
-            # handle the global special commands:
             if command.name == "ResetConversationHistory":
                 await self.reset_conversation_history()
                 await printr.print_async(
@@ -779,23 +1801,10 @@ class Wingman:
             return None, "ERROR DURING PROCESSING"
 
     async def execute_action(self, command: CommandConfig):
-        """Executes the actions defined in the command (in order).
-
-        Args:
-            command (dict): The command object from the config to execute
-        """
         if not command or not command.actions:
             return
 
         def contains_numpad_key(hotkey: str) -> bool:
-            """Check if the hotkey string contains a numpad key anywhere in the chord.
-
-            Args:
-                hotkey: The hotkey string (e.g., 'num 1', 'ctrl+num 1', 'alt+num 2')
-
-            Returns:
-                True if any token in the chord is a numpad key (num 0 - num 9)
-            """
             if not hotkey:
                 return False
             tokens = hotkey.lower().split("+")
@@ -812,7 +1821,6 @@ class Wingman:
                         code = action.keyboard.hotkey
 
                     if action.keyboard.press == action.keyboard.release:
-                        # compressed key events
                         hold = action.keyboard.hold or 0.1
                         if (
                             action.keyboard.hotkey_codes
@@ -833,7 +1841,6 @@ class Wingman:
                             time.sleep(hold)
                             keyboard.release(code)
                     else:
-                        # single key events
                         if (
                             action.keyboard.hotkey_codes
                             and len(action.keyboard.hotkey_codes) == 1
@@ -888,8 +1895,9 @@ class Wingman:
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
 
+    # ───────────────── Threading ─────────────────────────────── #
+
     def threaded_execution(self, function, *args) -> threading.Thread | None:
-        """Execute a function in a separate thread."""
         try:
 
             def start_thread(function, *args):
@@ -903,7 +1911,7 @@ class Wingman:
 
             thread = threading.Thread(target=start_thread, args=(function, *args))
             thread.name = function.__name__
-            thread.daemon = True  # Mark as daemon so it dies when main process exits
+            thread.daemon = True
             thread.start()
             return thread
         except Exception as e:
@@ -913,27 +1921,17 @@ class Wingman:
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None
 
+    # ───────────────── Config management ─────────────────────── #
+
     async def update_config(
         self, config: WingmanConfig, skip_config_validation: bool = True
     ) -> bool:
-        """Update the config of the Wingman.
-
-        This method should always be called if the config of the Wingman has changed.
-
-        Args:
-            config: The new wingman configuration
-            skip_config_validation: If False, validate the config and rollback on error
-
-        Returns:
-            True if config was updated successfully, False otherwise
-        """
         try:
             if not skip_config_validation:
                 old_config = deepcopy(self.config)
 
             self.config = config
 
-            # Propagate skill config changes to loaded skills
             await self._update_skill_configs(config)
 
             if not skip_config_validation:
@@ -957,15 +1955,9 @@ class Wingman:
             return False
 
     async def _update_skill_configs(self, wingman_config: WingmanConfig) -> None:
-        """Propagate skill config changes to loaded skills.
-
-        When the wingman config changes (e.g., user updates custom_properties for a skill),
-        we need to update the SkillConfig on each loaded skill instance so they see the new values.
-        """
         if not self.skills or not wingman_config.skills:
             return
 
-        # Build lookup of new skill configs by folder name
         new_skill_configs: dict[str, "SkillConfig"] = {}
         for skill_config in wingman_config.skills:
             try:
@@ -979,9 +1971,7 @@ class Wingman:
                 continue
             new_skill_configs[folder_name] = skill_config
 
-        # Update each loaded skill if its config changed
         for skill in self.skills:
-            # Get the folder name for this skill
             try:
                 skill_folder = _get_skill_folder_from_module(skill.config.module)
             except Exception:
@@ -997,51 +1987,49 @@ class Wingman:
 
                 fields_set = getattr(user_override, "model_fields_set", None)
                 if fields_set is None:
-                    # Pydantic v1 fallback
                     fields_set = getattr(user_override, "__fields_set__", set())
 
-                # Create updated config by copying current and applying overrides
-                # This preserves all default values while applying user overrides
                 updated_config = deepcopy(skill.config)
 
-                # Apply overrides even if they're explicitly empty.
-                # This allows users to clear custom properties/prompt in the UI.
                 if "custom_properties" in fields_set:
                     updated_config.custom_properties = user_override.custom_properties
                 if "prompt" in fields_set:
                     updated_config.prompt = user_override.prompt
 
-                # Let the skill handle the config update (will compare old vs new)
                 await skill.update_config(updated_config)
 
+    async def update_settings(self, settings: SettingsConfig):
+        try:
+            self.settings = settings
+
+            for skill in self.skills:
+                skill.settings = settings
+
+            # Re-create Wingman Pro provider when settings change
+            # (subscription settings might have been updated)
+            uses_wingman_pro = any([
+                self.config.features.conversation_provider == ConversationProvider.WINGMAN_PRO,
+                self.config.features.tts_provider == TtsProvider.WINGMAN_PRO,
+                self.config.features.stt_provider == SttProvider.WINGMAN_PRO,
+                self.config.features.image_generation_provider == ImageGenerationProvider.WINGMAN_PRO,
+            ])
+            if uses_wingman_pro:
+                await self.validate()
+                printr.print(
+                    f"Wingman {self.name}: reinitialized providers with new settings",
+                    server_only=True,
+                )
+
+            printr.print(f"Wingman {self.name}'s settings changed", server_only=True)
+        except Exception as e:
+            await printr.print_async(
+                f"Error while updating settings for wingman '{self.name}': {str(e)}",
+                color=LogType.ERROR,
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+
     async def save_config(self):
-        """Save the config of the Wingman."""
         self.tower.save_wingman(self.name)
 
     async def save_commands(self):
-        """Save only the commands section of this wingman's config.
-
-        This performs a partial YAML update - only the commands field is modified
-        in the config file, avoiding full config serialization. This is much safer
-        than save_config() for command-only changes as it won't accidentally
-        overwrite other fields.
-
-        Use this instead of save_config() when you only changed command definitions,
-        instant_activation phrases, or other command-related fields.
-
-        Example use cases:
-        - QuickCommands learning instant activation phrases
-        - Skills dynamically adding/modifying commands
-        - Skills updating command responses or actions
-        """
         self.tower.save_wingman_commands(self.name)
-
-    async def update_settings(self, settings: SettingsConfig):
-        """Update the settings of the Wingman. This method should always be called when the user Settings have changed."""
-        self.settings = settings
-
-        # Propagate settings changes to already-loaded skills
-        for skill in self.skills:
-            skill.settings = settings
-
-        printr.print(f"Wingman {self.name}'s settings changed", server_only=True)
