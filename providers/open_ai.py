@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
 import json
 import re
-from typing import Literal, Mapping, Union
+from typing import TYPE_CHECKING, Literal, Mapping, Union
 import httpx
 from openai import NOT_GIVEN, NotGiven, Omit, OpenAI, APIStatusError, AzureOpenAI
 import azure.cognitiveservices.speech as speechsdk
-from api.enums import AzureRegion, LogType
+from api.enums import AzureRegion, ConversationProvider, LogType, SttProvider, TtsProvider
 
 from api.interface import (
     AzureInstanceConfig,
@@ -14,9 +14,16 @@ from api.interface import (
     SoundConfig,
     VoiceInfo,
 )
+from providers.interfaces import (
+    SttInterface, TtsInterface, LlmInterface,
+    Transcript, stt_provider, tts_provider, llm_provider,
+)
 from services.audio_player import AudioPlayer
 from services.openai_utils import get_minimal_reasoning_by_model
 from services.printr import Printr
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 printr = Printr()
 
@@ -580,3 +587,252 @@ class OpenAiCompatibleTts:
                 printr.toast_error(
                     "An unknown OpenAI-compatible TTS error has occurred."
                 )
+
+
+@stt_provider(SttProvider.OPENAI)
+class OpenAiStt(SttInterface):
+    """OpenAI Whisper STT via the unified interface."""
+
+    def __init__(self, openai_instance: "OpenAi"):
+        self._openai = openai_instance
+
+    async def transcribe(self, filename: str) -> Transcript | None:
+        result = self._openai.transcribe(filename=filename)
+        if result is None:
+            return None
+        return Transcript(text=result.text)
+
+
+@tts_provider(TtsProvider.OPENAI)
+class OpenAiTts(TtsInterface):
+    """OpenAI TTS via the unified interface."""
+
+    def __init__(self, openai_instance: "OpenAi", config: "WingmanConfig"):
+        self._openai = openai_instance
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        await self._openai.play_audio(
+            text=text,
+            voice=self._config.openai.tts_voice,
+            model=self._config.openai.tts_model,
+            speed=self._config.openai.tts_speed,
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+            stream=self._config.openai.output_streaming,
+        )
+
+
+@llm_provider(ConversationProvider.OPENAI)
+class OpenAiLlm(LlmInterface):
+    """OpenAI chat completions via the unified interface."""
+
+    def __init__(self, openai_instance: "OpenAi", config: "WingmanConfig"):
+        self._openai = openai_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._openai.ask(
+            messages=messages,
+            tools=tools,
+            model=self._config.openai.conversation_model,
+        )
+
+
+@stt_provider(SttProvider.GROQ)
+class GroqStt(SttInterface):
+    """Groq Whisper STT (uses OpenAi-compatible client)."""
+
+    def __init__(self, openai_instance: "OpenAi"):
+        self._openai = openai_instance
+
+    async def transcribe(self, filename: str) -> Transcript | None:
+        result = self._openai.transcribe(
+            filename=filename, model="whisper-large-v3-turbo"
+        )
+        if result is None:
+            return None
+        return Transcript(text=result.text)
+
+
+@llm_provider(ConversationProvider.MISTRAL)
+class MistralLlm(LlmInterface):
+    def __init__(self, openai_instance: "OpenAi", config: "WingmanConfig"):
+        self._openai = openai_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._openai.ask(
+            messages=messages, tools=tools,
+            model=self._config.mistral.conversation_model,
+        )
+
+
+@llm_provider(ConversationProvider.GROQ)
+class GroqLlm(LlmInterface):
+    def __init__(self, openai_instance: "OpenAi", config: "WingmanConfig"):
+        self._openai = openai_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._openai.ask(
+            messages=messages, tools=tools,
+            model=self._config.groq.conversation_model,
+        )
+
+
+@llm_provider(ConversationProvider.CEREBRAS)
+class CerebrasLlm(LlmInterface):
+    def __init__(self, openai_instance: "OpenAi", config: "WingmanConfig"):
+        self._openai = openai_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._openai.ask(
+            messages=messages, tools=tools,
+            model=self._config.cerebras.conversation_model,
+        )
+
+
+@llm_provider(ConversationProvider.OPENROUTER)
+class OpenRouterLlm(LlmInterface):
+    def __init__(self, openai_instance: "OpenAi", config: "WingmanConfig",
+                 supports_tools: bool = False):
+        self._openai = openai_instance
+        self._config = config
+        self.supports_tools = supports_tools
+
+    async def ask(self, messages, tools=None):
+        effective_tools = tools if self.supports_tools else None
+        return self._openai.ask(
+            messages=messages, tools=effective_tools,
+            model=self._config.openrouter.conversation_model,
+        )
+
+
+@llm_provider(ConversationProvider.LOCAL_LLM)
+class LocalLlm(LlmInterface):
+    def __init__(self, openai_instance: "OpenAi | None", config: "WingmanConfig"):
+        self._openai = openai_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        if not self._openai:
+            raise RuntimeError(
+                f"Local LLM provider is not initialized. "
+                f"Please check your Local LLM endpoint configuration "
+                f"({self._config.local_llm.endpoint})."
+            )
+        return self._openai.ask(
+            messages=messages, tools=tools,
+            model=self._config.local_llm.conversation_model,
+        )
+
+
+@llm_provider(ConversationProvider.PERPLEXITY)
+class PerplexityLlm(LlmInterface):
+    def __init__(self, openai_instance: "OpenAi", config: "WingmanConfig"):
+        self._openai = openai_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._openai.ask(
+            messages=messages, tools=tools,
+            model=self._config.perplexity.conversation_model.value,
+        )
+
+
+@stt_provider(SttProvider.AZURE)
+class AzureWhisperStt(SttInterface):
+    def __init__(self, azure_instance: "OpenAiAzure", api_key: str, config: "WingmanConfig"):
+        self._azure = azure_instance
+        self._api_key = api_key
+        self._config = config
+
+    async def transcribe(self, filename: str) -> Transcript | None:
+        result = self._azure.transcribe_whisper(
+            filename=filename,
+            api_key=self._api_key,
+            config=self._config.azure.whisper,
+        )
+        if result is None:
+            return None
+        return Transcript(text=result.text)
+
+
+@stt_provider(SttProvider.AZURE_SPEECH)
+class AzureSpeechStt(SttInterface):
+    def __init__(self, azure_instance: "OpenAiAzure", api_key: str, config: "WingmanConfig"):
+        self._azure = azure_instance
+        self._api_key = api_key
+        self._config = config
+
+    async def transcribe(self, filename: str) -> Transcript | None:
+        result = self._azure.transcribe_azure_speech(
+            filename=filename,
+            api_key=self._api_key,
+            config=self._config.azure.stt,
+        )
+        if result is None:
+            return None
+        text = result.get("_text") if isinstance(result, dict) else result.text
+        return Transcript(text=text) if text else None
+
+
+@tts_provider(TtsProvider.AZURE)
+class AzureTts(TtsInterface):
+    def __init__(self, azure_instance: "OpenAiAzure", api_key: str, config: "WingmanConfig"):
+        self._azure = azure_instance
+        self._api_key = api_key
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        await self._azure.play_audio(
+            text=text,
+            api_key=self._api_key,
+            config=self._config.azure.tts,
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+        )
+
+
+@llm_provider(ConversationProvider.AZURE)
+class AzureLlm(LlmInterface):
+    def __init__(self, azure_instance: "OpenAiAzure", api_key: str, config: "WingmanConfig"):
+        self._azure = azure_instance
+        self._api_key = api_key
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._azure.ask(
+            messages=messages,
+            api_key=self._api_key,
+            config=self._config.azure.conversation,
+            tools=tools,
+        )
+
+
+@tts_provider(TtsProvider.OPENAI_COMPATIBLE)
+class OpenAiCompatibleTtsAdapter(TtsInterface):
+    def __init__(self, tts_instance: "OpenAiCompatibleTts", config: "WingmanConfig"):
+        self._tts = tts_instance
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        from openai import NOT_GIVEN
+        await self._tts.play_audio(
+            text=text,
+            voice=self._config.openai_compatible_tts.voice,
+            model=self._config.openai_compatible_tts.model,
+            speed=(
+                self._config.openai_compatible_tts.speed
+                if self._config.openai_compatible_tts.speed
+                else NOT_GIVEN
+            ),
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+            stream=self._config.openai_compatible_tts.output_streaming,
+        )

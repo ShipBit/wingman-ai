@@ -1,23 +1,27 @@
 import base64
 import json
 from os import path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 import threading
 import queue
 import time
 import requests
 import aiofiles
-from api.enums import LogType
+from api.enums import LogType, TtsProvider
 from api.interface import (
     SoundConfig,
     VoiceInfo,
     WingmanInitializationError,
     InworldConfig,
 )
+from providers.interfaces import TtsInterface, tts_provider
 from services.audio_player import AudioPlayer
 from services.file import get_writable_dir
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 RECORDING_PATH = "audio_output"
 OUTPUT_FILE: str = "inworld.mp3"
@@ -278,3 +282,19 @@ class Inworld:
         async with aiofiles.open(file_path, "wb") as f:
             await f.write(audio_data)
         return file_path
+
+
+@tts_provider(TtsProvider.INWORLD)
+class InworldTts(TtsInterface):
+    def __init__(self, inworld_instance: "Inworld", config: "WingmanConfig"):
+        self._inworld = inworld_instance
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        await self._inworld.play_audio(
+            text=text,
+            config=self._config.inworld,
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+        )

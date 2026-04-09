@@ -1,12 +1,17 @@
+from typing import TYPE_CHECKING
 import requests
-from api.enums import LogType
+from api.enums import LogType, SttProvider
 from api.interface import (
     WhispercppSettings,
     WhispercppSttConfig,
     WhispercppTranscript,
     WingmanInitializationError,
 )
+from providers.interfaces import SttInterface, Transcript, stt_provider
 from services.printr import Printr
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 
 class Whispercpp:
@@ -91,3 +96,21 @@ class Whispercpp:
             return response.ok
         except Exception:
             return False
+
+
+@stt_provider(SttProvider.WHISPERCPP)
+class WhispercppStt(SttInterface):
+    """Per-wingman adapter around the shared Whispercpp singleton."""
+
+    def __init__(self, shared: "Whispercpp", config: "WingmanConfig"):
+        self._shared = shared
+        self._config = config
+
+    async def transcribe(self, filename: str) -> Transcript | None:
+        result = self._shared.transcribe(
+            filename=filename,
+            config=self._config.whispercpp,
+        )
+        if result is None:
+            return None
+        return Transcript(text=result.text)

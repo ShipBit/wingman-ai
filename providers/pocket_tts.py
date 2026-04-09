@@ -3,11 +3,11 @@ import io
 import sys
 import glob
 import asyncio
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 import torch
 import torchaudio
 from pocket_tts import TTSModel
-from api.enums import LogType
+from api.enums import LogType, TtsProvider
 from api.interface import (
     PocketTTSConfig,
     SoundConfig,
@@ -15,10 +15,14 @@ from api.interface import (
     WingmanInitializationError,
     VoiceInfo,
 )
+from providers.interfaces import TtsInterface, tts_provider
 from services.file import get_custom_voices_dir
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 from providers.open_ai import OpenAiCompatibleTts
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 
 MODELS_DIR = "pocket-tts-models"
@@ -606,3 +610,21 @@ class PocketTTS:
         # Determine path to wingman included voices directory
         app_dir = self._get_app_dir()
         return os.path.join(app_dir, INCLUDED_VOICES_DIR)
+
+
+@tts_provider(TtsProvider.POCKET_TTS)
+class PocketTtsTts(TtsInterface):
+    """Per-wingman adapter around the shared PocketTTS singleton."""
+
+    def __init__(self, shared: "PocketTTS", config: "WingmanConfig"):
+        self._shared = shared
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        await self._shared.play_audio(
+            text=text,
+            config=self._config.pocket_tts,
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+        )

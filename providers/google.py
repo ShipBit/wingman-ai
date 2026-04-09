@@ -1,8 +1,14 @@
 import re
+from typing import TYPE_CHECKING
 from google import genai
 from google.genai import types
 from openai import APIStatusError, OpenAI
+from api.enums import ConversationProvider
+from providers.interfaces import LlmInterface, llm_provider
 from services.printr import Printr
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 printr = Printr()
 
@@ -139,3 +145,16 @@ class GoogleGenAI:
                 if action == "generateContent":
                     models.append(model)
         return models
+
+
+@llm_provider(ConversationProvider.GOOGLE)
+class GoogleLlm(LlmInterface):
+    def __init__(self, google_instance: "GoogleGenAI", config: "WingmanConfig"):
+        self._google = google_instance
+        self._config = config
+
+    async def ask(self, messages, tools=None):
+        return self._google.ask(
+            messages=messages, tools=tools,
+            model=self._config.google.conversation_model,
+        )

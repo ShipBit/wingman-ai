@@ -1,16 +1,20 @@
 import asyncio
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 import requests
 from threading import Event, Thread
 import numpy as np
 import sounddevice as sd
 from elevenlabslib import User, GenerationOptions, PlaybackOptions, SFXOptions
-from api.enums import LogType, SoundEffect, WingmanInitializationErrorType
+from api.enums import LogType, SoundEffect, TtsProvider, WingmanInitializationErrorType
 from api.interface import ElevenlabsConfig, SoundConfig, WingmanInitializationError
+from providers.interfaces import TtsInterface, tts_provider
 from services.audio_player import AudioPlayer
 from services.printr import Printr
 from services.sound_effects import get_sound_effects
 from services.websocket_user import WebSocketUser
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 
 class ElevenLabs:
@@ -401,3 +405,20 @@ class ElevenLabs:
 
     def get_subscription_data(self):
         return self.user.get_subscription_data()
+
+
+@tts_provider(TtsProvider.ELEVENLABS)
+class ElevenLabsTts(TtsInterface):
+    def __init__(self, elevenlabs_instance: "ElevenLabs", config: "WingmanConfig"):
+        self._elevenlabs = elevenlabs_instance
+        self._config = config
+
+    async def play_audio(self, text, sound_config, audio_player, wingman_name):
+        await self._elevenlabs.play_audio(
+            text=text,
+            config=self._config.elevenlabs,
+            sound_config=sound_config,
+            audio_player=audio_player,
+            wingman_name=wingman_name,
+            stream=self._config.elevenlabs.output_streaming,
+        )

@@ -1,18 +1,22 @@
 import gc
 import platform
 import threading
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import requests
 
-from api.enums import LogType
+from api.enums import LogType, SttProvider
 from api.interface import (
     ParakeetSettings,
     ParakeetSttConfig,
     ParakeetTranscript,
     WingmanInitializationError,
 )
+from providers.interfaces import SttInterface, Transcript, stt_provider
 from services.printr import Printr
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 
 EXECUTION_PROVIDER_MAP = {
@@ -202,3 +206,21 @@ class Parakeet:
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass
+
+
+@stt_provider(SttProvider.PARAKEET)
+class ParakeetStt(SttInterface):
+    """Per-wingman adapter around the shared Parakeet singleton."""
+
+    def __init__(self, shared: "Parakeet", config: "WingmanConfig"):
+        self._shared = shared
+        self._config = config
+
+    async def transcribe(self, filename: str) -> Transcript | None:
+        result = self._shared.transcribe(
+            config=self._config.parakeet,
+            filename=filename,
+        )
+        if result is None:
+            return None
+        return Transcript(text=result.text)

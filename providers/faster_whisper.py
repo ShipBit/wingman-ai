@@ -1,15 +1,19 @@
 from os import path
 import gc
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from faster_whisper import WhisperModel
-from api.enums import LogType
+from api.enums import LogType, SttProvider
 from api.interface import (
     FasterWhisperSettings,
     FasterWhisperTranscript,
     FasterWhisperSttConfig,
     WingmanInitializationError,
 )
+from providers.interfaces import SttInterface, Transcript, stt_provider
 from services.printr import Printr
+
+if TYPE_CHECKING:
+    from api.interface import WingmanConfig
 
 
 class FasterWhisper:
@@ -116,3 +120,34 @@ class FasterWhisper:
 
     def validate(self, errors: list[WingmanInitializationError]):
         pass
+
+
+@stt_provider(SttProvider.FASTER_WHISPER)
+class FasterWhisperStt(SttInterface):
+    """Per-wingman adapter around the shared FasterWhisper singleton."""
+
+    def __init__(self, shared: "FasterWhisper", config: "WingmanConfig", wingman_name: str):
+        self._shared = shared
+        self._config = config
+        self._wingman_name = wingman_name
+
+    async def transcribe(self, filename: str) -> Transcript | None:
+        hotwords: list[str] = [self._wingman_name]
+        default_hotwords = self._config.fasterwhisper.hotwords
+        if default_hotwords:
+            hotwords.extend(default_hotwords)
+        wingman_hotwords = self._config.fasterwhisper.additional_hotwords
+        if wingman_hotwords:
+            hotwords.extend(wingman_hotwords)
+
+        result = self._shared.transcribe(
+            config=self._config.fasterwhisper,
+            filename=filename,
+            hotwords=list(set(hotwords)),
+        )
+        if result is None:
+            return None
+        return Transcript(
+            text=result.text,
+            language=getattr(result, "language", None),
+        )
