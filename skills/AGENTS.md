@@ -118,10 +118,10 @@ from api.interface import SettingsConfig, SkillConfig, WingmanInitializationErro
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.open_ai_wingman import OpenAiWingman
+    from wingmen.wingman import Wingman
 
 class YourSkillName(Skill):
-    def __init__(self, config: SkillConfig, settings: SettingsConfig, wingman: "OpenAiWingman") -> None:
+    def __init__(self, config: SkillConfig, settings: SettingsConfig, wingman: "Wingman") -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 
     async def validate(self) -> list[WingmanInitializationError]:
