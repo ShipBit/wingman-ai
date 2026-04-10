@@ -60,7 +60,7 @@ from services.capability_registry import CapabilityRegistry
 from services.wingman_mcp_manager import WingmanMcpManager
 from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
 from services.tool_response_cache import ToolResponseCompressor
-from services.token_utils import count_tokens
+from services.turn_metrics import TurnMetrics
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -147,9 +147,13 @@ class Wingman:
             on_add_forced_commands=self.conversation.add_forced_assistant_command_calls,
         )
 
-        # --- Token tracking ---
-        self.last_turn_prompt_tokens: int = 0
-        self.last_turn_completion_tokens: int = 0
+        # --- Metrics service ---
+        self.metrics = TurnMetrics(
+            wingman_name=name,
+            config=config,
+            conversation=self.conversation,
+        )
+
         self.execution_start: None | float = None
         self._last_prompt_tokens: int = 0
 
@@ -428,13 +432,12 @@ class Wingman:
 
                 if actual_response:
                     token_usage = None
-                    if self.last_turn_prompt_tokens or self.last_turn_completion_tokens:
+                    if self.metrics.last_turn_prompt_tokens or self.metrics.last_turn_completion_tokens:
                         token_usage = (
-                            self.last_turn_prompt_tokens,
-                            self.last_turn_completion_tokens,
+                            self.metrics.last_turn_prompt_tokens,
+                            self.metrics.last_turn_completion_tokens,
                         )
-                        self.last_turn_prompt_tokens = 0
-                        self.last_turn_completion_tokens = 0
+                        self.metrics.reset_token_counters()
                     await printr.print_async(
                         f"{actual_response}",
                         color=LogType.POSITIVE,
@@ -506,7 +509,7 @@ class Wingman:
         llm_processing_time_ms += (time.perf_counter() - llm_start) * 1000
 
         if completion is None:
-            self._add_benchmark_snapshot(
+            self.metrics.add_benchmark_snapshot(
                 benchmark, "LLM Processing", llm_processing_time_ms
             )
             return None, None, None, True
@@ -556,14 +559,14 @@ class Wingman:
 
             if instant_response:
                 await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
-                self._add_benchmark_snapshot(
+                self.metrics.add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
                 if tool_execution_time_ms > 0:
-                    self._add_tool_execution_snapshot(
+                    self.metrics.add_tool_execution_snapshot(
                         benchmark, tool_execution_time_ms, tool_timings
                     )
-                await self._broadcast_token_usage(
+                await self.metrics.broadcast_token_usage(
                     turn_prompt_tokens, turn_completion_tokens
                 )
                 return None, instant_response, None, interrupt
@@ -575,14 +578,14 @@ class Wingman:
 
                 if completion is None:
                     await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
-                    self._add_benchmark_snapshot(
+                    self.metrics.add_benchmark_snapshot(
                         benchmark, "LLM Processing", llm_processing_time_ms
                     )
                     if tool_execution_time_ms > 0:
-                        self._add_tool_execution_snapshot(
+                        self.metrics.add_tool_execution_snapshot(
                             benchmark, tool_execution_time_ms, tool_timings
                         )
-                    await self._broadcast_token_usage(
+                    await self.metrics.broadcast_token_usage(
                         turn_prompt_tokens, turn_completion_tokens
                     )
                     return None, None, None, True
@@ -601,28 +604,28 @@ class Wingman:
                     interrupt = False
             elif is_waiting_response_needed:
                 await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
-                self._add_benchmark_snapshot(
+                self.metrics.add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
                 if tool_execution_time_ms > 0:
-                    self._add_tool_execution_snapshot(
+                    self.metrics.add_tool_execution_snapshot(
                         benchmark, tool_execution_time_ms, tool_timings
                     )
-                await self._broadcast_token_usage(
+                await self.metrics.broadcast_token_usage(
                     turn_prompt_tokens, turn_completion_tokens
                 )
                 return None, None, None, interrupt
 
         await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
 
-        self._add_benchmark_snapshot(
+        self.metrics.add_benchmark_snapshot(
             benchmark, "LLM Processing", llm_processing_time_ms
         )
         if tool_execution_time_ms > 0:
-            self._add_tool_execution_snapshot(
+            self.metrics.add_tool_execution_snapshot(
                 benchmark, tool_execution_time_ms, tool_timings
             )
-        await self._broadcast_token_usage(turn_prompt_tokens, turn_completion_tokens)
+        await self.metrics.broadcast_token_usage(turn_prompt_tokens, turn_completion_tokens)
         return response_message.content, response_message.content, None, interrupt
 
     # ───────────────── LLM call ───────────────── #
@@ -1001,101 +1004,6 @@ class Wingman:
         self.last_used_instant_responses.append(random_index)
         return self.instant_responses[random_index]
 
-    # ───────────────── Benchmarks / token usage ───────────────── #
-
-    def _add_benchmark_snapshot(
-        self, benchmark: Benchmark, label: str, execution_time_ms: float
-    ):
-        if execution_time_ms >= 1000:
-            formatted_time = f"{execution_time_ms/1000:.1f}s"
-        else:
-            formatted_time = f"{int(execution_time_ms)}ms"
-
-        from api.interface import BenchmarkResult
-
-        benchmark.snapshots.append(
-            BenchmarkResult(
-                label=label,
-                execution_time_ms=execution_time_ms,
-                formatted_execution_time=formatted_time,
-            )
-        )
-
-    def _add_tool_execution_snapshot(
-        self,
-        benchmark: Benchmark,
-        total_time_ms: float,
-        tool_timings: list[tuple[str, float]],
-    ):
-        from api.interface import BenchmarkResult
-
-        if total_time_ms >= 1000:
-            formatted_time = f"{total_time_ms/1000:.1f}s"
-        else:
-            formatted_time = f"{int(total_time_ms)}ms"
-
-        nested_snapshots = []
-        for label, time_ms in tool_timings:
-            if time_ms >= 1000:
-                fmt = f"{time_ms/1000:.1f}s"
-            else:
-                fmt = f"{int(time_ms)}ms"
-            nested_snapshots.append(
-                BenchmarkResult(
-                    label=label,
-                    execution_time_ms=time_ms,
-                    formatted_execution_time=fmt,
-                )
-            )
-
-        benchmark.snapshots.append(
-            BenchmarkResult(
-                label="Tool Execution",
-                execution_time_ms=total_time_ms,
-                formatted_execution_time=formatted_time,
-                snapshots=nested_snapshots if nested_snapshots else None,
-            )
-        )
-
-    async def _broadcast_token_usage(self, prompt_tokens: int, completion_tokens: int):
-        is_local = (
-            self.config.features.conversation_provider == ConversationProvider.LOCAL_LLM
-        )
-
-        if is_local and prompt_tokens == 0:
-            prompt_tokens = sum(
-                count_tokens(
-                    msg["content"]
-                    if isinstance(msg.get("content"), str)
-                    else str(msg.get("content", ""))
-                )
-                for msg in self.conversation.messages
-            )
-        if is_local and completion_tokens == 0 and self.conversation.messages:
-            last = self.conversation.messages[-1]
-            if last.get("role") == "assistant":
-                content = last.get("content", "")
-                completion_tokens = count_tokens(
-                    content if isinstance(content, str) else str(content)
-                )
-
-        self.last_turn_prompt_tokens = prompt_tokens
-        self.last_turn_completion_tokens = completion_tokens
-        if prompt_tokens == 0 and completion_tokens == 0:
-            return
-        if not printr._connection_manager:
-            return
-
-        from api.commands import ConversationTokenUsageCommand
-
-        await printr._connection_manager.broadcast(
-            ConversationTokenUsageCommand(
-                wingman_name=self.name,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                is_local=is_local,
-            )
-        )
 
     # ───────────────── Build tools ───────────────── #
 
