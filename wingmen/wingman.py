@@ -55,6 +55,7 @@ from services.command_executor import CommandExecutor
 from services.tool_executor import ToolExecutor
 from services.provider_factory import ProviderFactory
 from services.skill_registry import SkillRegistry
+from services.threading_utils import threaded_execution
 from services.mcp_client import McpClient
 from services.capability_registry import CapabilityRegistry
 from services.wingman_mcp_manager import WingmanMcpManager
@@ -975,28 +976,7 @@ class Wingman:
     # ───────────────── Threading ─────────────────────────────── #
 
     def threaded_execution(self, function, *args) -> threading.Thread | None:
-        try:
-
-            def start_thread(function, *args):
-                if asyncio.iscoroutinefunction(function):
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    new_loop.run_until_complete(function(*args))
-                    new_loop.close()
-                else:
-                    function(*args)
-
-            thread = threading.Thread(target=start_thread, args=(function, *args))
-            thread.name = function.__name__
-            thread.daemon = True
-            thread.start()
-            return thread
-        except Exception as e:
-            printr.print(
-                f"Error starting threaded execution: {str(e)}", color=LogType.ERROR
-            )
-            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-            return None
+        return threaded_execution(function, *args)
 
     # ───────────────── Config management ─────────────────────── #
 
