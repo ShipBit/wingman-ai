@@ -190,6 +190,9 @@ class Wingman:
         self._background_tasks: set[asyncio.Task] = set()
         self._tool_response_compressor = ToolResponseCompressor()
 
+        # --- Image generation (lazy) ---
+        self._image_subscription = None
+
         # --- Instant response generator ---
         self.instant_response_generator = InstantResponseGenerator(
             wingman_name=name,
@@ -917,22 +920,22 @@ class Wingman:
     async def generate_image(self, text: str) -> str:
         if (
             self.config.features.image_generation_provider
-            == ImageGenerationProvider.WINGMAN_PRO
+            != ImageGenerationProvider.WINGMAN_PRO
         ):
-            try:
+            return ""
+        try:
+            if self._image_subscription is None:
                 from providers.wingman_subscription import WingmanSubscription
 
-                wingman_pro = WingmanSubscription(
+                self._image_subscription = WingmanSubscription(
                     wingman_name=self.name, settings=self.settings.wingman_pro
                 )
-                return await wingman_pro.generate_image(text)
-            except Exception as e:
-                await printr.print_async(
-                    f"Error during image generation: {str(e)}", color=LogType.ERROR
-                )
-                printr.print(
-                    traceback.format_exc(), color=LogType.ERROR, server_only=True
-                )
+            return await self._image_subscription.generate_image(text)
+        except Exception as e:
+            await printr.print_async(
+                f"Error during image generation: {str(e)}", color=LogType.ERROR
+            )
+            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
         return ""
 
     # ───────────────── Build tools ───────────────── #
