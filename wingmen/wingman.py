@@ -45,7 +45,6 @@ from providers.interfaces import LlmInterface, SttInterface, TtsInterface
 from services.audio_player import AudioPlayer
 from services.benchmark import Benchmark
 from services.markdown import cleanup_text
-from services.module_manager import ModuleManager
 from services.secret_keeper import SecretKeeper
 from services.printr import Printr
 from services.audio_library import AudioLibrary
@@ -59,20 +58,15 @@ from services.skill_registry import SkillRegistry
 from services.mcp_client import McpClient
 from services.capability_registry import CapabilityRegistry
 from services.wingman_mcp_manager import WingmanMcpManager
+from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
 from services.tool_response_cache import ToolResponseCompressor
 from services.token_utils import count_tokens
 from skills.skill_base import Skill
-from wingmen.wingman_context import WingmanContext
 
 if TYPE_CHECKING:
     from services.tower import Tower
 
 printr = Printr()
-
-
-def _get_skill_folder_from_module(module: str) -> str:
-    """Extract folder name from module path like 'skills.star_head.main' -> 'star_head'"""
-    return module.replace(".main", "").replace(".", "/").split("/")[1]
 
 
 class Wingman:
@@ -160,10 +154,13 @@ class Wingman:
         self._last_prompt_tokens: int = 0
 
         # --- Skills ---
-        self.skills: list[Skill] = []
-        self.tool_skills: dict[str, Skill] = {}
-        self.skill_tools: list[dict] = []
         self.skill_registry = SkillRegistry()
+        self.skill_manager = WingmanSkillManager(
+            wingman=self,
+            config=config,
+            settings=settings,
+            skill_registry=self.skill_registry,
+        )
 
         # --- MCP ---
         self.mcp_client = McpClient(wingman_name=self.name)
@@ -199,6 +196,18 @@ class Wingman:
     def mcp_registry(self):
         """Backward-compat: many callers access wingman.mcp_registry directly."""
         return self.mcp_manager.mcp_registry
+
+    @property
+    def skills(self):
+        return self.skill_manager.skills
+
+    @property
+    def tool_skills(self):
+        return self.skill_manager.tool_skills
+
+    @property
+    def skill_tools(self):
+        return self.skill_manager.skill_tools
 
     # ──────────────────────────────── Record keys ─────────────────────────────── #
 
@@ -334,22 +343,7 @@ class Wingman:
         await self.unload_skills()
 
     async def unload_skills(self):
-        for skill in self.skills:
-            if not skill.is_prepared:
-                continue
-            try:
-                await skill.unload()
-            except Exception as e:
-                await printr.print_async(
-                    f"Error unloading skill '{skill.name}': {str(e)}",
-                    color=LogType.ERROR,
-                )
-                printr.print(
-                    traceback.format_exc(), color=LogType.ERROR, server_only=True
-                )
-        self.tool_skills = {}
-        self.skill_tools = []
-        self.skill_registry.clear()
+        return await self.skill_manager.unload_skills()
 
     async def unload_mcps(self):
         return await self.mcp_manager.unload_mcps()
@@ -385,255 +379,16 @@ class Wingman:
     async def init_mcps(self) -> list[WingmanInitializationError]:
         return await self.mcp_manager.init_mcps()
 
-    # ──────────────────────────────── Skills ───────────────────────────────────── #
+    # ──────────────────────────────── Skills (forwarding) ─────────────────────── #
 
     async def init_skills(self) -> list[WingmanInitializationError]:
-        import sys
-
-        current_platform = sys.platform
-        platform_map = {"win32": "windows", "darwin": "darwin", "linux": "linux"}
-        normalized_platform = platform_map.get(current_platform, current_platform)
-
-        if self.skills:
-            await self.unload_skills()
-
-        errors = []
-        self.skills = []
-
-        user_skill_configs: dict[str, "SkillConfig"] = {}
-        if self.config.skills:
-            for skill_config in self.config.skills:
-                folder_name = _get_skill_folder_from_module(skill_config.module)
-                user_skill_configs[folder_name] = skill_config
-
-        available_skills = ModuleManager.read_available_skill_configs()
-        discoverable_skills = self.config.discoverable_skills
-
-        for (
-            skill_folder_name,
-            skill_config_path,
-            _is_custom,
-            _is_local,
-        ) in available_skills:
-            try:
-                skill_config_dict = ModuleManager.read_config(skill_config_path)
-                if not skill_config_dict:
-                    continue
-
-                from api.interface import SkillConfig
-
-                if skill_folder_name in user_skill_configs:
-                    user_config = user_skill_configs[skill_folder_name]
-                    if user_config.custom_properties:
-                        skill_config_dict["custom_properties"] = [
-                            prop.model_dump() for prop in user_config.custom_properties
-                        ]
-                    if user_config.prompt:
-                        skill_config_dict["prompt"] = user_config.prompt
-
-                skill_config = SkillConfig(**skill_config_dict)
-
-                if skill_config.name not in discoverable_skills:
-                    continue
-
-                if skill_config.platforms:
-                    if normalized_platform not in skill_config.platforms:
-                        printr.print(
-                            f"Skipping skill '{skill_config.name}' - not supported on {normalized_platform}",
-                            color=LogType.WARNING,
-                            server_only=True,
-                        )
-                        continue
-
-                context = WingmanContext(self)
-                skill = ModuleManager.load_skill(
-                    config=skill_config,
-                    settings=self.settings,
-                    wingman=context,
-                )
-                if skill:
-                    skill.threaded_execution = self.threaded_execution
-                    self.skills.append(skill)
-                    await self.prepare_skill(skill)
-
-            except Exception as e:
-                skill_name = skill_folder_name
-                error_msg = f"Error loading skill '{skill_name}': {str(e)}"
-                await printr.print_async(
-                    error_msg,
-                    color=LogType.ERROR,
-                )
-                printr.print(
-                    traceback.format_exc(), color=LogType.ERROR, server_only=True
-                )
-                errors.append(
-                    WingmanInitializationError(
-                        wingman_name=self.name,
-                        message=error_msg,
-                        error_type=WingmanInitializationErrorType.SKILL_INITIALIZATION_FAILED,
-                    )
-                )
-
-        if self.skills:
-            skill_names = [s.config.name for s in self.skills]
-            await printr.print_async(
-                f"Discoverable skills ({len(skill_names)}): {', '.join(skill_names)}",
-                color=LogType.WINGMAN,
-                source=LogSource.WINGMAN,
-                source_name=self.name,
-                server_only=not self.settings.debug_mode,
-            )
-
-        return errors
-
-    async def prepare_skill(self, skill: Skill):
-        try:
-            for tool_name, tool in skill.get_tools():
-                self.tool_skills[tool_name] = skill
-                self.skill_tools.append(tool)
-
-            self.skill_registry.register_skill(skill)
-
-            if skill.config.auto_activate:
-                success, message = await skill.ensure_activated()
-                if not success:
-                    await printr.print_async(
-                        f"Auto-activated skill '{skill.config.display_name}' failed to activate: {message}",
-                        color=LogType.ERROR,
-                    )
-        except Exception as e:
-            await printr.print_async(
-                f"Error while preparing skill '{skill.name}': {str(e)}",
-                color=LogType.ERROR,
-            )
-            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-
-        skill.llm_call = self.actual_llm_call
-
-    async def unprepare_skill(self, skill: Skill):
-        try:
-            for tool_name, _ in skill.get_tools():
-                self.tool_skills.pop(tool_name, None)
-                self.skill_tools = [
-                    t
-                    for t in self.skill_tools
-                    if t.get("function", {}).get("name") != tool_name
-                ]
-            self.skill_registry.unregister_skill(skill.name)
-        except Exception as e:
-            await printr.print_async(
-                f"Error while unpreparing skill '{skill.name}': {str(e)}",
-                color=LogType.ERROR,
-            )
-            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        return await self.skill_manager.init_skills()
 
     async def enable_skill(self, skill_name: str) -> tuple[bool, str]:
-        import sys
-
-        current_platform = sys.platform
-        platform_map = {"win32": "windows", "darwin": "darwin", "linux": "linux"}
-        normalized_platform = platform_map.get(current_platform, current_platform)
-
-        for existing_skill in self.skills:
-            if existing_skill.config.name == skill_name:
-                return True, f"Skill '{skill_name}' is already enabled."
-
-        available_skills = ModuleManager.read_available_skill_configs()
-        user_skill_configs: dict[str, "SkillConfig"] = {}
-        if self.config.skills:
-            for skill_config in self.config.skills:
-                folder_name = _get_skill_folder_from_module(skill_config.module)
-                user_skill_configs[folder_name] = skill_config
-
-        for (
-            skill_folder_name,
-            skill_config_path,
-            _is_custom,
-            _is_local,
-        ) in available_skills:
-            try:
-                skill_config_dict = ModuleManager.read_config(skill_config_path)
-                if not skill_config_dict:
-                    continue
-
-                from api.interface import SkillConfig
-
-                if skill_folder_name in user_skill_configs:
-                    user_config = user_skill_configs[skill_folder_name]
-                    if user_config.custom_properties:
-                        skill_config_dict["custom_properties"] = [
-                            prop.model_dump() for prop in user_config.custom_properties
-                        ]
-                    if user_config.prompt:
-                        skill_config_dict["prompt"] = user_config.prompt
-
-                skill_config = SkillConfig(**skill_config_dict)
-
-                if skill_config.name != skill_name:
-                    continue
-
-                if skill_config.platforms:
-                    if normalized_platform not in skill_config.platforms:
-                        return (
-                            False,
-                            f"Skill '{skill_name}' is not supported on {normalized_platform}.",
-                        )
-
-                context = WingmanContext(self)
-                skill = ModuleManager.load_skill(
-                    config=skill_config,
-                    settings=self.settings,
-                    wingman=context,
-                )
-                if skill:
-                    skill.threaded_execution = self.threaded_execution
-                    self.skills.append(skill)
-                    await self.prepare_skill(skill)
-
-                    printr.print(
-                        f"Skill '{skill_name}' activated (loaded and made discoverable).",
-                        color=LogType.POSITIVE,
-                        server_only=True,
-                    )
-                    return True, f"Skill '{skill_name}' activated successfully."
-
-            except Exception as e:
-                error_msg = f"Error activating skill '{skill_name}': {str(e)}"
-                await printr.print_async(error_msg, color=LogType.ERROR)
-                printr.print(
-                    traceback.format_exc(), color=LogType.ERROR, server_only=True
-                )
-                return False, error_msg
-
-        return False, f"Skill '{skill_name}' not found."
+        return await self.skill_manager.enable_skill(skill_name)
 
     async def disable_skill(self, skill_name: str) -> tuple[bool, str]:
-        skill_to_remove = None
-        for skill in self.skills:
-            if skill.config.name == skill_name:
-                skill_to_remove = skill
-                break
-
-        if not skill_to_remove:
-            return True, f"Skill '{skill_name}' is already deactivated."
-
-        try:
-            await skill_to_remove.unload()
-            self.skills.remove(skill_to_remove)
-            await self.unprepare_skill(skill_to_remove)
-
-            printr.print(
-                f"Skill '{skill_name}' deactivated (unloaded and removed from discoverable skills).",
-                color=LogType.WARNING,
-                server_only=True,
-            )
-            return True, f"Skill '{skill_name}' deactivated successfully."
-
-        except Exception as e:
-            error_msg = f"Error deactivating skill '{skill_name}': {str(e)}"
-            await printr.print_async(error_msg, color=LogType.ERROR)
-            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-            return False, error_msg
+        return await self.skill_manager.disable_skill(skill_name)
 
     # ──────────────────────────── The main processing loop ──────────────────────── #
 
