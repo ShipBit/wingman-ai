@@ -117,6 +117,12 @@ class WingmanContext:
             return True
         return False
 
+    # --- Commands ---
+
+    def get_command(self, command_name: str):
+        """Delegate to command_executor for skills that need direct command lookup."""
+        return self._wingman.command_executor.get_command(command_name)
+
     # --- Backward compatibility (temporary) ---
     # These provide access to registries that some skills currently use.
     # They should be replaced with proper facade methods in a future iteration.
