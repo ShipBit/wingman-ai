@@ -2,7 +2,7 @@
 
 from api.enums import ConversationProvider
 from api.interface import BenchmarkResult, WingmanConfig
-from services.benchmark import Benchmark
+from services.benchmark import Benchmark, format_ms
 from services.printr import Printr
 from services.token_utils import count_tokens
 
@@ -10,12 +10,7 @@ printr = Printr()
 
 
 class TurnMetrics:
-    """Focused service for per-turn benchmark snapshots and token-usage broadcast.
-
-    Owns the two token counters that were previously tracked directly on
-    :class:`~wingmen.wingman.Wingman` and provides the formatting helpers
-    that used to live there as private methods.
-    """
+    """Focused service for per-turn benchmark snapshots and token-usage broadcast."""
 
     def __init__(
         self,
@@ -34,16 +29,11 @@ class TurnMetrics:
     def add_benchmark_snapshot(
         self, benchmark: Benchmark, label: str, execution_time_ms: float
     ) -> None:
-        if execution_time_ms >= 1000:
-            formatted_time = f"{execution_time_ms/1000:.1f}s"
-        else:
-            formatted_time = f"{int(execution_time_ms)}ms"
-
         benchmark.snapshots.append(
             BenchmarkResult(
                 label=label,
                 execution_time_ms=execution_time_ms,
-                formatted_execution_time=formatted_time,
+                formatted_execution_time=format_ms(execution_time_ms),
             )
         )
 
@@ -53,31 +43,21 @@ class TurnMetrics:
         total_time_ms: float,
         tool_timings: list[tuple[str, float]],
     ) -> None:
-        if total_time_ms >= 1000:
-            formatted_time = f"{total_time_ms/1000:.1f}s"
-        else:
-            formatted_time = f"{int(total_time_ms)}ms"
-
-        nested_snapshots = []
-        for label, time_ms in tool_timings:
-            if time_ms >= 1000:
-                fmt = f"{time_ms/1000:.1f}s"
-            else:
-                fmt = f"{int(time_ms)}ms"
-            nested_snapshots.append(
-                BenchmarkResult(
-                    label=label,
-                    execution_time_ms=time_ms,
-                    formatted_execution_time=fmt,
-                )
+        nested_snapshots = [
+            BenchmarkResult(
+                label=label,
+                execution_time_ms=time_ms,
+                formatted_execution_time=format_ms(time_ms),
             )
+            for label, time_ms in tool_timings
+        ]
 
         benchmark.snapshots.append(
             BenchmarkResult(
                 label="Tool Execution",
                 execution_time_ms=total_time_ms,
-                formatted_execution_time=formatted_time,
-                snapshots=nested_snapshots if nested_snapshots else None,
+                formatted_execution_time=format_ms(total_time_ms),
+                snapshots=nested_snapshots or None,
             )
         )
 

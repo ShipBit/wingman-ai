@@ -1,9 +1,7 @@
 """WingmanMcpManager — owns all MCP discovery, connection, and lifecycle.
 
-Extracted from ``wingmen/wingman.py`` so that MCP concerns (registry creation,
-secret injection, timeout handling, enable/disable, parallel init) live in one
-focused service.  Wingman delegates to this manager and exposes 1-line
-forwarding methods for backward compatibility with external callers.
+Centralises MCP concerns (registry creation, secret injection, timeout
+handling, enable/disable, parallel init) in one focused service.
 """
 
 import asyncio
@@ -11,7 +9,12 @@ import traceback
 from typing import Callable
 
 from api.commands import McpStateChangedCommand
-from api.enums import LogSource, LogType, WingmanInitializationErrorType
+from api.enums import (
+    LogSource,
+    LogType,
+    McpTransportType,
+    WingmanInitializationErrorType,
+)
 from api.interface import SettingsConfig, WingmanConfig, WingmanInitializationError
 from services.mcp_client import McpClient
 from services.mcp_registry import McpRegistry
@@ -19,6 +22,10 @@ from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
 printr = Printr()
+
+_AUTH_HEADER_KEYS = {"authorization", "api-key", "x-api-key"}
+_STDIO_DEFAULT_TIMEOUT = 60.0
+_HTTP_DEFAULT_TIMEOUT = 30.0
 
 
 class WingmanMcpManager:
@@ -48,6 +55,41 @@ class WingmanMcpManager:
         )
 
     # ─────────────────────────── Private ────────────────────────────────────── #
+
+    async def _prepare_connection_params(
+        self, mcp_config, log_secret_found: bool = False
+    ) -> tuple[dict, float]:
+        """Build request headers (with secret-injected auth) and resolve the timeout."""
+        headers: dict = {}
+        if mcp_config.headers:
+            headers.update(mcp_config.headers)
+
+        secret_key = f"mcp_{mcp_config.name}"
+        api_key = await self.secret_keeper.retrieve(
+            requester=self.wingman_name,
+            key=secret_key,
+            prompt_if_missing=False,
+        )
+        if api_key:
+            if log_secret_found:
+                printr.print(
+                    f"MCP secret '{secret_key}' found ({len(api_key)} chars)",
+                    color=LogType.INFO,
+                    source_name=self.wingman_name,
+                    server_only=True,
+                )
+            if not any(k.lower() in _AUTH_HEADER_KEYS for k in headers.keys()):
+                headers["Authorization"] = f"Bearer {api_key}"
+
+        default_timeout = (
+            _STDIO_DEFAULT_TIMEOUT
+            if mcp_config.type == McpTransportType.STDIO
+            else _HTTP_DEFAULT_TIMEOUT
+        )
+        timeout = (
+            float(mcp_config.timeout) if mcp_config.timeout else default_timeout
+        )
+        return headers, timeout
 
     def _broadcast_mcp_state_changed(self):
         if printr._connection_manager:
@@ -79,27 +121,7 @@ class WingmanMcpManager:
             return False, f"MCP server '{mcp_name}' not found in mcp.yaml."
 
         try:
-            headers = {}
-            if mcp_config.headers:
-                headers.update(mcp_config.headers)
-
-            secret_key = f"mcp_{mcp_config.name}"
-            api_key = await self.secret_keeper.retrieve(
-                requester=self.wingman_name,
-                key=secret_key,
-                prompt_if_missing=False,
-            )
-            if api_key:
-                if not any(
-                    k.lower() in ["authorization", "api-key", "x-api-key"]
-                    for k in headers.keys()
-                ):
-                    headers["Authorization"] = f"Bearer {api_key}"
-
-            default_timeout = 60.0 if mcp_config.type.value == "stdio" else 30.0
-            timeout = (
-                float(mcp_config.timeout) if mcp_config.timeout else default_timeout
-            )
+            headers, timeout = await self._prepare_connection_params(mcp_config)
 
             connection = await asyncio.wait_for(
                 self.mcp_registry.register_server(
@@ -168,32 +190,8 @@ class WingmanMcpManager:
         async def connect_mcp(mcp_config):
             local_errors = []
             try:
-                headers = {}
-                if mcp_config.headers:
-                    headers.update(mcp_config.headers)
-
-                secret_key = f"mcp_{mcp_config.name}"
-                api_key = await self.secret_keeper.retrieve(
-                    requester=self.wingman_name,
-                    key=secret_key,
-                    prompt_if_missing=False,
-                )
-                if api_key:
-                    printr.print(
-                        f"MCP secret '{secret_key}' found ({len(api_key)} chars)",
-                        color=LogType.INFO,
-                        source_name=self.wingman_name,
-                        server_only=True,
-                    )
-                    if not any(
-                        k.lower() in ["authorization", "api-key", "x-api-key"]
-                        for k in headers.keys()
-                    ):
-                        headers["Authorization"] = f"Bearer {api_key}"
-
-                default_timeout = 60.0 if mcp_config.type.value == "stdio" else 30.0
-                timeout = (
-                    float(mcp_config.timeout) if mcp_config.timeout else default_timeout
+                headers, timeout = await self._prepare_connection_params(
+                    mcp_config, log_secret_found=True
                 )
 
                 try:

@@ -20,6 +20,27 @@ from services.printr import Printr
 printr = Printr()
 
 
+def _command_has_effective_actions(command: CommandConfig) -> bool:
+    """True if the command has at least one action the LLM can meaningfully trigger."""
+    if command.is_system_command:
+        return True
+    if not command.actions:
+        return False
+    for action in command.actions:
+        if not action:
+            continue
+        if (
+            action.keyboard is not None
+            or action.mouse is not None
+            or action.joystick is not None
+            or action.audio is not None
+            or action.write is not None
+            or action.wait is not None
+        ):
+            return True
+    return False
+
+
 class CommandExecutor:
     """Focused service for command lookup, instant activation, and action dispatch."""
 
@@ -81,6 +102,8 @@ class CommandExecutor:
     async def _execute_instant_activation_command(
         self, transcript: str
     ) -> list[CommandConfig] | None:
+        if not self.config.commands:
+            return None
         try:
             commands_by_instant_activation = {}
             for command in self.config.commands:
@@ -160,25 +183,8 @@ class CommandExecutor:
     def get_tool_definition(self) -> dict | None:
         """Return the OpenAI-style execute_command tool definition, or None if no
         eligible commands are configured."""
-        def _command_has_effective_actions(command: CommandConfig) -> bool:
-            if command.is_system_command:
-                return True
-            if not command.actions:
-                return False
-            for action in command.actions:
-                if not action:
-                    continue
-                if (
-                    action.keyboard is not None
-                    or action.mouse is not None
-                    or action.joystick is not None
-                    or action.audio is not None
-                    or action.write is not None
-                    or action.wait is not None
-                ):
-                    return True
-            return False
-
+        if not self.config.commands:
+            return None
         commands = [
             command.name
             for command in self.config.commands

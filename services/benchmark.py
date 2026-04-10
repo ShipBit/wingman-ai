@@ -4,6 +4,13 @@ from api.interface import BenchmarkResult
 from services.printr import Printr
 
 
+def format_ms(execution_time_ms: float) -> str:
+    """Format milliseconds as ``"1.2s"`` or ``"340ms"``."""
+    if execution_time_ms >= 1000:
+        return f"{execution_time_ms/1000:.1f}s"
+    return f"{int(execution_time_ms)}ms"
+
+
 class Benchmark:
     def __init__(self, label: str):
         self.label = label
@@ -53,13 +60,8 @@ class Benchmark:
     def _create_benchmark_result(self, label: str, start_time: float):
         end_time = time.perf_counter()
         execution_time = (end_time - start_time) * 1000  # Convert to milliseconds
-        if execution_time >= 1000:
-            formatted_execution_time = f"{execution_time/1000:.1f}s"
-        else:
-            formatted_execution_time = f"{int(execution_time)}ms"
-
         return BenchmarkResult(
             label=label,
             execution_time_ms=execution_time,
-            formatted_execution_time=formatted_execution_time,
+            formatted_execution_time=format_ms(execution_time),
         )

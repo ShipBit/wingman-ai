@@ -5,14 +5,11 @@ into a single class that delegates to extracted services and provider
 interfaces for STT, TTS, and LLM.
 """
 
-import json
 import time
 import asyncio
-import random
 import traceback
 import threading
 from copy import deepcopy
-import difflib
 from typing import (
     Any,
     Dict,
@@ -21,8 +18,6 @@ from typing import (
 )
 from openai import APIConnectionError
 from openai.types.chat import ChatCompletion
-import keyboard.keyboard as keyboard
-import mouse.mouse as mouse
 from api.interface import (
     CommandConfig,
     SettingsConfig,
@@ -129,13 +124,6 @@ class Wingman:
         self.tts: TtsInterface | None = None
         self.llm: LlmInterface | None = None
 
-        # --- Backward-compat: keep old attributes for custom wingmen / skills ---
-        self.whispercpp = whispercpp
-        self.fasterwhisper = fasterwhisper
-        self.parakeet = parakeet
-        self.xvasynth = xvasynth
-        self.pocket_tts = pocket_tts
-
         # --- Extracted services ---
         self.conversation = ConversationManager(config, settings, name)
         self.condenser = ConversationCondenser(self.conversation, config, name)
@@ -157,7 +145,6 @@ class Wingman:
         )
 
         self.execution_start: None | float = None
-        self._last_prompt_tokens: int = 0
 
         # --- Skills ---
         self.skill_registry = SkillRegistry()
@@ -530,7 +517,6 @@ class Wingman:
 
         turn_prompt_tokens = usage[0]
         turn_completion_tokens = usage[1]
-        self._last_prompt_tokens = turn_prompt_tokens
 
         is_waiting_response_needed, is_summarize_needed = await self.conversation.add_gpt_response(
             response_message, tool_calls
@@ -607,7 +593,6 @@ class Wingman:
                 )
                 turn_prompt_tokens = usage[0]
                 turn_completion_tokens += usage[1]
-                self._last_prompt_tokens = turn_prompt_tokens
 
                 is_waiting_response_needed, is_summarize_needed = (
                     await self.conversation.add_gpt_response(response_message, tool_calls)
@@ -791,7 +776,6 @@ class Wingman:
                 pass
 
         await self.conversation.reset()
-        self._last_prompt_tokens = 0
         self.skill_registry.reset_activations()
         self.mcp_registry.reset_activations()
 

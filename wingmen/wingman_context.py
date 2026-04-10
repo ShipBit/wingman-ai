@@ -50,7 +50,7 @@ class WingmanContext:
 
     def get_conversation_history(self) -> list[dict]:
         """Get a read-only copy of the conversation history."""
-        return self._wingman.conversation.get_history()
+        return list(self._wingman.conversation.messages)
 
     async def add_user_message(self, content: str):
         await self._wingman.conversation.add_user_message(content)

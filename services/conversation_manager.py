@@ -11,7 +11,7 @@ from openai.types.chat import (
     ParsedFunction,
 )
 
-from api.enums import ConversationProvider, LogType, LogSource
+from api.enums import ConversationProvider, LogType
 from services.printr import Printr
 from services.token_utils import count_tokens, truncate_to_tokens
 
@@ -24,9 +24,6 @@ printr = Printr()
 class ConversationManager:
     """Owns the conversation message list, tool-response bookkeeping, and
     history cleanup / trimming logic.
-
-    Extracted from ``OpenAiWingman`` — all behaviour is identical, only the
-    home module changed.
     """
 
     def __init__(

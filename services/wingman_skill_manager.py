@@ -1,10 +1,9 @@
 """WingmanSkillManager — skill discovery, lifecycle, and state.
 
-Extracted from ``wingmen/wingman.py``.  Owns ``skills``, ``tool_skills``, and
-``skill_tools``; the parent ``Wingman`` exposes them as read-through properties.
+Owns ``skills``, ``tool_skills``, and ``skill_tools``; the parent ``Wingman``
+exposes them as read-through properties.
 """
 
-import sys
 import traceback
 from typing import TYPE_CHECKING
 
@@ -20,6 +19,7 @@ from api.enums import (
     WingmanInitializationErrorType,
 )
 from services.module_manager import ModuleManager
+from services.platform_utils import normalize_platform
 from services.printr import Printr
 from services.skill_registry import SkillRegistry
 from skills.skill_base import Skill
@@ -34,9 +34,6 @@ printr = Printr()
 def _get_skill_folder_from_module(module: str) -> str:
     """Extract folder name from module path like 'skills.star_head.main' -> 'star_head'"""
     return module.replace(".main", "").replace(".", "/").split("/")[1]
-
-
-_PLATFORM_MAP = {"win32": "windows", "darwin": "darwin", "linux": "linux"}
 
 
 class WingmanSkillManager:
@@ -102,27 +99,13 @@ class WingmanSkillManager:
 
         return SkillConfig(**skill_config_dict)
 
-    def _check_platform_supported(self, skill_config: SkillConfig) -> bool:
-        """Return True if the skill supports the current platform (or has no restriction)."""
-        if not skill_config.platforms:
-            return True
-        normalized = _PLATFORM_MAP.get(sys.platform, sys.platform)
-        if normalized not in skill_config.platforms:
-            printr.print(
-                f"Skipping skill '{skill_config.name}' - not supported on {normalized}",
-                color=LogType.WARNING,
-                server_only=True,
-            )
-            return False
-        return True
-
-    def _check_platform_supported_with_message(
+    def _check_platform_supported(
         self, skill_config: SkillConfig
     ) -> tuple[bool, str]:
-        """Like _check_platform_supported but returns (ok, reason) for enable_skill."""
+        """Return (ok, reason) for whether the skill supports the current platform."""
         if not skill_config.platforms:
             return True, ""
-        normalized = _PLATFORM_MAP.get(sys.platform, sys.platform)
+        normalized = normalize_platform()
         if normalized not in skill_config.platforms:
             return (
                 False,
@@ -171,7 +154,13 @@ class WingmanSkillManager:
                 if skill_config.name not in discoverable_skills:
                     continue
 
-                if not self._check_platform_supported(skill_config):
+                ok, reason = self._check_platform_supported(skill_config)
+                if not ok:
+                    printr.print(
+                        f"Skipping skill - {reason}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
                     continue
 
                 skill = self._instantiate_skill(skill_config)
@@ -276,7 +265,7 @@ class WingmanSkillManager:
                 if skill_config.name != skill_name:
                     continue
 
-                ok, reason = self._check_platform_supported_with_message(skill_config)
+                ok, reason = self._check_platform_supported(skill_config)
                 if not ok:
                     return False, reason
 

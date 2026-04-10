@@ -282,7 +282,7 @@ class ConfigService:
         wingman_name: str,
     ) -> list[WingmanSkillState]:
         """Get all skills with their enabled/disabled state for a specific wingman."""
-        import sys
+        from services.platform_utils import normalize_platform
 
         try:
             # Get all available skills
@@ -307,10 +307,7 @@ class ConfigService:
 
             discoverable_skills = wingman_config.discoverable_skills
 
-            # Get current platform for filtering
-            current_platform = sys.platform
-            platform_map = {"win32": "windows", "darwin": "darwin", "linux": "linux"}
-            normalized_platform = platform_map.get(current_platform, current_platform)
+            normalized_platform = normalize_platform()
 
             # Build response with enabled state
             result = []
