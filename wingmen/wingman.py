@@ -61,6 +61,7 @@ from services.wingman_mcp_manager import WingmanMcpManager
 from services.wingman_skill_manager import WingmanSkillManager, _get_skill_folder_from_module
 from services.tool_response_cache import ToolResponseCompressor
 from services.turn_metrics import TurnMetrics
+from services.instant_response_generator import InstantResponseGenerator
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -189,10 +190,15 @@ class Wingman:
         self._background_tasks: set[asyncio.Task] = set()
         self._tool_response_compressor = ToolResponseCompressor()
 
+        # --- Instant response generator ---
+        self.instant_response_generator = InstantResponseGenerator(
+            wingman_name=name,
+            llm_call_fn=self.actual_llm_call,
+            get_context_fn=self.get_context,
+        )
+
         # --- Conversation state ---
         self.last_gpt_call = None
-        self.instant_responses = []
-        self.last_used_instant_responses = []
 
     # ──────────────────────────────── Backward-compat properties ──────────────── #
 
@@ -314,7 +320,7 @@ class Wingman:
                     color=LogType.WARNING,
                     server_only=True,
                 )
-                self.threaded_execution(self._generate_instant_responses)
+                self.threaded_execution(self.instant_response_generator.generate)
         except Exception as e:
             await printr.print_async(
                 f"Error while preparing wingman '{self.name}': {str(e)}",
@@ -532,9 +538,11 @@ class Wingman:
                 message = None
                 if response_message.content:
                     message = response_message.content
-                elif self.instant_responses:
-                    message = self._get_random_filler()
-                    is_summarize_needed = True
+                else:
+                    filler = self.instant_response_generator.get_random_filler()
+                    if filler:
+                        message = filler
+                        is_summarize_needed = True
                 if message:
                     self.threaded_execution(self.play_to_user, message, interrupt)
                     await printr.print_async(
@@ -926,84 +934,6 @@ class Wingman:
                     traceback.format_exc(), color=LogType.ERROR, server_only=True
                 )
         return ""
-
-    # ───────────────── Instant responses ───────────────── #
-
-    async def _generate_instant_responses(self) -> None:
-        context = await self.get_context()
-        messages = [
-            {
-                "role": "system",
-                "content": """
-                Generate a list in JSON format of at least 20 short direct text responses.
-                Make sure the response only contains the JSON, no additional text.
-                They must fit the described character in the given context by the user.
-                Every generated response must be generally usable in every situation.
-                Responses must show its still in progress and not in a finished state.
-                The user request this response is used on is unknown. Therefore it must be generic.
-                Good examples:
-                    - "Processing..."
-                    - "Stand by..."
-
-                Bad examples:
-                    - "Generating route..." (too specific)
-                    - "I'm sorry, I can't do that." (too negative)
-
-                Response example:
-                [
-                    "OK",
-                    "Generating results...",
-                    "Roger that!",
-                    "Stand by..."
-                ]
-            """,
-            },
-            {"role": "user", "content": context},
-        ]
-        try:
-            completion = await self.actual_llm_call(messages)
-            if completion is None:
-                return
-            if completion.choices[0].message.content:
-                retry_limit = 3
-                retry_count = 1
-                valid = False
-                while not valid and retry_count <= retry_limit:
-                    try:
-                        responses = json.loads(completion.choices[0].message.content)
-                        valid = True
-                        for response in responses:
-                            if response not in self.instant_responses:
-                                self.instant_responses.append(str(response))
-                    except json.JSONDecodeError:
-                        messages.append(completion.choices[0].message)
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": "It was tried to handle the response in its entirety as a JSON string. Fix response to be a pure, valid JSON, it was not convertable.",
-                            }
-                        )
-                        if retry_count <= retry_limit:
-                            completion = await self.actual_llm_call(messages)
-                        retry_count += 1
-        except Exception as e:
-            await printr.print_async(
-                f"Error while generating instant responses: {str(e)}",
-                color=LogType.ERROR,
-            )
-            printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
-
-    def _get_random_filler(self):
-        if len(self.last_used_instant_responses) > 2:
-            self.last_used_instant_responses = self.last_used_instant_responses[-2:]
-
-        random_index = random.randint(0, len(self.instant_responses) - 1)
-        while random_index in self.last_used_instant_responses:
-            random_index = random.randint(0, len(self.instant_responses) - 1)
-
-        self.last_used_instant_responses.append(random_index)
-        return self.instant_responses[random_index]
-
 
     # ───────────────── Build tools ───────────────── #
 
