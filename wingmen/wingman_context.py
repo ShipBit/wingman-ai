@@ -53,10 +53,10 @@ class WingmanContext:
         return self._wingman.conversation.get_history()
 
     async def add_user_message(self, content: str):
-        await self._wingman.conversation.add_user_message(content, skills=self._wingman.skills)
+        await self._wingman.conversation.add_user_message(content)
 
     async def add_assistant_message(self, content: str):
-        await self._wingman.conversation.add_assistant_message(content, skills=self._wingman.skills)
+        await self._wingman.conversation.add_assistant_message(content)
 
     async def reset_conversation_history(self):
         await self._wingman.reset_conversation_history()

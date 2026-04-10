@@ -61,6 +61,16 @@ class WingmanSkillManager:
 
     # ──────────────────────────── Private helpers ─────────────────────────────── #
 
+    def _sync_conversation_skill_context(self) -> None:
+        """Push current skill state into the conversation manager.
+
+        Called after every mutation (init/enable/disable/unload) so that
+        ConversationManager does not need per-call skill kwargs.
+        """
+        self._wingman.conversation.set_skill_context(
+            self.skills, self.skill_registry, self.tool_skills
+        )
+
     def _build_user_skill_configs(self) -> dict[str, SkillConfig]:
         """Map folder name → user SkillConfig for each entry in wingman config."""
         result: dict[str, SkillConfig] = {}
@@ -197,6 +207,7 @@ class WingmanSkillManager:
                 server_only=not self.settings.debug_mode,
             )
 
+        self._sync_conversation_skill_context()
         return errors
 
     async def prepare_skill(self, skill: Skill):
@@ -239,6 +250,7 @@ class WingmanSkillManager:
                 color=LogType.ERROR,
             )
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
+        self._sync_conversation_skill_context()
 
     async def enable_skill(self, skill_name: str) -> tuple[bool, str]:
         for existing_skill in self.skills:
@@ -272,6 +284,7 @@ class WingmanSkillManager:
                 if skill:
                     self.skills.append(skill)
                     await self.prepare_skill(skill)
+                    self._sync_conversation_skill_context()
 
                     printr.print(
                         f"Skill '{skill_name}' activated (loaded and made discoverable).",
@@ -335,3 +348,4 @@ class WingmanSkillManager:
         self.tool_skills = {}
         self.skill_tools = []
         self.skill_registry.clear()
+        self._sync_conversation_skill_context()

@@ -144,7 +144,7 @@ class Wingman:
             audio_library=audio_library,
             wingman_name=name,
             on_reset_history=self.reset_conversation_history,
-            on_add_forced_commands=self.add_forced_assistant_command_calls,
+            on_add_forced_commands=self.conversation.add_forced_assistant_command_calls,
         )
 
         # --- Token tracking ---
@@ -490,7 +490,7 @@ class Wingman:
             transcript=transcript
         )
         if instant_response:
-            await self.add_assistant_message(instant_response)
+            await self.conversation.add_assistant_message(instant_response)
             benchmark.finish_snapshot()
             if instant_response == ".":
                 instant_response = None
@@ -519,7 +519,7 @@ class Wingman:
         turn_completion_tokens = usage[1]
         self._last_prompt_tokens = turn_prompt_tokens
 
-        is_waiting_response_needed, is_summarize_needed = await self._add_gpt_response(
+        is_waiting_response_needed, is_summarize_needed = await self.conversation.add_gpt_response(
             response_message, tool_calls
         )
         interrupt = True
@@ -555,7 +555,7 @@ class Wingman:
             tool_timings.extend(iteration_timings)
 
             if instant_response:
-                await self._trim_tool_responses()
+                await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
                 self._add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -574,7 +574,7 @@ class Wingman:
                 llm_processing_time_ms += (time.perf_counter() - llm_start) * 1000
 
                 if completion is None:
-                    await self._trim_tool_responses()
+                    await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
                     self._add_benchmark_snapshot(
                         benchmark, "LLM Processing", llm_processing_time_ms
                     )
@@ -595,12 +595,12 @@ class Wingman:
                 self._last_prompt_tokens = turn_prompt_tokens
 
                 is_waiting_response_needed, is_summarize_needed = (
-                    await self._add_gpt_response(response_message, tool_calls)
+                    await self.conversation.add_gpt_response(response_message, tool_calls)
                 )
                 if tool_calls:
                     interrupt = False
             elif is_waiting_response_needed:
-                await self._trim_tool_responses()
+                await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
                 self._add_benchmark_snapshot(
                     benchmark, "LLM Processing", llm_processing_time_ms
                 )
@@ -613,7 +613,7 @@ class Wingman:
                 )
                 return None, None, None, interrupt
 
-        await self._trim_tool_responses()
+        await self.conversation.trim_tool_responses(max_tokens=500, is_condensing=self.condenser.is_condensing)
 
         self._add_benchmark_snapshot(
             benchmark, "LLM Processing", llm_processing_time_ms
@@ -756,42 +756,14 @@ class Wingman:
 
     # ───────────────── Conversation delegation ───────────────── #
 
-    async def _add_gpt_response(self, message, tool_calls) -> tuple[bool, bool]:
-        return await self.conversation.add_gpt_response(
-            message,
-            tool_calls,
-            skills=self.skills,
-            skill_registry=self.skill_registry,
-            tool_skills=self.tool_skills,
-        )
-
-    async def _trim_tool_responses(self, max_tokens: int = 500):
-        await self.conversation.trim_tool_responses(
-            max_tokens=max_tokens,
-            is_condensing=self.condenser.is_condensing,
-        )
-
     async def add_user_message(self, content: str, images: list[tuple[str, str]] = None):
+        """Thin wrapper: resets memory-recall state then delegates to ConversationManager."""
         self._memory_recall_notified = False
         self.context_builder.reset_memory_notification()
         await self.conversation.add_user_message(
             content,
             images=images,
-            skills=self.skills,
             condense_fn=lambda: self.condenser.maybe_condense(self.local_ai_service),
-        )
-
-    async def add_assistant_message(self, content: str):
-        await self.conversation.add_assistant_message(
-            content, skills=self.skills
-        )
-
-    async def add_forced_assistant_command_calls(self, commands: list[CommandConfig]):
-        await self.conversation.add_forced_assistant_command_calls(
-            commands,
-            skills=self.skills,
-            skill_registry=self.skill_registry,
-            tool_skills=self.tool_skills,
         )
 
     async def reset_conversation_history(self):

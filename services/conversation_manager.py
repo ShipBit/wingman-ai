@@ -17,7 +17,6 @@ from services.token_utils import count_tokens, truncate_to_tokens
 
 if TYPE_CHECKING:
     from api.interface import CommandConfig, SettingsConfig, WingmanConfig
-    from skills.skill_base import Skill
 
 printr = Printr()
 
@@ -43,6 +42,26 @@ class ConversationManager:
         self.pending_tool_calls: list[str] = []
         self.conversation_summary: str = ""
 
+        # Skill state — set once via set_skill_context(); avoids per-call kwargs
+        self._skills: list = []
+        self._skill_registry = None
+        self._tool_skills: dict = {}
+
+    def set_skill_context(
+        self,
+        skills: list,
+        skill_registry,
+        tool_skills: dict,
+    ) -> None:
+        """Wire current skill state into the manager.
+
+        Called by WingmanSkillManager after init/enable/disable so per-call
+        methods don't need to receive it as arguments.
+        """
+        self._skills = skills
+        self._skill_registry = skill_registry
+        self._tool_skills = tool_skills
+
     # ------------------------------------------------------------------
     # GPT / assistant response helpers
     # ------------------------------------------------------------------
@@ -51,9 +70,6 @@ class ConversationManager:
         self,
         message,
         tool_calls,
-        skills: list["Skill"] = None,
-        skill_registry=None,
-        tool_skills: dict = None,
     ) -> tuple[bool, bool]:
         """Adds a message from GPT to the conversation history as well as
         adding dummy tool responses for any tool calls.
@@ -61,12 +77,9 @@ class ConversationManager:
         Args:
             message (dict | ChatCompletionMessage): The message to add.
             tool_calls (list): The tool calls associated with the message.
-            skills: List of active skills for hook invocation.
-            skill_registry: The skill registry (used for ``is_meta_tool``).
-            tool_skills: Mapping of function-name -> Skill instance.
         """
         # call skill hooks (only for prepared/activated skills)
-        for skill in (skills or []):
+        for skill in self._skills:
             if skill.is_prepared:
                 await skill.on_add_assistant_message(
                     message.content, message.tool_calls
@@ -92,10 +105,10 @@ class ConversationManager:
 
                 # Meta-tools (search_skills, activate_skill, etc.) always need a follow-up
                 # LLM call so it can use the newly activated tools
-                if skill_registry and skill_registry.is_meta_tool(function_name):
+                if self._skill_registry and self._skill_registry.is_meta_tool(function_name):
                     is_summarize_needed = True
-                elif tool_skills and function_name in tool_skills:
-                    skill = tool_skills[function_name]
+                elif function_name in self._tool_skills:
+                    skill = self._tool_skills[function_name]
                     if await skill.is_waiting_response_needed(function_name):
                         is_waiting_response_needed = True
                     if await skill.is_summarize_needed(function_name):
@@ -240,7 +253,6 @@ class ConversationManager:
         self,
         content: str,
         images: list[tuple[str, str]] = None,
-        skills: list["Skill"] = None,
         condense_fn: Optional[Callable] = None,
     ):
         """Shortens the conversation history if needed and adds a user message to it.
@@ -248,11 +260,10 @@ class ConversationManager:
         Args:
             content (str): The message content to add.
             images (list[tuple[str, str]]): Optional list of (base64_data, mime_type) tuples to attach.
-            skills: List of active skills for hook invocation.
             condense_fn: Optional async callable invoked after cleanup (``_maybe_condense_history``).
         """
         # call skill hooks (only for prepared/activated skills)
-        for skill in (skills or []):
+        for skill in self._skills:
             if skill.is_prepared:
                 await skill.on_add_user_message(content)
 
@@ -276,16 +287,15 @@ class ConversationManager:
         self.messages.append(msg)
 
     async def add_assistant_message(
-        self, content: str, skills: list["Skill"] = None
+        self, content: str
     ):
         """Adds an assistant message to the conversation history.
 
         Args:
             content (str): The message content to add.
-            skills: List of active skills for hook invocation.
         """
         # call skill hooks (only for prepared/activated skills)
-        for skill in (skills or []):
+        for skill in self._skills:
             if skill.is_prepared:
                 await skill.on_add_assistant_message(content, [])
 
@@ -295,17 +305,11 @@ class ConversationManager:
     async def add_forced_assistant_command_calls(
         self,
         commands: list["CommandConfig"],
-        skills: list["Skill"] = None,
-        skill_registry=None,
-        tool_skills: dict = None,
     ):
         """Adds forced assistant command calls to the conversation history.
 
         Args:
             commands (list[CommandConfig]): The commands to add.
-            skills: List of active skills for hook invocation.
-            skill_registry: The skill registry (used for ``is_meta_tool``).
-            tool_skills: Mapping of function-name -> Skill instance.
         """
 
         if not commands:
@@ -368,7 +372,7 @@ class ConversationManager:
             tool_id_to_command[tool_id] = command
 
         await self.add_gpt_response(
-            message, message.tool_calls, skills, skill_registry, tool_skills
+            message, message.tool_calls
         )
         for tool_call in message.tool_calls:
             command = tool_id_to_command[tool_call.id]
