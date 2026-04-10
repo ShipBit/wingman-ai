@@ -1,6 +1,5 @@
 import asyncio
 import os
-import platform
 from typing import Awaitable, Callable, Optional
 
 from api.enums import LogType, VoiceActivationSttProvider
@@ -74,9 +73,6 @@ class SttProviderManager:
         """Download and initialize Parakeet."""
         pk_settings = self.settings_service.settings.voice_activation.parakeet
 
-        # Auto-detect CUDA and update execution_provider in settings
-        self._auto_detect_execution_provider(pk_settings)
-
         # Download model
         variant = pk_settings.model_variant
         repo_id = PARAKEET_REPO_MAP.get(variant)
@@ -141,41 +137,6 @@ class SttProviderManager:
             await on_status("Verifying speech-to-text...", None)
 
         await self._health_check_fasterwhisper()
-
-    def _auto_detect_execution_provider(self, pk_settings):
-        """Auto-detect CUDA and set execution_provider if still on default (cpu)."""
-        if pk_settings.execution_provider != "cpu":
-            # User has manually set a non-default provider — respect it
-            self.printr.print(
-                f"Parakeet execution_provider already set to '{pk_settings.execution_provider}', skipping auto-detection.",
-                server_only=True,
-                color=LogType.INFO,
-            )
-            return
-
-        if platform.system() == "Darwin":
-            # macOS — always CPU (CoreML excluded for TDT models)
-            pk_settings.execution_provider = "cpu"
-            return
-
-        if self.system_manager.is_cuda_available():
-            pk_settings.execution_provider = "cuda"
-            gpu_name = self.system_manager.get_gpu_name() or "Unknown GPU"
-            self.printr.print(
-                f"CUDA detected ({gpu_name}). Setting Parakeet to CUDA execution provider.",
-                server_only=True,
-                color=LogType.POSITIVE,
-            )
-        else:
-            pk_settings.execution_provider = "cpu"
-            self.printr.print(
-                "No CUDA available. Parakeet will use CPU execution provider.",
-                server_only=True,
-                color=LogType.INFO,
-            )
-
-        # Persist to settings
-        self.settings_service.save_settings_to_disk()
 
     async def switch_provider(self, new_provider: VoiceActivationSttProvider):
         """Switch active STT provider. Unloads old, downloads + loads new."""

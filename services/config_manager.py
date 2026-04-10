@@ -1452,6 +1452,7 @@ class ConfigManager:
         if system_manager.is_cuda_available():
             self.settings_config.voice_activation.fasterwhisper.device = "cuda"
             self.settings_config.voice_activation.fasterwhisper.compute_type = "auto"
+            self.settings_config.voice_activation.parakeet.execution_provider = "cuda"
             self.printr.print(
                 f"- GPU detected: {system_manager.get_gpu_name()}",
                 color=LogType.STARTUP,
@@ -1460,7 +1461,7 @@ class ConfigManager:
                 source_name=self.log_source_name,
             )
             self.printr.print(
-                "- Auto-configured FasterWhisper to use CUDA",
+                "- Auto-configured FasterWhisper and Parakeet to use CUDA",
                 color=LogType.STARTUP,
                 server_only=True,
                 source=LogSource.SYSTEM,
@@ -1468,8 +1469,10 @@ class ConfigManager:
             )
             changes = True
         else:
+            self.settings_config.voice_activation.fasterwhisper.device = "cpu"
+            self.settings_config.voice_activation.parakeet.execution_provider = "cpu"
             self.printr.print(
-                "- No NVIDIA GPU detected, keeping current STT settings",
+                "- No NVIDIA GPU detected, STT providers will use CPU",
                 color=LogType.STARTUP,
                 server_only=True,
                 source=LogSource.SYSTEM,
