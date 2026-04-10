@@ -586,6 +586,63 @@ class PersistentMemoryService:
             self._db.close()
             self._db = None
 
+    def get_tool_definitions(self) -> list[dict]:
+        """Return the OpenAI-style tool definitions for persistent memory operations.
+        These are exposed to the LLM whenever a PersistentMemoryService is active."""
+        return [
+            {
+                "type": "function",
+                "function": {
+                    "name": "memory_remember",
+                    "description": "Store an important fact or detail for future reference. Use when the user explicitly asks you to remember something.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "text": {
+                                "type": "string",
+                                "description": "The fact or detail to remember.",
+                            },
+                        },
+                        "required": ["text"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "memory_recall",
+                    "description": "Search your memory for relevant information. Use when the user asks what you remember or know about a topic.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "What to search for in memory.",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "memory_forget",
+                    "description": "Remove a specific memory. Use when the user explicitly asks you to forget something.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "query": {
+                                "type": "string",
+                                "description": "Description of the memory to forget.",
+                            },
+                        },
+                        "required": ["query"],
+                    },
+                },
+            },
+        ]
+
     # --- Private helpers ---
 
     def _find_duplicate(self, embedding: list[float]) -> MemoryEntry | None:

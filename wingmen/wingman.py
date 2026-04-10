@@ -938,53 +938,12 @@ class Wingman:
     # ───────────────── Build tools ───────────────── #
 
     def build_tools(self) -> list[dict]:
-        def _command_has_effective_actions(command: CommandConfig) -> bool:
-            if command.is_system_command:
-                return True
-            if not command.actions:
-                return False
-            for action in command.actions:
-                if not action:
-                    continue
-                if (
-                    action.keyboard is not None
-                    or action.mouse is not None
-                    or action.joystick is not None
-                    or action.audio is not None
-                    or action.write is not None
-                    or action.wait is not None
-                ):
-                    return True
-            return False
-
-        commands = [
-            command.name
-            for command in self.config.commands
-            if (not command.force_instant_activation)
-            and _command_has_effective_actions(command)
-        ]
+        """Assemble the full tool list for LLM calls."""
         tools: list[dict] = []
-        if commands:
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "execute_command",
-                        "description": "Executes a command",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "command_name": {
-                                    "type": "string",
-                                    "description": "The name of the command to execute",
-                                    "enum": commands,
-                                },
-                            },
-                            "required": ["command_name"],
-                        },
-                    },
-                }
-            )
+
+        command_tool = self.command_executor.get_tool_definition()
+        if command_tool:
+            tools.append(command_tool)
 
         for _, tool in self.capability_registry.get_meta_tools():
             tools.append(tool)
@@ -996,57 +955,7 @@ class Wingman:
             tools.append(tool)
 
         if self.persistent_memory_service:
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "memory_remember",
-                    "description": "Store an important fact or detail for future reference. Use when the user explicitly asks you to remember something.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "text": {
-                                "type": "string",
-                                "description": "The fact or detail to remember.",
-                            },
-                        },
-                        "required": ["text"],
-                    },
-                },
-            })
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "memory_recall",
-                    "description": "Search your memory for relevant information. Use when the user asks what you remember or know about a topic.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "What to search for in memory.",
-                            },
-                        },
-                        "required": ["query"],
-                    },
-                },
-            })
-            tools.append({
-                "type": "function",
-                "function": {
-                    "name": "memory_forget",
-                    "description": "Remove a specific memory. Use when the user explicitly asks you to forget something.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {
-                                "type": "string",
-                                "description": "Description of the memory to forget.",
-                            },
-                        },
-                        "required": ["query"],
-                    },
-                },
-            })
+            tools.extend(self.persistent_memory_service.get_tool_definitions())
 
         return tools
 

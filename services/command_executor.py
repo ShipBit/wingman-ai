@@ -155,6 +155,57 @@ class CommandExecutor:
             printr.print(traceback.format_exc(), color=LogType.ERROR, server_only=True)
             return None, "ERROR DURING PROCESSING"
 
+    # ───────────────── Tool definition ───────────────────────── #
+
+    def get_tool_definition(self) -> dict | None:
+        """Return the OpenAI-style execute_command tool definition, or None if no
+        eligible commands are configured."""
+        def _command_has_effective_actions(command: CommandConfig) -> bool:
+            if command.is_system_command:
+                return True
+            if not command.actions:
+                return False
+            for action in command.actions:
+                if not action:
+                    continue
+                if (
+                    action.keyboard is not None
+                    or action.mouse is not None
+                    or action.joystick is not None
+                    or action.audio is not None
+                    or action.write is not None
+                    or action.wait is not None
+                ):
+                    return True
+            return False
+
+        commands = [
+            command.name
+            for command in self.config.commands
+            if (not command.force_instant_activation)
+            and _command_has_effective_actions(command)
+        ]
+        if not commands:
+            return None
+        return {
+            "type": "function",
+            "function": {
+                "name": "execute_command",
+                "description": "Executes a command",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "command_name": {
+                            "type": "string",
+                            "description": "The name of the command to execute",
+                            "enum": commands,
+                        },
+                    },
+                    "required": ["command_name"],
+                },
+            },
+        }
+
     # ───────────────── Action dispatch ────────────────────────── #
 
     async def execute_action(self, command: CommandConfig):
