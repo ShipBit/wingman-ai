@@ -630,7 +630,7 @@ from api.interface import SettingsConfig, SkillConfig, WingmanInitializationErro
 from skills.skill_base import Skill, tool
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class YourSkillName(Skill):
@@ -640,7 +640,7 @@ class YourSkillName(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
         # Initialize your skill here
@@ -1766,7 +1766,7 @@ from skills.skill_base import Skill, tool
 from services.skill_local_ai import MemoryType
 
 if TYPE_CHECKING:
-    from wingmen.wingman import Wingman
+    from wingmen.wingman_context import WingmanContext
 
 
 class GameStatsTracker(Skill):
@@ -1776,7 +1776,7 @@ class GameStatsTracker(Skill):
         self,
         config: SkillConfig,
         settings: SettingsConfig,
-        wingman: "Wingman",
+        wingman: "WingmanContext",
     ) -> None:
         super().__init__(config=config, settings=settings, wingman=wingman)
 

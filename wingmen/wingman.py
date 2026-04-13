@@ -534,7 +534,7 @@ class Wingman:
                         message = filler
                         is_summarize_needed = True
                 if message:
-                    self.threaded_execution(self.play_to_user, message, interrupt)
+                    self.threaded_execution(self.play_to_user, message, not interrupt)
                     await printr.print_async(
                         f"{message}",
                         color=LogType.POSITIVE,
@@ -972,7 +972,15 @@ class Wingman:
                 old_config = deepcopy(self.config)
 
             self.config = config
+
+            # Propagate to all services that hold a config reference
             self.command_executor.config = config
+            self.conversation._config = config
+            self.condenser._config = config
+            self.context_builder._config = config
+            self.tool_executor._config = config
+            self.metrics.config = config
+            self.mcp_manager.config = config
 
             await self._update_skill_configs(config)
 
@@ -984,7 +992,15 @@ class Wingman:
                         error.error_type
                         != WingmanInitializationErrorType.MISSING_SECRET
                     ):
+                        # Roll back config on all services
                         self.config = old_config
+                        self.command_executor.config = old_config
+                        self.conversation._config = old_config
+                        self.condenser._config = old_config
+                        self.context_builder._config = old_config
+                        self.tool_executor._config = old_config
+                        self.metrics.config = old_config
+                        self.mcp_manager.config = old_config
                         return False
 
             return True
@@ -1043,6 +1059,12 @@ class Wingman:
     async def update_settings(self, settings: SettingsConfig):
         try:
             self.settings = settings
+
+            # Propagate to all services that hold a settings reference
+            self.conversation._settings = settings
+            self.context_builder._settings = settings
+            self.tool_executor._settings = settings
+            self.mcp_manager.settings = settings
 
             for skill in self.skills:
                 skill.settings = settings

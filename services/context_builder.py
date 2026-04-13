@@ -193,9 +193,9 @@ class ContextBuilder:
                 "\n\n# PERSISTENT MEMORY\n"
                 "You have persistent memory. Important facts and past conversation summaries "
                 "are provided in the [Memory] sections above (if any). "
-                "You can use the `remember`, `recall`, and `forget` tools when the user "
+                "You can use the `memory_remember`, `memory_recall`, and `memory_forget` tools when the user "
                 "explicitly asks you to remember, recall, or forget something. "
-                "You don't need to use `remember` for routine information — that is handled automatically."
+                "You don't need to use `memory_remember` for routine information — that is handled automatically."
             )
 
         self._last_compiled_context = context

@@ -89,7 +89,7 @@ class WingmanContext:
             conversation_summary=self._wingman.condenser.summary,
             persistent_memory_service=self._wingman.persistent_memory_service,
             messages=self._wingman.conversation.messages,
-            config_dir_name=self._wingman.tower.config_dir.name if self._wingman.tower else None,
+            config_dir_name=self._wingman.tower.config_dir.name if self._wingman.tower and self._wingman.tower.config_dir and self._wingman.tower.config_dir.name else None,
         )
 
     # --- Provider switching (for voice_changer and similar) ---
@@ -102,6 +102,7 @@ class WingmanContext:
         Used by voice_changer skill.
         """
         from services.provider_factory import ProviderFactory
+        old_provider = self._wingman.config.features.tts_provider
         self._wingman.config.features.tts_provider = provider
         factory = ProviderFactory(
             config=self._wingman.config,
@@ -115,6 +116,8 @@ class WingmanContext:
         if new_tts:
             self._wingman.tts = new_tts
             return True
+        # Roll back config on failure
+        self._wingman.config.features.tts_provider = old_provider
         return False
 
     # --- Commands ---
