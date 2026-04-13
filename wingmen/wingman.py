@@ -981,6 +981,7 @@ class Wingman:
             self.tool_executor._config = config
             self.metrics.config = config
             self.mcp_manager.config = config
+            self.skill_manager.config = config
 
             await self._update_skill_configs(config)
 
@@ -1001,6 +1002,7 @@ class Wingman:
                         self.tool_executor._config = old_config
                         self.metrics.config = old_config
                         self.mcp_manager.config = old_config
+                        self.skill_manager.config = old_config
                         return False
 
             return True
@@ -1065,6 +1067,7 @@ class Wingman:
             self.context_builder._settings = settings
             self.tool_executor._settings = settings
             self.mcp_manager.settings = settings
+            self.skill_manager.settings = settings
 
             for skill in self.skills:
                 skill.settings = settings

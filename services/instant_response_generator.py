@@ -98,7 +98,7 @@ class InstantResponseGenerator:
                         messages.append(
                             {
                                 "role": "user",
-                                "content": "It was tried to handle the response in its entirety as a JSON string. Fix response to be a pure, valid JSON, it was not convertable.",
+                                "content": "The response could not be parsed as JSON. Return only valid JSON with no additional text.",
                             }
                         )
                         if retry_count <= retry_limit:

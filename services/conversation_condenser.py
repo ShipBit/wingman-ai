@@ -288,7 +288,7 @@ class ConversationCondenser:
             user_prompt_suffix = (
                 "\n\n---\n"
                 "Now list every fact from the conversation above as bullet points.\n"
-                "Start from the FIRST message, end at the LAST. Include all secrets, names, preferences, and creative content:"
+                "Start from the FIRST message, end at the LAST. Include all names, preferences, and creative content. Never include secrets, API keys, credentials, passwords, or tokens:"
             )
             prefix_suffix_tokens = count_tokens(user_prompt_prefix) + count_tokens(
                 user_prompt_suffix

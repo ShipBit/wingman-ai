@@ -204,7 +204,10 @@ class ToolExecutor:
                     # adding a new tool response
                     add_tool_response_fn(tool_call, function_response)
             except Exception as e:
-                add_tool_response_fn(tool_call, "Error")
+                if tool_call.id:
+                    await update_tool_response_fn(tool_call.id, "Error")
+                else:
+                    add_tool_response_fn(tool_call, "Error")
                 await printr.print_async(
                     f"Error while processing tool call: {str(e)}", color=LogType.ERROR
                 )

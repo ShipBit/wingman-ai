@@ -49,11 +49,15 @@ class WingmanContext:
         return await self._wingman.actual_llm_call(messages, tools)
 
     def get_conversation_history(self) -> list[dict]:
-        """Get a read-only copy of the conversation history."""
+        """Get a shallow copy of the conversation history.
+
+        Note: message objects are shared with the live conversation state.
+        Do not mutate individual messages.
+        """
         return list(self._wingman.conversation.messages)
 
     async def add_user_message(self, content: str):
-        await self._wingman.conversation.add_user_message(content)
+        await self._wingman.add_user_message(content)
 
     async def add_assistant_message(self, content: str):
         await self._wingman.conversation.add_assistant_message(content)
