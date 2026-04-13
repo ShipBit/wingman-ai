@@ -491,7 +491,7 @@ class ConversationCondenser:
             user_prompt = (
                 f"{existing_summary_section if i == 0 else ''}"
                 f"CONVERSATION TO SUMMARIZE (part {i + 1}/{len(chunks)}):\n{chunk}\n\n"
-                "---\nList every fact from the above as bullet points. Include all secrets, names, preferences, and creative content:"
+                "---\nList every fact from the above as bullet points. Include all names, preferences, and creative content. Never include secrets, API keys, credentials, passwords, or tokens:"
             )
 
             # Safety: if chunk input exceeds budget, truncate chunk text
@@ -504,7 +504,7 @@ class ConversationCondenser:
                     user_prompt = (
                         f"{existing_summary_section if i == 0 else ''}"
                         f"CONVERSATION TO SUMMARIZE (part {i + 1}/{len(chunks)}):\n{chunk}\n\n"
-                        "---\nList every fact from the above as bullet points. Include all secrets, names, preferences, and creative content:"
+                        "---\nList every fact from the above as bullet points. Include all names, preferences, and creative content. Never include secrets, API keys, credentials, passwords, or tokens:"
                     )
                 await printr.print_async(
                     f"Chunk {i + 1}/{len(chunks)} exceeded context budget, truncated to fit.",

@@ -3,7 +3,7 @@
 import json
 import time
 import traceback
-from typing import TYPE_CHECKING, Callable, Awaitable
+from typing import TYPE_CHECKING, Any, Callable, Awaitable
 
 from api.enums import LogType
 from services.benchmark import Benchmark
@@ -223,7 +223,7 @@ class ToolExecutor:
     async def execute_by_function_call(
         self,
         function_name: str,
-        function_args: dict[str, any],
+        function_args: dict[str, Any],
         *,
         tool_skills: dict,
         skill_registry: "SkillRegistry",

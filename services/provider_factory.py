@@ -310,13 +310,19 @@ class ProviderFactory:
         Replicates the logic from OpenAiWingman.validate_and_set_openrouter().
         """
         try:
+            import asyncio
             import requests
+
             model = self._config.openrouter.conversation_model
-            response = requests.get(
-                f"https://openrouter.ai/api/v1/models/{model}",
-                headers={"Authorization": f"Bearer {api_key}"},
-                timeout=10,
-            )
+
+            def _fetch():
+                return requests.get(
+                    f"https://openrouter.ai/api/v1/models/{model}",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    timeout=10,
+                )
+
+            response = await asyncio.to_thread(_fetch)
             if response.status_code == 200:
                 result = response.json()
                 supported_params = result.get("data", {}).get(

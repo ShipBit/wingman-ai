@@ -78,8 +78,8 @@ class WingmanContext:
 
     # --- Secrets ---
 
-    async def retrieve_secret(self, requester: str, errors: list = None) -> str | None:
-        return await self._wingman.retrieve_secret(requester, errors or [])
+    async def retrieve_secret(self, secret_name: str, errors: list = None) -> str | None:
+        return await self._wingman.retrieve_secret(secret_name, errors or [])
 
     # --- Utilities ---
 

@@ -738,7 +738,7 @@ class Wingman:
         )
 
     async def execute_command_by_function_call(
-        self, function_name: str, function_args: dict[str, any]
+        self, function_name: str, function_args: dict[str, Any]
     ) -> tuple[str, str | None, Skill | None, str | None]:
         """Public API kept for backward compatibility with skills."""
         return await self.tool_executor.execute_by_function_call(
