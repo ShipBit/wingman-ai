@@ -87,6 +87,7 @@ from services.benchmark import Benchmark
 from services.image_processing import process_image, validate_image_mime
 from services.model_metadata import ModelMetadataService
 from services.audio_recorder import RECORDING_PATH, AudioRecorder
+from services.threading_utils import threaded_execution
 from services.config_manager import ConfigManager
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
@@ -144,6 +145,18 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/send-text-to-wingman",
             endpoint=self.send_text_to_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/start-recording-for-wingman",
+            endpoint=self.start_recording_for_wingman,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/stop-recording-for-wingman",
+            endpoint=self.stop_recording_for_wingman,
             tags=tags,
         )
         self.router.add_api_route(
@@ -1718,6 +1731,51 @@ class WingmanCore(WebSocketUser):
     # POST /stop-playback
     async def stop_playback(self):
         await self.audio_player.stop_playback()
+
+    # POST /start-recording-for-wingman
+    async def start_recording_for_wingman(self, wingman_name: str):
+        """Start audio recording for a wingman (GUI mic toggle)."""
+        if not self.tower or self.active_recording["key"] != "":
+            return
+
+        wingman = self.tower.get_wingman_by_name(wingman_name)
+        if not wingman:
+            return
+
+        self.active_recording = dict(key="__gui__", wingman=wingman)
+        self.was_listening_before_ptt = self.is_listening
+        if (
+            self.settings_service.settings.voice_activation.enabled
+            and self.is_listening
+        ):
+            self.start_voice_recognition(mute=True)
+
+        self.audio_recorder.start_recording(wingman_name=wingman.name)
+
+    # POST /stop-recording-for-wingman
+    async def stop_recording_for_wingman(self, wingman_name: str):
+        """Stop audio recording and process the result (GUI mic toggle)."""
+        if (
+            not self.tower
+            or self.active_recording["key"] != "__gui__"
+        ):
+            return
+
+        wingman = self.active_recording["wingman"]
+        recorded_audio_wav = self.audio_recorder.stop_recording(
+            wingman_name=wingman.name
+        )
+        self.active_recording = {"key": "", "wingman": None}
+
+        if (
+            self.settings_service.settings.voice_activation.enabled
+            and not self.is_listening
+            and self.was_listening_before_ptt
+        ):
+            self.start_voice_recognition()
+
+        if recorded_audio_wav and isinstance(wingman, Wingman):
+            threaded_execution(wingman.process, str(recorded_audio_wav))
 
     # POST /ask-wingman-conversation-provider
     async def ask_wingman_conversation_provider(
