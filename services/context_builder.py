@@ -139,9 +139,7 @@ class ContextBuilder:
                     else getattr(msg, "content", "")
                 )
                 # Extract plain text from multimodal content (images etc.)
-                content = (
-                    self._extract_text_content(raw_content) if raw_content else ""
-                )
+                content = self._extract_text_content(raw_content) if raw_content else ""
                 if role == "user" and content:
                     last_user_msg = content
                     break
@@ -152,10 +150,7 @@ class ContextBuilder:
                             last_user_msg
                         )
                     )
-                    if (
-                        persistent_memory_context
-                        and not self._memory_recall_notified
-                    ):
+                    if persistent_memory_context and not self._memory_recall_notified:
                         self._memory_recall_notified = True
                         # Count restored fact lines (lines starting with "- ")
                         fact_count = sum(
@@ -165,7 +160,7 @@ class ContextBuilder:
                         )
                         if fact_count > 0:
                             await printr.print_async(
-                                f"Memory recalled: {fact_count} relevant {'memory' if fact_count == 1 else 'memories'} loaded.",
+                                f"Memory: {fact_count} {'memory' if fact_count == 1 else 'memories'} recalled",
                                 color=LogType.MEMORY,
                                 source_name=self._wingman_name,
                             )
