@@ -1,7 +1,6 @@
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import os
-import random
 import platform
 import re
 import threading
@@ -71,6 +70,7 @@ from services.file import (
     get_custom_skills_dir,
     get_local_models_dir,
     get_models_dir,
+    get_pocket_tts_models_dir,
     get_prompt,
 )
 from services.model_downloader import ModelDownloader
@@ -266,6 +266,36 @@ class WingmanCore(WebSocketUser):
             methods=["POST"],
             path="/pocket_tts/stop",
             endpoint=self.stop_pocket_tts,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/pocket_tts/status",
+            endpoint=self.get_pocket_tts_status,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["GET"],
+            path="/pocket_tts/models",
+            endpoint=self.get_pocket_tts_models,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/pocket_tts/preload_voice",
+            endpoint=self.preload_pocket_tts_voice,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/open-filemanager/pocket-tts-models",
+            endpoint=self.open_pocket_tts_models_directory,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
+            path="/voices/preprocess",
+            endpoint=self.preprocess_custom_voice,
             tags=tags,
         )
         self.router.add_api_route(
@@ -520,19 +550,6 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
-            path="/settings/test/output-device",
-            endpoint=self.test_output_device,
-            tags=tags,
-        )
-        self.router.add_api_route(
-            methods=["POST"],
-            path="/settings/generate-tts-sample",
-            endpoint=self.generate_tts_sample,
-            tags=tags,
-        )
-
-        self.router.add_api_route(
-            methods=["POST"],
             path="/local-ai/support",
             endpoint=self.api_support,
             tags=tags,
@@ -699,7 +716,12 @@ class WingmanCore(WebSocketUser):
             settings=self.settings_service.settings.voice_activation.parakeet,
         )
         self.xvasynth = XVASynth(settings=self.settings_service.settings.xvasynth)
-        self.pocket_tts = PocketTTS(settings=self.settings_service.settings.pocket_tts)
+        self.pocket_tts = PocketTTS(
+            settings=self.settings_service.settings.pocket_tts,
+            defer_load=True,
+        )
+        self.pocket_tts.on_model_reloaded = self._on_pocket_tts_reloaded
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
 
         # Unified model management
         self.model_downloader = ModelDownloader(models_root=get_models_dir())
@@ -760,6 +782,9 @@ class WingmanCore(WebSocketUser):
             self.audio_recorder.update_input_stream()
 
     async def startup(self):
+        # Capture the main loop so background workers can schedule coroutines.
+        self._main_loop = asyncio.get_running_loop()
+
         # 1. Detect hardware
         await self.set_core_state(
             CoreState.LOADING_CONFIG,
@@ -781,13 +806,15 @@ class WingmanCore(WebSocketUser):
         if self.settings_service.settings.voice_activation.enabled:
             await self.set_voice_activation(is_enabled=True)
 
-        # 4. TTS initialization (settings-aware)
+        # 4. TTS initialization (settings-aware, deferred from __init__)
         pocket_settings = self.settings_service.settings.pocket_tts
-        if pocket_settings.run_locally:
+        if pocket_settings.enable:
             await self.set_core_state(
                 CoreState.LOADING_CONFIG,
-                message="Initializing text-to-speech...",
+                message="Downloading TTS model..." if pocket_settings.run_locally else "Initializing text-to-speech...",
             )
+            loop = asyncio.get_running_loop()
+            await loop.run_in_executor(None, self.pocket_tts.deferred_init)
 
         # 5. Local AI download + init (settings-aware)
         llama_settings = self.settings_service.settings.llama_cpp
@@ -1286,6 +1313,9 @@ class WingmanCore(WebSocketUser):
                 self.printr.toast_error(error.message)
 
         self.config_service.set_tower(self.tower)
+
+        # Warm the PocketTTS voice cache for all voices used in this config.
+        await self._preload_pocket_tts_voices()
 
         # Broadcast state change - ready again after tower init
         await self.set_core_state(CoreState.READY)
@@ -2105,6 +2135,129 @@ class WingmanCore(WebSocketUser):
             devices.append("cuda")
         return devices
 
+    def _collect_pocket_tts_voice_ids(self) -> list[str]:
+        """Collect the PocketTTS voice IDs used by wingmen in the current tower."""
+        if not self.tower:
+            return []
+        ids: list[str] = []
+        seen: set[str] = set()
+        for wingman in self.tower.wingmen:
+            try:
+                voice_id = wingman.config.pocket_tts.voice
+            except AttributeError:
+                continue
+            if not voice_id or voice_id in seen:
+                continue
+            seen.add(voice_id)
+            ids.append(voice_id)
+        return ids
+
+    async def _preload_pocket_tts_voices(
+        self,
+        voice_ids: Optional[list[str]] = None,
+        state_message_prefix: str = "Preloading voices",
+        restore_ready_state: bool = False,
+    ) -> dict[str, bool]:
+        """Warm PocketTTS voice state cache.
+
+        When ``voice_ids`` is None, preloads every voice used by the current
+        tower. Broadcasts LOADING_CONFIG progress messages so the app header
+        bar shows the shared loading indicator. When ``restore_ready_state``
+        is True, flips the core state back to READY on completion — use that
+        for ad-hoc preloads outside the main startup flow (e.g. a user picks
+        a voice in the config screen).
+        """
+        if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
+            return {}
+        if not self.pocket_tts.model:
+            return {}
+        if voice_ids is None:
+            voice_ids = self._collect_pocket_tts_voice_ids()
+        if not voice_ids:
+            return {}
+
+        loop = asyncio.get_running_loop()
+        progress = {"current": 0, "total": len(voice_ids), "name": ""}
+
+        def on_progress(i: int, total: int, name: str):
+            progress["current"] = i
+            progress["total"] = total
+            progress["name"] = name
+
+        preload_task = loop.run_in_executor(
+            None,
+            lambda: self.pocket_tts.preload_voice_states(voice_ids, on_progress),
+        )
+        try:
+            while not preload_task.done():
+                if progress["total"]:
+                    await self.set_core_state(
+                        CoreState.LOADING_CONFIG,
+                        message=f"{state_message_prefix} ({progress['current']}/{progress['total']}): {progress['name']}",
+                        progress=progress["current"] / progress["total"],
+                    )
+                await asyncio.sleep(0.25)
+            return await preload_task
+        finally:
+            if restore_ready_state:
+                await self.set_core_state(CoreState.READY)
+
+    def _on_pocket_tts_reloaded(self) -> None:
+        """Callback fired after the PocketTTS model finishes (re)loading.
+
+        Runs from the model-load worker thread, so schedule the async preload
+        onto the main loop.
+        """
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = getattr(self, "_main_loop", None)
+            if loop is None:
+                self.printr.print(
+                    "PocketTTS model reload: main loop not captured; skipping preload.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                return
+        future = asyncio.run_coroutine_threadsafe(
+            self._preload_pocket_tts_voices(state_message_prefix="Preloading voices"),
+            loop,
+        )
+
+        def _log_preload_failure(fut):
+            exc = fut.exception()
+            if exc:
+                self.printr.print(
+                    f"PocketTTS background preload failed: {exc}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+
+        future.add_done_callback(_log_preload_failure)
+
+    # POST /pocket_tts/preload_voice
+    async def preload_pocket_tts_voice(self, voice: str) -> dict:
+        """Warm the voice-state cache for a single voice (e.g. after a user picks it).
+
+        Broadcasts LOADING_CONFIG core state while working, so the client
+        picks up progress via the shared header bar indicator. Resolves once
+        the clone + on-disk cache are ready and the core state is back to READY.
+        """
+        voice = (voice or "").strip()
+        if not voice:
+            return {"ok": False, "reason": "empty voice id"}
+        if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
+            return {"ok": False, "reason": "pocket_tts unavailable"}
+        if not self.pocket_tts.model:
+            return {"ok": False, "reason": "model not loaded"}
+
+        results = await self._preload_pocket_tts_voices(
+            voice_ids=[voice],
+            state_message_prefix="Preloading voice",
+            restore_ready_state=True,
+        )
+        return {"ok": bool(results.get(voice, False)), "voice": voice}
+
     # POST /pocket_tts/start
     def start_pocket_tts(self):
         self.pocket_tts.load_model()
@@ -2117,6 +2270,167 @@ class WingmanCore(WebSocketUser):
             self.printr.print(
                 f"Error stopping PocketTTS: {e}", color=LogType.ERROR, server_only=True
             )
+
+    # GET /pocket_tts/status
+    def get_pocket_tts_status(self) -> dict:
+        return self.pocket_tts.get_status()
+
+    # GET /pocket_tts/models
+    def get_pocket_tts_models(self) -> list[dict]:
+        return self.pocket_tts.get_available_models()
+
+    # POST /open-filemanager/pocket-tts-models
+    def open_pocket_tts_models_directory(self):
+        show_in_file_manager(get_pocket_tts_models_dir())
+
+    # Windows reserved device names (case-insensitive, with or without extension).
+    _RESERVED_WINDOWS_NAMES = frozenset(
+        ["CON", "PRN", "AUX", "NUL"]
+        + [f"COM{i}" for i in range(1, 10)]
+        + [f"LPT{i}" for i in range(1, 10)]
+    )
+    _MAX_VOICE_STEM_LEN = 80
+
+    def _validate_voice_stem(self, stem: str) -> str:
+        """Validate a user-supplied voice name for safe filesystem use.
+
+        Rejects empty names, path separators, dot-traversal, control
+        characters, Windows reserved names, overly long names, and stems
+        that match a known PocketTTS model tag (which would collide with
+        the ``<voice>.<model_tag>.safetensors`` cache naming scheme).
+        """
+        if not stem:
+            raise HTTPException(status_code=400, detail="Voice name cannot be empty.")
+        if any(c in stem for c in ("/", "\\")) or ".." in stem:
+            raise HTTPException(status_code=400, detail="Invalid voice name.")
+        if any(ord(c) < 0x20 for c in stem):
+            raise HTTPException(status_code=400, detail="Invalid voice name.")
+        if len(stem) > self._MAX_VOICE_STEM_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Voice name exceeds {self._MAX_VOICE_STEM_LEN} characters.",
+            )
+        if stem.upper() in self._RESERVED_WINDOWS_NAMES:
+            raise HTTPException(status_code=400, detail="Invalid voice name.")
+        # Disallow stems that shadow a known model tag — would collide with
+        # ``<voice>.<model_tag>.safetensors`` cache files on disk.
+        if stem in self.pocket_tts._known_model_tags():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Voice name '{stem}' conflicts with a model ID.",
+            )
+        return stem
+
+    # POST /voices/preprocess
+    async def preprocess_custom_voice(
+        self,
+        file: UploadFile = File(...),
+        name: Optional[str] = Form(None),
+        max_duration_s: float = Form(20.0),
+        overwrite: bool = Form(False),
+    ) -> dict:
+        """Clean up an uploaded audio clip for PocketTTS voice cloning.
+
+        Converts to mono 24 kHz WAV, trims silence, normalizes peak, caps duration,
+        and saves it into the custom voices directory under ``<name>.wav``.
+        Returns metadata about the preprocessed clip.
+        """
+        from services.voice_preprocessing import (
+            preprocess_voice_audio,
+            supported_input_extensions,
+        )
+
+        src_name = file.filename or "upload.wav"
+        src_ext = os.path.splitext(src_name)[1].lower()
+        if src_ext not in supported_input_extensions():
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Unsupported audio format '{src_ext}'. "
+                    f"Supported: {sorted(supported_input_extensions())}"
+                ),
+            )
+
+        stem = (name or os.path.splitext(src_name)[0]).strip()
+        stem = self._validate_voice_stem(stem)
+
+        custom_dir = get_custom_voices_dir()
+        dst_path = os.path.join(custom_dir, f"{stem}.wav")
+        # Verify the resolved destination actually lives inside custom_dir —
+        # belt-and-braces protection against creative filenames that slip past
+        # the character-level checks on platforms we don't cover (e.g. Windows
+        # drive letters, SMB paths).
+        abs_custom = os.path.realpath(custom_dir)
+        abs_dst = os.path.realpath(dst_path)
+        if os.path.commonpath([abs_custom, abs_dst]) != abs_custom:
+            raise HTTPException(status_code=400, detail="Invalid voice name.")
+        if os.path.exists(dst_path) and not overwrite:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Voice '{stem}' already exists. Pass overwrite=true to replace it.",
+            )
+
+        # Stream upload to a unique temp file — concurrent uploads must not collide.
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(
+            suffix=src_ext,
+            prefix="voice_upload_",
+            dir=get_writable_dir(RECORDING_PATH),
+        )
+        try:
+            contents = await file.read()
+            with os.fdopen(fd, "wb") as f:
+                f.write(contents)
+
+            try:
+                result = preprocess_voice_audio(
+                    src_path=tmp_path,
+                    dst_path=dst_path,
+                    max_duration_s=max_duration_s,
+                )
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, detail=f"Preprocessing failed: {e}"
+                ) from e
+        finally:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+
+        # Drop every stale cache (legacy + per-model) for this stem — the audio changed.
+        import glob as _glob
+        stale_paths = _glob.glob(os.path.join(custom_dir, f"{stem}.safetensors")) + _glob.glob(
+            os.path.join(custom_dir, f"{stem}.*.safetensors")
+        )
+        for stale in stale_paths:
+            try:
+                os.remove(stale)
+            except OSError:
+                pass
+
+        # Drop matching entries from the in-memory voice cache — only those
+        # that point at this stem's files, not the whole cache.
+        cache = self.pocket_tts.voice_cache
+        for cached_key in list(cache.keys()):
+            if os.path.basename(cached_key).startswith(f"{stem}."):
+                cache.pop(cached_key, None)
+
+        return {
+            "filename": f"{stem}.wav",
+            "path": result.path,
+            "sample_rate": result.sample_rate,
+            "duration_seconds": result.duration_seconds,
+            "channels": result.channels,
+            "original_sample_rate": result.original_sample_rate,
+            "original_channels": result.original_channels,
+            "original_duration_seconds": result.original_duration_seconds,
+            "trimmed_silence_ms": result.trimmed_silence_ms,
+            "truncated": result.truncated,
+        }
 
     # POST /xvasynth/start
     def start_xvasynth(self):
@@ -3073,47 +3387,6 @@ class WingmanCore(WebSocketUser):
             return TestConnectionResult(
                 success=False, provider="openai_compatible_tts", error=str(e)
             )
-
-    def _generate_tts_praise_text(self) -> str:
-        """Generate a funny Wingman AI praise sentence via the local AI support model.
-        Falls back to a static sentence if the model is not ready."""
-        from services.file import get_prompt
-
-        from services.skill_local_ai import SamplingPreset
-
-        text = None
-        if self.local_ai_service.is_ready():
-            system_prompt = get_prompt("tts-test-praise")
-            result = self.local_ai_service.support(
-                text="Generate a sentence.",
-                system_prompt=system_prompt,
-                preset=SamplingPreset.PRECISE,
-            )
-            if result.text:
-                text = result.text.strip().strip('"')
-
-        if not text:
-            text = "Wingman AI is so good, even my toaster is jealous."
-
-        return text
-
-    # POST /settings/test/output-device
-    async def test_output_device(self):
-        """Generate a funny Wingman AI praise via the support model, pick a random
-        Pocket TTS voice, and return both so the client can trigger playback separately."""
-        text = self._generate_tts_praise_text()
-
-        # Pick a random available Pocket TTS voice
-        voices = await self.pocket_tts.get_available_voices()
-        voice = random.choice(voices).id if voices else None
-
-        return {"text": text, "voice": voice}
-
-    # POST /settings/generate-tts-sample
-    async def generate_tts_sample(self):
-        """Generate a funny Wingman AI praise sentence for TTS voice previews."""
-        text = self._generate_tts_praise_text()
-        return {"text": text}
 
     # POST /local-ai/support
     async def api_support(
