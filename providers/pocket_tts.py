@@ -1,6 +1,5 @@
 import os
 import io
-import sys
 import glob
 import asyncio
 import threading
@@ -29,8 +28,6 @@ if TYPE_CHECKING:
     from api.interface import WingmanConfig
 
 
-POCKET_TTS_VOICES_DIR = "embeddings"
-INCLUDED_VOICES_DIR = "pocket-tts-voices"
 
 # Label == id so the exact pocket-tts model name is visible in the UI and
 # matches the tag baked into generated ``<voice>.<id>.safetensors`` caches.
@@ -100,7 +97,6 @@ class PocketTTS:
         self.remote_client: Optional[OpenAiCompatibleTts] = None
         self.voices_dir = get_custom_voices_dir()
         self.models_dir = get_pocket_tts_models_dir()
-        self.wingman_included_voices_dir = self._get_wingman_included_voices_dir()
         # LRU-bounded voice state cache — each entry is a dict of tensors and
         # can be tens of MB. Keep the most recent 32 voices (well over a
         # typical tower size) and drop the oldest on overflow.
@@ -155,7 +151,6 @@ class PocketTTS:
         old = self.settings
         self.settings = settings
         self.voices_dir = get_custom_voices_dir()
-        self.wingman_included_voices_dir = self._get_wingman_included_voices_dir()
 
         if not settings.enable:
             # Disabled — tear down everything
@@ -358,15 +353,6 @@ class PocketTTS:
                     id=name_id, name=f"PocketTTS: {name_id}", provider="pocket_tts"
                 )
             )
-        # Wingman included cc0 voices
-        for stem in self._list_voice_stems(self.wingman_included_voices_dir):
-            voices.append(
-                VoiceInfo(
-                    id=stem,
-                    name=f"Wingman Included: {stem}",
-                    provider="wingman_included",
-                )
-            )
         # Custom voices
         for stem in self._list_voice_stems(self.voices_dir):
             voices.append(
@@ -448,16 +434,11 @@ class PocketTTS:
         audio_exts = (".wav", ".mp3", ".flac")
         extension_order = (f".{active_tag}.safetensors", *audio_exts, ".safetensors")
 
-        # Check Pocket-TTS built-in voices (shipped alongside the library)
-        built_in_voices_dir = self._get_pocket_tts_included_voices_dir()
-        possible_path = os.path.join(built_in_voices_dir, f"{voice_id_or_path}.safetensors")
-        if os.path.exists(possible_path):
-            return os.path.abspath(possible_path)
-
-        for directory in (self.wingman_included_voices_dir, self.voices_dir):
-            if not directory:
-                continue
-            base = os.path.join(directory, voice_id_or_path)
+        # Bare predefined names (e.g. "alba") are handled by pocket-tts itself
+        # (downloaded + cached from HuggingFace on first use); we just pass them
+        # through untouched.
+        if self.voices_dir:
+            base = os.path.join(self.voices_dir, voice_id_or_path)
             if os.path.exists(base):
                 return os.path.abspath(base)
             for ext in extension_order:
@@ -861,32 +842,6 @@ class PocketTTS:
             return "wav"
         return fmt
 
-    def _get_app_dir(self) -> str:
-        """Return the application root directory (bundle-aware).
-
-        In PyInstaller one-dir builds, runtime assets often live under an internal
-        directory (e.g. "_internal"), while our bundled models/voices are located
-        alongside that directory. We therefore resolve to the parent of
-        the PyInstaller extraction directory ("_MEIPASS") when bundled.
-        """
-
-        app_is_bundled = getattr(sys, "frozen", False)
-        if app_is_bundled:
-            meipass = getattr(sys, "_MEIPASS", None)
-            if meipass:
-                return os.path.dirname(meipass)
-
-        # Source/dev layout: <repo>/providers/pocket_tts.py -> app root is two dirs up.
-        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-    def _get_pocket_tts_included_voices_dir(self) -> str:
-        app_dir = self._get_app_dir()
-        return os.path.join(app_dir, "pocket-tts-models", POCKET_TTS_VOICES_DIR)
-
-    def _get_wingman_included_voices_dir(self) -> str:
-        # Determine path to wingman included voices directory
-        app_dir = self._get_app_dir()
-        return os.path.join(app_dir, INCLUDED_VOICES_DIR)
 
 
 @tts_provider(TtsProvider.POCKET_TTS)

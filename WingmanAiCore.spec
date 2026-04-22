@@ -219,6 +219,18 @@ datas += ptts_datas
 binaries += ptts_binaries
 hiddenimports += ptts_hidden
 
+# Collect all torchao — required by pocket-tts for int8 quantization.
+# Without it, pocket-tts falls back to torch.ao.quantize_dynamic, which
+# wraps nn.Linear such that .weight is a bound method instead of a tensor
+# and breaks voice cloning (AttributeError on .device in init_state).
+try:
+    torchao_datas, torchao_binaries, torchao_hidden = collect_all('torchao')
+    datas += torchao_datas
+    binaries += torchao_binaries
+    hiddenimports += torchao_hidden
+except Exception as e:
+    print(f"Warning: Could not collect torchao: {e}")
+
 # Collect tiktoken encoding data (e.g. cl100k_base BPE ranks)
 tiktoken_datas, tiktoken_binaries, tiktoken_hidden = collect_all('tiktoken')
 datas += tiktoken_datas
