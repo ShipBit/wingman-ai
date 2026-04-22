@@ -148,7 +148,8 @@ class XVASynthSettings(BaseModel):
 class PocketTTSSettings(BaseModel):
     enable: bool
     run_locally: bool = True
-    custom_model_path: Optional[str] = None
+    model: str = "english"
+    quantize: bool = True
     host: str
     port: int
 
@@ -1223,6 +1224,7 @@ class SettingsConfig(BaseModel):
     cancel_tts_joystick_button: Optional[CommandJoystickConfig] = None
     user_name: Optional[str] = None
     hardware_scan_performed: bool = False
+    spoken_language: str = "multilingual"
 
 
 class BenchmarkResult(BaseModel):

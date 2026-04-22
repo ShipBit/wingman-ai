@@ -52,7 +52,8 @@ xvasynth:
 pocket_tts:
   enable: true
   run_locally: true
-  custom_model_path: ""
+  model: "english_2026-04"
+  quantize: true
   host: "localhost"
   port: 5002
 llama_cpp:
@@ -71,6 +72,7 @@ llama_cpp:
   support_remote_port: 49152
   embed_remote_host: "http://127.0.0.1"
   embed_remote_port: 49153
+spoken_language: "multilingual"
 hud_server:
   enabled: false
   host: "127.0.0.1"

@@ -49,14 +49,14 @@ prompts:
 
     # CONVERSATION STYLE
     - Keep responses brief and efficient
-    - Mirror the user's language
+    {language_instruction}
     - Execute commands without over-explaining
     - Don't ask if you can "help more" or "assist further"
 
     {ttsprompt}
 persistent_memory: true
 features:
-  tts_provider: wingman_pro
+  tts_provider: pocket_tts
   stt_provider: parakeet
   conversation_provider: wingman_pro
   image_generation_provider: wingman_pro
