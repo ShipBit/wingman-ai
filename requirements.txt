@@ -57,7 +57,8 @@ onnxruntime>=1.19.0; sys_platform == 'darwin'
 pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'
 
 # Pocket-TTS
-pocket-tts==1.1.0
+pocket-tts==2.0.0
+torchao==0.17.0 # required for int8 quantization; torch.ao fallback breaks voice cloning
 torch==2.8.0 # don't upgrade!
 torchaudio==2.8.0 # don't upgrade!
 
