@@ -123,6 +123,19 @@ def get_models_dir() -> str:
     return models_path
 
 
+def get_pocket_tts_models_dir() -> str:
+    """Get the path to the PocketTTS models directory.
+
+    NOT versioned - models persist across Wingman AI updates.
+    Location: APPDATA/WingmanAI/models/pocket-tts/
+    """
+    models_root = get_models_dir()
+    pocket_tts_path = path.join(models_root, "pocket-tts")
+    if not path.exists(pocket_tts_path):
+        makedirs(pocket_tts_path)
+    return pocket_tts_path
+
+
 def get_generated_files_dir(skill_name: str) -> str:
     """Get the path to a skill's generated files directory.
 
