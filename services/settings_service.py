@@ -20,6 +20,17 @@ from services.printr import Printr
 from services.pub_sub import PubSub
 
 
+SPOKEN_TO_POCKET_TTS = {
+    "en": "english_2026-04",
+    "de": "german",
+    # French has no 6-layer model in pocket-tts v2 — 24l is the only variant.
+    "fr": "french_24l",
+    "es": "spanish",
+    "it": "italian",
+    "pt": "portuguese",
+}
+
+
 class SettingsService:
     def __init__(self, config_manager: ConfigManager, config_service: ConfigService):
         self.printr = Printr()
@@ -177,6 +188,33 @@ class SettingsService:
             return
         self.pocket_tts.update_settings(settings=settings.pocket_tts)
         self.config_manager.settings_config.pocket_tts = settings.pocket_tts
+
+        # Spoken language cascade
+        old_spoken = old.spoken_language
+        new_spoken = settings.spoken_language
+        if new_spoken != old_spoken:
+            self.config_manager.settings_config.spoken_language = new_spoken
+
+            # Cascade to PocketTTS model language
+            pocket_lang = SPOKEN_TO_POCKET_TTS.get(new_spoken, "english_2026-04")
+            if settings.pocket_tts.model != pocket_lang:
+                settings.pocket_tts.model = pocket_lang
+                self.config_manager.settings_config.pocket_tts.model = pocket_lang
+                self.pocket_tts.update_settings(settings=settings.pocket_tts)
+
+            # Cascade to STT language (FasterWhisper)
+            stt_lang = None if new_spoken == "multilingual" else new_spoken
+            settings.voice_activation.fasterwhisper_config.language = stt_lang
+            self.config_manager.settings_config.voice_activation.fasterwhisper_config.language = stt_lang
+
+            self.printr.print(
+                f"Spoken language changed to '{new_spoken}'. "
+                f"PocketTTS: {pocket_lang}, STT: {stt_lang or 'auto-detect'}",
+                server_only=True,
+                color=LogType.INFO,
+            )
+        else:
+            self.config_manager.settings_config.spoken_language = new_spoken
 
         # Local AI (llama.cpp)
         if self.local_ai_service:

@@ -167,12 +167,23 @@ class ContextBuilder:
                 except Exception:
                     pass  # Don't let memory failures break conversation
 
+        spoken = getattr(self._settings, "spoken_language", "multilingual")
+        if spoken == "multilingual":
+            language_instruction = "- Respond in whatever language the user speaks to you"
+        else:
+            lang_names = {
+                "en": "English", "de": "German", "fr": "French",
+                "es": "Spanish", "it": "Italian", "pt": "Portuguese",
+            }
+            language_instruction = f"- Always respond in {lang_names.get(spoken, spoken)}"
+
         context = self._config.prompts.system_prompt.format(
             backstory=backstory,
             skills=skill_prompts,
             ttsprompt=tts_prompt,
             user_context=user_context,
             conversation_summary=conversation_summary_section,
+            language_instruction=language_instruction,
         )
 
         # If the system prompt template doesn't include {conversation_summary},
