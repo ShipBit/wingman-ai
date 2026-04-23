@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 from fastapi import APIRouter
 import sounddevice as sd
 from api.enums import LogType, SttProvider, ToastType, VoiceActivationSttProvider
@@ -45,6 +45,14 @@ class SettingsService:
         self.xvasynth: XVASynth = None
         self.pocket_tts: PocketTTS = None
         self.local_ai_service: LocalAiService = None
+        # Injected by WingmanCore to surface STT download/init progress via
+        # the shared LOADING_CONFIG indicator during runtime settings changes.
+        # ``stt_status_callback`` broadcasts per-step progress, ``stt_done_callback``
+        # flips the state back to READY once the switch finishes.
+        self.stt_status_callback: Optional[
+            Callable[[str, Optional[float]], Awaitable[None]]
+        ] = None
+        self.stt_done_callback: Optional[Callable[[], Awaitable[None]]] = None
 
         self.router = APIRouter()
         tags = ["settings"]
@@ -109,7 +117,13 @@ class SettingsService:
             self.fasterwhisper.settings = settings.voice_activation.fasterwhisper
             self.config_manager.settings_config.voice_activation = settings.voice_activation
             # Provider changed — let the manager handle unload/load
-            await self.stt_provider_manager.switch_provider(new_stt)
+            try:
+                await self.stt_provider_manager.switch_provider(
+                    new_stt, on_status=self.stt_status_callback
+                )
+            finally:
+                if self.stt_done_callback:
+                    await self.stt_done_callback()
             # Cascade the local stt_provider to wingman configs (disk + defaults)
             if new_stt == VoiceActivationSttProvider.PARAKEET:
                 new_stt_provider = SttProvider.PARAKEET
@@ -132,7 +146,13 @@ class SettingsService:
                 or old_pk.run_locally != new_pk.run_locally):
                 self.parakeet.settings = new_pk
                 if self.stt_provider_manager:
-                    await self.stt_provider_manager.switch_provider(new_stt)
+                    try:
+                        await self.stt_provider_manager.switch_provider(
+                            new_stt, on_status=self.stt_status_callback
+                        )
+                    finally:
+                        if self.stt_done_callback:
+                            await self.stt_done_callback()
             else:
                 self.parakeet.settings = new_pk
         elif new_stt == VoiceActivationSttProvider.FASTER_WHISPER:
@@ -144,7 +164,13 @@ class SettingsService:
                 or old_fw.compute_type != new_fw.compute_type):
                 self.fasterwhisper.settings = new_fw
                 if self.stt_provider_manager:
-                    await self.stt_provider_manager.switch_provider(new_stt)
+                    try:
+                        await self.stt_provider_manager.switch_provider(
+                            new_stt, on_status=self.stt_status_callback
+                        )
+                    finally:
+                        if self.stt_done_callback:
+                            await self.stt_done_callback()
             else:
                 self.fasterwhisper.settings = new_fw
 

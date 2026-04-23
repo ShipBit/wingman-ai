@@ -693,6 +693,11 @@ class WingmanCore(WebSocketUser):
         self.settings_service = SettingsService(
             config_manager=config_manager, config_service=self.config_service
         )
+        # Surface STT download/init progress during runtime settings switches
+        # via the same LOADING_CONFIG indicator used at startup; flip back to
+        # READY when the switch finishes.
+        self.settings_service.stt_status_callback = self._broadcast_loading_status
+        self.settings_service.stt_done_callback = self._broadcast_ready
         self.settings_service.settings_events.subscribe(
             "audio_devices_changed", self.on_audio_devices_changed
         )
@@ -974,6 +979,23 @@ class WingmanCore(WebSocketUser):
         if self._hud_server and self._hud_server.is_running:
             await self._hud_server.stop()
             self._hud_server = None
+
+    async def _broadcast_loading_status(
+        self, message: str, progress: float | None = None
+    ) -> None:
+        """Convenience wrapper: emit a LOADING_CONFIG state with a status message.
+
+        Used as the ``stt_status_callback`` so SttProviderManager can surface
+        download/init progress during runtime settings changes without needing
+        a direct reference to ``set_core_state``.
+        """
+        await self.set_core_state(
+            CoreState.LOADING_CONFIG, message=message, progress=progress
+        )
+
+    async def _broadcast_ready(self) -> None:
+        """Flip core state back to READY — paired with _broadcast_loading_status."""
+        await self.set_core_state(CoreState.READY)
 
     async def set_core_state(
         self,

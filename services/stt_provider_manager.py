@@ -17,6 +17,57 @@ PARAKEET_REPO_MAP = {
     "v3": "istupakov/parakeet-tdt-0.6b-v3-onnx",
 }
 
+# Mirror of faster_whisper.utils._MODELS — duplicated so we can fetch the
+# snapshot via our own ModelDownloader (with progress/status broadcasting)
+# instead of relying on faster_whisper's silent tqdm download.
+FASTER_WHISPER_REPO_MAP = {
+    "tiny.en":           "Systran/faster-whisper-tiny.en",
+    "tiny":              "Systran/faster-whisper-tiny",
+    "base.en":           "Systran/faster-whisper-base.en",
+    "base":              "Systran/faster-whisper-base",
+    "small.en":          "Systran/faster-whisper-small.en",
+    "small":             "Systran/faster-whisper-small",
+    "medium.en":         "Systran/faster-whisper-medium.en",
+    "medium":            "Systran/faster-whisper-medium",
+    "large-v1":          "Systran/faster-whisper-large-v1",
+    "large-v2":          "Systran/faster-whisper-large-v2",
+    "large-v3":          "Systran/faster-whisper-large-v3",
+    "large":             "Systran/faster-whisper-large-v3",
+    "distil-large-v2":   "Systran/faster-distil-whisper-large-v2",
+    "distil-medium.en":  "Systran/faster-distil-whisper-medium.en",
+    "distil-small.en":   "Systran/faster-distil-whisper-small.en",
+    "distil-large-v3":   "Systran/faster-distil-whisper-large-v3",
+    "distil-large-v3.5": "distil-whisper/distil-large-v3.5-ct2",
+    "large-v3-turbo":    "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+    "turbo":             "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+}
+
+FASTER_WHISPER_ALLOW_PATTERNS = [
+    "config.json",
+    "preprocessor_config.json",
+    "model.bin",
+    "tokenizer.json",
+    "vocabulary.*",
+]
+
+
+def resolve_faster_whisper_repo(model_size: str) -> str:
+    """Resolve a FasterWhisper ``model_size`` to a HuggingFace repo ID.
+
+    Accepts either a bare size ('distil-large-v3') or a user-supplied repo
+    path ('Systran/faster-whisper-large-v3'); the latter is passed through.
+    """
+    if "/" in model_size:
+        return model_size
+    repo = FASTER_WHISPER_REPO_MAP.get(model_size)
+    if not repo:
+        raise ValueError(
+            f"Unknown FasterWhisper model_size '{model_size}'. "
+            f"Expected one of: {', '.join(FASTER_WHISPER_REPO_MAP.keys())}, "
+            f"or a HuggingFace repo path."
+        )
+    return repo
+
 
 class SttProviderManager:
     """Manages STT provider lifecycle: CUDA detection, model download, load/unload."""
@@ -123,11 +174,42 @@ class SttProviderManager:
         on_status: Optional[Callable[[str, float | None], Awaitable[None]]] = None,
     ):
         """Download and initialize FasterWhisper."""
+        fw_settings = self.settings_service.settings.voice_activation.fasterwhisper
+        model_size = fw_settings.model_size
+
+        try:
+            repo_id = resolve_faster_whisper_repo(model_size)
+        except ValueError as e:
+            self.printr.toast_error(str(e))
+            return
+
+        # Download model snapshot via our ModelDownloader so the UI gets a
+        # 'Downloading...' status message — mirrors the Parakeet flow.
+        try:
+            if on_status:
+                await on_status(
+                    f"Downloading STT model (FasterWhisper: {model_size})...", None
+                )
+
+            await self.model_downloader.download_huggingface(
+                repo_id=repo_id,
+                category=f"faster-whisper/{model_size}",
+                allow_patterns=FASTER_WHISPER_ALLOW_PATTERNS,
+            )
+        except Exception as e:
+            self.printr.toast_error(
+                f"Could not download the FasterWhisper STT model. "
+                f"Please check your internet connection and restart Wingman AI. "
+                f"If the problem persists, report it at github.com/ShipBit/wingman-ai/issues\n"
+                f"Error: {e}"
+            )
+            return
+
+        # Load model
         if on_status:
-            await on_status("Initializing speech-to-text (FasterWhisper)...", None)
+            await on_status("Initializing speech-to-text...", None)
 
         model_dir = self.model_downloader.get_model_dir("faster-whisper")
-
         await asyncio.get_event_loop().run_in_executor(
             None, self.fasterwhisper.load, model_dir
         )
@@ -138,8 +220,17 @@ class SttProviderManager:
 
         await self._health_check_fasterwhisper()
 
-    async def switch_provider(self, new_provider: VoiceActivationSttProvider):
-        """Switch active STT provider. Unloads old, downloads + loads new."""
+    async def switch_provider(
+        self,
+        new_provider: VoiceActivationSttProvider,
+        on_status: Optional[Callable[[str, float | None], Awaitable[None]]] = None,
+    ):
+        """Switch active STT provider. Unloads old, downloads + loads new.
+
+        ``on_status`` is forwarded to the provider-specific init so settings-
+        triggered switches can surface download progress via the same
+        LOADING_CONFIG indicator used at startup.
+        """
         old_provider = self.active_provider
 
         # Unload current provider
@@ -151,9 +242,9 @@ class SttProviderManager:
         # Initialize new provider
         va_settings = self.settings_service.settings.voice_activation
         if new_provider == VoiceActivationSttProvider.PARAKEET and va_settings.parakeet.run_locally:
-            await self._initialize_parakeet()
+            await self._initialize_parakeet(on_status)
         elif new_provider == VoiceActivationSttProvider.FASTER_WHISPER:
-            await self._initialize_fasterwhisper()
+            await self._initialize_fasterwhisper(on_status)
 
         self.active_provider = new_provider
 
