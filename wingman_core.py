@@ -45,6 +45,7 @@ from api.interface import (
     PlaygroundChatRequest,
     ParakeetSttConfig,
     PocketTTSConfig,
+    PocketTTSPreloadResult,
     SoundConfig,
     TestConnectionResult,
     VoiceActivationSettings,
@@ -283,6 +284,7 @@ class WingmanCore(WebSocketUser):
         self.router.add_api_route(
             methods=["POST"],
             path="/pocket_tts/preload_voice",
+            response_model=PocketTTSPreloadResult,
             endpoint=self.preload_pocket_tts_voice,
             tags=tags,
         )
@@ -2258,7 +2260,7 @@ class WingmanCore(WebSocketUser):
         future.add_done_callback(_log_preload_failure)
 
     # POST /pocket_tts/preload_voice
-    async def preload_pocket_tts_voice(self, voice: str) -> dict:
+    async def preload_pocket_tts_voice(self, voice: str) -> PocketTTSPreloadResult:
         """Warm the voice-state cache for a single voice (e.g. after a user picks it).
 
         Broadcasts LOADING_CONFIG core state while working, so the client
@@ -2267,18 +2269,18 @@ class WingmanCore(WebSocketUser):
         """
         voice = (voice or "").strip()
         if not voice:
-            return {"ok": False, "reason": "empty voice id"}
+            return PocketTTSPreloadResult(ok=False, reason="empty voice id")
         if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
-            return {"ok": False, "reason": "pocket_tts unavailable"}
+            return PocketTTSPreloadResult(ok=False, reason="pocket_tts unavailable")
         if not self.pocket_tts.model:
-            return {"ok": False, "reason": "model not loaded"}
+            return PocketTTSPreloadResult(ok=False, reason="model not loaded")
 
         results = await self._preload_pocket_tts_voices(
             voice_ids=[voice],
             state_message_prefix="Preloading voice",
             restore_ready_state=True,
         )
-        return {"ok": bool(results.get(voice, False)), "voice": voice}
+        return PocketTTSPreloadResult(ok=bool(results.get(voice, False)), voice=voice)
 
     # POST /pocket_tts/start
     def start_pocket_tts(self):

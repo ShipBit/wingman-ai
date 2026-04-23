@@ -154,6 +154,12 @@ class PocketTTSSettings(BaseModel):
     port: int
 
 
+class PocketTTSPreloadResult(BaseModel):
+    ok: bool
+    voice: Optional[str] = None
+    reason: Optional[str] = None
+
+
 class WhispercppSttConfig(BaseModel):
     temperature: float
 
