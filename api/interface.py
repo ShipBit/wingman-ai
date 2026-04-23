@@ -192,6 +192,10 @@ class ParakeetSettings(BaseModel):
     """v2 (English) or v3 (Multilingual, 25 languages)"""
     execution_provider: str
     """cpu, directml, coreml, or cuda"""
+    language: Optional[str] = None
+    """Global default language for Parakeet transcription. Individual wingmen may
+    override this via their per-wingman parakeet_config.language; when that is
+    empty, the global value here is used."""
     host: str
     port: int
 

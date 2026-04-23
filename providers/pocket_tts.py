@@ -111,6 +111,13 @@ class PocketTTS:
         self._async_gen_lock = asyncio.Lock()
         self._model_swap_lock = threading.Lock()
 
+        # Precompute progress state — surfaced via get_status() so the UI can
+        # poll inline progress without a dedicated endpoint.
+        self._precompute_running: bool = False
+        self._precompute_current: int = 0
+        self._precompute_total: int = 0
+        self._precompute_voice: str = ""
+
         if not defer_load and self.settings.enable:
             if self.settings.run_locally:
                 self.load_model()
@@ -206,25 +213,37 @@ class PocketTTS:
             model_id = self.settings.model or "english_2026-04"
             model_id = LEGACY_MODEL_ALIASES.get(model_id, model_id)
 
+            # int8 quantization compounds error across layers; on 24L variants
+            # it audibly degrades cloned voices. Force it off for 24L regardless
+            # of the user's stored setting.
+            quantize = self.settings.quantize
+            if quantize and model_id.endswith("_24l"):
+                self.printr.print(
+                    f"PocketTTS: disabling quantization for 24L model '{model_id}' to avoid voice cloning artifacts.",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                quantize = False
+
             if self._is_custom_model(model_id):
                 model_path = os.path.join(self.models_dir, model_id)
                 self.printr.print(
-                    f"Loading PocketTTS custom model: {model_path} (quantize={self.settings.quantize})...",
+                    f"Loading PocketTTS custom model: {model_path} (quantize={quantize})...",
                     color=LogType.INFO,
                     server_only=True,
                 )
                 self.model = TTSModel.load_model(
-                    config=model_path, quantize=self.settings.quantize
+                    config=model_path, quantize=quantize
                 )
             else:
                 self.printr.print(
-                    f"Loading PocketTTS model: {model_id} (quantize={self.settings.quantize})...",
+                    f"Loading PocketTTS model: {model_id} (quantize={quantize})...",
                     color=LogType.INFO,
                     server_only=True,
                 )
                 self.model = TTSModel.load_model(
                     language=model_id,
-                    quantize=self.settings.quantize,
+                    quantize=quantize,
                 )
 
             self.printr.print(
@@ -276,6 +295,10 @@ class PocketTTS:
             "model_loaded": self.model is not None,
             "model": self.settings.model,
             "quantize": self.settings.quantize,
+            "precompute_running": self._precompute_running,
+            "precompute_current": self._precompute_current,
+            "precompute_total": self._precompute_total,
+            "precompute_voice": self._precompute_voice,
         }
 
     def get_available_models(self) -> list[dict]:
@@ -566,6 +589,79 @@ class PocketTTS:
                 )
                 results[voice_id] = False
         return results
+
+    def list_custom_voices_needing_precompute(self) -> list[str]:
+        """Return custom voice stems whose tagged safetensor for the active
+        model does NOT yet exist on disk — these are the ones that would
+        actually be cloned by a precompute pass.
+
+        Excludes built-in voices (pocket-tts resolves those from its HF cache).
+        """
+        if not self.voices_dir or not os.path.isdir(self.voices_dir):
+            return []
+
+        active_tag = self._active_model_tag()
+        audio_exts = ("*.wav", "*.mp3", "*.flac")
+        needs: list[str] = []
+        seen: set[str] = set()
+
+        for pattern in audio_exts:
+            for f in sorted(glob.glob(os.path.join(self.voices_dir, pattern))):
+                stem = os.path.splitext(os.path.basename(f))[0]
+                if stem in self._BUILTIN_VOICE_IDS or stem in seen:
+                    continue
+                seen.add(stem)
+                tagged = os.path.join(
+                    self.voices_dir, f"{stem}.{active_tag}.safetensors"
+                )
+                if not os.path.exists(tagged):
+                    needs.append(stem)
+        return needs
+
+    def precompute_custom_voices(
+        self,
+        progress_cb: Optional[Callable[[int, int, str], None]] = None,
+    ) -> dict:
+        """Generate + persist `.<active_model>.safetensors` for every custom
+        voice that doesn't yet have one. Built-in voices are skipped.
+
+        Returns ``{"total": N, "succeeded": int, "failed": int}``.
+        """
+        if not self.settings.run_locally or not self.model:
+            return {"total": 0, "succeeded": 0, "failed": 0}
+
+        targets = self.list_custom_voices_needing_precompute()
+        total = len(targets)
+        self._precompute_running = True
+        self._precompute_current = 0
+        self._precompute_total = total
+        self._precompute_voice = ""
+
+        succeeded = 0
+        failed = 0
+        try:
+            for i, voice_id in enumerate(targets, start=1):
+                self._precompute_current = i
+                self._precompute_voice = voice_id
+                if progress_cb:
+                    try:
+                        progress_cb(i, total, voice_id)
+                    except Exception:
+                        pass
+                try:
+                    self.get_voice_state(voice_id)
+                    succeeded += 1
+                except Exception as e:
+                    failed += 1
+                    self.printr.print(
+                        f"Failed to precompute voice '{voice_id}': {e}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+        finally:
+            self._precompute_running = False
+            self._precompute_voice = ""
+        return {"total": total, "succeeded": succeeded, "failed": failed}
 
     _VOICE_CACHE_MAX = 32
 

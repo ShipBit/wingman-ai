@@ -8,14 +8,20 @@ import numpy as np
 import soundfile as sf
 import sounddevice as sd
 from scipy.signal import resample
-from api.enums import SoundEffect
+from api.enums import LogType, SoundEffect
 from api.interface import SoundConfig
+from services.file import get_writable_dir
+from services.printr import Printr
 from services.pub_sub import PubSub
 from services.sound_effects import (
     get_additional_layer_file,
     get_azure_workaround_gain_boost,
     get_sound_effects,
 )
+
+PREVIEW_OUTPUT_DIR = "audio_output"
+PREVIEW_OUTPUT_FILE = "generated_audio.wav"
+PREVIEW_WINGMAN_NAME = "system"
 
 class AudioPlayer:
     def __init__(
@@ -194,6 +200,14 @@ class AudioPlayer:
 
         channels = audio.shape[1] if audio.ndim > 1 else 1
 
+        # Streaming previews bypass this method (see stream_with_effects) and
+        # are intentionally not saved — we only have the fully-rendered buffer here.
+        if wingman_name == PREVIEW_WINGMAN_NAME:
+            try:
+                self._save_preview_audio(audio, sample_rate)
+            except Exception:
+                pass
+
         def finished_callback():
             if self.stream is not None:
                 self.stream.close()
@@ -231,6 +245,39 @@ class AudioPlayer:
             await self.playback_events.publish("finished", wingman_name)
         if callable(self.on_playback_finished):
             await self.on_playback_finished(wingman_name)
+
+    def _save_preview_audio(self, audio: np.ndarray, sample_rate: int) -> None:
+        """Fire-and-forget save of the generated preview audio.
+
+        Runs on a daemon thread with an isolated copy of the buffer so it
+        can never block playback start or race with the playback callback.
+        Any failure is logged and swallowed — this is a best-effort bonus.
+        """
+        try:
+            audio_snapshot = audio.copy()
+        except Exception:
+            return
+
+        def _worker():
+            try:
+                file_path = path.join(
+                    get_writable_dir(PREVIEW_OUTPUT_DIR), PREVIEW_OUTPUT_FILE
+                )
+                sf.write(file_path, audio_snapshot, sample_rate)
+            except Exception as e:
+                try:
+                    Printr().print(
+                        f"Failed to save preview audio: {e}",
+                        color=LogType.WARNING,
+                        server_only=True,
+                    )
+                except Exception:
+                    pass
+
+        try:
+            Thread(target=_worker, daemon=True).start()
+        except Exception:
+            pass
 
     def play_wav_sample(self, audio_sample_file: str, volume: float):
         file_path = path.join(self.sample_dir, audio_sample_file)

@@ -228,10 +228,12 @@ class SettingsService:
                 self.config_manager.settings_config.pocket_tts.model = pocket_lang
                 self.pocket_tts.update_settings(settings=settings.pocket_tts)
 
-            # Cascade to STT language (FasterWhisper)
+            # Cascade to STT language (FasterWhisper + Parakeet)
             stt_lang = None if new_spoken == "multilingual" else new_spoken
             settings.voice_activation.fasterwhisper_config.language = stt_lang
             self.config_manager.settings_config.voice_activation.fasterwhisper_config.language = stt_lang
+            settings.voice_activation.parakeet.language = stt_lang
+            self.config_manager.settings_config.voice_activation.parakeet.language = stt_lang
 
             self.printr.print(
                 f"Spoken language changed to '{new_spoken}'. "

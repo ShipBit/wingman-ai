@@ -156,7 +156,16 @@ class Parakeet:
             return None
 
         try:
-            text = self.model.recognize(filename)
+            # Cascade: wingman override first, else global settings default.
+            # Empty/None = auto-detect (only consumed by Whisper/Canary models;
+            # Parakeet TDT silently ignores the kwarg).
+            effective_language = (config.language or "").strip() or (
+                (self.settings.language or "").strip() or None
+            )
+            if effective_language:
+                text = self.model.recognize(filename, language=effective_language)
+            else:
+                text = self.model.recognize(filename)
 
             if isinstance(text, list):
                 text = " ".join(text)

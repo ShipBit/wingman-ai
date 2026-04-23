@@ -290,6 +290,12 @@ class WingmanCore(WebSocketUser):
         )
         self.router.add_api_route(
             methods=["POST"],
+            path="/pocket_tts/precompute_voices",
+            endpoint=self.precompute_pocket_tts_voices,
+            tags=tags,
+        )
+        self.router.add_api_route(
+            methods=["POST"],
             path="/open-filemanager/pocket-tts-models",
             endpoint=self.open_pocket_tts_models_directory,
             tags=tags,
@@ -2201,26 +2207,15 @@ class WingmanCore(WebSocketUser):
             return {}
 
         loop = asyncio.get_running_loop()
-        progress = {"current": 0, "total": len(voice_ids), "name": ""}
-
-        def on_progress(i: int, total: int, name: str):
-            progress["current"] = i
-            progress["total"] = total
-            progress["name"] = name
-
         preload_task = loop.run_in_executor(
             None,
-            lambda: self.pocket_tts.preload_voice_states(voice_ids, on_progress),
+            lambda: self.pocket_tts.preload_voice_states(voice_ids),
         )
         try:
-            while not preload_task.done():
-                if progress["total"]:
-                    await self.set_core_state(
-                        CoreState.LOADING_CONFIG,
-                        message=f"{state_message_prefix} ({progress['current']}/{progress['total']}): {progress['name']}",
-                        progress=progress["current"] / progress["total"],
-                    )
-                await asyncio.sleep(0.25)
+            await self.set_core_state(
+                CoreState.LOADING_CONFIG,
+                message=state_message_prefix,
+            )
             return await preload_task
         finally:
             if restore_ready_state:
@@ -2244,7 +2239,10 @@ class WingmanCore(WebSocketUser):
                 )
                 return
         future = asyncio.run_coroutine_threadsafe(
-            self._preload_pocket_tts_voices(state_message_prefix="Preloading voices"),
+            self._preload_pocket_tts_voices(
+                state_message_prefix="Preloading voices",
+                restore_ready_state=True,
+            ),
             loop,
         )
 
@@ -2281,6 +2279,34 @@ class WingmanCore(WebSocketUser):
             restore_ready_state=True,
         )
         return PocketTTSPreloadResult(ok=bool(results.get(voice, False)), voice=voice)
+
+    # POST /pocket_tts/precompute_voices
+    async def precompute_pocket_tts_voices(self) -> dict:
+        """Kick off a background precompute pass over all custom voices
+        missing a ``.<active_model>.safetensors`` cache. Returns immediately;
+        progress is surfaced via ``GET /pocket_tts/status``.
+        """
+        if not self.pocket_tts.settings.enable or not self.pocket_tts.settings.run_locally:
+            return {"started": False, "reason": "pocket_tts unavailable", "total": 0}
+        if not self.pocket_tts.model:
+            return {"started": False, "reason": "model not loaded", "total": 0}
+        if self.pocket_tts._precompute_running:
+            return {
+                "started": False,
+                "reason": "already running",
+                "total": self.pocket_tts._precompute_total,
+            }
+
+        targets = self.pocket_tts.list_custom_voices_needing_precompute()
+        if not targets:
+            return {"started": False, "reason": "nothing to do", "total": 0}
+
+        loop = asyncio.get_running_loop()
+        # Fire-and-forget: run on the default executor so the HTTP call returns
+        # immediately. The method manages its own _precompute_* state for the
+        # status poller.
+        loop.run_in_executor(None, self.pocket_tts.precompute_custom_voices)
+        return {"started": True, "total": len(targets)}
 
     # POST /pocket_tts/start
     def start_pocket_tts(self):
