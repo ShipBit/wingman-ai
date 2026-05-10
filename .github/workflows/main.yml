@@ -1,0 +1,58 @@
+name: Dev Build
+run-name: "Core Build – ${{ inputs.platform }}"
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Target platform"
+        required: true
+        type: choice
+        options:
+          - windows
+          - macos
+          - linux
+          - appimage
+          - all
+        default: windows
+      runner:
+        description: "Runner provider"
+        required: true
+        type: choice
+        options:
+          - github
+          - blacksmith
+        default: github
+      version_label:
+        description: "Optional suffix (e.g. rc1, beta.2). Leave empty for default."
+        required: false
+        default: ""
+
+jobs:
+  build-windows:
+    if: inputs.platform == 'windows' || inputs.platform == 'all'
+    uses: ./.github/workflows/release-windows.yml
+    with:
+      runner: ${{ inputs.runner }}
+    secrets: inherit
+
+  build-macos:
+    if: inputs.platform == 'macos' || inputs.platform == 'all'
+    uses: ./.github/workflows/release-macos.yml
+    with:
+      runner: ${{ inputs.runner }}
+    secrets: inherit
+
+  build-linux:
+    if: inputs.platform == 'linux' || inputs.platform == 'all'
+    uses: ./.github/workflows/release-linux.yml
+    with:
+      runner: ${{ inputs.runner }}
+    secrets: inherit
+
+  build-appimage:
+    if: inputs.platform == 'appimage' || inputs.platform == 'all'
+    uses: ./.github/workflows/release-appimage.yml
+    with:
+      runner: ${{ inputs.runner }}
+    secrets: inherit
