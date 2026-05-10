@@ -1,0 +1,176 @@
+name: Build AppImage (Linux)
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        type: string
+        default: 'github'
+    outputs:
+      version:
+        description: "Extracted version from system_manager.py"
+        value: ${{ jobs.build-appimage.outputs.version }}
+
+jobs:
+  build-appimage:
+    name: Build Linux AppImage
+    runs-on: ${{ inputs.runner == 'blacksmith' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            portaudio19-dev \
+            libsdl2-dev \
+            libfuse2 \
+            wget \
+            python3-pip \
+            python3-venv \
+            python3-pil \
+            python3-pil.imagetk
+
+      - name: Extract version from system_manager.py
+        id: version
+        shell: bash
+        run: |
+          version=$(grep -oE 'LOCAL_VERSION\s*=\s*"[^"]+"' services/system_manager.py | sed 's/.*"\(.*\)"/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Detected version: $version"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.7'
+
+      - name: Create venv and install dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
+          python -m pip install --upgrade pip
+          # Install PyInstaller first
+          pip install pyinstaller==6.18.0
+          # Install the rest
+          pip install -r requirements.txt
+
+      - name: Convert icon to PNG
+        run: |
+          python3 -c "
+          from PIL import Image
+          img = Image.open('assets/wingman-ai.ico')
+          img.save('assets/wingman-ai.png', format='PNG')
+          print('Icon converted to PNG')
+          "
+
+      - name: Build with PyInstaller
+        run: |
+          source venv/bin/activate
+          pyinstaller WingmanAiCore.spec --noconfirm
+
+      - name: Prepare AppDir
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APPDIR="WingmanAI.AppDir"
+
+          # Clean any previous
+          rm -rf "${APPDIR}"
+
+          # Create AppDir structure
+          mkdir -p "${APPDIR}"
+
+          # Copy PyInstaller output
+          cp -r dist/WingmanAiCore/* "${APPDIR}/"
+
+          # Create AppRun
+          cat > "${APPDIR}/AppRun" << 'APPRUNEOF'
+          #!/bin/bash
+          SELF=$(readlink -f "$0")
+          HERE=${SELF%/*}
+          export PATH="${HERE}:${HERE}/usr/bin:${PATH}"
+          export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+          exec "${HERE}/WingmanAiCore" "$@"
+          APPRUNEOF
+          chmod +x "${APPDIR}/AppRun"
+
+          # Create .desktop file
+          cat > "${APPDIR}/wingman-ai.desktop" << DESKEOF
+          [Desktop Entry]
+          Type=Application
+          Name=Wingman AI Core
+          Comment=Voice-controlled AI assistant framework
+          Exec=WingmanAiCore
+          Icon=wingman-ai
+          Categories=Utility;AudioVideo;
+          Terminal=true
+          StartupNotify=true
+          X-AppImage-Version=${VERSION}
+          DESKEOF
+
+          # Copy icon
+          cp assets/wingman-ai.png "${APPDIR}/wingman-ai.png"
+
+          echo "AppDir prepared at ${APPDIR}"
+
+      - name: Build AppImage
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          APPDIR="WingmanAI.AppDir"
+          APPIMAGE_NAME="WingmanAI-${VERSION}-x86_64.AppImage"
+
+          # Download appimagetool
+          wget -q -O appimagetool \
+            "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
+          chmod +x appimagetool
+
+          # Build AppImage
+          ARCH=x86_64 ./appimagetool "${APPDIR}" "${APPIMAGE_NAME}"
+
+          echo "AppImage created: ${APPIMAGE_NAME}"
+          ls -lh "${APPIMAGE_NAME}"
+
+      - name: Upload AppImage Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WingmanAI-AppImage-x86_64
+          path: WingmanAI-*-x86_64.AppImage
+          retention-days: 5
+
+      - name: Upload to R2 staging
+        if: success()
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          pip install awscli
+          VERSION="${{ steps.version.outputs.version }}"
+          APPIMAGE_NAME="WingmanAI-${VERSION}-x86_64.AppImage"
+          aws s3 cp "${APPIMAGE_NAME}" \
+            "s3://wingman-staging/core/${{ github.sha }}/linux-x86_64/" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          echo "${{ github.sha }}" > latest-linux.txt
+          aws s3 cp latest-linux.txt \
+            "s3://wingman-staging/core/latest-linux.txt" \
+            --endpoint-url "https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+
+      - name: Clean up old staging builds
+        if: success()
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          R2_ENDPOINT="https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com"
+          CURRENT_SHA="${{ github.sha }}"
+          SHAS=$(aws s3 ls "s3://wingman-staging/core/" --endpoint-url "$R2_ENDPOINT" \
+            | grep 'PRE ' | awk '{print $2}' | sed 's|/||' | grep -v '^latest')
+          for SHA in $SHAS; do
+            if [ "$SHA" != "$CURRENT_SHA" ]; then
+              echo "Deleting old staging: core/$SHA/"
+              aws s3 rm "s3://wingman-staging/core/${SHA}/" \
+                --recursive --endpoint-url "$R2_ENDPOINT"
+            fi
+          done
