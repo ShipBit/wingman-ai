@@ -12,6 +12,7 @@ on:
           - windows
           - macos
           - linux
+          - appimage
           - all
         default: windows
       runner:
@@ -45,6 +46,13 @@ jobs:
   build-linux:
     if: inputs.platform == 'linux' || inputs.platform == 'all'
     uses: ./.github/workflows/release-linux.yml
+    with:
+      runner: ${{ inputs.runner }}
+    secrets: inherit
+
+  build-appimage:
+    if: inputs.platform == 'appimage' || inputs.platform == 'all'
+    uses: ./.github/workflows/release-appimage.yml
     with:
       runner: ${{ inputs.runner }}
     secrets: inherit

@@ -71,9 +71,9 @@ class SystemManager:
         self._cuda_available = False
         self._gpu_name = None
 
-        # Only check on Windows - CUDA is not supported on other platforms
-        if platform.system() != "Windows":
-            # No logging needed - CUDA is simply not available on non-Windows
+        # CUDA is available on Windows and Linux, but not on macOS
+        if platform.system() == "Darwin":
+            # No logging needed - CUDA is not available on macOS
             return
 
         try:

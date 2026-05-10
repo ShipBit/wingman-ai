@@ -2,6 +2,8 @@ module: skills.auto_screenshot.main
 name: AutoScreenshot
 display_name: Auto Screenshot
 author: teddybear082
+platforms:
+  - windows
 discoverable_by_default: false
 tags:
   - Utility

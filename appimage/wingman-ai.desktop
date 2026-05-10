@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Wingman AI Core
+Comment=Voice-controlled AI assistant framework
+Exec=WingmanAiCore
+Icon=wingman-ai
+Categories=Utility;AudioVideo;AI;
+Terminal=true
+StartupNotify=true
+X-AppImage-Version=@@VERSION@@

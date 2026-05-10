@@ -40,8 +40,9 @@ jaraco-functools>=4.0.0
 
 # NVIDIA CUDA libraries for GPU-accelerated FasterWhisper (ctranslate2)
 # These are bundled with PyInstaller to provide zero-config GPU support
-# IMPORTANT: Must stay on CUDA 12.x (12.4-12.8 tested). CUDA 13.x is NOT compatible with ctranslate2.
-# Comment these out if you want to run on MacOS.
+# Works on Windows and Linux. IMPORTANT: Must stay on CUDA 12.x (12.4-12.8 tested).
+# CUDA 13.x is NOT compatible with ctranslate2.
+# Comment these out if you want to run on macOS (no NVIDIA CUDA support).
 nvidia-cublas-cu12>=12.4.2,<13.0
 nvidia-cuda-runtime-cu12>=12.4.99,<13.0
 nvidia-cudnn-cu12>=9.1.0,<10.0
@@ -57,28 +58,31 @@ torchaudio==2.8.0 # don't upgrade!
 # These are requirements from built-in skills. TODO: Refactor skills to reduce deps.
 # =============================================================================
 
-# --- api_request skill ---
+# --- api_request skill --- (cross-platform)
 aiohttp>=3.11.12
 
-# --- vision_ai / auto_screenshot skills ---
+# --- vision_ai skill --- (cross-platform: mss + Pillow work on Win/Mac/Linux)
 mss>=10.0.0
 pillow>=11.1.0
+
+# --- auto_screenshot / control_windows skills --- (Windows only: pygetwindow, pyrect, clipboard)
+# These are guarded by platforms: [windows] in skill configs.
 PyGetWindow>=0.0.9
 PyRect>=0.2.0
 
-# --- spotify skill ---
+# --- spotify skill --- (cross-platform)
 spotipy>=2.25.0
 
-# --- file_manager skill ---
+# --- file_manager skill --- (cross-platform)
 cryptography>=43.0.1
 pdfminer.six>=20240706
 
-# --- control_windows skill ---
+# --- control_windows skill --- (Windows only)
 clip-util>=0.1.27
 
-# --- msfs2020_control skill ---
+# --- msfs2020_control skill --- (Windows only: SimConnect SDK)
 SimConnect>=0.4.26
 
-# --- ats_telemetry skill ---
+# --- ats_telemetry skill --- (Windows only: game telemetry DLL)
 pyproj>=3.6.1
 truck-telemetry>=0.0.3

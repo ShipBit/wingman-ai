@@ -1,0 +1,20 @@
+#!/bin/bash
+# AppRun script for Wingman AI Core AppImage
+# This script sets up the environment and launches the application
+
+SELF=$(readlink -f "$0")
+HERE=${SELF%/*}
+
+# Set environment variables
+export PATH="${HERE}/usr/bin:${HERE}:${PATH}"
+export LD_LIBRARY_PATH="${HERE}/usr/lib:${LD_LIBRARY_PATH}"
+
+# Find the WingmanAiCore executable (PyInstaller puts it in the root or in usr/bin)
+if [ -x "${HERE}/WingmanAiCore" ]; then
+    exec "${HERE}/WingmanAiCore" "$@"
+elif [ -x "${HERE}/usr/bin/WingmanAiCore" ]; then
+    exec "${HERE}/usr/bin/WingmanAiCore" "$@"
+else
+    echo "Error: Could not find WingmanAiCore executable"
+    exit 1
+fi
