@@ -567,7 +567,8 @@ class MacroManager(FunctionManager):
         return self._response_success(
             "start_countdown",
             f"Countdown started ({self._format_duration_text(duration_seconds)}).",
-            instructions="Inform the player in his language that the countdown has started by confirming the duration in a natural spoken format. Example: '1m 20s' becomes 'one minute and twenty seconds'."
+            instructions="Inform the player in his language that the countdown has started by confirming the duration in a natural spoken format. Example: '1m 20s' becomes 'one minute and twenty seconds'.",
+            do_not_cache=True,
         )
 
     def _stop_runtime_countdown_job(self):
@@ -579,6 +580,7 @@ class MacroManager(FunctionManager):
             return self._response_success(
                 "stop_countdown",
                 "In player language: Countdown is already inactive.",
+                do_not_cache=True,
             )
 
         job.stop_event.set()
@@ -591,7 +593,8 @@ class MacroManager(FunctionManager):
         return self._response_success(
             "stop_countdown",
             "Countdown stopped.",
-            instructions="Inform the player in his language"
+            instructions="Inform the player in his language",
+            do_not_cache=True,
         )
 
     def get_countdown_remaining(self):
@@ -617,7 +620,8 @@ class MacroManager(FunctionManager):
         return self._response_success(
             "get_countdown_remaining",
             f"In player language: Remaining time: {remaining_compact}.",
-            instructions="Transform to spoken format based on player language. Example: '1m 20s' becomes 'one minute and twenty seconds'."
+            instructions="Transform to spoken format based on player language. Example: '1m 20s' becomes 'one minute and twenty seconds'.",
+            do_not_cache=True,
         )
 
     def _duration_input_error(self, action: str, field_name: str, detail: str):
