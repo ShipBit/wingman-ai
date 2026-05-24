@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from typing import Optional, Tuple
 
@@ -26,7 +27,7 @@ except Exception:
     scroll_module = key_module
 
 
-DEBUG = False
+DEBUG = True
 printr = Printr()
 
 
@@ -41,9 +42,7 @@ class NavigationManager(FunctionManager):
         "Opens the starmap and automates destination routing with cached click coordinates."
     )
     MANAGER_CAPABILITIES = [
-        "Open starmap and zoom out to system map",
-        "Capture and cache click points for search, selection, and route",
-        "Select target and trigger route calculation",
+        "Open starmap, search for destination, select it, and calculate route.",
     ]
 
     def __init__(self, config, secret_keeper):
@@ -126,6 +125,7 @@ class NavigationManager(FunctionManager):
         self.coordinate_cache = self._load_click_coordinate_cache()
         self.uex_service = None
         self._navigation_location_names = []
+        self._navigation_location_names_by_category = {}
 
         try:
             self.uex2_api_key = secret_keeper.retrieve(
@@ -157,7 +157,11 @@ class NavigationManager(FunctionManager):
     def get_function_prompt(self) -> str:
         return (
             f"Call '{self.navigate_to_location.__name__}' when the user asks to navigate/route to a destination in starmap. "
-            "Use the destination name provided by the user as-is and do not invent missing names."
+            "Use the destination name provided by the user as-is and do not invent missing names. "
+            "If the user specifies a category, pass it as optional 'location_category' "
+            "(for example: outpost, station, city, moon, orbit, planet). "
+            "If the function returns a confirmation_request because the score is too low, do not start navigation. "
+            "Ask the user if they meant the suggested location and only call the function again after confirmation."
         )
 
     def get_function_tools(self) -> list[dict]:
@@ -175,6 +179,13 @@ class NavigationManager(FunctionManager):
                             "location_name": {
                                 "type": "string",
                                 "description": "Exact destination name the user asked for.",
+                            },
+                            "location_category": {
+                                "type": "string",
+                                "description": (
+                                    "Optional category hint to restrict matching. "
+                                    "Examples: outpost, station, city, moon, orbit, planet."
+                                ),
                             }
                         },
                         "required": ["location_name"],
@@ -184,7 +195,18 @@ class NavigationManager(FunctionManager):
         ]
 
     def navigate_to_location(self, function_args):
+        function_args = function_args or {}
+        print_debug(
+            "NavigationManager.navigate_to_location function_args:\n"
+            f"{json.dumps(function_args, indent=2, ensure_ascii=False)}"
+        )
+
         requested_location_name = (function_args.get("location_name") or "").strip()
+        requested_location_category_raw = (function_args.get("location_category") or "").strip()
+        requested_location_category = self._normalize_navigation_location_category(
+            requested_location_category_raw
+        )
+
         if not requested_location_name:
             return {
                 "success": False,
@@ -192,26 +214,83 @@ class NavigationManager(FunctionManager):
                 "message": "Missing location_name.",
                 "do_not_cache": True,
             }
-        resolved_location_name, location_match_result, matched = self._resolve_destination_name(
-            requested_location_name
-        )
-        if not matched:
+
+        if requested_location_category_raw and not requested_location_category:
+            valid_categories = ", ".join(self._get_navigation_category_input_examples())
+            print_debug(
+                "NavigationManager.navigate_to_location invalid location_category: "
+                f"'{requested_location_category_raw}'"
+            )
             return {
                 "success": False,
                 "message": (
-                    f"Could not match '{requested_location_name}' to a known outpost/planet/moon/city/station."
+                    f"Unknown location_category '{requested_location_category_raw}'. "
+                    f"Use one of: {valid_categories}."
                 ),
-                "location_match": location_match_result,
                 "instructions": (
-                    "Ask the user to repeat or clarify the destination name. "
-                    "If a best_candidate exists, suggest it and ask for confirmation."
+                    "Ask the user to repeat the category using one of the supported values."
                 ),
+                "location_match": {
+                    "matched": False,
+                    "method": "category_validation",
+                    "requested_category": requested_location_category_raw,
+                    "valid_categories": self._get_navigation_category_input_examples(),
+                },
                 "do_not_cache": True,
             }
 
+        print_debug(
+            "NavigationManager.navigate_to_location normalized args: "
+            f"location_name='{requested_location_name}', "
+            f"location_category='{requested_location_category}'"
+        )
+
+        resolved_location_name, location_match_result, matched = self._resolve_destination_name(
+            requested_location_name,
+            requested_location_category=requested_location_category,
+        )
+        if not matched:
+            best_candidate = location_match_result.get("best_candidate")
+            best_candidate_category = location_match_result.get("best_candidate_category")
+            best_candidate_score = location_match_result.get("score")
+            category_label = (
+                f" within category '{requested_location_category}'"
+                if requested_location_category
+                else ""
+            )
+            response = {
+                "success": False,
+                "message": (
+                    f"Could not match '{requested_location_name}'{category_label} "
+                    "to a known navigation destination."
+                ),
+                "location_match": location_match_result,
+                "do_not_cache": True,
+            }
+            if best_candidate:
+                response["confirmation_request"] = {
+                    "required": True,
+                    "candidate_location_name": best_candidate,
+                    "candidate_location_category": best_candidate_category,
+                    "candidate_score": best_candidate_score,
+                    "reason": "Best fuzzy candidate is below auto-match threshold.",
+                }
+                response["instructions"] = (
+                    f"Do not execute navigation yet. Ask the user if they meant "
+                    f"'{best_candidate}'"
+                    f"{f' in category {best_candidate_category}' if best_candidate_category else ''}. "
+                    "If the user confirms, call navigate_to_location again using the "
+                    "suggested candidate_location_name and candidate_location_category exactly."
+                )
+            else:
+                response["instructions"] = (
+                    "Ask the user to repeat or clarify the destination name."
+                )
+            return response
+
         printr.print(
             f"-> Navigation: route calculation requested for '{requested_location_name}' "
-            f"(resolved: '{resolved_location_name}').",
+            f"(resolved: '{resolved_location_name}', category: '{requested_location_category}').",
             tags="info",
         )
         self.overlay.display_overlay_text(
@@ -222,6 +301,7 @@ class NavigationManager(FunctionManager):
 
         result = self._execute_navigation_sequence(resolved_location_name)
         result["requested_location"] = requested_location_name
+        result["requested_location_category"] = requested_location_category
         result["resolved_location_name"] = resolved_location_name
         result["location_match"] = location_match_result
         result["do_not_cache"] = True
@@ -840,34 +920,167 @@ class NavigationManager(FunctionManager):
 
     def _build_navigation_location_names(self):
         if not self.uex_service:
+            self._navigation_location_names_by_category = {}
             return []
-        categories = [
-            uex_api_module.CATEGORY_OUTPOSTS,
-            uex_api_module.CATEGORY_ORBITS,
-            uex_api_module.CATEGORY_MOONS,
-            uex_api_module.CATEGORY_CITIES,
-            uex_api_module.CATEGORY_STATIONS,
-        ]
-        names = []
+
+        categories = self._get_navigation_location_categories_in_priority_order()
+        names_by_category = {}
+        deduped = []
+        seen = set()
         for category in categories:
+            category_names = []
             try:
-                names.extend(self.uex_service.get_category_names(category))
+                category_names = self.uex_service.get_category_names(category)
             except Exception as e:
                 print_debug(f"Could not load names for category '{category}': {e}")
 
-        deduped = []
-        seen = set()
-        for name in names:
-            normalized = (name or "").strip().lower()
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            deduped.append(name)
+            category_deduped = []
+            category_seen = set()
+            for name in category_names:
+                normalized = (name or "").strip().lower()
+                if not normalized or normalized in category_seen:
+                    continue
+                category_seen.add(normalized)
+                category_deduped.append(name)
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                deduped.append(name)
+
+            names_by_category[category] = category_deduped
+
+        self._navigation_location_names_by_category = names_by_category
         return deduped
 
-    def _resolve_destination_name(self, requested_location_name: str):
-        if not self._navigation_location_names:
-            self._navigation_location_names = self._build_navigation_location_names()
+    @staticmethod
+    def _get_navigation_location_categories_in_priority_order():
+        return [
+            uex_api_module.CATEGORY_OUTPOSTS,
+            uex_api_module.CATEGORY_STATIONS,
+            uex_api_module.CATEGORY_CITIES,
+            uex_api_module.CATEGORY_MOONS,
+            uex_api_module.CATEGORY_ORBITS,
+        ]
+
+    @staticmethod
+    def _get_navigation_category_alias_map():
+        return {
+            "outpost": uex_api_module.CATEGORY_OUTPOSTS,
+            "outposts": uex_api_module.CATEGORY_OUTPOSTS,
+            "station": uex_api_module.CATEGORY_STATIONS,
+            "stations": uex_api_module.CATEGORY_STATIONS,
+            "space_station": uex_api_module.CATEGORY_STATIONS,
+            "space_stations": uex_api_module.CATEGORY_STATIONS,
+            "space station": uex_api_module.CATEGORY_STATIONS,
+            "space stations": uex_api_module.CATEGORY_STATIONS,
+            "city": uex_api_module.CATEGORY_CITIES,
+            "cities": uex_api_module.CATEGORY_CITIES,
+            "moon": uex_api_module.CATEGORY_MOONS,
+            "moons": uex_api_module.CATEGORY_MOONS,
+            "orbit": uex_api_module.CATEGORY_ORBITS,
+            "orbits": uex_api_module.CATEGORY_ORBITS,
+            "planet": uex_api_module.CATEGORY_ORBITS,
+            "planets": uex_api_module.CATEGORY_ORBITS,
+        }
+
+    @classmethod
+    def _get_navigation_category_input_examples(cls):
+        return ["outpost", "station", "city", "moon", "orbit", "planet"]
+
+    def _normalize_navigation_location_category(self, requested_category: Optional[str]) -> Optional[str]:
+        normalized_category = (requested_category or "").strip().lower()
+        if not normalized_category:
+            return None
+
+        normalized_category = normalized_category.replace("-", "_")
+        return self._get_navigation_category_alias_map().get(normalized_category)
+
+    def _get_navigation_search_categories(
+        self, requested_location_category: Optional[str] = None
+    ) -> list[str]:
+        if requested_location_category:
+            return [requested_location_category]
+        return self._get_navigation_location_categories_in_priority_order()
+
+    def _ensure_navigation_location_names_loaded(self):
+        if self._navigation_location_names and self._navigation_location_names_by_category:
+            return
+        self._navigation_location_names = self._build_navigation_location_names()
+
+    def _find_exact_location_match_by_category(
+        self,
+        requested_location_name: str,
+        requested_location_category: Optional[str] = None,
+    ):
+        normalized_request = (requested_location_name or "").strip().lower()
+        search_categories = self._get_navigation_search_categories(requested_location_category)
+        print_debug(
+            f"Navigation exact search for '{requested_location_name}' in categories: "
+            f"{search_categories}"
+        )
+        for category in search_categories:
+            for value in self._navigation_location_names_by_category.get(category, []):
+                if value.lower().strip() == normalized_request:
+                    print_debug(
+                        f"Navigation exact match in category '{category}': '{value}'"
+                    )
+                    return category, value
+        return None, None
+
+    def _find_fuzzy_location_match_by_category(
+        self,
+        requested_location_name: str,
+        score_cutoff: int,
+        requested_location_category: Optional[str] = None,
+    ):
+        best_match = None
+        best_category = None
+
+        search_categories = self._get_navigation_search_categories(requested_location_category)
+        for category in search_categories:
+            category_names = self._navigation_location_names_by_category.get(category, [])
+            if not category_names:
+                print_debug(f"Navigation fuzzy search skipped empty category '{category}'")
+                continue
+
+            fuzzy_match, fuzzy_success = find_best_match.find_best_match(
+                requested_location_name,
+                category_names,
+                score_cutoff=score_cutoff,
+            )
+            if not fuzzy_success:
+                print_debug(
+                    f"Navigation fuzzy search in category '{category}' found no match "
+                    f"for '{requested_location_name}' with cutoff {score_cutoff}"
+                )
+                continue
+
+            score = fuzzy_match.get("score", 0)
+            print_debug(
+                f"Navigation fuzzy search in category '{category}' matched "
+                f"'{fuzzy_match.get('matched_value')}' with score {score} "
+                f"(cutoff {score_cutoff})"
+            )
+            if score_cutoff > 0:
+                return category, fuzzy_match
+
+            if best_match is None or score > best_match.get("score", 0):
+                best_match = fuzzy_match
+                best_category = category
+
+        return best_category, best_match
+
+    @staticmethod
+    def _strip_parenthetical_suffix(location_name: str) -> str:
+        cleaned_name = re.sub(r"\s*\([^)]*\)\s*$", "", (location_name or "").strip())
+        return cleaned_name.strip() or (location_name or "").strip()
+
+    def _resolve_destination_name(
+        self,
+        requested_location_name: str,
+        requested_location_category: Optional[str] = None,
+    ):
+        self._ensure_navigation_location_names_loaded()
 
         if not self._navigation_location_names:
             return (
@@ -882,59 +1095,75 @@ class NavigationManager(FunctionManager):
                 True,
             )
 
-        exact = next(
-            (
-                value
-                for value in self._navigation_location_names
-                if value.lower().strip() == requested_location_name.lower().strip()
-            ),
-            None,
+        matched_category, exact = self._find_exact_location_match_by_category(
+            requested_location_name,
+            requested_location_category=requested_location_category,
         )
         if exact:
+            cleaned_exact = self._strip_parenthetical_suffix(exact)
             return (
-                exact,
+                cleaned_exact,
                 {
                     "matched": True,
                     "method": "exact",
                     "score": 100,
-                    "matched_value": exact,
+                    "requested_category": requested_location_category,
+                    "matched_category": matched_category,
+                    "matched_value": cleaned_exact,
                 },
                 True,
             )
 
-        fuzzy_match, fuzzy_success = find_best_match.find_best_match(
+        matched_category, fuzzy_match = self._find_fuzzy_location_match_by_category(
             requested_location_name,
-            self._navigation_location_names,
             score_cutoff=self.location_match_score_cutoff,
+            requested_location_category=requested_location_category,
         )
-        if fuzzy_success:
+        if fuzzy_match:
             matched_value = fuzzy_match.get("matched_value", requested_location_name)
+            cleaned_matched_value = self._strip_parenthetical_suffix(matched_value)
             return (
-                matched_value,
+                cleaned_matched_value,
                 {
                     "matched": True,
                     "method": "fuzzy",
                     "score": fuzzy_match.get("score"),
-                    "matched_value": matched_value,
+                    "requested_category": requested_location_category,
+                    "matched_category": matched_category,
+                    "matched_value": cleaned_matched_value,
                     "score_cutoff": self.location_match_score_cutoff,
                 },
                 True,
             )
 
-        best_candidate, best_candidate_success = find_best_match.find_best_match(
+        suggestion_category, best_candidate = self._find_fuzzy_location_match_by_category(
             requested_location_name,
-            self._navigation_location_names,
             score_cutoff=0,
+            requested_location_category=requested_location_category,
         )
-        suggestion = best_candidate.get("matched_value") if best_candidate_success else None
-        suggestion_score = best_candidate.get("score") if best_candidate_success else None
+        suggestion = best_candidate.get("matched_value") if best_candidate else None
+        cleaned_suggestion = self._strip_parenthetical_suffix(suggestion) if suggestion else None
+        suggestion_score = best_candidate.get("score") if best_candidate else None
+        if best_candidate:
+            print_debug(
+                f"Navigation no-match fallback for '{requested_location_name}': "
+                f"best candidate '{cleaned_suggestion}' in category "
+                f"'{suggestion_category}' with score {suggestion_score}"
+            )
+        else:
+            print_debug(
+                f"Navigation no-match fallback for '{requested_location_name}': "
+                "no candidate found in search space"
+            )
         return (
             requested_location_name,
             {
                 "matched": False,
                 "method": "fuzzy",
                 "score": suggestion_score,
-                "best_candidate": suggestion,
+                "requested_category": requested_location_category,
+                "best_candidate": cleaned_suggestion,
+                "best_candidate_category": suggestion_category,
                 "score_cutoff": self.location_match_score_cutoff,
             },
             False,
