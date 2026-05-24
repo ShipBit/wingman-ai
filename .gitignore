@@ -167,6 +167,7 @@ cython_debug/
 .DS_Store
 
 # Wingman AI generated files
+.codex
 *.exe
 configs/contexts/*.yaml
 audio_output
