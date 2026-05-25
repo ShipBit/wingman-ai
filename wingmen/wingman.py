@@ -3,6 +3,7 @@ import os
 import io # Keep for potential future use, though not directly needed for new cache
 # import base64 # No longer needed for TTS cache
 import hashlib # Added for hashing cache keys
+import re
 import time # Added time for sort keys in hashing if needed and fallback keys
 import random
 import time
@@ -72,6 +73,21 @@ class Wingman(FileCreator):
 
         self.debug: bool = self.config["features"].get("debug_mode", False)
         """If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results."""
+
+        transcript_ignore_config = self.config["features"].get("transcript_ignore", {})
+        if not isinstance(transcript_ignore_config, dict):
+            transcript_ignore_config = {}
+        self.transcript_ignore_phrases = [
+            str(phrase).casefold().strip()
+            for phrase in transcript_ignore_config.get("phrases", [])
+            if str(phrase).strip()
+        ]
+        self.transcript_ignore_response = str(
+            transcript_ignore_config.get("response", "")
+        ).strip()
+        self.transcript_ignore_match_whole_words = bool(
+            transcript_ignore_config.get("match_whole_words", True)
+        )
 
         self.tts_provider = self.config["features"].get("tts_provider")
         """The name of the TTS provider you configured in the config.yaml"""
@@ -277,6 +293,7 @@ class Wingman(FileCreator):
         self.start_execution_benchmark()
 
         process_result = None
+        instant_response = None
         tts_cache_key = None
 
         if self.debug:
@@ -290,17 +307,22 @@ class Wingman(FileCreator):
 
         if transcript:
             printr.print(f">> (You): {transcript}", tags="violet")
-            
-            if self.debug:
-                printr.print("Getting response for transcript...", tags="info")
-            
-            # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
-            process_result, instant_response, tts_cache_key = await self._get_response_for_transcript(
-                transcript, locale
-            )
 
-            if self.debug:
-                self.print_execution_time(reset_timer=True)
+            if self._should_ignore_transcript(transcript):
+                instant_response = self.transcript_ignore_response
+                process_result = instant_response
+                printr.print("Transcript ignore phrase detected. Skipping processing.", tags="info")
+            else:
+                if self.debug:
+                    printr.print("Getting response for transcript...", tags="info")
+                
+                # process the transcript further. This is where you can do your magic. Return a string that is the "answer" to your passed transcript.
+                process_result, instant_response, tts_cache_key = await self._get_response_for_transcript(
+                    transcript, locale
+                )
+
+                if self.debug:
+                    self.print_execution_time(reset_timer=True)
 
             actual_response = instant_response or process_result
             printr.print(f"<< ({self.name}): {actual_response}", tags="green")
@@ -322,6 +344,20 @@ class Wingman(FileCreator):
             self.print_execution_time()
 
     # ───────────────── virtual methods / hooks ───────────────── #
+
+    def _should_ignore_transcript(self, transcript: str) -> bool:
+        """Returns True when the transcript contains a spoken cancellation phrase."""
+        if not self.transcript_ignore_phrases or not self.transcript_ignore_response:
+            return False
+
+        normalized_transcript = transcript.casefold()
+        if not self.transcript_ignore_match_whole_words:
+            return any(phrase in normalized_transcript for phrase in self.transcript_ignore_phrases)
+
+        return any(
+            re.search(rf"(?<!\w){re.escape(phrase)}(?!\w)", normalized_transcript)
+            for phrase in self.transcript_ignore_phrases
+        )
 
     async def _transcribe(self, audio_input_wav: str) -> tuple[str | None, str | None]:
         """Transcribes the audio to text. You can override this method if you want to use a different transcription service.

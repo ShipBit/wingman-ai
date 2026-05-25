@@ -14,6 +14,17 @@
 # ──────────────────────────────── FEATURES ─────────────────────────────────
 features:
   debug_mode: false # If enabled, the Wingman will skip executing any keypresses. It will also print more debug messages and benchmark results.
+
+  transcript_ignore:
+    response: Ok, befehl ignoriert
+    match_whole_words: true
+    phrases:
+    - abbruch
+    - abbrechen
+    - ignorier
+    - ignoriere
+    - ignorieren
+    - ignoriert
   
   command_and_tts_cache:
     cache_instant_commands: true # Setze auf true, um das Caching für Instant Commands zu aktivieren
@@ -284,7 +295,16 @@ wingmen:
       TddManager: False # True | False - will activate the integration to UEX to be able to ask for trade routes and prices. Requires a UEX account and the UEX API key
       UexDataRunnerManager: False # True | False - will activate the UEX data runner capabilities. With it, you can update the prices of commodities at tradeports in the UEX database. Requires a UEX account with the UEX API key and the UEX user secret.
       DeliveryMissionManager: False # True | False - will activated the delivery mission manager. With it, you are able to make Cora manage your ingame delivery missions 
-      NavigationManager: False # True | False - enables in-game starmap route automation via template matching and OCR validation.
+      NavigationManager:
+        enabled: False # True | False - enables in-game starmap route automation via template matching and OCR validation.
+        search_focus_wait_seconds: 0.60
+        text_input_step_wait_seconds: 0.12
+        route_key_wait_seconds: 0.25
+        confirmation:
+          function_prompt: If the function returns a confirmation_request because the score is too low, do not start navigation. Ask the user if they meant the suggested location and only call the function again after confirmation.
+          request_reason: Best fuzzy candidate is below auto-match threshold.
+          instructions_template: Do not execute navigation yet. Ask the user if they meant '{candidate_location_name}' in category '{candidate_location_category}'. If the user confirms, call navigate_to_location again using the suggested candidate_location_name and candidate_location_category exactly.
+          no_match_instructions: Ask the user to repeat or clarify the destination name.
       LoreManager: True # True | False - Allows Cora to search the Galactepedia for lore information. 
       IssueCouncilManager: False # True | False - checks known bugs in the RSI Issue Council and analyzes duplicate relations
       MacroManager:
