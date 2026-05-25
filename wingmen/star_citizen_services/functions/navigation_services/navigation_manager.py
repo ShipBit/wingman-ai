@@ -86,6 +86,12 @@ class NavigationManager(FunctionManager):
         self.post_click_wait_seconds = float(
             self.feature_config.get("post_click_wait_seconds", 0.35)
         )
+        self.search_focus_wait_seconds = float(
+            self.feature_config.get("search_focus_wait_seconds", 0.60)
+        )
+        self.text_input_step_wait_seconds = float(
+            self.feature_config.get("text_input_step_wait_seconds", 0.12)
+        )
         self.post_type_wait_seconds = float(
             self.feature_config.get("post_type_wait_seconds", 0.30)
         )
@@ -104,6 +110,24 @@ class NavigationManager(FunctionManager):
         self.selection_wait_seconds = float(
             self.feature_config.get("selection_wait_seconds", 0.35)
         )
+        self.route_key_wait_seconds = float(
+            self.feature_config.get("route_key_wait_seconds", 0.25)
+        )
+        confirmation_config = self.feature_config.get("confirmation", {})
+        if not isinstance(confirmation_config, dict):
+            confirmation_config = {}
+        self.confirmation_function_prompt = str(
+            confirmation_config.get("function_prompt", "")
+        ).strip()
+        self.confirmation_request_reason = str(
+            confirmation_config.get("request_reason", "")
+        ).strip()
+        self.confirmation_instructions_template = str(
+            confirmation_config.get("instructions_template", "")
+        ).strip()
+        self.no_match_instructions = str(
+            confirmation_config.get("no_match_instructions", "")
+        ).strip()
         self.mouse_settle_wait_seconds = float(
             self.feature_config.get("mouse_settle_wait_seconds", 0.1)
         )
@@ -155,14 +179,15 @@ class NavigationManager(FunctionManager):
         function_register[self.navigate_to_location.__name__] = self.navigate_to_location
 
     def get_function_prompt(self) -> str:
-        return (
+        prompt = (
             f"Call '{self.navigate_to_location.__name__}' when the user asks to navigate/route to a destination in starmap. "
             "Use the destination name provided by the user as-is and do not invent missing names. "
             "If the user specifies a category, pass it as optional 'location_category' "
-            "(for example: outpost, station, city, moon, orbit, planet). "
-            "If the function returns a confirmation_request because the score is too low, do not start navigation. "
-            "Ask the user if they meant the suggested location and only call the function again after confirmation."
+            "(for example: outpost, station, city, moon, orbit, planet)."
         )
+        if self.confirmation_function_prompt:
+            prompt = f"{prompt} {self.confirmation_function_prompt}"
+        return prompt
 
     def get_function_tools(self) -> list[dict]:
         return [
@@ -273,19 +298,26 @@ class NavigationManager(FunctionManager):
                     "candidate_location_name": best_candidate,
                     "candidate_location_category": best_candidate_category,
                     "candidate_score": best_candidate_score,
-                    "reason": "Best fuzzy candidate is below auto-match threshold.",
+                    "reason": self.confirmation_request_reason,
                 }
-                response["instructions"] = (
-                    f"Do not execute navigation yet. Ask the user if they meant "
-                    f"'{best_candidate}'"
-                    f"{f' in category {best_candidate_category}' if best_candidate_category else ''}. "
-                    "If the user confirms, call navigate_to_location again using the "
-                    "suggested candidate_location_name and candidate_location_category exactly."
+                confirmation_instructions = self._format_navigation_template(
+                    self.confirmation_instructions_template,
+                    candidate_location_name=best_candidate,
+                    candidate_location_category=best_candidate_category or "",
+                    candidate_score=best_candidate_score,
+                    requested_location_name=requested_location_name,
+                    requested_location_category=requested_location_category or "",
                 )
+                if confirmation_instructions:
+                    response["instructions"] = confirmation_instructions
             else:
-                response["instructions"] = (
-                    "Ask the user to repeat or clarify the destination name."
+                no_match_instructions = self._format_navigation_template(
+                    self.no_match_instructions,
+                    requested_location_name=requested_location_name,
+                    requested_location_category=requested_location_category or "",
                 )
+                if no_match_instructions:
+                    response["instructions"] = no_match_instructions
             return response
 
         printr.print(
@@ -340,7 +372,7 @@ class NavigationManager(FunctionManager):
                 "Could not focus starmap search field.",
                 "Search click failed.",
             )
-        time.sleep(self.post_click_wait_seconds)
+        time.sleep(self.search_focus_wait_seconds)
         self._typewrite_text(location_name)
         time.sleep(self.post_type_wait_seconds)
 
@@ -354,17 +386,8 @@ class NavigationManager(FunctionManager):
                 selection_error,
             )
 
-        route_cached_exists = self._has_cached_click_point("route_button")
-        route_point: Optional[Tuple[int, int]] = None
-        route_from_cache = False
-        route_error = None
-
         unblock_mouse = lambda: None
-        should_block_mouse = (
-            self.lock_mouse_until_route_clicked
-            and selection_from_cache
-            and route_cached_exists
-        )
+        should_block_mouse = self.lock_mouse_until_route_clicked and selection_from_cache
         if should_block_mouse:
             unblock_mouse = self._temporarily_block_mouse_input()
 
@@ -378,34 +401,13 @@ class NavigationManager(FunctionManager):
                 )
 
             time.sleep(self.selection_wait_seconds)
-
-            route_point, route_from_cache, route_error = self._get_or_capture_click_point(
-                point_key="route_button",
-                overlay_prompt="Please move cursor over route button and click.",
-            )
-            if route_error:
-                return self._navigation_error(
-                    "Could not find route button.",
-                    route_error,
-                )
-            if route_from_cache and not self._click_screen_coordinates(
-                route_point[0], route_point[1], move_first=True
-            ):
-                return self._navigation_error(
-                    "Could not click route button.",
-                    "Route click failed.",
-                )
         finally:
             try:
                 unblock_mouse()
             except Exception:
                 pass
 
-        if route_point is None:
-            return self._navigation_error(
-                "Could not click route button.",
-                "No route point available.",
-            )
+        self._press_route_key()
 
         self.overlay.display_overlay_text(
             f"Cora: Route set for {location_name}",
@@ -430,6 +432,16 @@ class NavigationManager(FunctionManager):
             "message": user_message,
             "error": error_details,
         }
+
+    @staticmethod
+    def _format_navigation_template(template: str, **values) -> str:
+        if not template:
+            return ""
+        try:
+            return template.format(**values)
+        except Exception as exc:
+            print_debug(f"Navigation template formatting failed: {exc}")
+            return template
 
     @staticmethod
     def _focus_sc_window_for_input(wait_seconds: float = 0.0):
@@ -762,15 +774,22 @@ class NavigationManager(FunctionManager):
         key_module.keyDown("ctrl")
         key_module.press("a")
         key_module.keyUp("ctrl")
-        time.sleep(0.05)
+        time.sleep(self.text_input_step_wait_seconds)
 
         key_module.press("backspace")
-        time.sleep(0.05)
+        time.sleep(self.text_input_step_wait_seconds)
 
         key_module.keyDown("ctrl")
         key_module.keyDown("v")
         key_module.keyUp("v")
         key_module.keyUp("ctrl")
+        time.sleep(self.text_input_step_wait_seconds)
+
+    def _press_route_key(self):
+        self._focus_sc_window_for_input(wait_seconds=0.0)
+        key_module.press("r")
+        if self.route_key_wait_seconds > 0:
+            time.sleep(self.route_key_wait_seconds)
 
     def _click_screen_coordinates(self, screen_x: int, screen_y: int, move_first: bool) -> bool:
         target_x = int(screen_x)
