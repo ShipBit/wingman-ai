@@ -28,7 +28,7 @@
     {"resource": "Iron", "base_signature": 4270, "max_count": 6, "category": "Ship Mineable"},
     {"resource": "Aluminium", "base_signature": 4285, "max_count": 6, "category": "Ship Mineable"},
     {"resource": "Ice", "base_signature": 4300, "max_count": 6, "category": "Ship Mineable"},
-    {"resource": "ROC", "base_signature": 4000, "max_count": 7, "category": "ROC Mineable"},
+    {"resource": "ROC", "base_signature": 4000, "max_count": 25, "category": "ROC Mineable"},
     {"resource": "FPS", "base_signature": 3000, "max_count": 25, "category": "FPS Mineable"},
     {"resource": "Wrack", "base_signature": 2000, "max_count": 15, "category": "Salvage"}
   ]
