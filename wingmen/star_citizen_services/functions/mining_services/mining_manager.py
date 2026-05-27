@@ -1,69 +1,75 @@
 import json
+import os
 import re
+import threading
 import time
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+
+import cv2
+import numpy as np
+import pyautogui
+import pygetwindow
+import pytesseract
+from pynput import keyboard
 
 from services.printr import Printr
 
 from wingmen.star_citizen_services.function_manager import FunctionManager
 from wingmen.star_citizen_services.ai_context_enum import AIContext
 from wingmen.star_citizen_services.overlay import StarCitizenOverlay
-from wingmen.star_citizen_services.helper import screenshots, find_best_match, time_string_converter
+from wingmen.star_citizen_services.helper import screenshots
 from wingmen.star_citizen_services.helper.ocr import OCR
 
-from wingmen.star_citizen_services.functions.mining_services.regolith_api import RegolithAPI
 from wingmen.star_citizen_services.functions.mining_services.mining_validation_popup import MiningValidationPopup
-from wingmen.star_citizen_services.functions.uex_v2.uex_api_module import UEXApi2
-from wingmen.star_citizen_services.functions.uex_v2 import uex_api_module
 
 
-DEBUG = False
 TEST = False # Set to True for testing purposes, e.g. to use example screenshots without being in the game
-REGOLITH_TEST = False
 printr = Printr()
 
 # Crop area coordinates for refinery work order screenshots
 REFINERY_CROP_COORDS = ((180, 75), (1200, 1300))
-# Add constant for rock scans
-ROCK_SCAN_COORDS = ((1500, 400), (2300, 1200))
 
-# Mapping of in-game station names to Regolith API refinery enum values
-REFINERY_STATION_MAPPING = {
-    "ARC-L1 Wide Forest Station": "ARCL1",
-    "ARC-L2 Lively Pathway Station": "ARCL2",
-    "ARC-L4 Faint Glen Station": "ARCL4",
-    "CRU-L1 Ambitious Dream Station": "CRUL1",
-    "HUR-L1 Green Glade Station": "HURL1",
-    "HUR-L2 Faithful Dream Station": "HURL2",
-    "MIC-L1 Shallow Frontier Station": "MICL1",
-    "MIC-L2 Long Forest Station": "MICL2",
-    "MIC-L5 Modern Icarus Station": "MICL5",
-    "Pyro Gateway (Stanton)": "PYROG",
-    "Nyx Gateway (Stanton)": "NYX_STANTG",
-    "Terra Gateway (Stanton)": "TERRG",
-    "Checkmate Station": "PYRO_CHECKMATE",
-    "Orbituary": "PYRO_ORBITUARY",
-    "Patch City": "MAGNG",
-    "Ruin Station": "PYRO_RUIN",
-    "Stanton Gateway (Pyro)": "PYRO_STANTG",
-    "Levski": "NYX_LEVSKI",
+SIGNATURE_OBSERVER_DEFAULTS = {
+    "enabled": True,
+    "debug_mode": False,
+    "debug_log_interval_seconds": 2.0,
+    "interval_seconds": 0.25,
+    "activation_duration_seconds": 120,
+    "stable_reads": 1,
+    "display_duration_ms": 2500,
+    "display_cooldown_seconds": 3.0,
+    "overlay_offset_pixels": 8,
+    "save_number_crops": False,
+    "overwrite_number_crop": True,
+    "watch_area": {
+        "coords": None,
+        "center_x_ratio": 0.5,
+        "center_y_ratio": 0.27,
+        "width_ratio": 0.24,
+        "height_ratio": 0.12,
+    },
 }
 
-def print_debug(to_print):
-    if DEBUG:
-        print(to_print)
-
+SIGNATURE_MATCH_PRIORITY = {
+    "ROC Mineable": 0,
+    "FPS Mineable": 1,
+    "Salvage": 2,
+}
 
 class MiningManager(FunctionManager):
     """  
         This is an example implementation structure that can be copy pasted for new managers.
     """
     MANAGER_CONTEXT = AIContext.CORA
-    MANAGER_DESCRIPTION = "Supports mining and salvage sessions, including Regolith session control, refinery work orders, and scan capture."
+    MANAGER_DESCRIPTION = "Supports local refinery work order capture, retrieval, and mining signature lookup."
     MANAGER_CAPABILITIES = [
-        "Create and manage mining/salvage sessions",
-        "Capture and store refinery work orders via OCR",
-        "Document rock scans and cluster information",
-        "Look up cluster details by signature value",
+        "Capture refinery work orders via OCR",
+        "Store active refinery work orders locally",
+        "Retrieve or remove locally stored active refinery work orders",
+        "Look up likely mining resources by radar signature",
+        "Watch the mining signature HUD with local OCR while active",
     ]
 
     def __init__(self, config, secret_keeper):
@@ -73,45 +79,21 @@ class MiningManager(FunctionManager):
         self.config = config
         self.mining_data_path = f'{self.config["data-root-directory"]}/mining-data'
         self.mining_file_path = f'{self.mining_data_path}/active-refinery-jobs.json'
-
-        self.uex2_api_key = secret_keeper.retrieve(
-            requester="MiningManager",
-            key="uex2_api_key",
-            friendly_key_name="UEX2 API key",
-            prompt_if_missing=False
-        )
-        self.uex2_secret_key = secret_keeper.retrieve(
-            requester="MiningManager",
-            key="uex2_secret_key",
-            friendly_key_name="UEX2 secret user key",
-            prompt_if_missing=False
-        )
-        self.uex2_service = UEXApi2.init(
-            uex_api_key=self.uex2_api_key,
-            user_secret_key=self.uex2_secret_key
-        )
-        regolith_api_key = secret_keeper.retrieve(
-            requester="MiningManager",
-            key="regolith_secret_key",
-            friendly_key_name="Regolith secret api key",
-            prompt_if_missing=True
-        ) if not REGOLITH_TEST else secret_keeper.retrieve(
-            requester="MiningManager",
-            key="regolith_secret_key_test",
-            friendly_key_name="Regolith secret api key for test",
-            prompt_if_missing=True
-        )
-        self.regolith = RegolithAPI(config=config, x_api_key=regolith_api_key)
+        self.signature_reference_path = f'{self.mining_data_path}/signature_reference.json'
+        self.signature_observer_config = self._get_signature_observer_config()
+        self.signature_observer_stop_event = None
+        self.signature_observer_thread = None
+        self.signature_tab_listener = None
+        self.signature_observer_lock = threading.RLock()
+        self.signature_observer_active_until = 0.0
+        self.last_signature_value = None
+        self.last_signature_display_time = 0.0
+        self.signature_candidate_value = None
+        self.signature_candidate_reads = 0
+        self.signature_ocr_unavailable_reported = False
+        self.signature_debug_last_by_key = {}
 
         self.overlay = StarCitizenOverlay()
-
-        self.refineries = self.uex2_service.get_refineries()
-        self.refinery_methods = self.uex2_service.get_data(uex_api_module.CATEGORY_REFINERY_METHODS)
-        commodities = self.uex2_service.get_data(uex_api_module.CATEGORY_COMMODITIES)
-        self.ores = {key: value for key, value in commodities.items() if value.get('is_raw') == 1}
-
-        self.refinery_names = [details["space_station_name"] for details in self.refineries.values() if "space_station_name" in details]
-        self.refinery_jobs = []
             
         with open(f'{self.mining_data_path}/examples/response_structure_refinery.json', 'r', encoding="UTF-8") as file:
             file_content = file.read()
@@ -140,24 +122,6 @@ class MiningManager(FunctionManager):
             ),
             overlay=self.overlay)
 
-        with open(f'{self.mining_data_path}/examples/response_structure_rock_scan.json', 'r', encoding="UTF-8") as file:
-            rock_scan_json = file.read()
-
-        self.rock_scan_ocr = OCR(
-            data_dir=self.mining_data_path,
-            config=self.config,
-            secret_keeper=secret_keeper,
-            requester_name="MiningManager",
-            extraction_instructions=(
-                "Extract the rock scan data from this image. "
-                f"Return a plain json object that matches the format of this example exactly: {rock_scan_json}. "
-                "The 'percent' values must be decimals between 0 and 1 (not 0-100). "
-                "Provide the json within markdown ```json ... ```. "
-                "If you are unable to process the image, just return 'error' as response."
-            ),
-            overlay=self.overlay,
-        )
-
         # # we always load from file, as we might restart wingmen.ai indipendently from star citizen
         # # TODO need to check on start, if we want to discard this mission
         # self.load_missions()
@@ -179,9 +143,7 @@ class MiningManager(FunctionManager):
             You register method(s) that can be called by openAI.
         """
         function_register[self.refinery_job_work_order_management.__name__] = self.refinery_job_work_order_management
-        function_register[self.mining_or_salvage_session_management.__name__] = self.mining_or_salvage_session_management
-        function_register[self.add_rock_scan_or_deposit_cluster_information.__name__] = self.add_rock_scan_or_deposit_cluster_information
-        function_register[self.signature_based_cluster_info.__name__] = self.signature_based_cluster_info
+        function_register[self.mining_signature_lookup.__name__] = self.mining_signature_lookup
     
     # @abstractmethod - overwritten
     def get_function_prompt(self) -> str:      
@@ -189,11 +151,10 @@ class MiningManager(FunctionManager):
             Here you can provide instructions to open ai on how to use this function. 
         """
         return (
-            f"You are able to manage mining or salvaging sessions and corresponding refinery work orders. "
+            f"You are able to help with locally stored refinery work orders and mining radar signature lookups. "
             f"The following functions allow you to help the player in this task. For each of them, don't make assumptions on the value and set to None if the user hasn't provided information about it. "
-            f"- {self.refinery_job_work_order_management.__name__}: call it to add 1, remove 1 or retrieve all refinery work orders / jobs of the active refinery session. This function does not require any further information from the user. "
-            f"- {self.mining_or_salvage_session_management.__name__}: call it to create a new mining / salvage session, or to open the current session in the browser. "
-            f"- {self.add_rock_scan_or_deposit_cluster_information.__name__}: call this, when the player has found a new deposit cluster or wants to save it, or if he wants to save a scan result of a rock."
+            f"- {self.refinery_job_work_order_management.__name__}: call it to add, retrieve, or remove locally stored active refinery work orders. "
+            f"- {self.mining_signature_lookup.__name__}: call it when the player asks which mining resource matches a radar signature value. "
             "If the user provided all information required, do not ask for confirmation about the action to be taken. Do not make assumptions on the values and ask for clarification if not clear. "
         )
     
@@ -209,88 +170,23 @@ class MiningManager(FunctionManager):
                 "type": "function",
                 "function": {
                     "name": self.refinery_job_work_order_management.__name__,
-                    "description": "Allows the player to add or remove a refinery work order / jobs to the active session, or to retrieve all active work order.",
+                    "description": "Allows the player to add, retrieve, or remove locally stored active refinery work orders.",
                     "parameters": {
                         "type": "object",
                         "properties": {
                             "type": {
                                 "type": "string",
                                 "description": "The type of operation that the player wants to execute",
-                                "enum": ["add_work_order", "get_all_work_orders"]
-                            }
-                        },
-                        "required": ["type"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": self.mining_or_salvage_session_management.__name__,
-                    "description": "Allows the player to create, remove or get a session for ship mining, vehicle mining or salvaging at Regolith.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "type": {
-                                "type": "string",
-                                "description": "The type of operation that the player wants to execute. Default: new_session",
-                                "enum": ["new_session", "open_session_in_browser"]
+                                "enum": ["add_work_order", "get_all_work_orders", "remove_work_order"]
                             },
-                            "name": {
+                            "work_order_id": {
                                 "type": "string",
-                                "description": "Only relevant for new sessions: The name the session should get. Do not make assumptions on the value. "
+                                "description": "Only relevant for remove_work_order: The id of the locally stored work order to remove."
                             },
-                            "activity": {
-                                "type": "string",
-                                "description": "Only relevant for new sessions: The activity of this session.  Do not make assumptions on the value. ",
-                                "enum": self.regolith.get_activity_names()
-                            },
-                            "refinery": {
-                                "type": "string",
-                                "description": "Only relevant for new sessions: The refinery where the ores will be processed. Is mandatory. Do not make assumptions on the value. ",
-                                "enum": self.regolith.get_refinery_names()
-                            },
-                            "gravityWell": {
-                                "type": "string",
-                                "description": "Only relevant for new sessions: The planet, moon or asteroid field where the mining or salvaging takes place. Do not make assumptions on the value. ",
-                                "enum": self.regolith.get_gravity_wells() + [None]
-                            },
-                            "scouting_start_location": {
-                                "type": "string",
-                                "description": "Only relevant for new sessions: At what starting POI does the scouting begins. Do not make assumptions on the value. It should be a name of an outpost, station, planet or gravityWell location. "
-                            },
-                            "scouting_direction": {
-                                "type": "string",
-                                "description": "Only relevant for new sessions: In which scouting_direction does the scouting mainly focussing. Is either a POI name or a compass scouting_direction. Do not make assumptions on the value. "
-                            }
-                        },
-                        "required": ["type"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": self.add_rock_scan_or_deposit_cluster_information.__name__,
-                    "description": "Allows the player to add/save information about found mining deposit clusters and rock scan results.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "type": {
-                                "type": "string",
-                                "description": "The type of operation that the player wants to execute",
-                                "enum": ["save_scan_result", "add_new_cluster"]
-                            },
-                            "cluster_count": {
+                            "work_order_index": {
                                 "type": "integer",
-                                "description": "Is only necessary for type 'add_new_cluster'. The number of rocks in the cluster. Do not ask for this value if type is 'save_scan_result'. Optional "
-                            },
-                            "cluster_type": {
-                                "type": "string",
-                                "description": "Is only necessary for type 'add_new_cluster'. The deposit / rock types within this cluster. Do not ask for this value if type is 'save_scan_result'. Optional ",
-                                "enum": self.regolith.get_cluster_types() + [None]
+                                "description": "Only relevant for remove_work_order if no work_order_id is provided: zero-based index of the work order to remove."
                             }
-                            
                         },
                         "required": ["type"]
                     }
@@ -299,17 +195,17 @@ class MiningManager(FunctionManager):
             {
                 "type": "function",
                 "function": {
-                    "name": self.signature_based_cluster_info.__name__,
-                    "description": "Call this function to lookup rock cluster information based on a signature scan value.",
+                    "name": self.mining_signature_lookup.__name__,
+                    "description": "Looks up likely mining resources and resource counts for a radar signature value.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "scan_value": {
+                            "signature_value": {
                                 "type": "integer",
-                                "description": "Signature scan value to lookup cluster info."
+                                "description": "The radar signature value to look up."
                             }
-                        }
-                        # scan_value is optional
+                        },
+                        "required": ["signature_value"]
                     }
                 }
             }
@@ -319,240 +215,47 @@ class MiningManager(FunctionManager):
 
     # overwritten
     def after_init(self):
-        # self.scheduler.start()
+        self._ensure_work_order_file()
 
-        # self.refinery_jobs, success = self.uex2_service.get_refinery_jobs()
-        # if success:
-        #     self.activate_refinery_job_monitoring(self.refinery_jobs)
+    def on_manager_enabled(self, source: str = "manual"):
+        if self.signature_observer_config.get("enabled", True):
+            self.start_signature_observer()
 
-        self.regolith.initialize_all_names()
-        # load mining knowledge for signature lookup
-        with open(f'{self.mining_data_path}/mining_knowledge.json', 'r', encoding='UTF-8') as f:
-            self.mining_knowledge = json.load(f)
+    def on_manager_disabled(self, source: str = "manual"):
+        self.stop_signature_observer()
 
     # overwritten
     def cora_start_information(self):
         """  
             This method can be implemented to retrieve information from the manager, that Cora should provide to the user on startup.
         """
-        result = self.regolith.get_active_work_orders()
-        if result and not result["success"]:
-            return ""  # we don't tell the user that errors occured
-        
-        return result
-
-    def mining_or_salvage_session_management(self, function_args):
-        printr.print(f"Executing function '{self.mining_or_salvage_session_management.__name__}'.", tags="info")
-
-        function_type = function_args["type"]
-        printr.print(f'-> Work Session Management: {function_type} with args: \n{json.dumps(function_args, indent=2)}', tags="info")
-        function_response = self.manage_work_session(type=function_type, function_args=function_args)
-        printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
-        self.overlay.display_overlay_text("DONE", vertical_position_ratio=3, display_duration=5000)
-        function_response["do_not_cache"] = True  # we don't want session management commands to be cached, as they are usually one-time commands that change frequently
-        return function_response
-
-    def manage_work_session(self, type, function_args):
-        if type == "new_session":
-            return self.create_session(function_args)
-        
-        if type == "open_session_in_browser":
-            success = self.regolith.open_session_in_browser()
-            if not success:
-                return {"success": False, "message": f"I couldn't open the browser{' as there is no active session. ' if self.regolith.active_session_id is None else '. '}"}
-            return {"success": True, "message": "You should see the browser now. "}
-        
-        return {"success": False, "message": "I couldn't identify the action to be taken. Please repeat. "}
-        
-    def create_session(self, function_args):
-        name = function_args.get("name", None)
-        activity = function_args.get("activity", None)
-        refinery = function_args.get("refinery", None)
-        gravityWell = function_args.get("gravityWell", None)
-        scouting_start_location = function_args.get("scouting_start_location", None)
-        scouting_direction = function_args.get("scouting_direction", None)
-
-        if activity is None: 
-            return {"success": False, "message": f"Please provide the activity you want the session to track. One of: {self.regolith.get_activity_names()}"}
-                
-        if activity == "SHIP_MINING" and refinery is None or gravityWell is None:
-            return {"success": False, "message": f"Please provide the {'refinery name' if refinery is None else ''} {'and ' if refinery is None and gravityWell is None else ''} {'gravity well' if gravityWell is None else ''} to create a mining session. "}
-        
-        session_id = self.regolith.create_mining_session(name, activity, refinery, gravityWell, scouting_start_location, scouting_direction)
-        if session_id is not None:
-            return {"success": True, "message": "Session created. ", "do_not_cache": True}
-        
-        return {"success": False, "message": "Session was not created."}
+        return ""
 
     def refinery_job_work_order_management(self, function_args):
         printr.print(f"Executing function '{self.refinery_job_work_order_management.__name__}'.", tags="info")
         work_order_index = function_args.get("work_order_index", None)
+        work_order_id = function_args.get("work_order_id", None)
         function_type = function_args["type"]
         printr.print(f'-> Refinery Management: {function_type}', tags="info")
-        function_response = self.manage_work_order(type=function_type, work_order_index=work_order_index)
+        function_response = self.manage_work_order(
+            type=function_type,
+            work_order_index=work_order_index,
+            work_order_id=work_order_id,
+        )
         function_response["do_not_cache"] = True  # we don't want work order management commands to be cached, as they are usually one-time commands that change frequently
         printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
         return function_response
     
-    def add_rock_scan_or_deposit_cluster_information(self, function_args):
-        printr.print(f"Executing function '{self.add_rock_scan_or_deposit_cluster_information.__name__}'. with args {json.dumps(function_args, indent=2)}", tags="info")
-        function_type = function_args["type"]
-        
-        if not function_type or function_type == "save_scan_result":
-            image_path = screenshots.take_screenshot_ingame(self.mining_data_path, "scans", test=TEST)
-            if not image_path:
-                self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                function_response = {
-                    "success": False,
-                    "response_instructions": "Tell the player the screenshot could not be taken.",
-                    "message": "Could not take screenshot. Explain the player, that you only take screenshots, if the active window is Star Citizen. ",
-                    "do_not_cache": True,
-                }
-                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
-                return function_response
-            self.overlay.display_overlay_text("Screenshot taken", vertical_position_ratio=3, display_duration=5000)
-            
-            area_image = screenshots.crop_screenshot_coordinates(
-                data_dir_path=f"{self.mining_data_path}/templates/scans",
-                screenshot=image_path,
-                instructions=[{'strategy': 'AREA', 'coords': ROCK_SCAN_COORDS}],
-                cash_key="rock_scan"
-            )
-            cropped_image = screenshots.crop_screenshot(
-                data_dir_path=f"{self.mining_data_path}/templates/scans",
-                screenshot=area_image,
-                areas_and_corners_and_cropstrat=[("UPPER_LEFT", "UPPER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")]
-            )
-            scan_result, success = self.rock_scan_ocr.get_screenshot_texts(
-                cropped_image,
-                "scans",
-                test=TEST,
-            )
-
-            if not success or not isinstance(scan_result, dict):
-                self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                function_response = {
-                    "success": False,
-                    "response_instructions": "Tell the player the scan data could not be read.",
-                    "message": "Couldn't read scan data. Reposition or try have a darker background. ",
-                    "do_not_cache": True,
-                }
-                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
-                return function_response
-
-            if "captureShipRockScan" not in scan_result:
-                scan_result = {"captureShipRockScan": scan_result}
-
-            scan_payload = scan_result.get("captureShipRockScan", {})
-            if not isinstance(scan_payload, dict) or not scan_payload.get("ores"):
-                self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                function_response = {
-                    "success": False,
-                    "response_instructions": "Tell the player the scan data could not be read.",
-                    "message": "Couldn't read scan data. Reposition or try have a darker background. ",
-                    "do_not_cache": True,
-                }
-                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
-                return function_response
-
-            def _coerce_float(value):
-                if isinstance(value, (int, float)):
-                    return float(value)
-                if isinstance(value, str):
-                    cleaned = value.strip().replace("%", "").replace(",", ".")
-                    try:
-                        return float(cleaned)
-                    except ValueError:
-                        return None
-                return None
-
-            for key in ("mass", "inst", "res"):
-                if key in scan_payload:
-                    coerced = _coerce_float(scan_payload.get(key))
-                    if coerced is not None:
-                        scan_payload[key] = coerced
-
-            for ore in scan_payload.get("ores", []):
-                percent_value = _coerce_float(ore.get("percent"))
-                if percent_value is None:
-                    continue
-                if percent_value > 1:
-                    percent_value = percent_value / 100
-                ore["percent"] = percent_value
-
-            scan_result["captureShipRockScan"] = scan_payload
-           
-            # Übergabe des gecroppten Bildes an das Validation Popup für Rock Scans
-            scan_result, operation = MiningValidationPopup.show_popup(
-                scan_result,
-                anchor_coords=ROCK_SCAN_COORDS[0],
-                title="Scan-Validierung",
-                align="right",
-                crop_image=cropped_image,
-                config_dir=self.mining_data_path,
-                validation_context={
-                    "rock_types": self.regolith.get_cluster_types(),
-                    "ship_ores": self.regolith.get_ship_ore_names(),
-                },
-            )
-            if operation == "aborted":
-                self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
-                function_response = {
-                    "success": False,
-                    "response_instructions": "Tell the player the scan transmission was aborted.",
-                    "message": "Scan transmission aborted.",
-                    "do_not_cache": True,
-                }
-                printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
-                return function_response
-
-            session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=None)
-            cluster = self.regolith.get_or_create_scouting_cluster(session_id)
-            function_response = self.regolith.add_ship_cluster_scan_results(session_id, cluster, scan_result["captureShipRockScan"])
-            if function_response is None or function_response.get("success", False) is False:
-                self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                if isinstance(function_response, dict):
-                    function_response.setdefault(
-                        "response_instructions",
-                        "Tell the player the scan could not be saved.",
-                    )
-                    function_response.setdefault("do_not_cache", True)
-            else:
-                if function_response.get("warnings"):
-                    self.overlay.display_overlay_text(
-                        f"Cora: warning {function_response['total_scans']}",
-                        vertical_position_ratio=3,
-                        display_duration=5000,
-                    )
-                else:
-                    self.overlay.display_overlay_text(
-                        f"Cora: saved {function_response['total_scans']}",
-                        vertical_position_ratio=3,
-                        display_duration=5000,
-                    )
-                function_response["do_not_cache"] = True
-                
-        elif function_type == "add_new_cluster":
-            cluster_count = function_args.get("cluster_count", 0)
-            cluster_type = function_args.get("cluster_type", None)
-            session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=None)
-            scout_finding_id = self.regolith.create_scouting_cluster(session_id, cluster_count, cluster_type)
-            if scout_finding_id is None:
-                self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                return {"success": False, "message": "Couldn't create a new cluster."}
-            function_response = {"success": True, "instructions": f"Saved {cluster_count}x{cluster_type}'.", "do_not_cache": True}
-            self.overlay.display_overlay_text("Cora: Saved", vertical_position_ratio=3, display_duration=5000)
-       
-        printr.print(f'-> Result: {json.dumps(function_response, indent=2)}', tags="info")
-
-        return function_response
-
-    def manage_work_order(self, type="new", work_order_index=None):
+    def manage_work_order(self, type="new", work_order_index=None, work_order_id=None):
         if type == "add_work_order":
             image_path = screenshots.take_screenshot_ingame(self.mining_data_path, "workorder", "images", test=TEST)
             if not image_path:
                 self.overlay.display_overlay_text("Cora: Error", vertical_position_ratio=3, display_duration=5000)
-                return {"success": False, "instructions": "Could not take screenshot. Explain the player, that you only take screenshots, if the active window is Star Citizen. "}
+                return {
+                    "success": False,
+                    "message": "Could not take a screenshot because Star Citizen is not the active window.",
+                    "instructions": "Tell the player that no refinery work order was created because screenshots can only be taken while Star Citizen is the active window.",
+                }
             
             self.overlay.display_overlay_text("Screenshot taken", vertical_position_ratio=3, display_duration=5000)
 
@@ -601,496 +304,635 @@ class MiningManager(FunctionManager):
                 config_dir=self.mining_data_path,
             )
             if operation == "aborted":
-                self.overlay.display_overlay_text("Transmission aborted", vertical_position_ratio=3, display_duration=3000)
+                self.overlay.display_overlay_text("Save aborted", vertical_position_ratio=3, display_duration=3000)
                 return {
                     "success": False,
-                    "message": "Work order transmission aborted.",
+                    "message": "Work order save aborted.",
                     "do_not_cache": True,
                 }
             
-            function_response = self.add_work_order_from_screenshot_scan(scan_result)
+            function_response = self.add_work_order_local(scan_result)
             function_response["do_not_cache"] = True
 
             self.overlay.display_overlay_text(f"Cora: {'Success' if function_response.get('success', False) else 'Error'}", vertical_position_ratio=3, display_duration=5000)
             return function_response
         
-        elif type == "add_work_order_uex":
-            pass
         if type == "get_all_work_orders":
-            return self.regolith.get_active_work_orders()
+            work_orders = self.load_active_work_orders()
+            return {
+                "success": True,
+                "message": f"{len(work_orders)} active refinery work order(s) retrieved.",
+                "work_orders": work_orders,
+            }
+
+        if type == "remove_work_order":
+            return self.remove_work_order_local(work_order_id=work_order_id, work_order_index=work_order_index)
 
         return {"success": False, "message": "I couldn't identify the action to be taken. Please repeat. "}
-    
-    def add_work_order_from_screenshot_scan(self, scan_result):
-        """
-        Process work order from OCR scan with screenshot structure (work_order format).
-        Maps screenshot data to Regolith API structure.
-        """
-        print_debug("\n ===== ADDING WORK ORDER FROM SCREENSHOT SCAN ======")
-        
-        current_time = int(time.time() * 1000)
-        work_order = scan_result["work_order"]
-        
-        # Map station name to refinery enum using fixed mapping
-        station_name = work_order["station_name"]
-        
-        # Try exact match first
-        refinery_name = REFINERY_STATION_MAPPING.get(station_name)
-        
-        if refinery_name is None:
-            # Fallback to fuzzy matching if exact match fails
-            station_match, success = find_best_match.find_best_match(
-                station_name, 
-                list(REFINERY_STATION_MAPPING.keys()), 
-                score_cutoff=70
-            )
-            if success:
-                refinery_name = REFINERY_STATION_MAPPING[station_match["matched_value"]]
-                print_debug(f'Fuzzy matched station "{station_match["matched_value"]}" from "{station_name}" (confidence: {station_match["score"]})')
-            else:
-                return {
-                    "success": False,
-                    "message": f"Could not identify refinery from station name: {station_name}. Available stations: {', '.join(REFINERY_STATION_MAPPING.keys())}",
-                    "do_not_cache": True
-                }
-        else:
-            print_debug(f'Exact matched station "{station_name}" to refinery enum: {refinery_name}')
-        
-        # Map processing method to method enum
-        method_display = work_order["processing_selection_method"]
-        method_match, success = find_best_match.find_best_match(
-            method_display, 
-            self.regolith.get_refinery_method_names(), 
-            score_cutoff=60
-        )
-        if not success:
+
+    def _ensure_work_order_file(self):
+        work_order_path = Path(self.mining_file_path)
+        work_order_path.parent.mkdir(parents=True, exist_ok=True)
+        if not work_order_path.exists():
+            self.save_active_work_orders([])
+
+    def load_active_work_orders(self):
+        self._ensure_work_order_file()
+        with open(self.mining_file_path, 'r', encoding='UTF-8') as file:
+            try:
+                file_content = json.load(file)
+            except json.JSONDecodeError:
+                return []
+
+        if isinstance(file_content, list):
+            return file_content
+        if isinstance(file_content, dict):
+            work_orders = file_content.get("active_work_orders", [])
+            return work_orders if isinstance(work_orders, list) else []
+        return []
+
+    def save_active_work_orders(self, work_orders):
+        work_order_path = Path(self.mining_file_path)
+        work_order_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(work_order_path, 'w', encoding='UTF-8') as file:
+            json.dump({"active_work_orders": work_orders}, file, indent=2, ensure_ascii=False)
+
+    def add_work_order_local(self, scan_result):
+        work_order = scan_result.get("work_order")
+        if not isinstance(work_order, dict):
             return {
                 "success": False,
-                "message": f"Could not identify processing method: {method_display}",
-                "do_not_cache": True
+                "message": "No valid work order data found.",
             }
-        method_name = method_match["matched_value"]
-        print_debug(f'Matched method "{method_name}" from "{method_display}" (confidence: {method_match["score"]})')
-        
-        # Convert processing time to seconds
-        processing_time_str = work_order["processing_time"]
-        processing_duration_s = time_string_converter.convert_to_seconds(processing_time_str)
-        print_debug(f'Converted processing time "{processing_time_str}" to {processing_duration_s} seconds')
-        
-        # Create or get session
-        session_id = self.regolith.get_or_create_mining_session(
-            name="Ship", 
-            activity="SHIP_MINING", 
-            refinery=refinery_name
-        )
-        if session_id is None:
-            print_debug("Couldn't get or create session.")
-            return {"success": False, "message": "Couldn't get or create session."}
-        
-        # Map selected materials to shipOres
-        shipOres = []
-        ship_ore_names = self.regolith.get_ship_ore_names()
-        
-        for material in work_order["selected_materials"]:
-            # Skip materials with yield = 0
-            if material["yield"] <= 0:
-                continue
-            
-            # Clean commodity name: remove suffixes like "(Ore)", "(Raw)", etc.
-            commodity_name = material["commodity_name"]
-            # Remove parenthetical suffixes and trim
-            cleaned_name = re.sub(r'\s*\([^)]*\)\s*$', '', commodity_name).strip()
-            
-            ore_match, success = find_best_match.find_best_match(
-                cleaned_name, 
-                ship_ore_names, 
-                score_cutoff=60
-            )
-            if not success:
-                print_debug(f'Warning: Could not match ore "{commodity_name}" (cleaned: "{cleaned_name}"), skipping')
-                continue
-            
-            ore_name = ore_match["matched_value"]
-            print_debug(f'Matched ore "{ore_name}" from "{commodity_name}" (cleaned: "{cleaned_name}", confidence: {ore_match["score"]})')
-            
-            # Calculate amount using yield
-            amt = self.regolith.ore_amt_calc(
-                material["yield"], 
-                ore_name, 
-                refinery_name, 
-                method_name
-            )
-            
-            shipOres.append({
-                "amt": amt,
-                "ore": ore_name
-            })
-        
-        if not shipOres:
+
+        selected_materials = work_order.get("selected_materials")
+        if not isinstance(selected_materials, list) or not selected_materials:
             return {
-                "success": False, 
-                "message": "No valid ores found in the work order.",
-                "do_not_cache": True
+                "success": False,
+                "message": "No selected materials found in the work order.",
             }
-        
-        # Build work order mutation variables
-        variables = {
-            "sessionId": session_id,
-            "shipOres": shipOres,
-            "workOrder": {
-                "expenses": [
-                    {
-                        "name": "Refinery Fee",
-                        "amount": work_order["total_cost"],
-                        "ownerScName": self.regolith.retrieve_user_info(),
-                    }
-                ],
-                "includeTransferFee": True,
-                "isRefined": True,
-                "isSold": False,
-                "method": method_name,
-                "note": "Work order created by Cora - Your Star Citizen AI-companion",
-                "processStartTime": current_time,
-                "processDurationS": processing_duration_s,
-                "refinery": refinery_name,
-                "shareRefinedValue": True,
-            },
-            "shares": [
-                {
-                    "payeeScName": self.regolith.sc_name,
-                    "share": 1,
-                    "shareType": "SHARE",
-                    "state": True
-                }
-            ]
+
+        active_work_orders = self.load_active_work_orders()
+        work_order_entry = {
+            "id": str(uuid.uuid4()),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "status": "active",
+            "work_order": work_order,
         }
+        active_work_orders.append(work_order_entry)
+        self.save_active_work_orders(active_work_orders)
 
-        return self.regolith.create_work_order(work_order_details=variables)
-    
-    def add_work_order_from_scan(self, scan_result):
-        """Process work order directly from OCR scan with captureRefineryOrder structure"""
-        print_debug("\n ===== ADDING WORK ORDER FROM SCAN ======")
-        
-        current_time = int(time.time() * 1000)
-        refinery_data = scan_result["captureRefineryOrder"]
-        
-        # Validate and normalize refinery name
-        refinery_name = refinery_data["refinery"]
-        refinery_match, success = find_best_match.find_best_match(
-            refinery_name, 
-            self.regolith.get_refinery_names(), 
-            score_cutoff=70
-        )
-        if success:
-            refinery_name = refinery_match["matched_value"]
-            print_debug(f'Matched refinery "{refinery_name}" (confidence: {refinery_match["score"]})')
-        else:
-            print_debug(f'Warning: Could not match refinery "{refinery_name}", using as-is')
-        
-        # Validate and normalize method name
-        method_name = refinery_data["method"]
-        method_match, success = find_best_match.find_best_match(
-            method_name, 
-            self.regolith.get_refinery_method_names(), 
-            score_cutoff=70
-        )
-        if success:
-            method_name = method_match["matched_value"]
-            print_debug(f'Matched method "{method_name}" (confidence: {method_match["score"]})')
-        else:
-            print_debug(f'Warning: Could not match method "{method_name}", using as-is')
-        
-        # Create or get session
-        session_id = self.regolith.get_or_create_mining_session(
-            name="Ship", 
-            activity="SHIP_MINING", 
-            refinery=refinery_name
-        )
-        if session_id is None:
-            print_debug("Couldn't get or create session.")
-            return {"success": False, "message": "Couldn't get or create session."}
-        
-        # Prepare shipOres with validated ore names and calculated amounts
-        shipOres = []
-        ship_ore_names = self.regolith.get_ship_ore_names()
-        for ore_data in refinery_data["shipOres"]:
-            ore_name = ore_data["ore"]
-            
-            # Validate and normalize ore name
-            ore_match, success = find_best_match.find_best_match(
-                ore_name, 
-                ship_ore_names, 
-                score_cutoff=70
-            )
-            if success:
-                ore_name = ore_match["matched_value"]
-                print_debug(f'Matched ore "{ore_name}" (confidence: {ore_match["score"]})')
-            else:
-                print_debug(f'Warning: Could not match ore "{ore_name}", skipping')
-                continue
-            
-            amt = self.regolith.ore_amt_calc(
-                ore_data["yield"], 
-                ore_name, 
-                refinery_name, 
-                method_name
-            )
-            shipOres.append({
-                "amt": amt,
-                "ore": ore_name
-            })
-        
-        if not shipOres:
-            return {
-                "success": False, 
-                "message": "No valid ores found in the work order.",
-                "do_not_cache": True
-            }
-        
-        # Build work order mutation variables
-        variables = {
-            "sessionId": session_id,
-            "shipOres": shipOres,
-            "workOrder": {
-                "expenses": [
-                    {
-                        "name": refinery_data["expenses"][0]["name"],
-                        "amount": refinery_data["expenses"][0]["amount"],
-                        "ownerScName": self.regolith.retrieve_user_info(),
-                    }
-                ],
-                "includeTransferFee": True,
-                "isRefined": True,
-                "isSold": False,
-                "method": method_name,
-                "note": "Work order created by Cora - Your Star Citizen AI-companion",
-                "processStartTime": current_time,
-                "processDurationS": refinery_data["processDurationS"],
-                "refinery": refinery_name,
-                "shareRefinedValue": True,
-            },
-            "shares": [
-                {
-                    "payeeScName": self.regolith.sc_name,
-                    "share": 1,
-                    "shareType": "SHARE",
-                    "state": True
-                }
-            ]
-        }
-
-        return self.regolith.create_work_order(work_order_details=variables)
-    
-    def add_work_order_regolith(self, work_order):
-        print_debug("\n ===== ADDING REGOLITH WORK ORDER ======")
-        
-        # Retrieve user info to ensure sc_name is available
-        self.regolith.retrieve_user_info()
-        
-        station = work_order["work_order"]["station_name"]
-        refinery, success = find_best_match.find_best_match(station, self.regolith.get_refinery_names(), score_cutoff=0)
-        if not success:
-            print_debug(f"Couldn't identify refinery from '{station}'.")
-            return f"Couldn't identify refinery from '{station}'."
-        print_debug(f'matched refinery "{refinery["matched_value"]}" with confidence {refinery["score"]}')
-        
-        method = work_order["work_order"]["processing_selection_method"]
-        refinery_method, success = find_best_match.find_best_match(
-            method, 
-            self.regolith.get_refinery_method_names(), score_cutoff=80)
-        if not success:
-            print_debug(f"Couldn't identify refinery method from '{method}'.")
-            return f"Couldn't identify refinery method from '{method}'."
-        print_debug(f'matched refinery method "{refinery_method["matched_value"]}" with confidence {refinery_method["score"]}')
-
-        current_time = int(time.time() * 1000)
-        session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=refinery["matched_value"])
-        processing_time_s = time_string_converter.convert_to_seconds(work_order["work_order"]["processing_time"])
-        if session_id is None:
-            print_debug(f"Couldn't get or create session.")
-            return {"success": False, "message": "Couldn't get or create session."}
-        variables = {
-            "sessionId": session_id,
-            "workOrder": {
-                "expenses": [
-                    {
-                        "amount": work_order["work_order"]["total_cost"],
-                        "name": "Refinery Fee",
-                        "ownerScName": self.regolith.retrieve_user_info(),
-                    }
-                ],
-                "includeTransferFee": True,
-                "isRefined": True,
-                "isSold": False,
-                "method": refinery_method["matched_value"],
-                "note": "Work order created by Cora - Your Star Citizen ai-compagnion",
-                "processDurationS": processing_time_s, 
-                "processStartTime": current_time,
-                # "processEndTime": (current_time + (processing_time_s * 1000)), not supported, will be returned
-                "refinery": refinery["matched_value"],
-                "shareRefinedValue": True,
-            },
-            "shares": [
-                {
-                    "payeeScName": self.regolith.sc_name,
-                    "share": 1,
-                    "shareType": "SHARE",
-                    "state": True
-                }
-            ]
-        }
-        materials = []
-        for material in work_order["work_order"]["selected_materials"]:
-            if material["yield"] <= 0:
-                continue  # material hasn't been selected to be refined
-            ore_name = material["commodity_name"]
-            ore, success = find_best_match.find_best_match(ore_name, self.regolith.get_ship_ore_names(), score_cutoff=0)
-            if not success:
-                print_debug(f"couldn't identify ore '{ore_name}'")
-                continue
-            print_debug(f'matched ore "{ore["matched_value"]}" with confidence {ore["score"]}')
-            
-            item = {
-                # "yield": material["yield"], not supported, is only returned
-                "amt": material["quantity"],  
-                "ore": ore["matched_value"]  
-            }
-            materials.append(item)
-
-        variables["shipOres"] = materials
-
-        return self.regolith.create_work_order(work_order_details=variables)
-    
-    def add_scan_result_regolith(self, scan_result):
-        print_debug("\n ===== ADDING REGOLITH SCAN Result ======")
-    
-        session_id = self.regolith.get_or_create_mining_session(name="Ship", activity="SHIP_MINING", refinery=None)
-        if session_id is None:
-            print_debug(f"Couldn't get or create session.")
-            return {"success": False, "message": "Couldn't get or create session."}
-        variables = {
-            "sessionId": session_id,
-            "scoutingFind": {
-                "state": "DISCOVERED",
-                "clusterCount": 1
-            },
-        }
-        materials = []
-        for material in work_order["work_order"]["selected_materials"]:
-            if material["yield"] <= 0:
-                continue  # material hasn't been selected to be refined
-            ore_name = material["commodity_name"]
-            ore, success = find_best_match.find_best_match(ore_name, self.regolith.get_ship_ore_names(), score_cutoff=0)
-            if not success:
-                print_debug(f"couldn't identify ore '{ore_name}'")
-                continue
-            print_debug(f'matched ore "{ore["matched_value"]}" with confidence {ore["score"]}')
-            
-            item = {
-                # "yield": material["yield"], not supported, is only returned
-                "amt": material["quantity"],  
-                "ore": ore["matched_value"]  
-            }
-            materials.append(item)
-
-        variables["shipOres"] = materials
-
-        return self.regolith.create_work_order(work_order_details=variables)
-    
-    def add_work_order_uex(self, work_order):
-        print_debug("\n ===== ADDING UEX WORK ORDER ======")
-        station = work_order["work_order"]["station_name"]
-        refinery, success = find_best_match.find_best_match(station, self.refineries, attributes=["space_station_name"])
-        if not success:
-            return f"Couldn't identify refinery from '{station}'."
-        print_debug(f'matched refinery "{refinery["matched_value"]}" with confidence {refinery["score"]}')
-        
-        method = work_order["work_order"]["processing_selection_method"]
-        refinery_method, success = find_best_match.find_best_match(
-            method, 
-            self.refinery_methods, 
-            attributes=["name"])
-        if not success:
-            return f"Couldn't identify refinery method from '{method}'."
-
-        uex_refinery_order = {
-            "id_terminal": refinery["root_object"]["id"],
-            "id_refinery_method": refinery_method["root_object"]["id"],
-            "cost": work_order["work_order"]["total_cost"],
-            "time_minutes": time_string_converter.convert_to_minutes(work_order["work_order"]["processing_time"]),
-            "refinery_capacity": work_order["work_order"]["current_capacity"]
-        }
-
-        materials = []
-        for material in work_order["work_order"]["selected_materials"]:
-            if material["yield"] <= 0:
-                continue  # material hasn't been selected to be refined
-            ore_name = material["commodity_name"]
-            ore, success = find_best_match.find_best_match(ore_name, self.ores, attributes=["name"])
-            if not success:
-                print_debug(f"couldn't identify ore '{ore_name}'")
-                continue
-            item = {
-                "yield": material["yield"],
-                "quantity": material["quantity"],
-                "id_commodity": ore["root_object"]["id"]
-            }
-            materials.append(item)
-
-        uex_refinery_order["items"] = materials
-
-        return self.uex2_service.add_refinery_job(uex_refinery_order)
-
-    def activate_refinery_job_monitoring(self, refinery_jobs):
-        pass
-        # self.scheduler.remove_all_jobs()
-        
-        # if len(refinery_jobs) <= 0:
-        #     print_debug("No refinery jobs to activate")
-        #     return
-        
-        # current_time = int(time.time())
-        # # Filter for active jobs
-        # self.active_jobs = [job for job in refinery_jobs if job["date_expiration"] - current_time > 0]
-
-        # # processed jobs
-        # self.processed_jobs = [job for job in refinery_jobs if job["date_expiration"] - current_time <= 0]
-
-        # for job in self.active_jobs:
-        #     # Schedule the action to be executed once the job expires
-        #     self.scheduler.add_job(self.execute_action, 'date', run_date=time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(job["date_expiration"])), args=[job])
-        
-    def execute_action(self, job):
-        print(f"Executing action for job {job['id']}")
-
-        self.overlay.display_overlay_text(f"Refinery job {job['id']} finished @{job['terminal_name']}.", display_duration=10000)
-
-    def signature_based_cluster_info(self, function_args):
-        """Lookup rock cluster info by signature scan value."""
-        scan_value = function_args.get("scan_value")
-        # build signature->(cluster_size, type) map for multiples 1..15, skip non-list entries
-        sigs = self.mining_knowledge.get("rock_signitures", {})
-        lookup = {}
-        for _, area in sigs.items():
-            if not isinstance(area, list):
-                continue
-            for rock in area:
-                base = rock.get("Signature_Value")
-                name = rock.get("RockType", "").lower()
-                if not isinstance(base, int):
-                    continue
-                for size in range(1, 25):
-                    lookup[base * size] = {"cluster_size": size, "type": name}
-        if scan_value is None:
-            return {"success": False, "message": "Please provide a scan_value to lookup."}
-        info = lookup.get(scan_value)
-        if not info:
-            return {"success": False, "message": f"No cluster info for signature {scan_value} available."}
         return {
             "success": True,
-            "cluster_size": info["cluster_size"],
-            "type": info["type"],
-            "message": f"Signature {scan_value} corresponds to a cluster of {info['cluster_size']} {info['type'].capitalize()} rocks.",
-            "do_not_cache": True
+            "message": "Refinery work order saved locally.",
+            "work_order": work_order_entry,
+            "total_active_work_orders": len(active_work_orders),
         }
+
+    def remove_work_order_local(self, work_order_id=None, work_order_index=None):
+        active_work_orders = self.load_active_work_orders()
+        if not active_work_orders:
+            return {
+                "success": False,
+                "message": "There are no active refinery work orders to remove.",
+            }
+
+        remove_index = None
+        if work_order_id:
+            remove_index = next(
+                (index for index, item in enumerate(active_work_orders) if item.get("id") == work_order_id),
+                None,
+            )
+        elif work_order_index is not None:
+            try:
+                remove_index = int(work_order_index)
+            except (TypeError, ValueError):
+                remove_index = None
+
+        if remove_index is None or remove_index < 0 or remove_index >= len(active_work_orders):
+            return {
+                "success": False,
+                "message": "Could not identify the refinery work order to remove.",
+            }
+
+        removed_work_order = active_work_orders.pop(remove_index)
+        self.save_active_work_orders(active_work_orders)
+        return {
+            "success": True,
+            "message": "Refinery work order removed.",
+            "removed_work_order": removed_work_order,
+            "total_active_work_orders": len(active_work_orders),
+        }
+
+    def mining_signature_lookup(self, function_args):
+        printr.print(f"Executing function '{self.mining_signature_lookup.__name__}'.", tags="info")
+        signature_value = function_args.get("signature_value", function_args.get("scan_value"))
+        try:
+            signature_value = int(signature_value)
+        except (TypeError, ValueError):
+            return {
+                "success": False,
+                "message": "Please provide a valid numeric radar signature value.",
+                "do_not_cache": True,
+            }
+
+        reference_entries = self.load_signature_reference()
+        exact_matches = self.find_signature_matches(signature_value, reference_entries)
+        if exact_matches:
+            match_descriptions = [
+                f"{match['resource']} x{match['count']} ({match['category']})"
+                for match in exact_matches
+            ]
+            return {
+                "success": True,
+                "signature_value": signature_value,
+                "matches": exact_matches,
+                "message": f"Signature {signature_value} matches: {', '.join(match_descriptions)}.",
+                "do_not_cache": True,
+            }
+
+        nearest_matches = self.find_nearest_signature_matches(signature_value, reference_entries)
+        return {
+            "success": False,
+            "signature_value": signature_value,
+            "matches": [],
+            "nearest_matches": nearest_matches,
+            "message": f"No exact mining resource signature match found for {signature_value}.",
+            "do_not_cache": True,
+        }
+
+    def load_signature_reference(self):
+        try:
+            with open(self.signature_reference_path, 'r', encoding='UTF-8') as file:
+                reference = json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return []
+        entries = reference.get("entries", [])
+        return entries if isinstance(entries, list) else []
+
+    def find_signature_matches(self, signature_value, reference_entries):
+        matches = [
+            match
+            for match in self.iter_signature_reference_values(reference_entries)
+            if match["signature_value"] == signature_value
+        ]
+        return self.sort_signature_matches(matches)
+
+    def find_nearest_signature_matches(self, signature_value, reference_entries, limit=5):
+        candidates = []
+        for match in self.iter_signature_reference_values(reference_entries):
+            candidates.append({
+                **match,
+                "delta": abs(match["signature_value"] - signature_value),
+            })
+        return sorted(
+            candidates,
+            key=lambda item: (
+                item["delta"],
+                self.get_signature_match_priority(item),
+                item["signature_value"],
+            ),
+        )[:limit]
+
+    def sort_signature_matches(self, matches):
+        return sorted(
+            matches,
+            key=lambda item: (
+                self.get_signature_match_priority(item),
+                item["signature_value"],
+                item["resource"],
+            ),
+        )
+
+    def get_signature_match_priority(self, match):
+        category = match.get("category")
+        if category in SIGNATURE_MATCH_PRIORITY:
+            return SIGNATURE_MATCH_PRIORITY[category]
+        resource = match.get("resource")
+        if resource in SIGNATURE_MATCH_PRIORITY:
+            return SIGNATURE_MATCH_PRIORITY[resource]
+        return 10
+
+    def iter_signature_reference_values(self, reference_entries):
+        for entry in reference_entries:
+            resource = entry.get("resource")
+            base_signature = entry.get("base_signature")
+            max_count = entry.get("max_count")
+            if not resource or not isinstance(base_signature, int) or not isinstance(max_count, int):
+                continue
+            for count in range(1, max_count + 1):
+                yield {
+                    "resource": resource,
+                    "category": entry.get("category", "Mining Resource"),
+                    "count": count,
+                    "base_signature": base_signature,
+                    "signature_value": base_signature * count,
+                }
+
+    def _get_signature_observer_config(self):
+        manager_config = self.config.get("features", {}).get(self.__class__.__name__, {})
+        observer_config = {}
+        if isinstance(manager_config, dict):
+            observer_config = manager_config.get("signature_observer", {}) or {}
+
+        merged = {**SIGNATURE_OBSERVER_DEFAULTS, **observer_config}
+        merged["watch_area"] = {
+            **SIGNATURE_OBSERVER_DEFAULTS["watch_area"],
+            **(observer_config.get("watch_area", {}) if isinstance(observer_config, dict) else {}),
+        }
+        return merged
+
+    def start_signature_observer(self):
+        with self.signature_observer_lock:
+            if self.signature_observer_thread and self.signature_observer_thread.is_alive():
+                return
+
+            self.signature_observer_stop_event = threading.Event()
+            self.signature_observer_active_until = 0.0
+            self.signature_tab_listener = keyboard.Listener(on_press=self._on_signature_observer_key_press)
+            self.signature_tab_listener.daemon = True
+            self.signature_tab_listener.start()
+            self.signature_observer_thread = threading.Thread(
+                target=self._signature_observer_loop,
+                args=(self.signature_observer_stop_event,),
+                daemon=True,
+                name="MiningSignatureObserver",
+            )
+            self.signature_observer_thread.start()
+            printr.print("Mining signature observer started.", tags="info")
+            self._signature_debug(
+                "listener started; press Tab in Star Citizen to enable OCR analysis window"
+            )
+
+    def stop_signature_observer(self):
+        with self.signature_observer_lock:
+            stop_event = self.signature_observer_stop_event
+            thread = self.signature_observer_thread
+            tab_listener = self.signature_tab_listener
+            self.signature_observer_stop_event = None
+            self.signature_observer_thread = None
+            self.signature_tab_listener = None
+            self.signature_observer_active_until = 0.0
+
+        if stop_event:
+            stop_event.set()
+        if tab_listener:
+            tab_listener.stop()
+        if thread and thread.is_alive():
+            thread.join(timeout=2.0)
+        printr.print("Mining signature observer stopped.", tags="info")
+
+    def _on_signature_observer_key_press(self, key):
+        if key != keyboard.Key.tab or not self._is_star_citizen_window_active():
+            if key == keyboard.Key.tab:
+                self._signature_debug("Tab ignored because Star Citizen is not the active window")
+            return
+
+        duration_seconds = float(self.signature_observer_config.get("activation_duration_seconds", 120))
+        with self.signature_observer_lock:
+            self.signature_observer_active_until = time.time() + max(1.0, duration_seconds)
+            self.signature_candidate_value = None
+            self.signature_candidate_reads = 0
+        printr.print(f"Mining signature OCR active for {int(duration_seconds)} seconds.", tags="info")
+        self._signature_debug(
+            f"Tab detected; OCR analysis active until {datetime.fromtimestamp(self.signature_observer_active_until).strftime('%H:%M:%S')}"
+        )
+
+    def _signature_observer_loop(self, stop_event):
+        interval_seconds = float(self.signature_observer_config.get("interval_seconds", 0.75))
+        while not stop_event.is_set():
+            try:
+                if self._should_analyze_signature_hud():
+                    self._signature_debug("analysis tick", throttle_key="analysis_tick")
+                    watch_image = self._capture_signature_watch_area()
+                    signature_value, number_crop = self._read_signature_value(watch_image)
+                    if signature_value is not None:
+                        self._signature_debug(f"OCR read signature value {signature_value}")
+                        self._handle_observed_signature(signature_value, number_crop)
+                    else:
+                        self._signature_debug("no signature value detected in watch area", throttle_key="no_value")
+                        self.signature_candidate_value = None
+                        self.signature_candidate_reads = 0
+            except pytesseract.TesseractNotFoundError:
+                if not self.signature_ocr_unavailable_reported:
+                    self.signature_ocr_unavailable_reported = True
+                    printr.print_warn("Tesseract OCR is not installed or not available in PATH.")
+                    self.overlay.display_overlay_text(
+                        "Cora: Local OCR unavailable",
+                        vertical_position_ratio=4,
+                        display_duration=5000,
+                    )
+            except Exception as e:
+                printr.print_warn(f"Mining signature observer failed: {e}")
+                self._signature_debug(f"exception: {e}")
+
+            stop_event.wait(timeout=max(0.1, interval_seconds))
+
+    def _should_analyze_signature_hud(self):
+        if not self._is_star_citizen_window_active():
+            with self.signature_observer_lock:
+                was_active = time.time() < self.signature_observer_active_until
+                self.signature_observer_active_until = 0.0
+                self.signature_candidate_value = None
+                self.signature_candidate_reads = 0
+            if was_active:
+                self._signature_debug("analysis stopped: Star Citizen lost focus")
+            return False
+        with self.signature_observer_lock:
+            active = time.time() < self.signature_observer_active_until
+        if not active:
+            self._signature_debug("analysis inactive: waiting for Tab ping", throttle_key="waiting_for_tab")
+        return active
+
+    def _signature_debug(self, message, throttle_key=None, interval_seconds=None):
+        if not self.signature_observer_config.get("debug_mode", False):
+            return
+
+        if throttle_key:
+            interval = float(
+                interval_seconds
+                if interval_seconds is not None
+                else self.signature_observer_config.get("debug_log_interval_seconds", 2.0)
+            )
+            now = time.time()
+            last_log_time = self.signature_debug_last_by_key.get(throttle_key, 0.0)
+            if now - last_log_time < interval:
+                return
+            self.signature_debug_last_by_key[throttle_key] = now
+
+        printr.print(f"Mining signature debug: {message}", tags="info")
+
+    def _is_star_citizen_window_active(self):
+        try:
+            active_window = pygetwindow.getActiveWindow()
+            return bool(active_window and "Star Citizen" in (active_window.title or ""))
+        except Exception:
+            return False
+
+    def _capture_signature_watch_area(self):
+        active_window = pygetwindow.getActiveWindow()
+        if not active_window:
+            return None
+
+        watch_area = self.signature_observer_config.get("watch_area", {})
+        relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
+        if not relative_rect:
+            return None
+
+        rel_x, rel_y, width, height = relative_rect
+        x = active_window.left + rel_x
+        y = active_window.top + rel_y
+        if width <= 0 or height <= 0:
+            self._signature_debug(f"invalid watch area: {relative_rect}", throttle_key="invalid_area")
+            return None
+
+        self._signature_debug(
+            f"capturing watch area relative=({rel_x}, {rel_y}, {width}, {height}) screen=({x}, {y}, {width}, {height})",
+            throttle_key="capture_area",
+        )
+        screenshot_pil = pyautogui.screenshot(region=(x, y, width, height))
+        return cv2.cvtColor(np.array(screenshot_pil), cv2.COLOR_RGB2BGR)
+
+    def _resolve_signature_watch_area_rect(self, active_window, watch_area):
+        coords = watch_area.get("coords")
+        if coords:
+            try:
+                (x1, y1), (x2, y2) = coords
+                x_min, x_max = sorted((int(x1), int(x2)))
+                y_min, y_max = sorted((int(y1), int(y2)))
+                x_min = max(0, min(active_window.width - 1, x_min))
+                y_min = max(0, min(active_window.height - 1, y_min))
+                x_max = max(0, min(active_window.width, x_max))
+                y_max = max(0, min(active_window.height, y_max))
+                rect = (x_min, y_min, x_max - x_min, y_max - y_min)
+                self._signature_debug(f"using configured watch_area.coords={coords} resolved={rect}", throttle_key="coords")
+                return rect
+            except (TypeError, ValueError):
+                printr.print_warn(f"Invalid MiningManager signature_observer.watch_area.coords: {coords}")
+                return None
+
+        width = max(1, int(active_window.width * float(watch_area.get("width_ratio", 0.24))))
+        height = max(1, int(active_window.height * float(watch_area.get("height_ratio", 0.12))))
+        center_x = int(active_window.width * float(watch_area.get("center_x_ratio", 0.5)))
+        center_y = int(active_window.height * float(watch_area.get("center_y_ratio", 0.27)))
+        x = max(0, center_x - width // 2)
+        y = max(0, center_y - height // 2)
+        width = min(width, active_window.width - x)
+        height = min(height, active_window.height - y)
+        rect = (x, y, width, height)
+        self._signature_debug(f"using ratio watch area resolved={rect}", throttle_key="ratio_area")
+        return rect
+
+    def _read_signature_value(self, watch_image):
+        if watch_image is None:
+            return None, None
+
+        number_crop = self._find_signature_number_crop(watch_image)
+        if number_crop is None:
+            self._signature_debug("number crop not found", throttle_key="no_crop")
+            return None, None
+
+        signature_value = self._ocr_signature_number(number_crop)
+        if signature_value is None:
+            self._signature_debug("OCR returned no digits", throttle_key="ocr_no_digits")
+        return signature_value, number_crop
+
+    def _find_signature_number_crop(self, image):
+        icon_rect = self._find_signature_icon_rect_by_contrast(image)
+        if icon_rect:
+            self._signature_debug(f"contrast icon candidate found at {icon_rect}", throttle_key="icon_candidate")
+            number_crop = self._crop_signature_number_area(image, icon_rect)
+            if number_crop is not None:
+                return number_crop
+
+        self._signature_debug("falling back to likely-number crop search", throttle_key="number_fallback")
+        return self._crop_likely_signature_number_area(image)
+
+    def _find_signature_icon_rect_by_contrast(self, image):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+        _, bright_mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
+        contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        image_height, image_width = image.shape[:2]
+        candidates = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            area = cv2.contourArea(contour)
+            if area < 15 or w < 4 or h < 8:
+                continue
+            if x > image_width * 0.65:
+                continue
+            candidates.append((area * h, x, y, w, h))
+
+        if not candidates:
+            return None
+
+        _, x, y, w, h = max(candidates, key=lambda item: item[0])
+        if h < image_height * 0.12:
+            return None
+        return (x, y, w, h)
+
+    def _crop_likely_signature_number_area(self, image):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        _, bright_mask = cv2.threshold(gray, 95, 255, cv2.THRESH_BINARY)
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, np.ones((3, 2), np.uint8))
+        contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None
+
+        image_height, image_width = image.shape[:2]
+        candidates = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            if w < image_width * 0.12 or h < image_height * 0.12:
+                continue
+            if x < image_width * 0.15:
+                continue
+            if not self._has_left_signature_icon_blob(bright_mask, x, y, h):
+                continue
+            candidates.append((w * h, x, y, w, h))
+
+        if not candidates:
+            return None
+
+        _, x, y, w, h = max(candidates, key=lambda item: item[0])
+        crop_x1 = max(0, x - 4)
+        crop_y1 = max(0, y - 4)
+        crop_x2 = min(image_width, x + w + 8)
+        crop_y2 = min(image_height, y + h + 6)
+        return image[crop_y1:crop_y2, crop_x1:crop_x2]
+
+    def _has_left_signature_icon_blob(self, mask, number_x, number_y, number_height):
+        image_height, _ = mask.shape[:2]
+        left_x1 = max(0, number_x - int(number_height * 3.0))
+        left_x2 = max(0, number_x - 2)
+        left_y1 = max(0, number_y - int(number_height * 0.6))
+        left_y2 = min(image_height, number_y + int(number_height * 1.6))
+        if left_x2 <= left_x1 or left_y2 <= left_y1:
+            return False
+
+        icon_area = mask[left_y1:left_y2, left_x1:left_x2]
+        contours, _ = cv2.findContours(icon_area, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        return any(cv2.contourArea(contour) >= max(8, number_height * 0.5) for contour in contours)
+
+    def _crop_signature_number_area(self, image, icon_rect):
+        x, y, w, h = icon_rect
+        image_height, image_width = image.shape[:2]
+        start_x = min(image_width - 1, x + w + 4)
+        right_side = image[:, start_x:image_width]
+        if right_side.size == 0:
+            return None
+
+        gray = cv2.cvtColor(right_side, cv2.COLOR_BGR2GRAY)
+        _, bright_mask = cv2.threshold(gray, 95, 255, cv2.THRESH_BINARY)
+        bright_points = cv2.findNonZero(bright_mask)
+        if bright_points is None:
+            return None
+
+        rx, ry, rw, rh = cv2.boundingRect(bright_points)
+        crop_x1 = max(0, start_x + rx - 4)
+        crop_y1 = max(0, ry - 4)
+        crop_x2 = min(image_width, start_x + rx + rw + 8)
+        crop_y2 = min(image_height, ry + rh + 6)
+        if crop_x2 <= crop_x1 or crop_y2 <= crop_y1:
+            return None
+        return image[crop_y1:crop_y2, crop_x1:crop_x2]
+
+    def _ocr_signature_number(self, number_crop):
+        gray = cv2.cvtColor(number_crop, cv2.COLOR_BGR2GRAY)
+        scale = max(3, int(90 / max(1, gray.shape[0])))
+        resized = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        resized = cv2.GaussianBlur(resized, (3, 3), 0)
+        _, binary = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        binary = cv2.bitwise_not(binary)
+
+        text = pytesseract.image_to_string(
+            binary,
+            config="--psm 7 -c tessedit_char_whitelist=0123456789,",
+        )
+        digits = re.sub(r"\D", "", text or "")
+        if not digits:
+            return None
+        try:
+            return int(digits)
+        except ValueError:
+            return None
+
+    def _handle_observed_signature(self, signature_value, number_crop):
+        stable_reads = int(self.signature_observer_config.get("stable_reads", 2))
+        if signature_value == self.signature_candidate_value:
+            self.signature_candidate_reads += 1
+        else:
+            self.signature_candidate_value = signature_value
+            self.signature_candidate_reads = 1
+
+        if self.signature_candidate_reads < max(1, stable_reads):
+            return
+
+        now = time.time()
+        display_cooldown = float(self.signature_observer_config.get("display_cooldown_seconds", 3.0))
+        if signature_value == self.last_signature_value and now - self.last_signature_display_time < display_cooldown:
+            return
+
+        self.last_signature_value = signature_value
+        self.last_signature_display_time = now
+
+        if self.signature_observer_config.get("save_number_crops", True):
+            self._save_signature_number_crop(signature_value, number_crop)
+
+        self._display_signature_overlay_text(self._build_signature_overlay_text(signature_value))
+
+    def _display_signature_overlay_text(self, text):
+        display_duration = int(self.signature_observer_config.get("display_duration_ms", 2500))
+        try:
+            active_window = pygetwindow.getActiveWindow()
+            if not active_window:
+                raise ValueError("No active window available.")
+
+            watch_area = self.signature_observer_config.get("watch_area", {})
+            relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
+            if not relative_rect:
+                raise ValueError("No watch area available.")
+
+            rel_x, rel_y, width, _ = relative_rect
+            offset = int(self.signature_observer_config.get("overlay_offset_pixels", 8))
+            x_center = active_window.left + rel_x + width // 2
+            y_bottom = max(active_window.top, active_window.top + rel_y - offset)
+            self.overlay.display_overlay_text_at(
+                text,
+                x_center=x_center,
+                y_bottom=y_bottom,
+                display_duration=display_duration,
+            )
+        except Exception as e:
+            self._signature_debug(f"falling back to centered overlay: {e}")
+            self.overlay.display_overlay_text(
+                text,
+                vertical_position_ratio=4,
+                display_duration=display_duration,
+            )
+
+    def _save_signature_number_crop(self, signature_value, number_crop):
+        if number_crop is None:
+            return
+        path = os.path.join(self.mining_data_path, "screenshots", "signatures")
+        os.makedirs(path, exist_ok=True)
+        if self.signature_observer_config.get("overwrite_number_crop", True):
+            filename = os.path.join(path, "latest_signature_number.png")
+        else:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            filename = os.path.join(path, f"signature_{signature_value}_{timestamp}.png")
+        cv2.imwrite(filename, number_crop)
+
+    def _build_signature_overlay_text(self, signature_value):
+        reference_entries = self.load_signature_reference()
+        exact_matches = self.find_signature_matches(signature_value, reference_entries)
+        if exact_matches:
+            preferred_match = exact_matches[0]
+            return f"{preferred_match['count']} x {preferred_match['resource']}"
+        return "unknown"
 

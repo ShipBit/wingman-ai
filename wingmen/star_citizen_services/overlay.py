@@ -134,6 +134,54 @@ class StarCitizenOverlay:
 
         WingmanUI.enqueue_tkinter_command(create_overlay)
 
+    def display_overlay_text_at(self, text, x_center, y_bottom, display_duration=15000):
+        """
+            Displays text with its horizontal center at x_center and its bottom edge at y_bottom.
+        """
+        self.new_text = True
+
+        def create_overlay():
+            if self.overlay_shown:
+                close_overlay(self.overlay_root)
+
+            print_debug(f"showing overlay {time.time()}")
+
+            self.overlay_shown = True
+            root = WingmanUI.get_instance()
+            overlay_root = Toplevel(root)
+            overlay_root.overrideredirect(True)
+            overlay_root.attributes('-topmost', True)
+
+            transparent_color = "gray"
+            overlay_root.attributes("-transparentcolor", transparent_color)
+
+            text_image = self.create_glow_text_image(text=text, transparent_color=transparent_color)
+            photo = ImageTk.PhotoImage(text_image)
+
+            overlay_root.image = photo
+
+            overlay_label = Label(overlay_root, image=photo, bg=transparent_color)
+            overlay_label.pack()
+
+            overlay_root.update()
+
+            window_width = overlay_root.winfo_width()
+            window_height = overlay_root.winfo_height()
+            x_position = int(x_center - window_width // 2)
+            y_position = int(y_bottom - window_height)
+
+            overlay_root.geometry(f"+{x_position}+{y_position}")
+            overlay_root.after(display_duration, lambda: close_overlay(overlay_root))
+
+            self.overlay_root = overlay_root
+
+        def close_overlay(overlay_window):
+            print_debug(f"closing overlay {time.time()}")
+            overlay_window.destroy()
+            self.overlay_shown = False
+
+        WingmanUI.enqueue_tkinter_command(create_overlay)
+
     def get_primary_monitor_resolution(self):
         monitors = get_monitors()
         if monitors:

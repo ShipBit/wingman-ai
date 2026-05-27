@@ -291,7 +291,31 @@ wingmen:
     record_key: x1  # mouse button
     features: # all features that Cora has. You can activated or deactivate features here.
       ComponentManager: True # True | False - provides basic information about ship components
-      MiningManager: False # True | False - will activate the integration to Regolith to manage your refinery orders from ingame. Requires a Regolith account and the Regolith API key
+      MiningManager:
+        enabled: False # True | False - captures refinery work orders locally and looks up mining radar signatures.
+        signature_observer:
+          enabled: True # Starts local OCR observation while the MiningManager is active.
+          debug_mode: False
+          debug_log_interval_seconds: 2.0
+          interval_seconds: 0.25
+          activation_duration_seconds: 120
+          stable_reads: 1
+          display_duration_ms: 2500
+          display_cooldown_seconds: 3.0
+          overlay_offset_pixels: 8
+          save_number_crops: False
+          overwrite_number_crop: True
+          watch_area:
+            # Optional absolute pixel coordinates relative to the Star Citizen window screenshot.
+            # Measure them in a full-size screenshot: [810, 280] means x=810 pixels from the left edge
+            # and y=280 pixels from the top edge of the Star Citizen window/screenshot.
+            # The two points are the top-left and bottom-right corners of the area to analyze.
+            # If set, these override the ratio settings below.
+            # coords: [[810, 280], [1110, 390]]
+            center_x_ratio: 0.5
+            center_y_ratio: 0.27
+            width_ratio: 0.24
+            height_ratio: 0.12
       TddManager: False # True | False - will activate the integration to UEX to be able to ask for trade routes and prices. Requires a UEX account and the UEX API key
       UexDataRunnerManager: False # True | False - will activate the UEX data runner capabilities. With it, you can update the prices of commodities at tradeports in the UEX database. Requires a UEX account with the UEX API key and the UEX user secret.
       DeliveryMissionManager: False # True | False - will activated the delivery mission manager. With it, you are able to make Cora manage your ingame delivery missions 
