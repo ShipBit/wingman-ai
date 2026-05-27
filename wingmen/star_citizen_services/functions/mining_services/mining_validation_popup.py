@@ -428,7 +428,7 @@ class MiningValidationPopup(tk.Toplevel):
             bg=self.theme["bg"],
             activebackground=self.theme["bg"],
         )
-        send_icon = self.button_icon_images.get("sent_to_regolith")
+        send_icon = self.button_icon_images.get("confirm")
         abort_icon = self.button_icon_images.get("abort")
         self._confirm_icon_loaded = bool(send_icon)
         self._abort_icon_loaded = bool(abort_icon)
@@ -797,9 +797,9 @@ class MiningValidationPopup(tk.Toplevel):
                 "inst_zero": "Regel 2: 'inst' ist 0. Fallback beim Senden: 1.0.",
                 "res_zero": "Regel 2: 'res' ist 0. Fallback beim Senden: 0.01.",
                 "zero_or_eight": "Regel 3: Mögliche OCR-Vertauschung (Ziffer 0/8) gefunden in: {fields}.",
-                "rocktype_unmapped": "Regel 4: Rock Type ist nicht erkannt oder nicht auf Regolith mapbar: '{value}'.",
+                "rocktype_unmapped": "Regel 4: Rock Type ist nicht erkannt oder nicht mapbar: '{value}'.",
                 "rocktype_missing_map": "Regel 4: Rock-Type-Mappingdaten fehlen.",
-                "ore_unmapped": "Regel 5: Inhaltsstoffe nicht mapbar mit Regolith: {ores}.",
+                "ore_unmapped": "Regel 5: Inhaltsstoffe nicht mapbar: {ores}.",
                 "ore_missing_map": "Regel 5: Ore-Mappingdaten fehlen.",
                 "inert_missing": "Regel 1: INERT MATERIAL fehlt in der Zusammensetzung.",
             },
@@ -810,9 +810,9 @@ class MiningValidationPopup(tk.Toplevel):
                 "inst_zero": "Rule 2: 'inst' is 0. Send fallback: 1.0.",
                 "res_zero": "Rule 2: 'res' is 0. Send fallback: 0.01.",
                 "zero_or_eight": "Rule 3: Possible OCR digit swap (0/8) found in: {fields}.",
-                "rocktype_unmapped": "Rule 4: Rock type is missing or cannot be mapped to Regolith: '{value}'.",
+                "rocktype_unmapped": "Rule 4: Rock type is missing or cannot be mapped: '{value}'.",
                 "rocktype_missing_map": "Rule 4: Rock type mapping data is missing.",
-                "ore_unmapped": "Rule 5: Ores cannot be mapped to Regolith: {ores}.",
+                "ore_unmapped": "Rule 5: Ores cannot be mapped: {ores}.",
                 "ore_missing_map": "Rule 5: Ore mapping data is missing.",
                 "inert_missing": "Rule 1: INERT MATERIAL is missing from composition.",
             },
@@ -1374,7 +1374,7 @@ class MiningValidationPopup(tk.Toplevel):
 
     def _load_ui_icons(self):
         self.button_icon_images = {
-            "sent_to_regolith": self._load_icon_asset("sent_to_regolith.png"),
+            "confirm": self._load_icon_asset("check.png"),
             "abort": self._load_icon_asset("abort.png"),
         }
         self.icon_images.update(self.button_icon_images)

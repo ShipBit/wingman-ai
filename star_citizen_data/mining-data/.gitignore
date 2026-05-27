@@ -2,5 +2,5 @@
 *.jpg
 *.png
 !template_*.png
+!signature_reference.json
 !examples/response_structure_refinery.json*
-!examples/response_structure_rock_scan.json*

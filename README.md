@@ -56,9 +56,10 @@ Cora uses modular "Manager" components. Each manager can be enabled/disabled via
 
 #### Mining Manager
 
-- Creates/manages mining and salvage sessions
-- Captures refinery work orders from in-game UI and syncs with Regolith
-- Stores rock scan and cluster information for later lookup
+- Captures refinery work orders from in-game UI
+- Stores active refinery work orders locally
+- Retrieves or removes locally stored active refinery work orders
+- Looks up likely mining resources by radar signature value
 
 #### Trading Division Manager (TDD)
 
@@ -178,7 +179,6 @@ This project also relies on community data providers:
 
 - United Express Corporation API: https://uexcorp.space/
 - Star Citizen Wiki API: https://star-citizen.wiki/
-- Regolith: https://regolith.rocks/
 
 ## Open Source Acknowledgements
 

@@ -193,6 +193,7 @@ class OpenAiWingman(Wingman):
         )
         self._active_debug_trace_id = None
         self._active_debug_step = 0
+        self._pending_tool_payloads_for_summary = []
 
         if self.debug or DEBUG:
             _ensure_debug_log()
@@ -1148,6 +1149,7 @@ class OpenAiWingman(Wingman):
         """Processes all the tool calls identified in the response message."""
 
         instant_response = None
+        self._pending_tool_payloads_for_summary = []
         # function_response = "" # Variable not used in original return
 
         cached_function_calls = []
@@ -1187,6 +1189,7 @@ class OpenAiWingman(Wingman):
                 )
 
                 caching_key_function_objects.append((function_name, call_cache_key, function_response))
+                self._pending_tool_payloads_for_summary.append(function_response)
 
                 if instant_response_iter:
                     instant_response = instant_response_iter
@@ -1378,7 +1381,12 @@ class OpenAiWingman(Wingman):
                 latest_user_message = (self._get_message_content(message) or "").strip()
                 break
 
-        tool_payloads = self._get_trailing_tool_payloads()
+        pending_tool_payloads = getattr(self, "_pending_tool_payloads_for_summary", [])
+        if pending_tool_payloads:
+            tool_payloads = pending_tool_payloads
+            self._pending_tool_payloads_for_summary = []
+        else:
+            tool_payloads = self._get_trailing_tool_payloads()
         prepared_payloads = self._prepare_tool_payloads_for_summary(tool_payloads)
         serialized_payloads = ""
         try:
