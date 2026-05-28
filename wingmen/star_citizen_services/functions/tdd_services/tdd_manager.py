@@ -23,7 +23,7 @@ def print_debug(to_print):
 
 
 class TddManager(FunctionManager):
-    MANAGER_CONTEXT = AIContext.TDD
+    MANAGER_CONTEXT = AIContext.CORA
     MANAGER_DESCRIPTION = "Provides trading information about commodities and trade routes."
     MANAGER_CAPABILITIES = [
         "Find the best trade route from/between locations",
@@ -39,7 +39,7 @@ class TddManager(FunctionManager):
 
     # @abstractmethod
     def get_context_mapping(self) -> AIContext:
-        return AIContext.TDD
+        return self.MANAGER_CONTEXT
     
     # @abstractmethod
     def register_functions(self, function_register):
