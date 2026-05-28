@@ -607,6 +607,12 @@ class MiningManager(FunctionManager):
                     watch_image = self._capture_signature_watch_area()
                     signature_value, number_crop = self._read_signature_value(watch_image)
                     if signature_value is not None:
+                        if not self._is_signature_analysis_active():
+                            self._signature_debug(
+                                "discarding OCR result because analysis window expired",
+                                throttle_key="expired_result",
+                            )
+                            continue
                         self._signature_debug(f"OCR read signature value {signature_value}")
                         self._handle_observed_signature(signature_value, number_crop)
                     else:
@@ -643,6 +649,12 @@ class MiningManager(FunctionManager):
         if not active:
             self._signature_debug("analysis inactive: waiting for Tab ping", throttle_key="waiting_for_tab")
         return active
+
+    def _is_signature_analysis_active(self):
+        if not self._is_star_citizen_window_active():
+            return False
+        with self.signature_observer_lock:
+            return time.time() < self.signature_observer_active_until
 
     def _signature_debug(self, message, throttle_key=None, interval_seconds=None):
         if not self.signature_observer_config.get("debug_mode", False):
@@ -863,6 +875,13 @@ class MiningManager(FunctionManager):
             return None
 
     def _handle_observed_signature(self, signature_value, number_crop):
+        if not self._is_signature_analysis_active():
+            self._signature_debug(
+                "skipping signature overlay because analysis is inactive",
+                throttle_key="inactive_overlay",
+            )
+            return
+
         stable_reads = int(self.signature_observer_config.get("stable_reads", 2))
         if signature_value == self.signature_candidate_value:
             self.signature_candidate_reads += 1
@@ -883,6 +902,13 @@ class MiningManager(FunctionManager):
 
         if self.signature_observer_config.get("save_number_crops", True):
             self._save_signature_number_crop(signature_value, number_crop)
+
+        if not self._is_signature_analysis_active():
+            self._signature_debug(
+                "skipping signature overlay because analysis expired before display",
+                throttle_key="expired_before_display",
+            )
+            return
 
         self._display_signature_overlay_text(self._build_signature_overlay_text(signature_value))
 
