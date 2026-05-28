@@ -1,5 +1,4 @@
-import json
-import random
+﻿import json
 
 from services.printr import Printr
 
@@ -7,9 +6,6 @@ from wingmen.star_citizen_services.overlay import StarCitizenOverlay
 from wingmen.star_citizen_services.functions.uex_v2.uex_api_module import UEXApi2
 from wingmen.star_citizen_services.function_manager import FunctionManager
 from wingmen.star_citizen_services.ai_context_enum import AIContext
-
-from wingmen.star_citizen_services.helper import transform_numbers_in_words
-
 
 DEBUG = False
 # TEST = True
@@ -35,7 +31,6 @@ class TddManager(FunctionManager):
         self.config = config  # the wingmen config
         self.uex_service: UEXApi2 = UEXApi2()
         self.overlay: StarCitizenOverlay = StarCitizenOverlay()
-        self.tdd_voice = self.config["openai"]["contexts"]["tdd_voice"]
 
     # @abstractmethod
     def get_context_mapping(self) -> AIContext:
@@ -43,8 +38,10 @@ class TddManager(FunctionManager):
     
     # @abstractmethod
     def register_functions(self, function_register):
-        function_register[self.get_trade_information_from_tdd_employee.__name__] = self.get_trade_information_from_tdd_employee
-        function_register[self.switch_tdd_employee.__name__] = self.switch_tdd_employee
+        function_register[self.get_commodity_price.__name__] = self.get_commodity_price
+        function_register[self.find_commodity_trade_locations.__name__] = self.find_commodity_trade_locations
+        function_register[self.find_trade_routes.__name__] = self.find_trade_routes
+        function_register[self.get_trade_information.__name__] = self.get_trade_information
         
     # @abstractmethod
     def get_function_tools(self):
@@ -56,57 +53,94 @@ class TddManager(FunctionManager):
 
         # combined_locations_names = planet_names + satellite_names + cities_names + tradeport_names
 
-        # commands = all defined keybinding label names
         tools = [
             {
                 "type": "function",
-                "function": 
-                {
-                    "name": self.get_trade_information_from_tdd_employee.__name__,
+                "function": {
+                    "name": self.get_commodity_price.__name__,
                     "description": (
-                        "When asked for trading information,  "
-                        "select the appropriate parameters to met the players request and make sure to follow the given instructions: "
-                        "All locations can be planets, moons / satellites or a specific tradeport or even a terminal. "
-                        "The player can ask for a specific location or a general area. "
-                        "When he asks where he can sell something, use the location_name_end_or_sell parameter. "
-                        "When he asks where he can buy something, use the location_name_start_or_buy parameter. "
-                        "For any of the parameters, make sure to only use one of the allowed values. If there is none that matches, ask for clarification. "
+                        "Use for commodity price questions only. "
+                        "'What does X cost?' means buy_average. "
+                        "'How much do I get for X?' means sell_average. "
+                        "Do not use for where-to-buy, where-to-sell, or route questions."
                     ),
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "location_name_start_or_buy": {
-                                "type": "string",
-                                "description": "The location area, where the player wants buy a commodity or start a trade route from. Can be the name of a planet, a moon / satellite, system or a specific tradeport / terminal. Can be empty.",
-                                # "enum": combined_locations_names
-                            },
-                            "location_name_end_or_sell": {
-                                "type": "string",
-                                "description": "The location area, where the player wants to sell a commodity or end a trade route. Can be the name of a planet, a moon / satellite, system or a specific tradeport / terminal. Can be empty.",
-                                # "enum": combined_locations_names
-                            },
                             "commodity_name": {
                                 "type": "string",
-                                "description": "One of the known commodities that the user wants to sell or buy. Can be empty.",
-                                # "enum": commodity_names
+                                "description": "Commodity name or fragment exactly as the player said it. Do not replace unclear names with another known commodity."
                             },
-                            "include_illegal_commodities": {
-                                "type": "boolean",
-                                "description": "Indicates if illegal or restricted commodities should be searched as well. Only True, if the user explicitely requests it."
+                            "price_type": {
+                                "type": "string",
+                                "description": "Requested price direction.",
+                                "enum": ["buy_average", "sell_average"]
+                            },
+                            "location_name": {
+                                "type": "string",
+                                "description": "Optional planet, moon, system, city, station, outpost, tradeport, or terminal."
                             }
-                        }
+                        },
+                        "required": ["commodity_name", "price_type"]
                     }
                 }
             },
             {
                 "type": "function",
-                "function": 
-                {
-                    "name": self.switch_tdd_employee.__name__,
-                    "description": "Whenever the player adresses a new Trading Division Departement, make this function call.",
+                "function": {
+                    "name": self.find_commodity_trade_locations.__name__,
+                    "description": (
+                        "Use for questions asking where a commodity can be bought or sold. "
+                        "Do not use for average price or route questions."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "commodity_name": {
+                                "type": "string",
+                                "description": "Commodity name or fragment exactly as the player said it. Do not replace unclear names with another known commodity."
+                            },
+                            "operation": {
+                                "type": "string",
+                                "description": "buy for where-can-I-buy, sell for where-can-I-sell.",
+                                "enum": ["buy", "sell"]
+                            },
+                            "location_name": {
+                                "type": "string",
+                                "description": "Optional planet, moon, system, city, station, outpost, tradeport, or terminal restriction."
+                            }
+                        },
+                        "required": ["commodity_name", "operation"]
+                    }
                 }
-            }
-
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": self.find_trade_routes.__name__,
+                    "description": (
+                        "Use for trade route questions, profit route questions, or 'how can I trade X'. "
+                        "Do not use for plain price questions."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "commodity_name": {
+                                "type": "string",
+                                "description": "Optional commodity name or fragment exactly as the player said it for commodity-specific routes."
+                            },
+                            "location_name_from": {
+                                "type": "string",
+                                "description": "Optional route start location."
+                            },
+                            "location_name_to": {
+                                "type": "string",
+                                "description": "Optional route target location."
+                            }
+                        }
+                    }
+                }
+            },
         ]
 
         # print_debug(f"tools definition: {json.dumps(tools, indent=2)}")
@@ -124,96 +158,338 @@ class TddManager(FunctionManager):
                 # "For any of the parameters, make sure to only use one of the allowed values. If there is none that matches, ask for clarification. "
         )
 
-    def get_trade_information_from_tdd_employee(self, function_args):
-        print_debug(f"trade request: {function_args}")
-        printr.print(f'Executing function call {self.get_trade_information_from_tdd_employee.__name__} with args {function_args}', tags="info")
-        
-        # Extract parameters
-        location_from = function_args.get("location_name_start_or_buy")
-        location_to = function_args.get("location_name_end_or_sell")
-        commodity_name = function_args.get("commodity_name")
-        not_found_message = ""
-        
-        # Determine which function to call based on provided parameters.
-        if location_from and not location_to and not commodity_name:
-            # Only location_from is provided -> find best trade route starting at location
-            function_response = self.uex_service.find_best_trade_from_location_code(location_name_from=location_from)
-            not_found_message = f"No trade found @'{location_from}'->."
-        elif location_from and location_to:
-            # Both locations provided -> find best trade route between locations
-            function_response = self.uex_service.find_best_trade_between_locations_code(
-                location_name_from=location_from,
-                location_name_to=location_to)
-            not_found_message = f"No trade found @'{location_from}'->{location_to}."
-        elif commodity_name and location_to and not location_from:
-            # Commodity and destination provided -> find tradeports at given location for commodity
-            function_response = self.uex_service.find_best_sell_price_at_location_codes(location_name=location_to, commodity_name=commodity_name)
-            not_found_message = f"No trade found @'{location_to}' for {commodity_name}."
-        elif commodity_name and not location_from and not location_to:
-            function_response = self.uex_service.find_best_selling_location_for_commodity_code(commodity_name=commodity_name)
-            not_found_message = f"No trade found for {commodity_name}."
-        elif location_to and not location_from and not commodity_name:
-            # Only location_to provided -> find best trade routes around the location
-            function_response = self.uex_service.find_best_trade_between_locations_code(location_name_from=location_to, location_name_to=location_to)
-            not_found_message = f"No trade for destination '{location_to}'."
-        elif location_from and commodity_name and not location_to:
-            # Commodity and origin provided -> find tradeports at given location for commodity
-            function_response = self.uex_service.find_best_buy_price_at_location_codes(location_name=location_from, commodity_name=commodity_name)
-            not_found_message = f"No trade found @'{location_from}' for {commodity_name}."
-        else:
-            # In case the provided parameters are insufficient or ambiguous, ask the player for clarification.
-            return {"success": False, "instructions": "Could not identify the trade request. Please provide more details.", "do_not_cache": True}
-        
-        # Process response
-        success = function_response.get("success", False)
-        if success and function_response.get("trade_routes"):
-            function_response["do_not_cache"] = True
-            
-            trade_route = function_response["trade_routes"][0]
-            # Safely retrieve keys with fallback values
-            moon_or_planet_buy = trade_route.get("buy_moon", "") or trade_route.get("buy_orbit", "")
-            moon_or_planet_sell = trade_route.get("sell_moon", "") or trade_route.get("sell_orbit", "")
-            is_sell_only = bool(trade_route.get("sell_at_tradeport_name")) and not trade_route.get("buy_at_tradeport_name")
-            is_buy_only = bool(trade_route.get("buy_at_tradeport_name")) and not trade_route.get("sell_at_tradeport_name")
+    @staticmethod
+    def _optional_arg(function_args, key):
+        value = function_args.get(key)
+        if isinstance(value, str):
+            value = value.strip()
+        return value or None
 
-            if commodity_name and is_sell_only:
-                self.overlay.display_overlay_text(
-                    f'Sell {trade_route.get("commodity", commodity_name)} at {trade_route.get("sell_at_tradeport_name", "")} ({moon_or_planet_sell}) for {trade_route.get("sell_price", "")} aUEC.'
-                )
-                print_debug(f'Sell {trade_route.get("commodity", commodity_name)} at {trade_route.get("sell_at_tradeport_name", "")} ({moon_or_planet_sell}) for {trade_route.get("sell_price", "")} aUEC.')
-            elif commodity_name and is_buy_only:
-                self.overlay.display_overlay_text(
-                    f'Buy {trade_route.get("commodity", commodity_name)} at {trade_route.get("buy_at_tradeport_name", "")} ({moon_or_planet_buy}) for {trade_route.get("buy_price", "")} aUEC.'
-                )
-                print_debug(f'Buy {trade_route.get("commodity", commodity_name)} at {trade_route.get("buy_at_tradeport_name", "")} ({moon_or_planet_buy}) for {trade_route.get("buy_price", "")} aUEC.')
-            else:
-                self.overlay.display_overlay_text(
-                    f'Buy {trade_route.get("commodity", "")} at {trade_route.get("buy_at_tradeport_name", "")} ({moon_or_planet_buy}). '
-                    f'Sell at {trade_route.get("sell_at_tradeport_name", "")} ({moon_or_planet_sell}). Profit: {trade_route.get("profit", "")} aUEC.'
-                )
-                print_debug(f'Buy {trade_route.get("commodity", "")} at {trade_route.get("buy_at_tradeport_name", "")} ({moon_or_planet_buy}). '
-                            f'Sell at {trade_route.get("sell_at_tradeport_name", "")} ({moon_or_planet_sell}).')
-        else:
-            # If not successful, display the error message if available.
-            message = function_response.get("message", not_found_message)
+    @staticmethod
+    def _first_route(function_response):
+        routes = function_response.get("trade_routes") or []
+        if routes:
+            return routes[0]
+
+        community_routes = function_response.get("uex_community_trade_routes") or []
+        if community_routes:
+            return community_routes[0]
+
+        return None
+
+    @staticmethod
+    def _route_commodity(route):
+        return route.get("commodity") or route.get("commodity_name", "")
+
+    @staticmethod
+    def _route_origin_name(route):
+        return route.get("buy_at_tradeport_name") or route.get("origin_terminal_name", "")
+
+    @staticmethod
+    def _route_destination_name(route):
+        return route.get("sell_at_tradeport_name") or route.get("destination_terminal_name", "")
+
+    @staticmethod
+    def _route_origin_area(route):
+        return (
+            route.get("buy_moon")
+            or route.get("buy_orbit")
+            or route.get("buy_system")
+            or route.get("origin_orbit_name")
+            or route.get("origin_planet_name")
+            or route.get("origin_star_system_name")
+            or ""
+        )
+
+    @staticmethod
+    def _route_destination_area(route):
+        return (
+            route.get("sell_moon")
+            or route.get("sell_orbit")
+            or route.get("sell_system")
+            or route.get("destination_orbit_name")
+            or route.get("destination_planet_name")
+            or route.get("destination_star_system_name")
+            or ""
+        )
+
+    @staticmethod
+    def _route_buy_price(route):
+        return route.get("buy_price") or route.get("price_origin", "")
+
+    @staticmethod
+    def _route_sell_price(route):
+        return route.get("sell_price") or route.get("price_destination", "")
+
+    def _finish_tdd_response(self, function_response, fallback_message=None):
+        function_response["do_not_cache"] = True
+        if not function_response.get("success", False):
+            message = function_response.get("message", fallback_message or "No trade information found.")
             self.overlay.display_overlay_text(message)
             print_debug(message)
-            
+
         printr.print(f'-> Resultat: {json.dumps(function_response, indent=2)}', tags="info")
-        transform_numbers_in_words.transform_numbers(function_response)
         return function_response
 
-    def switch_tdd_employee(self, function_args):
-        tdd_voices = set(self.config["openai"]["contexts"]["tdd_voices"].split(","))
-        tdd_voices.remove(self.tdd_voice)
-        self.tdd_voice = random.choice(list(tdd_voices))
-        self.config["openai"]["contexts"]["tdd_voice"] = self.tdd_voice
-        self.config["openai"]["tts_voice"] = self.tdd_voice
-        printr.print("TDD Department changed", tags="info")
-        return json.dumps(
-            {"success": True, 
-                "instructions": (
-                    f"You are now a new Trade and Developmenent Employee. Please briefly introduce yourself giving you a first name in the star citizen universe. Your gender should match the voice you are using: {self.tdd_voice}. "
-                    "Tell the player your position within the requested TDD-Departement and ask him how you can help. Example: 'Hello, my name is Lilia from the Hurston Trading Devision. I'm your trade operator, how can I help you?'"
-                )
-            }), None
+    def _add_price_summary(self, function_response, location_name=None):
+        if not function_response.get("success"):
+            return
+
+        operation = function_response.get("operation")
+        commodity = function_response.get("commodity")
+        average_price = function_response.get("average_price")
+        price_label = "buying" if operation == "buy" else "selling"
+        location_suffix = f" at {location_name}" if location_name else ""
+
+        function_response["summary_payload"] = {
+            "result_type": "commodity_price",
+            "commodity": commodity,
+            "price_type": f"{operation}_average",
+            "location": location_name,
+            "average_price": average_price,
+            "currency": "alpha you ee see",
+            "minimum_price": function_response.get("minimum_price"),
+            "maximum_price": function_response.get("maximum_price"),
+            "price_count": function_response.get("price_count"),
+            "spoken_instruction": (
+                f"Answer with the average {price_label} price only. "
+                "Name the currency as alpha you ee see. "
+                "Write out all numbers in words and do not use decimal places. "
+                "Do not mention routes or alternatives."
+            )
+        }
+        self.overlay.display_overlay_text(
+            f'{commodity}: average {price_label} price{location_suffix}: {average_price} aUEC.'
+        )
+
+    def _add_location_summary(self, function_response, operation, location_name=None):
+        function_response.pop("uex_community_trade_routes", None)
+        if not function_response.get("success"):
+            return
+
+        route = self._first_route(function_response)
+        if not route:
+            return
+
+        commodity = self._route_commodity(route)
+        if operation == "sell":
+            terminal = route.get("sell_at_tradeport_name", "")
+            area = self._route_destination_area(route)
+            price = route.get("sell_price", "")
+            action = "Sell"
+            price_key = "sell_price"
+        else:
+            terminal = route.get("buy_at_tradeport_name", "")
+            area = self._route_origin_area(route)
+            price = route.get("buy_price", "")
+            action = "Buy"
+            price_key = "buy_price"
+
+        function_response["result_type"] = "commodity_locations"
+        function_response["operation"] = operation
+        function_response["result_interpretation_instructions"] = (
+            "Answer only where the commodity can be bought or sold. "
+            "Mention the best option first. Do not describe trade routes."
+        )
+        function_response["summary_payload"] = {
+            "result_type": "commodity_locations",
+            "operation": operation,
+            "commodity": commodity,
+            "location_filter": location_name,
+            "best_result": {
+                "terminal": terminal,
+                "area": area,
+                "currency": "alpha you ee see",
+                price_key: price
+            },
+            "number_of_alternatives": function_response.get("number_of_alternatives", 1),
+            "spoken_instruction": (
+                "Keep the answer to one short sentence. "
+                "Name the currency as alpha you ee see. "
+                "Write out all numbers in words."
+            )
+        }
+        self.overlay.display_overlay_text(f'{action} {commodity} at {terminal} ({area}) for {price} aUEC.')
+
+    def _add_route_summary(self, function_response):
+        if not function_response.get("success"):
+            return
+
+        route = self._first_route(function_response)
+        if not route:
+            return
+
+        function_response["summary_payload"] = {
+            "result_type": "trade_route",
+            "commodity": self._route_commodity(route),
+            "buy": {
+                "terminal": self._route_origin_name(route),
+                "area": self._route_origin_area(route),
+                "price": self._route_buy_price(route),
+                "currency": "alpha you ee see"
+            },
+            "sell": {
+                "terminal": self._route_destination_name(route),
+                "area": self._route_destination_area(route),
+                "price": self._route_sell_price(route),
+                "currency": "alpha you ee see"
+            },
+            "profit": route.get("profit", ""),
+            "profit_currency": "alpha you ee see",
+            "number_of_alternatives": function_response.get("number_of_alternatives", 1),
+            "spoken_instruction": (
+                "Describe the best route only. Mention alternatives only as a count. "
+                "Name the currency as alpha you ee see. "
+                "Write out all numbers in words. "
+                "Keep the answer concise."
+            )
+        }
+        self.overlay.display_overlay_text(
+            f'Buy {self._route_commodity(route)} at {self._route_origin_name(route)} '
+            f'({self._route_origin_area(route)}). Sell at {self._route_destination_name(route)} '
+            f'({self._route_destination_area(route)}). Profit: {route.get("profit", "")} aUEC.'
+        )
+
+    def get_commodity_price(self, function_args):
+        print_debug(f"commodity price request: {function_args}")
+        printr.print(
+            f'Executing function call {self.get_commodity_price.__name__} with args {function_args}',
+            tags="info"
+        )
+
+        commodity_name = self._optional_arg(function_args, "commodity_name")
+        price_type = self._optional_arg(function_args, "price_type")
+        location_name = self._optional_arg(function_args, "location_name")
+
+        if not commodity_name or price_type not in {"buy_average", "sell_average"}:
+            return {
+                "success": False,
+                "message": "Could not identify the requested commodity price.",
+                "do_not_cache": True
+            }
+
+        function_response = self.uex_service.find_commodity_price_information_code(
+            commodity_name=commodity_name,
+            price_type=price_type,
+            location_name=location_name
+        )
+        self._add_price_summary(function_response, location_name)
+        return self._finish_tdd_response(function_response, f"No price found for {commodity_name}.")
+
+    def find_commodity_trade_locations(self, function_args):
+        print_debug(f"commodity location request: {function_args}")
+        printr.print(
+            f'Executing function call {self.find_commodity_trade_locations.__name__} with args {function_args}',
+            tags="info"
+        )
+
+        commodity_name = self._optional_arg(function_args, "commodity_name")
+        operation = self._optional_arg(function_args, "operation") or "sell"
+        location_name = self._optional_arg(function_args, "location_name")
+
+        if not commodity_name or operation not in {"buy", "sell"}:
+            return {
+                "success": False,
+                "message": "Could not identify the requested trade location.",
+                "do_not_cache": True
+            }
+
+        if operation == "sell" and location_name:
+            function_response = self.uex_service.find_best_sell_price_at_location_codes(
+                commodity_name=commodity_name,
+                location_name=location_name
+            )
+        elif operation == "sell":
+            function_response = self.uex_service.find_best_selling_location_for_commodity_code(
+                commodity_name=commodity_name
+            )
+        elif location_name:
+            function_response = self.uex_service.find_best_buy_price_at_location_codes(
+                commodity_name=commodity_name,
+                location_name=location_name
+            )
+        else:
+            function_response = self.uex_service.find_best_buying_location_for_commodity_code(
+                commodity_name=commodity_name
+            )
+
+        self._add_location_summary(function_response, operation, location_name)
+        return self._finish_tdd_response(function_response, f"No {operation} location found for {commodity_name}.")
+
+    def find_trade_routes(self, function_args):
+        print_debug(f"trade route request: {function_args}")
+        printr.print(
+            f'Executing function call {self.find_trade_routes.__name__} with args {function_args}',
+            tags="info"
+        )
+
+        commodity_name = self._optional_arg(function_args, "commodity_name")
+        location_from = self._optional_arg(function_args, "location_name_from")
+        location_to = self._optional_arg(function_args, "location_name_to")
+
+        if commodity_name:
+            function_response = self.uex_service.find_best_trade_for_commodity_at_location_codes(
+                commodity_name=commodity_name,
+                location_name_from=location_from,
+                location_name_to=location_to
+            )
+            fallback_message = f"No trade route found for {commodity_name}."
+        elif location_from and location_to:
+            function_response = self.uex_service.find_best_trade_between_locations_code(
+                location_name_from=location_from,
+                location_name_to=location_to
+            )
+            fallback_message = f"No trade route found from {location_from} to {location_to}."
+        elif location_from:
+            function_response = self.uex_service.find_best_trade_from_location_code(
+                location_name_from=location_from
+            )
+            fallback_message = f"No trade route found from {location_from}."
+        elif location_to:
+            function_response = self.uex_service.find_best_trade_between_locations_code(
+                location_name_from=location_to,
+                location_name_to=location_to
+            )
+            fallback_message = f"No trade route found around {location_to}."
+        else:
+            return {
+                "success": False,
+                "message": "Could not identify the trade route request.",
+                "do_not_cache": True
+            }
+
+        self._add_route_summary(function_response)
+        return self._finish_tdd_response(function_response, fallback_message)
+
+    def get_trade_information(self, function_args):
+        print_debug(f"trade request: {function_args}")
+        printr.print(f'Executing function call {self.get_trade_information.__name__} with args {function_args}', tags="info")
+
+        location_from = self._optional_arg(function_args, "location_name_start_or_buy")
+        location_to = self._optional_arg(function_args, "location_name_end_or_sell")
+        commodity_name = self._optional_arg(function_args, "commodity_name")
+
+        if commodity_name and location_to and not location_from:
+            return self.find_commodity_trade_locations({
+                "commodity_name": commodity_name,
+                "operation": "sell",
+                "location_name": location_to
+            })
+
+        if commodity_name and location_from and not location_to:
+            return self.find_commodity_trade_locations({
+                "commodity_name": commodity_name,
+                "operation": "buy",
+                "location_name": location_from
+            })
+
+        if commodity_name and not location_from and not location_to:
+            return self.find_commodity_trade_locations({
+                "commodity_name": commodity_name,
+                "operation": "sell"
+            })
+
+        return self.find_trade_routes({
+            "location_name_from": location_from,
+            "location_name_to": location_to
+        })

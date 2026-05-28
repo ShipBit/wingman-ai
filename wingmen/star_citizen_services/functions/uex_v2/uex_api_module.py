@@ -1,9 +1,10 @@
-import json
+﻿import json
 import os
 import time
 import requests
 import random
 import heapq
+import Levenshtein
 
 if __name__ != "__main__":
     from wingmen.star_citizen_services.helper import find_best_match
@@ -59,7 +60,8 @@ TRADE_ROUTE_PROMPT_INSTRUCTIONS = (
     "It is important to provide the player with the information about the trade route, "
     "especially if he has to travel to another planetary body (orbit) or even a different star system. "
     "If the other alternatives have similar profit without system change, mention that to the player. "
-    "Write out all numbers, especially prices. "
+    "Write out all numbers in words, especially prices. "
+    "Always name the currency as alpha you ee see for money values. "
     "Example: instead of 24 write 'twentyfour'!"
 )
 
@@ -444,7 +446,7 @@ class UEXApi2():
     def _build_dynamic_param_dict(self, location_category: str, location_id: int, is_origin=True) -> dict:
         """
         Baut ein Dictionary { 'id_???_origin': location_id } bzw. { 'id_???_destination': location_id }
-        abhängig von der Category (SYSTEMS, ORBITS, MOONS, CITIES, OUTPOSTS).
+        abhÃ¤ngig von der Category (SYSTEMS, ORBITS, MOONS, CITIES, OUTPOSTS).
         
         Sonderfall Moons: Manchmal mappen wir 'id_moon' -> 'id_planet', 
         je nachdem wie Du es brauchst in Deinen Parametern.
@@ -469,7 +471,7 @@ class UEXApi2():
         return {key: location_id}
 
     # ---------------------------------------------------------
-    #   ÜBERARBEITET: _find_best_trade_from_location
+    #   ÃœBERARBEITET: _find_best_trade_from_location
     # ---------------------------------------------------------
     def _find_best_trade_from_location(self, location_id, location_category, include_restricted_illegal=False):
         """
@@ -483,7 +485,7 @@ class UEXApi2():
         ]
         commodities_data = self.data[CATEGORY_COMMODITIES].get("data", {})
 
-        # 2) Erzeuge ParamDict für UEX-Routen, z. B. {"id_orbit_origin": location_id} ...
+        # 2) Erzeuge ParamDict fÃ¼r UEX-Routen, z. B. {"id_orbit_origin": location_id} ...
         param_dict = {}
         # Sonderfall: MOONS => ID auf Planet mappen
         if location_category == CATEGORY_MOONS:
@@ -620,7 +622,7 @@ class UEXApi2():
         }
 
     # ---------------------------------------------------------
-    #   ÜBERARBEITET: _find_best_trade_between_locations
+    #   ÃœBERARBEITET: _find_best_trade_between_locations
     # ---------------------------------------------------------
     def _find_best_trade_between_locations(self, location_id1, location_category1, location_id2, location_category2, include_restricted_illegal=False):
         """
@@ -651,12 +653,12 @@ class UEXApi2():
             return self._build_dynamic_param_dict(category, loc_id, is_origin=is_origin)
 
         # ------------------------------------------------------
-        #   Hilfsfunktion: Erzeuge alle möglichen Param-Dicts 
+        #   Hilfsfunktion: Erzeuge alle mÃ¶glichen Param-Dicts 
         #   (City/Outpost kann mehrere Terminals haben)
         # ------------------------------------------------------
         def _build_params_list_for_location(loc_id, loc_cat, is_origin=True):
             """
-            Gibt eine Liste von Param-Dicts zurück. 
+            Gibt eine Liste von Param-Dicts zurÃ¼ck. 
             Example: Falls City => wir liefern eine Liste von N Parametern 
                     (je Terminal), 
                     sonst 1 Dicte.
@@ -720,7 +722,7 @@ class UEXApi2():
             ]
             # nach score sortieren
             uex_trade_routes.sort(key=lambda x: x["score"], reverse=True)
-            # ggf. einkürzen (Top 5)
+            # ggf. einkÃ¼rzen (Top 5)
             uex_trade_routes = uex_trade_routes[:5]
             # transformieren
             uex_trade_routes = [self._transform_uex_trade_entry(r) for r in uex_trade_routes]
@@ -728,7 +730,7 @@ class UEXApi2():
         # ------------------------------------------------------
         # 3) Lokale Preiskalkulation
         # ------------------------------------------------------
-        #    - Terminal-IDs für Start + End
+        #    - Terminal-IDs fÃ¼r Start + End
         #    - Commodity-Preise per 'get_prices_of'
         #    - Profit-Berechnung
         #    - Top 3 Heap
@@ -761,7 +763,7 @@ class UEXApi2():
             if prices:
                 commodity_prices[c_id] = list(prices.values())
 
-        # Heap für Best Trades
+        # Heap fÃ¼r Best Trades
         import heapq
         top_trades = []
         heapq.heapify(top_trades)
@@ -821,7 +823,7 @@ class UEXApi2():
         }
 
     # ---------------------------------------------------------
-    #   ÜBERARBEITET: _find_best_trade_for_commodity
+    #   ÃœBERARBEITET: _find_best_trade_for_commodity
     #   -> param usage
     # ---------------------------------------------------------
     def _find_best_trade_for_commodity(self, commodity_id, include_restricted_illegal=False):
@@ -829,7 +831,7 @@ class UEXApi2():
         Find the best trade route for a specific commodity.
         """
 
-        # 1) Lade Terminal-Daten (Commodity‑Terminals) und Commodity‑Daten:
+        # 1) Lade Terminal-Daten (Commodityâ€‘Terminals) und Commodityâ€‘Daten:
         terminal_data = [
             t for t in self.data[CATEGORY_TERMINALS].get("data").values()
             if t["type"] == "commodity"
@@ -837,16 +839,16 @@ class UEXApi2():
         commodities_data = self.data[CATEGORY_COMMODITIES].get("data", {})
         no_route = {"success": False, "message": f"No trade route found for commodity {commodity_id}."}
 
-        # 2) Prüfe, ob die Commodity überhaupt "zulässig" (nicht illegal) ist:
+        # 2) PrÃ¼fe, ob die Commodity Ã¼berhaupt "zulÃ¤ssig" (nicht illegal) ist:
         allowed_commodities = self._filter_available_commodities(
             commodities_data,
             include_restricted_illegal,
-            isOnlySellable=False  # Du möchtest auch buyable => False
+            isOnlySellable=False  # Du mÃ¶chtest auch buyable => False
         )
         if commodity_id not in allowed_commodities:
             return no_route
 
-        # 3) UEX-Community-Routen für diese Commodity laden
+        # 3) UEX-Community-Routen fÃ¼r diese Commodity laden
         #    => param: { "id_commodity": commodity_id } 
         uex_routes_raw = self.get_uex_trade_routes(id_commodity=commodity_id)
         #   => ggf. Sortieren & Begrenzen
@@ -872,7 +874,7 @@ class UEXApi2():
         # Umwandeln in dict {id_terminal: info}
         prices_dict = {item["id_terminal"]: item for item in prices_data.values()}
 
-        # 5) Heap-Logik für bestes Buy‑Sell
+        # 5) Heap-Logik fÃ¼r bestes Buyâ€‘Sell
         import heapq
         top_trades = []
         heapq.heapify(top_trades)
@@ -905,15 +907,15 @@ class UEXApi2():
                     sell_price,
                     round(profit, 2)
                 )
-                # Negative Profit in den Heap, damit "höchstes" = bestes
+                # Negative Profit in den Heap, damit "hÃ¶chstes" = bestes
                 heapq.heappush(top_trades, (-profit, trade_id, trade_info))
                 trade_id += 1
 
-        # 6) Falls KEIN lokaler Trade möglich => check "no_route"
+        # 6) Falls KEIN lokaler Trade mÃ¶glich => check "no_route"
         if not top_trades and not uex_community_trade_routes:
             return no_route
         elif not top_trades:
-            # Nur UEX-Community-Einträge
+            # Nur UEX-Community-EintrÃ¤ge
             return {
                 "success": True,
                 "result_interpretation_instructions": TRADE_ROUTE_PROMPT_INSTRUCTIONS,
@@ -928,7 +930,7 @@ class UEXApi2():
             _, _, info = heapq.heappop(top_trades)
             best_trade_routes.append(info)
 
-        # 8) Zusammenfügen von local + UEX
+        # 8) ZusammenfÃ¼gen von local + UEX
         return {
             "success": True,
             "result_interpretation_instructions": TRADE_ROUTE_PROMPT_INSTRUCTIONS,
@@ -938,7 +940,7 @@ class UEXApi2():
         }
   
     # ---------------------------------------------------------
-    #   ÜBERARBEITET: _find_best_selling_location_for_commodity
+    #   ÃœBERARBEITET: _find_best_selling_location_for_commodity
     # ---------------------------------------------------------
     def _find_best_selling_location_for_commodity(self, commodity_id, include_restricted_illegal=False):
         """
@@ -991,7 +993,7 @@ class UEXApi2():
         }
 
     # ---------------------------------------------------------
-    #   ÜBERARBEITET: _find_best_sell_price_at_location
+    #   ÃœBERARBEITET: _find_best_sell_price_at_location
     # ---------------------------------------------------------
     def _find_best_sell_price_at_location(self, commodity_id, location_id, location_category):
         """
@@ -1008,7 +1010,7 @@ class UEXApi2():
         if commodity_id not in allowedCommodities:
             return no_route
 
-        # UEX community routes – dynamischer Param-Builder
+        # UEX community routes â€“ dynamischer Param-Builder
         # falls MOON => map to planet ...
         param_dict = {}
         if location_category == CATEGORY_MOONS:
@@ -1115,7 +1117,7 @@ class UEXApi2():
         if commodity_id not in buyable_commodities:
             return no_route
 
-        # UEX community routes – dynamischer Param-Builder
+        # UEX community routes â€“ dynamischer Param-Builder
         # falls MOON => map to planet ...
         param_dict = {}
         if location_category == CATEGORY_MOONS:
@@ -1204,7 +1206,7 @@ class UEXApi2():
         }
 
     # ---------------------------------------------------------
-    #   UNVERÄNDERT: Hilfsfunktionen create_trade_info, transform_uex_trade_entry
+    #   UNVERÃ„NDERT: Hilfsfunktionen create_trade_info, transform_uex_trade_entry
     #                plus Deine find_best_*_code-Methoden
     # ---------------------------------------------------------
     def _create_trade_info(self, buy_terminal, sell_terminal, commodity_code, buy_price, sell_price, profit):
@@ -1266,13 +1268,215 @@ class UEXApi2():
             "buy_price": min_buy_price
         }
 
+    def _get_commodity_terminal_ids_for_location(self, location_id, location_category):
+        if location_category == CATEGORY_TERMINALS:
+            return {location_id}
+
+        id_field_name = {
+            CATEGORY_SYSTEMS: "id_star_system",
+            CATEGORY_ORBITS: "id_orbit",
+            CATEGORY_MOONS: "id_moon",
+            CATEGORY_CITIES: "id_city",
+            CATEGORY_OUTPOSTS: "id_outpost",
+            CATEGORY_STATIONS: "id_space_station",
+        }.get(location_category)
+
+        if not id_field_name:
+            return set()
+
+        return {
+            terminal[ID_FIELD_NAME]
+            for terminal in self.data[CATEGORY_TERMINALS].get("data", {}).values()
+            if terminal.get("type") == "commodity"
+            and terminal.get(id_field_name) == location_id
+        }
+
+    def _get_price_rows_for_commodity(self, commodity_id, location_id=None, location_category=None):
+        prices = self.get_prices_of(price_category=PRICES_COMMODITIES, id_commodity=commodity_id)
+        if not prices:
+            return []
+
+        price_rows = list(prices.values())
+        if location_id is None or location_category is None:
+            return price_rows
+
+        terminal_ids = self._get_commodity_terminal_ids_for_location(location_id, location_category)
+        if not terminal_ids:
+            return []
+
+        return [
+            price_row for price_row in price_rows
+            if price_row.get("id_terminal") in terminal_ids
+        ]
+
+    def _find_commodity_price_information(self, commodity_id, price_type, location_id=None, location_category=None):
+        operation = "buy" if price_type == "buy_average" else "sell"
+        price_field = f"price_{operation}"
+        price_rows = self._get_price_rows_for_commodity(commodity_id, location_id, location_category)
+        prices = [
+            price_row.get(price_field)
+            for price_row in price_rows
+            if price_row.get(price_field, 0) > 0
+        ]
+
+        if not prices:
+            return {
+                "success": False,
+                "message": f"No {operation} price found for commodity {commodity_id}."
+            }
+
+        commodity = self.data[CATEGORY_COMMODITIES].get("data", {}).get(commodity_id, {})
+        return {
+            "success": True,
+            "result_type": "commodity_price",
+            "commodity": commodity.get("name", self.get_commodity_name(commodity_id)),
+            "operation": operation,
+            "average_price": round(sum(prices) / len(prices)),
+            "minimum_price": min(prices),
+            "maximum_price": max(prices),
+            "price_count": len(prices),
+            "result_interpretation_instructions": (
+                "Answer only the requested commodity price. "
+                "For buy_average, call it the average buying price. "
+                "For sell_average, call it the average selling price. "
+                "Always name the currency as alpha you ee see. "
+                "Write out all numbers in words and do not use decimal places. "
+                "Do not mention trade routes or locations unless a location was requested."
+            )
+        }
+
+    def _find_best_buying_location_for_commodity(self, commodity_id, include_restricted_illegal=False):
+        commodities_data = self.data[CATEGORY_COMMODITIES].get("data", {})
+        no_route = {"success": False, "message": f"No buying location found for commodity {commodity_id}."}
+
+        buyable_commodities = {
+            commodity[ID_FIELD_NAME]: commodity
+            for commodity in commodities_data.values()
+            if commodity["is_buyable"] == 1
+            and commodity["price_buy"] > 0
+            and (include_restricted_illegal or commodity["is_illegal"] != 1)
+        }
+        if commodity_id not in buyable_commodities:
+            no_route["message"] = f"Commodity {commodity_id} is not buyable."
+            return no_route
+
+        prices = self.get_prices_of(price_category=PRICES_COMMODITIES, id_commodity=commodity_id)
+        if not prices:
+            return no_route
+
+        top_trades = []
+        trade_id = 0
+
+        for term_price in prices.values():
+            buy_price = term_price.get("price_buy", 0)
+            if buy_price <= 0:
+                continue
+
+            info = self._build_trade_buying_info(commodity_id, term_price, round(buy_price, 2))
+            heapq.heappush(top_trades, (buy_price, trade_id, info))
+            trade_id += 1
+
+        if not top_trades:
+            return no_route
+
+        best_routes = []
+        for _ in range(min(3, len(top_trades))):
+            _, _, info = heapq.heappop(top_trades)
+            best_routes.append(info)
+
+        return {
+            "success": True,
+            "result_type": "commodity_locations",
+            "operation": "buy",
+            "result_interpretation_instructions": (
+                "Tell the player where the commodity can be bought. "
+                "Mention the best location first and keep the answer short. "
+                "Do not describe trade routes."
+            ),
+            "trade_routes": best_routes,
+            "number_of_alternatives": len(best_routes)
+        }
+
+    def _find_best_trade_for_commodity_at_locations(
+        self,
+        commodity_id,
+        location_id_from=None,
+        location_category_from=None,
+        location_id_to=None,
+        location_category_to=None,
+        include_restricted_illegal=False
+    ):
+        commodities_data = self.data[CATEGORY_COMMODITIES].get("data", {})
+        no_route = {"success": False, "message": f"No trade route found for commodity {commodity_id}."}
+
+        allowed_commodities = self._filter_available_commodities(
+            commodities_data,
+            include_restricted_illegal,
+            isOnlySellable=False
+        )
+        if commodity_id not in allowed_commodities:
+            return no_route
+
+        buy_rows = self._get_price_rows_for_commodity(
+            commodity_id,
+            location_id_from,
+            location_category_from
+        )
+        sell_rows = self._get_price_rows_for_commodity(
+            commodity_id,
+            location_id_to,
+            location_category_to
+        )
+
+        top_trades = []
+        trade_id = 0
+        for buy_row in buy_rows:
+            buy_price = buy_row.get("price_buy", 0)
+            if buy_price <= 0:
+                continue
+
+            for sell_row in sell_rows:
+                sell_price = sell_row.get("price_sell", 0)
+                if sell_price <= 0:
+                    continue
+
+                profit = sell_price - buy_price
+                if profit <= 0:
+                    continue
+
+                trade_info = self._create_trade_info(
+                    buy_row,
+                    sell_row,
+                    commodity_id,
+                    buy_price,
+                    sell_price,
+                    round(profit, 2)
+                )
+                heapq.heappush(top_trades, (-profit, trade_id, trade_info))
+                trade_id += 1
+
+        if not top_trades:
+            return no_route
+
+        best_trade_routes = []
+        for _ in range(min(3, len(top_trades))):
+            _, _, trade_info = heapq.heappop(top_trades)
+            best_trade_routes.append(trade_info)
+
+        return {
+            "success": True,
+            "result_interpretation_instructions": TRADE_ROUTE_PROMPT_INSTRUCTIONS,
+            "trade_routes": best_trade_routes,
+            "number_of_alternatives": len(best_trade_routes)
+        }
+
     # ---------------------------------------------------------
     #   Deine "find_best_trade_between_locations_code" & Co.
     #   => rufen intern _find_best_trade_between_locations auf
     # ---------------------------------------------------------
     def find_best_trade_between_locations_code(self, location_name_from, location_name_to):
         if __name__ != "__main__":
-            printr.print(text=f"Suche beste Handelsoption für die Reise {location_name_from} -> {location_name_to}", tags="info")
+            printr.print(text=f"Suche beste Handelsoption fÃ¼r die Reise {location_name_from} -> {location_name_to}", tags="info")
         category_from, location_from = self.get_location(location_name_from)
         category_to, location_to = self.get_location(location_name_to)
         
@@ -1303,33 +1507,27 @@ class UEXApi2():
 
     def find_best_trade_for_commodity_code(self, commodity_name):
         if __name__ != "__main__":
-            printr.print(text=f"Suche beste Route für {commodity_name}", tags="info")
-        commodity = self.get_commodity(commodity_name)
+            printr.print(text=f"Suche beste Route fÃ¼r {commodity_name}", tags="info")
+        commodity = self.get_commodity(commodity_name, operation="trade")
         if not commodity:
-            return {
-                "success": False,
-                "result_interpretation_instructions": "Ask the player for the commodity that he wants to trade."
-            }
+            return self._commodity_failure_response(commodity_name, operation="trade")
         return self._find_best_trade_for_commodity(commodity[ID_FIELD_NAME])
     
     def find_best_selling_location_for_commodity_code(self, commodity_name):
         if __name__ != "__main__":
-            printr.print(text=f"Suche beste Verkaufsort für {commodity_name}", tags="info")
-        commodity = self.get_commodity(commodity_name)
+            printr.print(text=f"Suche beste Verkaufsort fÃ¼r {commodity_name}", tags="info")
+        commodity = self.get_commodity(commodity_name, operation="sell")
         if not commodity:
-            return {
-                "success": False,
-                "result_interpretation_instructions": "Ask the player the commodity that he wants to sell."
-            }
+            return self._commodity_failure_response(commodity_name, operation="sell")
         print_debug(f"Commodity found for '{commodity_name}: {commodity['name']}")
         return self._find_best_selling_location_for_commodity(commodity[ID_FIELD_NAME], include_restricted_illegal=True)
     
     def find_best_sell_price_at_location_codes(self, commodity_name, location_name):
         if __name__ != "__main__":
-            printr.print(text=f"Suche beste Verkaufsoption für {commodity_name} bei {location_name}", tags="info")
+            printr.print(text=f"Suche beste Verkaufsoption fÃ¼r {commodity_name} bei {location_name}", tags="info")
         
         category, location_to = self.get_location(location_name)
-        commodity = self.get_commodity(commodity_name)
+        commodity = self.get_commodity(commodity_name, operation="sell")
         
         if not location_to:
             return {
@@ -1337,10 +1535,7 @@ class UEXApi2():
                 "result_interpretation_instructions": f"The location {location_name} could not be found. User should try again speaking clearly. "
             }
         if not commodity:
-            return {
-                "success": False,
-                "result_interpretation_instructions": f"The commodity {commodity_name} could not be identified. Ask the user to repeat the name clearly. "
-            }
+            return self._commodity_failure_response(commodity_name, operation="sell")
     
         return self._find_best_sell_price_at_location(
             commodity_id=commodity[ID_FIELD_NAME],
@@ -1350,10 +1545,10 @@ class UEXApi2():
     
     def find_best_buy_price_at_location_codes(self, commodity_name, location_name):
         if __name__ != "__main__":
-            printr.print(text=f"Suche beste Einkaufsoption für {commodity_name} bei {location_name}", tags="info")
+            printr.print(text=f"Suche beste Einkaufsoption fÃ¼r {commodity_name} bei {location_name}", tags="info")
         
         category, location_to = self.get_location(location_name)
-        commodity = self.get_commodity(commodity_name)
+        commodity = self.get_commodity(commodity_name, operation="buy")
         
         if not location_to:
             return {
@@ -1361,10 +1556,7 @@ class UEXApi2():
                 "result_interpretation_instructions": f"The location {location_name} could not be found. User should try again speaking clearly. "
             }
         if not commodity:
-            return {
-                "success": False,
-                "result_interpretation_instructions": f"The commodity {commodity_name} could not be identified. Ask the user to repeat the name clearly. "
-            }
+            return self._commodity_failure_response(commodity_name, operation="buy")
     
         return self._find_best_buy_price_at_location(
             commodity_id=commodity[ID_FIELD_NAME],
@@ -1373,8 +1565,88 @@ class UEXApi2():
         )
 
     # ---------------------------------------------------------
-    #   UNVERÄNDERT:  Hilfsfunktionen get_location, get_commodity ...
+    #   UNVERÃ„NDERT:  Hilfsfunktionen get_location, get_commodity ...
     # ---------------------------------------------------------
+    def find_commodity_price_information_code(self, commodity_name, price_type, location_name=None):
+        if __name__ != "__main__":
+            printr.print(text=f"Suche Preisinfo {price_type} fÃƒÂ¼r {commodity_name}", tags="info")
+
+        operation = "buy" if price_type == "buy_average" else "sell"
+        commodity = self.get_commodity(commodity_name, operation=operation)
+        if not commodity:
+            return self._commodity_failure_response(commodity_name, operation=operation)
+
+        location_id = None
+        location_category = None
+        if location_name:
+            location_category, location = self.get_location(location_name)
+            if not location:
+                return {
+                    "success": False,
+                    "result_interpretation_instructions": (
+                        f"The location {location_name} could not be found. "
+                        "User should try again speaking clearly."
+                    )
+                }
+            location_id = location[ID_FIELD_NAME]
+
+        return self._find_commodity_price_information(
+            commodity_id=commodity[ID_FIELD_NAME],
+            price_type=price_type,
+            location_id=location_id,
+            location_category=location_category
+        )
+
+    def find_best_buying_location_for_commodity_code(self, commodity_name):
+        if __name__ != "__main__":
+            printr.print(text=f"Suche besten Einkaufsort fÃƒÂ¼r {commodity_name}", tags="info")
+
+        commodity = self.get_commodity(commodity_name, operation="buy")
+        if not commodity:
+            return self._commodity_failure_response(commodity_name, operation="buy")
+
+        return self._find_best_buying_location_for_commodity(
+            commodity[ID_FIELD_NAME],
+            include_restricted_illegal=True
+        )
+
+    def find_best_trade_for_commodity_at_location_codes(
+        self,
+        commodity_name,
+        location_name_from=None,
+        location_name_to=None
+    ):
+        if __name__ != "__main__":
+            printr.print(text=f"Suche beste Route fÃƒÂ¼r {commodity_name}", tags="info")
+
+        commodity = self.get_commodity(commodity_name, operation="trade")
+        if not commodity:
+            return self._commodity_failure_response(commodity_name, operation="trade")
+
+        location_id_from = None
+        location_category_from = None
+        if location_name_from:
+            location_category_from, location_from = self.get_location(location_name_from)
+            if not location_from:
+                return {"success": False, "message": f"Start location not recognised: {location_name_from}"}
+            location_id_from = location_from[ID_FIELD_NAME]
+
+        location_id_to = None
+        location_category_to = None
+        if location_name_to:
+            location_category_to, location_to = self.get_location(location_name_to)
+            if not location_to:
+                return {"success": False, "message": f"Target location not recognised: {location_name_to}"}
+            location_id_to = location_to[ID_FIELD_NAME]
+
+        return self._find_best_trade_for_commodity_at_locations(
+            commodity_id=commodity[ID_FIELD_NAME],
+            location_id_from=location_id_from,
+            location_category_from=location_category_from,
+            location_id_to=location_id_to,
+            location_category_to=location_category_to
+        )
+
     def get_commodity_name(self, commodity_id):
         self._refresh_data()
         if commodity_id in self.code_mapping.get(CATEGORY_COMMODITIES):
@@ -1454,19 +1726,144 @@ class UEXApi2():
         
         return None, None
     
-    def get_commodity(self, commodity_mapping_name):
+    def _filter_commodities_for_operation(self, commodities, operation=None):
+        if operation == "buy":
+            return {
+                commodity_id: commodity
+                for commodity_id, commodity in commodities.items()
+                if commodity.get("is_buyable") == 1
+                and commodity.get("price_buy", 0) > 0
+            }
+        if operation == "sell":
+            return {
+                commodity_id: commodity
+                for commodity_id, commodity in commodities.items()
+                if commodity.get("is_sellable") == 1
+                and commodity.get("price_sell", 0) > 0
+            }
+        if operation == "trade":
+            return {
+                commodity_id: commodity
+                for commodity_id, commodity in commodities.items()
+                if commodity.get("is_buyable") == 1
+                and commodity.get("price_buy", 0) > 0
+                and commodity.get("is_sellable") == 1
+                and commodity.get("price_sell", 0) > 0
+            }
+        return commodities
+
+    @staticmethod
+    def _commodity_match_score(search_term, commodity_name):
+        search_term = (search_term or "").lower().strip()
+        commodity_name = (commodity_name or "").lower().strip()
+        max_length = max(len(search_term), len(commodity_name))
+        if max_length == 0:
+            return 100
+
+        distance = Levenshtein.distance(search_term, commodity_name)
+        return max(0, (1 - distance / max_length) * 100)
+
+    def _rank_commodity_candidates(self, commodity_name, commodities):
+        ranked_candidates = []
+        for commodity in commodities.values():
+            score = self._commodity_match_score(commodity_name, commodity.get("name", ""))
+            ranked_candidates.append({
+                "name": commodity.get("name"),
+                "score": round(score, 2)
+            })
+
+        ranked_candidates.sort(key=lambda item: item["score"], reverse=True)
+        return ranked_candidates
+
+    def _commodity_failure_response(self, commodity_name, operation=None):
+        match_result = getattr(self, "last_commodity_match_result", {}) or {}
+        candidates = match_result.get("candidates", [])
+        reason = match_result.get("reason", "not_found")
+
+        if reason == "not_valid_for_operation":
+            return {
+                "success": False,
+                "commodity_candidates": candidates,
+                "result_interpretation_instructions": (
+                    f"The commodity {commodity_name} exists, but it is not valid for this {operation} request. "
+                    "Tell the player this briefly and ask for a different commodity if needed."
+                )
+            }
+
+        if candidates:
+            return {
+                "success": False,
+                "commodity_candidates": candidates,
+                "result_interpretation_instructions": (
+                    f"The commodity name {commodity_name} is ambiguous. "
+                    "Ask the player which of the candidate commodities he means. "
+                    "Do not choose one yourself."
+                )
+            }
+
+        return {
+            "success": False,
+            "result_interpretation_instructions": (
+                f"The commodity {commodity_name} could not be identified. "
+                "Ask the user to repeat the name clearly."
+            )
+        }
+
+    def get_commodity(self, commodity_mapping_name, operation=None):
         self._refresh_data()
-        commodity_mapping, success = find_best_match.find_best_match(
-            commodity_mapping_name,
-            self.data[CATEGORY_COMMODITIES].get('data', {}),
-            attributes=["name"]
-        )
-        if not success:
-            return None
+        self.last_commodity_match_result = {
+            "reason": "not_found",
+            "candidates": []
+        }
+
+        all_commodities = self.data[CATEGORY_COMMODITIES].get('data', {})
+        commodities = self._filter_commodities_for_operation(all_commodities, operation)
+        normalized_name = (commodity_mapping_name or "").lower().strip()
+
+        for commodity in all_commodities.values():
+            if commodity.get("name", "").lower().strip() == normalized_name:
+                if commodity in commodities.values():
+                    self.last_commodity_match_result = {
+                        "reason": "exact",
+                        "candidates": [{"name": commodity.get("name"), "score": 100}]
+                    }
+                    return commodity
+
+                self.last_commodity_match_result = {
+                    "reason": "not_valid_for_operation",
+                    "candidates": [{"name": commodity.get("name"), "score": 100}]
+                }
+                return None
+
+        ranked_candidates = self._rank_commodity_candidates(commodity_mapping_name, commodities)
+        best_candidate = ranked_candidates[0] if ranked_candidates else None
+        second_candidate = ranked_candidates[1] if len(ranked_candidates) > 1 else None
+
+        if best_candidate:
+            score = best_candidate["score"]
+            second_score = second_candidate["score"] if second_candidate else 0
+            score_margin = score - second_score
+
+            if score >= 85 and score_margin >= 8:
+                for commodity in commodities.values():
+                    if commodity.get("name") == best_candidate["name"]:
+                        self.last_commodity_match_result = {
+                            "reason": "fuzzy",
+                            "candidates": [best_candidate]
+                        }
+                        return commodity
+
+            if score >= 55:
+                self.last_commodity_match_result = {
+                    "reason": "ambiguous",
+                    "candidates": [
+                        candidate for candidate in ranked_candidates
+                        if candidate["score"] >= 55
+                    ][:3]
+                }
+                return None
         
-        commodity = commodity_mapping["root_object"]
-        print_debug(f"found matching commodity for '{commodity_mapping_name}':\n {json.dumps(commodity, indent=2)}")
-        return commodity
+        return None
 
     def get_commodity_for_tradeport(self, commodity_mapping_name, tradeport):
         self._refresh_data()

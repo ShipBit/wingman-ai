@@ -412,25 +412,31 @@ class StarCitizenWingman(OpenAiWingman):
             self.current_context = new_context
             context_prompt = f'{self.config["openai"]["contexts"].get(f"context-{new_context.name}")}'
 
-            outpost_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_OUTPOSTS)
-            planet_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_ORBITS)
-            satellite_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_MOONS)
-            commodity_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_COMMODITIES)
-            cities_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_CITIES)
-            terminal_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_TERMINALS)
-            station_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_STATIONS)
-
-            context_prompt += (
-                " Whenever you need to provide or reference the name of a location it must be one of the available tradeport-, planet-, satellite / moon or city names that matches best the player request. "
-                "The same applies to commodity names. Identify the correct names among the following values: "
-                f"Available outpost names: {outpost_names}. "
-                f"Available planet and orbit names: {planet_names}. "
-                f"Available satellite names: {satellite_names}. "
-                f"Available city names: {cities_names}. "
-                f"Available commodity names: {commodity_names}. "
-                f"Available terminal names: {terminal_names}. "
-                f"Available station names: {station_names}. "
-            )
+            if new_context == AIContext.TDD:
+                context_prompt += (
+                    " For trade function parameters, pass location and commodity names as the player said them. "
+                    "Do not replace unclear or misspelled commodity names with a different known commodity. "
+                    "Backend services validate and match names against known Star Citizen trade data. "
+                )
+            else:
+                outpost_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_OUTPOSTS)
+                planet_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_ORBITS)
+                satellite_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_MOONS)
+                commodity_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_COMMODITIES)
+                cities_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_CITIES)
+                terminal_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_TERMINALS)
+                station_names = self.uex_service.get_category_names(uex_api_module.CATEGORY_STATIONS)
+                context_prompt += (
+                    " Whenever you need to provide or reference the name of a location it must be one of the available tradeport-, planet-, satellite / moon or city names that matches best the player request. "
+                    "The same applies to commodity names. Identify the correct names among the following values: "
+                    f"Available outpost names: {outpost_names}. "
+                    f"Available planet and orbit names: {planet_names}. "
+                    f"Available satellite names: {satellite_names}. "
+                    f"Available city names: {cities_names}. "
+                    f"Available commodity names: {commodity_names}. "
+                    f"Available terminal names: {terminal_names}. "
+                    f"Available station names: {station_names}. "
+                )
 
             functions_prompt = f" {self._get_manager_control_prompt()} "
 
@@ -447,7 +453,7 @@ class StarCitizenWingman(OpenAiWingman):
             if new_context == AIContext.TDD:
                 context_switch_prompt += (
                     f" Whenever the player adresses a new Trading Division Location, switch the employee "
-                    f"by calling the function switch_tdd_employee and select a different employee_id. "
+                    f"by calling the function switch_tdd_voice. "
                     f"If the current user request does not fit the current context, switch to an appropriate context "
                     f"by calling the switch_context function. Do switch to context {AIContext.CORA}, "
                     f"if the player adresses 'Cora' or using words like 'computer' or demanding a specific player or ship action or mission related actions. "
@@ -572,6 +578,7 @@ class StarCitizenWingman(OpenAiWingman):
             for ai_function_manager in self.ai_functions_manager.get_managers(current_context):
                 ai_function_manager: FunctionManager
                 tdd_tools.extend(ai_function_manager.get_function_tools())
+            tdd_tools.append(self._tdd_voice_switch_tool())
             tdd_tools.append(self._context_switch_tool(current_context=AIContext.TDD))
             return tdd_tools
         else:
@@ -657,6 +664,9 @@ class StarCitizenWingman(OpenAiWingman):
         # we have to repeat the user request on this switched context, to get a valid response.
         if function_name == "switch_context":
             return self._execute_switch_context_function(function_args)
+
+        if function_name == "switch_tdd_voice":
+            return self._execute_switch_tdd_voice_function(function_args)
         
         if function_name == "execute_command":
             # get the command from config file based on the argument passed by GPT
@@ -696,7 +706,7 @@ class StarCitizenWingman(OpenAiWingman):
                 finally:
                     if isinstance(manager_instance, FunctionManager):
                         manager_instance.clear_ask_ai_debug_context()
-        elif function_name not in ["switch_context", "execute_command", self.manage_feature_manager_state.__name__]:
+        elif function_name not in ["switch_context", "switch_tdd_voice", "execute_command", self.manage_feature_manager_state.__name__]:
             manager_name = self.ai_functions_manager.get_manager_for_function(function_name)
             if manager_name and not self.ai_functions_manager.is_manager_enabled(manager_name):
                 function_response = {
@@ -751,6 +761,34 @@ class StarCitizenWingman(OpenAiWingman):
         function_response = f"switched to context {context_name_to_switch_to}, reevaluate the previous user request in the new context. "
         instant_reponse = None
         return function_response, instant_reponse
+
+    def _execute_switch_tdd_voice_function(self, function_args):
+        tdd_voices = set(self.config["openai"]["contexts"]["tdd_voices"].split(","))
+        tdd_voices.discard(self.tdd_voice)
+        if not tdd_voices:
+            return {
+                "success": False,
+                "message": "No alternative Trading Division voice is configured.",
+                "do_not_cache": True
+            }, None
+
+        self.tdd_voice = random.choice(list(tdd_voices))
+        self.config["openai"]["contexts"]["tdd_voice"] = self.tdd_voice
+
+        if self.current_context == AIContext.TDD:
+            self.config["openai"]["tts_voice"] = self.tdd_voice
+
+        return {
+            "success": True,
+            "selected_voice": self.tdd_voice,
+            "instructions": (
+                f"You are now a new Trade and Development employee. Please briefly introduce yourself giving you a first name in the Star Citizen universe. "
+                f"Your gender should match the voice you are using: {self.tdd_voice}. "
+                "Tell the player your position within the requested Trading Division department and ask how you can help. "
+                "Example: 'Hello, my name is Lilia from the Hurston Trading Division. I'm your trade operator, how can I help you?'"
+            ),
+            "do_not_cache": True
+        }, None
 
     def _execute_star_citizen_keymapping_command(self, command_name: str):
         """This method will execute a keystroke as defined in the keybinding settings of the game"""
@@ -999,6 +1037,15 @@ class StarCitizenWingman(OpenAiWingman):
                 }
             }
         return tools
+
+    def _tdd_voice_switch_tool(self) -> dict:
+        return {
+            "type": "function",
+            "function": {
+                "name": "switch_tdd_voice",
+                "description": "Switches the voice for Trading Division responses when the player addresses a different Trading Division location.",
+            }
+        }
     
     def _get_keybinding_commands(self) -> list[dict]:
         # get defined commands in config

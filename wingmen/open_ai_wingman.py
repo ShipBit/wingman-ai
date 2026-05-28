@@ -921,6 +921,13 @@ class OpenAiWingman(Wingman):
                     call_cache_key = fuzzy_key
                 cached_command_data = self.instant_command_cache_manager.get(call_cache_key)
 
+            if cached_command_data and not self._is_cached_command_data_valid(
+                cached_command_data
+            ):
+                if hasattr(self.instant_command_cache_manager, "_remove_entry"):
+                    self.instant_command_cache_manager._remove_entry(call_cache_key)
+                cached_command_data = None
+
             if cached_command_data:
                 printr.print(
                     f"Instant command cache hit for: '{normalized_transcript}':{call_cache_key}", tags="info"
@@ -996,6 +1003,32 @@ class OpenAiWingman(Wingman):
             final_text_to_speak = getattr(response_message, "content", "")
 
         return final_text_to_speak, instant_response, tts_cache_key
+
+    def _is_cached_command_data_valid(self, cached_command_data):
+        if not isinstance(cached_command_data, list):
+            return False
+
+        built_in_functions = {
+            "switch_context",
+            "execute_command",
+            self.manage_feature_manager_state.__name__,
+        }
+        registered_functions = set()
+        if getattr(self, "ai_functions_manager", None):
+            registered_functions = set(self.ai_functions_manager.get_function_registry())
+
+        for function_call in cached_command_data:
+            if not isinstance(function_call, (list, tuple)) or len(function_call) < 2:
+                return False
+
+            function_name = function_call[0]
+            if function_name in built_in_functions:
+                continue
+            if function_name in registered_functions:
+                continue
+            return False
+
+        return True
 
     def _add_user_message(self, content):
         """Shortens the conversation history if needed and adds a user message to it."""
