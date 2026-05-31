@@ -1,5 +1,5 @@
 import time
-from tkinter import Tk, Label, Toplevel
+from tkinter import Tk, Label, Toplevel, Canvas
 from PIL import Image, ImageTk, ImageDraw, ImageFont, ImageColor
 from screeninfo import get_monitors
 
@@ -20,6 +20,16 @@ class StarCitizenOverlay:
         self.overlay_shown = False
         self.overlay_root = None
         self.overlay_label = None
+        self.overlay_after_id = None
+        self.overlay_text_key = None
+        self.debug_rectangle_root = None
+        self.debug_rectangle_geometry = None
+        self.status_dot_root = None
+        self.status_dot_canvas = None
+        self.status_dot_item = None
+        self.status_dot_after_id = None
+        self.status_dot_reset_after_id = None
+        self.status_dot_geometry = None
         self.new_text = True
         self.screen_width = None
         self.screen_height = None
@@ -84,6 +94,15 @@ class StarCitizenOverlay:
         self.new_text = True
 
         def create_overlay():
+            overlay_key = ("center", text, int(vertical_position_ratio))
+            if self.overlay_shown and self.overlay_root and self.overlay_text_key == overlay_key:
+                self._reschedule_overlay_close(self.overlay_root, display_duration)
+                try:
+                    self.overlay_root.lift()
+                except Exception:
+                    pass
+                return
+
             if self.overlay_shown:
                 close_overlay(self.overlay_root)
 
@@ -123,14 +142,19 @@ class StarCitizenOverlay:
 
             # Center the overlay horizontally
             overlay_root.geometry(f"+{x_position}+{y_position}")
-            overlay_root.after(display_duration, lambda: close_overlay(overlay_root))
+            if display_duration and display_duration > 0:
+                self.overlay_after_id = overlay_root.after(display_duration, lambda: close_overlay(overlay_root))
 
             self.overlay_root = overlay_root
+            self.overlay_text_key = overlay_key
 
         def close_overlay(overlay_window):
             print_debug(f"closing overlay {time.time()}") 
+            self._cancel_overlay_close()
             overlay_window.destroy()
             self.overlay_shown = False
+            self.overlay_root = None
+            self.overlay_text_key = None
 
         WingmanUI.enqueue_tkinter_command(create_overlay)
 
@@ -141,6 +165,15 @@ class StarCitizenOverlay:
         self.new_text = True
 
         def create_overlay():
+            overlay_key = ("at", text, int(x_center), int(y_bottom))
+            if self.overlay_shown and self.overlay_root and self.overlay_text_key == overlay_key:
+                self._reschedule_overlay_close(self.overlay_root, display_duration)
+                try:
+                    self.overlay_root.lift()
+                except Exception:
+                    pass
+                return
+
             if self.overlay_shown:
                 close_overlay(self.overlay_root)
 
@@ -171,16 +204,288 @@ class StarCitizenOverlay:
             y_position = int(y_bottom - window_height)
 
             overlay_root.geometry(f"+{x_position}+{y_position}")
-            overlay_root.after(display_duration, lambda: close_overlay(overlay_root))
+            if display_duration and display_duration > 0:
+                self.overlay_after_id = overlay_root.after(display_duration, lambda: close_overlay(overlay_root))
 
             self.overlay_root = overlay_root
+            self.overlay_text_key = overlay_key
 
         def close_overlay(overlay_window):
             print_debug(f"closing overlay {time.time()}")
+            self._cancel_overlay_close()
             overlay_window.destroy()
             self.overlay_shown = False
+            self.overlay_root = None
+            self.overlay_text_key = None
 
         WingmanUI.enqueue_tkinter_command(create_overlay)
+
+    def clear_overlay_text(self):
+        def close_current_overlay():
+            if not self.overlay_shown or not self.overlay_root:
+                return
+            try:
+                self._cancel_overlay_close()
+                self.overlay_root.destroy()
+            except Exception:
+                pass
+            self.overlay_root = None
+            self.overlay_shown = False
+            self.overlay_text_key = None
+
+        WingmanUI.enqueue_tkinter_command(close_current_overlay)
+
+    def _cancel_overlay_close(self):
+        if self.overlay_root and self.overlay_after_id:
+            try:
+                self.overlay_root.after_cancel(self.overlay_after_id)
+            except Exception:
+                pass
+        self.overlay_after_id = None
+
+    def _reschedule_overlay_close(self, overlay_root, display_duration):
+        self._cancel_overlay_close()
+        if display_duration and display_duration > 0:
+            self.overlay_after_id = overlay_root.after(
+                display_duration,
+                self.clear_overlay_text,
+            )
+
+    def display_debug_rectangle(self, x, y, width, height, color="red", line_width=3, padding=4):
+        """
+            Displays a transparent debug rectangle around a screen area.
+            The border is drawn outside the provided area to avoid polluting screenshots of that area.
+        """
+        geometry = (
+            int(x) - int(padding),
+            int(y) - int(padding),
+            int(width) + int(padding) * 2,
+            int(height) + int(padding) * 2,
+            str(color),
+            int(line_width),
+            int(padding),
+        )
+
+        def create_or_update_rectangle():
+            rect_x, rect_y, rect_width, rect_height, rect_color, rect_line_width, _ = geometry
+            if rect_width <= 0 or rect_height <= 0:
+                return
+
+            if self.debug_rectangle_root and self.debug_rectangle_geometry == geometry:
+                try:
+                    self.debug_rectangle_root.lift()
+                    return
+                except Exception:
+                    self.debug_rectangle_root = None
+                    self.debug_rectangle_geometry = None
+
+            if self.debug_rectangle_root:
+                try:
+                    self.debug_rectangle_root.destroy()
+                except Exception:
+                    pass
+
+            root = WingmanUI.get_instance()
+            rectangle_root = Toplevel(root)
+            rectangle_root.overrideredirect(True)
+            rectangle_root.attributes("-topmost", True)
+
+            transparent_color = "gray"
+            rectangle_root.attributes("-transparentcolor", transparent_color)
+            rectangle_root.configure(bg=transparent_color)
+            rectangle_root.geometry(f"{rect_width}x{rect_height}+{rect_x}+{rect_y}")
+
+            canvas = Canvas(
+                rectangle_root,
+                width=rect_width,
+                height=rect_height,
+                bg=transparent_color,
+                highlightthickness=0,
+                bd=0,
+            )
+            canvas.pack(fill="both", expand=True)
+            half_line = max(1, rect_line_width // 2)
+            canvas.create_rectangle(
+                half_line,
+                half_line,
+                rect_width - half_line - 1,
+                rect_height - half_line - 1,
+                outline=rect_color,
+                width=rect_line_width,
+            )
+
+            self.debug_rectangle_root = rectangle_root
+            self.debug_rectangle_geometry = geometry
+
+        WingmanUI.enqueue_tkinter_command(create_or_update_rectangle)
+
+    def clear_debug_rectangle(self):
+        def close_current_rectangle():
+            if not self.debug_rectangle_root:
+                return
+            try:
+                self.debug_rectangle_root.destroy()
+            except Exception:
+                pass
+            self.debug_rectangle_root = None
+            self.debug_rectangle_geometry = None
+
+        WingmanUI.enqueue_tkinter_command(close_current_rectangle)
+
+    def display_blinking_status_dot(
+        self,
+        x_center,
+        y_center,
+        color="white",
+        size=10,
+        blink_ms=450,
+        hold_ms=None,
+        reset_to_color=None,
+    ):
+        geometry = (
+            int(x_center),
+            int(y_center),
+            int(size),
+            str(color),
+            int(blink_ms),
+        )
+
+        def create_or_update_dot():
+            dot_x_center, dot_y_center, dot_size, dot_color, dot_blink_ms = geometry
+            window_size = max(8, dot_size + 8)
+            x_position = int(dot_x_center - window_size // 2)
+            y_position = int(dot_y_center - window_size // 2)
+
+            if self.status_dot_root and self.status_dot_geometry == geometry:
+                try:
+                    self.status_dot_root.lift()
+                    self._schedule_status_dot_reset(
+                        dot_x_center,
+                        dot_y_center,
+                        dot_size,
+                        dot_blink_ms,
+                        hold_ms,
+                        reset_to_color,
+                    )
+                    return
+                except Exception:
+                    self.status_dot_root = None
+                    self.status_dot_geometry = None
+
+            self._destroy_status_dot()
+
+            root = WingmanUI.get_instance()
+            dot_root = Toplevel(root)
+            dot_root.overrideredirect(True)
+            dot_root.attributes("-topmost", True)
+
+            transparent_color = "gray"
+            dot_root.attributes("-transparentcolor", transparent_color)
+            dot_root.configure(bg=transparent_color)
+            dot_root.geometry(f"{window_size}x{window_size}+{x_position}+{y_position}")
+
+            canvas = Canvas(
+                dot_root,
+                width=window_size,
+                height=window_size,
+                bg=transparent_color,
+                highlightthickness=0,
+                bd=0,
+            )
+            canvas.pack(fill="both", expand=True)
+            padding = max(2, (window_size - dot_size) // 2)
+            dot_item = canvas.create_oval(
+                padding,
+                padding,
+                window_size - padding,
+                window_size - padding,
+                fill=dot_color,
+                outline=dot_color,
+            )
+
+            self.status_dot_root = dot_root
+            self.status_dot_canvas = canvas
+            self.status_dot_item = dot_item
+            self.status_dot_geometry = geometry
+
+            def blink_dot():
+                if not self.status_dot_root or not self.status_dot_canvas or not self.status_dot_item:
+                    return
+                try:
+                    current_state = self.status_dot_canvas.itemcget(self.status_dot_item, "state")
+                    next_state = "hidden" if current_state != "hidden" else "normal"
+                    self.status_dot_canvas.itemconfigure(self.status_dot_item, state=next_state)
+                    self.status_dot_after_id = self.status_dot_root.after(dot_blink_ms, blink_dot)
+                except Exception:
+                    self._destroy_status_dot()
+
+            self.status_dot_after_id = dot_root.after(dot_blink_ms, blink_dot)
+            self._schedule_status_dot_reset(
+                dot_x_center,
+                dot_y_center,
+                dot_size,
+                dot_blink_ms,
+                hold_ms,
+                reset_to_color,
+            )
+
+        WingmanUI.enqueue_tkinter_command(create_or_update_dot)
+
+    def clear_blinking_status_dot(self):
+        WingmanUI.enqueue_tkinter_command(self._destroy_status_dot)
+
+    def _schedule_status_dot_reset(
+        self,
+        x_center,
+        y_center,
+        size,
+        blink_ms,
+        hold_ms,
+        reset_to_color,
+    ):
+        if self.status_dot_root and self.status_dot_reset_after_id:
+            try:
+                self.status_dot_root.after_cancel(self.status_dot_reset_after_id)
+            except Exception:
+                pass
+        self.status_dot_reset_after_id = None
+
+        if not self.status_dot_root or not hold_ms or hold_ms <= 0 or not reset_to_color:
+            return
+
+        self.status_dot_reset_after_id = self.status_dot_root.after(
+            int(hold_ms),
+            lambda: self.display_blinking_status_dot(
+                x_center=x_center,
+                y_center=y_center,
+                color=reset_to_color,
+                size=size,
+                blink_ms=blink_ms,
+            ),
+        )
+
+    def _destroy_status_dot(self):
+        if self.status_dot_root and self.status_dot_after_id:
+            try:
+                self.status_dot_root.after_cancel(self.status_dot_after_id)
+            except Exception:
+                pass
+        if self.status_dot_root and self.status_dot_reset_after_id:
+            try:
+                self.status_dot_root.after_cancel(self.status_dot_reset_after_id)
+            except Exception:
+                pass
+        if self.status_dot_root:
+            try:
+                self.status_dot_root.destroy()
+            except Exception:
+                pass
+        self.status_dot_root = None
+        self.status_dot_canvas = None
+        self.status_dot_item = None
+        self.status_dot_after_id = None
+        self.status_dot_reset_after_id = None
+        self.status_dot_geometry = None
 
     def get_primary_monitor_resolution(self):
         monitors = get_monitors()

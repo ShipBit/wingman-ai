@@ -1,5 +1,7 @@
+import base64
 import json
 import os
+import queue
 import re
 import threading
 import time
@@ -36,13 +38,73 @@ SIGNATURE_OBSERVER_DEFAULTS = {
     "debug_mode": False,
     "debug_log_interval_seconds": 2.0,
     "interval_seconds": 0.25,
-    "activation_duration_seconds": 120,
-    "stable_reads": 1,
-    "display_duration_ms": 2500,
+    "focus_activation_grace_seconds": 1.0,
+    "activation_duration_seconds": 30,
+    "recognition_extension_seconds": 30,
+    "stable_reads": 2,
+    "stable_single_tick_support": 3,
+    "stable_miss_tolerance": 2,
+    "unknown_clear_reads": 3,
+    "display_duration_ms": 5000,
     "display_cooldown_seconds": 3.0,
-    "overlay_offset_pixels": 8,
+    "overlay_offset_pixels": 2,
+    "overlay_text_offset_x_pixels": 130,
+    "overlay_text_offset_y_pixels": 8,
+    "vision_signature_fallback_enabled": True,
+    "vision_signature_model": None,
+    "vision_signature_min_interval_seconds": 1.5,
+    "vision_signature_queue_size": 4,
+    "vision_signature_sample_known_reads": False,
+    "vision_signature_accept_single_result": True,
+    "vision_signature_save_crops": True,
+    "vision_signature_training_dir": "debug_data/signature_training",
+    "vision_signature_max_output_tokens": 512,
     "save_number_crops": False,
     "overwrite_number_crop": True,
+    "log_observed_clusters": True,
+    "minimum_signature_digits": 4,
+    "ocr_number_region_left_ratio": 0.35,
+    "use_signature_icon_template": True,
+    "signature_icon_template_path": "templates/scans/scan_signature_icon.png",
+    "signature_icon_match_threshold": 0.70,
+    "signature_icon_scales": [0.85, 1.0, 1.15],
+    "signature_number_crop_left_padding": 2,
+    "signature_number_crop_right_padding": 36,
+    "signature_number_crop_vertical_padding": 8,
+    "debug_log_ocr_candidates": True,
+    "debug_log_ocr_timing": True,
+    "ocr_psm_modes": [7, 8, 13],
+    "ocr_variant_names": ["gray", "light_text", "light_text_closed", "light_text_thick", "otsu", "adaptive"],
+    "ocr_tesseract_timeout_seconds": 2.0,
+    "ocr_fuzzy_reference_match": True,
+    "ocr_fuzzy_max_distance": 1,
+    "ocr_fuzzy_max_weighted_distance": 0.5,
+    "ocr_fuzzy_max_numeric_delta": 100,
+    "ocr_fuzzy_require_same_length": True,
+    "ocr_fuzzy_allow_missing_leading_one": True,
+    "save_ocr_debug_variants": True,
+    "status_dot_size": 10,
+    "status_dot_offset_pixels": 16,
+    "status_dot_blink_ms": 450,
+    "status_dot_hold_ms": 900,
+    "dynamic_watch_area": {
+        "enabled": True,
+        "refresh_seconds": 10.0,
+        "missing_icon_refresh_after": 2,
+        "anchor_templates_glob": "templates/scans/scan_area_*.jpg",
+        "anchor_match_threshold": 0.70,
+        "anchor_scales": [0.90, 1.0, 1.10],
+        "anchor_search_area": {
+            "coords": [[850, 500], [1300, 950]],
+        },
+        "signature_area_offset": {
+            "x": 250,
+            "y": -250,
+            "width": 300,
+            "height": 210,
+        },
+        "use_last_on_miss": True,
+    },
     "watch_area": {
         "coords": None,
         "center_x_ratio": 0.5,
@@ -86,10 +148,32 @@ class MiningManager(FunctionManager):
         self.signature_tab_listener = None
         self.signature_observer_lock = threading.RLock()
         self.signature_observer_active_until = 0.0
+        self.signature_alt_modifier_down = False
+        self.signature_last_non_star_citizen_focus_time = 0.0
         self.last_signature_value = None
         self.last_signature_display_time = 0.0
+        self.signature_overlay_visible = False
         self.signature_candidate_value = None
         self.signature_candidate_reads = 0
+        self.signature_candidate_misses = 0
+        self.signature_unknown_reads = 0
+        self.signature_last_ocr_value_support = {}
+        self.signature_icon_template = None
+        self.signature_icon_template_loaded = False
+        self.signature_last_number_crop_rect = None
+        self.signature_last_watch_area_rect = None
+        self.signature_last_icon_match_rect = None
+        self.signature_icon_miss_count = 0
+        self.signature_dynamic_anchor_templates = None
+        self.signature_dynamic_watch_area_rect = None
+        self.signature_dynamic_watch_area_updated_at = 0.0
+        self.signature_vision_ocr = None
+        self.signature_vision_queue = None
+        self.signature_vision_stop_event = None
+        self.signature_vision_worker_thread = None
+        self.signature_vision_cache = {}
+        self.signature_vision_queued_hashes = set()
+        self.signature_vision_last_request_at = 0.0
         self.signature_ocr_unavailable_reported = False
         self.signature_debug_last_by_key = {}
 
@@ -439,15 +523,27 @@ class MiningManager(FunctionManager):
         reference_entries = self.load_signature_reference()
         exact_matches = self.find_signature_matches(signature_value, reference_entries)
         if exact_matches:
+            preferred_matches = self.get_preferred_signature_matches(exact_matches)
             match_descriptions = [
-                f"{match['resource']} x{match['count']} ({match['category']})"
-                for match in exact_matches
+                self.format_signature_match_description(match)
+                for match in preferred_matches
             ]
             return {
                 "success": True,
                 "signature_value": signature_value,
                 "matches": exact_matches,
                 "message": f"Signature {signature_value} matches: {', '.join(match_descriptions)}.",
+                "do_not_cache": True,
+            }
+
+        max_known_signature = self.get_max_known_signature_value(reference_entries)
+        if max_known_signature and signature_value > max_known_signature:
+            return {
+                "success": False,
+                "signature_value": signature_value,
+                "matches": [],
+                "max_known_signature": max_known_signature,
+                "message": f"Signature {signature_value} exceeds the highest known signature value ({max_known_signature}).",
                 "do_not_cache": True,
             }
 
@@ -478,6 +574,133 @@ class MiningManager(FunctionManager):
         ]
         return self.sort_signature_matches(matches)
 
+    def find_fuzzy_signature_match(self, signature_value, reference_entries):
+        if not self.signature_observer_config.get("ocr_fuzzy_reference_match", True):
+            return None
+        if not isinstance(signature_value, int):
+            return None
+
+        value_text = str(signature_value)
+        max_distance = int(self.signature_observer_config.get("ocr_fuzzy_max_distance", 1))
+        max_weighted_distance = float(self.signature_observer_config.get("ocr_fuzzy_max_weighted_distance", 0.5))
+        max_numeric_delta = int(self.signature_observer_config.get("ocr_fuzzy_max_numeric_delta", 100))
+        require_same_length = bool(self.signature_observer_config.get("ocr_fuzzy_require_same_length", True))
+
+        candidates = []
+        for match in self.iter_signature_reference_values(reference_entries):
+            reference_value = match["signature_value"]
+            reference_text = str(reference_value)
+            if require_same_length and len(reference_text) != len(value_text):
+                continue
+
+            distance = self._levenshtein_distance(value_text, reference_text)
+            weighted_distance = self._weighted_digit_levenshtein_distance(value_text, reference_text)
+            delta = abs(reference_value - signature_value)
+            if distance <= max_distance and weighted_distance <= max_weighted_distance and delta <= max_numeric_delta:
+                candidates.append({
+                    **match,
+                    "ocr_fuzzy_distance": distance,
+                    "ocr_fuzzy_weighted_distance": weighted_distance,
+                    "ocr_fuzzy_delta": delta,
+                })
+
+        if not candidates:
+            return None
+
+        candidates = sorted(
+            candidates,
+            key=lambda item: (
+                item["ocr_fuzzy_weighted_distance"],
+                item["ocr_fuzzy_distance"],
+                item["ocr_fuzzy_delta"],
+                self.get_signature_match_priority(item),
+                self.get_signature_match_specificity_priority(item),
+                item["signature_value"],
+            ),
+        )
+        best_match = candidates[0]
+        if len(candidates) > 1:
+            second_match = candidates[1]
+            if (
+                second_match["ocr_fuzzy_weighted_distance"] == best_match["ocr_fuzzy_weighted_distance"]
+                and second_match["ocr_fuzzy_distance"] == best_match["ocr_fuzzy_distance"]
+                and second_match["ocr_fuzzy_delta"] == best_match["ocr_fuzzy_delta"]
+                and second_match["signature_value"] != best_match["signature_value"]
+            ):
+                return None
+
+        return best_match
+
+    def _weighted_digit_levenshtein_distance(self, left, right):
+        if left == right:
+            return 0.0
+        if not left:
+            return float(len(right))
+        if not right:
+            return float(len(left))
+
+        previous_row = [float(index) for index in range(len(right) + 1)]
+        for left_index, left_char in enumerate(left, start=1):
+            current_row = [float(left_index)]
+            for right_index, right_char in enumerate(right, start=1):
+                insertion_cost = current_row[right_index - 1] + 1.0
+                deletion_cost = previous_row[right_index] + 1.0
+                substitution_cost = previous_row[right_index - 1] + self._digit_substitution_cost(left_char, right_char)
+                current_row.append(min(insertion_cost, deletion_cost, substitution_cost))
+            previous_row = current_row
+        return previous_row[-1]
+
+    def _digit_substitution_cost(self, left, right):
+        if left == right:
+            return 0.0
+
+        common_ocr_confusions = {
+            frozenset(("6", "8")): 0.2,
+            frozenset(("0", "8")): 0.35,
+            frozenset(("0", "9")): 0.45,
+            frozenset(("1", "7")): 0.45,
+            frozenset(("3", "8")): 0.55,
+            frozenset(("5", "6")): 0.75,
+        }
+        return common_ocr_confusions.get(frozenset((left, right)), 1.0)
+
+    def _levenshtein_distance(self, left, right):
+        if left == right:
+            return 0
+        if not left:
+            return len(right)
+        if not right:
+            return len(left)
+
+        previous_row = list(range(len(right) + 1))
+        for left_index, left_char in enumerate(left, start=1):
+            current_row = [left_index]
+            for right_index, right_char in enumerate(right, start=1):
+                insertion_cost = current_row[right_index - 1] + 1
+                deletion_cost = previous_row[right_index] + 1
+                substitution_cost = previous_row[right_index - 1] + (left_char != right_char)
+                current_row.append(min(insertion_cost, deletion_cost, substitution_cost))
+            previous_row = current_row
+        return previous_row[-1]
+
+    def get_max_known_signature_value(self, reference_entries):
+        signature_values = [
+            match["signature_value"]
+            for match in self.iter_signature_reference_values(reference_entries)
+        ]
+        return max(signature_values) if signature_values else None
+
+    def is_above_max_known_signature(self, signature_value, reference_entries=None):
+        if not isinstance(signature_value, int):
+            return False
+        reference_entries = reference_entries if reference_entries is not None else self.load_signature_reference()
+        max_known_signature = self.get_max_known_signature_value(reference_entries)
+        return bool(max_known_signature and signature_value > max_known_signature)
+
+    def get_preferred_signature_matches(self, matches):
+        specific_matches = [match for match in matches if match.get("specific_cluster_size")]
+        return specific_matches if specific_matches else matches
+
     def find_nearest_signature_matches(self, signature_value, reference_entries, limit=5):
         candidates = []
         for match in self.iter_signature_reference_values(reference_entries):
@@ -490,6 +713,7 @@ class MiningManager(FunctionManager):
             key=lambda item: (
                 item["delta"],
                 self.get_signature_match_priority(item),
+                self.get_signature_match_specificity_priority(item),
                 item["signature_value"],
             ),
         )[:limit]
@@ -499,6 +723,7 @@ class MiningManager(FunctionManager):
             matches,
             key=lambda item: (
                 self.get_signature_match_priority(item),
+                self.get_signature_match_specificity_priority(item),
                 item["signature_value"],
                 item["resource"],
             ),
@@ -513,6 +738,9 @@ class MiningManager(FunctionManager):
             return SIGNATURE_MATCH_PRIORITY[resource]
         return 10
 
+    def get_signature_match_specificity_priority(self, match):
+        return 0 if match.get("specific_cluster_size") else 1
+
     def iter_signature_reference_values(self, reference_entries):
         for entry in reference_entries:
             resource = entry.get("resource")
@@ -520,14 +748,40 @@ class MiningManager(FunctionManager):
             max_count = entry.get("max_count")
             if not resource or not isinstance(base_signature, int) or not isinstance(max_count, int):
                 continue
-            for count in range(1, max_count + 1):
+
+            cluster_sizes = self._get_signature_reference_cluster_sizes(entry, max_count)
+            counts = cluster_sizes if cluster_sizes else range(1, max_count + 1)
+            for count in counts:
                 yield {
                     "resource": resource,
                     "category": entry.get("category", "Mining Resource"),
                     "count": count,
+                    "cluster_size": count,
+                    "specific_cluster_size": bool(cluster_sizes),
                     "base_signature": base_signature,
                     "signature_value": base_signature * count,
                 }
+
+    def _get_signature_reference_cluster_sizes(self, entry, max_count):
+        cluster_sizes = entry.get("cluster_sizes")
+        if not isinstance(cluster_sizes, list):
+            return []
+
+        normalized_cluster_sizes = []
+        for cluster_size in cluster_sizes:
+            try:
+                cluster_size = int(cluster_size)
+            except (TypeError, ValueError):
+                continue
+            if 1 <= cluster_size <= max_count:
+                normalized_cluster_sizes.append(cluster_size)
+        return sorted(set(normalized_cluster_sizes))
+
+    def format_signature_match_description(self, match):
+        cluster_size = match.get("cluster_size", match.get("count"))
+        if match.get("specific_cluster_size"):
+            return f"{match['resource']} cluster {cluster_size} ({match['category']})"
+        return f"{match['resource']} x{match['count']} ({match['category']})"
 
     def _get_signature_observer_config(self):
         manager_config = self.config.get("features", {}).get(self.__class__.__name__, {})
@@ -540,6 +794,28 @@ class MiningManager(FunctionManager):
             **SIGNATURE_OBSERVER_DEFAULTS["watch_area"],
             **(observer_config.get("watch_area", {}) if isinstance(observer_config, dict) else {}),
         }
+        merged["dynamic_watch_area"] = {
+            **SIGNATURE_OBSERVER_DEFAULTS["dynamic_watch_area"],
+            **(observer_config.get("dynamic_watch_area", {}) if isinstance(observer_config, dict) else {}),
+        }
+        merged["dynamic_watch_area"]["anchor_search_area"] = {
+            **SIGNATURE_OBSERVER_DEFAULTS["dynamic_watch_area"]["anchor_search_area"],
+            **(
+                observer_config.get("dynamic_watch_area", {}).get("anchor_search_area", {})
+                if isinstance(observer_config, dict)
+                and isinstance(observer_config.get("dynamic_watch_area", {}), dict)
+                else {}
+            ),
+        }
+        merged["dynamic_watch_area"]["signature_area_offset"] = {
+            **SIGNATURE_OBSERVER_DEFAULTS["dynamic_watch_area"]["signature_area_offset"],
+            **(
+                observer_config.get("dynamic_watch_area", {}).get("signature_area_offset", {})
+                if isinstance(observer_config, dict)
+                and isinstance(observer_config.get("dynamic_watch_area", {}), dict)
+                else {}
+            ),
+        }
         return merged
 
     def start_signature_observer(self):
@@ -549,7 +825,11 @@ class MiningManager(FunctionManager):
 
             self.signature_observer_stop_event = threading.Event()
             self.signature_observer_active_until = 0.0
-            self.signature_tab_listener = keyboard.Listener(on_press=self._on_signature_observer_key_press)
+            self._start_signature_vision_worker()
+            self.signature_tab_listener = keyboard.Listener(
+                on_press=self._on_signature_observer_key_press,
+                on_release=self._on_signature_observer_key_release,
+            )
             self.signature_tab_listener.daemon = True
             self.signature_tab_listener.start()
             self.signature_observer_thread = threading.Thread(
@@ -576,27 +856,66 @@ class MiningManager(FunctionManager):
 
         if stop_event:
             stop_event.set()
+        self._stop_signature_vision_worker()
         if tab_listener:
             tab_listener.stop()
         if thread and thread.is_alive():
             thread.join(timeout=2.0)
+        self._clear_signature_overlay()
+        self._clear_signature_debug_scan_area()
+        self._clear_signature_status_dot()
         printr.print("Mining signature observer stopped.", tags="info")
 
     def _on_signature_observer_key_press(self, key):
-        if key != keyboard.Key.tab or not self._is_star_citizen_window_active():
-            if key == keyboard.Key.tab:
-                self._signature_debug("Tab ignored because Star Citizen is not the active window")
+        if self._is_signature_alt_key(key):
+            self.signature_alt_modifier_down = True
+            return
+
+        if key != keyboard.Key.tab:
+            return
+
+        now = time.time()
+        if self.signature_alt_modifier_down:
+            self._signature_debug("Tab ignored because Alt is held")
+            return
+
+        if not self._is_star_citizen_window_active():
+            self.signature_last_non_star_citizen_focus_time = now
+            was_active = self._deactivate_signature_analysis(reset_state=True)
+            if was_active:
+                self._signature_debug("analysis stopped: Star Citizen lost focus")
+            self._signature_debug("Tab ignored because Star Citizen is not the active window")
+            return
+
+        focus_grace_seconds = float(self.signature_observer_config.get("focus_activation_grace_seconds", 1.0))
+        if now - self.signature_last_non_star_citizen_focus_time < max(0.0, focus_grace_seconds):
+            self._signature_debug(
+                "Tab ignored because Star Citizen focus was just restored; press Tab again to ping",
+                throttle_key="tab_focus_grace",
+                interval_seconds=0.25,
+            )
             return
 
         duration_seconds = float(self.signature_observer_config.get("activation_duration_seconds", 120))
-        with self.signature_observer_lock:
-            self.signature_observer_active_until = time.time() + max(1.0, duration_seconds)
-            self.signature_candidate_value = None
-            self.signature_candidate_reads = 0
+        self._activate_signature_analysis_window(duration_seconds)
+        self._show_signature_debug_scan_area()
+        self._show_signature_status_dot("white")
         printr.print(f"Mining signature OCR active for {int(duration_seconds)} seconds.", tags="info")
         self._signature_debug(
-            f"Tab detected; OCR analysis active until {datetime.fromtimestamp(self.signature_observer_active_until).strftime('%H:%M:%S')}"
+            f"Tab detected; OCR analysis active for {int(duration_seconds)}s"
         )
+
+    def _on_signature_observer_key_release(self, key):
+        if self._is_signature_alt_key(key):
+            self.signature_alt_modifier_down = False
+
+    def _is_signature_alt_key(self, key):
+        return key in {
+            keyboard.Key.alt,
+            keyboard.Key.alt_l,
+            keyboard.Key.alt_r,
+            getattr(keyboard.Key, "alt_gr", None),
+        }
 
     def _signature_observer_loop(self, stop_event):
         interval_seconds = float(self.signature_observer_config.get("interval_seconds", 0.75))
@@ -614,11 +933,27 @@ class MiningManager(FunctionManager):
                             )
                             continue
                         self._signature_debug(f"OCR read signature value {signature_value}")
-                        self._handle_observed_signature(signature_value, number_crop)
+                        signature_status = self._get_observed_signature_status(signature_value)
+                        if signature_status == "known":
+                            self.signature_unknown_reads = 0
+                            extension_seconds = self._extend_signature_analysis_after_value()
+                            if extension_seconds:
+                                self._signature_debug(
+                                    f"signature recognized; OCR analysis refreshed for {int(extension_seconds)}s",
+                                    throttle_key="recognition_extension",
+                                )
+                            self._handle_observed_signature(signature_value, number_crop)
+                        else:
+                            self._show_signature_status_dot("red")
+                            self._handle_unknown_signature_value(signature_value, number_crop, signature_status)
                     else:
-                        self._signature_debug("no signature value detected in watch area", throttle_key="no_value")
-                        self.signature_candidate_value = None
-                        self.signature_candidate_reads = 0
+                        self._show_signature_status_dot("white")
+                        self.signature_unknown_reads = 0
+                        self._handle_signature_miss()
+                        if number_crop is None:
+                            self._signature_debug("no signature value detected in watch area", throttle_key="no_value")
+                        else:
+                            self._signature_debug("discarding implausible OCR value", throttle_key="discard_implausible_signature")
             except pytesseract.TesseractNotFoundError:
                 if not self.signature_ocr_unavailable_reported:
                     self.signature_ocr_unavailable_reported = True
@@ -636,11 +971,8 @@ class MiningManager(FunctionManager):
 
     def _should_analyze_signature_hud(self):
         if not self._is_star_citizen_window_active():
-            with self.signature_observer_lock:
-                was_active = time.time() < self.signature_observer_active_until
-                self.signature_observer_active_until = 0.0
-                self.signature_candidate_value = None
-                self.signature_candidate_reads = 0
+            self.signature_last_non_star_citizen_focus_time = time.time()
+            was_active = self._deactivate_signature_analysis(reset_state=True)
             if was_active:
                 self._signature_debug("analysis stopped: Star Citizen lost focus")
             return False
@@ -648,6 +980,9 @@ class MiningManager(FunctionManager):
             active = time.time() < self.signature_observer_active_until
         if not active:
             self._signature_debug("analysis inactive: waiting for Tab ping", throttle_key="waiting_for_tab")
+            self._clear_signature_overlay()
+            self._clear_signature_debug_scan_area()
+            self._clear_signature_status_dot()
         return active
 
     def _is_signature_analysis_active(self):
@@ -655,6 +990,40 @@ class MiningManager(FunctionManager):
             return False
         with self.signature_observer_lock:
             return time.time() < self.signature_observer_active_until
+
+    def _activate_signature_analysis_window(self, duration_seconds):
+        with self.signature_observer_lock:
+            self.signature_observer_active_until = time.time() + max(1.0, duration_seconds)
+            self.signature_candidate_value = None
+            self.signature_candidate_reads = 0
+            self.signature_candidate_misses = 0
+            self.signature_unknown_reads = 0
+            self.signature_last_icon_match_rect = None
+
+    def _deactivate_signature_analysis(self, reset_state=True):
+        with self.signature_observer_lock:
+            was_active = time.time() < self.signature_observer_active_until
+            self.signature_observer_active_until = 0.0
+            if reset_state:
+                self.signature_candidate_value = None
+                self.signature_candidate_reads = 0
+                self.signature_candidate_misses = 0
+                self.signature_unknown_reads = 0
+                self.signature_last_icon_match_rect = None
+
+        self._clear_signature_overlay()
+        self._clear_signature_debug_scan_area()
+        self._clear_signature_status_dot()
+        return was_active
+
+    def _extend_signature_analysis_after_value(self):
+        extension_seconds = float(self.signature_observer_config.get("recognition_extension_seconds", 30))
+        if extension_seconds <= 0:
+            return None
+
+        with self.signature_observer_lock:
+            self.signature_observer_active_until = time.time() + max(1.0, extension_seconds)
+            return extension_seconds
 
     def _signature_debug(self, message, throttle_key=None, interval_seconds=None):
         if not self.signature_observer_config.get("debug_mode", False):
@@ -689,9 +1058,11 @@ class MiningManager(FunctionManager):
         watch_area = self.signature_observer_config.get("watch_area", {})
         relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
         if not relative_rect:
+            self.signature_last_watch_area_rect = None
             return None
 
         rel_x, rel_y, width, height = relative_rect
+        self.signature_last_watch_area_rect = relative_rect
         x = active_window.left + rel_x
         y = active_window.top + rel_y
         if width <= 0 or height <= 0:
@@ -702,10 +1073,109 @@ class MiningManager(FunctionManager):
             f"capturing watch area relative=({rel_x}, {rel_y}, {width}, {height}) screen=({x}, {y}, {width}, {height})",
             throttle_key="capture_area",
         )
+        if self.signature_observer_config.get("debug_mode", False):
+            self._show_signature_debug_scan_area(active_window=active_window, relative_rect=relative_rect)
         screenshot_pil = pyautogui.screenshot(region=(x, y, width, height))
         return cv2.cvtColor(np.array(screenshot_pil), cv2.COLOR_RGB2BGR)
 
+    def _show_signature_debug_scan_area(self, active_window=None, relative_rect=None):
+        if not self.signature_observer_config.get("debug_mode", False):
+            self._clear_signature_debug_scan_area()
+            return
+
+        try:
+            if active_window is None:
+                active_window = pygetwindow.getActiveWindow()
+            if not active_window:
+                return
+
+            if relative_rect is None:
+                watch_area = self.signature_observer_config.get("watch_area", {})
+                relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
+            if not relative_rect:
+                return
+
+            rel_x, rel_y, width, height = self._get_signature_debug_rect(relative_rect)
+            self.overlay.display_debug_rectangle(
+                active_window.left + rel_x,
+                active_window.top + rel_y,
+                width,
+                height,
+                color="red",
+            )
+        except Exception as e:
+            self._signature_debug(f"could not show debug scan area: {e}", throttle_key="debug_scan_area_failed")
+
+    def _clear_signature_debug_scan_area(self):
+        self.overlay.clear_debug_rectangle()
+
+    def _get_signature_debug_rect(self, watch_relative_rect):
+        number_crop_rect = self.signature_last_number_crop_rect
+        if not number_crop_rect:
+            return watch_relative_rect
+
+        watch_x, watch_y, _, _ = watch_relative_rect
+        crop_x, crop_y, crop_width, crop_height = number_crop_rect
+        return (
+            watch_x + crop_x,
+            watch_y + crop_y,
+            crop_width,
+            crop_height,
+        )
+
+    def _show_signature_status_dot(self, color):
+        try:
+            active_window = pygetwindow.getActiveWindow()
+            if not active_window:
+                return
+
+            watch_area = self.signature_observer_config.get("watch_area", {})
+            relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
+            if not relative_rect:
+                return
+
+            size = int(self.signature_observer_config.get("status_dot_size", 10))
+            blink_ms = int(self.signature_observer_config.get("status_dot_blink_ms", 450))
+            hold_ms = int(self.signature_observer_config.get("status_dot_hold_ms", 900))
+            x_center, y_center = self._get_signature_status_dot_position(
+                active_window,
+                relative_rect,
+                size,
+            )
+            self.overlay.display_blinking_status_dot(
+                x_center=x_center,
+                y_center=y_center,
+                color=color,
+                size=size,
+                blink_ms=blink_ms,
+                hold_ms=hold_ms if color != "white" else None,
+                reset_to_color="white" if color != "white" else None,
+            )
+        except Exception as e:
+            self._signature_debug(f"could not show signature status dot: {e}", throttle_key="status_dot_failed")
+
+    def _clear_signature_status_dot(self):
+        self.overlay.clear_blinking_status_dot()
+
+    def _get_signature_status_dot_position(self, active_window, relative_rect, size=None):
+        rel_x, rel_y, width, height = relative_rect
+        offset = int(self.signature_observer_config.get("status_dot_offset_pixels", 16))
+        dot_size = int(size if size is not None else self.signature_observer_config.get("status_dot_size", 10))
+        icon_rect = self.signature_last_icon_match_rect
+        if icon_rect:
+            icon_x, icon_y, _, icon_height = icon_rect
+            x_center = active_window.left + icon_x - offset
+            y_center = active_window.top + icon_y + icon_height // 2
+        else:
+            x_center = active_window.left + rel_x + width // 2
+            y_center = active_window.top + rel_y + height // 2
+        return max(active_window.left + dot_size, x_center), y_center
+
     def _resolve_signature_watch_area_rect(self, active_window, watch_area):
+        dynamic_rect = self._resolve_dynamic_signature_watch_area_rect(active_window)
+        if dynamic_rect:
+            return dynamic_rect
+
         coords = watch_area.get("coords")
         if coords:
             try:
@@ -735,144 +1205,1112 @@ class MiningManager(FunctionManager):
         self._signature_debug(f"using ratio watch area resolved={rect}", throttle_key="ratio_area")
         return rect
 
+    def _resolve_dynamic_signature_watch_area_rect(self, active_window):
+        dynamic_config = self.signature_observer_config.get("dynamic_watch_area", {})
+        if not isinstance(dynamic_config, dict) or not dynamic_config.get("enabled", False):
+            return None
+
+        now = time.time()
+        refresh_seconds = float(dynamic_config.get("refresh_seconds", 10.0))
+        missing_icon_refresh_after = int(dynamic_config.get("missing_icon_refresh_after", 2))
+        refresh_interval = max(0.1, refresh_seconds)
+        has_dynamic_rect = self.signature_dynamic_watch_area_rect is not None
+        needs_refresh = (
+            self.signature_dynamic_watch_area_updated_at <= 0.0
+            or now - self.signature_dynamic_watch_area_updated_at >= refresh_interval
+            or (
+                has_dynamic_rect
+                and self.signature_icon_miss_count >= max(1, missing_icon_refresh_after)
+            )
+        )
+
+        if not needs_refresh:
+            if self.signature_dynamic_watch_area_rect:
+                self._signature_debug(
+                    f"using cached dynamic watch area resolved={self.signature_dynamic_watch_area_rect}",
+                    throttle_key="dynamic_watch_cached",
+                )
+                return self.signature_dynamic_watch_area_rect
+            return None
+
+        anchor_match = self._find_dynamic_watch_area_anchor(active_window, dynamic_config)
+        self.signature_dynamic_watch_area_updated_at = now
+        if anchor_match:
+            dynamic_rect = self._build_dynamic_signature_watch_area_rect(active_window, dynamic_config, anchor_match)
+            if dynamic_rect:
+                self.signature_dynamic_watch_area_rect = dynamic_rect
+                self.signature_icon_miss_count = 0
+                self._signature_debug(
+                    f"dynamic watch area resolved={dynamic_rect} from template={anchor_match['template_name']} score={anchor_match['score']:.2f}"
+                )
+                return dynamic_rect
+
+        if dynamic_config.get("use_last_on_miss", True) and self.signature_dynamic_watch_area_rect:
+            self.signature_icon_miss_count = 0
+            self._signature_debug(
+                f"dynamic watch anchor not found; using last area={self.signature_dynamic_watch_area_rect}",
+                throttle_key="dynamic_watch_anchor_miss",
+            )
+            return self.signature_dynamic_watch_area_rect
+
+        self._signature_debug("dynamic watch anchor not found; falling back to configured watch_area", throttle_key="dynamic_watch_fallback")
+        return None
+
+    def _find_dynamic_watch_area_anchor(self, active_window, dynamic_config):
+        search_area = dynamic_config.get("anchor_search_area", {})
+        search_rect = self._resolve_rect_config(active_window, search_area)
+        if not search_rect:
+            return None
+
+        rel_x, rel_y, width, height = search_rect
+        if width <= 0 or height <= 0:
+            return None
+
+        screenshot_pil = pyautogui.screenshot(
+            region=(
+                active_window.left + rel_x,
+                active_window.top + rel_y,
+                width,
+                height,
+            )
+        )
+        search_image = cv2.cvtColor(np.array(screenshot_pil), cv2.COLOR_RGB2BGR)
+        search_gray = cv2.cvtColor(search_image, cv2.COLOR_BGR2GRAY)
+        templates = self._load_dynamic_watch_anchor_templates(dynamic_config)
+        if not templates:
+            return None
+
+        scales = dynamic_config.get("anchor_scales", [1.0])
+        if not isinstance(scales, list):
+            scales = [1.0]
+
+        best_match = None
+        for template in templates:
+            template_gray = template["gray"]
+            for scale in scales:
+                try:
+                    scale = float(scale)
+                except (TypeError, ValueError):
+                    continue
+                if scale <= 0:
+                    continue
+
+                scaled_width = max(4, int(template_gray.shape[1] * scale))
+                scaled_height = max(4, int(template_gray.shape[0] * scale))
+                if scaled_width > search_gray.shape[1] or scaled_height > search_gray.shape[0]:
+                    continue
+
+                scaled_template = cv2.resize(
+                    template_gray,
+                    (scaled_width, scaled_height),
+                    interpolation=cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC,
+                )
+                match_result = cv2.matchTemplate(search_gray, scaled_template, cv2.TM_CCOEFF_NORMED)
+                _, max_value, _, max_location = cv2.minMaxLoc(match_result)
+                if best_match is None or max_value > best_match["score"]:
+                    best_match = {
+                        "score": float(max_value),
+                        "x": rel_x + int(max_location[0]),
+                        "y": rel_y + int(max_location[1]),
+                        "width": scaled_width,
+                        "height": scaled_height,
+                        "scale": scale,
+                        "template_name": template["name"],
+                    }
+
+        threshold = float(dynamic_config.get("anchor_match_threshold", 0.70))
+        if not best_match or best_match["score"] < threshold:
+            if best_match:
+                self._signature_debug(
+                    f"dynamic watch anchor below threshold template={best_match['template_name']} score={best_match['score']:.2f} threshold={threshold:.2f}",
+                    throttle_key="dynamic_watch_low_score",
+                    interval_seconds=1.0,
+                )
+            return None
+
+        self._signature_debug(
+            f"dynamic watch anchor matched template={best_match['template_name']} score={best_match['score']:.2f} pos=({best_match['x']},{best_match['y']}) scale={best_match['scale']:.2f}",
+            throttle_key="dynamic_watch_anchor",
+            interval_seconds=1.0,
+        )
+        return best_match
+
+    def _load_dynamic_watch_anchor_templates(self, dynamic_config):
+        if self.signature_dynamic_anchor_templates is not None:
+            return self.signature_dynamic_anchor_templates
+
+        configured_glob = str(dynamic_config.get("anchor_templates_glob", "templates/scans/scan_area_*.jpg"))
+        if os.path.isabs(configured_glob):
+            template_paths = sorted(Path(configured_glob).parent.glob(Path(configured_glob).name))
+        else:
+            template_paths = sorted(Path(self.mining_data_path).glob(configured_glob))
+
+        templates = []
+        for template_path in template_paths:
+            image = cv2.imread(str(template_path), cv2.IMREAD_COLOR)
+            if image is None:
+                continue
+            templates.append({
+                "name": template_path.name,
+                "gray": cv2.cvtColor(image, cv2.COLOR_BGR2GRAY),
+            })
+
+        self.signature_dynamic_anchor_templates = templates
+        self._signature_debug(f"loaded {len(templates)} dynamic watch anchor templates", throttle_key="dynamic_watch_templates")
+        return templates
+
+    def _build_dynamic_signature_watch_area_rect(self, active_window, dynamic_config, anchor_match):
+        offset = dynamic_config.get("signature_area_offset", {})
+        x = int(anchor_match["x"] + int(offset.get("x", 250)))
+        y = int(anchor_match["y"] + int(offset.get("y", -250)))
+        width = int(offset.get("width", 300))
+        height = int(offset.get("height", 210))
+        return self._clamp_relative_rect(active_window, (x, y, width, height))
+
+    def _resolve_rect_config(self, active_window, rect_config):
+        coords = rect_config.get("coords") if isinstance(rect_config, dict) else None
+        if coords:
+            try:
+                (x1, y1), (x2, y2) = coords
+                x_min, x_max = sorted((int(x1), int(x2)))
+                y_min, y_max = sorted((int(y1), int(y2)))
+                return self._clamp_relative_rect(active_window, (x_min, y_min, x_max - x_min, y_max - y_min))
+            except (TypeError, ValueError):
+                return None
+
+        if not isinstance(rect_config, dict):
+            return None
+        x = int(active_window.width * float(rect_config.get("x_ratio", 0.0)))
+        y = int(active_window.height * float(rect_config.get("y_ratio", 0.0)))
+        width = int(active_window.width * float(rect_config.get("width_ratio", 1.0)))
+        height = int(active_window.height * float(rect_config.get("height_ratio", 1.0)))
+        return self._clamp_relative_rect(active_window, (x, y, width, height))
+
+    def _clamp_relative_rect(self, active_window, rect):
+        x, y, width, height = rect
+        if width <= 0 or height <= 0:
+            return None
+        x = max(0, min(active_window.width - 1, int(x)))
+        y = max(0, min(active_window.height - 1, int(y)))
+        width = max(1, min(int(width), active_window.width - x))
+        height = max(1, min(int(height), active_window.height - y))
+        return (x, y, width, height)
+
     def _read_signature_value(self, watch_image):
         if watch_image is None:
             return None, None
 
-        number_crop = self._find_signature_number_crop(watch_image)
+        number_crop, number_crop_rect = self._prepare_signature_ocr_crop(watch_image)
+        self.signature_last_number_crop_rect = number_crop_rect
         if number_crop is None:
-            self._signature_debug("number crop not found", throttle_key="no_crop")
+            self.signature_icon_miss_count += 1
+            self._signature_debug("signature icon not found in watch area", throttle_key="signature_icon_not_found")
             return None, None
+        self.signature_icon_miss_count = 0
+        cached_vision_value = self._get_cached_signature_vision_value(number_crop)
 
-        signature_value = self._ocr_signature_number(number_crop)
-        if signature_value is None:
+        raw_signature_value = self._ocr_signature_number(number_crop)
+        if raw_signature_value is None:
             self._signature_debug("OCR returned no digits", throttle_key="ocr_no_digits")
+            self._queue_signature_vision_analysis(number_crop, reason="local_no_digits")
+            return cached_vision_value, number_crop
+
+        minimum_digits = int(self.signature_observer_config.get("minimum_signature_digits", 4))
+        if len(str(raw_signature_value)) < max(1, minimum_digits):
+            self._signature_debug(
+                f"OCR read {raw_signature_value}, but it is shorter than {minimum_digits} digits",
+                throttle_key="short_ocr_signature",
+            )
+            self._queue_signature_vision_analysis(number_crop, local_value=raw_signature_value, reason="local_short")
+            return cached_vision_value, number_crop
+
+        signature_value = self._correct_signature_ocr_value(raw_signature_value)
+        signature_status = self._get_observed_signature_status(signature_value)
+        if signature_status != "known":
+            self._queue_signature_vision_analysis(number_crop, local_value=signature_value, reason=f"local_{signature_status}")
+            if cached_vision_value is not None:
+                return cached_vision_value, number_crop
+        elif self.signature_observer_config.get("vision_signature_sample_known_reads", False):
+            self._queue_signature_vision_analysis(number_crop, local_value=signature_value, reason="local_known_sample")
         return signature_value, number_crop
 
-    def _find_signature_number_crop(self, image):
-        icon_rect = self._find_signature_icon_rect_by_contrast(image)
-        if icon_rect:
-            self._signature_debug(f"contrast icon candidate found at {icon_rect}", throttle_key="icon_candidate")
-            number_crop = self._crop_signature_number_area(image, icon_rect)
-            if number_crop is not None:
-                return number_crop
+    def _start_signature_vision_worker(self):
+        if not self.signature_observer_config.get("vision_signature_fallback_enabled", True):
+            return
+        if self.signature_vision_worker_thread and self.signature_vision_worker_thread.is_alive():
+            return
 
-        self._signature_debug("falling back to likely-number crop search", throttle_key="number_fallback")
-        return self._crop_likely_signature_number_area(image)
+        queue_size = int(self.signature_observer_config.get("vision_signature_queue_size", 4))
+        self.signature_vision_queue = queue.Queue(maxsize=max(1, queue_size))
+        self.signature_vision_stop_event = threading.Event()
+        self.signature_vision_worker_thread = threading.Thread(
+            target=self._signature_vision_worker_loop,
+            args=(self.signature_vision_stop_event,),
+            daemon=True,
+            name="MiningSignatureVisionWorker",
+        )
+        self.signature_vision_worker_thread.start()
+        self._signature_debug("signature vision fallback worker started", throttle_key="vision_worker_started")
 
-    def _find_signature_icon_rect_by_contrast(self, image):
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
-        _, bright_mask = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
-        contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None
+    def _stop_signature_vision_worker(self):
+        stop_event = self.signature_vision_stop_event
+        thread = self.signature_vision_worker_thread
+        if stop_event:
+            stop_event.set()
+        if thread and thread.is_alive():
+            thread.join(timeout=1.0)
+        self.signature_vision_queue = None
+        self.signature_vision_stop_event = None
+        self.signature_vision_worker_thread = None
+        self.signature_vision_queued_hashes.clear()
 
-        image_height, image_width = image.shape[:2]
-        candidates = []
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            area = cv2.contourArea(contour)
-            if area < 15 or w < 4 or h < 8:
+    def _signature_vision_worker_loop(self, stop_event):
+        while not stop_event.is_set():
+            active_queue = self.signature_vision_queue
+            if active_queue is None:
+                stop_event.wait(timeout=0.25)
                 continue
-            if x > image_width * 0.65:
+
+            try:
+                job = active_queue.get(timeout=0.25)
+            except queue.Empty:
                 continue
-            candidates.append((area * h, x, y, w, h))
 
-        if not candidates:
+            try:
+                result = self._analyze_signature_crop_with_vision(job)
+                with self.signature_observer_lock:
+                    self.signature_vision_cache[job["image_hash"]] = result
+                    self.signature_vision_queued_hashes.discard(job["image_hash"])
+                self._write_signature_vision_training_sample(job, result)
+                self._handle_signature_vision_result(job, result)
+            except Exception as e:
+                with self.signature_observer_lock:
+                    self.signature_vision_queued_hashes.discard(job.get("image_hash"))
+                self._signature_debug(f"signature vision worker failed: {e}", throttle_key="vision_worker_failed")
+            finally:
+                try:
+                    active_queue.task_done()
+                except ValueError:
+                    pass
+
+    def _queue_signature_vision_analysis(self, number_crop, local_value=None, reason="local_uncertain"):
+        if not self.signature_observer_config.get("vision_signature_fallback_enabled", True):
+            return None
+        if number_crop is None or number_crop.size == 0:
             return None
 
-        _, x, y, w, h = max(candidates, key=lambda item: item[0])
-        if h < image_height * 0.12:
-            return None
-        return (x, y, w, h)
+        image_hash = self._signature_crop_hash(number_crop)
+        cached_value = self._get_cached_signature_vision_value(number_crop, image_hash=image_hash)
+        if cached_value is not None:
+            return cached_value
 
-    def _crop_likely_signature_number_area(self, image):
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        _, bright_mask = cv2.threshold(gray, 95, 255, cv2.THRESH_BINARY)
-        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, np.ones((3, 2), np.uint8))
-        contours, _ = cv2.findContours(bright_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None
-
-        image_height, image_width = image.shape[:2]
-        candidates = []
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            if w < image_width * 0.12 or h < image_height * 0.12:
-                continue
-            if x < image_width * 0.15:
-                continue
-            if not self._has_left_signature_icon_blob(bright_mask, x, y, h):
-                continue
-            candidates.append((w * h, x, y, w, h))
-
-        if not candidates:
+        active_queue = self.signature_vision_queue
+        if active_queue is None:
+            self._start_signature_vision_worker()
+            active_queue = self.signature_vision_queue
+        if active_queue is None:
             return None
 
-        _, x, y, w, h = max(candidates, key=lambda item: item[0])
-        crop_x1 = max(0, x - 4)
-        crop_y1 = max(0, y - 4)
-        crop_x2 = min(image_width, x + w + 8)
-        crop_y2 = min(image_height, y + h + 6)
-        return image[crop_y1:crop_y2, crop_x1:crop_x2]
+        now = time.time()
+        min_interval = float(self.signature_observer_config.get("vision_signature_min_interval_seconds", 1.5))
+        with self.signature_observer_lock:
+            if image_hash in self.signature_vision_queued_hashes:
+                return None
+            if now - self.signature_vision_last_request_at < max(0.0, min_interval):
+                return None
+            self.signature_vision_queued_hashes.add(image_hash)
+            self.signature_vision_last_request_at = now
 
-    def _has_left_signature_icon_blob(self, mask, number_x, number_y, number_height):
-        image_height, _ = mask.shape[:2]
-        left_x1 = max(0, number_x - int(number_height * 3.0))
-        left_x2 = max(0, number_x - 2)
-        left_y1 = max(0, number_y - int(number_height * 0.6))
-        left_y2 = min(image_height, number_y + int(number_height * 1.6))
-        if left_x2 <= left_x1 or left_y2 <= left_y1:
-            return False
+        image_path = self._save_signature_vision_crop(number_crop, image_hash)
+        job = {
+            "image": number_crop.copy(),
+            "image_hash": image_hash,
+            "image_path": image_path,
+            "queued_at": datetime.now(timezone.utc).isoformat(),
+            "reason": reason,
+            "local_value": local_value,
+            "watch_area_rect": self.signature_last_watch_area_rect,
+            "icon_match_rect": self.signature_last_icon_match_rect,
+            "number_crop_rect": self.signature_last_number_crop_rect,
+        }
+        try:
+            active_queue.put_nowait(job)
+            self._signature_debug(
+                f"queued signature vision analysis hash={image_hash[:12]} reason={reason}",
+                throttle_key="vision_queued",
+                interval_seconds=0.5,
+            )
+        except queue.Full:
+            with self.signature_observer_lock:
+                self.signature_vision_queued_hashes.discard(image_hash)
+            self._signature_debug("signature vision queue full; dropping crop", throttle_key="vision_queue_full")
+        return None
 
-        icon_area = mask[left_y1:left_y2, left_x1:left_x2]
-        contours, _ = cv2.findContours(icon_area, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        return any(cv2.contourArea(contour) >= max(8, number_height * 0.5) for contour in contours)
+    def _get_cached_signature_vision_value(self, number_crop, image_hash=None):
+        if not self.signature_observer_config.get("vision_signature_fallback_enabled", True):
+            return None
+        image_hash = image_hash or self._signature_crop_hash(number_crop)
+        cached_result = self.signature_vision_cache.get(image_hash)
+        if not cached_result:
+            return None
+        signature_value = cached_result.get("signature_value")
+        if signature_value is None:
+            return None
+        corrected_value = self._correct_signature_ocr_value(signature_value)
+        self._signature_debug(
+            f"using cached vision signature {signature_value}"
+            + (f" corrected={corrected_value}" if corrected_value != signature_value else "")
+            + f" for hash={image_hash[:12]}",
+            throttle_key="vision_cache_hit",
+            interval_seconds=0.5,
+        )
+        return corrected_value
 
-    def _crop_signature_number_area(self, image, icon_rect):
-        x, y, w, h = icon_rect
-        image_height, image_width = image.shape[:2]
-        start_x = min(image_width - 1, x + w + 4)
-        right_side = image[:, start_x:image_width]
-        if right_side.size == 0:
+    def _signature_crop_hash(self, image):
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        resized = cv2.resize(gray, (16, 16), interpolation=cv2.INTER_AREA)
+        mean_value = float(np.mean(resized))
+        bits = ["1" if value > mean_value else "0" for value in resized.flatten()]
+        return f"{image.shape[1]}x{image.shape[0]}_" + f"{int(''.join(bits), 2):064x}"
+
+    def _save_signature_vision_crop(self, image, image_hash):
+        if not self.signature_observer_config.get("vision_signature_save_crops", True):
             return None
 
-        gray = cv2.cvtColor(right_side, cv2.COLOR_BGR2GRAY)
-        _, bright_mask = cv2.threshold(gray, 95, 255, cv2.THRESH_BINARY)
-        bright_points = cv2.findNonZero(bright_mask)
-        if bright_points is None:
+        training_dir = self._get_signature_vision_training_dir()
+        crop_dir = os.path.join(training_dir, "crops")
+        os.makedirs(crop_dir, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        filename = f"signature_{timestamp}_{image_hash[:12]}.jpg"
+        path = os.path.join(crop_dir, filename)
+        try:
+            cv2.imwrite(path, image)
+            return os.path.relpath(path, self.mining_data_path)
+        except Exception as e:
+            self._signature_debug(f"could not save signature vision crop: {e}", throttle_key="vision_crop_save_failed")
             return None
 
-        rx, ry, rw, rh = cv2.boundingRect(bright_points)
-        crop_x1 = max(0, start_x + rx - 4)
-        crop_y1 = max(0, ry - 4)
-        crop_x2 = min(image_width, start_x + rx + rw + 8)
-        crop_y2 = min(image_height, ry + rh + 6)
-        if crop_x2 <= crop_x1 or crop_y2 <= crop_y1:
+    def _get_signature_vision_training_dir(self):
+        configured_path = str(
+            self.signature_observer_config.get(
+                "vision_signature_training_dir",
+                "debug_data/signature_training",
+            )
+        )
+        if os.path.isabs(configured_path):
+            return configured_path
+        return os.path.join(self.mining_data_path, configured_path)
+
+    def _get_signature_vision_ocr(self):
+        if self.signature_vision_ocr is not None:
+            return self.signature_vision_ocr
+
+        model = self.signature_observer_config.get("vision_signature_model")
+        instructions = (
+            "Read only the mining signature number shown in this cropped Star Citizen HUD image. "
+            "Return only the digits with no separators and no other text. "
+            "If there is no complete visible number, return NONE."
+        )
+        self.signature_vision_ocr = OCR(
+            data_dir=self.mining_data_path,
+            config=self.config,
+            secret_keeper=self.secret_keeper,
+            requester_name="MiningManagerSignatureVision",
+            extraction_instructions=instructions,
+            open_ai_model=model,
+            overlay=self.overlay,
+        )
+        return self.signature_vision_ocr
+
+    def _analyze_signature_crop_with_vision(self, job):
+        vision_ocr = self._get_signature_vision_ocr()
+        if not vision_ocr:
+            return {"success": False, "signature_value": None, "error": "vision helper unavailable"}
+
+        provider = vision_ocr._get_vision_provider()
+        if provider == "gemini" and not vision_ocr.gemini_api_key:
+            return {"success": False, "signature_value": None, "error": "Gemini API key missing"}
+        if provider != "gemini" and not vision_ocr.openai_api_key:
+            return {"success": False, "signature_value": None, "error": "OpenAI API key missing"}
+
+        encode_ok, encoded = cv2.imencode(".jpg", job["image"], [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        if not encode_ok:
+            return {"success": False, "signature_value": None, "error": "could not encode crop"}
+
+        image_payload = base64.b64encode(encoded.tobytes()).decode("ascii")
+        max_tokens = int(self.signature_observer_config.get("vision_signature_max_output_tokens", 512))
+        response = (
+            vision_ocr._call_gemini_vision(image_payload, max_output_tokens=max_tokens)
+            if provider == "gemini"
+            else vision_ocr._call_openai_vision(image_payload, max_output_tokens=max_tokens)
+        )
+        if response.status_code != 200:
+            return {
+                "success": False,
+                "signature_value": None,
+                "error": vision_ocr._extract_error_for_logging(response),
+                "provider": provider,
+            }
+
+        response_payload = response.json()
+        message_content, finish_reason = vision_ocr._extract_message_content(response_payload)
+        message_content = vision_ocr._normalize_message_content(message_content)
+        signature_value, confidence = self._parse_signature_vision_value(message_content)
+        return {
+            "success": signature_value is not None,
+            "signature_value": signature_value,
+            "confidence": confidence,
+            "provider": provider,
+            "model": vision_ocr.openai_model,
+            "finish_reason": finish_reason,
+            "parse_error": None,
+            "raw_text": message_content,
+        }
+
+    def _parse_signature_vision_value(self, message_content):
+        normalized = (message_content or "").strip()
+        if not normalized or normalized.upper() == "NONE":
+            return None, None
+
+        digit_match = re.search(r"\d{4,}", normalized)
+        if not digit_match:
+            return None, None
+        return int(digit_match.group(0)), None
+
+    def _write_signature_vision_training_sample(self, job, result):
+        training_dir = self._get_signature_vision_training_dir()
+        os.makedirs(training_dir, exist_ok=True)
+        filename = os.path.join(training_dir, "signature_vision_training.jsonl")
+        signature_value = result.get("signature_value")
+        status = self._get_observed_signature_status(signature_value) if signature_value is not None else "no_value"
+        payload = {
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "source": "vision_ai",
+            "label_state": "auto_label" if signature_value is not None else "no_label",
+            "signature_value": signature_value,
+            "known": status == "known",
+            "status": status,
+            "confidence": result.get("confidence"),
+            "provider": result.get("provider"),
+            "model": result.get("model"),
+            "finish_reason": result.get("finish_reason"),
+            "image_hash": job.get("image_hash"),
+            "image": job.get("image_path"),
+            "reason": job.get("reason"),
+            "local_value": job.get("local_value"),
+            "watch_area_rect": job.get("watch_area_rect"),
+            "icon_match_rect": job.get("icon_match_rect"),
+            "number_crop_rect": job.get("number_crop_rect"),
+            "success": bool(result.get("success")),
+            "error": result.get("error"),
+            "raw_text": result.get("raw_text"),
+        }
+        try:
+            with open(filename, "a", encoding="UTF-8") as file:
+                file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except Exception as e:
+            self._signature_debug(f"could not write signature vision training sample: {e}", throttle_key="vision_training_write_failed")
+
+    def _handle_signature_vision_result(self, job, result):
+        signature_value = result.get("signature_value")
+        if signature_value is None:
+            self._signature_debug(
+                f"vision returned no signature value hash={job.get('image_hash', '')[:12]}",
+                throttle_key="vision_no_value",
+                interval_seconds=0.5,
+            )
+            return
+
+        corrected_value = self._correct_signature_ocr_value(signature_value)
+        status = self._get_observed_signature_status(corrected_value)
+        self._signature_debug(
+            f"vision read signature value {signature_value}"
+            + (f" corrected={corrected_value}" if corrected_value != signature_value else "")
+            + f" status={status}",
+            throttle_key="vision_result",
+            interval_seconds=0.5,
+        )
+        if not self._is_signature_analysis_active():
+            return
+
+        if status == "known":
+            self.signature_unknown_reads = 0
+            if self.signature_observer_config.get("vision_signature_accept_single_result", True):
+                support_threshold = int(self.signature_observer_config.get("stable_single_tick_support", 3))
+                self.signature_last_ocr_value_support[corrected_value] = max(1, support_threshold)
+            extension_seconds = self._extend_signature_analysis_after_value()
+            if extension_seconds:
+                self._signature_debug(
+                    f"signature recognized by vision; OCR analysis refreshed for {int(extension_seconds)}s",
+                    throttle_key="vision_recognition_extension",
+                )
+            self._handle_observed_signature(corrected_value, job.get("image"))
+        else:
+            self._show_signature_status_dot("red")
+            self._handle_unknown_signature_value(corrected_value, job.get("image"), status)
+
+    def _correct_signature_ocr_value(self, signature_value):
+        reference_entries = self.load_signature_reference()
+        if self.find_signature_matches(signature_value, reference_entries):
+            return signature_value
+
+        missing_leading_one_match = self._find_missing_leading_one_signature_match(signature_value, reference_entries)
+        if missing_leading_one_match:
+            corrected_value = missing_leading_one_match["signature_value"]
+            self.signature_last_ocr_value_support[corrected_value] = max(
+                self.signature_last_ocr_value_support.get(corrected_value, 0),
+                self.signature_last_ocr_value_support.get(signature_value, 0),
+            )
+            self._signature_debug(f"OCR corrected missing leading 1: {signature_value} -> {corrected_value}")
+            return corrected_value
+
+        fuzzy_match = self.find_fuzzy_signature_match(signature_value, reference_entries)
+        if not fuzzy_match:
+            return signature_value
+
+        corrected_value = fuzzy_match["signature_value"]
+        self.signature_last_ocr_value_support[corrected_value] = max(
+            self.signature_last_ocr_value_support.get(corrected_value, 0),
+            self.signature_last_ocr_value_support.get(signature_value, 0),
+        )
+        self._signature_debug(
+            f"OCR fuzzy corrected {signature_value} -> {corrected_value} "
+            f"(distance={fuzzy_match['ocr_fuzzy_distance']}, "
+            f"weighted={fuzzy_match['ocr_fuzzy_weighted_distance']:.2f}, "
+            f"delta={fuzzy_match['ocr_fuzzy_delta']})"
+        )
+        return corrected_value
+
+    def _find_missing_leading_one_signature_match(self, signature_value, reference_entries):
+        if not self.signature_observer_config.get("ocr_fuzzy_allow_missing_leading_one", True):
             return None
-        return image[crop_y1:crop_y2, crop_x1:crop_x2]
+        if not isinstance(signature_value, int):
+            return None
+
+        value_text = str(signature_value)
+        minimum_digits = int(self.signature_observer_config.get("minimum_signature_digits", 4))
+        if len(value_text) < max(1, minimum_digits):
+            return None
+        if value_text.startswith("1"):
+            return None
+
+        candidate_value = int(f"1{value_text}")
+        matches = self.find_signature_matches(candidate_value, reference_entries)
+        if not matches:
+            return None
+        return self.get_preferred_signature_matches(matches)[0]
 
     def _ocr_signature_number(self, number_crop):
-        gray = cv2.cvtColor(number_crop, cv2.COLOR_BGR2GRAY)
-        scale = max(3, int(90 / max(1, gray.shape[0])))
-        resized = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
-        resized = cv2.GaussianBlur(resized, (3, 3), 0)
-        _, binary = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-        binary = cv2.bitwise_not(binary)
+        started_at = time.perf_counter()
+        variants = self._filter_signature_ocr_variants(self._build_signature_ocr_variants(number_crop))
+        psm_modes = self._get_signature_ocr_psm_modes("ocr_psm_modes", [7, 8, 13])
+        timeout_seconds = float(self.signature_observer_config.get("ocr_tesseract_timeout_seconds", 2.0))
+        self._save_signature_ocr_debug_variants(number_crop, variants)
 
-        text = pytesseract.image_to_string(
-            binary,
-            config="--psm 7 -c tessedit_char_whitelist=0123456789,",
+        ocr_results = self._run_signature_ocr_variants(
+            variants,
+            psm_modes=psm_modes,
+            timeout_seconds=timeout_seconds,
         )
-        digits = re.sub(r"\D", "", text or "")
-        if not digits:
+
+        if not ocr_results:
+            self.signature_last_ocr_value_support = {}
+            self._log_signature_ocr_timing("empty", started_at, 0)
             return None
+
+        selectable_results = self._filter_short_signature_ocr_results(ocr_results)
+        self.signature_last_ocr_value_support = self._count_signature_ocr_values(selectable_results)
+        selected_result = self._select_signature_ocr_result(selectable_results)
+        self._log_signature_ocr_candidates(ocr_results, selected_result, stage="simple")
+        self._log_signature_ocr_timing("simple", started_at, len(ocr_results))
+        return selected_result["value"]
+
+    def _run_signature_ocr_variants(self, variants, psm_modes, timeout_seconds):
+        ocr_results = []
+        for variant_name, variant_image in variants:
+            for page_segmentation_mode in psm_modes:
+                try:
+                    text = pytesseract.image_to_string(
+                        variant_image,
+                        config=(
+                            f"--psm {page_segmentation_mode} "
+                            "-c classify_bln_numeric_mode=1 "
+                            "-c tessedit_char_whitelist=0123456789,"
+                        ),
+                        timeout=timeout_seconds if timeout_seconds > 0 else 0,
+                    )
+                except RuntimeError as e:
+                    self._signature_debug(
+                        f"OCR timeout/failed for {variant_name}/psm{page_segmentation_mode}: {e}",
+                        throttle_key=f"ocr_timeout_{variant_name}_{page_segmentation_mode}",
+                    )
+                    continue
+                digits = re.sub(r"\D", "", text or "")
+                if not digits:
+                    continue
+                try:
+                    value = int(digits)
+                except ValueError:
+                    continue
+                ocr_results.append(
+                    {
+                        "value": value,
+                        "digits": digits,
+                        "variant": variant_name,
+                        "psm": page_segmentation_mode,
+                    }
+                )
+        return ocr_results
+
+    def _filter_short_signature_ocr_results(self, ocr_results):
+        minimum_digits = int(self.signature_observer_config.get("minimum_signature_digits", 4))
+        plausible_results = [
+            result
+            for result in ocr_results
+            if len(result["digits"]) >= max(1, minimum_digits)
+        ]
+        return plausible_results or ocr_results
+
+    def _get_signature_ocr_psm_modes(self, config_key, default_modes):
+        configured_modes = self.signature_observer_config.get(config_key, default_modes)
+        if not isinstance(configured_modes, list):
+            return default_modes
+
+        modes = []
+        for mode in configured_modes:
+            try:
+                mode = int(mode)
+            except (TypeError, ValueError):
+                continue
+            if mode > 0:
+                modes.append(mode)
+        return modes or default_modes
+
+    def _filter_signature_ocr_variants(self, variants):
+        configured_names = self.signature_observer_config.get(
+            "ocr_variant_names",
+            ["gray", "otsu", "adaptive"],
+        )
+        if not isinstance(configured_names, list):
+            return variants
+
+        allowed_names = {str(name) for name in configured_names}
+        filtered_variants = [
+            (variant_name, variant_image)
+            for variant_name, variant_image in variants
+            if variant_name in allowed_names
+        ]
+        return filtered_variants or variants
+
+    def _log_signature_ocr_candidates(self, ocr_results, selected_result, stage):
+        if self.signature_observer_config.get("debug_log_ocr_candidates", True):
+            candidate_summary = [
+                f"{result['value']}:{result['variant']}/psm{result['psm']}"
+                for result in ocr_results[:12]
+            ]
+            self._signature_debug(
+                f"OCR {stage} candidates {candidate_summary}; selected {selected_result['value']}",
+                throttle_key="ocr_candidates",
+                interval_seconds=1.0,
+            )
+
+    def _log_signature_ocr_timing(self, stage, started_at, result_count):
+        if not self.signature_observer_config.get("debug_log_ocr_timing", True):
+            return
+        elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+        self._signature_debug(
+            f"OCR stage={stage} results={result_count} elapsed={elapsed_ms}ms",
+            throttle_key="ocr_timing",
+            interval_seconds=0.5,
+        )
+
+    def _build_signature_ocr_variants(self, image):
+        configured_names = self.signature_observer_config.get(
+            "ocr_variant_names",
+            ["gray", "light_text", "light_text_closed", "otsu", "adaptive"],
+        )
+        allowed_names = {str(name) for name in configured_names} if isinstance(configured_names, list) else None
+
+        def should_build_variant(variant_name):
+            return allowed_names is None or variant_name in allowed_names
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        enhanced = cv2.convertScaleAbs(gray, alpha=2.2, beta=20)
+        scale = max(5, int(180 / max(1, enhanced.shape[0])))
+        resized = cv2.resize(enhanced, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+        resized_color = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
+        variants = []
+        gray_variant = self._pad_ocr_image(self._normalize_ocr_polarity(resized))
+        if should_build_variant("gray"):
+            variants.append(("gray", gray_variant))
+        if should_build_variant("gray_inverted"):
+            variants.append(("gray_inverted", self._pad_ocr_image(self._normalize_ocr_polarity(cv2.bitwise_not(resized)))))
+
+        light_text = None
+        if (
+            should_build_variant("light_text")
+            or should_build_variant("light_text_closed")
+            or should_build_variant("light_text_thick")
+            or should_build_variant("light_mask")
+            or should_build_variant("light_mask_closed")
+        ):
+            light_text = self._build_signature_light_text_image(resized_color, resized)
+        if should_build_variant("light_text") or should_build_variant("light_mask"):
+            variants.append(("light_text", self._prepare_binary_ocr_image(light_text)))
+        if should_build_variant("light_text_closed") or should_build_variant("light_mask_closed"):
+            closed_text = cv2.morphologyEx(light_text, cv2.MORPH_CLOSE, np.ones((2, 2), np.uint8))
+            variants.append(("light_text_closed", self._prepare_binary_ocr_image(closed_text)))
+        if should_build_variant("light_text_thick"):
+            thick_text = cv2.erode(light_text, np.ones((2, 2), np.uint8), iterations=1)
+            thick_text = cv2.morphologyEx(thick_text, cv2.MORPH_CLOSE, np.ones((3, 2), np.uint8))
+            variants.append(("light_text_thick", self._prepare_binary_ocr_image(thick_text)))
+
+        if should_build_variant("otsu"):
+            _, otsu = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            variants.append(("otsu", self._prepare_binary_ocr_image(self._normalize_ocr_polarity(otsu))))
+
+        if should_build_variant("otsu_blur"):
+            blurred = cv2.GaussianBlur(resized, (3, 3), 0)
+            _, otsu_blur = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            variants.append(("otsu_blur", self._prepare_binary_ocr_image(self._normalize_ocr_polarity(otsu_blur))))
+
+        for threshold_value in (70, 90, 110, 130):
+            variant_name = f"threshold_{threshold_value}"
+            if should_build_variant(variant_name):
+                _, fixed = cv2.threshold(resized, threshold_value, 255, cv2.THRESH_BINARY)
+                variants.append((variant_name, self._prepare_binary_ocr_image(self._normalize_ocr_polarity(fixed))))
+
+        if should_build_variant("adaptive"):
+            adaptive = cv2.adaptiveThreshold(
+                resized,
+                255,
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY,
+                21,
+                7,
+            )
+            variants.append(("adaptive", self._prepare_binary_ocr_image(self._normalize_ocr_polarity(adaptive))))
+        return variants or [("gray", gray_variant)]
+
+    def _normalize_ocr_polarity(self, image):
+        return cv2.bitwise_not(image) if float(np.mean(image)) < 127.0 else image
+
+    def _prepare_binary_ocr_image(self, image):
+        normalized = self._normalize_ocr_polarity(image)
+        cropped = self._crop_ocr_image_to_dark_content(normalized)
+        return self._pad_ocr_image(cropped)
+
+    def _crop_ocr_image_to_dark_content(self, image):
+        dark_mask = cv2.inRange(image, 0, 210)
+        dark_points = cv2.findNonZero(dark_mask)
+        if dark_points is None:
+            return image
+
+        x, y, width, height = cv2.boundingRect(dark_points)
+        if width < 4 or height < 4:
+            return image
+
+        pad_x = max(8, int(width * 0.08))
+        pad_y = max(6, int(height * 0.25))
+        x1 = max(0, x - pad_x)
+        y1 = max(0, y - pad_y)
+        x2 = min(image.shape[1], x + width + pad_x)
+        y2 = min(image.shape[0], y + height + pad_y)
+        if x2 <= x1 or y2 <= y1:
+            return image
+
+        return image[y1:y2, x1:x2]
+
+    def _build_signature_light_text_image(self, color_image, gray_image):
+        hsv = cv2.cvtColor(color_image, cv2.COLOR_BGR2HSV)
+        _, _, value = cv2.split(hsv)
+        threshold_value = max(130, int(np.percentile(gray_image, 92)))
+        threshold_value = min(250, threshold_value)
+        text_mask = cv2.bitwise_and(
+            cv2.inRange(gray_image, threshold_value, 255),
+            cv2.inRange(value, threshold_value, 255),
+        )
+
+        coverage = float(cv2.countNonZero(text_mask)) / max(1, text_mask.size)
+        if coverage > 0.35:
+            threshold_value = max(threshold_value, int(np.percentile(gray_image, 98)))
+            text_mask = cv2.bitwise_and(
+                cv2.inRange(gray_image, threshold_value, 255),
+                cv2.inRange(value, threshold_value, 255),
+            )
+        elif coverage < 0.002:
+            threshold_value = max(90, int(np.percentile(gray_image, 80)))
+            text_mask = cv2.bitwise_and(
+                cv2.inRange(gray_image, threshold_value, 255),
+                cv2.inRange(value, threshold_value, 255),
+            )
+
+        text_mask = cv2.medianBlur(text_mask, 3)
+        text_mask = cv2.dilate(text_mask, np.ones((2, 1), np.uint8), iterations=1)
+        ocr_image = np.full_like(gray_image, 255)
+        ocr_image[text_mask > 0] = 0
+        return ocr_image
+
+    def _save_signature_ocr_debug_variants(self, original_crop, variants):
+        if not self.signature_observer_config.get("debug_mode", False):
+            return
+        if not self.signature_observer_config.get("save_ocr_debug_variants", True):
+            return
+
+        path = os.path.join(self.mining_data_path, "debug_data", "signature_ocr_variants")
         try:
-            return int(digits)
-        except ValueError:
+            os.makedirs(path, exist_ok=True)
+            if original_crop is not None:
+                cv2.imwrite(os.path.join(path, "latest_original.png"), original_crop)
+            for variant_name, variant_image in variants:
+                cv2.imwrite(os.path.join(path, f"latest_{variant_name}.png"), variant_image)
+        except Exception as e:
+            self._signature_debug(f"could not save OCR debug variants: {e}", throttle_key="save_ocr_variants_failed")
+
+    def _pad_ocr_image(self, image):
+        return cv2.copyMakeBorder(
+            image,
+            20,
+            20,
+            24,
+            24,
+            cv2.BORDER_CONSTANT,
+            value=255,
+        )
+
+    def _select_signature_ocr_result(self, ocr_results):
+        result_counts = self._count_signature_ocr_values(ocr_results)
+
+        variant_priority = {
+            "light_text_thick": 0,
+            "light_text_closed": 1,
+            "light_text": 2,
+            "gray": 3,
+            "otsu": 4,
+            "adaptive": 5,
+        }
+
+        def score(result):
+            value = result["value"]
+            digit_count = len(result["digits"])
+            return (
+                result_counts[value],
+                -variant_priority.get(result["variant"], 20),
+                -abs(digit_count - 4),
+                digit_count,
+            )
+
+        return max(ocr_results, key=score)
+
+    def _count_signature_ocr_values(self, ocr_results):
+        result_counts = {}
+        for result in ocr_results:
+            result_counts[result["value"]] = result_counts.get(result["value"], 0) + 1
+        return result_counts
+
+    def _prepare_signature_ocr_crop(self, image):
+        icon_match = self._find_signature_icon_match(image)
+        if icon_match:
+            self._remember_signature_icon_match(icon_match)
+            return self._crop_signature_number_after_icon(image, icon_match)
+
+        if self.signature_observer_config.get("use_signature_icon_template", True):
+            if self.signature_icon_template_loaded and self.signature_icon_template is None:
+                return self._prepare_signature_ocr_crop_without_icon(image)
+            return None, None
+
+        return self._prepare_signature_ocr_crop_without_icon(image)
+
+    def _remember_signature_icon_match(self, icon_match):
+        watch_rect = self.signature_last_watch_area_rect
+        if not watch_rect:
+            return
+
+        watch_x, watch_y, _, _ = watch_rect
+        self.signature_last_icon_match_rect = (
+            watch_x + int(icon_match["x"]),
+            watch_y + int(icon_match["y"]),
+            int(icon_match["width"]),
+            int(icon_match["height"]),
+        )
+
+    def _prepare_signature_ocr_crop_without_icon(self, image):
+        _, image_width = image.shape[:2]
+        left_ratio = float(self.signature_observer_config.get("ocr_number_region_left_ratio", 0.35))
+        left_ratio = max(0.0, min(0.80, left_ratio))
+        left = min(image_width - 1, int(image_width * left_ratio))
+        cropped = image[:, left:image_width]
+        if cropped.size == 0:
+            image_height, image_width = image.shape[:2]
+            return image, (0, 0, image_width, image_height)
+
+        gray = cv2.cvtColor(cropped, cv2.COLOR_BGR2GRAY)
+        _, bright_mask = cv2.threshold(gray, 80, 255, cv2.THRESH_BINARY)
+        bright_mask = cv2.morphologyEx(bright_mask, cv2.MORPH_CLOSE, np.ones((3, 2), np.uint8))
+        bright_points = cv2.findNonZero(bright_mask)
+        if bright_points is None:
+            return cropped, (left, 0, cropped.shape[1], cropped.shape[0])
+
+        x, y, w, h = cv2.boundingRect(bright_points)
+        if w < 4 or h < 4:
+            return cropped, (left, 0, cropped.shape[1], cropped.shape[0])
+
+        crop_x1 = max(0, x - 4)
+        crop_y1 = max(0, y - 4)
+        crop_x2 = min(cropped.shape[1], x + w + 6)
+        crop_y2 = min(cropped.shape[0], y + h + 5)
+        if crop_x2 <= crop_x1 or crop_y2 <= crop_y1:
+            return cropped, (left, 0, cropped.shape[1], cropped.shape[0])
+
+        return (
+            cropped[crop_y1:crop_y2, crop_x1:crop_x2],
+            (left + crop_x1, crop_y1, crop_x2 - crop_x1, crop_y2 - crop_y1),
+        )
+
+    def _find_signature_icon_match(self, image):
+        if not self.signature_observer_config.get("use_signature_icon_template", True):
             return None
+
+        template = self._load_signature_icon_template()
+        if template is None or image is None:
+            return None
+
+        try:
+            image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            template_gray = cv2.cvtColor(template, cv2.COLOR_BGR2GRAY)
+        except Exception as e:
+            self._signature_debug(f"could not prepare signature icon template match: {e}", throttle_key="signature_icon_prepare_failed")
+            return None
+
+        threshold = float(self.signature_observer_config.get("signature_icon_match_threshold", 0.70))
+        scales = self.signature_observer_config.get("signature_icon_scales", [0.85, 1.0, 1.15])
+        if not isinstance(scales, list):
+            scales = [1.0]
+
+        best_match = None
+        for scale in scales:
+            try:
+                scale = float(scale)
+            except (TypeError, ValueError):
+                continue
+            if scale <= 0:
+                continue
+
+            scaled_width = max(4, int(template_gray.shape[1] * scale))
+            scaled_height = max(4, int(template_gray.shape[0] * scale))
+            if scaled_width > image_gray.shape[1] or scaled_height > image_gray.shape[0]:
+                continue
+
+            resized_template = cv2.resize(
+                template_gray,
+                (scaled_width, scaled_height),
+                interpolation=cv2.INTER_AREA if scale < 1.0 else cv2.INTER_CUBIC,
+            )
+            match_result = cv2.matchTemplate(image_gray, resized_template, cv2.TM_CCOEFF_NORMED)
+            _, max_value, _, max_location = cv2.minMaxLoc(match_result)
+            if best_match is None or max_value > best_match["score"]:
+                best_match = {
+                    "score": float(max_value),
+                    "x": int(max_location[0]),
+                    "y": int(max_location[1]),
+                    "width": scaled_width,
+                    "height": scaled_height,
+                    "scale": scale,
+                }
+
+        if not best_match or best_match["score"] < threshold:
+            if best_match:
+                self._signature_debug(
+                    f"signature icon match below threshold score={best_match['score']:.2f} threshold={threshold:.2f}",
+                    throttle_key="signature_icon_low_score",
+                    interval_seconds=0.5,
+                )
+            return None
+
+        self._signature_debug(
+            f"signature icon matched score={best_match['score']:.2f} pos=({best_match['x']},{best_match['y']}) scale={best_match['scale']:.2f}",
+            throttle_key="signature_icon_match",
+            interval_seconds=0.5,
+        )
+        return best_match
+
+    def _load_signature_icon_template(self):
+        if self.signature_icon_template_loaded:
+            return self.signature_icon_template
+
+        self.signature_icon_template_loaded = True
+        configured_path = str(
+            self.signature_observer_config.get(
+                "signature_icon_template_path",
+                "templates/scans/scan_signature_icon.png",
+            )
+        )
+        template_path = configured_path
+        if not os.path.isabs(template_path):
+            template_path = os.path.join(self.mining_data_path, template_path)
+
+        self.signature_icon_template = cv2.imread(template_path, cv2.IMREAD_COLOR)
+        if self.signature_icon_template is None:
+            self._signature_debug(f"signature icon template not found: {template_path}", throttle_key="signature_icon_template_missing")
+        return self.signature_icon_template
+
+    def _crop_signature_number_after_icon(self, image, icon_match):
+        image_height, image_width = image.shape[:2]
+        left_padding = int(self.signature_observer_config.get("signature_number_crop_left_padding", 2))
+        right_padding = int(self.signature_observer_config.get("signature_number_crop_right_padding", 36))
+        vertical_padding = int(self.signature_observer_config.get("signature_number_crop_vertical_padding", 8))
+
+        x1 = min(image_width - 1, max(0, icon_match["x"] + icon_match["width"] + left_padding))
+        x2 = min(image_width, max(x1 + 1, image_width - max(0, right_padding)))
+        y1 = max(0, icon_match["y"] - max(0, vertical_padding))
+        y2 = min(image_height, icon_match["y"] + icon_match["height"] + max(0, vertical_padding))
+        if x2 <= x1 or y2 <= y1:
+            return self._prepare_signature_ocr_crop_without_icon(image)
+
+        number_crop = image[y1:y2, x1:x2]
+        if number_crop.size == 0:
+            return self._prepare_signature_ocr_crop_without_icon(image)
+
+        return number_crop, (x1, y1, x2 - x1, y2 - y1)
+
+    def _get_observed_signature_status(self, signature_value):
+        reference_entries = self.load_signature_reference()
+        if self.find_signature_matches(signature_value, reference_entries):
+            return "known"
+        if self.is_above_max_known_signature(signature_value, reference_entries):
+            return "max_reached"
+        return "unknown"
+
+    def _handle_unknown_signature_value(self, signature_value, number_crop, signature_status):
+        self.signature_unknown_reads += 1
+
+        if self.signature_observer_config.get("save_number_crops", True):
+            self._save_signature_number_crop(signature_value, number_crop)
+
+        self._log_observed_signature_matches(signature_value)
+        clear_reads = int(self.signature_observer_config.get("unknown_clear_reads", 3))
+        if self.signature_unknown_reads >= max(1, clear_reads):
+            self._signature_debug(
+                f"clearing signature overlay after {self.signature_unknown_reads} consecutive {signature_status} reads"
+            )
+            self.signature_candidate_value = None
+            self.signature_candidate_reads = 0
+            self.signature_candidate_misses = 0
+            self._clear_signature_overlay()
+
+    def _handle_signature_miss(self):
+        if self.signature_candidate_value is None:
+            return
+
+        self.signature_candidate_misses += 1
+        miss_tolerance = int(self.signature_observer_config.get("stable_miss_tolerance", 2))
+        if self.signature_candidate_misses <= max(0, miss_tolerance):
+            return
+
+        self.signature_candidate_value = None
+        self.signature_candidate_reads = 0
+        self.signature_candidate_misses = 0
 
     def _handle_observed_signature(self, signature_value, number_crop):
         if not self._is_signature_analysis_active():
@@ -885,16 +2323,49 @@ class MiningManager(FunctionManager):
         stable_reads = int(self.signature_observer_config.get("stable_reads", 2))
         if signature_value == self.signature_candidate_value:
             self.signature_candidate_reads += 1
+            self.signature_candidate_misses = 0
         else:
             self.signature_candidate_value = signature_value
             self.signature_candidate_reads = 1
+            self.signature_candidate_misses = 0
+
+        single_tick_support_threshold = int(self.signature_observer_config.get("stable_single_tick_support", 3))
+        single_tick_support = int(self.signature_last_ocr_value_support.get(signature_value, 0))
+        if single_tick_support_threshold > 0 and single_tick_support >= single_tick_support_threshold:
+            if self.signature_candidate_reads < max(1, stable_reads):
+                self._signature_debug(
+                    f"candidate signature {signature_value} accepted from single OCR tick "
+                    f"support={single_tick_support}/{single_tick_support_threshold}"
+                )
+            self.signature_candidate_reads = max(self.signature_candidate_reads, max(1, stable_reads))
 
         if self.signature_candidate_reads < max(1, stable_reads):
+            self._signature_debug(
+                f"candidate signature {signature_value} pending {self.signature_candidate_reads}/{stable_reads}",
+                throttle_key="signature_candidate_pending",
+                interval_seconds=0.5,
+            )
+            self._show_signature_status_dot("yellow")
             return
 
+        self._show_signature_status_dot("green")
         now = time.time()
         display_cooldown = float(self.signature_observer_config.get("display_cooldown_seconds", 3.0))
         if signature_value == self.last_signature_value and now - self.last_signature_display_time < display_cooldown:
+            self._signature_debug(
+                f"suppressing duplicate signature display for {signature_value} during cooldown",
+                throttle_key="signature_display_cooldown",
+                interval_seconds=0.5,
+            )
+            return
+
+        overlay_text = self._build_signature_overlay_text(signature_value)
+        if not overlay_text:
+            self._signature_debug(
+                f"stable signature {signature_value} has no display text",
+                throttle_key="signature_no_display_text",
+                interval_seconds=0.5,
+            )
             return
 
         self.last_signature_value = signature_value
@@ -910,10 +2381,22 @@ class MiningManager(FunctionManager):
             )
             return
 
-        self._display_signature_overlay_text(self._build_signature_overlay_text(signature_value))
+        self._log_observed_signature_matches(signature_value)
+        self._signature_debug(f"displaying stable signature {signature_value}: {overlay_text}")
+        self._display_signature_overlay_text(overlay_text)
+
+    def _clear_signature_overlay(self):
+        if not self.signature_overlay_visible and self.last_signature_value is None:
+            return
+        self.overlay.clear_overlay_text()
+        self.signature_overlay_visible = False
+        self.last_signature_value = None
+        self.last_signature_display_time = 0.0
 
     def _display_signature_overlay_text(self, text):
-        display_duration = int(self.signature_observer_config.get("display_duration_ms", 2500))
+        if not text:
+            return
+        display_duration = int(self.signature_observer_config.get("display_duration_ms", 5000))
         try:
             active_window = pygetwindow.getActiveWindow()
             if not active_window:
@@ -924,16 +2407,19 @@ class MiningManager(FunctionManager):
             if not relative_rect:
                 raise ValueError("No watch area available.")
 
-            rel_x, rel_y, width, _ = relative_rect
-            offset = int(self.signature_observer_config.get("overlay_offset_pixels", 8))
-            x_center = active_window.left + rel_x + width // 2
-            y_bottom = max(active_window.top, active_window.top + rel_y - offset)
+            dot_size = int(self.signature_observer_config.get("status_dot_size", 10))
+            dot_x, dot_y = self._get_signature_status_dot_position(active_window, relative_rect, dot_size)
+            x_offset = int(self.signature_observer_config.get("overlay_text_offset_x_pixels", 130))
+            y_offset = int(self.signature_observer_config.get("overlay_text_offset_y_pixels", 8))
+            x_center = dot_x + x_offset
+            y_bottom = max(active_window.top, dot_y - max(0, y_offset))
             self.overlay.display_overlay_text_at(
                 text,
                 x_center=x_center,
                 y_bottom=y_bottom,
                 display_duration=display_duration,
             )
+            self.signature_overlay_visible = True
         except Exception as e:
             self._signature_debug(f"falling back to centered overlay: {e}")
             self.overlay.display_overlay_text(
@@ -941,6 +2427,7 @@ class MiningManager(FunctionManager):
                 vertical_position_ratio=4,
                 display_duration=display_duration,
             )
+            self.signature_overlay_visible = True
 
     def _save_signature_number_crop(self, signature_value, number_crop):
         if number_crop is None:
@@ -956,9 +2443,74 @@ class MiningManager(FunctionManager):
 
     def _build_signature_overlay_text(self, signature_value):
         reference_entries = self.load_signature_reference()
+        if self.is_above_max_known_signature(signature_value, reference_entries):
+            return None
+
         exact_matches = self.find_signature_matches(signature_value, reference_entries)
         if exact_matches:
-            preferred_match = exact_matches[0]
-            return f"{preferred_match['count']} x {preferred_match['resource']}"
-        return "unknown"
+            preferred_match = self.get_preferred_signature_matches(exact_matches)[0]
+            if preferred_match.get("specific_cluster_size"):
+                return f"{signature_value} -> {preferred_match['resource']} cluster {preferred_match['cluster_size']}"
+            return f"{signature_value} -> {preferred_match['count']} x {preferred_match['resource']}"
+        return None
+
+    def _log_observed_signature_matches(self, signature_value):
+        reference_entries = self.load_signature_reference()
+        if self.is_above_max_known_signature(signature_value, reference_entries):
+            max_known_signature = self.get_max_known_signature_value(reference_entries)
+            self._signature_debug(
+                f"observed signature {signature_value}; max reached above known maximum {max_known_signature}"
+            )
+            self._write_signature_cluster_observation(signature_value, [], status="max_reached")
+            return
+
+        exact_matches = self.find_signature_matches(signature_value, reference_entries)
+        if not exact_matches:
+            self._signature_debug(f"observed signature {signature_value}; no cluster match found")
+            self._write_signature_cluster_observation(signature_value, [], status="unknown")
+            return
+
+        preferred_matches = self.get_preferred_signature_matches(exact_matches)
+        match_descriptions = [
+            self.format_signature_match_description(match)
+            for match in preferred_matches
+        ]
+        self._signature_debug(
+            f"observed signature {signature_value}; cluster match: {', '.join(match_descriptions)}"
+        )
+        self._write_signature_cluster_observation(signature_value, preferred_matches, status="matched")
+
+    def _write_signature_cluster_observation(self, signature_value, matches, status):
+        if not self.signature_observer_config.get("log_observed_clusters", True):
+            return
+
+        path = os.path.join(self.mining_data_path, "debug_data")
+        os.makedirs(path, exist_ok=True)
+        filename = os.path.join(path, "signature_cluster_observations.jsonl")
+        payload = {
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "status": status,
+            "signature_value": signature_value,
+            "cluster_sizes": sorted({
+                match.get("cluster_size", match.get("count"))
+                for match in matches
+                if match.get("cluster_size", match.get("count")) is not None
+            }),
+            "matches": [
+                {
+                    "resource": match.get("resource"),
+                    "category": match.get("category"),
+                    "base_signature": match.get("base_signature"),
+                    "signature_value": match.get("signature_value"),
+                    "cluster_size": match.get("cluster_size", match.get("count")),
+                    "specific_cluster_size": bool(match.get("specific_cluster_size")),
+                }
+                for match in matches
+            ],
+        }
+        try:
+            with open(filename, "a", encoding="UTF-8") as file:
+                file.write(json.dumps(payload, ensure_ascii=False) + "\n")
+        except Exception as e:
+            self._signature_debug(f"could not write signature cluster observation: {e}")
 

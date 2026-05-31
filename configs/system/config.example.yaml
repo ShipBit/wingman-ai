@@ -295,16 +295,77 @@ wingmen:
         enabled: False # True | False - captures refinery work orders locally and looks up mining radar signatures.
         signature_observer:
           enabled: True # Starts local OCR observation while the MiningManager is active.
-          debug_mode: False
-          debug_log_interval_seconds: 2.0
-          interval_seconds: 0.25
-          activation_duration_seconds: 120
-          stable_reads: 1
-          display_duration_ms: 2500
-          display_cooldown_seconds: 3.0
-          overlay_offset_pixels: 8
-          save_number_crops: False
-          overwrite_number_crop: True
+          debug_mode: False # Shows the active OCR scan area as a red overlay frame and prints debug logs.
+          debug_log_interval_seconds: 2.0 # Minimum seconds between repeated debug log lines with the same throttle key.
+          interval_seconds: 0.25 # Seconds between OCR scan attempts while the observer is active.
+          focus_activation_grace_seconds: 1.0 # After Star Citizen regains focus, ignore Tab for this long so Alt+Tab does not count as a scan ping.
+          activation_duration_seconds: 30 # Seconds OCR stays active after pressing Tab in Star Citizen.
+          recognition_extension_seconds: 30 # After each successful read, keep OCR active for this many more seconds.
+          stable_reads: 2 # Require this many identical known reads before updating the text overlay.
+          stable_single_tick_support: 3 # Treat one OCR tick as stable if the same known value appears in at least this many OCR candidates.
+          stable_miss_tolerance: 2 # Keep a pending known value through this many OCR misses so flaky reads can still confirm.
+          unknown_clear_reads: 3 # Clear the last green text after this many consecutive unknown/max reads.
+          display_duration_ms: 5000 # How long the green text stays visible; repeated same text refreshes this timer.
+          display_cooldown_seconds: 3.0 # Minimum seconds before showing/logging the same stable signature again.
+          overlay_offset_pixels: 2 # Legacy text offset; signature text now uses overlay_text_offset_* relative to the blinking dot.
+          overlay_text_offset_x_pixels: 130 # Horizontal offset from the blinking dot to the text overlay center.
+          overlay_text_offset_y_pixels: 8 # Vertical offset placing the text slightly above the blinking dot.
+          vision_signature_fallback_enabled: True # Use Vision AI asynchronously when local OCR is missing or implausible.
+          vision_signature_model:  # Optional model override for signature crops; empty uses open-ai-vision-model.
+          vision_signature_min_interval_seconds: 1.5 # Minimum seconds between Vision AI crop requests to control cost.
+          vision_signature_queue_size: 4 # Maximum queued Vision AI crops; new crops are dropped while full.
+          vision_signature_sample_known_reads: False # Also send locally known reads to Vision AI for extra training samples.
+          vision_signature_accept_single_result: True # Treat one known Vision AI result as stable enough to show immediately.
+          vision_signature_save_crops: True # Save sent number crops for later local recognizer training.
+          vision_signature_training_dir: debug_data/signature_training # Relative to mining-data; stores crops and auto-label JSONL.
+          vision_signature_max_output_tokens: 512 # Response token limit for the small digit-only signature extraction prompt.
+          save_number_crops: False # Save OCR scan crops to mining-data/screenshots/signatures for debugging.
+          overwrite_number_crop: True # If saving crops, overwrite latest_signature_number.png instead of creating timestamped files.
+          log_observed_clusters: True # Appends stable observations to mining-data/debug_data/signature_cluster_observations.jsonl.
+          minimum_signature_digits: 4 # Discards short OCR noise like 2 or 260.
+          ocr_number_region_left_ratio: 0.35 # Ignores the left icon area before OCR.
+          use_signature_icon_template: True # First look for the signature icon; skip OCR when it is not visible.
+          signature_icon_template_path: templates/scans/scan_signature_icon.png # Template image used to find the signature row inside the watch area.
+          signature_icon_match_threshold: 0.70 # Minimum template-match score required before OCR reads the number to the right.
+          signature_icon_scales: [0.85, 1.0, 1.15] # Template scales to try so matching still works with small HUD size differences.
+          signature_number_crop_left_padding: 2 # Pixels between the detected icon's right edge and the OCR number crop.
+          signature_number_crop_right_padding: 36 # Pixels to leave unused at the right side of the watch area.
+          signature_number_crop_vertical_padding: 8 # Extra pixels above and below the icon row kept for OCR context.
+          debug_log_ocr_candidates: False # Logs OCR variant candidates; useful while tuning recognition.
+          debug_log_ocr_timing: True # Logs whether OCR found digits and how long the simple OCR pass took.
+          ocr_psm_modes: [7, 8, 13] # Tesseract page segmentation modes used for every OCR attempt.
+          ocr_variant_names: [gray, light_text, light_text_closed, light_text_thick, otsu, adaptive] # Image variants used for the simple OCR pass after the icon was found.
+          ocr_tesseract_timeout_seconds: 2.0 # Max seconds per individual Tesseract attempt before skipping it.
+          ocr_fuzzy_reference_match: True # Correct unknown OCR values to a very close known reference value when the match is unambiguous.
+          ocr_fuzzy_max_distance: 1 # Maximum Levenshtein digit edits allowed for fuzzy correction, e.g. 8460 -> 8480.
+          ocr_fuzzy_max_weighted_distance: 0.5 # Maximum weighted OCR-confusion distance; favors likely digit confusions like 6 vs 8.
+          ocr_fuzzy_max_numeric_delta: 100 # Maximum numeric difference allowed for fuzzy correction.
+          ocr_fuzzy_require_same_length: True # Only fuzzy-match values with the same number of digits.
+          ocr_fuzzy_allow_missing_leading_one: True # Allow correction like 1475 -> 11475 when adding a leading 1 gives an exact known signature.
+          save_ocr_debug_variants: True # In debug mode, save latest OCR input variants to mining-data/debug_data/signature_ocr_variants.
+          status_dot_size: 10 # Diameter in pixels of the blinking status dot left of the scan area.
+          status_dot_offset_pixels: 16 # Horizontal distance from the scan area's left edge to the status dot center.
+          status_dot_blink_ms: 450 # Blink interval for the status dot in milliseconds.
+          status_dot_hold_ms: 900 # How long yellow/green/red stays before falling back to white without a fresh OCR result.
+          dynamic_watch_area:
+            enabled: True # Find a stable scan-angle HUD element first and derive the signature watch area from it.
+            refresh_seconds: 10.0 # Re-check the scan-angle HUD position this often; cached coordinates are used between refreshes.
+            missing_icon_refresh_after: 2 # If the signature icon is missing this many OCR ticks, refresh the dynamic watch area early.
+            anchor_templates_glob: templates/scans/scan_area_*.jpg # Template images used to locate the stable scan-angle HUD element.
+            anchor_match_threshold: 0.70 # Minimum template-match score required before the dynamic position is accepted.
+            anchor_scales: [0.90, 1.0, 1.10] # Scale variants for matching the scan-angle HUD at slightly different HUD sizes.
+            use_last_on_miss: True # If refresh fails, keep the last dynamic watch area instead of immediately falling back.
+            anchor_search_area:
+              # Absolute pixel search box relative to the Star Citizen window.
+              # This limits scan_area*.jpg matching to the lower center HUD region instead of the whole screen.
+              coords: [[850, 500], [1300, 950]]
+            signature_area_offset:
+              # Watch-area rectangle derived from the matched scan-angle template's top-left position.
+              # Tune x/y until the red debug frame reliably contains the signature icon and number.
+              x: 250
+              y: -250
+              width: 300
+              height: 210
           watch_area:
             # Optional absolute pixel coordinates relative to the Star Citizen window screenshot.
             # Measure them in a full-size screenshot: [810, 280] means x=810 pixels from the left edge
