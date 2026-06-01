@@ -50,15 +50,28 @@ SIGNATURE_OBSERVER_DEFAULTS = {
     "overlay_offset_pixels": 2,
     "overlay_text_offset_x_pixels": 130,
     "overlay_text_offset_y_pixels": 8,
+    "debug_rectangle_auto_clear_ms": 120,
+    "debug_overlay_pre_capture_clear_wait_ms": 50,
     "vision_signature_fallback_enabled": True,
     "vision_signature_model": None,
-    "vision_signature_min_interval_seconds": 1.5,
-    "vision_signature_queue_size": 4,
+    "vision_signature_min_interval_seconds": 5.0,
+    "vision_signature_queue_size": 1,
+    "vision_signature_single_inflight": True,
+    "vision_signature_near_duplicate_enabled": True,
+    "vision_signature_near_duplicate_cooldown_seconds": 30.0,
+    "vision_signature_near_duplicate_max_mean_delta": 18.0,
+    "vision_signature_near_duplicate_history_size": 8,
+    "vision_signature_error_backoff_seconds": 30.0,
+    "vision_signature_inflight_timeout_seconds": 60.0,
+    "log_signature_vision_events": True,
+    "signature_vision_event_log_interval_seconds": 2.0,
     "vision_signature_sample_known_reads": False,
     "vision_signature_accept_single_result": True,
+    "vision_signature_reject_overlay_artifacts": True,
     "vision_signature_save_crops": True,
     "vision_signature_training_dir": "debug_data/signature_training",
     "vision_signature_max_output_tokens": 512,
+    "local_signature_ocr_enabled": False,
     "save_number_crops": False,
     "overwrite_number_crop": True,
     "log_observed_clusters": True,
@@ -68,7 +81,13 @@ SIGNATURE_OBSERVER_DEFAULTS = {
     "signature_icon_template_path": "templates/scans/scan_signature_icon.png",
     "signature_icon_match_threshold": 0.70,
     "signature_icon_scales": [0.85, 1.0, 1.15],
+    "signature_icon_tracking_enabled": True,
+    "signature_icon_tracking_interval_seconds": 0.25,
+    "signature_icon_tracking_search_padding_pixels": 48,
+    "signature_icon_tracking_miss_tolerance": 4,
     "signature_number_crop_left_padding": 2,
+    "signature_number_crop_width": 120,
+    "signature_number_crop_min_width": 80,
     "signature_number_crop_right_padding": 36,
     "signature_number_crop_vertical_padding": 8,
     "debug_log_ocr_candidates": True,
@@ -131,7 +150,7 @@ class MiningManager(FunctionManager):
         "Store active refinery work orders locally",
         "Retrieve or remove locally stored active refinery work orders",
         "Look up likely mining resources by radar signature",
-        "Watch the mining signature HUD with local OCR while active",
+        "Watch the mining signature HUD with template matching and Vision AI while active",
     ]
 
     def __init__(self, config, secret_keeper):
@@ -163,6 +182,7 @@ class MiningManager(FunctionManager):
         self.signature_last_number_crop_rect = None
         self.signature_last_watch_area_rect = None
         self.signature_last_icon_match_rect = None
+        self.signature_icon_tracking_misses = 0
         self.signature_icon_miss_count = 0
         self.signature_dynamic_anchor_templates = None
         self.signature_dynamic_watch_area_rect = None
@@ -173,9 +193,15 @@ class MiningManager(FunctionManager):
         self.signature_vision_worker_thread = None
         self.signature_vision_cache = {}
         self.signature_vision_queued_hashes = set()
+        self.signature_vision_queued_at_by_hash = {}
         self.signature_vision_last_request_at = 0.0
+        self.signature_vision_backoff_until = 0.0
+        self.signature_vision_recent_crops = []
+        self.signature_last_value_source = None
+        self.signature_last_vision_skip_reason = None
         self.signature_ocr_unavailable_reported = False
         self.signature_debug_last_by_key = {}
+        self.signature_vision_event_last_by_key = {}
 
         self.overlay = StarCitizenOverlay()
             
@@ -919,41 +945,26 @@ class MiningManager(FunctionManager):
 
     def _signature_observer_loop(self, stop_event):
         interval_seconds = float(self.signature_observer_config.get("interval_seconds", 0.75))
+        tracking_enabled = bool(self.signature_observer_config.get("signature_icon_tracking_enabled", True))
+        tracking_interval_seconds = float(
+            self.signature_observer_config.get("signature_icon_tracking_interval_seconds", 0.25)
+        )
+        tracking_interval_seconds = max(0.05, tracking_interval_seconds)
+        next_analysis_at = 0.0
         while not stop_event.is_set():
+            active = False
             try:
-                if self._should_analyze_signature_hud():
-                    self._signature_debug("analysis tick", throttle_key="analysis_tick")
-                    watch_image = self._capture_signature_watch_area()
-                    signature_value, number_crop = self._read_signature_value(watch_image)
-                    if signature_value is not None:
-                        if not self._is_signature_analysis_active():
-                            self._signature_debug(
-                                "discarding OCR result because analysis window expired",
-                                throttle_key="expired_result",
-                            )
-                            continue
-                        self._signature_debug(f"OCR read signature value {signature_value}")
-                        signature_status = self._get_observed_signature_status(signature_value)
-                        if signature_status == "known":
-                            self.signature_unknown_reads = 0
-                            extension_seconds = self._extend_signature_analysis_after_value()
-                            if extension_seconds:
-                                self._signature_debug(
-                                    f"signature recognized; OCR analysis refreshed for {int(extension_seconds)}s",
-                                    throttle_key="recognition_extension",
-                                )
-                            self._handle_observed_signature(signature_value, number_crop)
-                        else:
-                            self._show_signature_status_dot("red")
-                            self._handle_unknown_signature_value(signature_value, number_crop, signature_status)
-                    else:
-                        self._show_signature_status_dot("white")
-                        self.signature_unknown_reads = 0
-                        self._handle_signature_miss()
-                        if number_crop is None:
-                            self._signature_debug("no signature value detected in watch area", throttle_key="no_value")
-                        else:
-                            self._signature_debug("discarding implausible OCR value", throttle_key="discard_implausible_signature")
+                active = self._should_analyze_signature_hud()
+                if active:
+                    now = time.time()
+                    if now >= next_analysis_at:
+                        self._signature_debug("analysis tick", throttle_key="analysis_tick")
+                        self._run_signature_analysis_tick()
+                        next_analysis_at = time.time() + max(0.1, interval_seconds)
+                    elif tracking_enabled and self.signature_last_icon_match_rect:
+                        self._refresh_signature_icon_tracking()
+                else:
+                    next_analysis_at = 0.0
             except pytesseract.TesseractNotFoundError:
                 if not self.signature_ocr_unavailable_reported:
                     self.signature_ocr_unavailable_reported = True
@@ -967,7 +978,69 @@ class MiningManager(FunctionManager):
                 printr.print_warn(f"Mining signature observer failed: {e}")
                 self._signature_debug(f"exception: {e}")
 
-            stop_event.wait(timeout=max(0.1, interval_seconds))
+            wait_seconds = tracking_interval_seconds if active and tracking_enabled else max(0.1, interval_seconds)
+            stop_event.wait(timeout=max(0.05, wait_seconds))
+
+    def _run_signature_analysis_tick(self):
+        signature_capture = self._capture_signature_watch_area()
+        signature_value, number_crop = self._read_signature_value(signature_capture)
+        if signature_value is not None:
+            if not self._is_signature_analysis_active():
+                self._signature_debug(
+                    "discarding signature result because analysis window expired",
+                    throttle_key="expired_result",
+                )
+                return
+            self._signature_debug(f"read signature value {signature_value}")
+            signature_status = self._get_observed_signature_status(signature_value)
+            if signature_status == "known":
+                self.signature_unknown_reads = 0
+                extension_seconds = self._extend_signature_analysis_after_value()
+                if extension_seconds:
+                    self._signature_debug(
+                        f"signature recognized; OCR analysis refreshed for {int(extension_seconds)}s",
+                        throttle_key="recognition_extension",
+                    )
+                self._handle_observed_signature(signature_value, number_crop)
+            else:
+                self._show_signature_status_dot(
+                    "red",
+                    symbol="C" if self.signature_last_value_source == "cache" else None,
+                )
+                self._handle_unknown_signature_value(signature_value, number_crop, signature_status)
+            return
+
+        if (
+            number_crop is not None
+            and not self.signature_observer_config.get("local_signature_ocr_enabled", False)
+            and self.signature_observer_config.get("vision_signature_fallback_enabled", True)
+        ):
+            now = time.time()
+            if now < self.signature_vision_backoff_until:
+                self._show_signature_status_dot(
+                    "red",
+                    symbol="!",
+                    hold_ms_override=int((self.signature_vision_backoff_until - now) * 1000),
+                    use_cached_rect=True,
+                )
+            elif self.signature_last_vision_skip_reason == "overlay_artifact":
+                self._show_signature_status_dot("red", symbol="!", use_cached_rect=True)
+            else:
+                self._show_signature_status_dot("yellow")
+                self._signature_debug(
+                    "waiting for Vision AI signature result",
+                    throttle_key="vision_pending",
+                    interval_seconds=0.5,
+                )
+            return
+
+        self._show_signature_status_dot("white")
+        self.signature_unknown_reads = 0
+        self._handle_signature_miss()
+        if number_crop is None:
+            self._signature_debug("no signature value detected in watch area", throttle_key="no_value")
+        else:
+            self._signature_debug("discarding implausible OCR value", throttle_key="discard_implausible_signature")
 
     def _should_analyze_signature_hud(self):
         if not self._is_star_citizen_window_active():
@@ -999,6 +1072,7 @@ class MiningManager(FunctionManager):
             self.signature_candidate_misses = 0
             self.signature_unknown_reads = 0
             self.signature_last_icon_match_rect = None
+            self.signature_icon_tracking_misses = 0
 
     def _deactivate_signature_analysis(self, reset_state=True):
         with self.signature_observer_lock:
@@ -1010,6 +1084,7 @@ class MiningManager(FunctionManager):
                 self.signature_candidate_misses = 0
                 self.signature_unknown_reads = 0
                 self.signature_last_icon_match_rect = None
+                self.signature_icon_tracking_misses = 0
 
         self._clear_signature_overlay()
         self._clear_signature_debug_scan_area()
@@ -1070,13 +1145,30 @@ class MiningManager(FunctionManager):
             return None
 
         self._signature_debug(
-            f"capturing watch area relative=({rel_x}, {rel_y}, {width}, {height}) screen=({x}, {y}, {width}, {height})",
+            f"capturing window for watch area relative=({rel_x}, {rel_y}, {width}, {height}) "
+            f"screen=({x}, {y}, {width}, {height})",
             throttle_key="capture_area",
         )
         if self.signature_observer_config.get("debug_mode", False):
+            self._clear_signature_debug_scan_area()
+            clear_wait_ms = int(
+                self.signature_observer_config.get("debug_overlay_pre_capture_clear_wait_ms", 50)
+            )
+            if clear_wait_ms > 0:
+                time.sleep(clear_wait_ms / 1000.0)
+
+        screenshot_pil = pyautogui.screenshot(
+            region=(active_window.left, active_window.top, active_window.width, active_window.height)
+        )
+        window_image = cv2.cvtColor(np.array(screenshot_pil), cv2.COLOR_RGB2BGR)
+        watch_image = window_image[rel_y:rel_y + height, rel_x:rel_x + width]
+        if self.signature_observer_config.get("debug_mode", False):
             self._show_signature_debug_scan_area(active_window=active_window, relative_rect=relative_rect)
-        screenshot_pil = pyautogui.screenshot(region=(x, y, width, height))
-        return cv2.cvtColor(np.array(screenshot_pil), cv2.COLOR_RGB2BGR)
+        return {
+            "window_image": window_image,
+            "watch_image": watch_image,
+            "watch_rect": relative_rect,
+        }
 
     def _show_signature_debug_scan_area(self, active_window=None, relative_rect=None):
         if not self.signature_observer_config.get("debug_mode", False):
@@ -1102,12 +1194,82 @@ class MiningManager(FunctionManager):
                 width,
                 height,
                 color="red",
+                auto_clear_ms=int(self.signature_observer_config.get("debug_rectangle_auto_clear_ms", 120)),
             )
         except Exception as e:
             self._signature_debug(f"could not show debug scan area: {e}", throttle_key="debug_scan_area_failed")
 
     def _clear_signature_debug_scan_area(self):
         self.overlay.clear_debug_rectangle()
+
+    def _refresh_signature_icon_tracking(self):
+        if not self.signature_last_icon_match_rect:
+            return False
+
+        active_window = pygetwindow.getActiveWindow()
+        if not active_window:
+            return False
+
+        search_rect = self._resolve_signature_icon_tracking_rect(active_window)
+        if not search_rect:
+            return False
+
+        rel_x, rel_y, width, height = search_rect
+        try:
+            screenshot_pil = pyautogui.screenshot(
+                region=(
+                    active_window.left + rel_x,
+                    active_window.top + rel_y,
+                    width,
+                    height,
+                )
+            )
+            search_image = cv2.cvtColor(np.array(screenshot_pil), cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            self._signature_debug(f"signature icon tracking screenshot failed: {e}", throttle_key="icon_tracking_capture_failed")
+            return False
+
+        icon_match = self._find_signature_icon_match(search_image)
+        if not icon_match:
+            self.signature_icon_tracking_misses += 1
+            miss_tolerance = int(self.signature_observer_config.get("signature_icon_tracking_miss_tolerance", 4))
+            if self.signature_icon_tracking_misses > max(0, miss_tolerance):
+                self._signature_debug(
+                    "signature icon tracking missed repeatedly; waiting for next full scan",
+                    throttle_key="icon_tracking_miss",
+                    interval_seconds=0.5,
+                )
+            return False
+
+        self.signature_icon_tracking_misses = 0
+        self._set_signature_icon_match_rect(
+            rel_x + int(icon_match["x"]),
+            rel_y + int(icon_match["y"]),
+            int(icon_match["width"]),
+            int(icon_match["height"]),
+        )
+        self._signature_debug(
+            f"signature icon tracked pos=({self.signature_last_icon_match_rect[0]},{self.signature_last_icon_match_rect[1]}) "
+            f"score={icon_match['score']:.2f}",
+            throttle_key="icon_tracking_match",
+            interval_seconds=0.5,
+        )
+        self._refresh_signature_overlay_text_position()
+        return True
+
+    def _resolve_signature_icon_tracking_rect(self, active_window):
+        icon_rect = self.signature_last_icon_match_rect
+        if not icon_rect:
+            return None
+
+        icon_x, icon_y, icon_width, icon_height = icon_rect
+        padding = int(self.signature_observer_config.get("signature_icon_tracking_search_padding_pixels", 48))
+        padding = max(0, padding)
+        x = icon_x - padding
+        y = icon_y - padding
+        width = icon_width + padding * 2
+        height = icon_height + padding * 2
+        return self._clamp_relative_rect(active_window, (x, y, width, height))
 
     def _get_signature_debug_rect(self, watch_relative_rect):
         number_crop_rect = self.signature_last_number_crop_rect
@@ -1123,20 +1285,24 @@ class MiningManager(FunctionManager):
             crop_height,
         )
 
-    def _show_signature_status_dot(self, color):
+    def _show_signature_status_dot(self, color, symbol=None, hold_ms_override=None, use_cached_rect=False):
         try:
             active_window = pygetwindow.getActiveWindow()
             if not active_window:
                 return
 
-            watch_area = self.signature_observer_config.get("watch_area", {})
-            relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
+            relative_rect = self.signature_last_watch_area_rect if use_cached_rect else None
+            if not relative_rect:
+                watch_area = self.signature_observer_config.get("watch_area", {})
+                relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
             if not relative_rect:
                 return
 
             size = int(self.signature_observer_config.get("status_dot_size", 10))
             blink_ms = int(self.signature_observer_config.get("status_dot_blink_ms", 450))
             hold_ms = int(self.signature_observer_config.get("status_dot_hold_ms", 900))
+            if hold_ms_override is not None:
+                hold_ms = int(hold_ms_override)
             x_center, y_center = self._get_signature_status_dot_position(
                 active_window,
                 relative_rect,
@@ -1150,6 +1316,7 @@ class MiningManager(FunctionManager):
                 blink_ms=blink_ms,
                 hold_ms=hold_ms if color != "white" else None,
                 reset_to_color="white" if color != "white" else None,
+                symbol=symbol,
             )
         except Exception as e:
             self._signature_debug(f"could not show signature status dot: {e}", throttle_key="status_dot_failed")
@@ -1396,18 +1563,74 @@ class MiningManager(FunctionManager):
         height = max(1, min(int(height), active_window.height - y))
         return (x, y, width, height)
 
-    def _read_signature_value(self, watch_image):
+    def _read_signature_value(self, signature_capture):
+        self.signature_last_value_source = None
+        self.signature_last_vision_skip_reason = None
+        if not signature_capture:
+            return None, None
+
+        if isinstance(signature_capture, dict):
+            watch_image = signature_capture.get("watch_image")
+            source_image = signature_capture.get("window_image")
+            watch_rect = signature_capture.get("watch_rect") or self.signature_last_watch_area_rect
+            source_offset = (watch_rect[0], watch_rect[1]) if watch_rect else (0, 0)
+        else:
+            watch_image = signature_capture
+            source_image = None
+            source_offset = (0, 0)
+
         if watch_image is None:
             return None, None
 
-        number_crop, number_crop_rect = self._prepare_signature_ocr_crop(watch_image)
+        number_crop, number_crop_rect = self._prepare_signature_ocr_crop(
+            watch_image,
+            source_image=source_image,
+            source_offset=source_offset,
+        )
         self.signature_last_number_crop_rect = number_crop_rect
         if number_crop is None:
             self.signature_icon_miss_count += 1
-            self._signature_debug("signature icon not found in watch area", throttle_key="signature_icon_not_found")
+            if number_crop_rect:
+                self._signature_debug(
+                    f"signature number crop unavailable rect={number_crop_rect}",
+                    throttle_key="signature_number_crop_unavailable",
+                    interval_seconds=0.5,
+                )
+            else:
+                self._signature_debug("signature icon not found in watch area", throttle_key="signature_icon_not_found")
             return None, None
         self.signature_icon_miss_count = 0
         cached_vision_value = self._get_cached_signature_vision_value(number_crop)
+        if cached_vision_value is not None:
+            return cached_vision_value, number_crop
+
+        if not self.signature_observer_config.get("local_signature_ocr_enabled", False):
+            queued_vision_value = self._queue_signature_vision_analysis(number_crop, reason="vision_only")
+            if queued_vision_value is not None:
+                return queued_vision_value, number_crop
+            now = time.time()
+            if now < self.signature_vision_backoff_until:
+                self._show_signature_status_dot(
+                    "red",
+                    symbol="!",
+                    hold_ms_override=int((self.signature_vision_backoff_until - now) * 1000),
+                    use_cached_rect=True,
+                )
+            elif self.signature_last_vision_skip_reason == "overlay_artifact":
+                self._show_signature_status_dot("red", symbol="!", use_cached_rect=True)
+                self._signature_debug(
+                    "Vision AI skipped because the signature crop contains overlay/debug pixels",
+                    throttle_key="vision_overlay_artifact_status",
+                    interval_seconds=0.5,
+                )
+            else:
+                self._show_signature_status_dot("yellow")
+                self._signature_debug(
+                    "local signature OCR disabled; waiting for Vision AI result",
+                    throttle_key="local_ocr_disabled",
+                    interval_seconds=0.5,
+                )
+            return None, number_crop
 
         raw_signature_value = self._ocr_signature_number(number_crop)
         if raw_signature_value is None:
@@ -1432,6 +1655,7 @@ class MiningManager(FunctionManager):
                 return cached_vision_value, number_crop
         elif self.signature_observer_config.get("vision_signature_sample_known_reads", False):
             self._queue_signature_vision_analysis(number_crop, local_value=signature_value, reason="local_known_sample")
+        self.signature_last_value_source = "local"
         return signature_value, number_crop
 
     def _start_signature_vision_worker(self):
@@ -1440,7 +1664,7 @@ class MiningManager(FunctionManager):
         if self.signature_vision_worker_thread and self.signature_vision_worker_thread.is_alive():
             return
 
-        queue_size = int(self.signature_observer_config.get("vision_signature_queue_size", 4))
+        queue_size = int(self.signature_observer_config.get("vision_signature_queue_size", 1))
         self.signature_vision_queue = queue.Queue(maxsize=max(1, queue_size))
         self.signature_vision_stop_event = threading.Event()
         self.signature_vision_worker_thread = threading.Thread(
@@ -1463,6 +1687,8 @@ class MiningManager(FunctionManager):
         self.signature_vision_stop_event = None
         self.signature_vision_worker_thread = None
         self.signature_vision_queued_hashes.clear()
+        self.signature_vision_queued_at_by_hash.clear()
+        self.signature_vision_recent_crops.clear()
 
     def _signature_vision_worker_loop(self, stop_event):
         while not stop_event.is_set():
@@ -1479,14 +1705,24 @@ class MiningManager(FunctionManager):
             try:
                 result = self._analyze_signature_crop_with_vision(job)
                 with self.signature_observer_lock:
-                    self.signature_vision_cache[job["image_hash"]] = result
+                    if result.get("transient_error"):
+                        self._apply_signature_vision_backoff(result)
+                    else:
+                        self.signature_vision_cache[job["image_hash"]] = result
                     self.signature_vision_queued_hashes.discard(job["image_hash"])
+                    self.signature_vision_queued_at_by_hash.pop(job["image_hash"], None)
                 self._write_signature_vision_training_sample(job, result)
                 self._handle_signature_vision_result(job, result)
             except Exception as e:
                 with self.signature_observer_lock:
                     self.signature_vision_queued_hashes.discard(job.get("image_hash"))
+                    self.signature_vision_queued_at_by_hash.pop(job.get("image_hash"), None)
                 self._signature_debug(f"signature vision worker failed: {e}", throttle_key="vision_worker_failed")
+                self._write_signature_vision_event(
+                    "worker_exception",
+                    image_hash=job.get("image_hash"),
+                    error=str(e),
+                )
             finally:
                 try:
                     active_queue.task_done()
@@ -1495,31 +1731,178 @@ class MiningManager(FunctionManager):
 
     def _queue_signature_vision_analysis(self, number_crop, local_value=None, reason="local_uncertain"):
         if not self.signature_observer_config.get("vision_signature_fallback_enabled", True):
+            self.signature_last_vision_skip_reason = "disabled"
+            self._write_signature_vision_event("disabled", reason=reason)
             return None
         if number_crop is None or number_crop.size == 0:
+            self.signature_last_vision_skip_reason = "empty_crop"
+            self._write_signature_vision_event("empty_crop", reason=reason)
             return None
 
         image_hash = self._signature_crop_hash(number_crop)
         cached_value = self._get_cached_signature_vision_value(number_crop, image_hash=image_hash)
         if cached_value is not None:
+            self._write_signature_vision_event(
+                "cache_hit",
+                image_hash=image_hash,
+                reason=reason,
+                signature_value=cached_value,
+            )
             return cached_value
+        if image_hash in self.signature_vision_cache:
+            self.signature_last_vision_skip_reason = "cached_no_value"
+            self._signature_debug(
+                f"skipping cached no-value signature vision crop hash={image_hash[:12]}",
+                throttle_key="vision_cached_no_value",
+                interval_seconds=0.5,
+            )
+            self._write_signature_vision_event(
+                "cached_no_value",
+                image_hash=image_hash,
+                reason=reason,
+                crop_shape=self._get_signature_crop_shape(number_crop),
+            )
+            return None
+        now = time.time()
+        if now < self.signature_vision_backoff_until:
+            self.signature_last_vision_skip_reason = "error_backoff"
+            remaining_seconds = self.signature_vision_backoff_until - now
+            self._show_signature_status_dot(
+                "red",
+                symbol="!",
+                hold_ms_override=int(remaining_seconds * 1000),
+                use_cached_rect=True,
+            )
+            self._signature_debug(
+                f"skipping signature vision crop during error backoff "
+                f"{remaining_seconds:.1f}s remaining",
+                throttle_key="vision_error_backoff",
+                interval_seconds=0.5,
+            )
+            self._write_signature_vision_event(
+                "error_backoff",
+                image_hash=image_hash,
+                reason=reason,
+                remaining_seconds=round(remaining_seconds, 2),
+                crop_shape=self._get_signature_crop_shape(number_crop),
+            )
+            return None
+
+        similar_crop = self._get_recent_similar_signature_vision_crop(number_crop, image_hash, now)
+        if similar_crop:
+            cached_result = self.signature_vision_cache.get(similar_crop["image_hash"])
+            if cached_result and cached_result.get("signature_value") is not None:
+                signature_value = cached_result["signature_value"]
+                corrected_value = self._correct_signature_ocr_value(signature_value)
+                self.signature_last_value_source = "cache"
+                self._signature_debug(
+                    f"using similar cached vision signature {signature_value}"
+                    + (f" corrected={corrected_value}" if corrected_value != signature_value else "")
+                    + f" delta={similar_crop['mean_delta']:.1f}",
+                    throttle_key="vision_similar_cache_hit",
+                    interval_seconds=0.5,
+                )
+                self._write_signature_vision_event(
+                    "similar_cache_hit",
+                    image_hash=image_hash,
+                    similar_image_hash=similar_crop.get("image_hash"),
+                    reason=reason,
+                    signature_value=corrected_value,
+                    mean_delta=round(float(similar_crop.get("mean_delta", 0.0)), 2),
+                )
+                return corrected_value
+            self._signature_debug(
+                f"skipping similar signature vision crop delta={similar_crop['mean_delta']:.1f} hash={image_hash[:12]}",
+                throttle_key="vision_near_duplicate",
+                interval_seconds=0.5,
+            )
+            self._write_signature_vision_event(
+                "near_duplicate",
+                image_hash=image_hash,
+                similar_image_hash=similar_crop.get("image_hash"),
+                reason=reason,
+                mean_delta=round(float(similar_crop.get("mean_delta", 0.0)), 2),
+                crop_shape=self._get_signature_crop_shape(number_crop),
+            )
+            self.signature_last_vision_skip_reason = "near_duplicate"
+            return None
+        overlay_artifact = self._signature_crop_has_overlay_artifact(number_crop)
+        if overlay_artifact and self.signature_observer_config.get("vision_signature_reject_overlay_artifacts", True):
+            self.signature_last_vision_skip_reason = "overlay_artifact"
+            self._signature_debug(
+                f"skipping signature vision crop with overlay artifact hash={image_hash[:12]}",
+                throttle_key="vision_overlay_artifact",
+                interval_seconds=0.5,
+            )
+            self._write_signature_vision_event(
+                "overlay_artifact",
+                image_hash=image_hash,
+                reason=reason,
+                crop_shape=self._get_signature_crop_shape(number_crop),
+            )
+            return None
 
         active_queue = self.signature_vision_queue
         if active_queue is None:
             self._start_signature_vision_worker()
             active_queue = self.signature_vision_queue
         if active_queue is None:
+            self.signature_last_vision_skip_reason = "worker_unavailable"
+            self._write_signature_vision_event(
+                "worker_unavailable",
+                image_hash=image_hash,
+                reason=reason,
+                crop_shape=self._get_signature_crop_shape(number_crop),
+            )
             return None
 
-        now = time.time()
-        min_interval = float(self.signature_observer_config.get("vision_signature_min_interval_seconds", 1.5))
+        min_interval = float(self.signature_observer_config.get("vision_signature_min_interval_seconds", 5.0))
         with self.signature_observer_lock:
+            self._clear_stale_signature_vision_inflight(now)
+            if self.signature_observer_config.get("vision_signature_single_inflight", True) and self.signature_vision_queued_hashes:
+                self._signature_debug(
+                    "skipping signature vision crop because another Vision AI request is still active",
+                    throttle_key="vision_single_inflight",
+                    interval_seconds=0.5,
+                )
+                self._write_signature_vision_event(
+                    "single_inflight",
+                    image_hash=image_hash,
+                    reason=reason,
+                    active_hashes=list(self.signature_vision_queued_hashes),
+                    crop_shape=self._get_signature_crop_shape(number_crop),
+                )
+                self.signature_last_vision_skip_reason = "single_inflight"
+                return None
             if image_hash in self.signature_vision_queued_hashes:
+                self.signature_last_vision_skip_reason = "already_queued"
+                self._write_signature_vision_event(
+                    "already_queued",
+                    image_hash=image_hash,
+                    reason=reason,
+                    crop_shape=self._get_signature_crop_shape(number_crop),
+                )
                 return None
             if now - self.signature_vision_last_request_at < max(0.0, min_interval):
+                self.signature_last_vision_skip_reason = "min_interval"
+                remaining_seconds = max(0.0, min_interval - (now - self.signature_vision_last_request_at))
+                self._signature_debug(
+                    f"skipping signature vision crop due to {min_interval:.1f}s request interval",
+                    throttle_key="vision_min_interval",
+                    interval_seconds=0.5,
+                )
+                self._write_signature_vision_event(
+                    "min_interval",
+                    image_hash=image_hash,
+                    reason=reason,
+                    remaining_seconds=round(remaining_seconds, 2),
+                    crop_shape=self._get_signature_crop_shape(number_crop),
+                )
                 return None
             self.signature_vision_queued_hashes.add(image_hash)
+            self.signature_vision_queued_at_by_hash[image_hash] = now
             self.signature_vision_last_request_at = now
+            self._remember_signature_vision_crop(image_hash, number_crop, now)
 
         image_path = self._save_signature_vision_crop(number_crop, image_hash)
         job = {
@@ -1529,6 +1912,7 @@ class MiningManager(FunctionManager):
             "queued_at": datetime.now(timezone.utc).isoformat(),
             "reason": reason,
             "local_value": local_value,
+            "overlay_artifact": overlay_artifact,
             "watch_area_rect": self.signature_last_watch_area_rect,
             "icon_match_rect": self.signature_last_icon_match_rect,
             "number_crop_rect": self.signature_last_number_crop_rect,
@@ -1540,11 +1924,89 @@ class MiningManager(FunctionManager):
                 throttle_key="vision_queued",
                 interval_seconds=0.5,
             )
+            self._write_signature_vision_event(
+                "queued",
+                image_hash=image_hash,
+                reason=reason,
+                image_path=image_path,
+                crop_shape=self._get_signature_crop_shape(number_crop),
+            )
         except queue.Full:
+            self.signature_last_vision_skip_reason = "queue_full"
             with self.signature_observer_lock:
                 self.signature_vision_queued_hashes.discard(image_hash)
+                self.signature_vision_queued_at_by_hash.pop(image_hash, None)
             self._signature_debug("signature vision queue full; dropping crop", throttle_key="vision_queue_full")
+            self._write_signature_vision_event(
+                "queue_full",
+                image_hash=image_hash,
+                reason=reason,
+                crop_shape=self._get_signature_crop_shape(number_crop),
+            )
         return None
+
+    def _clear_stale_signature_vision_inflight(self, now):
+        timeout_seconds = float(
+            self.signature_observer_config.get("vision_signature_inflight_timeout_seconds", 60.0)
+        )
+        if timeout_seconds <= 0:
+            return
+
+        stale_hashes = [
+            image_hash
+            for image_hash, queued_at in self.signature_vision_queued_at_by_hash.items()
+            if now - float(queued_at) > timeout_seconds
+        ]
+        for image_hash in stale_hashes:
+            queued_at = float(self.signature_vision_queued_at_by_hash.pop(image_hash, now))
+            self.signature_vision_queued_hashes.discard(image_hash)
+            age_seconds = now - queued_at
+            self._write_signature_vision_event(
+                "inflight_timeout",
+                image_hash=image_hash,
+                age_seconds=round(age_seconds, 2),
+                timeout_seconds=timeout_seconds,
+            )
+            self._signature_debug(
+                f"cleared stale signature vision inflight hash={image_hash[:12]} age={age_seconds:.1f}s",
+                throttle_key="vision_inflight_timeout",
+                interval_seconds=0.5,
+            )
+
+    def _get_signature_crop_shape(self, image):
+        if image is None or not hasattr(image, "shape"):
+            return None
+        height, width = image.shape[:2]
+        return {"width": int(width), "height": int(height)}
+
+    def _write_signature_vision_event(self, event, **payload):
+        if not self.signature_observer_config.get("log_signature_vision_events", True):
+            return
+
+        interval = float(
+            self.signature_observer_config.get("signature_vision_event_log_interval_seconds", 2.0)
+        )
+        image_hash = payload.get("image_hash")
+        throttle_key = f"{event}:{image_hash or ''}:{payload.get('reason') or ''}"
+        now = time.time()
+        last_logged_at = self.signature_vision_event_last_by_key.get(throttle_key, 0.0)
+        if interval > 0 and now - last_logged_at < interval:
+            return
+        self.signature_vision_event_last_by_key[throttle_key] = now
+
+        training_dir = self._get_signature_vision_training_dir()
+        filename = os.path.join(training_dir, "signature_vision_events.jsonl")
+        event_payload = {
+            "observed_at": datetime.now(timezone.utc).isoformat(),
+            "event": event,
+            **payload,
+        }
+        try:
+            os.makedirs(training_dir, exist_ok=True)
+            with open(filename, "a", encoding="UTF-8") as file:
+                file.write(json.dumps(event_payload, ensure_ascii=False) + "\n")
+        except Exception as e:
+            self._signature_debug(f"could not write signature vision event: {e}", throttle_key="vision_event_write_failed")
 
     def _get_cached_signature_vision_value(self, number_crop, image_hash=None):
         if not self.signature_observer_config.get("vision_signature_fallback_enabled", True):
@@ -1557,6 +2019,7 @@ class MiningManager(FunctionManager):
         if signature_value is None:
             return None
         corrected_value = self._correct_signature_ocr_value(signature_value)
+        self.signature_last_value_source = "cache"
         self._signature_debug(
             f"using cached vision signature {signature_value}"
             + (f" corrected={corrected_value}" if corrected_value != signature_value else "")
@@ -1566,12 +2029,127 @@ class MiningManager(FunctionManager):
         )
         return corrected_value
 
+    def _get_recent_similar_signature_vision_crop(self, number_crop, image_hash, now):
+        if not self.signature_observer_config.get("vision_signature_near_duplicate_enabled", True):
+            return None
+
+        cooldown_seconds = float(
+            self.signature_observer_config.get("vision_signature_near_duplicate_cooldown_seconds", 30.0)
+        )
+        max_mean_delta = float(
+            self.signature_observer_config.get("vision_signature_near_duplicate_max_mean_delta", 18.0)
+        )
+        if cooldown_seconds <= 0 or max_mean_delta < 0:
+            return None
+
+        fingerprint = self._signature_crop_fingerprint(number_crop)
+        best_match = None
+        retained_crops = []
+        for recent_crop in self.signature_vision_recent_crops:
+            age = now - float(recent_crop.get("sent_at", 0.0))
+            if age > cooldown_seconds:
+                continue
+            retained_crops.append(recent_crop)
+            if recent_crop.get("image_hash") == image_hash:
+                continue
+
+            recent_fingerprint = recent_crop.get("fingerprint")
+            if recent_fingerprint is None or recent_fingerprint.shape != fingerprint.shape:
+                continue
+            mean_delta = float(
+                np.mean(cv2.absdiff(fingerprint, recent_fingerprint))
+            )
+            if mean_delta <= max_mean_delta and (
+                best_match is None or mean_delta < best_match["mean_delta"]
+            ):
+                best_match = {
+                    "image_hash": recent_crop.get("image_hash"),
+                    "mean_delta": mean_delta,
+                }
+
+        self.signature_vision_recent_crops = retained_crops
+        return best_match
+
+    def _remember_signature_vision_crop(self, image_hash, number_crop, sent_at):
+        history_size = int(
+            self.signature_observer_config.get("vision_signature_near_duplicate_history_size", 8)
+        )
+        if history_size <= 0:
+            return
+
+        self.signature_vision_recent_crops.append(
+            {
+                "image_hash": image_hash,
+                "fingerprint": self._signature_crop_fingerprint(number_crop),
+                "sent_at": sent_at,
+            }
+        )
+        self.signature_vision_recent_crops = self.signature_vision_recent_crops[-history_size:]
+
+    def _signature_crop_fingerprint(self, image):
+        if image is None or image.size == 0:
+            return np.zeros((24, 64), dtype=np.uint8)
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        if len(image.shape) == 3:
+            blue, green, red = cv2.split(image)
+            max_channel = np.maximum(np.maximum(red, green), blue)
+            min_channel = np.minimum(np.minimum(red, green), blue)
+            white_text_mask = (max_channel > 120) & ((max_channel - min_channel) < 90)
+            bright_threshold = max(120, int(np.percentile(gray, 82)))
+            mask = (white_text_mask | (gray >= bright_threshold)).astype(np.uint8) * 255
+        else:
+            bright_threshold = max(120, int(np.percentile(gray, 82)))
+            mask = (gray >= bright_threshold).astype(np.uint8) * 255
+
+        mask = cv2.medianBlur(mask, 3)
+        kernel = np.ones((2, 2), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        text_pixels = cv2.findNonZero(mask)
+        if text_pixels is None:
+            resized = cv2.resize(gray, (64, 24), interpolation=cv2.INTER_AREA)
+            return cv2.equalizeHist(resized)
+
+        x, y, width, height = cv2.boundingRect(text_pixels)
+        pad = 2
+        x1 = max(0, x - pad)
+        y1 = max(0, y - pad)
+        x2 = min(mask.shape[1], x + width + pad)
+        y2 = min(mask.shape[0], y + height + pad)
+        text_roi = mask[y1:y2, x1:x2]
+        if text_roi.size == 0:
+            resized = cv2.resize(gray, (64, 24), interpolation=cv2.INTER_AREA)
+            return cv2.equalizeHist(resized)
+
+        canvas_width, canvas_height = 64, 24
+        max_width, max_height = canvas_width - 4, canvas_height - 4
+        scale = min(max_width / max(1, text_roi.shape[1]), max_height / max(1, text_roi.shape[0]))
+        resized_width = max(1, min(max_width, int(round(text_roi.shape[1] * scale))))
+        resized_height = max(1, min(max_height, int(round(text_roi.shape[0] * scale))))
+        resized = cv2.resize(text_roi, (resized_width, resized_height), interpolation=cv2.INTER_AREA)
+        canvas = np.zeros((canvas_height, canvas_width), dtype=np.uint8)
+        x_offset = (canvas_width - resized_width) // 2
+        y_offset = (canvas_height - resized_height) // 2
+        canvas[y_offset:y_offset + resized_height, x_offset:x_offset + resized_width] = resized
+        return cv2.GaussianBlur(canvas, (3, 3), 0)
+
     def _signature_crop_hash(self, image):
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
         resized = cv2.resize(gray, (16, 16), interpolation=cv2.INTER_AREA)
         mean_value = float(np.mean(resized))
         bits = ["1" if value > mean_value else "0" for value in resized.flatten()]
         return f"{image.shape[1]}x{image.shape[0]}_" + f"{int(''.join(bits), 2):064x}"
+
+    def _signature_crop_has_overlay_artifact(self, image):
+        if not self.signature_observer_config.get("debug_mode", False):
+            return False
+        if image is None or image.size == 0 or len(image.shape) != 3:
+            return False
+
+        blue, green, red = cv2.split(image)
+        red_mask = (red > 180) & (green < 100) & (blue < 100)
+        red_ratio = float(np.count_nonzero(red_mask)) / float(image.shape[0] * image.shape[1])
+        return red_ratio > 0.003
 
     def _save_signature_vision_crop(self, image, image_hash):
         if not self.signature_observer_config.get("vision_signature_save_crops", True):
@@ -1622,6 +2200,63 @@ class MiningManager(FunctionManager):
         )
         return self.signature_vision_ocr
 
+    def _is_signature_vision_transient_error(self, status_code=None, error=None):
+        if status_code == 429 or (status_code is not None and int(status_code) >= 500):
+            return True
+
+        normalized_error = str(error or "").upper()
+        transient_markers = (
+            "RESOURCE_EXHAUSTED",
+            "RATE_LIMIT",
+            "RATE LIMIT",
+            "QUOTA",
+            "UNAVAILABLE",
+            "TIMEOUT",
+            "DEADLINE",
+            "INTERNAL",
+        )
+        return any(marker in normalized_error for marker in transient_markers)
+
+    def _get_signature_vision_retry_after(self, response):
+        headers = getattr(response, "headers", {}) or {}
+        retry_after = headers.get("Retry-After") if hasattr(headers, "get") else None
+        if retry_after is None:
+            return None
+        try:
+            return max(0.0, float(retry_after))
+        except (TypeError, ValueError):
+            return None
+
+    def _apply_signature_vision_backoff(self, result):
+        retry_after = result.get("retry_after_seconds")
+        if retry_after is None:
+            retry_after = float(self.signature_observer_config.get("vision_signature_error_backoff_seconds", 30.0))
+        retry_after = max(0.0, float(retry_after))
+        if retry_after <= 0:
+            return
+
+        self.signature_vision_backoff_until = max(
+            self.signature_vision_backoff_until,
+            time.time() + retry_after,
+        )
+        self._signature_debug(
+            f"signature vision transient error; backing off for {retry_after:.1f}s",
+            throttle_key="vision_transient_backoff",
+            interval_seconds=0.5,
+        )
+        self._write_signature_vision_event(
+            "transient_error",
+            error=result.get("error"),
+            status_code=result.get("status_code"),
+            retry_after_seconds=retry_after,
+        )
+        self._show_signature_status_dot(
+            "red",
+            symbol="!",
+            hold_ms_override=int(retry_after * 1000),
+            use_cached_rect=True,
+        )
+
     def _analyze_signature_crop_with_vision(self, job):
         vision_ocr = self._get_signature_vision_ocr()
         if not vision_ocr:
@@ -1639,17 +2274,33 @@ class MiningManager(FunctionManager):
 
         image_payload = base64.b64encode(encoded.tobytes()).decode("ascii")
         max_tokens = int(self.signature_observer_config.get("vision_signature_max_output_tokens", 512))
-        response = (
-            vision_ocr._call_gemini_vision(image_payload, max_output_tokens=max_tokens)
-            if provider == "gemini"
-            else vision_ocr._call_openai_vision(image_payload, max_output_tokens=max_tokens)
-        )
-        if response.status_code != 200:
+        try:
+            response = (
+                vision_ocr._call_gemini_vision(image_payload, max_output_tokens=max_tokens)
+                if provider == "gemini"
+                else vision_ocr._call_openai_vision(image_payload, max_output_tokens=max_tokens)
+            )
+        except Exception as e:
             return {
                 "success": False,
                 "signature_value": None,
-                "error": vision_ocr._extract_error_for_logging(response),
+                "error": str(e),
                 "provider": provider,
+                "model": vision_ocr.openai_model,
+                "transient_error": self._is_signature_vision_transient_error(error=e),
+            }
+        if response.status_code != 200:
+            error = vision_ocr._extract_error_for_logging(response)
+            status_code = int(response.status_code)
+            return {
+                "success": False,
+                "signature_value": None,
+                "error": error,
+                "provider": provider,
+                "model": vision_ocr.openai_model,
+                "status_code": status_code,
+                "retry_after_seconds": self._get_signature_vision_retry_after(response),
+                "transient_error": self._is_signature_vision_transient_error(status_code=status_code, error=error),
             }
 
         response_payload = response.json()
@@ -1683,10 +2334,25 @@ class MiningManager(FunctionManager):
         filename = os.path.join(training_dir, "signature_vision_training.jsonl")
         signature_value = result.get("signature_value")
         status = self._get_observed_signature_status(signature_value) if signature_value is not None else "no_value"
+        overlay_artifact = bool(job.get("overlay_artifact"))
+        training_usable = bool(
+            signature_value is not None
+            and status != "max_reached"
+            and not overlay_artifact
+        )
+        if signature_value is None:
+            label_state = "no_label"
+        elif training_usable:
+            label_state = "auto_label" if status == "known" else "auto_label_unresolved"
+        elif overlay_artifact:
+            label_state = "rejected_overlay_artifact"
+        else:
+            label_state = "rejected_auto_label"
         payload = {
             "observed_at": datetime.now(timezone.utc).isoformat(),
             "source": "vision_ai",
-            "label_state": "auto_label" if signature_value is not None else "no_label",
+            "label_state": label_state,
+            "training_usable": training_usable,
             "signature_value": signature_value,
             "known": status == "known",
             "status": status,
@@ -1698,11 +2364,14 @@ class MiningManager(FunctionManager):
             "image": job.get("image_path"),
             "reason": job.get("reason"),
             "local_value": job.get("local_value"),
+            "overlay_artifact": overlay_artifact,
             "watch_area_rect": job.get("watch_area_rect"),
             "icon_match_rect": job.get("icon_match_rect"),
             "number_crop_rect": job.get("number_crop_rect"),
             "success": bool(result.get("success")),
             "error": result.get("error"),
+            "status_code": result.get("status_code"),
+            "transient_error": bool(result.get("transient_error")),
             "raw_text": result.get("raw_text"),
         }
         try:
@@ -1713,6 +2382,20 @@ class MiningManager(FunctionManager):
 
     def _handle_signature_vision_result(self, job, result):
         signature_value = result.get("signature_value")
+        if result.get("transient_error"):
+            self._signature_debug(
+                f"vision transient error status={result.get('status_code')} error={result.get('error')}",
+                throttle_key="vision_transient_error",
+                interval_seconds=0.5,
+            )
+            return
+        if job.get("overlay_artifact") and self.signature_observer_config.get("vision_signature_reject_overlay_artifacts", True):
+            self._signature_debug(
+                f"discarding vision result from overlay artifact crop hash={job.get('image_hash', '')[:12]}",
+                throttle_key="vision_overlay_result_discarded",
+                interval_seconds=0.5,
+            )
+            return
         if signature_value is None:
             self._signature_debug(
                 f"vision returned no signature value hash={job.get('image_hash', '')[:12]}",
@@ -1734,6 +2417,7 @@ class MiningManager(FunctionManager):
             return
 
         if status == "known":
+            self.signature_last_value_source = "vision"
             self.signature_unknown_reads = 0
             if self.signature_observer_config.get("vision_signature_accept_single_result", True):
                 support_threshold = int(self.signature_observer_config.get("stable_single_tick_support", 3))
@@ -1746,6 +2430,7 @@ class MiningManager(FunctionManager):
                 )
             self._handle_observed_signature(corrected_value, job.get("image"))
         else:
+            self.signature_last_value_source = "vision"
             self._show_signature_status_dot("red")
             self._handle_unknown_signature_value(corrected_value, job.get("image"), status)
 
@@ -2109,11 +2794,15 @@ class MiningManager(FunctionManager):
             result_counts[result["value"]] = result_counts.get(result["value"], 0) + 1
         return result_counts
 
-    def _prepare_signature_ocr_crop(self, image):
+    def _prepare_signature_ocr_crop(self, image, source_image=None, source_offset=(0, 0)):
         icon_match = self._find_signature_icon_match(image)
         if icon_match:
             self._remember_signature_icon_match(icon_match)
-            return self._crop_signature_number_after_icon(image, icon_match)
+            return self._crop_signature_number_after_icon(
+                source_image if source_image is not None else image,
+                icon_match,
+                source_offset=source_offset if source_image is not None else (0, 0),
+            )
 
         if self.signature_observer_config.get("use_signature_icon_template", True):
             if self.signature_icon_template_loaded and self.signature_icon_template is None:
@@ -2128,12 +2817,21 @@ class MiningManager(FunctionManager):
             return
 
         watch_x, watch_y, _, _ = watch_rect
-        self.signature_last_icon_match_rect = (
+        self._set_signature_icon_match_rect(
             watch_x + int(icon_match["x"]),
             watch_y + int(icon_match["y"]),
             int(icon_match["width"]),
             int(icon_match["height"]),
         )
+
+    def _set_signature_icon_match_rect(self, x, y, width, height):
+        self.signature_last_icon_match_rect = (
+            int(x),
+            int(y),
+            int(width),
+            int(height),
+        )
+        self.signature_icon_tracking_misses = 0
 
     def _prepare_signature_ocr_crop_without_icon(self, image):
         _, image_width = image.shape[:2]
@@ -2255,24 +2953,43 @@ class MiningManager(FunctionManager):
             self._signature_debug(f"signature icon template not found: {template_path}", throttle_key="signature_icon_template_missing")
         return self.signature_icon_template
 
-    def _crop_signature_number_after_icon(self, image, icon_match):
+    def _crop_signature_number_after_icon(self, image, icon_match, source_offset=(0, 0)):
         image_height, image_width = image.shape[:2]
         left_padding = int(self.signature_observer_config.get("signature_number_crop_left_padding", 2))
+        fixed_width = int(self.signature_observer_config.get("signature_number_crop_width", 120))
+        min_width = int(self.signature_observer_config.get("signature_number_crop_min_width", 80))
         right_padding = int(self.signature_observer_config.get("signature_number_crop_right_padding", 36))
         vertical_padding = int(self.signature_observer_config.get("signature_number_crop_vertical_padding", 8))
+        source_x, source_y = source_offset
 
-        x1 = min(image_width - 1, max(0, icon_match["x"] + icon_match["width"] + left_padding))
-        x2 = min(image_width, max(x1 + 1, image_width - max(0, right_padding)))
-        y1 = max(0, icon_match["y"] - max(0, vertical_padding))
-        y2 = min(image_height, icon_match["y"] + icon_match["height"] + max(0, vertical_padding))
+        x1 = min(image_width - 1, max(0, source_x + icon_match["x"] + icon_match["width"] + left_padding))
+        if fixed_width > 0:
+            x2 = min(image_width, max(x1 + 1, x1 + fixed_width))
+        else:
+            x2 = min(image_width, max(x1 + 1, image_width - max(0, right_padding)))
+        y1 = max(0, source_y + icon_match["y"] - max(0, vertical_padding))
+        y2 = min(image_height, source_y + icon_match["y"] + icon_match["height"] + max(0, vertical_padding))
         if x2 <= x1 or y2 <= y1:
+            if source_offset != (0, 0):
+                return None, None
             return self._prepare_signature_ocr_crop_without_icon(image)
+
+        if fixed_width > 0 and x2 - x1 < max(1, min_width):
+            self._signature_debug(
+                f"signature number crop too narrow width={x2 - x1}px min={min_width}px "
+                f"icon_x={icon_match['x']} image_width={image_width}",
+                throttle_key="signature_number_crop_too_narrow",
+                interval_seconds=0.5,
+            )
+            return None, (x1 - source_x, y1 - source_y, x2 - x1, y2 - y1)
 
         number_crop = image[y1:y2, x1:x2]
         if number_crop.size == 0:
+            if source_offset != (0, 0):
+                return None, None
             return self._prepare_signature_ocr_crop_without_icon(image)
 
-        return number_crop, (x1, y1, x2 - x1, y2 - y1)
+        return number_crop, (x1 - source_x, y1 - source_y, x2 - x1, y2 - y1)
 
     def _get_observed_signature_status(self, signature_value):
         reference_entries = self.load_signature_reference()
@@ -2348,7 +3065,10 @@ class MiningManager(FunctionManager):
             self._show_signature_status_dot("yellow")
             return
 
-        self._show_signature_status_dot("green")
+        self._show_signature_status_dot(
+            "green",
+            symbol="C" if self.signature_last_value_source == "cache" else None,
+        )
         now = time.time()
         display_cooldown = float(self.signature_observer_config.get("display_cooldown_seconds", 3.0))
         if signature_value == self.last_signature_value and now - self.last_signature_display_time < display_cooldown:
@@ -2393,6 +3113,16 @@ class MiningManager(FunctionManager):
         self.last_signature_value = None
         self.last_signature_display_time = 0.0
 
+    def _refresh_signature_overlay_text_position(self):
+        if not self.signature_overlay_visible or self.last_signature_value is None:
+            return
+
+        overlay_text = self._build_signature_overlay_text(self.last_signature_value)
+        if not overlay_text:
+            return
+
+        self._display_signature_overlay_text(overlay_text)
+
     def _display_signature_overlay_text(self, text):
         if not text:
             return
@@ -2402,8 +3132,10 @@ class MiningManager(FunctionManager):
             if not active_window:
                 raise ValueError("No active window available.")
 
-            watch_area = self.signature_observer_config.get("watch_area", {})
-            relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
+            relative_rect = self.signature_last_watch_area_rect
+            if not relative_rect:
+                watch_area = self.signature_observer_config.get("watch_area", {})
+                relative_rect = self._resolve_signature_watch_area_rect(active_window, watch_area)
             if not relative_rect:
                 raise ValueError("No watch area available.")
 
@@ -2412,7 +3144,8 @@ class MiningManager(FunctionManager):
             x_offset = int(self.signature_observer_config.get("overlay_text_offset_x_pixels", 130))
             y_offset = int(self.signature_observer_config.get("overlay_text_offset_y_pixels", 8))
             x_center = dot_x + x_offset
-            y_bottom = max(active_window.top, dot_y - max(0, y_offset))
+            y_bottom = dot_y - y_offset
+            y_bottom = max(active_window.top, y_bottom)
             self.overlay.display_overlay_text_at(
                 text,
                 x_center=x_center,

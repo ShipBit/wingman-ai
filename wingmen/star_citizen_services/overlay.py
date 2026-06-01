@@ -24,6 +24,7 @@ class StarCitizenOverlay:
         self.overlay_text_key = None
         self.debug_rectangle_root = None
         self.debug_rectangle_geometry = None
+        self.debug_rectangle_after_id = None
         self.status_dot_root = None
         self.status_dot_canvas = None
         self.status_dot_item = None
@@ -173,6 +174,27 @@ class StarCitizenOverlay:
                 except Exception:
                     pass
                 return
+            if (
+                self.overlay_shown
+                and self.overlay_root
+                and isinstance(self.overlay_text_key, tuple)
+                and len(self.overlay_text_key) >= 2
+                and self.overlay_text_key[0] == "at"
+                and self.overlay_text_key[1] == text
+            ):
+                self._reschedule_overlay_close(self.overlay_root, display_duration)
+                try:
+                    self.overlay_root.update_idletasks()
+                    window_width = self.overlay_root.winfo_width()
+                    window_height = self.overlay_root.winfo_height()
+                    x_position = int(x_center - window_width // 2)
+                    y_position = int(y_bottom - window_height)
+                    self.overlay_root.geometry(f"+{x_position}+{y_position}")
+                    self.overlay_root.lift()
+                    self.overlay_text_key = overlay_key
+                    return
+                except Exception:
+                    pass
 
             if self.overlay_shown:
                 close_overlay(self.overlay_root)
@@ -251,7 +273,7 @@ class StarCitizenOverlay:
                 self.clear_overlay_text,
             )
 
-    def display_debug_rectangle(self, x, y, width, height, color="red", line_width=3, padding=4):
+    def display_debug_rectangle(self, x, y, width, height, color="red", line_width=3, padding=4, auto_clear_ms=None):
         """
             Displays a transparent debug rectangle around a screen area.
             The border is drawn outside the provided area to avoid polluting screenshots of that area.
@@ -274,6 +296,7 @@ class StarCitizenOverlay:
             if self.debug_rectangle_root and self.debug_rectangle_geometry == geometry:
                 try:
                     self.debug_rectangle_root.lift()
+                    self._schedule_debug_rectangle_clear(auto_clear_ms)
                     return
                 except Exception:
                     self.debug_rectangle_root = None
@@ -316,21 +339,44 @@ class StarCitizenOverlay:
 
             self.debug_rectangle_root = rectangle_root
             self.debug_rectangle_geometry = geometry
+            self._schedule_debug_rectangle_clear(auto_clear_ms)
 
         WingmanUI.enqueue_tkinter_command(create_or_update_rectangle)
 
-    def clear_debug_rectangle(self):
-        def close_current_rectangle():
-            if not self.debug_rectangle_root:
-                return
+    def _schedule_debug_rectangle_clear(self, auto_clear_ms):
+        if self.debug_rectangle_root and self.debug_rectangle_after_id:
             try:
-                self.debug_rectangle_root.destroy()
+                self.debug_rectangle_root.after_cancel(self.debug_rectangle_after_id)
             except Exception:
                 pass
-            self.debug_rectangle_root = None
-            self.debug_rectangle_geometry = None
+            self.debug_rectangle_after_id = None
 
-        WingmanUI.enqueue_tkinter_command(close_current_rectangle)
+        if not self.debug_rectangle_root or not auto_clear_ms or auto_clear_ms <= 0:
+            return
+
+        self.debug_rectangle_after_id = self.debug_rectangle_root.after(
+            int(auto_clear_ms),
+            self._destroy_debug_rectangle,
+        )
+
+    def clear_debug_rectangle(self):
+        WingmanUI.enqueue_tkinter_command(self._destroy_debug_rectangle)
+
+    def _destroy_debug_rectangle(self):
+        if self.debug_rectangle_root and self.debug_rectangle_after_id:
+            try:
+                self.debug_rectangle_root.after_cancel(self.debug_rectangle_after_id)
+            except Exception:
+                pass
+        self.debug_rectangle_after_id = None
+        if not self.debug_rectangle_root:
+            return
+        try:
+            self.debug_rectangle_root.destroy()
+        except Exception:
+            pass
+        self.debug_rectangle_root = None
+        self.debug_rectangle_geometry = None
 
     def display_blinking_status_dot(
         self,
@@ -341,6 +387,7 @@ class StarCitizenOverlay:
         blink_ms=450,
         hold_ms=None,
         reset_to_color=None,
+        symbol=None,
     ):
         geometry = (
             int(x_center),
@@ -348,11 +395,12 @@ class StarCitizenOverlay:
             int(size),
             str(color),
             int(blink_ms),
+            str(symbol or ""),
         )
 
         def create_or_update_dot():
-            dot_x_center, dot_y_center, dot_size, dot_color, dot_blink_ms = geometry
-            window_size = max(8, dot_size + 8)
+            dot_x_center, dot_y_center, dot_size, dot_color, dot_blink_ms, dot_symbol = geometry
+            window_size = max(18 if dot_symbol else 8, dot_size + (14 if dot_symbol else 8))
             x_position = int(dot_x_center - window_size // 2)
             y_position = int(dot_y_center - window_size // 2)
 
@@ -394,14 +442,23 @@ class StarCitizenOverlay:
             )
             canvas.pack(fill="both", expand=True)
             padding = max(2, (window_size - dot_size) // 2)
-            dot_item = canvas.create_oval(
-                padding,
-                padding,
-                window_size - padding,
-                window_size - padding,
-                fill=dot_color,
-                outline=dot_color,
-            )
+            if dot_symbol:
+                dot_item = canvas.create_text(
+                    window_size // 2,
+                    window_size // 2,
+                    text=dot_symbol,
+                    fill=dot_color,
+                    font=("Arial", max(14, int(dot_size * 1.7)), "bold"),
+                )
+            else:
+                dot_item = canvas.create_oval(
+                    padding,
+                    padding,
+                    window_size - padding,
+                    window_size - padding,
+                    fill=dot_color,
+                    outline=dot_color,
+                )
 
             self.status_dot_root = dot_root
             self.status_dot_canvas = canvas

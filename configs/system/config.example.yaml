@@ -310,15 +310,28 @@ wingmen:
           overlay_offset_pixels: 2 # Legacy text offset; signature text now uses overlay_text_offset_* relative to the blinking dot.
           overlay_text_offset_x_pixels: 130 # Horizontal offset from the blinking dot to the text overlay center.
           overlay_text_offset_y_pixels: 8 # Vertical offset placing the text slightly above the blinking dot.
-          vision_signature_fallback_enabled: True # Use Vision AI asynchronously when local OCR is missing or implausible.
+          debug_rectangle_auto_clear_ms: 120 # Auto-hide the red debug frame quickly so it is not captured by the next OCR screenshot.
+          debug_overlay_pre_capture_clear_wait_ms: 50 # When debug_mode is on, clear the previous debug frame and wait briefly before taking the screenshot.
+          vision_signature_fallback_enabled: True # Use Vision AI asynchronously for signature number crops.
           vision_signature_model:  # Optional model override for signature crops; empty uses open-ai-vision-model.
-          vision_signature_min_interval_seconds: 1.5 # Minimum seconds between Vision AI crop requests to control cost.
-          vision_signature_queue_size: 4 # Maximum queued Vision AI crops; new crops are dropped while full.
+          vision_signature_min_interval_seconds: 5.0 # Minimum seconds between Vision AI crop requests to control cost.
+          vision_signature_queue_size: 1 # Maximum queued Vision AI crops; keep this at 1 to avoid request backlogs.
+          vision_signature_single_inflight: True # Do not queue a new Vision AI crop until the current request finished.
+          vision_signature_near_duplicate_enabled: True # Compare pixels locally and skip crops that look like a recently sent crop.
+          vision_signature_near_duplicate_cooldown_seconds: 30.0 # How long a similar crop suppresses another Vision AI request.
+          vision_signature_near_duplicate_max_mean_delta: 18.0 # Average normalized text-mask delta under this threshold counts as near-duplicate.
+          vision_signature_near_duplicate_history_size: 8 # Number of recent Vision AI crops kept for near-duplicate comparison.
+          vision_signature_error_backoff_seconds: 30.0 # Backoff after transient Vision AI errors such as rate limits or 5xx responses.
+          vision_signature_inflight_timeout_seconds: 60.0 # Clear a stuck Vision AI in-flight request after this many seconds.
+          log_signature_vision_events: True # Append queue/skip decisions to debug_data/signature_training/signature_vision_events.jsonl.
+          signature_vision_event_log_interval_seconds: 2.0 # Throttle repeated Vision event log lines with the same reason/hash.
           vision_signature_sample_known_reads: False # Also send locally known reads to Vision AI for extra training samples.
           vision_signature_accept_single_result: True # Treat one known Vision AI result as stable enough to show immediately.
+          vision_signature_reject_overlay_artifacts: True # Skip Vision AI crops that contain red overlay/debug pixels.
           vision_signature_save_crops: True # Save sent number crops for later local recognizer training.
-          vision_signature_training_dir: debug_data/signature_training # Relative to mining-data; stores crops and auto-label JSONL.
+          vision_signature_training_dir: debug_data/signature_training # Relative to mining-data; stores crops and auto-label JSONL, including unknown but readable values.
           vision_signature_max_output_tokens: 512 # Response token limit for the small digit-only signature extraction prompt.
+          local_signature_ocr_enabled: False # Disable local Tesseract OCR; Vision AI is the live recognition source and training label source.
           save_number_crops: False # Save OCR scan crops to mining-data/screenshots/signatures for debugging.
           overwrite_number_crop: True # If saving crops, overwrite latest_signature_number.png instead of creating timestamped files.
           log_observed_clusters: True # Appends stable observations to mining-data/debug_data/signature_cluster_observations.jsonl.
@@ -328,14 +341,20 @@ wingmen:
           signature_icon_template_path: templates/scans/scan_signature_icon.png # Template image used to find the signature row inside the watch area.
           signature_icon_match_threshold: 0.70 # Minimum template-match score required before OCR reads the number to the right.
           signature_icon_scales: [0.85, 1.0, 1.15] # Template scales to try so matching still works with small HUD size differences.
+          signature_icon_tracking_enabled: True # Re-track the already found signature icon between OCR/Vision scans so overlays stay anchored.
+          signature_icon_tracking_interval_seconds: 0.25 # How often the icon position is refreshed after the first match.
+          signature_icon_tracking_search_padding_pixels: 48 # Pixels around the last icon position searched during fast tracking.
+          signature_icon_tracking_miss_tolerance: 4 # Keep the last icon position through this many tracking misses before waiting for the next full scan.
           signature_number_crop_left_padding: 2 # Pixels between the detected icon's right edge and the OCR number crop.
+          signature_number_crop_width: 120 # Fixed width in pixels for the signature number crop after the icon.
+          signature_number_crop_min_width: 80 # Discard crops narrower than this instead of sending cut-off digits to Vision AI.
           signature_number_crop_right_padding: 36 # Pixels to leave unused at the right side of the watch area.
           signature_number_crop_vertical_padding: 8 # Extra pixels above and below the icon row kept for OCR context.
           debug_log_ocr_candidates: False # Logs OCR variant candidates; useful while tuning recognition.
           debug_log_ocr_timing: True # Logs whether OCR found digits and how long the simple OCR pass took.
-          ocr_psm_modes: [7, 8, 13] # Tesseract page segmentation modes used for every OCR attempt.
-          ocr_variant_names: [gray, light_text, light_text_closed, light_text_thick, otsu, adaptive] # Image variants used for the simple OCR pass after the icon was found.
-          ocr_tesseract_timeout_seconds: 2.0 # Max seconds per individual Tesseract attempt before skipping it.
+          ocr_psm_modes: [7, 8, 13] # Only used when local_signature_ocr_enabled is True.
+          ocr_variant_names: [gray, light_text, light_text_closed, light_text_thick, otsu, adaptive] # Only used when local_signature_ocr_enabled is True.
+          ocr_tesseract_timeout_seconds: 2.0 # Only used when local_signature_ocr_enabled is True.
           ocr_fuzzy_reference_match: True # Correct unknown OCR values to a very close known reference value when the match is unambiguous.
           ocr_fuzzy_max_distance: 1 # Maximum Levenshtein digit edits allowed for fuzzy correction, e.g. 8460 -> 8480.
           ocr_fuzzy_max_weighted_distance: 0.5 # Maximum weighted OCR-confusion distance; favors likely digit confusions like 6 vs 8.
