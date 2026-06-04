@@ -6,8 +6,8 @@ Give me the commodity price information within this image. Give me the response 
             "commodity_name": "DIAMOND",
             "available_SCU_quantity": 293,
             "inventory_state": "MEDIUM INVENTORY",
-            "price_per_unit": 3.984999989,
-            "multiplier": "K",
+            "price_per_unit": 3984,
+            "multiplier": null,
         },
         {
             "commodity_name": "CHLORINE",
@@ -30,7 +30,7 @@ Additionally, do not nest the commodity name as a key. Provide an array of objec
 - "commodity_name": string
 - "available_SCU_quantity": integer (use 0 if unknown)
 - "inventory_state": one of ["MAX INVENTORY", "VERY HIGH INVENTORY", "HIGH INVENTORY", "MEDIUM INVENTORY", "LOW INVENTORY", "VERY LOW INVENTORY", "OUT OF STOCK"]
-- "price_per_unit": floating number (use 0 if unknown)
-- "multiplier": "K", "M", or null if unknown
+- "price_per_unit": number as shown after normalizing separators. If no multiplier is shown, return an integer aUEC value with no decimal places (for example, read "3,984" as 3984). If a "K" or "M" multiplier is shown, decimal places are allowed and the decimal separator must be a dot (for example, read "3.984 K" as price_per_unit 3.984 and multiplier "K").
+- "multiplier": "K", "M", or null if the screen explicitly shows a multiplier. Do not infer a multiplier from a thousands comma. A comma in a non-multiplied price is a thousands separator.
 
 Provide the json within markdown ```json ... ```. If you are unable to process the image, just return 'error' as response.

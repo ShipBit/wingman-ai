@@ -74,6 +74,8 @@ class UexDataRunnerManager(FunctionManager):
 
         with open(f'{self.data_dir_path}/templates/response_structure_commodity_prices.prompt', 'r', encoding="UTF-8") as file:
             ocr_commodity_prices_prompt = file.read()
+        with open(f'{self.data_dir_path}/templates/response_structure_location_name.json', 'r', encoding="UTF-8") as file:
+            ocr_location_name_structure = file.read()
 
         # JSON-String direkt verwenden
         prompt = ocr_commodity_prices_prompt   
@@ -84,6 +86,18 @@ class UexDataRunnerManager(FunctionManager):
             secret_keeper=secret_keeper,
             requester_name="UexDataRunnerManager",
             extraction_instructions=prompt,
+            overlay=self.overlay)
+        self.location_name_ocr = OCR(
+            data_dir=self.data_dir_path,
+            config=self.config,
+            secret_keeper=secret_keeper,
+            requester_name="UexDataRunnerManagerLocation",
+            extraction_instructions=(
+                "Extract the current trading terminal location name from this image exactly as shown. "
+                f"Return a plain JSON object matching this structure: {ocr_location_name_structure}. "
+                "If the image does not contain a location name, return an empty location_name value. "
+                "Provide the json within markdown ```json ... ```."
+            ),
             overlay=self.overlay)
         
     # @abstractmethod
@@ -102,7 +116,9 @@ class UexDataRunnerManager(FunctionManager):
         return (
             "If user asks to transmit commodity prices, call "
             f"'{self.transmit_commodity_prices_for_tradeport.__name__}' when player wants to transmit prices from trading terminal. "
-            "Ask for missing terminal name or trading operation (buy/sell) if not provided. Only use explicitly provided information. Do not ask for confirmation, if all information is provided."
+            "Ask for missing trading operation (buy/sell) if not provided. "
+            "The terminal name is optional because it can be selected from the screenshot validation overlay. "
+            "Only use explicitly provided information. Do not ask for confirmation, if all information is provided."
             "No context switch to TDD."
         )
     
@@ -126,7 +142,8 @@ class UexDataRunnerManager(FunctionManager):
                                 "description": (
                                     "The terminal name provided by the user. "
                                     "Accept exact names and short aliases like 'CRU-L5' or 'Area 18'. "
-                                    "Ask, if he didn't provide a terminal / tradeport name."
+                                    "Leave empty if the user did not provide a terminal / tradeport name. "
+                                    "The terminal can be selected in the screenshot validation overlay."
                                 ),
                             },
                             "terminal_type": {
@@ -152,17 +169,14 @@ class UexDataRunnerManager(FunctionManager):
         printr.print(f'-> Command: Analysing commodity prices to be sent to uex corp. Doing screenshot analysis. Only commodity information and only if active window is star citizen for {function_args}.')
         self.overlay.display_overlay_text("Trying to submit all prices ...")
         print_debug(function_args)
-        if not function_args.get("player_provided_terminal_name"):
-            function_response = json.dumps({"success": False, "instruction": "Ask the player to provide the tradeport name for which he wants the prices to be transmitted", "do_not_cache": True})
-            return function_response, None
-
         terminal_type = function_args.get("terminal_type", "commodity")    
-    
-        tradeport = self.uex2_service.get_terminal(function_args["player_provided_terminal_name"], type=terminal_type, search_fields=["nickname", "name", "space_station_name", "outpost_name", "city_name"])
+        player_provided_terminal_name = function_args.get("player_provided_terminal_name")
+        tradeport = None
+        if player_provided_terminal_name:
+            tradeport = self.uex2_service.get_terminal(player_provided_terminal_name, type=terminal_type, search_fields=["nickname", "name", "space_station_name", "outpost_name", "city_name"])
 
         if not tradeport:
-            function_response = json.dumps({"success": False, "instruction": 'Could not identify the given tradeport name. Please repeat clearly the tradeport name.', "do_not_cache": True})
-            return function_response, None
+            self.overlay.display_overlay_text("Terminal not recognized. It can be selected in the validation overlay.")
                
         if "operation" not in function_args:
             self.overlay.display_overlay_text("Invalid command.")
@@ -171,25 +185,31 @@ class UexDataRunnerManager(FunctionManager):
                     "do_not_cache": True
                     }, None
         
-        function_response = self._get_data_from_screenshots(tradeport, function_args["operation"])
+        function_response = self._get_data_from_screenshots(
+            tradeport,
+            function_args["operation"],
+            terminal_type=terminal_type,
+            player_provided_terminal_name=player_provided_terminal_name,
+        )
         function_response["do_not_cache"] = True  # we don't want this instant command to be cached 
         
         printr.print(f'-> Result: {json.dumps(function_response)}', tags="info")
 
         return function_response
 
-    def _get_data_from_screenshots(self, tradeport=None, asked_operation=None):
+    def _get_data_from_screenshots(self, tradeport=None, asked_operation=None, terminal_type="commodity", player_provided_terminal_name=None):
         validated_tradeport = tradeport
         operation = "buy"
         if asked_operation == "sell":
             operation = "sell"
         
-        screenshot_path = screenshots.take_screenshot_ingame(self.data_dir_path, operation, test=TEST, operation=operation, tradeport=tradeport["code"])
+        tradeport_code = validated_tradeport["code"] if validated_tradeport and validated_tradeport.get("code") else "unknown"
+        screenshot_path = screenshots.take_screenshot_ingame(self.data_dir_path, operation, test=TEST, operation=operation, tradeport=tradeport_code)
         if screenshot_path is None:
             self.overlay.display_overlay_text("Could not take screenshot. ")
             return {"success": False, "instructions": "You where not able to analyse the data. You can provide error information, if he likes. ", 
                     "error": "Could not make screenshot. Maybe, during screenshot taking, the active window displayed was NOT Star Citizen. In that case, I don't make any screenshots! "
-                    }, None
+                    }
     
         location_name_crop = screenshots.crop_screenshot_coordinates(
             data_dir_path=f"{self.data_dir_path}/location_name_area",
@@ -200,19 +220,52 @@ class UexDataRunnerManager(FunctionManager):
                     "coords": ((350, 330), (900, 385))
                 }
             ],
-            cash_key=f"uex_locationname_{validated_tradeport['code']}"
+            cash_key=f"uex_locationname_{tradeport_code}"
         )
-                
-        print_debug(f'location name: {validated_tradeport["nickname"]}')            
-        self.overlay.display_overlay_text(f'Cora: Screenshot taken, selected tradeport: {validated_tradeport["nickname"]}')
-        function_result = self._analyse_prices_at_tradeport(screenshot_path, location_name_crop, validated_tradeport, operation)
+        screenshot_location_name = self._extract_location_name_from_crop(
+            location_name_crop,
+            operation=operation,
+            tradeport_code=tradeport_code,
+        )
+        terminal_hint = (
+            validated_tradeport.get("nickname")
+            if validated_tradeport
+            else screenshot_location_name or player_provided_terminal_name or ""
+        )
+
+        print_debug(f'location name: {terminal_hint}')            
+        self.overlay.display_overlay_text(f'Cora: Screenshot taken, terminal hint: {terminal_hint or "select in overlay"}')
+        function_result = self._analyse_prices_at_tradeport(
+            screenshot_path,
+            location_name_crop,
+            validated_tradeport,
+            operation,
+            terminal_hint=terminal_hint,
+        )
         
         # function_result["do_not_cache"] = True  # we don't want this instant command to be cached
         print_debug(function_result)
 
         return function_result
          
-    def _analyse_prices_at_tradeport(self, screenshot_path, cropped_screenshot_location, validated_tradeport, operation):
+    def _extract_location_name_from_crop(self, location_name_crop, operation, tradeport_code):
+        try:
+            location_raw, success = self.location_name_ocr.get_screenshot_texts(
+                location_name_crop,
+                "location_name_area",
+                operation,
+                operation=operation,
+                tradeport=tradeport_code,
+            )
+        except Exception as e:
+            print_debug(f"location OCR failed: {e}")
+            return ""
+
+        if not success or not isinstance(location_raw, dict):
+            return ""
+        return str(location_raw.get("location_name", "")).strip()
+
+    def _analyse_prices_at_tradeport(self, screenshot_path, cropped_screenshot_location, validated_tradeport, operation, terminal_hint=""):
         
         # commodity_area_crop = screenshots.crop_screenshot(f"{self.data_dir_path}/commodity_info_area", screenshot_path, [("UPPER_LEFT", "LOWER_LEFT", "HORIZONTAL"), ("UPPER_LEFT", "LOWER_LEFT", "VERTICAL")], ["BOTTOM", "RIGHT"])
         commodity_area_crop = screenshots.crop_screenshot_coordinates(
@@ -225,11 +278,17 @@ class UexDataRunnerManager(FunctionManager):
                 #     uex_sell_STAHN_UPPER_RIGHT_LOWER_RIGHT ⇒ x1=1640, x2=2404 → VERTICAL zwischen diesen beiden x
                 { "strategy": "VERTICAL",   "coords": [1640, 2400] },
             ],
-            cash_key=f"uex_{operation}_{validated_tradeport['code']}",
+            cash_key=f"uex_{operation}_{validated_tradeport['code'] if validated_tradeport and validated_tradeport.get('code') else 'unknown'}",
             select_sides=["BOTTOM", "RIGHT"]
         )
         # commodity_area_crop = screenshots.crop_screenshot(f"{self.data_dir_path}/commodity_info_area", screenshot_path, [("UPPER_LEFT", "LOWER_LEFT", "AREA"), ("LOWER_RIGHT", "LOWER_RIGHT", "AREA")])
-        prices_raw, success = self.commodity_prices_ocr.get_screenshot_texts(commodity_area_crop, "commodity_info_area", operation, operation=operation, tradeport=validated_tradeport['code'])
+        prices_raw, success = self.commodity_prices_ocr.get_screenshot_texts(
+            commodity_area_crop,
+            "commodity_info_area",
+            operation,
+            operation=operation,
+            tradeport=validated_tradeport['code'] if validated_tradeport and validated_tradeport.get("code") else "unknown",
+        )
         
         if not success or not prices_raw.get("commodity_prices", False):
             self.overlay.display_overlay_text("Error retrieving commodity prices in screenshot.")
@@ -242,8 +301,14 @@ class UexDataRunnerManager(FunctionManager):
 
         print_debug(f"extracted {number_of_extracted_prices} price-informations from screenshot")
 
-        terminal_prices = self.uex2_service.get_prices_of(price_category="commodities_prices", id_terminal=validated_tradeport["id"])
-        screenshot_prices, validated_prices, invalid_prices, success = CommodityPriceValidator.validate_price_information(prices_raw.get("commodity_prices", []), terminal_prices, operation)
+        terminal_prices = {}
+        if validated_tradeport:
+            terminal_prices = self.uex2_service.get_prices_of(price_category="commodities_prices", id_terminal=validated_tradeport["id"]) or {}
+        screenshot_prices, validated_prices, invalid_prices, success = CommodityPriceValidator.validate_price_information(
+            prices_raw.get("commodity_prices", []),
+            list(terminal_prices.values()) if isinstance(terminal_prices, dict) else terminal_prices,
+            operation,
+        )
 
         if not success:
             self.overlay.display_overlay_text("Error: could not identify commodities. Check logs.")
@@ -251,7 +316,14 @@ class UexDataRunnerManager(FunctionManager):
                     "instructions": "You couldn't identify the commodities and prices. Instruct the user to analyse the log files.", 
                     }
         
-        manually_confirmed_data, new_operation, new_terminal_id = OverlayPopup.show_data_validation_popup(terminal_prices, operation, screenshot_prices, commodity_area_crop, cropped_screenshot_location)
+        manually_confirmed_data, new_operation, new_terminal_id = OverlayPopup.show_data_validation_popup(
+            terminal_prices,
+            operation,
+            screenshot_prices,
+            commodity_area_crop,
+            cropped_screenshot_location,
+            initial_terminal_name=terminal_hint,
+        )
         
         if manually_confirmed_data == "aborted":
             return {
@@ -293,7 +365,12 @@ class UexDataRunnerManager(FunctionManager):
             json.dump(manually_confirmed_data, file, indent=4)
         
         self.overlay.display_overlay_text("Now transmitting to UEX.")
-        response2, success2 = self.uex2_service.update_tradeport_prices(tradeport=validated_tradeport, commodity_update_infos=manually_confirmed_data, operation=operation)
+        response2, success2 = self.uex2_service.update_tradeport_prices(
+            tradeport=validated_tradeport,
+            commodity_update_infos=manually_confirmed_data,
+            operation=operation,
+            screenshot_path=screenshot_path,
+        )
         if not success2:
             self.overlay.display_overlay_text(f"Error UEX: no price information accepted.", display_duration=1500)
         

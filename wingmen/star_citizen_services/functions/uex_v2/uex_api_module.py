@@ -1,4 +1,6 @@
-﻿import json
+﻿import base64
+import io
+import json
 import os
 import time
 import requests
@@ -1904,14 +1906,14 @@ class UEXApi2():
         names = [item[field_name] for item in filtered_data]
         return names
         
-    def update_tradeport_prices(self, tradeport, commodity_update_infos, operation):
+    def update_tradeport_prices(self, tradeport, commodity_update_infos, operation, screenshot_path=None):
         self._refresh_data()
         url = f"{self.base_url}data_submit/"
         
         if not ("code" in tradeport):
             return "missing code, rejected", False
         
-        terminal_id = self.name_mapping[CATEGORY_TERMINALS][tradeport["name"]] if tradeport["name"] in self.name_mapping[CATEGORY_TERMINALS] else None        
+        terminal_id = self.name_mapping[CATEGORY_TERMINALS][tradeport["name"]] if tradeport["name"] in self.name_mapping[CATEGORY_TERMINALS] else tradeport.get("id")
         prices = []
         for commodity_info in commodity_update_infos:
             # {
@@ -1951,6 +1953,9 @@ class UEXApi2():
             "type": "commodity",
             "prices": prices
         }
+        screenshot_payload = self._encode_screenshot_for_data_submit(screenshot_path)
+        if screenshot_payload:
+            update_data["screenshot"] = screenshot_payload
         
         if not CALL_UEX_SR_ENDPOINT:
             possible_strings = ["2423", "1234", "5678", "53249", "5294"]
@@ -1967,6 +1972,41 @@ class UEXApi2():
         
         print_debug(f"Fehler beim Abrufen von Daten von {url} mit params {json.dumps(update_data, indent=2)}: with response: {json.dumps(response.json(), indent=2)}")
         return response.json(), False  # error reason
+
+    @staticmethod
+    def _encode_screenshot_for_data_submit(screenshot_path):
+        max_payload_bytes = 10_000_000
+        if not screenshot_path:
+            return None
+        if not os.path.exists(screenshot_path):
+            print_debug(f"Screenshot for UEX data_submit does not exist: {screenshot_path}")
+            return None
+
+        try:
+            with open(screenshot_path, "rb") as screenshot_file:
+                encoded = base64.b64encode(screenshot_file.read())
+                if len(encoded) <= max_payload_bytes:
+                    return encoded.decode("ascii")
+        except OSError as e:
+            print_debug(f"Could not read screenshot for UEX data_submit: {e}")
+            return None
+
+        try:
+            from PIL import Image
+
+            with Image.open(screenshot_path) as image:
+                rgb_image = image.convert("RGB")
+                for quality in (90, 80, 70, 60, 50, 40):
+                    buffer = io.BytesIO()
+                    rgb_image.save(buffer, format="JPEG", quality=quality, optimize=True)
+                    encoded = base64.b64encode(buffer.getvalue())
+                    if len(encoded) <= max_payload_bytes:
+                        return encoded.decode("ascii")
+        except Exception as e:
+            print_debug(f"Could not compress screenshot for UEX data_submit: {e}")
+
+        print_debug("Screenshot for UEX data_submit exceeds the 10 MB API limit.")
+        return None
 
     def add_refinery_job(self, work_order):
         url = f"{self.base_url}user_refineries_jobs_add/"

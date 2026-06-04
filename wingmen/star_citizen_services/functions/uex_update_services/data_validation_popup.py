@@ -136,7 +136,7 @@ class OverlayPopup(tk.Toplevel):
         },
     }
 
-    def __init__(self, master, terminal_prices, operation, screenshot_prices, cropped_screenshot_prices, cropped_screenshot_location):
+    def __init__(self, master, terminal_prices, operation, screenshot_prices, cropped_screenshot_prices, cropped_screenshot_location, initial_terminal_name=""):
         super().__init__(master)
         self.withdraw()
         self._ui_ready = False
@@ -144,9 +144,15 @@ class OverlayPopup(tk.Toplevel):
         self.theme = self.THEME
         self.lang = self._detect_language()
         self.translations = self.I18N.get(self.lang, self.I18N["en"])
-        self.terminal_prices = list(terminal_prices.values())
-        self.selected_terminal_id = self.terminal_prices[0].get("id_terminal")
-        self.selected_terminal_name = self.terminal_prices[0].get("terminal_name")
+        self.terminal_prices = self._normalize_terminal_prices_input(terminal_prices)
+        self.location_name_hint = str(initial_terminal_name or "").strip()
+        first_terminal_price = self.terminal_prices[0] if self.terminal_prices else {}
+        self.selected_terminal_id = first_terminal_price.get("id_terminal")
+        self.selected_terminal_name = (
+            first_terminal_price.get("terminal_name")
+            or self.location_name_hint
+            or "Select terminal"
+        )
         self.updated_data = copy.deepcopy(screenshot_prices)
         self.user_updated_data = copy.deepcopy(screenshot_prices)
         self.operation = str(operation).lower() if operation else "buy"
@@ -567,12 +573,29 @@ class OverlayPopup(tk.Toplevel):
 
         self.protocol("WM_DELETE_WINDOW", self.abort_process)
         self._ui_ready = True
-
+        if not self.terminal_prices:
+            self.after(50, self._activate_tradeport_edit)
 
     @staticmethod
-    def show_data_validation_popup(terminal_prices, operation, screenshot_prices, cropped_screenshot, location_name_screen_crop):
+    def _normalize_terminal_prices_input(terminal_prices):
+        if not terminal_prices:
+            return []
+        if isinstance(terminal_prices, dict):
+            return list(terminal_prices.values())
+        return list(terminal_prices)
+
+    @staticmethod
+    def show_data_validation_popup(terminal_prices, operation, screenshot_prices, cropped_screenshot, location_name_screen_crop, initial_terminal_name=""):
         root = WingmanUI.get_instance()
-        popup = OverlayPopup(root, terminal_prices, operation, screenshot_prices, cropped_screenshot, location_name_screen_crop)
+        popup = OverlayPopup(
+            root,
+            terminal_prices,
+            operation,
+            screenshot_prices,
+            cropped_screenshot,
+            location_name_screen_crop,
+            initial_terminal_name=initial_terminal_name,
+        )
         popup.show_popup()
 
         # Wait for the popup to close
@@ -602,6 +625,9 @@ class OverlayPopup(tk.Toplevel):
         # Ensure current tradeport entry text is applied even if user confirms immediately.
         if self._tradeport_edit_active:
             self.tradeport_update()
+        if not self.selected_terminal_id:
+            self._activate_tradeport_edit()
+            return
         normalized_data = []
         for data in self.updated_data:
             item = data.copy()
@@ -782,7 +808,7 @@ class OverlayPopup(tk.Toplevel):
         except Exception:
             terminals = {}
         if not isinstance(terminals, dict):
-            terminals = {}
+            terminals = {terminal.get("id"): terminal for terminal in terminals if isinstance(terminal, dict)}
         self.terminals_by_id = terminals
         self.terminal_catalog = [
             terminal
@@ -811,7 +837,7 @@ class OverlayPopup(tk.Toplevel):
             if selected_id_int is not None:
                 selected_terminal = self.terminals_by_id.get(selected_id_int)
         if not selected_terminal:
-            return self.terminal_catalog
+            return self._terminals_matching_location_hint() or self.terminal_catalog
 
         anchor_field, anchor_value = self._terminal_location_anchor(selected_terminal)
         if not anchor_field or not anchor_value:
@@ -825,6 +851,34 @@ class OverlayPopup(tk.Toplevel):
         ]
         return same_location or self.terminal_catalog
 
+    def _terminals_matching_location_hint(self):
+        self._ensure_terminal_catalog()
+        hint = self.location_name_hint.strip().lower()
+        if len(hint) < 2:
+            return []
+
+        return [
+            terminal
+            for terminal in self.terminal_catalog
+            if self._terminal_contains_text(terminal, hint)
+        ]
+
+    @staticmethod
+    def _terminal_contains_text(terminal, query):
+        fields = (
+            "name",
+            "nickname",
+            "displayname",
+            "fullname",
+            "space_station_name",
+            "outpost_name",
+            "city_name",
+            "orbit_name",
+            "moon_name",
+            "planet_name",
+        )
+        return any(query in str(terminal.get(field, "")).lower() for field in fields)
+
     def _rank_tradeport_suggestions(self, query_text, terminals):
         query = query_text.strip().lower()
         ranked = []
@@ -833,7 +887,18 @@ class OverlayPopup(tk.Toplevel):
             nickname = str(terminal.get("nickname", ""))
             displayname = str(terminal.get("displayname", ""))
             fullname = str(terminal.get("fullname", ""))
-            searchable = [name, nickname, displayname, fullname]
+            searchable = [
+                name,
+                nickname,
+                displayname,
+                fullname,
+                str(terminal.get("space_station_name", "")),
+                str(terminal.get("outpost_name", "")),
+                str(terminal.get("city_name", "")),
+                str(terminal.get("orbit_name", "")),
+                str(terminal.get("moon_name", "")),
+                str(terminal.get("planet_name", "")),
+            ]
             searchable_lower = [value.lower() for value in searchable if value]
 
             if not any(query in value for value in searchable_lower):
@@ -857,6 +922,8 @@ class OverlayPopup(tk.Toplevel):
                 score += 70
             if query in fullname.lower():
                 score += 40
+            if self._terminal_contains_text(terminal, query):
+                score += 20
 
             ranked.append((score, name.lower(), terminal))
 
@@ -1029,11 +1096,29 @@ class OverlayPopup(tk.Toplevel):
             transmit,
             item.get("commodity_name", ""),
             item.get("code", ""),
-            item.get("available_SCU_quantity", ""),
+            self._format_integer_value(item.get("available_SCU_quantity", "")),
             item.get("inventory_state", ""),
-            f"{item.get('price_per_unit', '')}",
+            self._format_price_value(item.get("price_per_unit", ""), item.get("multiplier")),
             item.get("multiplier", ""),
         )
+
+    @staticmethod
+    def _format_integer_value(value):
+        if value is None or value == "":
+            return ""
+        normalized = CommodityPriceValidator.normalize_price_for_display(value)
+        return f"{normalized:,}"
+
+    @staticmethod
+    def _format_price_value(value, multiplier=None):
+        if value is None or value == "":
+            return ""
+        normalized = CommodityPriceValidator.normalize_price_for_display(value, multiplier)
+        if CommodityPriceValidator._normalized_multiplier(multiplier):
+            if isinstance(normalized, int):
+                return str(normalized)
+            return f"{float(normalized):.8f}".rstrip("0").rstrip(".")
+        return f"{int(round(float(normalized))):,}"
 
     def _table_value_index(self, column_name):
         try:
@@ -1335,7 +1420,8 @@ class OverlayPopup(tk.Toplevel):
             matched_tradeport = {"terminal_name": self.selected_terminal_name}
         else:
             print_debug(f"found terminal: {uex_terminal['name']}")
-            self.terminal_prices = list(uex.get_prices_of(price_category="commodities_prices", id_terminal=uex_terminal["id"]).values())
+            terminal_prices = uex.get_prices_of(price_category="commodities_prices", id_terminal=uex_terminal["id"]) or {}
+            self.terminal_prices = list(terminal_prices.values())
             self.selected_terminal_id = uex_terminal["id"]
             if self.terminal_prices:
                 matched_tradeport = self.terminal_prices[0]
@@ -1491,9 +1577,8 @@ class OverlayPopup(tk.Toplevel):
             self._set_row_validation(item, "user updated", table_values)
 
             if column_key == "price_per_unit":
-                try:
-                    unit_price = float(new_value)  # Convert to float (for decimal prices)
-                except ValueError:
+                unit_price = CommodityPriceValidator.normalize_numeric_value(new_value, default=None)
+                if unit_price is None:
                     # Handle the case where the user's input is not a valid number
                     self.updated_data[row_index]["validation_result"] = "Invalid price format"
                     self._set_row_validation(item, "Invalid price format", table_values)
@@ -1504,13 +1589,10 @@ class OverlayPopup(tk.Toplevel):
                     return 
 
                 multiplier = self.updated_data[row_index]["multiplier"]
-                if multiplier and multiplier.lower()[0] == "m":
-                    unit_price = unit_price * 1000000
-                
-                if multiplier and multiplier.lower()[0] == "k":
-                    unit_price = unit_price * 1000
-
-                self.updated_data[row_index]['uex_price'] = unit_price
+                display_price = CommodityPriceValidator.normalize_price_for_display(unit_price, multiplier)
+                self.updated_data[row_index]["price_per_unit"] = display_price
+                self.updated_data[row_index]['uex_price'] = CommodityPriceValidator.calculate_uex_price(display_price, multiplier)
+                table_values[column_index] = self._format_price_value(display_price, multiplier)
 
             if column_key == "multiplier":
                 self.update_price_by_multipler(new_value, row_index)
@@ -1537,15 +1619,11 @@ class OverlayPopup(tk.Toplevel):
                 self.updated_data[row_index]['code'] = uex_commodity_price_object["id_commodity"]
                 if code_idx is not None:
                     table_values[code_idx] = uex_commodity_price_object["id_commodity"]
-                unit_price = self.updated_data[row_index]["price_per_unit"]
                 multiplier = self.updated_data[row_index]["multiplier"]
-                if multiplier and multiplier.lower()[0] == "m":
-                    unit_price = unit_price * 1000000
-                
-                if multiplier and multiplier.lower()[0] == "k":
-                    unit_price = unit_price * 1000
-
-                self.updated_data[row_index]['uex_price'] = unit_price
+                self.updated_data[row_index]['uex_price'] = CommodityPriceValidator.calculate_uex_price(
+                    self.updated_data[row_index]["price_per_unit"],
+                    multiplier,
+                )
 
         #self.data_table.item(item, )
         self.data_table.item(item, values=table_values)
@@ -1558,11 +1636,9 @@ class OverlayPopup(tk.Toplevel):
     def update_price_by_multipler(self, new_value, row_index):
         multiplier = new_value
         unit_price = self.updated_data[row_index]["price_per_unit"]
-        if multiplier and multiplier.lower()[0] == "m":
-            unit_price = unit_price * 1000000
-                
-        if multiplier and multiplier.lower()[0] == "k":
-            unit_price = unit_price * 1000
-
-        self.updated_data[row_index]['uex_price'] = unit_price
+        self.updated_data[row_index]["price_per_unit"] = CommodityPriceValidator.normalize_price_for_display(
+            unit_price,
+            multiplier,
+        )
+        self.updated_data[row_index]['uex_price'] = CommodityPriceValidator.calculate_uex_price(unit_price, multiplier)
                 
