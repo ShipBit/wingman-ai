@@ -1293,6 +1293,98 @@ class UEXApi2():
             and terminal.get(id_field_name) == location_id
         }
 
+    @staticmethod
+    def _terminal_display_name(terminal):
+        return (
+            terminal.get("name")
+            or terminal.get("displayname")
+            or terminal.get("fullname")
+            or terminal.get("nickname")
+            or ""
+        )
+
+    def _get_buyable_price_rows_for_location(self, location_id, location_category):
+        terminal_ids = self._get_commodity_terminal_ids_for_location(location_id, location_category)
+        if not terminal_ids:
+            return []
+
+        terminals_by_id = self.data[CATEGORY_TERMINALS].get("data", {})
+        rows = []
+        for terminal_id in terminal_ids:
+            terminal_prices = self.get_prices_of(
+                price_category=PRICES_COMMODITIES,
+                id_terminal=terminal_id
+            ) or {}
+            terminal = terminals_by_id.get(terminal_id) or terminals_by_id.get(str(terminal_id)) or {}
+            terminal_name = self._terminal_display_name(terminal)
+            for price_row in terminal_prices.values():
+                if price_row.get("price_buy", 0) <= 0:
+                    continue
+                enriched_row = dict(price_row)
+                if terminal_name and not enriched_row.get("terminal_name"):
+                    enriched_row["terminal_name"] = terminal_name
+                rows.append(enriched_row)
+
+        return rows
+
+    def _find_buyable_commodities_at_location(self, location_id, location_category, location_name):
+        commodities_by_id = self.data[CATEGORY_COMMODITIES].get("data", {})
+        commodity_names_by_key = {}
+        terminal_names_by_key = {}
+
+        for price_row in self._get_buyable_price_rows_for_location(location_id, location_category):
+            commodity_id = price_row.get("id_commodity")
+            commodity = commodities_by_id.get(commodity_id) or commodities_by_id.get(str(commodity_id)) or {}
+            commodity_name = price_row.get("commodity_name") or commodity.get("name")
+            if not commodity_name:
+                continue
+
+            commodity_key = commodity_name.casefold()
+            commodity_names_by_key[commodity_key] = commodity_name
+            terminal_name = price_row.get("terminal_name")
+            if terminal_name:
+                terminal_names_by_key.setdefault(commodity_key, set()).add(terminal_name)
+
+        commodity_names = [
+            commodity_names_by_key[key]
+            for key in sorted(commodity_names_by_key, key=lambda value: commodity_names_by_key[value].casefold())
+        ]
+
+        if not commodity_names:
+            return {
+                "success": False,
+                "message": f"No buyable commodities found at {location_name}."
+            }
+
+        return {
+            "success": True,
+            "result_type": "buyable_commodities_at_location",
+            "location": location_name,
+            "commodity_names": commodity_names,
+            "commodity_count": len(commodity_names),
+            "terminal_names_by_commodity": {
+                commodity_names_by_key[key]: sorted(terminal_names_by_key.get(key, set()))
+                for key in sorted(commodity_names_by_key, key=lambda value: commodity_names_by_key[value].casefold())
+            },
+        }
+
+    def find_buyable_commodities_at_location_code(self, location_name):
+        if __name__ != "__main__":
+            printr.print(text=f"Suche kaufbare Waren bei {location_name}", tags="info")
+
+        category, location = self.get_location(location_name)
+        if not location:
+            return {
+                "success": False,
+                "message": f"Location not recognised: {location_name}"
+            }
+
+        return self._find_buyable_commodities_at_location(
+            location_id=location[ID_FIELD_NAME],
+            location_category=category,
+            location_name=location.get("name", location_name)
+        )
+
     def _get_price_rows_for_commodity(self, commodity_id, location_id=None, location_category=None):
         prices = self.get_prices_of(price_category=PRICES_COMMODITIES, id_commodity=commodity_id)
         if not prices:

@@ -937,6 +937,9 @@ class OpenAiWingman(Wingman):
                     None, call_cache_key, normalized_transcript
                 )
 
+                if self._pending_tool_payloads_suppress_tts():
+                    return None, instant_response, None
+
                 if not self.tts_cache_manager.exists(tts_cache_key):
                     # if the response of the function call is not cached, we should put the conversation into history
                     # such that we can summarize the response through ai calls.
@@ -983,6 +986,9 @@ class OpenAiWingman(Wingman):
             instant_response, tts_cache_key = await self._handle_tool_calls(
                 tool_calls, call_cache_key, flag_for_removal=flag_for_removal, command_phrase=normalized_transcript
             )  # Pass transcript
+
+            if self._pending_tool_payloads_suppress_tts():
+                return None, instant_response, None
 
             # Run summarization based on tool results
             summarize_response_content = self._summarize_function_calls()
@@ -1309,6 +1315,18 @@ class OpenAiWingman(Wingman):
             instant_response,
             tool_call_response_cache_key,
         )  # Return cache key for tool call responses to save the tts response
+
+    def _pending_tool_payloads_suppress_tts(self):
+        payloads = getattr(self, "_pending_tool_payloads_for_summary", [])
+        if not payloads:
+            payloads = self._get_trailing_tool_payloads()
+        if not payloads:
+            return False
+
+        return all(
+            isinstance(payload, dict) and payload.get("suppress_tts") is True
+            for payload in payloads
+        )
 
     def _summarize_function_calls(self):
         """Summarizes the function call responses using the configured summarize provider."""

@@ -40,6 +40,8 @@ class TddManager(FunctionManager):
     def register_functions(self, function_register):
         function_register[self.get_commodity_price.__name__] = self.get_commodity_price
         function_register[self.find_commodity_trade_locations.__name__] = self.find_commodity_trade_locations
+        function_register[self.get_buyable_commodities_at_location.__name__] = self.get_buyable_commodities_at_location
+        function_register[self.can_buy_commodity_at_location.__name__] = self.can_buy_commodity_at_location
         function_register[self.find_trade_routes.__name__] = self.find_trade_routes
         function_register[self.get_trade_information.__name__] = self.get_trade_information
         
@@ -91,7 +93,8 @@ class TddManager(FunctionManager):
                     "name": self.find_commodity_trade_locations.__name__,
                     "description": (
                         "Use for questions asking where a commodity can be bought or sold. "
-                        "Do not use for average price or route questions."
+                        "Do not use for average price, route questions, 'what can I buy at location', "
+                        "or yes/no questions like 'can I buy commodity at location'."
                     ),
                     "parameters": {
                         "type": "object",
@@ -111,6 +114,52 @@ class TddManager(FunctionManager):
                             }
                         },
                         "required": ["commodity_name", "operation"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": self.get_buyable_commodities_at_location.__name__,
+                    "description": (
+                        "Use for questions asking what commodities can be bought at a location, "
+                        "for example 'What can I buy at XYZ?' or 'Was kann ich bei XYZ kaufen?'. "
+                        "Return commodity names only, no prices."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location_name": {
+                                "type": "string",
+                                "description": "Planet, moon, system, city, station, outpost, tradeport, or terminal exactly as the player said it."
+                            }
+                        },
+                        "required": ["location_name"]
+                    }
+                }
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": self.can_buy_commodity_at_location.__name__,
+                    "description": (
+                        "Use for yes/no questions asking whether a specific commodity can be bought at a specific location, "
+                        "for example 'Can I buy ABC at XYZ?' or 'Kann ich an XYZ ABC kaufen?'. "
+                        "Answer by speech only and mention the terminal where it can be bought. Do not include prices."
+                    ),
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "location_name": {
+                                "type": "string",
+                                "description": "Planet, moon, system, city, station, outpost, tradeport, or terminal exactly as the player said it."
+                            },
+                            "commodity_name": {
+                                "type": "string",
+                                "description": "Commodity name or fragment exactly as the player said it. Do not replace unclear names with another known commodity."
+                            }
+                        },
+                        "required": ["location_name", "commodity_name"]
                     }
                 }
             },
@@ -225,11 +274,19 @@ class TddManager(FunctionManager):
         function_response["do_not_cache"] = True
         if not function_response.get("success", False):
             message = function_response.get("message", fallback_message or "No trade information found.")
-            self.overlay.display_overlay_text(message)
+            if not function_response.get("suppress_overlay"):
+                self.overlay.display_overlay_text(message)
             print_debug(message)
 
         printr.print(f'-> Resultat: {json.dumps(function_response, indent=2)}', tags="info")
         return function_response
+
+    @staticmethod
+    def _format_commodity_overlay_list(commodity_names, names_per_line=3):
+        lines = []
+        for index in range(0, len(commodity_names), names_per_line):
+            lines.append(", ".join(commodity_names[index:index + names_per_line]))
+        return "\n".join(lines)
 
     def _add_price_summary(self, function_response, location_name=None):
         if not function_response.get("success"):
@@ -350,6 +407,56 @@ class TddManager(FunctionManager):
             f'({self._route_destination_area(route)}). Profit: {route.get("profit", "")} aUEC.'
         )
 
+    def _add_buyable_commodities_summary(self, function_response, location_name):
+        if not function_response.get("success"):
+            return
+
+        commodity_names = function_response.get("commodity_names") or []
+        function_response["summary_payload"] = {
+            "result_type": "buyable_commodities_at_location",
+            "location": function_response.get("location") or location_name,
+            "commodity_names": commodity_names,
+            "commodity_count": len(commodity_names),
+            "spoken_instruction": (
+                "Name only the buyable commodities. Do not mention prices. "
+                "Keep the answer concise and comma-separated."
+            )
+        }
+
+    def _add_can_buy_summary(self, function_response, commodity_name, location_name):
+        route = self._first_route(function_response)
+        can_buy = function_response.get("success", False) and bool(route)
+
+        if can_buy:
+            terminal = route.get("buy_at_tradeport_name", "")
+            commodity = self._route_commodity(route) or commodity_name
+            function_response["result_type"] = "can_buy_commodity_at_location"
+            function_response["summary_payload"] = {
+                "result_type": "can_buy_commodity_at_location",
+                "can_buy": True,
+                "commodity": commodity,
+                "location": location_name,
+                "terminal": terminal,
+                "spoken_instruction": (
+                    "Answer with one short spoken sentence. Say that the commodity can be bought there "
+                    "and mention the terminal. Do not mention prices."
+                )
+            }
+            return
+
+        function_response["suppress_overlay"] = True
+        function_response["summary_payload"] = {
+            "result_type": "can_buy_commodity_at_location",
+            "can_buy": False,
+            "commodity": commodity_name,
+            "location": location_name,
+            "spoken_instruction": (
+                "Answer with one short spoken sentence. Say that the commodity cannot be bought there, "
+                "or that the location or commodity was not recognized if the tool result says so. "
+                "Do not mention prices."
+            )
+        }
+
     def get_commodity_price(self, function_args):
         print_debug(f"commodity price request: {function_args}")
         printr.print(
@@ -415,6 +522,65 @@ class TddManager(FunctionManager):
 
         self._add_location_summary(function_response, operation, location_name)
         return self._finish_tdd_response(function_response, f"No {operation} location found for {commodity_name}.")
+
+    def get_buyable_commodities_at_location(self, function_args):
+        print_debug(f"buyable commodities at location request: {function_args}")
+        printr.print(
+            f'Executing function call {self.get_buyable_commodities_at_location.__name__} with args {function_args}',
+            tags="info"
+        )
+
+        location_name = self._optional_arg(function_args, "location_name")
+        if not location_name:
+            return {
+                "success": False,
+                "message": "Could not identify the requested location.",
+                "do_not_cache": True
+            }
+
+        function_response = self.uex_service.find_buyable_commodities_at_location_code(location_name)
+        commodity_names = function_response.get("commodity_names") or []
+        if function_response.get("success") and len(commodity_names) <= 9:
+            function_response["display_mode"] = "overlay"
+            function_response["suppress_tts"] = True
+            self.overlay.display_overlay_text(self._format_commodity_overlay_list(commodity_names))
+        elif function_response.get("success"):
+            function_response["display_mode"] = "speech"
+            function_response["suppress_overlay"] = True
+            self._add_buyable_commodities_summary(function_response, location_name)
+
+        return self._finish_tdd_response(
+            function_response,
+            f"No buyable commodities found at {location_name}."
+        )
+
+    def can_buy_commodity_at_location(self, function_args):
+        print_debug(f"can buy commodity at location request: {function_args}")
+        printr.print(
+            f'Executing function call {self.can_buy_commodity_at_location.__name__} with args {function_args}',
+            tags="info"
+        )
+
+        location_name = self._optional_arg(function_args, "location_name")
+        commodity_name = self._optional_arg(function_args, "commodity_name")
+        if not location_name or not commodity_name:
+            return {
+                "success": False,
+                "message": "Could not identify the requested commodity or location.",
+                "do_not_cache": True,
+                "suppress_overlay": True
+            }
+
+        function_response = self.uex_service.find_best_buy_price_at_location_codes(
+            commodity_name=commodity_name,
+            location_name=location_name
+        )
+        function_response["suppress_overlay"] = True
+        self._add_can_buy_summary(function_response, commodity_name, location_name)
+        return self._finish_tdd_response(
+            function_response,
+            f"No buying terminal found for {commodity_name} at {location_name}."
+        )
 
     def find_trade_routes(self, function_args):
         print_debug(f"trade route request: {function_args}")

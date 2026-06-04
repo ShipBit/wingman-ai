@@ -61,16 +61,24 @@ class StarCitizenOverlay:
         text_color_rgba = (text_color_rgb[0], text_color_rgb[1], text_color_rgb[2], 0)
 
 
+        text = str(text or "")
+        text_spacing = 5
+
         # Erstelle ein Dummy-Image, um die Textgröße zu bekommen
         dummy_image = Image.new('RGB', (1, 1))
         draw_dummy = ImageDraw.Draw(dummy_image)
-        text_width, text_height = int(draw_dummy.textlength(text, font=font)), font_size
+        if "\n" in text:
+            text_bbox = draw_dummy.multiline_textbbox((0, 0), text, font=font, spacing=text_spacing)
+            text_width = int(text_bbox[2] - text_bbox[0])
+            text_height = int(text_bbox[3] - text_bbox[1])
+        else:
+            text_width, text_height = int(draw_dummy.textlength(text, font=font)), font_size
 
         print_debug(f'text width: {text_width} height: {text_height}')
 
         # Erstelle ein neues Image mit transparentem Hintergrund (weiß wird transparent)
         # colored_bg = Image.new('RGBA', (text_width + 2, text_height + 2), transparent_color_rgba)
-        text_image = Image.new('RGBA', (text_width + 5, text_height + 4), text_color_rgba)
+        text_image = Image.new('RGBA', (text_width + 5, text_height + 4), transparent_color_rgba)
         
         # find starting coordinates of the text position
         text_x = (text_image.width - text_width) / 2
@@ -83,9 +91,9 @@ class StarCitizenOverlay:
 
         for i, value in enumerate(transparency_values):
             glow_color_rgba = (glow_color_rgb[0], glow_color_rgb[1], glow_color_rgb[2], value)
-            draw.text((text_x, text_y), text, glow_color_rgba, font=font, stroke_width=i, spacing=5)
+            draw.multiline_text((text_x, text_y), text, glow_color_rgba, font=font, stroke_width=i, spacing=text_spacing, align="center")
  
-        draw.text((text_x, text_y), text, text_color_rgb, font=font, stroke_width=0, spacing=5)
+        draw.multiline_text((text_x, text_y), text, text_color_rgb, font=font, stroke_width=0, spacing=text_spacing, align="center")
         return text_image
 
     def display_overlay_text(self, text, vertical_position_ratio=4, display_duration=15000):
