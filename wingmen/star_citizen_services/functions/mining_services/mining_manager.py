@@ -61,6 +61,10 @@ SIGNATURE_OBSERVER_DEFAULTS = {
     "vision_signature_near_duplicate_cooldown_seconds": 30.0,
     "vision_signature_near_duplicate_max_mean_delta": 18.0,
     "vision_signature_near_duplicate_history_size": 8,
+    "vision_signature_similar_cache_verifier_enabled": True,
+    "vision_signature_similar_cache_min_template_score": 0.94,
+    "vision_signature_similar_cache_max_template_delta": 12.0,
+    "vision_signature_similar_cache_min_text_coverage": 0.01,
     "vision_signature_error_backoff_seconds": 30.0,
     "vision_signature_inflight_timeout_seconds": 60.0,
     "log_signature_vision_events": True,
@@ -1789,7 +1793,7 @@ class MiningManager(FunctionManager):
             return None
 
         similar_crop = self._get_recent_similar_signature_vision_crop(number_crop, image_hash, now)
-        if similar_crop:
+        if similar_crop and similar_crop.get("verified", True):
             cached_result = self.signature_vision_cache.get(similar_crop["image_hash"])
             if cached_result and cached_result.get("signature_value") is not None:
                 signature_value = cached_result["signature_value"]
@@ -1798,7 +1802,9 @@ class MiningManager(FunctionManager):
                 self._signature_debug(
                     f"using similar cached vision signature {signature_value}"
                     + (f" corrected={corrected_value}" if corrected_value != signature_value else "")
-                    + f" delta={similar_crop['mean_delta']:.1f}",
+                    + f" delta={similar_crop['mean_delta']:.1f}"
+                    + f" score={similar_crop.get('template_score', 0.0):.2f}"
+                    + f" template_delta={similar_crop.get('template_delta', 0.0):.1f}",
                     throttle_key="vision_similar_cache_hit",
                     interval_seconds=0.5,
                 )
@@ -1809,10 +1815,16 @@ class MiningManager(FunctionManager):
                     reason=reason,
                     signature_value=corrected_value,
                     mean_delta=round(float(similar_crop.get("mean_delta", 0.0)), 2),
+                    template_score=round(float(similar_crop.get("template_score", 0.0)), 4),
+                    template_delta=round(float(similar_crop.get("template_delta", 0.0)), 2),
                 )
                 return corrected_value
             self._signature_debug(
-                f"skipping similar signature vision crop delta={similar_crop['mean_delta']:.1f} hash={image_hash[:12]}",
+                f"skipping verified duplicate signature vision crop "
+                f"delta={similar_crop['mean_delta']:.1f} "
+                f"score={similar_crop.get('template_score', 0.0):.2f} "
+                f"template_delta={similar_crop.get('template_delta', 0.0):.1f} "
+                f"hash={image_hash[:12]}",
                 throttle_key="vision_near_duplicate",
                 interval_seconds=0.5,
             )
@@ -1822,10 +1834,32 @@ class MiningManager(FunctionManager):
                 similar_image_hash=similar_crop.get("image_hash"),
                 reason=reason,
                 mean_delta=round(float(similar_crop.get("mean_delta", 0.0)), 2),
+                template_score=round(float(similar_crop.get("template_score", 0.0)), 4),
+                template_delta=round(float(similar_crop.get("template_delta", 0.0)), 2),
                 crop_shape=self._get_signature_crop_shape(number_crop),
             )
             self.signature_last_vision_skip_reason = "near_duplicate"
             return None
+        if similar_crop:
+            self._signature_debug(
+                f"rejected similar cached signature crop "
+                f"delta={similar_crop.get('mean_delta', 0.0):.1f} "
+                f"score={similar_crop.get('template_score', 0.0):.2f} "
+                f"template_delta={similar_crop.get('template_delta', 0.0):.1f}",
+                throttle_key="vision_similar_cache_rejected",
+                interval_seconds=0.5,
+            )
+            self._write_signature_vision_event(
+                "similar_cache_rejected",
+                image_hash=image_hash,
+                similar_image_hash=similar_crop.get("image_hash"),
+                reason=reason,
+                mean_delta=round(float(similar_crop.get("mean_delta", 0.0)), 2),
+                template_score=round(float(similar_crop.get("template_score", 0.0)), 4),
+                template_delta=round(float(similar_crop.get("template_delta", 0.0)), 2),
+                reject_reason=similar_crop.get("reject_reason"),
+                crop_shape=self._get_signature_crop_shape(number_crop),
+            )
         overlay_artifact = self._signature_crop_has_overlay_artifact(number_crop)
         if overlay_artifact and self.signature_observer_config.get("vision_signature_reject_overlay_artifacts", True):
             self.signature_last_vision_skip_reason = "overlay_artifact"
@@ -2043,7 +2077,9 @@ class MiningManager(FunctionManager):
             return None
 
         fingerprint = self._signature_crop_fingerprint(number_crop)
+        match_template = self._signature_crop_match_template(number_crop)
         best_match = None
+        best_rejected_match = None
         retained_crops = []
         for recent_crop in self.signature_vision_recent_crops:
             age = now - float(recent_crop.get("sent_at", 0.0))
@@ -2059,16 +2095,32 @@ class MiningManager(FunctionManager):
             mean_delta = float(
                 np.mean(cv2.absdiff(fingerprint, recent_fingerprint))
             )
-            if mean_delta <= max_mean_delta and (
-                best_match is None or mean_delta < best_match["mean_delta"]
-            ):
-                best_match = {
-                    "image_hash": recent_crop.get("image_hash"),
-                    "mean_delta": mean_delta,
-                }
+            if mean_delta > max_mean_delta:
+                continue
+
+            match_details = self._verify_similar_signature_cache_crop(
+                match_template,
+                recent_crop.get("match_template"),
+            )
+            candidate = {
+                "image_hash": recent_crop.get("image_hash"),
+                "mean_delta": mean_delta,
+                **match_details,
+            }
+            if candidate.get("verified"):
+                candidate_score = self._score_similar_signature_cache_candidate(candidate)
+                best_score = (
+                    self._score_similar_signature_cache_candidate(best_match)
+                    if best_match is not None
+                    else None
+                )
+                if best_score is None or candidate_score > best_score:
+                    best_match = candidate
+            elif best_rejected_match is None or mean_delta < best_rejected_match["mean_delta"]:
+                best_rejected_match = candidate
 
         self.signature_vision_recent_crops = retained_crops
-        return best_match
+        return best_match or best_rejected_match
 
     def _remember_signature_vision_crop(self, image_hash, number_crop, sent_at):
         history_size = int(
@@ -2081,14 +2133,89 @@ class MiningManager(FunctionManager):
             {
                 "image_hash": image_hash,
                 "fingerprint": self._signature_crop_fingerprint(number_crop),
+                "match_template": self._signature_crop_match_template(number_crop),
                 "sent_at": sent_at,
             }
         )
         self.signature_vision_recent_crops = self.signature_vision_recent_crops[-history_size:]
 
-    def _signature_crop_fingerprint(self, image):
+    def _score_similar_signature_cache_candidate(self, candidate):
+        return (
+            float(candidate.get("template_score", 0.0)),
+            -float(candidate.get("template_delta", 255.0)),
+            -float(candidate.get("mean_delta", 255.0)),
+        )
+
+    def _verify_similar_signature_cache_crop(self, current_template, recent_template):
+        if not self.signature_observer_config.get("vision_signature_similar_cache_verifier_enabled", True):
+            return {
+                "verified": True,
+                "template_score": 1.0,
+                "template_delta": 0.0,
+            }
+        if current_template is None or recent_template is None:
+            return {
+                "verified": False,
+                "template_score": 0.0,
+                "template_delta": 255.0,
+                "reject_reason": "missing_template",
+            }
+        if current_template.shape != recent_template.shape:
+            return {
+                "verified": False,
+                "template_score": 0.0,
+                "template_delta": 255.0,
+                "reject_reason": "shape_mismatch",
+            }
+
+        min_text_coverage = float(
+            self.signature_observer_config.get("vision_signature_similar_cache_min_text_coverage", 0.01)
+        )
+        current_coverage = float(cv2.countNonZero(current_template)) / max(1, current_template.size)
+        recent_coverage = float(cv2.countNonZero(recent_template)) / max(1, recent_template.size)
+        if current_coverage < min_text_coverage or recent_coverage < min_text_coverage:
+            return {
+                "verified": False,
+                "template_score": 0.0,
+                "template_delta": 255.0,
+                "reject_reason": "low_text_coverage",
+            }
+
+        template_delta = float(np.mean(cv2.absdiff(current_template, recent_template)))
+        template_score = self._signature_crop_template_score(current_template, recent_template)
+        min_score = float(
+            self.signature_observer_config.get("vision_signature_similar_cache_min_template_score", 0.94)
+        )
+        max_template_delta = float(
+            self.signature_observer_config.get("vision_signature_similar_cache_max_template_delta", 12.0)
+        )
+        verified = template_score >= min_score and template_delta <= max_template_delta
+        return {
+            "verified": verified,
+            "template_score": template_score,
+            "template_delta": template_delta,
+            "reject_reason": None if verified else "template_mismatch",
+        }
+
+    def _signature_crop_template_score(self, current_template, recent_template):
+        current = current_template.astype(np.float32)
+        recent = recent_template.astype(np.float32)
+        current -= float(np.mean(current))
+        recent -= float(np.mean(recent))
+        denominator = float(np.sqrt(np.sum(current * current) * np.sum(recent * recent)))
+        if denominator <= 0.0:
+            return 0.0
+        return float(np.sum(current * recent) / denominator)
+
+    def _signature_crop_match_template(self, image):
+        mask = self._signature_crop_text_mask(image)
+        if mask is None:
+            return None
+        return mask
+
+    def _signature_crop_text_mask(self, image):
         if image is None or image.size == 0:
-            return np.zeros((24, 64), dtype=np.uint8)
+            return None
 
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
         if len(image.shape) == 3:
@@ -2104,7 +2231,18 @@ class MiningManager(FunctionManager):
 
         mask = cv2.medianBlur(mask, 3)
         kernel = np.ones((2, 2), np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+        return cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+    def _signature_crop_fingerprint(self, image):
+        if image is None or image.size == 0:
+            return np.zeros((24, 64), dtype=np.uint8)
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if len(image.shape) == 3 else image
+        mask = self._signature_crop_text_mask(image)
+        if mask is None:
+            resized = cv2.resize(gray, (64, 24), interpolation=cv2.INTER_AREA)
+            return cv2.equalizeHist(resized)
+
         text_pixels = cv2.findNonZero(mask)
         if text_pixels is None:
             resized = cv2.resize(gray, (64, 24), interpolation=cv2.INTER_AREA)
