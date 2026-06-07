@@ -85,6 +85,13 @@ class FasterWhisper:
             segments, info = self.model.transcribe(
                 filename,
                 without_timestamps=True,
+                # Run Silero VAD before decoding so non-speech audio (silence,
+                # background noise from an accidental key tap) is removed and the
+                # model isn't fed material it hallucinates filler like "you" from.
+                vad_filter=True,
+                # Each recording is an independent utterance; don't let the decoder
+                # carry context across segments, which fuels repetition hallucinations.
+                condition_on_previous_text=False,
                 beam_size=config.beam_size,
                 best_of=config.best_of,
                 temperature=config.temperature,

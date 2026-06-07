@@ -19,6 +19,53 @@ RECORDING_PATH = "audio_output"
 RECORDING_FILE: str = "recording.wav"
 CONTINUOUS_RECORDING_FILE: str = "continuous_recording.wav"
 
+# Push-to-talk recordings are gated against this energy threshold to drop
+# silent / noise-only clips (e.g. an accidental key tap with no speech) before
+# they reach STT. Whisper-based providers reliably hallucinate filler phrases
+# like "you" / "Thank you." from near-silence, so we never want to transcribe
+# such clips. Mirrors the default voice_activation energy_threshold and is only
+# used when no tuned VoiceActivationSettings are available (pure PTT mode).
+DEFAULT_PTT_SILENCE_ENERGY_THRESHOLD = 0.01
+
+
+def butter_bandpass(lowcut: int, highcut: int, sample_rate, order):
+    nyq = 0.5 * sample_rate
+    low = lowcut / nyq
+    high = highcut / nyq
+    b, a = butter(order, [low, high], btype="band")
+    return b, a
+
+
+def butter_bandpass_filter(
+    audio_data, lowcut: int, highcut: int, sample_rate, order: int
+):
+    b, a = butter_bandpass(
+        lowcut=lowcut, highcut=highcut, sample_rate=sample_rate, order=order
+    )
+    return filtfilt(b, a, audio_data)
+
+
+def speech_band_rms_energy(audio_data, sample_rate) -> float:
+    """RMS energy of the audio within the human speech band (85-500 Hz).
+
+    Accepts mono or multi-channel float samples (channels are averaged).
+    Used to decide whether a recording actually contains spoken voice.
+    """
+    audio_data = numpy.asarray(audio_data, dtype=numpy.float64)
+    if audio_data.ndim > 1:
+        audio_data = audio_data.mean(axis=1)
+    audio_data = numpy.squeeze(audio_data)
+    if audio_data.size == 0:
+        return 0.0
+    filtered_audio = butter_bandpass_filter(
+        audio_data=audio_data,
+        lowcut=85,
+        highcut=500,
+        sample_rate=sample_rate,
+        order=5,
+    )
+    return float(numpy.sqrt(numpy.mean(filtered_audio**2)))
+
 
 class AudioRecorder:
     def __init__(
@@ -122,6 +169,27 @@ class AudioRecorder:
             )
             return None
 
+        # Drop silent / noise-only recordings (e.g. an accidental key tap) before
+        # they reach STT, where Whisper-based providers hallucinate phrases like
+        # "you" from near-silence. Push-to-talk has no VoiceActivationSettings, so
+        # fall back to the default threshold when none are configured.
+        energy_threshold = (
+            self.va_settings.energy_threshold
+            if self.va_settings is not None
+            else DEFAULT_PTT_SILENCE_ENERGY_THRESHOLD
+        )
+        recorded_energy = speech_band_rms_energy(self.recording_data, self.samplerate)
+        if recorded_energy <= energy_threshold:
+            self.printr.print(
+                f"Skipped recording ({wingman_name}) - no speech detected "
+                f"(energy {recorded_energy:.5f} <= threshold {energy_threshold})",
+                color=LogType.WARNING,
+                source_name=wingman_name,
+                command_tag=CommandTag.IGNORED_RECORDING,
+            )
+            self.recording_data = None
+            return None
+
         try:
             soundfile.write(self.file_path, self.recording_data, self.samplerate)
             self.recording_data = None
@@ -138,31 +206,8 @@ class AudioRecorder:
     # Continuous listening:
 
     def contains_speech(self, audio_bytes: bytes, energy_threshold: float):
-        def butter_bandpass(lowcut: int, highcut: int, sample_rate, order):
-            nyq = 0.5 * sample_rate
-            low = lowcut / nyq
-            high = highcut / nyq
-            b, a = butter(order, [low, high], btype="band")
-            return b, a
-
-        def butter_bandpass_filter(
-            audio_data, lowcut: int, highcut: int, sample_rate, order: int
-        ):
-            b, a = butter_bandpass(
-                lowcut=lowcut, highcut=highcut, sample_rate=sample_rate, order=order
-            )
-            y = filtfilt(b, a, audio_data)
-            return y
-
         audio_data, sample_rate = soundfile.read(io.BytesIO(audio_bytes))
-        filtered_audio = butter_bandpass_filter(
-            audio_data=audio_data,
-            sample_rate=sample_rate,
-            lowcut=85,
-            highcut=500,
-            order=5,
-        )
-        rms_energy = numpy.sqrt(numpy.mean(filtered_audio**2))
+        rms_energy = speech_band_rms_energy(audio_data, sample_rate)
 
         if rms_energy > energy_threshold:
             return True, rms_energy
