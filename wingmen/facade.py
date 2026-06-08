@@ -524,29 +524,27 @@ class SkillAudio:
         """True while the wingman is currently playing TTS/audio."""
         return bool(self._wingman.audio_player.is_playing)
 
-    async def play(self, audio_config: Any, volume_modifier: float = 1.0) -> None:
-        """Start playback of a skill-owned audio file (``AudioFile``/``AudioFileConfig``)."""
-        await self._wingman.audio_library.start_playback(audio_config, volume_modifier)
+    async def play(self, audio_config: Any, *, volume: float = 1.0) -> None:
+        """Start playback of a skill-owned audio file."""
+        await self._wingman.audio_library.start_playback(audio_config, volume)
 
-    async def stop(self, audio_config: Any, fade_out_time: float = 0.5) -> None:
+    async def stop(self, audio_config: Any, *, fade_out: float = 0.5) -> None:
         """Stop playback of a skill-owned audio file (optionally fading out)."""
-        await self._wingman.audio_library.stop_playback(audio_config, fade_out_time)
+        await self._wingman.audio_library.stop_playback(audio_config, fade_out)
 
-    def on_playback_started(self, callback: Any) -> None:
-        """Subscribe to playback-started events. Callback receives the wingman name."""
+    def on_playback_started(self, callback: Any) -> "Subscription":
+        """Observe playback start. Returns a Subscription — call .unsubscribe() to detach."""
         self._wingman.audio_player.playback_events.subscribe("started", callback)
+        return Subscription(
+            lambda: self._wingman.audio_player.playback_events.unsubscribe("started", callback)
+        )
 
-    def on_playback_finished(self, callback: Any) -> None:
-        """Subscribe to playback-finished events. Callback receives the wingman name."""
+    def on_playback_finished(self, callback: Any) -> "Subscription":
+        """Observe playback finish. Returns a Subscription — call .unsubscribe() to detach."""
         self._wingman.audio_player.playback_events.subscribe("finished", callback)
-
-    def off_playback_started(self, callback: Any) -> None:
-        """Unsubscribe a previously-registered playback-started callback."""
-        self._wingman.audio_player.playback_events.unsubscribe("started", callback)
-
-    def off_playback_finished(self, callback: Any) -> None:
-        """Unsubscribe a previously-registered playback-finished callback."""
-        self._wingman.audio_player.playback_events.unsubscribe("finished", callback)
+        return Subscription(
+            lambda: self._wingman.audio_player.playback_events.unsubscribe("finished", callback)
+        )
 
     # --- output/input device control (in-process; replaces HTTP-to-backend hacks) ---
 
