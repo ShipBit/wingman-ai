@@ -448,37 +448,96 @@ class SkillMemory:
         return await self._la.forget_memory_by_id(entry_id)
 
 
-class SkillRegistryView:
-    """Sanctioned read + invoke over the wingman's tools/commands.
-
-    Lets a skill discover which tool functions exist and invoke one (or a command)
-    by name — without reaching into build_tools()/the renamed internal dispatcher.
-    The invoke surface is deliberately scoped to enumerable tools/commands, not
-    arbitrary attribute calls.
-    """
+class SkillTools:
+    """Discover and invoke the wingman's callable functions (skill @tools, MCP tools,
+    commands) by name. Scoped to enumerable tools — not arbitrary attribute access."""
 
     def __init__(self, wingman: "Wingman") -> None:
         self._wingman = wingman
 
+    def _tool_defs(self) -> dict:
+        return {t.get("function", {}).get("name"): t.get("function", {})
+                for t in self._wingman.build_tools()
+                if t.get("function", {}).get("name")}
+
+    def names(self) -> set[str]:
+        return set(self._tool_defs().keys())
+
+    def has(self, name: str) -> bool:
+        return name in self._tool_defs()
+
+    # --- backward-compatible aliases (pre-v3 callers used tool_names/has_tool) ---
     def tool_names(self) -> set[str]:
-        """Names of all currently-available tool functions."""
-        names = set()
-        for tool in self._wingman.build_tools():
-            name = tool.get("function", {}).get("name")
-            if name:
-                names.add(name)
-        return names
+        """Deprecated alias for names()."""
+        return self.names()
 
     def has_tool(self, name: str) -> bool:
-        """True if a tool function with this name is currently available."""
-        return name in self.tool_names()
+        """Deprecated alias for has()."""
+        return self.has(name)
 
-    async def invoke(self, function_name: str, arguments: dict | None = None):
-        """Invoke a tool/command by name. Returns
-        ``(function_response, instant_response, used_skill, tool_label)``."""
-        return await self._wingman.execute_command_by_function_call(
-            function_name, arguments or {}
-        )
+    def source(self, name: str) -> str | None:
+        """Human-readable origin of a tool: the owning skill's name, or the MCP server's
+        display name. Prefers mcp_registry PUBLIC accessors; falls back to internals."""
+        skill = (self._wingman.tool_skills or {}).get(name)
+        if skill is not None:
+            return getattr(skill, "name", None)
+        mcp = self._wingman.mcp_registry
+        if not mcp:
+            return None
+        try:
+            for manifest in mcp.get_connected_servers():
+                sname = getattr(manifest, "name", None)
+                tools = mcp.get_server_tools(sname) if sname else []
+                tool_names = {getattr(t, "prefixed_name", None) or getattr(t, "name", None) for t in tools}
+                if name in tool_names:
+                    return getattr(manifest, "display_name", sname)
+        except Exception:
+            pass
+        # Fallback to internals if the public shapes differ.
+        server = getattr(mcp, "_tool_to_server", {}).get(name)
+        manifests = getattr(mcp, "_manifests", {})
+        if server and server in manifests:
+            return getattr(manifests[server], "display_name", server)
+        return None
+
+    def describe(self, name: str) -> "ToolDescriptor | None":
+        fn = self._tool_defs().get(name)
+        if not fn:
+            return None
+        return ToolDescriptor(name=name, source=self.source(name),
+                              description=fn.get("description"),
+                              parameters=fn.get("parameters", {}))
+
+    def all(self) -> tuple:
+        return tuple(self.describe(n) for n in self._tool_defs())
+
+    def servers(self) -> tuple:
+        """Active MCP servers as dicts: name, display_name, connected, tools (prefixed names)."""
+        mcp = self._wingman.mcp_registry
+        if not mcp:
+            return ()
+        out = []
+        for manifest in mcp.get_connected_servers():
+            sname = getattr(manifest, "name", None)
+            tools = mcp.get_server_tools(sname) if sname else []
+            out.append({
+                "name": sname,
+                "display_name": getattr(manifest, "display_name", sname),
+                "connected": bool(getattr(manifest, "is_connected", True)),
+                "tools": [getattr(t, "prefixed_name", None) or getattr(t, "name", None) for t in tools],
+            })
+        return tuple(out)
+
+    async def invoke(self, name: str, arguments: dict | None = None) -> "ToolResult":
+        result = await self._wingman.execute_command_by_function_call(name, arguments or {})
+        func_resp, instant_resp, used_skill, label = (list(result) + [None, None, None, None])[:4]
+        return ToolResult(response=func_resp or "", instant_response=instant_resp or "",
+                          skill=used_skill, label=label)
+
+
+# Backward-compatible alias: wingman_context.py still imports SkillRegistryView and
+# exposes ctx.registry. SkillTools is the v3 name (ctx.tools).
+SkillRegistryView = SkillTools
 
 
 class SkillCommands:
