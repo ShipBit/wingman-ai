@@ -12,7 +12,6 @@ The HUD Server must be enabled in global settings for this skill to work.
 """
 
 import asyncio
-import inspect
 import json
 import os
 import threading
@@ -906,33 +905,13 @@ class HUD(Skill):
                 tool_name = tc.function.name
                 source = "System"
                 source_type = "system"
-                icon_path = None
 
-                # Check if skill
-                if self.wingman.tool_skills and tool_name in self.wingman.tool_skills:
-                    skill = self.wingman.tool_skills[tool_name]
-                    source = skill.name
-                    source_type = "skill"
-                    try:
-                        skill_file = inspect.getfile(skill.__class__)
-                        skill_dir = os.path.dirname(skill_file)
-                        logo_path = os.path.join(skill_dir, "logo.png")
-                        if os.path.exists(logo_path):
-                            icon_path = logo_path
-                    except Exception:
-                        pass
-
-                # Check if MCP tool
-                elif (self.wingman.mcp_registry and
-                      hasattr(self.wingman.mcp_registry, '_tool_to_server')):
-                    server_name = self.wingman.mcp_registry._tool_to_server.get(tool_name)
-                    if server_name:
-                        if (hasattr(self.wingman.mcp_registry, '_manifests') and
-                            server_name in self.wingman.mcp_registry._manifests):
-                            source = self.wingman.mcp_registry._manifests[server_name].display_name
-                        else:
-                            source = server_name
-                        source_type = "mcp"
+                # Resolve human-readable source via v3 facade
+                origin = self.wingman.tools.source(tool_name)
+                if origin is not None:
+                    source = origin
+                    mcp_display_names = {s["display_name"] for s in self.wingman.tools.servers()}
+                    source_type = "mcp" if origin in mcp_display_names else "skill"
 
                 # Use tool name if configured
                 if display_tool_names:
@@ -942,7 +921,7 @@ class HUD(Skill):
                     'name': tool_name,
                     'source': source,
                     'type': source_type,
-                    'icon': icon_path
+                    'icon': None
                 })
 
         if message:
