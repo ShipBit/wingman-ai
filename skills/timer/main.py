@@ -5,10 +5,6 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Optional
 from api.interface import SettingsConfig, SkillConfig
-from api.enums import (
-    LogSource,
-    LogType,
-)
 from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
 
@@ -134,7 +130,7 @@ class Timer(Skill):
     async def prepare(self) -> None:
         await super().prepare()
         self.active = True
-        self.threaded_execution(self.start_timer_worker)
+        self.wingman.run_in_thread(self.start_timer_worker)
 
     async def unload(self) -> None:
         await super().unload()
@@ -175,7 +171,7 @@ class Timer(Skill):
             function_name = function_name.split(".")[1]
 
         # check if a tool with this name exists
-        is_known = self.wingman.registry.has_tool(function_name)
+        is_known = self.wingman.tools.has(function_name)
 
         # if not a tool, it might be a command
         if not is_known and self.wingman.commands.get(function_name):
@@ -316,25 +312,17 @@ class Timer(Skill):
             return
 
         timer = self.timers[timer_id]
-        function_response, instant_response, used_skill, tool_label = (
-            await self.wingman.registry.invoke(
-                timer.function_name, timer.function_arguments
-            )
+        result = await self.wingman.tools.invoke(
+            timer.function_name, timer.function_arguments
         )
 
-        response = instant_response or function_response
+        response = result.instant_response or result.response
         if response:
             summary = await self._summarize_timer_execution(timer, response)
             if summary:
-                await self.wingman.add_assistant_message(summary)
-                await self.printr.print_async(
-                    f"{summary}",
-                    color=LogType.POSITIVE,
-                    source=LogSource.WINGMAN,
-                    source_name=self.wingman.name,
-                    skill_name=self.name,
-                )
-                await self.wingman.play_to_user(summary, True)
+                await self.wingman.conversation.add_assistant(summary)
+                self.log.info(summary)
+                await self.wingman.tts.speak(summary, interrupt=False)
 
         if not timer.is_loop or timer.loops == 1:
             # we cant delete it here, because we are iterating over the timers in a separate thread
@@ -350,7 +338,7 @@ class Timer(Skill):
     ) -> str | None:
         if timer.silent:
             return None
-        history = self.wingman.get_conversation_history()
+        history = self.wingman.conversation.history()
         conversation = "\n".join(
             f"{message.get('role', '')}: {message.get('content', '')}"
             for message in history
