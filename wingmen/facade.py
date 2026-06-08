@@ -844,3 +844,95 @@ class SkillTts:
             return "Voice change failed while reinitializing the TTS provider."
         self._wingman.tts = new_tts
         return f"Switched {self._wingman.name}'s voice to {voice_name} ({provider_label})."
+
+
+class SkillConversation:
+    """Read + append to the live conversation, and summarize it (free, local)."""
+
+    def __init__(self, wingman: "Wingman") -> None:
+        self._wingman = wingman
+
+    def history(self) -> list[dict]:
+        """Shallow copy of the live history. Don't mutate individual messages."""
+        return list(self._wingman.conversation.messages)
+
+    @property
+    def summary(self) -> str:
+        return self._wingman.condenser.summary or ""
+
+    async def add_user(self, content: str) -> None:
+        await self._wingman.add_user_message(content)
+
+    async def add_assistant(self, content: str) -> None:
+        await self._wingman.conversation.add_assistant_message(content)
+
+    async def reset(self) -> None:
+        await self._wingman.reset_conversation_history()
+
+    async def summarize(self) -> str:
+        """Summarize the live conversation via the FREE local model. '' if unavailable."""
+        from services.skill_local_ai import SkillLocalAI
+        text = "\n".join(
+            f"{m.get('role','')}: {m.get('content','')}"
+            for m in self._wingman.conversation.messages
+            if isinstance(m.get("content"), str)
+        )
+        return await SkillLocalAiView(SkillLocalAI(self._wingman)).summarize(text)
+
+
+class SkillSecrets:
+    """Fetch stored secrets (prompts the user if missing)."""
+
+    def __init__(self, wingman: "Wingman") -> None:
+        self._wingman = wingman
+
+    async def retrieve(self, name: str, errors: list | None = None) -> str | None:
+        return await self._wingman.retrieve_secret(name, errors if errors is not None else [])
+
+
+class SkillSkills:
+    """Read which skills are currently loaded on this wingman."""
+
+    def __init__(self, wingman: "Wingman") -> None:
+        self._wingman = wingman
+
+    def active(self) -> tuple:
+        out = []
+        for s in self._wingman.skill_manager.skills:
+            out.append({"name": getattr(s, "name", None),
+                        "display_name": getattr(getattr(s, "config", None), "display_name", None)})
+        return tuple(out)
+
+    def has(self, name: str) -> bool:
+        """Is a skill with this name currently loaded? (symmetric with ctx.tools.has)"""
+        return any(getattr(s, "name", None) == name for s in self._wingman.skill_manager.skills)
+
+
+class SkillSettings:
+    """Read-only view of app settings + the one sanctioned mutation (audio devices)."""
+
+    __slots__ = ("_wingman",)
+
+    def __init__(self, wingman: "Wingman") -> None:
+        object.__setattr__(self, "_wingman", wingman)
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        return _wrap(getattr(object.__getattribute__(self, "_wingman").settings, name))
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        raise FacadeError(
+            f"Settings are read-only for skills — cannot set '{name}'. "
+            f"Use ctx.audio.set_output_device(...) to change devices."
+        )
+
+    @property
+    def output_device(self):
+        audio = object.__getattribute__(self, "_wingman").settings.audio
+        return audio.output if audio else None
+
+    @property
+    def input_device(self):
+        audio = object.__getattribute__(self, "_wingman").settings.audio
+        return audio.input if audio else None
