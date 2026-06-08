@@ -95,7 +95,44 @@ def main():
     assert cfg.inworld.voice_id == "iw" and cfg.inworld.output_streaming is False
     assert label == "Wingman Pro / Inworld"
 
+    test_tts_speak_and_voice()
+
     print("ALL OK")
+
+
+def test_tts_speak_and_voice():
+    """SkillTts.speak() flips interrupt->no_interrupt and delegates to play_to_user;
+    voice/voices are present. Build a tiny fake wingman inline (this file has no helper)."""
+    import asyncio
+    from wingmen.facade import SkillTts
+
+    # voice reads config.features.tts_provider + per-provider fields; use OpenAI here.
+    config = SimpleNamespace(
+        features=SimpleNamespace(tts_provider=TtsProvider.OPENAI),
+        openai=SimpleNamespace(tts_voice="nova"),
+    )
+
+    class _FakeWingman:
+        pass
+
+    w = _FakeWingman()
+    w.config = config
+
+    spoken = {}
+
+    async def _p2u(text, no_interrupt=False, sound_config=None):
+        spoken["text"], spoken["no_interrupt"] = text, no_interrupt
+
+    w.play_to_user = _p2u
+    tts = SkillTts(w)
+
+    asyncio.get_event_loop().run_until_complete(tts.speak("hello", interrupt=False))
+    assert spoken["text"] == "hello" and spoken["no_interrupt"] is True, spoken
+
+    # voice reads the configured OpenAI voice; voices() is a coroutine method.
+    assert tts.voice == "nova", tts.voice
+    assert hasattr(tts, "voices") and hasattr(type(tts), "voice")
+    print("PASS: tts speak (interrupt->no_interrupt) + voice/voices present")
 
 
 if __name__ == "__main__":

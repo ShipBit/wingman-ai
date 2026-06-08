@@ -594,6 +594,83 @@ class SkillTts:
     def __init__(self, wingman: "Wingman") -> None:
         self._wingman = wingman
 
+    @property
+    def voice(self):
+        """The voice configured on the current TTS provider (read)."""
+        from api.enums import TtsProvider
+
+        config = self._wingman.config
+        provider = config.features.tts_provider
+        mapping = {
+            TtsProvider.OPENAI: lambda: config.openai.tts_voice,
+            TtsProvider.ELEVENLABS: lambda: config.elevenlabs.voice,
+            TtsProvider.AZURE: lambda: config.azure.tts.voice,
+            TtsProvider.EDGE_TTS: lambda: config.edge_tts.voice,
+            TtsProvider.XVASYNTH: lambda: config.xvasynth.voice,
+            TtsProvider.HUME: lambda: config.hume.voice,
+            TtsProvider.INWORLD: lambda: config.inworld.voice_id,
+            TtsProvider.POCKET_TTS: lambda: config.pocket_tts.voice,
+            TtsProvider.OPENAI_COMPATIBLE: lambda: config.openai_compatible_tts.voice,
+        }
+        getter = mapping.get(provider)
+        return getter() if getter else None
+
+    async def voices(self) -> list:
+        """ALL voices available on the current provider (not just the user-picked ones).
+
+        Best-effort: providers that need a secret/network round-trip or that aren't
+        cheaply enumerable here return ``[]`` rather than raising. Providers whose live
+        TTS instance exposes a cached/static voice list are read from it. Full
+        per-provider enumeration lives in the VoiceService HTTP API; skills that need the
+        exhaustive list should call that. (Correctness is smoke-checked at boot.)
+        """
+        from api.enums import TtsProvider
+
+        config = self._wingman.config
+        provider = config.features.tts_provider
+
+        # Prefer the live TTS instance if it advertises a voice list (e.g. static providers
+        # like Edge / Pocket cache their catalogue).
+        tts = getattr(self._wingman, "tts", None)
+        for attr in ("available_voices", "voices", "get_available_voices"):
+            candidate = getattr(tts, attr, None) if tts is not None else None
+            if candidate is None:
+                continue
+            try:
+                if callable(candidate):
+                    result = candidate()
+                    if hasattr(result, "__await__"):
+                        result = await result
+                else:
+                    result = candidate
+                if result:
+                    return list(result)
+            except Exception:
+                pass
+
+        # Pocket TTS can enumerate its local voices without a secret/network call.
+        if provider == TtsProvider.POCKET_TTS:
+            pocket = getattr(self._wingman, "pocket_tts", None) or getattr(tts, "pocket_tts", None)
+            getter = getattr(pocket, "get_available_voices", None)
+            if getter is not None:
+                try:
+                    result = getter()
+                    if hasattr(result, "__await__"):
+                        result = await result
+                    return list(result or [])
+                except Exception:
+                    return []
+
+        # Everything else (OpenAI, ElevenLabs, Azure, Hume, Inworld, OpenAI-compatible,
+        # XVASynth) needs a secret and/or network call we don't make here.
+        return []
+
+    async def speak(self, text: str, *, interrupt: bool = True, sound_config=None) -> None:
+        """Say text in the wingman's voice. interrupt=True (default) speaks immediately,
+        cutting off current playback; interrupt=False waits for it to finish."""
+        await self._wingman.play_to_user(text, no_interrupt=(not interrupt),
+                                         sound_config=sound_config)
+
     async def set_voice(self, voice: Any, errors: list | None = None) -> str:
         """Set the voice on the wingman's current TTS provider and rebuild the TTS
         instance so it takes effect immediately.
