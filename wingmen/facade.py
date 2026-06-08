@@ -566,6 +566,89 @@ class SkillCommands:
             return False
         return self._wingman.tower.save_wingman_commands(self._wingman.name)
 
+    def add(self, command, *, category=None) -> None:
+        """Add a command (optionally into a category). Call save() to persist."""
+        if self._wingman.config.commands is None:
+            self._wingman.config.commands = []
+        if category is not None:
+            command.category_id = category.id if isinstance(category, CommandCategory) else category
+        self._wingman.config.commands.append(command)
+
+    def remove(self, name: str) -> None:
+        """Remove a command by name. Call save() to persist."""
+        cmds = self._wingman.config.commands or []
+        self._wingman.config.commands = [c for c in cmds if c.name != name]
+
+    def add_category(self, name: str) -> "CommandCategory":
+        """Create (or return the existing) category with this name. Idempotent by name."""
+        from api.interface import CommandCategoryConfig
+        import uuid
+        cats = self._wingman.config.command_categories
+        if cats is None:
+            cats = self._wingman.config.command_categories = []
+        for cfg in cats:
+            if cfg.name == name:
+                return CommandCategory(id=cfg.id, name=cfg.name, commands=self._commands_in(cfg.id))
+        cfg = CommandCategoryConfig(id=str(uuid.uuid4()), name=name)
+        cats.append(cfg)
+        return CommandCategory(id=cfg.id, name=cfg.name)
+
+    def update_category(self, category: "CommandCategory") -> None:
+        for cfg in (self._wingman.config.command_categories or []):
+            if cfg.id == category.id:
+                cfg.name = category.name
+                return
+
+    def delete_category(self, id_or_name: str) -> None:
+        cats = self._wingman.config.command_categories or []
+        self._wingman.config.command_categories = [
+            c for c in cats if c.id != id_or_name and c.name != id_or_name
+        ]
+
+    def categories(self) -> tuple:
+        return tuple(
+            CommandCategory(id=c.id, name=c.name, commands=self._commands_in(c.id))
+            for c in (self._wingman.config.command_categories or [])
+        )
+
+    def _commands_in(self, category_id: str) -> list:
+        return [c for c in (self._wingman.config.commands or []) if getattr(c, "category_id", None) == category_id]
+
+    def register_function(self, func, *, label=None, description=None,
+                          respond="ai", parameters=None) -> str:
+        """Register a live skill method as a bindable command function at runtime — the
+        dynamic equivalent of @command_action. Returns the registered function name."""
+        from skills.skill_base import CommandActionDefinition
+        skill = getattr(func, "__self__", None)
+        if skill is None:
+            raise FacadeError("register_function requires a bound skill method (func.__self__).")
+        cad = CommandActionDefinition(func=func.__func__, label=label,
+                                      description=description, respond=respond)
+        skill._command_actions[cad.name] = cad
+        self._wingman.skill_manager.command_action_skills[(skill.name, cad.name)] = skill
+        return cad.name
+
+    def unregister_function(self, name: str) -> None:
+        registry = self._wingman.skill_manager.command_action_skills
+        for key in [k for k in registry if k[1] == name]:
+            skill = registry.pop(key)
+            skill._command_actions.pop(name, None)
+
+    def add_skill_command(self, name: str, func, *, category=None,
+                          instant_phrases=None, respond="ai") -> None:
+        """One call: register `func` as a command function, build a command named `name`
+        bound to it (with optional instant-activation phrases), categorize it. Call save()."""
+        from api.interface import CommandConfig, CommandActionConfig, CommandSkillActionConfig
+        fn_name = self.register_function(func, label=name, respond=respond)
+        skill = func.__self__
+        action = CommandActionConfig(
+            skill_action=CommandSkillActionConfig(skill_name=skill.name, function_name=fn_name)
+        )
+        command = CommandConfig(name=name, actions=[action])
+        if instant_phrases:
+            command.instant_activation = list(instant_phrases)
+        self.add(command, category=category)
+
 
 class SkillAudio:
     """Sanctioned audio capabilities for skills.
