@@ -93,7 +93,56 @@ async def main():
     assert w.last_messages[0] == {"role": "system", "content": "be terse"}
     assert w.last_messages[1]["content"] == "hello"
 
+    await test_ai_has_converse_summarize_image()
+
     print("ALL OK")
+
+
+class FakeConversation:
+    def __init__(self):
+        self.messages = []
+        self.assistant = []
+
+    async def add_assistant_message(self, content):
+        self.assistant.append(content)
+
+
+class FakeConverseWingman(FakeWingman):
+    """Extends FakeWingman with the bits converse()/generate_image() need."""
+
+    def __init__(self, provider, condense=True, skill_cap=16000):
+        super().__init__(provider, condense=condense, skill_cap=skill_cap)
+        self.conversation = FakeConversation()
+        self.added_user = []
+
+    async def add_user_message(self, content):
+        self.added_user.append(content)
+        self.conversation.messages.append({"role": "user", "content": content})
+
+    async def generate_image(self, t):
+        return f"IMG:{t}"
+
+
+async def test_ai_has_converse_summarize_image():
+    w = FakeConverseWingman(ConversationProvider.OPENAI)
+    ai = SkillAi(w)
+    assert hasattr(ai, "converse") and hasattr(ai, "summarize") and hasattr(ai, "generate_image")
+
+    # generate_image delegates to wingman.generate_image
+    out = await ai.generate_image("a cat")
+    assert out == "IMG:a cat", out
+
+    # converse appends user + assistant turns and returns the model text
+    reply = await ai.converse("hi there")
+    assert reply == "RESULT", reply
+    assert w.added_user == ["hi there"]
+    assert w.conversation.assistant == ["RESULT"]
+
+    # summarize routes through generate() (capped side-call) and returns text
+    summary = await ai.summarize("some long text")
+    assert summary == "RESULT", summary
+
+    print("PASS: ai converse/summarize/generate_image present + delegate")
 
 
 if __name__ == "__main__":

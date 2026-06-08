@@ -349,6 +349,29 @@ class SkillAi:
             return completion.choices[0].message.content or ""
         return ""
 
+    async def converse(self, user_message: str) -> str:
+        """Conversation-aware reply: uses the wingman's own system prompt + live history
+        and is subject to the normal auto-condensation. Use generate() for off-topic
+        side work that should NOT join the conversation."""
+        await self._wingman.add_user_message(user_message)
+        messages = list(self._wingman.conversation.messages)
+        completion = await self._wingman.actual_llm_call(messages)
+        text = ""
+        if completion and completion.choices:
+            text = completion.choices[0].message.content or ""
+        if text:
+            await self._wingman.conversation.add_assistant_message(text)
+        return text
+
+    async def summarize(self, text: str, *, system: str | None = None) -> str:
+        """Summarize text via the main CLOUD model (capped like generate). For bulk/cheap
+        summarization prefer ctx.local_ai.summarize() (free, local)."""
+        return await self.generate(text, system=system or "Summarize the following concisely.")
+
+    async def generate_image(self, prompt: str) -> str:
+        """Generate an image from a prompt; returns the generated file path/URL."""
+        return await self._wingman.generate_image(prompt)
+
 
 class SkillRegistryView:
     """Sanctioned read + invoke over the wingman's tools/commands.
