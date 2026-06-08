@@ -466,15 +466,6 @@ class SkillTools:
     def has(self, name: str) -> bool:
         return name in self._tool_defs()
 
-    # --- backward-compatible aliases (pre-v3 callers used tool_names/has_tool) ---
-    def tool_names(self) -> set[str]:
-        """Deprecated alias for names()."""
-        return self.names()
-
-    def has_tool(self, name: str) -> bool:
-        """Deprecated alias for has()."""
-        return self.has(name)
-
     def source(self, name: str) -> str | None:
         """Human-readable origin of a tool: the owning skill's name, or the MCP server's
         display name. Prefers mcp_registry PUBLIC accessors; falls back to internals."""
@@ -533,11 +524,6 @@ class SkillTools:
         func_resp, instant_resp, used_skill, label = (list(result) + [None, None, None, None])[:4]
         return ToolResult(response=func_resp or "", instant_response=instant_resp or "",
                           skill=used_skill, label=label)
-
-
-# Backward-compatible alias: wingman_context.py still imports SkillRegistryView and
-# exposes ctx.registry. SkillTools is the v3 name (ctx.tools).
-SkillRegistryView = SkillTools
 
 
 class SkillCommands:
