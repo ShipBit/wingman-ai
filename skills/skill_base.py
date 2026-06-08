@@ -29,6 +29,24 @@ if TYPE_CHECKING:
     from wingmen.wingman_context import WingmanContext
 
 
+class SkillLog:
+    """Friendly logging for skills. Wraps Printr. server_only=True keeps a line out of the
+    client toast/log and only in the server console."""
+
+    def __init__(self, name: str) -> None:
+        self._printr = Printr()
+        self._name = name
+
+    def info(self, message: str, server_only: bool = False) -> None:
+        self._printr.print(f"[{self._name}] {message}", LogType.INFO, server_only=server_only)
+
+    def warning(self, message: str, server_only: bool = False) -> None:
+        self._printr.print(f"[{self._name}] {message}", LogType.WARNING, server_only=server_only)
+
+    def error(self, message: str, server_only: bool = False) -> None:
+        self._printr.print(f"[{self._name}] {message}", LogType.ERROR, server_only=server_only)
+
+
 # Type mapping from Python types to JSON Schema types
 _TYPE_MAP = {
     str: "string",
@@ -396,13 +414,18 @@ class Skill:
         wingman: "WingmanContext",
     ) -> None:
         self.config = config
-        self.settings = settings
         self.wingman = wingman
-
-        self.secret_keeper = SecretKeeper()
-        # Note: secret_events subscription moved to prepare() to avoid listener accumulation
         self.name = self.__class__.__name__
-        self.printr = Printr()
+
+        # Read-only view of app settings; change devices via self.wingman.audio.set_output_device(...)
+        from wingmen.facade import ReadOnlyConfigView
+        self.settings = ReadOnlyConfigView(settings)
+
+        # Private — skills retrieve via self.wingman.secrets.retrieve(...)
+        # Note: secret_events subscription moved to prepare() to avoid listener accumulation
+        self.__secret_keeper = SecretKeeper()
+        self.log = SkillLog(self.name)
+        self.printr = Printr()  # internal/back-compat for base-class logging only
         self.execution_start: None | float = None
         """Used for benchmarking executon times. The timer is (re-)started whenever the process function starts."""
 
@@ -416,27 +439,12 @@ class Skill:
         self.is_unloaded: bool = False
         """Whether unload() has been called. Check this in __del__ before calling unload()."""
 
-        # Lazy facade for local AI capabilities (support model, embeddings, memory)
-        self._local_ai: "SkillLocalAI | None" = None
-
         # Collect @tool decorated methods
         self._decorated_tools: dict[str, ToolDefinition] = {}
         self._collect_decorated_tools()
 
         self._command_actions: dict[str, CommandActionDefinition] = {}
         self._collect_command_actions()
-
-    @property
-    def local_ai(self) -> "SkillLocalAI":
-        """Stable facade for local AI capabilities (support model, embeddings, memory).
-
-        Lazily instantiated on first access. Zero cost for skills that don't use it.
-        """
-        if self._local_ai is None:
-            from services.skill_local_ai import SkillLocalAI
-
-            self._local_ai = SkillLocalAI(self.wingman)
-        return self._local_ai
 
     def needs_activation(self) -> bool:
         """Check if this skill still needs validation and preparation.
@@ -618,7 +626,7 @@ class Skill:
 
         # Safely unsubscribe - the handler may not be subscribed if prepare() was never called
         try:
-            self.secret_keeper.secret_events.unsubscribe(
+            self.__secret_keeper.secret_events.unsubscribe(
                 "secrets_saved", self.secret_changed
             )
         except ValueError:
@@ -632,7 +640,7 @@ class Skill:
         Subscribe to events here, not in __init__.
         """
         # Subscribe to secret changes - will be unsubscribed in unload()
-        self.secret_keeper.secret_events.subscribe("secrets_saved", self.secret_changed)
+        self.__secret_keeper.secret_events.subscribe("secrets_saved", self.secret_changed)
 
     def get_tools(self) -> list[tuple[str, dict]]:
         """
@@ -829,41 +837,6 @@ class Skill:
             return self._decorated_tools[tool_name].wait_response
         return False
 
-    async def llm_call(self, messages, tools: list[dict] = None) -> any:
-        from wingmen.facade import FacadeError
-
-        raise FacadeError(
-            "self.llm_call(...) has been removed. Use the sanctioned, capped call "
-            "instead: `await self.wingman.ai.generate(prompt, system=..., data=..., "
-            "image=...)` for a single-turn side-call. For bulk summarization use the "
-            "local model via `self.local_ai.summarize(...)`."
-        )
-
-    async def retrieve_secret(
-        self,
-        secret_name: str,
-        errors: list[WingmanInitializationError],
-        hint: str = None,
-    ):
-        """Use this method to retrieve secrets like API keys from the SecretKeeper.
-        If the key is missing, the user will be prompted to enter it.
-        """
-        secret = await self.secret_keeper.retrieve(
-            requester=self.name,
-            key=secret_name,
-            prompt_if_missing=True,
-        )
-        if not secret:
-            errors.append(
-                WingmanInitializationError(
-                    wingman_name=self.name,
-                    message=f"Missing secret '{secret_name}'. {hint or ''}",
-                    error_type=WingmanInitializationErrorType.MISSING_SECRET,
-                    secret_name=secret_name,
-                )
-            )
-        return secret
-
     def retrieve_custom_property_value(
         self,
         property_id: str,
@@ -885,11 +858,6 @@ class Skill:
             )
             return None
         return p.value
-
-    def threaded_execution(self, function, *args) -> threading.Thread:
-        """Execute a function in a separate thread."""
-        self.printr.print(f"[{self.__class__.__name__}] Threaded execution called before it was ready.", LogType.WARNING, server_only=True)
-        pass
 
     def get_generated_files_dir(self) -> str:
         """Get the path to this skill's generated files directory.
