@@ -373,6 +373,81 @@ class SkillAi:
         return await self._wingman.generate_image(prompt)
 
 
+def _text_or_empty(resp) -> str:
+    return resp.text if resp is not None and getattr(resp, "text", None) else ""
+
+
+class SkillLocalAiView:
+    """Free, local model. generate()/summarize() return plain strings ("" if the local
+    model is unavailable — check `available`). Tune with a SamplingPreset or temperature/top_p."""
+
+    def __init__(self, local_ai) -> None:
+        self._la = local_ai
+
+    @property
+    def available(self) -> bool:
+        return bool(self._la.available)
+
+    async def generate(self, text: str, *, system: str = "", preset=None,
+                       temperature=None, top_p=None, top_k=None) -> str:
+        resp = await self._la.support(text, system_prompt=system, preset=preset,
+                                      temperature=temperature, top_p=top_p, top_k=top_k)
+        return _text_or_empty(resp)
+
+    def generate_sync(self, text: str, *, system: str = "", preset=None,
+                     temperature=None, top_p=None, top_k=None) -> str:
+        resp = self._la.support_sync(text, system_prompt=system, preset=preset,
+                                     temperature=temperature, top_p=top_p, top_k=top_k)
+        return _text_or_empty(resp)
+
+    async def summarize(self, text: str, *, instruction: str = "", preset=None,
+                       temperature=None, top_p=None) -> str:
+        resp = await self._la.summarize(text, instruction=instruction, preset=preset,
+                                        temperature=temperature, top_p=top_p)
+        return _text_or_empty(resp)
+
+    def summarize_sync(self, text: str, *, instruction: str = "", preset=None,
+                      temperature=None, top_p=None) -> str:
+        resp = self._la.summarize_sync(text, instruction=instruction, preset=preset,
+                                       temperature=temperature, top_p=top_p)
+        return _text_or_empty(resp)
+
+    async def embed(self, texts: list[str]):
+        return await self._la.embed(texts)
+
+    def embed_sync(self, texts: list[str]):
+        return self._la.embed_sync(texts)
+
+
+class SkillMemory:
+    """Local persistent memory (free). Returns None/empty when unavailable (check `available`)."""
+
+    def __init__(self, local_ai) -> None:
+        self._la = local_ai
+
+    @property
+    def available(self) -> bool:
+        return bool(getattr(self._la, "memory_available", False))
+
+    async def remember(self, content: str, **kw):
+        return await self._la.remember_fact(content, **kw)
+
+    async def recall(self, query: str, **kw):
+        return await self._la.recall_memory(query, **kw)
+
+    async def context(self, query: str, max_tokens: int = 500) -> str:
+        return await self._la.memory_context(query, max_tokens=max_tokens)
+
+    async def update(self, entry_id: int, new_content: str) -> bool:
+        return await self._la.update_memory(entry_id, new_content)
+
+    async def forget(self, query: str) -> bool:
+        return await self._la.memory_forget(query)
+
+    async def forget_by_id(self, entry_id: int) -> bool:
+        return await self._la.forget_memory_by_id(entry_id)
+
+
 class SkillRegistryView:
     """Sanctioned read + invoke over the wingman's tools/commands.
 
