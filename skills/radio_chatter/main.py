@@ -114,8 +114,7 @@ class RadioChatter(Skill):
                     )
                 )
 
-            # Provider initialization is handled by ProviderFactory via
-            # switch_tts_provider() at voice-switch time. No pre-init needed.
+            # Provider initialization is handled at voice-switch time via tts.set_voice().
 
         return errors
 
@@ -204,7 +203,7 @@ class RadioChatter(Skill):
         await super().prepare()
         self.loaded = True
         if self._get_auto_start() and not self.radio_status:
-            self.threaded_execution(self._init_chatter)
+            self.wingman.run_in_thread(self._init_chatter)
 
     async def unload(self) -> None:
         await super().unload()
@@ -231,7 +230,7 @@ class RadioChatter(Skill):
         if self.radio_status:
             return "Radio is already on."
         else:
-            self.threaded_execution(self._init_chatter)
+            self.wingman.run_in_thread(self._init_chatter)
             return "Radio is now on."
 
     @tool(
@@ -263,6 +262,10 @@ class RadioChatter(Skill):
             return "Radio is on."
         else:
             return "Radio is off."
+
+    async def _speak(self, text: str, sound_config=None) -> None:
+        """Async helper for threaded TTS with interrupt=False and optional sound_config."""
+        await self.wingman.tts.speak(text, interrupt=False, sound_config=sound_config)
 
     async def _init_chatter(self) -> None:
         """Start the radio chatter."""
@@ -396,9 +399,9 @@ class RadioChatter(Skill):
                     color=LogType.INFO,
                     source_name=self.wingman.name,
                 )
-            self.threaded_execution(self.wingman.play_to_user, text, True, sound_config)
+            self.wingman.run_in_thread(self._speak, text, sound_config)
             if self._get_radio_knowledge():
-                await self.wingman.add_assistant_message(
+                await self.wingman.conversation.add_assistant(
                     f"Background radio chatter: {text}"
                 )
             max_wait = 10
