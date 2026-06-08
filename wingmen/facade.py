@@ -7,8 +7,9 @@ Skills that legitimately need to change something use a sanctioned capability
 (e.g. ``ctx.tts.set_voice(...)``) instead of mutating config by reference.
 """
 
+from dataclasses import dataclass
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 from pydantic import BaseModel
 
@@ -22,6 +23,59 @@ class FacadeError(Exception):
     The message always names the sanctioned capability to use instead, so a skill
     author gets actionable feedback (we don't gate the catalog on this).
     """
+
+
+@dataclass
+class ToolResult:
+    """Result of ctx.tools.invoke(). `response` is fed to the AI; `instant_response`
+    is spoken verbatim if present; `skill`/`label` identify what ran."""
+    response: str
+    instant_response: str = ""
+    skill: Optional[str] = None
+    label: Optional[str] = None
+
+
+@dataclass
+class ToolDescriptor:
+    """Describes one callable function available to the wingman (skill tool, MCP tool,
+    or command). `parameters` is the JSON-schema object for its arguments."""
+    name: str
+    source: Optional[str]
+    description: Optional[str]
+    parameters: dict
+
+
+class Subscription:
+    """Handle returned by ctx.audio.on_playback_*; call unsubscribe() to detach."""
+
+    __slots__ = ("_off", "_done")
+
+    def __init__(self, off: Callable[[], None]) -> None:
+        self._off = off
+        self._done = False
+
+    def unsubscribe(self) -> None:
+        """Detach the callback. Safe to call more than once."""
+        if not self._done:
+            self._done = True
+            self._off()
+
+
+class CommandCategory:
+    """A command category (group) the user sees. Wraps a CommandCategoryConfig."""
+
+    __slots__ = ("id", "name", "_commands")
+
+    def __init__(self, id: str, name: str, commands: Optional[list] = None) -> None:
+        self.id = id
+        self.name = name
+        self._commands = commands if commands is not None else []
+
+    def add(self, command) -> None:
+        """Put a command in this category (sets its category_id)."""
+        command.category_id = self.id
+        if command not in self._commands:
+            self._commands.append(command)
 
 
 class ReadOnlyConfigView:
