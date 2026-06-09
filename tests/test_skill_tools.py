@@ -61,6 +61,16 @@ def test_describe_all_invoke():
     print("PASS: describe/all/invoke->ToolResult")
 
 
+def test_icon():
+    t = SkillTools(_W())
+    # unknown tool / MCP tool (not in tool_skills) -> None
+    assert t.icon("nope") is None
+    assert t.icon("get_weather") is None
+    # a skill tool whose module dir has no logo.png -> None (no crash)
+    assert t.icon("set_timer") is None
+    print("PASS: icon() -> None when no logo / not a skill tool")
+
+
 def test_servers():
     t = SkillTools(_W())
     servers = t.servers()
@@ -74,5 +84,6 @@ def test_servers():
 if __name__ == "__main__":
     test_names_has_source()
     test_describe_all_invoke()
+    test_icon()
     test_servers()
     print("ALL OK")

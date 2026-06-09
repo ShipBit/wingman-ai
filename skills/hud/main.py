@@ -906,12 +906,14 @@ class HUD(Skill):
                 source = "System"
                 source_type = "system"
 
-                # Resolve human-readable source via v3 facade
+                # Resolve human-readable source + icon via v3 facade
+                icon_path = None
                 origin = self.wingman.tools.source(tool_name)
                 if origin is not None:
                     source = origin
                     mcp_display_names = {s["display_name"] for s in self.wingman.tools.servers()}
                     source_type = "mcp" if origin in mcp_display_names else "skill"
+                    icon_path = self.wingman.tools.icon(tool_name)
 
                 # Use tool name if configured
                 if display_tool_names:
@@ -921,7 +923,7 @@ class HUD(Skill):
                     'name': tool_name,
                     'source': source,
                     'type': source_type,
-                    'icon': None
+                    'icon': icon_path
                 })
 
         if message:

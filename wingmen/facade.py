@@ -547,6 +547,23 @@ class SkillTools:
     def all(self) -> tuple:
         return tuple(self.describe(n) for n in self._tool_defs())
 
+    def icon(self, name: str) -> str | None:
+        """Filesystem path to the owning skill's ``logo.png`` for a tool, or ``None`` (MCP
+        tools, commands, or skills without a logo). Lets a UI show a per-tool icon without
+        touching the skill object."""
+        skill = (self._wingman.tool_skills or {}).get(name)
+        if skill is None:
+            return None
+        import inspect
+        import os
+
+        try:
+            skill_dir = os.path.dirname(inspect.getfile(skill.__class__))
+            logo_path = os.path.join(skill_dir, "logo.png")
+            return logo_path if os.path.exists(logo_path) else None
+        except Exception:
+            return None
+
     def servers(self) -> tuple:
         """Active MCP servers as dicts: name, display_name, connected, tools (prefixed names)."""
         mcp = self._wingman.mcp_registry
@@ -736,12 +753,15 @@ class SkillAudio:
         audio = self._wingman.settings.audio
         return audio.input if audio else None
 
-    async def set_output_device(self, device_id: int) -> bool:
-        """Switch the system audio OUTPUT device. Returns False if unavailable."""
+    async def set_output_device(self, device_id: int | None) -> bool:
+        """Switch the system audio OUTPUT device (in-process; persists + re-routes playback).
+        Pass None to reset to the system default. Returns False if device control is
+        unavailable (no settings service)."""
         return await self._set_devices(output_device=device_id)
 
-    async def set_input_device(self, device_id: int) -> bool:
-        """Switch the system audio INPUT device. Returns False if unavailable."""
+    async def set_input_device(self, device_id: int | None) -> bool:
+        """Switch the system audio INPUT device (in-process). Pass None to reset to the
+        system default. Returns False if device control is unavailable."""
         return await self._set_devices(input_device=device_id)
 
     async def _set_devices(self, input_device: int | None = None,

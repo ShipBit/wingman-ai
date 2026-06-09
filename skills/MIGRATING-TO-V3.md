@@ -149,9 +149,10 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 > - **Skill-vs-MCP discrimination:** if you need to know whether a tool came from a skill or an
 >   MCP server, compare against the MCP display names: `mcp = {s["display_name"] for s in
 >   self.wingman.tools.servers()}; is_mcp = source in mcp`.
-> - **The skill's directory / logo path is intentionally not exposed.** There is no v3 path to
->   a skill's files (the old code reaching `inspect.getfile(skill.__class__)` for a `logo.png`
->   has no replacement). Drop that lookup; use the source name as the label.
+> - **Skill icon/logo:** if you reached into the skill object for its `logo.png` (e.g. old code
+>   doing `inspect.getfile(skill.__class__)`), use `self.wingman.tools.icon(name)` — it returns
+>   the owning skill's `logo.png` path, or `None` for MCP tools / skills without a logo. There
+>   is still no general path to a skill's other files.
 
 #### Secrets, threading, image, settings, logging
 

@@ -1455,6 +1455,7 @@ Every callable function the wingman has: your `@tool`s, other active skills' too
 | `.source(name)` | Human origin of a tool: the owning skill's name, or the MCP server's display name (`None` if unknown). It's a **name string**, not the skill/server object. |
 | `.describe(name)` → `ToolDescriptor` | `name`, `source`, `description`, `parameters` (JSON-schema) — or `None`. |
 | `.all()` | Tuple of `ToolDescriptor` for every callable function (with params). |
+| `.icon(name)` | Path to the owning skill's `logo.png`, or `None` (MCP tools / no logo). For UIs that show a per-tool icon. |
 | `.servers()` | Active MCP servers as dicts (`name`, `display_name`, `connected`, `tools`). |
 | `await .invoke(name, arguments=None)` → `ToolResult` | Call a function by name. Returns a **`ToolResult`** (`.response`, `.instant_response`, `.skill`, `.label`) — not a 4-tuple. |
 
