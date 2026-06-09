@@ -567,8 +567,11 @@ class SkillTools:
     async def invoke(self, name: str, arguments: dict | None = None) -> "ToolResult":
         result = await self._wingman.execute_command_by_function_call(name, arguments or {})
         func_resp, instant_resp, used_skill, label = (list(result) + [None, None, None, None])[:4]
+        # execute_command_by_function_call returns the owning Skill object in slot 3;
+        # ToolResult.skill is the skill NAME (str | None) per the public contract.
+        skill_name = getattr(used_skill, "name", used_skill)
         return ToolResult(response=func_resp or "", instant_response=instant_resp or "",
-                          skill=used_skill, label=label)
+                          skill=skill_name, label=label)
 
 
 class SkillCommands:

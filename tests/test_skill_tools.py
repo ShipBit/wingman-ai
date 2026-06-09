@@ -36,7 +36,9 @@ class _W:
             {"function": {"name": "get_weather", "description": "d2", "parameters": {"type": "object"}}},
         ]
     async def execute_command_by_function_call(self, name, args):
-        return (f"resp:{name}", "instant", "Timer", "Set Timer")
+        # Slot 3 is the owning Skill OBJECT in production (not a string) — return a real
+        # _Skill so the test verifies ToolResult.skill coerces it to the name.
+        return (f"resp:{name}", "instant", _Skill(), "Set Timer")
 
 
 def test_names_has_source():

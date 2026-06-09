@@ -1,6 +1,5 @@
 import asyncio
 import inspect
-import threading
 from typing import (
     TYPE_CHECKING,
     Any,

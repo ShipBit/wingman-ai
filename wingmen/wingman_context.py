@@ -9,13 +9,43 @@ security sandbox (skills run in-process with full Python).
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from api.interface import WingmanConfig, SettingsConfig
+    from api.interface import WingmanConfig
     from wingmen.facade import (
         SkillAi, SkillAudio, SkillCommands, SkillTools, SkillTts,
         SkillLocalAiView, SkillMemory, SkillConversation, SkillSecrets, SkillSkills,
         SkillSettings,
     )
     from wingmen.wingman import Wingman
+
+
+# Removed v2 members -> the sanctioned v3 capability to use instead (spec §8). Touching
+# any of these on self.wingman raises a FacadeError naming the replacement.
+_REMOVED_MEMBERS = {
+    "llm_call": "Use self.wingman.ai.generate(...).",
+    "actual_llm_call": "Use self.wingman.ai.generate(...).",
+    "audio_player": "Use self.wingman.audio.* (is_playing, play, stop, on_playback_*).",
+    "audio_library": "Use self.wingman.audio.play(...) / .stop(...).",
+    "tool_skills": "Use self.wingman.tools.* (source/has/invoke) or self.wingman.skills.active().",
+    "mcp_registry": "Use self.wingman.tools.servers() / .source(name) / .invoke(name, args).",
+    "skill_registry": "Use self.wingman.skills.active() / .has(name).",
+    "registry": "Use self.wingman.tools.* (names/has/source/describe/all/servers/invoke).",
+    "tower": "Use self.wingman.commands.save().",
+    "secret_keeper": "Use self.wingman.secrets.retrieve(name).",
+    "messages": "Use self.wingman.conversation.history().",
+    "get_command": "Use self.wingman.commands.get(name).",
+    "get_context": "Removed (internal, no consumer).",
+    "local_ai_service": "Use self.wingman.local_ai.",
+    "persistent_memory_service": "Use self.wingman.memory.",
+    "play_to_user": "Use self.wingman.tts.speak(text, interrupt=...).",
+    "generate_image": "Use self.wingman.ai.generate_image(prompt).",
+    "get_conversation_history": "Use self.wingman.conversation.history().",
+    "add_user_message": "Use self.wingman.conversation.add_user(content).",
+    "add_assistant_message": "Use self.wingman.conversation.add_assistant(content).",
+    "reset_conversation_history": "Use self.wingman.conversation.reset().",
+    "retrieve_secret": "Use self.wingman.secrets.retrieve(name).",
+    "threaded_execution": "Use self.wingman.run_in_thread(fn, *args).",
+    "switch_tts_provider": "Removed; use self.wingman.tts.set_voice(...) (no provider switching).",
+}
 
 
 class WingmanContext:
@@ -35,6 +65,23 @@ class WingmanContext:
         self.__secrets = None
         self.__skills = None
         self.__settings = None
+
+    # --- guided failure for removed v2 members (spec §8: helpful, not silent) ---
+
+    def __getattr__(self, name: str) -> Any:
+        # __getattr__ only fires for names not found normally (the sub-facades are real
+        # properties, so they never land here). A v2 skill touching a removed member gets
+        # a FacadeError naming the replacement instead of a bare AttributeError.
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        replacement = _REMOVED_MEMBERS.get(name)
+        if replacement is not None:
+            from wingmen.facade import FacadeError
+            raise FacadeError(
+                f"`self.wingman.{name}` was removed in the v3 Skill API. {replacement} "
+                f"See skills/MIGRATING-TO-V3.md."
+            )
+        raise AttributeError(name)
 
     # --- identity + config (read-only) ---
 
