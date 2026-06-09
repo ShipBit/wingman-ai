@@ -31,7 +31,7 @@ class AudioDeviceChanger(Skill):
         self.original_audio_device = settings.audio.output
         self.current_audio_device = settings.audio.output
         self.backend_port = 49111
-        self.wingman.audio.on_playback_finished(self.playback_finished)
+        self._sub_finished = self.wingman.audio.on_playback_finished(self.playback_finished)
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -108,7 +108,7 @@ class AudioDeviceChanger(Skill):
         await super().unload()
         await self.reset_audio_device()
 
-        self.wingman.audio.off_playback_finished(self.playback_finished)
+        self._sub_finished.unsubscribe()
 
         self.printr.print(
             text="Audio Device Changer Skill unloaded.",
