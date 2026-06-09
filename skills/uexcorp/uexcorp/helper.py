@@ -215,13 +215,13 @@ class Helper:
         self.__is_ready = ready
 
         async def add_loaded_message():
-            await self.get_wingmen().add_assistant_message(
+            await self.get_wingmen().conversation.add_assistant(
                 "UEX skill is now loaded and ready to use."
             )
 
         if ready and self.get_request_while_not_ready():
             self.__handler_debug.write("UEX functions are available now.", True)
-            self.threaded_execution(add_loaded_message)
+            self.run_in_thread(add_loaded_message)
             self.set_request_while_not_loaded(False)
 
     def is_loaded(self) -> bool:
@@ -314,10 +314,10 @@ class Helper:
             context += "\n\n" + "\n".join(self.__additional_context)
         return context
 
-    def threaded_execution(self, function, *args) -> threading.Thread:
+    def run_in_thread(self, function, *args) -> threading.Thread:
         if not self.__threaded_execution:
             raise Exception("Threaded execution not prepared")
-        return self.__threaded_execution(function, args)
+        return self.__threaded_execution(function, *args)
 
     def get_llm(self) -> Llm:
         return self.__llm

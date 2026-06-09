@@ -29,10 +29,10 @@ class UEXCorp(Skill):
         self.random_seed = uuid.uuid4()
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.__helper: Helper = Helper.get_instance()
-        self.__helper.prepare(self.threaded_execution, self.wingman)
+        self.__helper.prepare(self.wingman.run_in_thread, self.wingman)
         self.__invalid_session = False
         self.__initialized = False
-        wingman.threaded_execution(self.threaded_prepare, True)
+        wingman.run_in_thread(self.threaded_prepare, True)
 
     async def validate(self) -> list[WingmanInitializationError]:
         errors = await super().validate()
@@ -76,8 +76,8 @@ class UEXCorp(Skill):
                 "Skill is still in preload phase, skipping initial import on load and removing preload flag.",
             )
         else:
-            self.threaded_execution(self.threaded_prepare)
-        self.threaded_execution(self.loop_master)
+            self.wingman.run_in_thread(self.threaded_prepare)
+        self.wingman.run_in_thread(self.loop_master)
 
     async def unload(self) -> None:
         await super().unload()
