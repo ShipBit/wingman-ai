@@ -51,11 +51,9 @@ class ImageGeneration(Skill):
             prompt: The image generation prompt describing what to create.
         """
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                f"Generate image with prompt: {prompt}.", color=LogType.INFO
-            )
+            self.log.info(f"Generate image with prompt: {prompt}.")
 
-        image = await self.wingman.generate_image(prompt)
+        image = await self.wingman.ai.generate_image(prompt)
         await self.printr.print_async(
             "",
             color=LogType.INFO,
@@ -85,9 +83,6 @@ class ImageGeneration(Skill):
                         f" The image has also been stored to {image_path}."
                     )
                     if self.settings.debug_mode:
-                        await self.printr.print_async(
-                            f"Image displayed and saved at {image_path}.",
-                            color=LogType.INFO,
-                        )
+                        self.log.info(f"Image displayed and saved at {image_path}.")
 
         return function_response

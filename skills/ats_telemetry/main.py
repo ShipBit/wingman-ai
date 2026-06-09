@@ -16,7 +16,6 @@ from api.interface import (
     SkillConfig,
     WingmanInitializationError,
 )
-from api.enums import LogType
 from skills.skill_base import Skill, tool
 
 
@@ -169,9 +168,8 @@ class ATSTelemetry(Skill):
         # - Release: loaded from _internal/skills/ats_telemetry/scs-telemetry.dll
         sdk_dll_filepath = Path(__file__).resolve().parent / "scs-telemetry.dll"
         if not sdk_dll_filepath.exists():
-            await self.printr.print_async(
-                f"Missing scs telemetry dll at '{sdk_dll_filepath}'. Cannot auto-install telemetry plugin.",
-                color=LogType.ERROR,
+            self.log.error(
+                f"Missing scs telemetry dll at '{sdk_dll_filepath}'. Cannot auto-install telemetry plugin."
             )
             return
 
@@ -196,28 +194,21 @@ class ATSTelemetry(Skill):
                 os.makedirs(plugins_dir, exist_ok=True)
                 shutil.copy2(str(sdk_dll_filepath), plugins_dir)
             except OSError as exc:
-                await self.printr.print_async(
-                    f"Could not install scs telemetry dll to {label} plugins directory: {plugins_dir}. Error: {exc}",
-                    color=LogType.ERROR,
+                self.log.error(
+                    f"Could not install scs telemetry dll to {label} plugins directory: {plugins_dir}. Error: {exc}"
                 )
 
     # Start telemetry module connection with in-game telemetry SDK
     async def initialize_telemetry(self) -> bool:
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                "Starting ATS / ETS telemetry module",
-                color=LogType.INFO,
-            )
+            self.log.info("Starting ATS / ETS telemetry module", server_only=True)
         # truck_telemetry.init() requires the user to have installed the proper SDK DLL from https://github.com/RenCloud/scs-sdk-plugin/releases/tag/V.1.12.1
         # into the proper folder of their truck sim install (https://github.com/RenCloud/scs-sdk-plugin#installation), if they do not this step will fail, so need to catch the error.
         try:
             truck_telemetry.init()
             return True
         except Exception:
-            await self.printr.print_async(
-                "Initialize ATSTelemetry function failed.",
-                color=LogType.ERROR,
-            )
+            self.log.error("Initialize ATSTelemetry function failed.")
             return False
 
     # Initiate separate thread for constant checking of changes to key telemetry data points
@@ -226,11 +217,8 @@ class ATSTelemetry(Skill):
             return
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                "Starting ATS / ETS telemetry cache loop",
-                color=LogType.INFO,
-            )
-        self.threaded_execution(self.start_telemetry_loop, loop_time)
+            self.log.info("Starting ATS / ETS telemetry cache loop", server_only=True)
+        self.wingman.run_in_thread(self.start_telemetry_loop, loop_time)
 
     # Loop every designated number of seconds to retrieve telemetry data and run query function to determine if any tracked data points have changed
     async def start_telemetry_loop(self, loop_time: int):
@@ -255,10 +243,7 @@ class ATSTelemetry(Skill):
             data = truck_telemetry.get_data()
             filtered_data = await self.filter_data(data)
             if self.settings.debug_mode:
-                await self.printr.print_async(
-                    "Querying and comparing telemetry data",
-                    color=LogType.INFO,
-                )
+                self.log.info("Querying and comparing telemetry data", server_only=True)
             for point in data_points:
                 current_data = filtered_data.get(point)
                 if (
@@ -283,17 +268,11 @@ class ATSTelemetry(Skill):
             self.telemetry_loop_cached_data = copy.deepcopy(filtered_data)
             if data_changed == default:
                 if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        "No changed telemetry data found.",
-                        color=LogType.INFO,
-                    )
+                    self.log.info("No changed telemetry data found.", server_only=True)
                 return None
             else:
                 if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        data_changed,
-                        color=LogType.INFO,
-                    )
+                    self.log.info(data_changed, server_only=True)
                 return data_changed
         except Exception:
             return None
@@ -303,10 +282,11 @@ class ATSTelemetry(Skill):
         self.telemetry_loop_running = False
         self.telemetry_loop_cached_data = {}
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                "Stopping ATS / ETS telemetry cache loop",
-                color=LogType.INFO,
-            )
+            self.log.info("Stopping ATS / ETS telemetry cache loop", server_only=True)
+
+    async def _speak(self, text: str) -> None:
+        """Async helper for threaded TTS with interrupt=False."""
+        await self.wingman.tts.speak(text, interrupt=False)
 
     # If telemetry data changed, get LLM to provide a verbal response to the user, without requiring the user to initiate a communication with the LLM
     async def initiate_llm_call_with_changed_data(self, changed_data):
@@ -328,14 +308,10 @@ class ATSTelemetry(Skill):
         if not response:
             return
 
-        await self.printr.print_async(
-            text=f"Dispatch: {response}",
-            color=LogType.INFO,
-            source_name=self.wingman.name,
-        )
+        self.log.info(f"Dispatch: {response}", server_only=True)
 
-        self.threaded_execution(self.wingman.play_to_user, response, True)
-        await self.wingman.add_assistant_message(response)
+        self.wingman.run_in_thread(self._speak, response)
+        await self.wingman.conversation.add_assistant(response)
 
     @tool(
         description="Retrieve telemetry from ATS/ETS2. Common variables: truckSpeed, speedLimit, gear, engineRpm, fuel*, cargo*, city*, job*, truckBrand, coordinates, damage/wear values, event flags (fined, tollgate, ferry). Tool returns error if variable doesn't exist."
@@ -359,10 +335,7 @@ class ATSTelemetry(Skill):
         data = truck_telemetry.get_data()
         filtered_data = await self.filter_data(data)
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                f"Received telemetry data: {filtered_data}",
-                color=LogType.INFO,
-            )
+            self.log.info(f"Received telemetry data: {filtered_data}", server_only=True)
         # Try exact match first
         if variable in filtered_data:
             value = filtered_data[variable]
@@ -372,17 +345,11 @@ class ATSTelemetry(Skill):
                 string_value = "value could not be found."
 
             if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"Found variable result in telemetry for {variable}, {string_value}",
-                    color=LogType.INFO,
-                )
+                self.log.info(f"Found variable result in telemetry for {variable}, {string_value}", server_only=True)
             return f"The current value of '{variable}' is {string_value}."
         else:
             if self.settings.debug_mode:
-                await self.printr.print_async(
-                    f"Could not locate variable result in telemetry for {variable}.",
-                    color=LogType.INFO,
-                )
+                self.log.info(f"Could not locate variable result in telemetry for {variable}.", server_only=True)
             # Try fuzzy match as fallback before failing
             MATCH_THRESHOLD = 60 
             choices = list(filtered_data.keys())
@@ -406,10 +373,7 @@ class ATSTelemetry(Skill):
                 matches_formatted = ", ".join(results_list)
                 
                 if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        f"Fuzzy matches for '{variable}': {matches_formatted}",
-                        color=LogType.INFO,
-                    )
+                    self.log.info(f"Fuzzy matches for '{variable}': {matches_formatted}", server_only=True)
 
                 return (f"Exact variable '{variable}' not found. "
                         f"Found the following close matches instead {matches_formatted}")
@@ -445,9 +409,9 @@ class ATSTelemetry(Skill):
                 data["coordinateX"], data["coordinateZ"]
             )
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Executing get_information_about_current_location function (game is ets2: {is_ets2}) with coordinateX as {x} and coordinateZ as {y}, latitude returned was {latitude}, longitude returned was {longitude}.",
-                color=LogType.INFO,
+                server_only=True,
             )
         place_info = await self.convert_lat_long_data_into_place_data(
             latitude, longitude
@@ -473,10 +437,7 @@ class ATSTelemetry(Skill):
 
         if self.telemetry_loop_running:
             if self.settings.debug_mode:
-                await self.printr.print_async(
-                    "Attempted to start dispatch communications loop but loop is already running",
-                    color=LogType.INFO,
-                )
+                self.log.info("Attempted to start dispatch communications loop but loop is already running", server_only=True)
             return "Dispatch communications already open."
 
         if not self.telemetry_loop_running:
@@ -513,7 +474,7 @@ class ATSTelemetry(Skill):
         await super().prepare()
         self.loaded = True
         if self._get_autostart_dispatch_mode():
-            self.threaded_execution(self.autostart_dispatcher_mode)
+            self.wingman.run_in_thread(self.autostart_dispatcher_mode)
 
     # Unload telemetry module and stop any ongoing loop when config / program unloads
     async def unload(self) -> None:
@@ -845,10 +806,7 @@ class ATSTelemetry(Skill):
             return enhanced_data
 
         except Exception as e:
-            await self.printr.print_async(
-                f"There was a problem with the filter_data function: {e}. Returning original data.",
-                color=LogType.ERROR,
-            )
+            self.log.error(f"There was a problem with the filter_data function: {e}. Returning original data.")
             return data
 
     # Convert an array of days, hours, minutes into clock time
@@ -1060,9 +1018,9 @@ class ATSTelemetry(Skill):
         zoom = 15
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Attempting query of OpenStreetMap Nominatum with parameters: {latitude}, {longitude}, zoom level: {zoom}",
-                color=LogType.INFO,
+                server_only=True,
             )
 
         # Request data from openstreetmap nominatum api for reverse geocoding
@@ -1072,8 +1030,5 @@ class ATSTelemetry(Skill):
         if response.status_code == 200:
             return response.json()
         else:
-            await self.printr.print_async(
-                f"API request failed to {url}, status code: {response.status_code}.",
-                color=LogType.ERROR,
-            )
+            self.log.error(f"API request failed to {url}, status code: {response.status_code}.")
             return None

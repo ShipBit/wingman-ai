@@ -10,8 +10,6 @@ from api.interface import (
     SkillConfig,
     WingmanInitializationError,
 )
-from api.enums import LogType
-from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
 
 
@@ -101,9 +99,9 @@ class Msfs2020Control(Skill):
         matches = self.command_matcher.find_matches(user_intent)
         matches_string = self.command_matcher.matches_as_string(matches)
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Found potential matching commands for intent {user_intent}: {matches_string}",
-                color=LogType.INFO,
+                server_only=True,
             )
         return matches_string
 
@@ -120,9 +118,9 @@ class Msfs2020Control(Skill):
         
         value = self.aq.get(data_point)
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Retrieving data point from sim: {data_point}; value returned: {value}",
-                color=LogType.INFO,
+                server_only=True,
             )
         return f"{data_point} value is: {value}"
 
@@ -140,9 +138,9 @@ class Msfs2020Control(Skill):
             argument: The argument to pass for the action, if any.
         """
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Attempting to perform action/set data in sim: {action} with argument: {argument}",
-                color=LogType.INFO,
+                server_only=True,
             )
         try:
             if argument is not None:
@@ -151,9 +149,9 @@ class Msfs2020Control(Skill):
                 event_to_trigger = self.ae.find(action)
                 event_to_trigger()
         except Exception:
-            await self.printr.print_async(
+            self.log.info(
                 f"Tried to perform action {action} with argument {argument} using aq.set, now going to try ae.event_to_trigger.",
-                color=LogType.INFO,
+                server_only=True,
             )
 
         try:
@@ -161,9 +159,9 @@ class Msfs2020Control(Skill):
                 event_to_trigger = self.ae.find(action)
                 event_to_trigger(argument)
         except Exception:
-            await self.printr.print_async(
+            self.log.info(
                 f"Neither aq.set nor ae.event_to_trigger worked with {action} and {argument}.  Command failed.",
-                color=LogType.INFO,
+                server_only=True,
             )
             return "Error: Command failed."
 
@@ -209,19 +207,13 @@ class Msfs2020Control(Skill):
         while self.loaded and not self.already_initialized_simconnect:
             try:
                 if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        "Attempting to find MSFS2020....",
-                        color=LogType.INFO,
-                    )
+                    self.log.info("Attempting to find MSFS2020....", server_only=True)
                 self.sm = SimConnect()
                 self.aq = AircraftRequests(self.sm, _time=2000)
                 self.ae = AircraftEvents(self.sm)
                 self.already_initialized_simconnect = True
                 if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        "Initialized SimConnect with MSFS2020.",
-                        color=LogType.INFO,
-                    )
+                    self.log.info("Initialized SimConnect with MSFS2020.", server_only=True)
                 if self._get_autostart_data_monitoring_loop_mode():
                     await self.initialize_data_monitoring_loop()
             except Exception:
@@ -233,12 +225,9 @@ class Msfs2020Control(Skill):
             return
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                "Starting threaded data monitoring loop",
-                color=LogType.INFO,
-            )
+            self.log.info("Starting threaded data monitoring loop", server_only=True)
 
-        self.threaded_execution(self.start_data_monitoring_loop)
+        self.wingman.run_in_thread(self.start_data_monitoring_loop)
 
     async def start_data_monitoring_loop(self):
         if not self.data_monitoring_loop_running:
@@ -255,19 +244,16 @@ class Msfs2020Control(Skill):
                     )
                 )  # Gets random number from min to max in increments of 15
                 if self.settings.debug_mode:
-                    await self.printr.print_async(
-                        "Attempting looped monitoring check.",
-                        color=LogType.INFO,
-                    )
+                    self.log.info("Attempting looped monitoring check.", server_only=True)
                 try:
                     place_data = await self.convert_lat_long_data_into_place_data()
                     if place_data:
                         await self.initiate_llm_call_with_plane_data(place_data)
                 except Exception as e:
                     if self.settings.debug_mode:
-                        await self.printr.print_async(
+                        self.log.info(
                             f"Something failed in looped monitoring check.  Could not return data or send to llm: {e}.",
-                            color=LogType.INFO,
+                            server_only=True,
                         )
                 time.sleep(random_time)
 
@@ -275,10 +261,7 @@ class Msfs2020Control(Skill):
         self.data_monitoring_loop_running = False
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
-                "Stopping data monitoring loop",
-                color=LogType.INFO,
-            )
+            self.log.info("Stopping data monitoring loop", server_only=True)
 
     async def convert_lat_long_data_into_place_data(
         self, latitude=None, longitude=None, altitude=None
@@ -321,9 +304,9 @@ class Msfs2020Control(Skill):
             zoom = 8
 
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Attempting query of OpenStreetMap Nominatum with parameters: {latitude}, {longitude}, {altitude}, zoom level: {zoom}",
-                color=LogType.INFO,
+                server_only=True,
             )
 
         # Request data from openstreetmap nominatum api for reverse geocoding
@@ -334,11 +317,15 @@ class Msfs2020Control(Skill):
             return response.json()
         else:
             if self.settings.debug_mode:
-                await self.printr.print_async(
+                self.log.info(
                     f"API request failed to {url}, status code: {response.status_code}.",
-                    color=LogType.INFO,
+                    server_only=True,
                 )
             return None
+
+    async def _speak(self, text: str) -> None:
+        """Async helper for threaded TTS — speaks without interrupting current playback."""
+        await self.wingman.tts.speak(text, interrupt=False)
 
     # Get LLM to provide a verbal response to the user, without requiring the user to initiate a communication with the LLM
     async def initiate_llm_call_with_plane_data(self, data):
@@ -352,9 +339,9 @@ class Msfs2020Control(Skill):
                     {backstory}
                 """
         if self.settings.debug_mode:
-            await self.printr.print_async(
+            self.log.info(
                 f"Attempting LLM call with parameters: {backstory}, {user_content}.",
-                color=LogType.INFO,
+                server_only=True,
             )
         response = await self.wingman.ai.generate(
             user_content, system=system_content, auto_shorten=True
@@ -362,20 +349,13 @@ class Msfs2020Control(Skill):
 
         if not response:
             if self.settings.debug_mode:
-                await self.printr.print_async(
-                    "LLM call returned no response.",
-                    color=LogType.INFO,
-                )
+                self.log.info("LLM call returned no response.", server_only=True)
             return
 
-        await self.printr.print_async(
-            text=f"Data monitoring response: {response}",
-            color=LogType.INFO,
-            source_name=self.wingman.name,
-        )
+        self.log.info(f"Data monitoring response: {response}")
 
-        self.threaded_execution(self.wingman.play_to_user, response, True)
-        await self.wingman.add_assistant_message(response)
+        self.wingman.run_in_thread(self._speak, response)
+        await self.wingman.conversation.add_assistant(response)
 
     async def is_waiting_response_needed(self, tool_name: str) -> bool:
         return True
@@ -384,7 +364,7 @@ class Msfs2020Control(Skill):
         """Load the skill by trying to connect to the sim"""
         await super().prepare()
         self.loaded = True
-        self.threaded_execution(self.start_simconnect)
+        self.wingman.run_in_thread(self.start_simconnect)
 
     async def unload(self) -> None:
         """Unload the skill."""

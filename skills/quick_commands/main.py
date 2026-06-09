@@ -3,7 +3,6 @@ import json
 import datetime
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from api.enums import LogType
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -36,7 +35,7 @@ class QuickCommands(Skill):
             "quick_commands_learning_rule_count", errors
         )
 
-        self.threaded_execution(self._init_skill)
+        self.wingman.run_in_thread(self._init_skill)
         return errors
 
     def _get_rule_count(self) -> int:
@@ -84,8 +83,8 @@ class QuickCommands(Skill):
     async def on_add_assistant_message(self, message: str, tool_calls: list) -> None:
         """Hook to start learning process."""
         if tool_calls:
-            self.threaded_execution(
-                self._process_messages, tool_calls, self.wingman.get_conversation_history()[-1]
+            self.wingman.run_in_thread(
+                self._process_messages, tool_calls, self.wingman.conversation.history()[-1]
             )
 
     async def _process_messages(self, tool_calls, last_message) -> None:
@@ -226,9 +225,8 @@ class QuickCommands(Skill):
         )
         answer = response or ""
         if answer.lower() == "yes":
-            await self.printr.print_async(
+            self.log.info(
                 f"Instant activation phrase for '{', '.join(commands)}' learned.",
-                color=LogType.INFO,
             )
             self.learning_learned[phrase] = commands
             self.learning_data.pop(phrase)
@@ -240,9 +238,8 @@ class QuickCommands(Skill):
 
     async def _add_to_blacklist(self, phrase: str) -> None:
         """Add a phrase to the blacklist."""
-        await self.printr.print_async(
+        self.log.info(
             f"Added phrase to blacklist: '{phrase if len(phrase) <= 25 else phrase[:25]+'...'}'",
-            color=LogType.INFO,
         )
         self.learning_blacklist.append(phrase)
         self.learning_data.pop(phrase)
@@ -266,9 +263,8 @@ class QuickCommands(Skill):
             try:
                 data = json.load(file)
             except json.JSONDecodeError:
-                await self.printr.print_async(
+                self.log.error(
                     "Could not read learning data file. Resetting learning data..",
-                    color=LogType.ERROR,
                 )
                 # if file wasnt empty, save it as backup
                 if file.read():

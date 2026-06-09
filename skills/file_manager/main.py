@@ -3,7 +3,6 @@ import json
 import zipfile
 from typing import TYPE_CHECKING
 from api.interface import SettingsConfig, SkillConfig, WingmanInitializationError
-from api.enums import LogType
 from services.benchmark import Benchmark
 from skills.skill_base import Skill, tool
 from showinfm import show_in_file_manager
@@ -334,7 +333,7 @@ class FileManager(Skill):
 
         # First check if there's text content, if so, just play that as the user just wants the AI to say something in its TTS voice
         if text_content:
-            await self.wingman.play_to_user(text_content)
+            await self.wingman.tts.speak(text_content)
             return "Provided text read aloud."
         # Otherwise, check to see if a valid file has been passed, if so, read its text as long as it does not exceed max content length
         # If not a valid file location, double check whether the AI accidentally put text content in file name and play that
@@ -344,7 +343,7 @@ class FileManager(Skill):
             else:
                 file_path = os.path.join(directory_path, file_name)
                 if not os.path.isfile(file_path):
-                    await self.wingman.play_to_user(file_path)
+                    await self.wingman.tts.speak(file_path)
                     return "Provided text read aloud."
                 else:
                     file_extension = file_name.split(".")[-1]
@@ -360,7 +359,7 @@ class FileManager(Skill):
                             elif len(file_content) > self.max_text_size:
                                 return f"File content at {file_path} exceeds the maximum allowed size so could not read it aloud."
                             else:
-                                await self.wingman.play_to_user(file_content)
+                                await self.wingman.tts.speak(file_content)
                                 return f"File content from {file_path} read aloud."
                         except Exception as e:
                             return f"There was an error trying to read aloud '{file_name}' in '{directory_path}'.  The error was {str(e)}."

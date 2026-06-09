@@ -7,7 +7,6 @@ from api.interface import (
     VoiceSelection,
     WingmanInitializationError,
 )
-from api.enums import LogType
 from skills.skill_base import Skill, command_action
 
 if TYPE_CHECKING:
@@ -80,7 +79,7 @@ class VoiceChanger(Skill):
 
         # prepare first personality
         if self._get_context_prompt():
-            self.threaded_execution(self._generate_new_context)
+            self.wingman.run_in_thread(self._generate_new_context)
 
     async def unload(self) -> None:
         await super().unload()
@@ -125,17 +124,13 @@ class VoiceChanger(Skill):
         if self._get_context_prompt():
             messages.append(self._switch_personality())
         if self._get_clear_history():
-            await self.wingman.reset_conversation_history()
+            await self.wingman.conversation.reset()
 
         # sort out empty messages
         messages = [await message for message in messages if message]
 
         if messages:
-            await self.printr.print_async(
-                text="\n".join(messages),
-                color=LogType.INFO,
-                source_name=self.wingman.name,
-            )
+            self.log.info("\n".join(messages))
 
     async def _switch_voice(self, voices: list[VoiceSelection]) -> str:
         """Pick a (different) configured voice and set it on the current provider.
@@ -163,10 +158,7 @@ class VoiceChanger(Skill):
                 break
 
         if not voice_setting:
-            await self.printr.print_async(
-                "Voice switching failed due to missing voice settings.",
-                LogType.ERROR,
-            )
+            self.log.error("Voice switching failed due to missing voice settings.")
             return "Voice switching failed due to missing voice settings."
 
         return await self.wingman.tts.set_voice(voice_setting.voice)
@@ -179,7 +171,7 @@ class VoiceChanger(Skill):
         self.context_personality = self.context_personality_next
         self.context_personality_next = ""
 
-        self.threaded_execution(self._generate_new_context)
+        self.wingman.run_in_thread(self._generate_new_context)
 
         return "Switched personality context."
 
