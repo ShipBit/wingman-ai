@@ -2,6 +2,8 @@
 
 Before creating or modifying a skill, **read [README.md](README.md)** in this directory for full documentation including custom property types, discovery metadata guidelines, dependency bundling, and example skills.
 
+**Migrating an existing skill?** See [MIGRATING-TO-V3.md](MIGRATING-TO-V3.md).
+
 ## STOP — Before You Start Implementing
 
 **You MUST ask the user these questions before writing any code:**
@@ -187,6 +189,7 @@ class YourSkill(Skill):
 
 ```yaml
 module: skills.your_skill_name.main
+api_version: 3                         # REQUIRED for v3 — without it the skill is treated as legacy and won't load
 name: YourSkillName                    # Must match class name exactly
 display_name: Your Skill Name
 author: Your Name
@@ -223,9 +226,9 @@ async def unload(self) -> None
 
 ```python
 self.retrieve_custom_property_value(property_id, errors)  # Config value (just-in-time!)
-await self.retrieve_secret(secret_name, errors, hint)      # Secrets via SecretKeeper
+await self.wingman.secrets.retrieve(secret_name, errors)  # Secrets via SecretKeeper
 self.wingman.config                                        # READ-ONLY view of the config
-self.printr.print() / await self.printr.print_async()      # Logging
+self.log.info(msg) / self.log.warning(msg) / self.log.error(msg)  # Logging (server_only=True skips the toast)
 self.get_generated_files_dir()                             # Persistent storage directory
 ```
 
@@ -241,28 +244,67 @@ but you may only **change** things through sanctioned capabilities. Writing to c
 
 # CHANGE (sanctioned capabilities only):
 await self.wingman.tts.set_voice(voice)                 # voice on the CURRENT provider (no switching)
+await self.wingman.tts.speak(text, interrupt=True)      # say text; interrupt=False waits for current playback
 self.wingman.audio.is_playing                           # read playback state
 await self.wingman.audio.play(cfg) / .stop(cfg)         # play/stop your own audio
-self.wingman.audio.on_playback_started(cb) / .on_playback_finished(cb)  # + off_* to unsubscribe
+sub = self.wingman.audio.on_playback_started(cb)        # returns a Subscription; sub.unsubscribe() in unload()
 await self.wingman.audio.set_output_device(device_id)   # switch output device in-process
 self.wingman.commands.get(name) / .all() / await .save()  # read/edit/persist commands
-self.wingman.registry.has_tool(name) / await .invoke(name, args)  # discover + invoke tools/commands
+self.wingman.tools.has(name) / await .invoke(name, args)  # discover + invoke tools/commands -> ToolResult
+self.wingman.tools.source(name) / .all() / .servers()   # tool origin + enumerate callable functions / MCP servers
 
-# MAIN AI — two clearly-different calls (both replace the removed self.llm_call):
-text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., auto_shorten=False)
-#   single-turn side-call, NOT added to the conversation. Input is CAPPED when conversation
-#   condensation is on (Wingman Pro hardcoded; own providers config.features.skill_max_input_tokens).
+# CONVERSATION:
+self.wingman.conversation.history() / .summary          # read the live conversation
+await self.wingman.conversation.add_user(c) / .add_assistant(c) / .reset()
+await self.wingman.conversation.summarize()             # summarize the live convo (free, local)
+
+# SECRETS / MEMORY:
+await self.wingman.secrets.retrieve(name, errors)       # stored secret (prompts user if missing)
+self.wingman.memory.available                           # persistent memory ready?
+await self.wingman.memory.remember(c) / .recall(q) / .context(q) / .update(id, c) / .forget(q) / .forget_by_id(id)
+
+# MAIN AI — two clearly-different calls (both replace the removed raw LLM call):
+text = await self.wingman.ai.generate(prompt, system=..., data=..., image=..., messages=..., auto_shorten=False)
+#   single-turn side-call, NOT added to the conversation; returns a str (""). Input is CAPPED when
+#   conversation condensation is on (Wingman Pro hardcoded; own providers config.features.skill_max_input_tokens).
 #   Over the cap -> FacadeError (or truncates if auto_shorten=True). Images are charged a flat
-#   estimate, never the base64 length.
-summary = await self.local_ai.summarize(...)            # bulk reduction on the FREE local model
+#   estimate, never the base64 length. Pass messages= to send a prebuilt message list directly.
+summary = await self.wingman.local_ai.summarize(...)    # bulk reduction on the FREE local model
+text2 = await self.wingman.local_ai.generate(t, system=...)  # free local single-turn -> str
 ```
 
-**Removed (do NOT use):** `self.llm_call(...)` (use `ctx.ai.generate`), `self.wingman.switch_tts_provider(...)`
-(runtime provider switching is not allowed), and writing to `self.wingman.config` (use the capabilities above).
+**Removed (do NOT use):** the raw LLM call (`self.llm_call(...)` / `actual_llm_call` — use `self.wingman.ai.generate`),
+`self.wingman.switch_tts_provider(...)` (runtime provider switching is not allowed; use `tts.set_voice`),
+the raw registries (`self.wingman.registry.*` — use `self.wingman.tools.*`), and writing to
+`self.wingman.config` / `self.settings` (read-only; use the capabilities above).
 
-## Local Support Model — Sampling Parameters
+### Calling other skills & MCP servers
 
-Global defaults are tuned for summarization (low temperature). **Override for creative tasks.** Use `SamplingPreset` from `services/skill_local_ai.py` or pass `temperature` / `top_p` directly to `support()`, `support_sync()`, and `summarize()`. Manual values override presets. See `SamplingPreset` docstring for available presets and values.
+```python
+# Discover everything callable right now (with origin + params)
+for tool in self.wingman.tools.all():
+    self.log.info(f"{tool.name} (from {tool.source})", server_only=True)
+
+# Call another ACTIVE skill's tool by name
+if self.wingman.tools.has("take_screenshot"):
+    result = await self.wingman.tools.invoke("take_screenshot", {})
+    self.log.info(f"{result.response} (from {result.skill})")
+
+# Call your own MCP server's tool (many skills ship an MCP for their datasource)
+servers = {s["display_name"] for s in self.wingman.tools.servers()}
+if "My Data MCP" in servers and self.wingman.tools.has("mydata_query"):
+    res = await self.wingman.tools.invoke("mydata_query", {"q": "ships"})
+    data = res.response
+else:
+    self.log.warning("My Data MCP not active; skipping enriched lookup")
+```
+
+MCP tool names are prefixed by the registry — use the name exactly as it appears in
+`self.wingman.tools.names()` / `.all()`.
+
+## Local Model — Sampling Parameters
+
+Global defaults are tuned for summarization (low temperature). **Override for creative tasks.** Use `SamplingPreset` from `services/skill_local_ai.py` or pass `temperature` / `top_p` directly to `self.wingman.local_ai.generate()`, `.generate_sync()`, and `.summarize()`. Manual values override presets. See `SamplingPreset` docstring for available presets and values.
 
 ## Example Skills
 
