@@ -61,7 +61,11 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 > **`ai.generate` returns a `str`, not a completion object.** The old `actual_llm_call`
 > returned a `ChatCompletion`; you used to read `completion.choices[0].message.content`.
 > `ai.generate(...)` already gives you that text. If your code parsed JSON out of the
-> completion, parse it straight from the returned string.
+> completion, parse it straight from the returned string. It returns `""` (empty string)
+> when the model gives nothing back — never `None` — and raises `FacadeError` only when the
+> input is over the cap. So a v2 retry loop that re-called on a bad/empty completion should
+> now: wrap the call in `try/except FacadeError` (cap errors won't fix themselves on retry —
+> shorten instead) and treat an empty string as the "no answer, retry" case.
 
 > **`ai.generate` is capped.** When conversation condensation is on, the combined input
 > (system + prompt + data, plus a flat estimate per image) is limited (Wingman Pro: a fixed
@@ -100,6 +104,8 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 > **`tts.speak`'s `interrupt` is keyword-only and inverted from the old `no_interrupt`.**
 > `play_to_user(t, no_interrupt=True)` → `tts.speak(t, interrupt=False)`. `interrupt=True`
 > (the default) cuts off current playback immediately; `interrupt=False` waits for it.
+> Watch for the **positional** form: old code often called `play_to_user(text, True)` — that
+> `True` is the second positional arg `no_interrupt`, so it maps to `tts.speak(text, interrupt=False)`.
 
 #### Conversation
 
@@ -135,6 +141,16 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 > result.skill             # was used_skill
 > result.label             # was tool_label
 > ```
+
+> **`tools.source(name)` returns a name string, not the skill/server object.** It gives the
+> human origin (the owning skill's name, or the MCP server's display name), or `None`. Two
+> things the old raw registries gave you that `source()` does NOT:
+> - **Skill-vs-MCP discrimination:** if you need to know whether a tool came from a skill or an
+>   MCP server, compare against the MCP display names: `mcp = {s["display_name"] for s in
+>   self.wingman.tools.servers()}; is_mcp = source in mcp`.
+> - **The skill's directory / logo path is intentionally not exposed.** There is no v3 path to
+>   a skill's files (the old code reaching `inspect.getfile(skill.__class__)` for a `logo.png`
+>   has no replacement). Drop that lookup; use the source name as the label.
 
 #### Secrets, threading, image, settings, logging
 
@@ -179,6 +195,14 @@ self.wingman.run_in_thread(self._speak, response)
 
 (If your threaded call had no special kwargs — e.g. `threaded_execution(self._loop)` — it's a
 straight rename to `self.wingman.run_in_thread(self._loop)`.)
+
+**Skills that pass their threading function into a helper/dependency.** If your skill handed
+the old `self.threaded_execution` to a helper object (which then called it later), pass
+`self.wingman.run_in_thread` instead — and check the helper's own call signature. `run_in_thread`
+takes `(fn, *args)` (args spread positionally); a helper that stored args as a tuple and called
+`stored_fn(fn, args_tuple)` must be updated to `stored_fn(fn, *args_tuple)`. Also rename any
+helper method still literally called `threaded_execution` (the lockdown gate flags that name
+anywhere in `skills/**`).
 
 **Stale comments and strings.** Search for the old names in comments/docstrings too (e.g. a
 comment mentioning `switch_tts_provider`). Update or delete them — leftover references read as
