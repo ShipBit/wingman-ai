@@ -25,7 +25,6 @@ from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 
 if TYPE_CHECKING:
-    from services.skill_local_ai import SkillLocalAI
     from wingmen.wingman_context import WingmanContext
 
 
