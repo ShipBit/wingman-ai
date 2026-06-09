@@ -99,6 +99,7 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 | `audio_player.playback_events.subscribe("started", cb)` | `sub = self.wingman.audio.on_playback_started(cb)` |
 | `audio_player.playback_events.subscribe("finished", cb)` | `sub = self.wingman.audio.on_playback_finished(cb)` |
 | `audio_player.playback_events.unsubscribe(ev, cb)` | `sub.unsubscribe()` (keep the returned `Subscription`) |
+| `self.wingman.audio.off_playback_started(cb)` / `off_playback_finished(cb)` | **removed** — capture the `Subscription` returned by `on_playback_started/finished(cb)` (e.g. `self._sub = ...`) and call `self._sub.unsubscribe()` in `unload()` |
 | device read / change (HTTP hack) | `self.wingman.audio.output_device` / `.set_output_device(id)` (+ `input` variants) |
 
 > **`tts.speak`'s `interrupt` is keyword-only and inverted from the old `no_interrupt`.**
@@ -164,8 +165,13 @@ Everything you might reach for, and its v3 replacement. `await` where the v3 for
 | `self.settings.X = ...` | read-only now; change devices via `self.wingman.audio.set_output_device(...)` |
 | `self.printr.print(msg, ...)` | `self.log.info(msg)` / `self.log.warning(msg)` / `self.log.error(msg)` (pass `server_only=True` to keep a line out of the client toast) |
 
-> **`self.log`** is the friendly logger. `self.log.info/warning/error(message,
-> server_only=False)`. Use it instead of `self.printr`.
+> **`self.log` vs `self.printr`.** `self.log.info/warning/error(message,
+> server_only=False)` is the friendly logger — prefer it for plain status/debug/error
+> messages (including the async `printr.print_async(msg, color=...)` calls: drop the
+> `color`/`source`/`source_name`/`skill_name` kwargs and use `self.log.*`). BUT `self.printr`
+> is **not removed** — keep using `self.printr.print_async(...)` for the cases `self.log`
+> can't express, specifically anything passing **`additional_data=`** (e.g. shipping an
+> `image_url`/`image_base64` payload to the client UI). Don't downgrade those to `self.log`.
 
 ### Gotchas that bite during migration
 
@@ -207,6 +213,10 @@ anywhere in `skills/**`).
 **Stale comments and strings.** Search for the old names in comments/docstrings too (e.g. a
 comment mentioning `switch_tts_provider`). Update or delete them — leftover references read as
 "still using the old API."
+
+**Unused imports.** Removing the last use of `self.printr`/`play_to_user`/etc. often orphans an
+import (`from api.enums import LogType`, `Benchmark`, …). Grep won't flag those — delete any
+import your migration made dead so the module stays clean.
 
 **`self.settings` is now a read-only view.** Reads still work
 (`self.wingman.settings` is preferred); any assignment raises `FacadeError`.
