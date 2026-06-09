@@ -17,9 +17,3 @@ custom_properties:
     value: null
     required: false
     property_type: audio_device
-  - id: backend_port
-    name: Backend Port
-    hint: If you are running the backend on a different port, set it here.
-    value: 49111
-    required: true
-    property_type: number

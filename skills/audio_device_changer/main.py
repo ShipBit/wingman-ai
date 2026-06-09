@@ -1,17 +1,11 @@
-import asyncio
 from typing import TYPE_CHECKING
 
-import aiohttp
-from aiohttp import ClientError
-
 from api.interface import (
-    AudioDeviceSettings,
     SettingsConfig,
     SkillConfig,
     SoundConfig,
     WingmanInitializationError,
 )
-from api.enums import LogType
 from skills.skill_base import Skill
 
 if TYPE_CHECKING:
@@ -30,59 +24,29 @@ class AudioDeviceChanger(Skill):
         super().__init__(config=config, settings=settings, wingman=wingman)
         self.original_audio_device = settings.audio.output
         self.current_audio_device = settings.audio.output
-        self.backend_port = 49111
         self._sub_finished = self.wingman.audio.on_playback_finished(self.playback_finished)
 
     async def validate(self) -> list[WingmanInitializationError]:
-        errors = await super().validate()
+        return await super().validate()
 
-        backend_port = self.retrieve_custom_property_value("backend_port", errors)
-        if backend_port is not None:
-            self.backend_port = backend_port
-
-        return errors
-
-    async def _change_audio_device(self, device_id: int | AudioDeviceSettings) -> bool:
-        """Change the audio output device via HTTP request to the backend."""
+    async def _change_audio_device(self, device_id: int | None) -> bool:
+        """Change the audio output device in-process via the facade. Pass None to reset to
+        the system default. Returns False if device control is unavailable."""
         try:
-            async with aiohttp.ClientSession() as session:
-                url = f"http://127.0.0.1:{self.backend_port}/settings/audio-devices"
-                if device_id is not None:
-                    url = f"{url}?output_device={device_id}"
-
-                async with session.post(
-                    url,
-                    timeout=aiohttp.ClientTimeout(total=10),
-                ) as response:
-                    if response.status == 200:
-                        self.printr.print(
-                            f"Audio Device Changer: changed audio device to {device_id}",
-                            LogType.INFO,
-                            server_only=True,
-                        )
-                        return True
-                    else:
-                        await self.printr.print_async(
-                            f"Audio Device Changer: Failed to change audio device. Status: {response.status}",
-                            LogType.ERROR,
-                        )
-                        return False
-        except ClientError as e:
-            await self.printr.print_async(
-                f"Audio Device Changer: HTTP error changing audio device: {e}",
-                LogType.ERROR,
-            )
-            return False
-        except asyncio.TimeoutError:
-            await self.printr.print_async(
-                "Audio Device Changer: Timeout while changing audio device",
-                LogType.ERROR,
-            )
-            return False
+            ok = await self.wingman.audio.set_output_device(device_id)
+            if ok:
+                self.log.info(
+                    f"Audio Device Changer: changed audio device to {device_id}",
+                    server_only=True,
+                )
+            else:
+                self.log.error(
+                    "Audio Device Changer: audio device control unavailable."
+                )
+            return ok
         except Exception as e:
-            await self.printr.print_async(
-                f"Audio Device Changer: Unexpected error changing audio device: {e}",
-                LogType.ERROR,
+            self.log.error(
+                f"Audio Device Changer: error changing audio device: {e}"
             )
             return False
 
@@ -92,9 +56,8 @@ class AudioDeviceChanger(Skill):
             "audio_changer_device", errors
         )
         if len(errors) > 0:
-            await self.printr.print_async(
-                f"Audio Device Changer: Error retrieving audio device settings: {errors[0].message}",
-                LogType.ERROR,
+            self.log.error(
+                f"Audio Device Changer: Error retrieving audio device settings: {errors[0].message}"
             )
         elif audio_device is not None and audio_device != self.original_audio_device:
             self.current_audio_device = audio_device
@@ -110,11 +73,7 @@ class AudioDeviceChanger(Skill):
 
         self._sub_finished.unsubscribe()
 
-        self.printr.print(
-            text="Audio Device Changer Skill unloaded.",
-            color=LogType.INFO,
-            server_only=True,
-        )
+        self.log.info("Audio Device Changer Skill unloaded.", server_only=True)
 
     async def reset_audio_device(self) -> None:
         """Resets the audio device to the original one"""
@@ -122,8 +81,6 @@ class AudioDeviceChanger(Skill):
         if self.current_audio_device == self.original_audio_device:
             return
         await self._change_audio_device(self.original_audio_device)
-        self.printr.print(
-            text="Audio Device Changer: Reset audio device to original.",
-            color=LogType.INFO,
-            server_only=True,
+        self.log.info(
+            "Audio Device Changer: Reset audio device to original.", server_only=True
         )
