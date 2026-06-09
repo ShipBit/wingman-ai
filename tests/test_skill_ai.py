@@ -94,8 +94,39 @@ async def main():
     assert w.last_messages[1]["content"] == "hello"
 
     await test_ai_has_converse_summarize_image()
+    await test_ai_messages_path()
 
     print("ALL OK")
+
+
+async def test_ai_messages_path():
+    # messages= sends a prebuilt list directly (prompt optional) and returns the content
+    w = FakeWingman(ConversationProvider.OPENAI, condense=True, skill_cap=16000)
+    ai = SkillAi(w)
+    msgs = [
+        {"role": "system", "content": "be terse"},
+        {"role": "user", "content": "hello there"},
+    ]
+    out = await ai.generate(messages=msgs)
+    assert out == "RESULT", out
+    assert w.last_messages is msgs, "messages must be passed through as-is"
+
+    # the messages path is also capped
+    huge = [{"role": "user", "content": "word " * 20000}]
+    w = FakeWingman(ConversationProvider.OPENAI, condense=True, skill_cap=16000)
+    ai = SkillAi(w)
+    try:
+        await ai.generate(messages=huge)
+        raise AssertionError("expected FacadeError for oversized messages list")
+    except FacadeError as e:
+        assert "16000" in str(e), str(e)
+
+    # condense OFF -> messages path is uncapped
+    w = FakeWingman(ConversationProvider.OPENAI, condense=False)
+    ai = SkillAi(w)
+    assert await ai.generate(messages=huge) == "RESULT"
+
+    print("PASS: ai.generate(messages=) path + cap")
 
 
 class FakeConversation:

@@ -274,6 +274,27 @@ def skill_input_cap(config: Any) -> int:
     return getattr(features, "skill_max_input_tokens", 16000)
 
 
+def _count_message_tokens(messages: list) -> int:
+    """Token count of a prebuilt message list — string contents are counted directly;
+    multimodal image parts are charged a flat IMAGE_TOKEN_ESTIMATE (never the base64)."""
+    from services.token_utils import count_tokens
+
+    total = 0
+    for message in messages:
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, str):
+            total += count_tokens(content)
+        elif isinstance(content, list):
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "text":
+                    total += count_tokens(part.get("text", ""))
+                elif part.get("type") == "image_url":
+                    total += IMAGE_TOKEN_ESTIMATE
+    return total
+
+
 class SkillAi:
     """Sanctioned access to the main (cloud) AI model for skills.
 
@@ -291,23 +312,47 @@ class SkillAi:
 
     async def generate(
         self,
-        prompt: str,
+        prompt: str = "",
         *,
         system: str | None = None,
         data: str | None = None,
         image: str | None = None,
+        messages: list | None = None,
         auto_shorten: bool = False,
     ) -> str:
         """Single-turn generation on the main model. Returns the response text.
 
         ``prompt`` is the instruction; ``data`` is an optional larger payload appended
-        to it; ``image`` is an optional data-URL for vision. When conversation
+        to it; ``image`` is an optional data-URL for vision. Pass ``messages`` (a prebuilt
+        OpenAI-style message list) to send your own turns directly — it is sent as-is and
+        ``prompt``/``system``/``data``/``image`` are ignored. When conversation
         condensation is enabled the combined input is capped (see class docstring):
-        over the cap raises :class:`FacadeError`, or truncates if ``auto_shorten``.
+        over the cap raises :class:`FacadeError`, or (for the prompt/data path) truncates
+        if ``auto_shorten``. The ``messages`` path can't be auto-shortened — it raises.
         """
         from services.token_utils import count_tokens, truncate_to_tokens
 
         features = self._wingman.config.features
+
+        # Prebuilt message-list path: send the skill's own turns directly (still capped).
+        if messages is not None:
+            if features.condense_conversation:
+                cap = self._max_input_tokens()
+                total = _count_message_tokens(messages)
+                if total > cap:
+                    raise FacadeError(
+                        f"Skill tried to send ~{total} tokens to the main model, but the "
+                        f"limit is {cap}. Reduce the messages or pre-summarize them cheaply "
+                        f"with self.local_ai.summarize(...). (A structured message list can't "
+                        f"be auto-shortened — trim it yourself. On your own AI provider you can "
+                        f"raise features.skill_max_input_tokens or turn off condensation; on "
+                        f"Wingman Pro the limit is fixed.)"
+                    )
+            completion = await self._wingman.actual_llm_call(messages)
+            if completion and completion.choices:
+                return completion.choices[0].message.content or ""
+            return ""
+
         user_text = prompt if not data else f"{prompt}\n\n{data}"
 
         if features.condense_conversation:
