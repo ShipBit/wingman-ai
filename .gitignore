@@ -170,6 +170,8 @@ frontmatter.json
 
 # Wingman AI:
 skills/**/dependencies
+# Standalone dev test scripts (house convention: run locally with PYTHONPATH=. — not shipped/CI'd)
+/tests/
 whispercpp/
 whispercpp-cuda/
 whispercpp-models/
