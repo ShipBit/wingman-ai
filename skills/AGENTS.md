@@ -226,7 +226,7 @@ async def unload(self) -> None
 
 ```python
 self.retrieve_custom_property_value(property_id, errors)  # Config value (just-in-time!)
-await self.wingman.secrets.retrieve(secret_name, errors)  # Secrets via SecretKeeper
+await self.wingman.secrets.retrieve(secret_name, errors)  # stored secret (prompts user if missing)
 self.wingman.config                                        # READ-ONLY view of the config
 self.log.info(msg) / self.log.warning(msg) / self.log.error(msg)  # Logging (server_only=True skips the toast)
 self.get_generated_files_dir()                             # Persistent storage directory

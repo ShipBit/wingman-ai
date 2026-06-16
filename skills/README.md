@@ -1428,7 +1428,7 @@ Runs on the user's machine. Returns `""` when the local model is unavailable —
 | `.on_playback_started(cb)` → `Subscription` | Observe playback start. Keep the returned `Subscription` and call `.unsubscribe()` in `unload()`. |
 | `.on_playback_finished(cb)` → `Subscription` | Observe playback finish (same `Subscription` contract). |
 | `.output_device` / `.input_device` | Currently selected audio device settings (read-only). |
-| `await .set_output_device(id)` / `await .set_input_device(id)` | Switch the system audio device (in-process). Returns `False` if unavailable. |
+| `await .set_output_device(id)` / `await .set_input_device(id)` | Switch the system audio device (in-process). Pass `None` to reset to the system default. Returns `False` if unavailable. |
 
 ### `self.wingman.commands` — user commands
 
@@ -1439,8 +1439,10 @@ Runs on the user's machine. Returns `""` when the local model is unavailable —
 | `.add(command, *, category=None)` | Add a command (optionally into a category). Call `save()` to persist. |
 | `.remove(name)` | Remove a command by name. Call `save()`. |
 | `.add_category(name)` → `CommandCategory` | Create/return a category (idempotent by name). |
+| `.update_category(category)` / `.delete_category(id_or_name)` | Rename / remove a category. |
 | `.categories()` | All categories as `CommandCategory` objects. |
 | `.register_function(func, *, label=None, description=None, respond="ai", parameters=None)` | Register a bound skill method as a runtime command function (dynamic `@command_action`). |
+| `.unregister_function(name)` | Remove a previously registered runtime command function. |
 | `.add_skill_command(name, func, *, category=None, instant_phrases=None, respond="ai")` | One call: register `func`, build a command bound to it, categorize it. Call `save()`. |
 | `await .save()` | Persist the commands section to disk. Returns `True` on success. |
 
