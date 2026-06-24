@@ -1425,6 +1425,9 @@ class WingmanCore(WebSocketUser):
         if isinstance(hotkey, list):
             codes = hotkey
 
+        if not codes:
+            return False
+
         # check if all hotkey codes are in the key events code list
         is_pressed = all(code in self.key_events for code in codes)
 
