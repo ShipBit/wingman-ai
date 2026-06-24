@@ -41,7 +41,7 @@ class Helper:
     def __init__(self):
         self.__is_loaded = None
         self.__data_path: str = get_writable_dir(path.join("skills", "uexcorp", "data"))
-        self.__version_skill: str = 'v2.1.3-20251230'
+        self.__version_skill: str = 'v2.2.0-20260524'
         self.__version_uex: str | None = None
         self.__debug: bool = True
         self.__default_thread = threading.get_ident()
@@ -64,6 +64,7 @@ class Helper:
             "secrets_saved", self.on_secret_changed
         )
         self.__request_while_not_ready = False
+        self.__data_pool_recreated = False
         self.__wingman = None
 
     def prepare(self, threaded_execution: callable, wingman: "WingmanContext"):
@@ -100,6 +101,7 @@ class Helper:
             )
             self.set_ready(True)
             self.get_database().recreate_database()
+            self.__data_pool_recreated = True
         elif force_check:
             self.__handler_debug.write(
                 f"Version parity is still given. Skill: {old_version_skill} | UEX: {old_version_uex}"
@@ -113,6 +115,12 @@ class Helper:
         self.get_handler_config().sync_blacklists()
         self.__version_uex = self.get_handler_import().get_version_uex()
         self.set_ready(True)
+        if self.__data_pool_recreated:
+            self.__data_pool_recreated = False
+            self.__handler_debug.write(
+                f"UEX/Skill version parity restored. UEX functions are available again.",
+                True,
+            )
 
     def sync_fasterwhisper_hotwords(self, unload: bool = False):
         if not self.get_handler_config().get_behavior_use_fasterwhisper_hotwords():

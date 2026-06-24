@@ -1,4 +1,4 @@
-import json
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
 
@@ -61,7 +61,7 @@ class VehicleInformation(Tool):
                 vehicle_data_access.offset(offset)
 
         vehicles = vehicle_data_access.load(debug=True) # TODO remove debug=True
-        return json.dumps([vehicle.get_data_for_ai() for vehicle in vehicles]), ""
+        return compression.dumps([vehicle.get_data_for_ai() for vehicle in vehicles]), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
         return {}

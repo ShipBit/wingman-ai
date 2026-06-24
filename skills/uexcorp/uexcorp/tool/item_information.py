@@ -1,4 +1,4 @@
-import json
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
 
@@ -157,7 +157,7 @@ class ItemInformation(Tool):
             )
             items = []
 
-        return json.dumps(items), ""
+        return compression.dumps(items), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
         return {}

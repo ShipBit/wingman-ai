@@ -38,8 +38,13 @@ class CommodityStatus(DataModel):
             "type": "buy (higher inventory means more can be bought here and is better)" if self.get_is_buy() else "sell (lower inventory means higher demand and is better)",
         }
 
-    def get_data_for_ai_minimal(self) -> dict:
-        return self.get_data_for_ai()
+    def get_data_for_ai_minimal(self) -> str:
+        # Short form for embedding in price options. The buy/sell direction is
+        # already implied by the surrounding key, and the meaning of the
+        # percentage is documented in the commodity tool prompt.
+        if self.get_percentage() is not None:
+            return f"{self.get_name()} ({self.get_percentage()})"
+        return self.get_name()
 
     def get_code(self) -> str:
         return self.data["code"]

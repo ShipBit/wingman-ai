@@ -182,6 +182,7 @@ class ToolHandler:
             return ""
 
         prompt = "=== Start of \"Available uex function descriptions\" ===\n"
+        prompt += "Note on uex function responses: to save space, any field that is unknown, empty or not applicable is omitted from the response. A missing field therefore means \"unknown / not available\", not zero.\n"
         prompt += "\n".join(tool_prompts)
         prompt += "\n=== End of \"Available uex function descriptions\" ==="
         return prompt

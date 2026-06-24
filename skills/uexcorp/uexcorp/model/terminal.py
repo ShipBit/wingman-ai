@@ -231,32 +231,42 @@ class Terminal(DataModel):
 
         return information
 
-    def get_data_for_ai_minimal(self) -> dict:
+    def get_parent_location_name(self) -> str | None:
         from skills.uexcorp.uexcorp.model.poi import Poi
 
+        if self.get_id_city():
+            return self.get_city_name()
+        elif self.get_id_poi():
+            return str(Poi(self.get_id_poi(), load=True))
+        elif self.get_id_outpost():
+            return self.get_outpost_name()
+        elif self.get_id_space_station():
+            return self.get_space_station_name()
+        return None
+
+    def get_data_for_ai_minimal(self) -> dict:
         information = {
             "name": self.get_nickname(),
             "location_type": "Terminal",
             "terminal_types": self.get_types(),
             "terminal_extras": self.get_extras(),
-            "parent_location": "",
+            "parent_location": self.get_parent_location_name(),
             "star_system_name": self.get_star_system_name(),
             "company_name": self.get_company_name(),
             "faction_name": self.get_faction_name(),
-            "max_container_size_in_scu": self.get_max_container_size() or "unknown",
+            "max_container_size_in_scu": self.get_max_container_size(),
         }
 
-        if self.get_id_city():
-            information["parent_location"] = self.get_city_name()
-        elif self.get_id_poi():
-            poi = Poi(self.get_id_poi(), load=True)
-            information["parent_location"] = str(poi)
-        elif self.get_id_outpost():
-            information["parent_location"] = self.get_outpost_name()
-        elif self.get_id_space_station():
-            information["parent_location"] = self.get_space_station_name()
-
         return information
+
+    def get_data_for_ai_tiny(self) -> dict:
+        # Identity-only view for embedding inside price/offer options, where the
+        # surrounding context already implies this is a commodity terminal.
+        return {
+            "name": self.get_nickname() or self.get_name(),
+            "parent_location": self.get_parent_location_name(),
+            "star_system_name": self.get_star_system_name(),
+        }
 
     def get_id(self) -> int:
         return self.data["id"]

@@ -70,9 +70,7 @@ class Item(DataModel):
         information = {
             "name": self.get_name(),
             "category": category.get_data_for_ai_minimal() if category else None,
-            "is_exclusive_pledge": self.get_is_exclusive_pledge(),
-            "is_exclusive_subscriber": self.get_is_exclusive_subscriber(),
-            "is_exclusive_concierge": self.get_is_exclusive_concierge(),
+            "exclusivity": self.get_exclusivity(),
             "notes": self.get_notification(),
         }
 
@@ -129,6 +127,16 @@ class Item(DataModel):
             information["offers"] = offers
 
         return information
+
+    def get_exclusivity(self) -> list[str]:
+        exclusivity = []
+        if self.get_is_exclusive_pledge():
+            exclusivity.append("pledge")
+        if self.get_is_exclusive_subscriber():
+            exclusivity.append("subscriber")
+        if self.get_is_exclusive_concierge():
+            exclusivity.append("concierge")
+        return exclusivity
 
     def get_attributes(self) -> list["ItemAttribute"]:
         from skills.uexcorp.uexcorp.data_access.item_attribute_data_access import ItemAttributeDataAccess

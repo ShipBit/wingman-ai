@@ -1,4 +1,4 @@
-import json
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
 
@@ -143,7 +143,7 @@ class CommodityRoute(Tool):
         routes = commodity_route_data_access.load(debug=True) # TODO remove debug=True
 
         routes = [route.get_data_for_ai() for route in routes]
-        return json.dumps(routes), ""
+        return compression.dumps(routes), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
         return {}

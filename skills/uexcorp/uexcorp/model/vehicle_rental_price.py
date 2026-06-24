@@ -41,7 +41,7 @@ class VehicleRentalPrice(DataModel):
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
         information = {
-            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
+            "terminal": terminal.get_data_for_ai_tiny() if terminal else None,
             "price_rent": self.get_price_rent(),
         }
 

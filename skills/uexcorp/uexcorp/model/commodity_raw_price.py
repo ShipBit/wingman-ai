@@ -56,8 +56,21 @@ class CommodityRawPrice(DataModel):
             "price_sell_to_terminal": self.get_price_sell(),
         }
 
-    def get_data_for_ai_minimal(self) -> dict:
-        return self.get_data_for_ai()
+    def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_commodity_information: bool = True) -> dict:
+        from skills.uexcorp.uexcorp.model.terminal import Terminal
+
+        information = {}
+
+        if show_commodity_information:
+            information["commodity"] = self.get_commodity_name()
+
+        if show_terminal_information:
+            terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+            information["terminal"] = terminal.get_data_for_ai_tiny() if terminal else self.get_terminal_name()
+
+        information["price_sell_to_terminal"] = self.get_price_sell()
+
+        return information
 
     def get_id(self) -> int:
         return self.data["id"]

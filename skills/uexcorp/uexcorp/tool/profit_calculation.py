@@ -1,4 +1,4 @@
-import json
+from skills.uexcorp.uexcorp import compression
 from skills.uexcorp.uexcorp.tool.tool import Tool
 from skills.uexcorp.uexcorp.tool.validator import Validator
 
@@ -34,7 +34,7 @@ class ProfitCalculation(Tool):
             "base_profit": f"{round(((sell_price / buy_price) -1 ) * 100, 2)}%", # 100%
             "profit_margin": f"{round(((sell_price - buy_price) / sell_price) * 100, 2)}%", # 50%
         }
-        return json.dumps(data), ""
+        return compression.dumps(data), ""
 
     def get_mandatory_fields(self) -> dict[str, Validator]:
         return {}
