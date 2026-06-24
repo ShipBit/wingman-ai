@@ -472,7 +472,7 @@ class RadioChatter(Skill):
 
         await self.wingman.tts.set_voice(voice_setting.voice)
 
-    async def _get_original_voice_setting(self) -> VoiceSelection:
+    async def _get_original_voice_setting(self) -> None|VoiceSelection:
         voice_provider = self.wingman.config.features.tts_provider
         voice_subprovider = None
         voice = None
@@ -490,11 +490,6 @@ class RadioChatter(Skill):
         elif voice_provider == TtsProvider.WINGMAN_PRO:
             voice_subprovider = self.wingman.config.wingman_pro.tts_provider
             if (
-                self.wingman.config.wingman_pro.tts_provider
-                == WingmanProTtsProvider.OPENAI
-            ):
-                voice = self.wingman.config.openai.tts_voice
-            elif (
                 self.wingman.config.wingman_pro.tts_provider
                 == WingmanProTtsProvider.AZURE
             ):
