@@ -15,6 +15,30 @@ hint:
   en: Please make sure the HUD server in the global settings is enabled.
   de: Bitte stelle sicher, dass der HUD-Server in den globalen Einstellungen aktiviert ist.
 custom_properties:
+  - id: chat_layout_mode
+    name: Chat Window Placement
+    hint: "Auto: stack at the chosen anchor. Manual: free placement at the X/Y offset below (anchor is ignored)."
+    property_type: single_select
+    value: "auto"
+    required: false
+    options:
+      - label: "Auto (anchor)"
+        value: "auto"
+      - label: "Manual (free X/Y)"
+        value: "manual"
+
+  - id: persistent_layout_mode
+    name: Info Panel Placement
+    hint: "Auto: stack at the chosen anchor. Manual: free placement at the X/Y offset below (anchor is ignored)."
+    property_type: single_select
+    value: "auto"
+    required: false
+    options:
+      - label: "Auto (anchor)"
+        value: "auto"
+      - label: "Manual (free X/Y)"
+        value: "manual"
+
   - id: chat_anchor
     name: Chat Window Position
     hint: Screen position/anchor for the chat window.
@@ -66,6 +90,34 @@ custom_properties:
         value: "bottom_center"
       - label: "Bottom Right"
         value: "bottom_right"
+
+  - id: chat_x
+    name: Chat Window X
+    hint: Horizontal offset in pixels from the upper-left corner of the screen. Only used when Chat Window Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: persistent_x
+    name: Info Panel X
+    hint: Horizontal offset in pixels from the upper-left corner of the screen. Only used when Info Panel Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: chat_y
+    name: Chat Window Y
+    hint: Vertical offset in pixels from the upper-left corner of the screen. Only used when Chat Window Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
+
+  - id: persistent_y
+    name: Info Panel Y
+    hint: Vertical offset in pixels from the upper-left corner of the screen. Only used when Info Panel Placement is Manual.
+    property_type: number
+    value: 20
+    required: false
 
   - id: chat_priority
     name: Chat Window Priority

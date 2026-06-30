@@ -8,6 +8,11 @@ information on a transparent overlay. It supports:
 - Progress bars
 - Countdown timers
 
+Both the chat window and the persistent info panel can be positioned either
+automatically (anchored/stacked at a screen edge) or freely via manual X/Y pixel
+offsets measured from the upper-left corner of the screen (see the
+`*_layout_mode` / `*_x` / `*_y` config properties).
+
 The HUD Server must be enabled in global settings for this skill to work.
 """
 
@@ -201,6 +206,38 @@ class HUD(Skill):
                 )
             )
 
+        # Validate manual-placement properties (free X/Y positioning).
+        # These were added after the initial release, so they may be absent from
+        # configs saved by older versions. Validate them only when present and
+        # otherwise fall back to "auto" placement.
+        for mode_key, x_key, y_key, label in (
+            ("chat_layout_mode", "chat_x", "chat_y", "chat"),
+            ("persistent_layout_mode", "persistent_x", "persistent_y", "info panel"),
+        ):
+            if self._has_prop(mode_key):
+                mode = self.retrieve_custom_property_value(mode_key, errors)
+                if mode not in ("auto", "manual"):
+                    errors.append(
+                        WingmanInitializationError(
+                            wingman_name=self.wingman.name,
+                            message=f"Invalid {mode_key}: '{mode}'. Must be 'auto' or 'manual'.",
+                            error_type=WingmanInitializationErrorType.INVALID_CONFIG
+                        )
+                    )
+            for coord_key in (x_key, y_key):
+                if not self._has_prop(coord_key):
+                    continue
+                coord = self.retrieve_custom_property_value(coord_key, errors)
+                if not isinstance(coord, (int, float)) or not (-5000 <= coord <= 10000):
+                    errors.append(
+                        WingmanInitializationError(
+                            wingman_name=self.wingman.name,
+                            message=f"Invalid {coord_key}: '{coord}'. Must be a number between -5000 and 10000 "
+                                    f"(pixel offset for the {label} from the screen's upper-left corner).",
+                            error_type=WingmanInitializationErrorType.INVALID_CONFIG
+                        )
+                    )
+
         # Validate persistent_priority
         persistent_priority = self.retrieve_custom_property_value("persistent_priority", errors)
         if not isinstance(persistent_priority, (int, float)) or persistent_priority < 0:
@@ -362,12 +399,38 @@ class HUD(Skill):
         val = self.retrieve_custom_property_value(key, [])
         return val if val is not None else default
 
+    def _has_prop(self, key: str) -> bool:
+        """Whether a custom property is present in this skill's config.
+
+        Used to stay backwards-compatible: properties added after a user saved
+        their config are absent from that saved config and must fall back to
+        defaults instead of raising validation errors.
+        """
+        return any(p.id == key for p in self.config.custom_properties)
+
+    def _resolve_placement(self, mode_key: str, x_key: str, y_key: str) -> dict:
+        """Resolve layout_mode + optional manual x/y offsets for an element.
+
+        Returns a dict suitable for spreading into a Props constructor. In
+        manual mode the x/y offsets (from the screen's upper-left corner) are
+        included so the HUD server places the window freely; otherwise only the
+        layout mode is set and the element stacks at its anchor.
+        """
+        mode = str(self._get_prop(mode_key, "auto")).lower()
+        if mode == "manual":
+            return {
+                "layout_mode": LayoutMode.MANUAL,
+                "x": int(self._get_prop(x_key, 20)),
+                "y": int(self._get_prop(y_key, 20)),
+            }
+        return {"layout_mode": LayoutMode.AUTO}
+
     def _get_hud_props(self) -> MessageProps:
         """Get all HUD visual properties as a dictionary."""
         return MessageProps(
             anchor=str(self._get_prop("chat_anchor", Anchor.TOP_LEFT)),
             priority=int(self._get_prop("chat_priority", 20)),
-            layout_mode=LayoutMode.AUTO,
+            **self._resolve_placement("chat_layout_mode", "chat_x", "chat_y"),
             width=int(self._get_prop("hud_width", 400)),
             max_height=int(self._get_prop("hud_max_height", 600)),
             bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
@@ -386,7 +449,7 @@ class HUD(Skill):
         return PersistentProps(
             anchor=str(self._get_prop("persistent_anchor", Anchor.TOP_LEFT)),
             priority=int(self._get_prop("persistent_priority", 10)),
-            layout_mode=LayoutMode.AUTO,
+            **self._resolve_placement("persistent_layout_mode", "persistent_x", "persistent_y"),
             width=int(self._get_prop("persistent_width", 400)),
             max_height=int(self._get_prop("persistent_max_height", 600)),
             bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
