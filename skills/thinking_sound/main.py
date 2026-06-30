@@ -72,7 +72,7 @@ class ThinkingSound(Skill):
             return
 
         # Stop any existing playback first
-        await self.wingman.audio.stop(audio_config, 0)
+        await self.wingman.audio.stop(audio_config, fade_out=0)
 
         self.log.info("Thinking Sound: Starting playback.", server_only=True)
 
@@ -85,7 +85,7 @@ class ThinkingSound(Skill):
             return
 
         self.is_playing = True
-        await self.wingman.audio.play(audio_config, self.wingman.config.sound.volume)
+        await self.wingman.audio.play(audio_config, volume=self.wingman.config.sound.volume)
 
     async def stop_playback(self):
         """Stop the thinking sound with fade out."""
@@ -93,5 +93,5 @@ class ThinkingSound(Skill):
         if not audio_config or not self.is_playing:
             return
 
-        await self.wingman.audio.stop(audio_config, self.stop_duration)
+        await self.wingman.audio.stop(audio_config, fade_out=self.stop_duration)
         self.is_playing = False

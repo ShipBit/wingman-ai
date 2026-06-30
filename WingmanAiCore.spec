@@ -250,6 +250,15 @@ datas += onnx_asr_datas
 binaries += onnx_asr_binaries
 hiddenimports += onnx_asr_hidden
 
+# Collect all faster_whisper files (specifically assets like silero_vad_v6.onnx)
+try:
+    fw_datas, fw_binaries, fw_hidden = collect_all('faster_whisper')
+    datas += fw_datas
+    binaries += fw_binaries
+    hiddenimports += fw_hidden
+except Exception as e:
+    print(f"Warning: Could not collect faster_whisper: {e}")
+
 # ============================================================================
 # ANALYSIS
 # ============================================================================

@@ -526,17 +526,7 @@ class WingmanSubscriptionTts(TtsInterface):
 
     async def play_audio(self, text, sound_config, audio_player, wingman_name):
         from api.enums import WingmanProTtsProvider
-        if self._config.wingman_pro.tts_provider == WingmanProTtsProvider.OPENAI:
-            await self._ws.generate_openai_speech(
-                text=text,
-                voice=self._config.openai.tts_voice,
-                model=self._config.openai.tts_model,
-                speed=self._config.openai.tts_speed,
-                sound_config=sound_config,
-                audio_player=audio_player,
-                wingman_name=wingman_name,
-            )
-        elif self._config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
+        if self._config.wingman_pro.tts_provider == WingmanProTtsProvider.AZURE:
             await self._ws.generate_azure_speech(
                 text=text,
                 config=self._config.azure.tts,
