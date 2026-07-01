@@ -100,6 +100,22 @@ class HUD(Skill):
         except ValueError:
             return False
 
+    @staticmethod
+    def _merge_alpha(hex_color: str, opacity_percent: float) -> str:
+        """Merge an opacity percentage (0-100) into a hex color's alpha channel.
+
+        Accepts #RGB, #RRGGBB, or #RRGGBBAA input; any existing alpha is replaced.
+        Returns an #RRGGBBAA string, or the input unchanged if it isn't a valid hex color.
+        """
+        if not HUD._is_valid_hex_color(hex_color):
+            return hex_color
+        hex_part = hex_color[1:]
+        if len(hex_part) == 3:
+            hex_part = "".join(c * 2 for c in hex_part)
+        rgb = hex_part[:6]
+        alpha = max(0, min(255, round(opacity_percent / 100 * 255)))
+        return f"#{rgb}{alpha:02x}"
+
     # ─────────────────────────────── Configuration ─────────────────────────────── #
 
     async def validate(self) -> list[WingmanInitializationError]:
@@ -282,6 +298,19 @@ class HUD(Skill):
                 )
             )
 
+        # Validate bg_opacity (0-100 range from slider). Added after the initial
+        # release, so it may be absent from configs saved by older versions.
+        if self._has_prop("bg_opacity"):
+            bg_opacity = self.retrieve_custom_property_value("bg_opacity", errors)
+            if not isinstance(bg_opacity, (int, float)) or not (0 <= bg_opacity <= 100):
+                errors.append(
+                    WingmanInitializationError(
+                        wingman_name=self.wingman.name,
+                        message=f"Invalid bg_opacity: '{bg_opacity}'. Must be a number between 0 and 100.",
+                        error_type=WingmanInitializationErrorType.INVALID_CONFIG
+                    )
+                )
+
         # Validate border_radius
         border_radius = self.retrieve_custom_property_value("border_radius", errors)
         if not isinstance(border_radius, (int, float)) or border_radius < 0:
@@ -425,6 +454,18 @@ class HUD(Skill):
             }
         return {"layout_mode": LayoutMode.AUTO}
 
+    def _get_bg_color(self) -> str:
+        """Get the background color with bg_opacity merged into its alpha channel.
+
+        Falls back to the color's own alpha (if any) when bg_opacity is absent -
+        i.e. for configs saved before this property existed.
+        """
+        bg_color = str(self._get_prop("bg_color", HudColor.BG_DARK))
+        if not self._has_prop("bg_opacity"):
+            return bg_color
+        bg_opacity = float(self._get_prop("bg_opacity", 100))
+        return self._merge_alpha(bg_color, bg_opacity)
+
     def _get_hud_props(self) -> MessageProps:
         """Get all HUD visual properties as a dictionary."""
         return MessageProps(
@@ -433,7 +474,7 @@ class HUD(Skill):
             **self._resolve_placement("chat_layout_mode", "chat_x", "chat_y"),
             width=int(self._get_prop("hud_width", 400)),
             max_height=int(self._get_prop("hud_max_height", 600)),
-            bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
+            bg_color=self._get_bg_color(),
             text_color=str(self._get_prop("text_color", HudColor.TEXT_PRIMARY)),
             accent_color=str(self._get_prop("accent_color", HudColor.ACCENT_BLUE)),
             opacity=float(self._get_prop("opacity", 85)) / 100.0,
@@ -452,7 +493,7 @@ class HUD(Skill):
             **self._resolve_placement("persistent_layout_mode", "persistent_x", "persistent_y"),
             width=int(self._get_prop("persistent_width", 400)),
             max_height=int(self._get_prop("persistent_max_height", 600)),
-            bg_color=str(self._get_prop("bg_color", HudColor.BG_DARK)),
+            bg_color=self._get_bg_color(),
             text_color=str(self._get_prop("text_color", HudColor.TEXT_PRIMARY)),
             accent_color=str(self._get_prop("accent_color", HudColor.ACCENT_BLUE)),
             opacity=float(self._get_prop("opacity", 85)) / 100.0,
@@ -789,6 +830,9 @@ class HUD(Skill):
         props = self._get_hud_props()
         props.fade_delay = duration
 
+        # Show the wingman's avatar in front of its own name (not for "USER" messages)
+        title_icon = self.wingman.avatar_path if title == self.wingman.name else None
+
         result = await self._client.show_message(
             group_name=self._group_name,
             element=WindowType.MESSAGE,
@@ -797,7 +841,8 @@ class HUD(Skill):
             color=color,
             tools=tools,
             props=props,
-            duration=duration
+            duration=duration,
+            title_icon=title_icon
         )
         if result is None and self.active:
             await printr.print_async(
@@ -1014,10 +1059,14 @@ class HUD(Skill):
     ) -> str:
         """
         Add or update a persistent information panel on the HUD overlay.
-        Use Markdown formatting for better readability.
+
+        Supports Markdown: headers (#), **bold**, *italic*, `code`, lists, tables,
+        blockquotes, and images via ![caption](source), where source is a local
+        file path or an http(s) URL (PNG with transparency and JPEG are supported).
+        Any caption text renders below the image.
 
         :param title: Unique identifier and display title for this info panel.
-        :param description_markdown: Content to display (Markdown supported).
+        :param description_markdown: Content to display (Markdown supported, see above).
         :param duration: Auto-remove after this many seconds. If not set, stays until removed.
         """
         if not await self._ensure_connected():
@@ -1137,7 +1186,8 @@ class HUD(Skill):
         :param title: Unique identifier and title for this progress bar.
         :param current: Current progress value.
         :param maximum: Maximum value (100% when current equals maximum).
-        :param description_markdown: Optional description below the progress bar.
+        :param description_markdown: Optional description below the progress bar
+            (Markdown supported, including images - see hud_add_info).
         :param auto_close: If True, removes the bar when reaching 100%.
         :param color: Optional color for the progress bar (hex color like #00ff00).
         """
@@ -1190,7 +1240,8 @@ class HUD(Skill):
 
         :param title: Unique identifier and title for this timer.
         :param duration_seconds: Time in seconds until the progress bar reaches 100%.
-        :param description_markdown: Optional description below the timer.
+        :param description_markdown: Optional description below the timer
+            (Markdown supported, including images - see hud_add_info).
         :param auto_close: If True (default), removes the timer after completion.
         :param color: Optional color for the timer bar (hex color like #00ff00).
         """
@@ -1294,6 +1345,8 @@ class HUD(Skill):
     ) -> str:
         """
         Update an existing information panel's content.
+        Images can be embedded via ![caption](source) - see hud_add_info for supported
+        source formats and caption behavior.
 
         :param title: The title of the info panel to update.
         :param description_markdown: The new content (Markdown supported).

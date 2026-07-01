@@ -15,6 +15,7 @@ import queue
 import math
 import re
 import ctypes
+from ctypes import wintypes
 from typing import Tuple, Dict, Optional
 import traceback
 
@@ -48,15 +49,17 @@ from hud_server.platform.win32 import (
     WS_EX_TOPMOST,
     WS_EX_TOOLWINDOW,
     WS_EX_NOACTIVATE,
-    LWA_ALPHA,
-    LWA_COLORKEY,
     SWP_SHOWWINDOW,
+    SWP_HIDEWINDOW,
     SWP_NOACTIVATE,
     SWP_NOMOVE,
     SWP_NOSIZE,
-    SRCCOPY,
     DIB_RGB_COLORS,
     BI_RGB,
+    ULW_ALPHA,
+    AC_SRC_OVER,
+    AC_SRC_ALPHA,
+    BLENDFUNCTION,
     SW_SHOWNOACTIVATE,
     HWND_TOPMOST,
     PM_REMOVE,
@@ -766,6 +769,21 @@ class HeadsUpOverlay:
         # Fade logic
         self._update_window_fade(win, has_content=bool(items))
 
+    def _show_window_if_hidden(self, win: Dict):
+        """Re-show a layered window that was hidden via SWP_HIDEWINDOW (fade_state==0).
+
+        Several code paths set fade_state to 1 directly (bypassing _update_window_fade)
+        as a fast path when new content arrives - each of those must call this first
+        (before overwriting fade_state) or the window stays invisible forever, since
+        SWP_HIDEWINDOW/SWP_SHOWWINDOW visibility is independent of per-pixel alpha.
+        """
+        hwnd = win.get("hwnd")
+        if hwnd and win.get("fade_state") == 0:
+            user32.SetWindowPos(
+                hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+            )
+
     def _update_window_fade(self, win: Dict, has_content: bool):
         """Update fade animation for a window."""
         hwnd = win.get("hwnd")
@@ -776,7 +794,6 @@ class HeadsUpOverlay:
         if win.get("hidden", False):
             has_content = False
 
-        key = 0x00FF00FF
         fade_amount = int(1080 * self.dt)
         if fade_amount < 1:
             fade_amount = 1
@@ -786,6 +803,7 @@ class HeadsUpOverlay:
 
         # Determine target state
         if has_content and win["fade_state"] in (0, 3):
+            self._show_window_if_hidden(win)
             win["fade_state"] = 1  # start fade in
         elif not has_content and win["fade_state"] in (1, 2):
             win["fade_state"] = 3  # start fade out
@@ -803,23 +821,30 @@ class HeadsUpOverlay:
 
         if win["fade_state"] == 1:  # Fade in
             win["opacity"] = min(target, win.get("opacity", 0) + fade_amount)
-            user32.SetLayeredWindowAttributes(
-                hwnd, key, win["opacity"], LWA_ALPHA | LWA_COLORKEY
-            )
+            # Opacity is applied per-pixel at blit time (BLENDFUNCTION.SourceConstantAlpha
+            # in _blit_window), not via SetLayeredWindowAttributes - force a re-blit.
+            win["canvas_dirty"] = True
             if win["opacity"] >= target:
                 win["fade_state"] = 2
 
         elif win["fade_state"] == 3:  # Fade out
             win["opacity"] = max(0, win.get("opacity", 0) - fade_amount)
-            user32.SetLayeredWindowAttributes(
-                hwnd, key, win["opacity"], LWA_ALPHA | LWA_COLORKEY
-            )
+            win["canvas_dirty"] = True
             if win["opacity"] <= 0:
                 win["fade_state"] = 0
                 # Update layout visibility when fully hidden
                 self._layout_manager.set_window_visible(window_name, False)
                 if win["type"] == self.WINDOW_TYPE_MESSAGE:
                     win["current_message"] = None
+                # Explicitly hide the window rather than relying on a final
+                # alpha=0 blit: the draw function clears the canvas as soon as
+                # there's no content, so that final blit is never guaranteed to
+                # run on this exact frame. Without this, the window would be
+                # stuck showing its last visible frame forever.
+                user32.SetWindowPos(
+                    hwnd, None, 0, 0, 0, 0,
+                    SWP_HIDEWINDOW | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE
+                )
 
         elif win["fade_state"] == 2:  # Visible - maintain target opacity
             if win["opacity"] != target:
@@ -827,9 +852,7 @@ class HeadsUpOverlay:
                     win["opacity"] = min(target, win["opacity"] + fade_amount)
                 else:
                     win["opacity"] = max(target, win["opacity"] - fade_amount)
-                user32.SetLayeredWindowAttributes(
-                    hwnd, key, win["opacity"], LWA_ALPHA | LWA_COLORKEY
-                )
+                win["canvas_dirty"] = True
 
     def _draw_message_window(self, name: str, win: Dict):
         """Draw content for a message window."""
@@ -875,6 +898,7 @@ class HeadsUpOverlay:
                 msg_state = (
                     current_message.get("message", "") if current_message else "",
                     current_message.get("title", "") if current_message else "",
+                    current_message.get("title_icon", "") if current_message else "",
                     int(win.get("typewriter_char_count", 0)),
                     tools_hash,
                 )
@@ -927,6 +951,30 @@ class HeadsUpOverlay:
         # Title
         if current_message:
             title = current_message.get("title", "")
+            title_icon = current_message.get("title_icon")
+            title_x = padding
+            title_start_y = y
+            icon_drawn = False
+            icon_size = 0
+
+            if title_icon and os.path.isfile(title_icon):
+                icon_size = int(font_size * 1.75)
+                try:
+                    cache_key = (title_icon, icon_size)
+                    icon_img = self.image_cache.get(cache_key)
+                    if icon_img is None:
+                        icon_img = (
+                            Image.open(title_icon)
+                            .convert("RGBA")
+                            .resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+                        )
+                        self.image_cache[cache_key] = icon_img
+                    temp.paste(icon_img, (padding, title_start_y), icon_img)
+                    title_x = padding + icon_size + 10
+                    icon_drawn = True
+                except Exception:
+                    pass
+
             if title:
                 title = self._strip_emotions(title)
                 font_bold = self.fonts.get(
@@ -937,7 +985,7 @@ class HeadsUpOverlay:
                     self._render_text_with_emoji(
                         draw,
                         title,
-                        padding,
+                        title_x,
                         y,
                         accent + (255,),
                         font_bold,
@@ -948,6 +996,9 @@ class HeadsUpOverlay:
                         y += bbox[3] - bbox[1] + 12
                     except:
                         y += 24
+
+            if icon_drawn:
+                y = max(y, title_start_y + icon_size + 8)
 
             # Message content with typewriter
             message = current_message.get("message", "")
@@ -1085,20 +1136,21 @@ class HeadsUpOverlay:
             or old_canvas.width != width
             or old_canvas.height != final_h
         ):
-            canvas = Image.new("RGBA", (width, final_h), (255, 0, 255, 255))
+            canvas = Image.new("RGBA", (width, final_h), (0, 0, 0, 0))
             win["canvas"] = canvas
         else:
             canvas = old_canvas
-            # Completely clear the canvas with magenta (transparency key)
+            # Completely clear the canvas (fully transparent)
             # Use a new image to ensure complete overwrite
             canvas.paste(
-                Image.new("RGBA", (width, final_h), (255, 0, 255, 255)), (0, 0)
+                Image.new("RGBA", (width, final_h), (0, 0, 0, 0)), (0, 0)
             )
 
         final_draw = ImageDraw.Draw(canvas)
-        # Draw solid background first (covers everything)
-        final_draw.rectangle([0, 0, width, final_h], fill=(255, 0, 255, 255))
-        # Then draw the rounded rectangle on top with user-specified alpha
+        # Draw the rounded rectangle with the user-specified background alpha. The
+        # canvas starts fully transparent, so everything outside the rounded rect
+        # (e.g. the corners) stays transparent - no color-key trick needed since the
+        # window is now composited with true per-pixel alpha (see _blit_window).
         final_draw.rounded_rectangle(
             [0, 0, width - 1, final_h - 1],
             radius=radius,
@@ -1130,17 +1182,6 @@ class HeadsUpOverlay:
                 # Fade at top to indicate more content above
                 top_region = canvas.crop((0, 0, width, fade_height))
 
-                # Create a mask identifying magenta (color key) pixels to preserve rounded corners
-                top_data = top_region.load()
-                corner_mask = Image.new("L", (width, fade_height), 0)
-                corner_mask_data = corner_mask.load()
-                for py in range(fade_height):
-                    for px in range(width):
-                        r, g, b, a = top_data[px, py]
-                        # Check if pixel is magenta (color key for transparency)
-                        if r == 255 and g == 0 and b == 255:
-                            corner_mask_data[px, py] = 255  # Mark as corner pixel
-
                 # Create a gradient mask that fades from opaque bg at top to transparent at bottom
                 gradient = Image.new("L", (width, fade_height), 0)
                 for fade_y in range(fade_height):
@@ -1150,6 +1191,12 @@ class HeadsUpOverlay:
                         [(0, fade_y), (width, fade_y)], fill=alpha
                     )
 
+                # Limit the gradient to where the panel is already opaque, so it can't
+                # paint over the transparent rounded corners or a semi-transparent
+                # background (bg_opacity) - true alpha replaces the old colorkey mask.
+                dest_alpha = top_region.split()[3]
+                gradient = ImageChops.multiply(gradient, dest_alpha)
+
                 # Create background layer for fade
                 bg_layer = Image.new("RGBA", (width, fade_height), bg + (255,))
 
@@ -1158,13 +1205,6 @@ class HeadsUpOverlay:
 
                 # Composite fade over content
                 faded_top = Image.alpha_composite(top_region, bg_layer)
-
-                # Restore magenta pixels for corners (color key transparency)
-                faded_data = faded_top.load()
-                for py in range(fade_height):
-                    for px in range(width):
-                        if corner_mask_data[px, py] == 255:
-                            faded_data[px, py] = (255, 0, 255, 255)
 
                 canvas.paste(faded_top, (0, 0))
 
@@ -1438,19 +1478,20 @@ class HeadsUpOverlay:
             or old_canvas.width != width
             or old_canvas.height != final_h
         ):
-            canvas = Image.new("RGBA", (width, final_h), (255, 0, 255, 255))
+            canvas = Image.new("RGBA", (width, final_h), (0, 0, 0, 0))
             win["canvas"] = canvas
         else:
             canvas = old_canvas
-            # Completely clear the canvas with magenta (transparency key)
+            # Completely clear the canvas (fully transparent)
             canvas.paste(
-                Image.new("RGBA", (width, final_h), (255, 0, 255, 255)), (0, 0)
+                Image.new("RGBA", (width, final_h), (0, 0, 0, 0)), (0, 0)
             )
 
         final_draw = ImageDraw.Draw(canvas)
-        # Draw solid background first (covers everything)
-        final_draw.rectangle([0, 0, width, final_h], fill=(255, 0, 255, 255))
-        # Then draw the rounded rectangle on top with user-specified alpha
+        # Draw the rounded rectangle with the user-specified background alpha. The
+        # canvas starts fully transparent, so everything outside the rounded rect
+        # (e.g. the corners) stays transparent - no color-key trick needed since the
+        # window is now composited with true per-pixel alpha (see _blit_window).
         final_draw.rounded_rectangle(
             [0, 0, width - 1, final_h - 1],
             radius=radius,
@@ -1471,18 +1512,6 @@ class HeadsUpOverlay:
                 # Get the top portion of the canvas before applying fade
                 top_region = canvas.crop((0, 0, width, fade_height))
 
-                # Create a mask identifying magenta (color key) pixels to preserve rounded corners
-                # Magenta = (255, 0, 255) is used as transparency color key
-                top_data = top_region.load()
-                corner_mask = Image.new("L", (width, fade_height), 0)
-                corner_mask_data = corner_mask.load()
-                for py in range(fade_height):
-                    for px in range(width):
-                        r, g, b, a = top_data[px, py]
-                        # Check if pixel is magenta (color key for transparency)
-                        if r == 255 and g == 0 and b == 255:
-                            corner_mask_data[px, py] = 255  # Mark as corner pixel
-
                 # Create a gradient mask that fades from opaque bg at top to transparent at bottom
                 gradient = Image.new("L", (width, fade_height), 0)
                 for fade_y in range(fade_height):
@@ -1492,6 +1521,12 @@ class HeadsUpOverlay:
                         [(0, fade_y), (width, fade_y)], fill=alpha
                     )
 
+                # Limit the gradient to where the panel is already opaque, so it can't
+                # paint over the transparent rounded corners or a semi-transparent
+                # background (bg_opacity) - true alpha replaces the old colorkey mask.
+                dest_alpha = top_region.split()[3]
+                gradient = ImageChops.multiply(gradient, dest_alpha)
+
                 # Create background layer for fade
                 bg_layer = Image.new("RGBA", (width, fade_height), bg + (255,))
 
@@ -1500,13 +1535,6 @@ class HeadsUpOverlay:
 
                 # Composite fade over content
                 faded_top = Image.alpha_composite(top_region, bg_layer)
-
-                # Restore magenta pixels for corners (color key transparency)
-                faded_data = faded_top.load()
-                for py in range(fade_height):
-                    for px in range(width):
-                        if corner_mask_data[px, py] == 255:
-                            faded_data[px, py] = (255, 0, 255, 255)
 
                 canvas.paste(faded_top, (0, 0))
 
@@ -1522,17 +1550,6 @@ class HeadsUpOverlay:
                         (0, fade_y, width, fade_y + fade_actual)
                     )
 
-                    # Create a mask identifying magenta (color key) pixels to preserve rounded corners
-                    bottom_data = bottom_region.load()
-                    corner_mask = Image.new("L", (width, fade_actual), 0)
-                    corner_mask_data = corner_mask.load()
-                    for py in range(fade_actual):
-                        for px in range(width):
-                            r, g, b, a = bottom_data[px, py]
-                            # Check if pixel is magenta (color key for transparency)
-                            if r == 255 and g == 0 and b == 255:
-                                corner_mask_data[px, py] = 255  # Mark as corner pixel
-
                     # Create a gradient mask that fades from transparent at bottom to opaque at top
                     gradient = Image.new("L", (width, fade_actual), 0)
                     for fade_y_idx in range(fade_actual):
@@ -1542,6 +1559,10 @@ class HeadsUpOverlay:
                             [(0, fade_y_idx), (width, fade_y_idx)], fill=alpha
                         )
 
+                    # Limit the gradient to where the panel is already opaque (see top fade above).
+                    dest_alpha = bottom_region.split()[3]
+                    gradient = ImageChops.multiply(gradient, dest_alpha)
+
                     # Create background layer for fade
                     bg_layer = Image.new("RGBA", (width, fade_actual), bg + (255,))
 
@@ -1550,13 +1571,6 @@ class HeadsUpOverlay:
 
                     # Composite fade over content
                     faded_bottom = Image.alpha_composite(bottom_region, bg_layer)
-
-                    # Restore magenta pixels for corners (color key transparency)
-                    faded_data = faded_bottom.load()
-                    for py in range(fade_actual):
-                        for px in range(width):
-                            if corner_mask_data[px, py] == 255:
-                                faded_data[px, py] = (255, 0, 255, 255)
 
                     canvas.paste(faded_bottom, (0, fade_y))
 
@@ -1780,16 +1794,17 @@ class HeadsUpOverlay:
             or old_canvas.width != width
             or old_canvas.height != final_h
         ):
-            canvas = Image.new("RGBA", (width, final_h), (255, 0, 255, 255))
+            canvas = Image.new("RGBA", (width, final_h), (0, 0, 0, 0))
             win["canvas"] = canvas
         else:
             canvas = old_canvas
             canvas.paste(
-                Image.new("RGBA", (width, final_h), (255, 0, 255, 255)), (0, 0)
+                Image.new("RGBA", (width, final_h), (0, 0, 0, 0)), (0, 0)
             )
 
         final_draw = ImageDraw.Draw(canvas)
-        final_draw.rectangle([0, 0, width, final_h], fill=(255, 0, 255, 255))
+        # Canvas starts fully transparent; the rounded rect's own alpha is all that's
+        # needed - no color-key trick since blitting now uses true per-pixel alpha.
         final_draw.rounded_rectangle(
             [0, 0, width - 1, final_h - 1],
             radius=radius,
@@ -1817,18 +1832,6 @@ class HeadsUpOverlay:
                 # Get the top portion of the canvas before applying fade
                 top_region = canvas.crop((0, 0, width, fade_height))
 
-                # Create a mask identifying magenta (color key) pixels to preserve rounded corners
-                # Magenta = (255, 0, 255) is used as transparency color key
-                top_data = top_region.load()
-                corner_mask = Image.new("L", (width, fade_height), 0)
-                corner_mask_data = corner_mask.load()
-                for py in range(fade_height):
-                    for px in range(width):
-                        r, g, b, a = top_data[px, py]
-                        # Check if pixel is magenta (color key for transparency)
-                        if r == 255 and g == 0 and b == 255:
-                            corner_mask_data[px, py] = 255  # Mark as corner pixel
-
                 # Create a gradient mask that fades from opaque bg at top to transparent at bottom
                 gradient = Image.new("L", (width, fade_height), 0)
                 for fade_y in range(fade_height):
@@ -1838,6 +1841,12 @@ class HeadsUpOverlay:
                         [(0, fade_y), (width, fade_y)], fill=alpha
                     )
 
+                # Limit the gradient to where the panel is already opaque, so it can't
+                # paint over the transparent rounded corners or a semi-transparent
+                # background (bg_opacity) - true alpha replaces the old colorkey mask.
+                dest_alpha = top_region.split()[3]
+                gradient = ImageChops.multiply(gradient, dest_alpha)
+
                 # Create background layer for fade
                 bg_layer = Image.new("RGBA", (width, fade_height), bg + (255,))
 
@@ -1846,13 +1855,6 @@ class HeadsUpOverlay:
 
                 # Composite fade over content
                 faded_top = Image.alpha_composite(top_region, bg_layer)
-
-                # Restore magenta pixels for corners (color key transparency)
-                faded_data = faded_top.load()
-                for py in range(fade_height):
-                    for px in range(width):
-                        if corner_mask_data[px, py] == 255:
-                            faded_data[px, py] = (255, 0, 255, 255)
 
                 canvas.paste(faded_top, (0, 0))
 
@@ -1870,7 +1872,9 @@ class HeadsUpOverlay:
             user32.MoveWindow(hwnd, x, y_pos, width, final_h, True)
 
     def _blit_window(self, name: str, win: Dict):
-        """Blit a window's canvas to its Win32 window."""
+        """Blit a window's canvas to its Win32 window using true per-pixel alpha
+        (UpdateLayeredWindow), so background transparency (bg_opacity) is actually
+        respected on screen instead of being discarded by a plain BitBlt."""
         if win.get("opacity", 0) <= 0:
             return
         if not win.get("canvas_dirty", False):
@@ -1878,10 +1882,9 @@ class HeadsUpOverlay:
 
         canvas = win.get("canvas")
         hwnd = win.get("hwnd")
-        window_dc = win.get("window_dc")
         mem_dc = win.get("mem_dc")
 
-        if not all([canvas, hwnd, window_dc, mem_dc]):
+        if not all([canvas, hwnd, mem_dc]):
             return
 
         w, h = canvas.size
@@ -1924,15 +1927,40 @@ class HeadsUpOverlay:
             return
 
         try:
-            rgba = canvas.tobytes("raw", "BGRA")
-            # Clear the entire DIB buffer first to prevent any ghosting
+            # UpdateLayeredWindow with AC_SRC_ALPHA requires premultiplied alpha:
+            # R/G/B must already be scaled by their own pixel's alpha.
+            r, g, b, a = canvas.split()
+            r = ImageChops.multiply(r, a)
+            g = ImageChops.multiply(g, a)
+            b = ImageChops.multiply(b, a)
+            premultiplied = Image.merge("RGBA", (r, g, b, a))
+
+            rgba = premultiplied.tobytes("raw", "BGRA")
             buffer_size = w * h * 4
-            # Overwrite entire buffer with new content
             ctypes.memmove(dib_bits, rgba, buffer_size)
-            gdi32.BitBlt(window_dc, 0, 0, w, h, mem_dc, 0, 0, SRCCOPY)
+
+            blend = BLENDFUNCTION()
+            blend.BlendOp = AC_SRC_OVER
+            blend.BlendFlags = 0
+            blend.SourceConstantAlpha = max(0, min(255, int(win.get("opacity", 255))))
+            blend.AlphaFormat = AC_SRC_ALPHA
+
+            size = wintypes.SIZE(w, h)
+            src_pos = wintypes.POINT(0, 0)
+
+            ctypes.set_last_error(0)
+            ok = user32.UpdateLayeredWindow(
+                hwnd, None, None, ctypes.byref(size), mem_dc,
+                ctypes.byref(src_pos), 0, ctypes.byref(blend), ULW_ALPHA
+            )
+            if not ok:
+                err = ctypes.get_last_error()
+                self._report_exception(
+                    "blit_window", RuntimeError(f"UpdateLayeredWindow failed, GetLastError={err}")
+                )
             win["canvas_dirty"] = False
         except Exception as e:
-            pass
+            self._report_exception("blit_window", e)
 
     def _hex_to_rgb(self, hex_color: str) -> Tuple[int, int, int]:
         """Parse hex color string to RGB tuple. Supports #RGB, #RRGGBB, #RRGGBBAA formats."""
@@ -2537,6 +2565,7 @@ class HeadsUpOverlay:
         fade_state = win.get("fade_state", 0)
 
         if should_show and fade_state in (0, 3):
+            self._show_window_if_hidden(win)
             win["fade_state"] = 1  # Start fade in
         elif not should_show and fade_state in (1, 2):
             win["fade_state"] = 3  # Start fade out
@@ -2886,6 +2915,7 @@ class HeadsUpOverlay:
                     win["last_render_state"] = None
 
                 if win["fade_state"] != 2:
+                    self._show_window_if_hidden(win)
                     win["fade_state"] = 1
                     # Immediately notify layout manager that this window is now visible
                     window_name = self._get_window_name(self.WINDOW_TYPE_MESSAGE, group)
@@ -2905,6 +2935,7 @@ class HeadsUpOverlay:
                     win["loading_color"] = self._hex_to_rgb(msg["color"])
                 # If showing loader, ensure window is visible
                 if win["is_loading"] and win["fade_state"] in (0, 3):
+                    self._show_window_if_hidden(win)
                     win["fade_state"] = 1
                     # Immediately notify layout manager that this window is now visible
                     window_name = self._get_window_name(self.WINDOW_TYPE_MESSAGE, group)
@@ -3267,6 +3298,7 @@ class HeadsUpOverlay:
 
                     # Show window if auto-hide was triggered
                     if win["fade_state"] == 0 or win["fade_state"] == 3:
+                        self._show_window_if_hidden(win)
                         win["fade_state"] = 1  # fade in
                         win["visible"] = True
                         # Immediately notify layout manager
@@ -3300,6 +3332,7 @@ class HeadsUpOverlay:
                 if chat_name and window_name in self._windows:
                     win = self._windows[window_name]
                     win["visible"] = True
+                    self._show_window_if_hidden(win)
                     win["fade_state"] = 1  # fade in
                     # Immediately notify layout manager
                     self._layout_manager.set_window_visible(window_name, True)
@@ -3326,6 +3359,7 @@ class HeadsUpOverlay:
                     if window_name in self._windows:
                         win = self._windows[window_name]
                         win["hidden"] = False
+                        self._show_window_if_hidden(win)
                         win["fade_state"] = 1  # fade in
                         self._layout_manager.set_window_visible(window_name, True)
                         win["canvas_dirty"] = True
@@ -3473,9 +3507,11 @@ class HeadsUpOverlay:
             None,
         )
         if hwnd:
-            user32.SetLayeredWindowAttributes(
-                hwnd, 0x00FF00FF, 0, LWA_ALPHA | LWA_COLORKEY
-            )
+            # Do NOT call SetLayeredWindowAttributes here: once a window has been
+            # given per-simple-transparency attributes that way, subsequent
+            # UpdateLayeredWindow calls on it fail with ERROR_INVALID_PARAMETER (87).
+            # The window stays undefined/invisible until the first real blit via
+            # UpdateLayeredWindow (in _blit_window) establishes its content.
             user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
             user32.SetWindowPos(
                 hwnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE | SWP_SHOWWINDOW
