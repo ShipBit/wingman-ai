@@ -6,7 +6,7 @@ capabilities and can only change what is safe. The underlying Wingman is private
 security sandbox (skills run in-process with full Python).
 """
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from api.interface import WingmanConfig
@@ -95,6 +95,13 @@ class WingmanContext:
         use a sanctioned capability (ctx.tts.set_voice, ctx.commands.*, ...)."""
         from wingmen.facade import ReadOnlyConfigView
         return ReadOnlyConfigView(self.__wingman.config)
+
+    @property
+    def avatar_path(self) -> Optional[str]:
+        """Local file path to this wingman's avatar image (PNG). Falls back to the
+        default Wingman AI avatar if the user hasn't set a custom one. None if
+        unavailable (e.g. in tests)."""
+        return self.__wingman.get_avatar_path()
 
     @property
     def settings(self) -> "SkillSettings":

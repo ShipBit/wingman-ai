@@ -823,6 +823,29 @@ class Wingman:
     def _is_condensing(self) -> bool:
         return self.condenser.is_condensing
 
+    # ───────────────── Avatar ───────────────── #
+
+    def get_avatar_path(self) -> Optional[str]:
+        """Resolve the local file path to this wingman's avatar image (PNG).
+
+        Falls back to the default Wingman AI avatar template if the user hasn't
+        set a custom one. Returns None if no Tower/ConfigManager is available
+        (e.g. in tests).
+        """
+        if not self.tower or not self.tower.config_manager or not self.tower.config_dir:
+            return None
+        try:
+            return self.tower.config_manager.get_wingman_avatar_path(
+                self.tower.config_dir, self.name
+            )
+        except Exception as e:
+            printr.print(
+                f"Could not resolve avatar path for wingman '{self.name}': {str(e)}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
+            return None
+
     # ───────────────── Context ───────────────── #
 
     async def get_context(self):

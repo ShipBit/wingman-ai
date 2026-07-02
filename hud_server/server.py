@@ -305,7 +305,8 @@ class HudServer:
                 color=request.color,
                 tools=request.tools,
                 props=request.props,
-                duration=request.duration
+                duration=request.duration,
+                title_icon=request.title_icon
             )
             return OperationResponse(status="ok")
 

@@ -91,6 +91,13 @@ custom_properties:
       - label: "Bottom Right"
         value: "bottom_right"
 
+  - id: font_size
+    name: Font Size
+    hint: Text font size in pixels.
+    property_type: number
+    value: 16
+    required: false
+
   - id: chat_x
     name: Chat Window X
     hint: Horizontal offset in pixels from the upper-left corner of the screen. Only used when Chat Window Placement is Manual.
@@ -161,13 +168,6 @@ custom_properties:
     value: 600
     required: false
 
-  - id: font_size
-    name: Font Size
-    hint: Text font size in pixels.
-    property_type: number
-    value: 16
-    required: false
-
   - id: font_family
     name: Font Family
     hint: Font family for HUD text.
@@ -204,6 +204,20 @@ custom_properties:
     hint: Background color of HUD elements (hex format, e.g. #1e212b or #1e212b80 for 50% transparent).
     property_type: color
     value: "#1e212b"
+    required: false
+
+  - id: bg_opacity
+    name: Background Opacity
+    hint: Transparency of just the background box (0 = fully transparent, 100 = fully opaque). Independent of the overall Opacity setting, which also fades text and borders.
+    property_type: slider
+    options:
+      - label: "min"
+        value: 0
+      - label: "max"
+        value: 100
+      - label: "step"
+        value: 1
+    value: 100
     required: false
 
   - id: text_color
