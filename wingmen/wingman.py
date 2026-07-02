@@ -838,7 +838,12 @@ class Wingman:
             return self.tower.config_manager.get_wingman_avatar_path(
                 self.tower.config_dir, self.name
             )
-        except Exception:
+        except Exception as e:
+            printr.print(
+                f"Could not resolve avatar path for wingman '{self.name}': {str(e)}",
+                color=LogType.WARNING,
+                server_only=True,
+            )
             return None
 
     # ───────────────── Context ───────────────── #
