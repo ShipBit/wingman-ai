@@ -86,11 +86,11 @@ class Validator:
             else:
                 validated, note = self.__method_validate(value, **self.__config)
 
-            if validated is None:
-                return None
-
             if note is not None:
                 self.__helper.get_handler_tool().add_note(note)
+
+            if validated is None:
+                return None
 
             validated_values.append(validated)
 
