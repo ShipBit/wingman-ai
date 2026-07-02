@@ -75,30 +75,49 @@ class Item(DataModel):
         }
 
         if self.get_id_parent():
+            # Name only: the parent's own view would drag in all of its offers.
             parent = Item(self.get_id_parent(), load=True)
-            information["parent"] = parent.get_data_for_ai_minimal()
+            information["parent"] = parent.get_name()
 
         if self.get_id_vehicle():
             vehicle = Vehicle(self.get_id_vehicle(), load=True)
-            information["for_vehicle"] = vehicle.get_data_for_ai_minimal()
+            information["for_vehicle"] = str(vehicle)
 
         attributes = {}
         for item_attribute in self.get_attributes():
-            attributes[item_attribute.get_attribute_name()] = f"{str(item_attribute.get_value())}{str(item_attribute.get_unit())}" or "N/A"
+            value = f"{item_attribute.get_value() or ''}{item_attribute.get_unit() or ''}"
+            if value:
+                attributes[item_attribute.get_attribute_name()] = value
         information["attributes"] = attributes
 
-        prices = ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load()
-        offers = []
-        for price in prices:
-            offers.append(price.get_data_for_ai_minimal())
+        offers = self.__get_offer_strings()
         if offers:
             information["offers"] = offers
 
         return information
 
-    def get_data_for_ai_minimal(self) -> dict:
+    def __get_offer_strings(self) -> list[str]:
+        # Many terminals share the same price, so offers are grouped by price
+        # ("Buy for X at: A, B, C") instead of one entry per terminal.
+        from skills.uexcorp.uexcorp import compression
         from skills.uexcorp.uexcorp.data_access.item_price_data_access import ItemPriceDataAccess
 
+        buy_groups = {}
+        sell_groups = {}
+        for price in ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load():
+            if price.get_price_buy():
+                buy_groups.setdefault(price.get_price_buy(), []).append(price.get_terminal_name())
+            if price.get_price_sell():
+                sell_groups.setdefault(price.get_price_sell(), []).append(price.get_terminal_name())
+
+        offers = []
+        for value in sorted(buy_groups):  # cheapest buy first
+            offers.append(f"Buy for {compression.number(value)} at: {', '.join(buy_groups[value])}")
+        for value in sorted(sell_groups, reverse=True):  # best sell first
+            offers.append(f"Sell for {compression.number(value)} at: {', '.join(sell_groups[value])}")
+        return offers
+
+    def get_data_for_ai_minimal(self) -> dict:
         information = {
             "name": self.get_name(),
             "section": self.get_section(),
@@ -114,15 +133,12 @@ class Item(DataModel):
 
         attributes = {}
         for item_attribute in self.get_attributes():
-            value = f"{str(item_attribute.get_value())}{str(item_attribute.get_unit())}"
+            value = f"{item_attribute.get_value() or ''}{item_attribute.get_unit() or ''}"
             if value:
                 attributes[item_attribute.get_attribute_name()] = value
         information["attributes"] = attributes
 
-        prices = ItemPriceDataAccess().add_filter_by_id_item(self.get_id()).load()
-        offers = []
-        for price in prices:
-            offers.append(str(price))
+        offers = self.__get_offer_strings()
         if offers:
             information["offers"] = offers
 

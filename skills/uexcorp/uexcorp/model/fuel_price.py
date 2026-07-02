@@ -45,15 +45,13 @@ class FuelPrice(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp.uexcorp.model.commodity import Commodity
         from skills.uexcorp.uexcorp.model.terminal import Terminal
 
-        commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
         return {
-            "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
-            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
+            "commodity": self.get_commodity_name(),
+            "terminal": terminal.get_ai_location_string() if terminal else self.get_terminal_name(),
             "price_buy_from_terminal": self.get_price_buy(),
             "price_buy_from_terminal_avg": self.get_price_buy_avg(),
         }

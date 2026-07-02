@@ -176,13 +176,15 @@ class ToolHandler:
             if self.__helper.get_handler_config().is_tool_enabled(tool_name):
                 tool_prompts.append(f"- {tool.TOOL_NAME}: {tool.get_prompt()}")
             else:
-                tool_prompts.append(f"- (DISABLED BY USER) {tool.TOOL_NAME}: {tool.get_prompt()}")
+                # No full prompt for disabled tools - it would cost tokens on
+                # every request for a function the LLM must not use anyway.
+                tool_prompts.append(f"- {tool.TOOL_NAME}: DISABLED BY USER")
 
         if not tool_prompts:
             return ""
 
         prompt = "=== Start of \"Available uex function descriptions\" ===\n"
-        prompt += "Note on uex function responses: to save space, any field that is unknown, empty or not applicable is omitted from the response. A missing field therefore means \"unknown / not available\", not zero.\n"
+        prompt += "Note on uex function responses: to save space, any field that is unknown, empty or not applicable is omitted from the response. A missing field therefore means \"unknown / not available\", not zero. All prices and profits are in aUEC, all margins and inventory statuses in percent.\n"
         prompt += "\n".join(tool_prompts)
         prompt += "\n=== End of \"Available uex function descriptions\" ==="
         return prompt

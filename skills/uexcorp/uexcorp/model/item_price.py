@@ -41,26 +41,38 @@ class ItemPrice(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp.uexcorp.model.item import Item
         from skills.uexcorp.uexcorp.model.terminal import Terminal
 
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
-        item = Item(self.get_id_item(), load=True) if self.get_id_item() else None
 
         return {
-            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
-            "item": item.get_data_for_ai_minimal() if item else None,
+            "terminal": terminal.get_ai_location_string() if terminal else self.get_terminal_name(),
+            "item": self.get_item_name(),
             "price_buy_from_terminal": self.get_price_buy(),
             "price_sell": self.get_price_sell(),
         }
 
-    def get_data_for_ai_minimal(self) -> dict:
-        return {
-            "terminal": self.get_terminal_name(),
-            "item_name": self.get_item_name(),
-            "price_buy_from_terminal": self.get_price_buy(),
-            "price_sell": self.get_price_sell(),
-        }
+    def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_item_information: bool = True) -> dict:
+        information = {}
+        if show_item_information:
+            information["item_name"] = self.get_item_name()
+        if show_terminal_information:
+            information["terminal"] = self.get_terminal_name()
+        # A price of 0 means "no buy/sell option here", not a free item.
+        if self.get_price_buy():
+            information["price_buy_from_terminal"] = self.get_price_buy()
+        if self.get_price_sell():
+            information["price_sell"] = self.get_price_sell()
+        return information
+
+    def get_ai_string(self, show_item: bool = True) -> str:
+        parts = []
+        if self.get_price_buy():
+            parts.append(f"buy for {self.get_price_buy()}")
+        if self.get_price_sell():
+            parts.append(f"sell for {self.get_price_sell()}")
+        prefix = f"{self.get_item_name()} at" if show_item else "At"
+        return f"{prefix} {self.get_terminal_name()}: {', '.join(parts)}"
 
     def get_id(self) -> int:
         return self.data["id"]
@@ -102,4 +114,4 @@ class ItemPrice(DataModel):
         return self.data["terminal_name"]
 
     def __str__(self):
-        return f"{self.data['item_name']} at {self.data['terminal_name']}: Buy from for {self.data['price_buy']}, Sell to for {self.data['price_sell']}"
+        return self.get_ai_string()

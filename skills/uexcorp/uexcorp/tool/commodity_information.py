@@ -242,7 +242,7 @@ class CommodityInformation(Tool):
         }
 
     def get_description(self) -> str:
-        return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage."
+        return "Gives back information about commodities. Preferable over uex_get_trade_routes if looking into buy or sell actions specifically and not a route. filter_commodities overwrites all other filters."
 
     def get_prompt(self) -> str:
         return "Get all information's about all commodities, filterable. When asked for drop off (sell) or pick up (buy) locations, prefer this over uex_get_trade_routes. filter_commodities overwrites all other filters. Important: Must includes for buy/sell options are: Terminal location, Price AND terminal status percentage and description (e.g., Out of Stock, Full Inventory). Inventory status percentage: for buy options a higher percentage means more stock available; for sell options a lower percentage means higher demand. If users gives specific buy or sell price and asks for profit margin, always use uex_calculate_profit function afterwards to calculate correct profit with user values."

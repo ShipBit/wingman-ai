@@ -25,14 +25,15 @@ class ProfitCalculation(Tool):
         ]) or buy_price < 0 or sell_price < 0 or quantity < 0:
             return "buy_price and sell_price is needed. As at least one is missing, try to get the value from other uex-functions first and then call this tool again.", ""
 
+        # Units (aUEC / %) are documented once in the tool help prompt.
         data = {
-            "buy_price": f"{buy_price} aUEC", # 1000
-            "sell_price": f"{sell_price} aUEC", # 2000
+            "buy_price": buy_price, # 1000
+            "sell_price": sell_price, # 2000
             "quantity": quantity, # 5
-            "profit": f"{(sell_price - buy_price)} aUEC", # 1000
-            "profit_total": f"{(sell_price - buy_price) * quantity} aUEC", # 5000
-            "base_profit": f"{round(((sell_price / buy_price) -1 ) * 100, 2)}%", # 100%
-            "profit_margin": f"{round(((sell_price - buy_price) / sell_price) * 100, 2)}%", # 50%
+            "profit": sell_price - buy_price, # 1000
+            "profit_total": (sell_price - buy_price) * quantity, # 5000
+            "base_profit_percent": round(((sell_price / buy_price) - 1) * 100, 2), # 100
+            "profit_margin_percent": round(((sell_price - buy_price) / sell_price) * 100, 2), # 50
         }
         return compression.dumps(data), ""
 

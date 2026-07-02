@@ -65,19 +65,17 @@ class CommodityPrice(DataModel):
             self.load_by_value("id", self.data["id"])
 
     def get_data_for_ai(self) -> dict:
-        from skills.uexcorp.uexcorp.model.commodity import Commodity
         from skills.uexcorp.uexcorp.model.terminal import Terminal
         from skills.uexcorp.uexcorp.model.commodity_status import CommodityStatus
 
-        commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
         terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
         commodity_status_buy = CommodityStatus(self.get_status_buy(), True, load=True) if self.get_status_buy() else None
         commodity_status_sell = CommodityStatus(self.get_status_sell(), False, load=True) if self.get_status_sell() else None
 
         return {
-            "commodity": commodity.get_data_for_ai_minimal() if commodity else None,
-            "terminal": terminal.get_data_for_ai_minimal() if terminal else None,
+            "commodity": self.get_commodity_name(),
+            "terminal": terminal.get_ai_location_string() if terminal else self.get_terminal_name(),
             "price_buy_from_terminal": self.get_price_buy(),
             "price_sell_to_terminal": self.get_price_sell(),
             "status_buy": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
@@ -89,12 +87,8 @@ class CommodityPrice(DataModel):
         }
 
     def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_commodity_information: bool = True) -> dict:
-        from skills.uexcorp.uexcorp.model.commodity import Commodity
         from skills.uexcorp.uexcorp.model.terminal import Terminal
         from skills.uexcorp.uexcorp.model.commodity_status import CommodityStatus
-
-        commodity = Commodity(self.get_id_commodity(), load=True) if self.get_id_commodity() else None
-        terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
 
         commodity_status_buy = CommodityStatus(self.get_status_buy(), True, load=True) if self.get_status_buy() else None
         commodity_status_sell = CommodityStatus(self.get_status_sell(), False, load=True) if self.get_status_sell() else None
@@ -102,10 +96,13 @@ class CommodityPrice(DataModel):
         information = {}
 
         if show_commodity_information:
-            information["commodity"] = commodity.get_data_for_ai_minimal() if commodity else None
+            # Name only: embedding the full commodity view here would drag in
+            # that commodity's buy/sell options at every other terminal.
+            information["commodity"] = self.get_commodity_name()
 
         if show_terminal_information:
-            information["terminal"] = terminal.get_data_for_ai_tiny() if terminal else None
+            terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
+            information["terminal"] = terminal.get_ai_location_string() if terminal else self.get_terminal_name()
 
         if self.get_price_buy():
             information.update({
@@ -198,8 +195,13 @@ class CommodityPrice(DataModel):
     def get_terminal_slug(self) -> str | None:
         return self.data["terminal_slug"]
 
-    def __str__(self):
+    def get_ai_string(self, show_commodity: bool = True) -> str:
+        # show_commodity=False when embedded under the commodity itself, so the
+        # name is not repeated in every option line.
+        commodity = f" {self.get_commodity_name()}" if show_commodity else ""
         if self.get_price_sell():
-            return f"Sell {self.get_commodity_name()} to {self.get_terminal_name()} for {self.get_price_sell()}"
-        else:
-            return f"Buy {self.get_commodity_name()} from {self.get_terminal_name()} for {self.get_price_buy()}"
+            return f"Sell{commodity} to {self.get_terminal_name()} for {self.get_price_sell()}"
+        return f"Buy{commodity} from {self.get_terminal_name()} for {self.get_price_buy()}"
+
+    def __str__(self):
+        return self.get_ai_string()
