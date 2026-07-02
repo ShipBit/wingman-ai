@@ -187,7 +187,8 @@ class ToolHandler:
             return ""
 
         prompt = "=== UEX functions ===\n"
-        prompt += "Note on uex function responses: omitted fields mean \"unknown / not available\", not zero. Prices and profits are in aUEC, margins and inventory statuses in percent.\n"
+        prompt += "Note on uex function responses: omitted fields mean \"unknown / not available\", not zero. Prices and profits are in aUEC, margins and inventory statuses in percent. A response may start with a \"keys\" object mapping shortened keys to full field names for the \"data\" part.\n"
+        prompt += "Trade direction - every buy/sell field is from the PLAYER's perspective: buy_* = the player buys FROM the terminal, sell_* = the player sells TO the terminal. In answers, never present the terminal as the actor (no 'terminal X buys/sells') - phrase it as 'you can buy <commodity> at <terminal> for <buy price>' / 'you can sell <commodity> at <terminal> for <sell price>'. Buy options report the terminal's stock (more stock = better to buy), sell options report the terminal's demand (more demand = better to sell); relay these statuses as given.\n"
         prompt += "\n".join(tool_prompts)
         prompt += "\n=== End of UEX functions ==="
         return prompt

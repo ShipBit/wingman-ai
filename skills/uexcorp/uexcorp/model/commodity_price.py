@@ -76,14 +76,14 @@ class CommodityPrice(DataModel):
         return {
             "commodity": self.get_commodity_name(),
             "terminal": terminal.get_ai_location_string() if terminal else self.get_terminal_name(),
-            "price_buy_from_terminal": self.get_price_buy(),
-            "price_sell_to_terminal": self.get_price_sell(),
-            "status_buy": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
-            "status_sell": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
-            "scu_buy": self.get_scu_buy(),
-            "scu_buy_avg": self.get_scu_buy_avg(),
-            "scu_sell_stock": self.get_scu_sell_stock(),
-            "scu_sell_stock_avg": self.get_scu_sell_stock_avg(),
+            "buy_price_from_terminal": self.get_price_buy(),
+            "sell_price_to_terminal": self.get_price_sell(),
+            "buy_status": commodity_status_buy.get_data_for_ai_minimal() if commodity_status_buy else None,
+            "sell_status": commodity_status_sell.get_data_for_ai_minimal() if commodity_status_sell else None,
+            "buy_stock_in_scu": self.get_scu_buy(),
+            "buy_stock_in_scu_avg": self.get_scu_buy_avg(),
+            "sell_demand_in_scu": self.get_scu_sell_stock(),
+            "sell_demand_in_scu_avg": self.get_scu_sell_stock_avg(),
         }
 
     def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_commodity_information: bool = True) -> dict:

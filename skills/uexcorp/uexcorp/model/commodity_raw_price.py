@@ -51,7 +51,7 @@ class CommodityRawPrice(DataModel):
         return {
             "commodity": self.get_commodity_name(),
             "terminal": terminal.get_ai_location_string() if terminal else self.get_terminal_name(),
-            "price_sell_to_terminal": self.get_price_sell(),
+            "sell_price_to_terminal": self.get_price_sell(),
         }
 
     def get_data_for_ai_minimal(self, show_terminal_information: bool = True, show_commodity_information: bool = True) -> dict:
@@ -66,7 +66,7 @@ class CommodityRawPrice(DataModel):
             terminal = Terminal(self.get_id_terminal(), load=True) if self.get_id_terminal() else None
             information["terminal"] = terminal.get_ai_location_string() if terminal else self.get_terminal_name()
 
-        information["price_sell_to_terminal"] = self.get_price_sell()
+        information["sell_price_to_terminal"] = self.get_price_sell()
 
         return information
 
