@@ -1382,6 +1382,7 @@ The reference below lists every member, one line each. Gotchas (cap, interrupt, 
 | Member | Description |
 | --- | --- |
 | `.name` | This wingman's name (`str`). |
+| `.avatar_path` | **Read-only** local file path to this wingman's avatar image (PNG, `str`). Falls back to the default Wingman AI avatar if the user hasn't set a custom one; `None` if unavailable. |
 | `.config` | **Read-only** live view of the wingman config. Reads pass through to live values; any write raises `FacadeError`. Change things through a capability (`tts.set_voice`, `commands.*`, `audio.set_output_device`). |
 | `.settings` | **Read-only** view of app settings. Writing raises `FacadeError`; change devices via `audio.set_output_device(...)`. |
 | `.run_in_thread(fn, *args)` | Run a blocking callable off the event loop (args spread **positionally**). If `fn` is a coroutine function it's run in a fresh event loop. |
@@ -1998,6 +1999,7 @@ class GameStatsTracker(Skill):
 ```python
 self.wingman.config                    # Wingman configuration (read-only)
 self.wingman.name                      # Wingman name
+self.wingman.avatar_path               # Path to the wingman's avatar PNG (or None)
 await self.wingman.ai.generate(...)    # Main-model side-call (capped)
 await self.wingman.ai.generate_image(prompt)  # Generate image
 self.wingman.audio.is_playing          # Is the wingman speaking?
