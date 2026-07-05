@@ -23,15 +23,17 @@ from api.enums import (
 
 class WingmanConfigFileInfo(BaseModel):
     name: str
-    """"The "friendly" name of this config used to display in the UI/Terminal without prefixes or file extension.
+    """"The name of this config used to display in the UI/Terminal, without file extension.
 
     Examples: Board Computer"""
     file: str
-    """The actual name of the file in the file system. May include meta prefixes and always includes file extension.
+    """The actual name of the file in the file system (name + file extension).
 
-    Examples: Board Computer.yaml or .Board Computer.yaml"""
+    Examples: Board Computer.yaml"""
     is_deleted: bool
-    """Whether this file is logically deleted."""
+    """Deprecated - always False. Deleted wingman configs no longer exist in the
+    file system; deletion state is tracked in configs/.context.yaml.
+    Kept for API client compatibility."""
 
     avatar: Annotated[str, Base64Str]
     """The avatar of the wingman or the default avatar if none is set. Encoded as base64 string."""
@@ -39,18 +41,21 @@ class WingmanConfigFileInfo(BaseModel):
 
 class ConfigDirInfo(BaseModel):
     name: str
-    """"The "friendly" name of this config used to display in the UI/Terminal.
+    """"The name of this config used to display in the UI/Terminal.
 
     Examples: Star Citizen
     """
     directory: str
-    """The actual name of the directory in the file system. May include meta prefixes.
+    """The actual name of the directory in the file system. Always equals name.
 
-    Examples: Star Citizen or _Star Citizen or .Star Citizen"""
+    Kept separate for API client compatibility."""
     is_default: bool
-    """Whether this config is the default config that is used on launch."""
+    """Whether this config is the default config that is used on launch
+    (as tracked in configs/.context.yaml)."""
     is_deleted: bool
-    """Whether this directory is logically deleted."""
+    """Deprecated - always False. Deleted config dirs no longer exist in the
+    file system; deletion state is tracked in configs/.context.yaml.
+    Kept for API client compatibility."""
     # TODO: icon(?)
 
 

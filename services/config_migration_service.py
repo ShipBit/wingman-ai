@@ -8,8 +8,7 @@ from api.enums import LogType
 from api.interface import NestedConfig, SettingsConfig
 from services.config_manager import (
     CONFIGS_DIR,
-    DEFAULT_PREFIX,
-    DELETED_PREFIX,
+    CONTEXT_FILE,
     ConfigManager,
 )
 from services.file import get_users_dir, get_custom_skills_dir, get_audio_library_dir
@@ -20,6 +19,12 @@ from services.system_manager import SystemManager
 
 MIGRATION_LOG = ".migration"
 MINIMUM_SUPPORTED_VERSION = "1_7_0"  # Versions older than this require a fresh start
+
+# Legacy (pre-3.1.4) directory/file name prefixes that encoded config state.
+# Only used to interpret OLD version directories during migration.
+# Since 3.1.4, this state lives in configs/.context.yaml instead.
+LEGACY_DELETED_PREFIX = "."
+LEGACY_DEFAULT_PREFIX = "_"
 
 
 class ConfigMigrationService:
@@ -190,32 +195,6 @@ class ConfigMigrationService:
                 f"No migration path found from {old_version} to {new_version}"
             )
 
-    def find_previous_version(self, users_dir, current_version):
-        versions = self.get_valid_versions(users_dir)
-        versions.sort(key=lambda v: [int(n) for n in v.split("_")])
-        index = versions.index(current_version)
-        return versions[index - 1] if index > 0 else None
-
-    def get_valid_versions(self, users_dir):
-        versions = next(os.walk(users_dir))[1]
-        return [
-            v
-            for v in versions
-            if self.is_valid_version(v) and not self.is_version_too_old(v)
-        ]
-
-    def find_latest_user_version(self, users_dir):
-        valid_versions = self.get_valid_versions(users_dir)
-        return max(
-            valid_versions,
-            default=None,
-            key=lambda v: [int(n) for n in v.split("_")],
-        )
-
-    def is_valid_version(self, version):
-        """Check if a version exists in the migration chain."""
-        return any(version in migration[:2] for migration in self.migrations)
-
     def is_version_too_old(self, version):
         """Check if a version is older than the minimum supported version."""
         version_parts = [int(n) for n in version.split("_")]
@@ -262,54 +241,6 @@ class ConfigMigrationService:
         with open(migration_file, "w") as f:
             f.write(f"Fresh install - Version {self.latest_version}\n")
         self.log("- migration marker created")
-
-    def reset_to_fresh_configs(self):
-        """Copy fresh configs from templates to the latest version directory.
-
-        Note: Skills are NO LONGER copied here. Built-in skills are loaded directly
-        from the bundled location. Custom skills persist in the non-versioned
-        custom_skills/ directory.
-        """
-        try:
-            configs_template = path.join(self.templates_dir, "configs")
-
-            latest_dir = path.join(self.users_dir, self.latest_version)
-
-            # Remove existing latest version directory contents, but preserve 'logs' directory
-            # because the log file may be locked by the logging system
-            if path.exists(latest_dir):
-                for item in os.listdir(latest_dir):
-                    item_path = path.join(latest_dir, item)
-                    if item == "logs":
-                        # Skip logs directory - it may contain open log files
-                        self.log("Preserving logs directory during reset")
-                        continue
-                    if path.isdir(item_path):
-                        shutil.rmtree(item_path)
-                    else:
-                        os.remove(item_path)
-                self.log(
-                    f"Cleared existing {self.latest_version} directory (preserved logs)"
-                )
-
-            # Create the latest version directory
-            os.makedirs(latest_dir, exist_ok=True)
-
-            # Copy configs only (skills are now loaded from bundled location)
-            if path.exists(configs_template):
-                shutil.copytree(configs_template, path.join(latest_dir, CONFIGS_DIR))
-                self.log("Copied fresh configs from templates")
-
-            # Create migration log
-            migration_file = path.join(latest_dir, CONFIGS_DIR, MIGRATION_LOG)
-            with open(migration_file, "w", encoding="UTF-8") as stream:
-                stream.write(self.log_message)
-
-            self.log_highlight("Fresh configs installed successfully!")
-
-        except Exception as e:
-            self.err(f"Failed to reset to fresh configs: {str(e)}")
-            raise
 
     def migrate_audio_library(self) -> None:
         """Migrate audio library from versioned location to non-versioned location.
@@ -621,7 +552,7 @@ class ConfigMigrationService:
             path.join(
                 self.templates_dir,
                 "configs",
-                "_Star Citizen",
+                "Star Citizen",
                 f"{wingman_name}.template.yaml",
             ),
             path.join(
@@ -714,15 +645,17 @@ class ConfigMigrationService:
         self.log_message += f"{message}\n"
 
     def normalize_config_name(self, config_name: str) -> str:
-        """Remove DEFAULT_PREFIX and DELETED_PREFIX from config name for comparison.
+        """Remove the legacy state prefixes from a config name for comparison.
 
-        This allows us to detect when '_Star Citizen' and 'Star Citizen' are the same config.
+        This allows us to detect that '_Star Citizen', '.Star Citizen' (and
+        corrupted combinations like '_.Star Citizen') all mean 'Star Citizen'.
         """
         normalized = config_name
-        if normalized.startswith(DELETED_PREFIX):
-            normalized = normalized[len(DELETED_PREFIX) :]
-        if normalized.startswith(DEFAULT_PREFIX):
-            normalized = normalized[len(DEFAULT_PREFIX) :]
+        while normalized and (
+            normalized.startswith(LEGACY_DELETED_PREFIX)
+            or normalized.startswith(LEGACY_DEFAULT_PREFIX)
+        ):
+            normalized = normalized[1:]
         return normalized
 
     def remove_duplicate_template_configs(
@@ -741,12 +674,16 @@ class ConfigMigrationService:
         if not path.exists(old_config_path) or not path.exists(new_config_path):
             return
 
-        # Get normalized config names from old version
+        # Get normalized config names from old version.
+        # Legacy-deleted dirs ('.Star Citizen') are included on purpose: the user
+        # had that config (deleted), so the fresh template must not survive either.
         old_config_normalized = set()
         for item in os.listdir(old_config_path):
             item_path = path.join(old_config_path, item)
-            if path.isdir(item_path) and not item.startswith("."):
+            if path.isdir(item_path):
                 normalized = self.normalize_config_name(item)
+                if not normalized:
+                    continue
                 old_config_normalized.add(normalized)
                 self.log(
                     f"Old config found for duplicate check: {item} (normalized: {normalized})"
@@ -793,13 +730,17 @@ class ConfigMigrationService:
         if not path.exists(path.join(users_dir, new_version)):
             os.makedirs(new_config_path, exist_ok=True)
 
-            # Build set of normalized old config names for deduplication
+            # Build set of normalized old config names for deduplication.
+            # Includes legacy-deleted dirs ('.Star Citizen') so their templates
+            # are not recreated in the new version either.
             old_config_normalized = set()
             if path.exists(old_config_path):
                 for item in os.listdir(old_config_path):
                     item_path = path.join(old_config_path, item)
-                    if path.isdir(item_path) and not item.startswith("."):
+                    if path.isdir(item_path):
                         normalized = self.normalize_config_name(item)
+                        if not normalized:
+                            continue
                         old_config_normalized.add(normalized)
                         self.log(
                             f"Old config found: {item} (normalized: {normalized})"
@@ -929,6 +870,13 @@ class ConfigMigrationService:
                 # when missing and optionally transform it via migrate_mcp.
                 elif filename == "mcp.yaml":
                     continue
+                # Config context state (introduced in 3.1.4): copy verbatim
+                elif filename == CONTEXT_FILE:
+                    self.copy_file(old_file, new_file)
+                    if new_config_path == self.latest_config_path:
+                        self.config_manager.context_state = (
+                            self.config_manager.load_context_state()
+                        )
                 # Wingmen
                 elif filename.endswith(".yaml"):
                     # Templates are not Wingman configs and may not validate.
@@ -953,23 +901,6 @@ class ConfigMigrationService:
                         )
                         # save it
                         self.config_manager.write_config(new_file, wingman_diff)
-
-                        # The old file was logically deleted and a new one exists that isn't yet
-                        new_base_file = path.join(
-                            root.replace(old_config_path, new_config_path),
-                            filename.replace(DELETED_PREFIX, "", 1),
-                        )
-                        if filename.startswith(DELETED_PREFIX) and path.exists(
-                            new_base_file
-                        ):
-                            os.remove(new_base_file)
-
-                            avatar = new_base_file.replace(".yaml", ".png")
-                            if path.exists(avatar):
-                                os.remove(avatar)
-                            self.log(
-                                f"Logically deleting Wingman {filename} like in the previous version"
-                            )
                     except FileNotFoundError as e:
                         # Likely a custom skill that doesn't have templates
                         error_str = str(e)
@@ -998,31 +929,6 @@ class ConfigMigrationService:
                         continue
                 else:
                     self.copy_file(old_file, new_file)
-
-        # Handle directory deletions after processing all files
-        for root, _dirs, _files in walk(old_config_path):
-            # the old dir was logically deleted and a new one exists that isn't yet
-            new_base_dir = root.replace(old_config_path, new_config_path).replace(
-                DELETED_PREFIX, "", 1
-            )
-            new_undeleted_default_dir = root.replace(
-                old_config_path, new_config_path
-            ).replace(DELETED_PREFIX, DEFAULT_PREFIX, 1)
-
-            target_dir = (
-                new_undeleted_default_dir
-                if path.exists(new_undeleted_default_dir)
-                else new_base_dir if path.exists(new_base_dir) else None
-            )
-            if (
-                target_dir
-                and os.path.basename(root).startswith(DELETED_PREFIX)
-                and path.exists(target_dir)
-            ):
-                shutil.rmtree(target_dir)
-                self.log(
-                    f"Logically deleting config {root} like in the previous version"
-                )
 
         # Handle case where secrets.yaml doesn't exist in old version but we need to create it
         if migrate_secrets:

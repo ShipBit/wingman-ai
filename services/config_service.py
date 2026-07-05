@@ -564,14 +564,8 @@ class ConfigService:
 
             # 4. Remove skill from ALL wingman configs across ALL config dirs
             for config_dir in self.config_manager.get_config_dirs():
-                if config_dir.is_deleted:
-                    continue
-
                 wingman_files = self.config_manager.get_wingmen_configs(config_dir)
                 for wingman_file in wingman_files:
-                    if wingman_file.is_deleted:
-                        continue
-
                     try:
                         wingman_config = self.config_manager.load_wingman_config(
                             config_dir=config_dir, wingman_file=wingman_file
@@ -1587,9 +1581,6 @@ class ConfigService:
         made_changes = False
 
         for wingman_config_file in wingman_config_files:
-            if wingman_config_file.is_deleted:
-                continue
-
             wingman_config = config.wingmen[wingman_config_file.name]
 
             if wingman_config_file.name == wingman_name:
