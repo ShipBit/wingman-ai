@@ -10,6 +10,26 @@ from typing import TYPE_CHECKING, Callable
 if TYPE_CHECKING:
     from services.config_migration_service import ConfigMigrationService
 
+# Legacy (pre-3.1.4) directory/file name prefixes that encoded config state.
+# Only used to interpret OLD version directories during migration.
+# Since 3.1.4, this state lives in configs/context.yaml instead.
+LEGACY_DELETED_PREFIX = "."
+LEGACY_DEFAULT_PREFIX = "_"
+
+
+def strip_legacy_prefixes(name: str) -> str:
+    """Remove the legacy state prefixes from a config name.
+
+    This allows us to detect that '_Star Citizen', '.Star Citizen' (and
+    corrupted combinations like '_.Star Citizen') all mean 'Star Citizen'.
+    """
+    while name and (
+        name.startswith(LEGACY_DELETED_PREFIX)
+        or name.startswith(LEGACY_DEFAULT_PREFIX)
+    ):
+        name = name[1:]
+    return name
+
 
 def log_step(step_name: str):
     """Decorator to log migration step execution.

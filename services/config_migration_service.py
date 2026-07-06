@@ -13,18 +13,13 @@ from services.config_manager import (
 )
 from services.file import get_users_dir, get_custom_skills_dir, get_audio_library_dir
 from services.migrations import discover_migrations
+from services.migrations.base_migration import strip_legacy_prefixes
 from services.printr import Printr
 from services.secret_keeper import SecretKeeper
 from services.system_manager import SystemManager
 
 MIGRATION_LOG = ".migration"
 MINIMUM_SUPPORTED_VERSION = "1_7_0"  # Versions older than this require a fresh start
-
-# Legacy (pre-3.1.4) directory/file name prefixes that encoded config state.
-# Only used to interpret OLD version directories during migration.
-# Since 3.1.4, this state lives in configs/context.yaml instead.
-LEGACY_DELETED_PREFIX = "."
-LEGACY_DEFAULT_PREFIX = "_"
 
 
 class ConfigMigrationService:
@@ -189,6 +184,16 @@ class ConfigMigrationService:
             # Instantiate and execute the migration
             migration = migration_class(self)
             migration.execute()
+
+            # Mark the step as completed only after execute() has fully run
+            # (incl. post-migrate hooks) so a crash mid-step causes a re-run
+            # on next launch instead of leaving the version half-migrated.
+            with open(
+                path.join(self.users_dir, new_version, CONFIGS_DIR, MIGRATION_LOG),
+                "w",
+                encoding="UTF-8",
+            ) as stream:
+                stream.write(self.log_message)
         else:
             self.err(f"No migration path found from {old_version} to {new_version}")
             raise ValueError(
@@ -645,18 +650,8 @@ class ConfigMigrationService:
         self.log_message += f"{message}\n"
 
     def normalize_config_name(self, config_name: str) -> str:
-        """Remove the legacy state prefixes from a config name for comparison.
-
-        This allows us to detect that '_Star Citizen', '.Star Citizen' (and
-        corrupted combinations like '_.Star Citizen') all mean 'Star Citizen'.
-        """
-        normalized = config_name
-        while normalized and (
-            normalized.startswith(LEGACY_DELETED_PREFIX)
-            or normalized.startswith(LEGACY_DEFAULT_PREFIX)
-        ):
-            normalized = normalized[1:]
-        return normalized
+        """Remove the legacy state prefixes from a config name for comparison."""
+        return strip_legacy_prefixes(config_name)
 
     def remove_duplicate_template_configs(
         self, old_version: str, new_version: str
@@ -1011,8 +1006,8 @@ class ConfigMigrationService:
             server_only=True,
         )
         self.log_message += f"{success_message}\n"
-
-        with open(
-            path.join(new_config_path, MIGRATION_LOG), "w", encoding="UTF-8"
-        ) as stream:
-            stream.write(self.log_message)
+        # NOTE: the .migration marker is deliberately NOT written here.
+        # perform_migration() writes it after the whole step - including
+        # post-migrate hooks like the 3.1.4 context state conversion - has
+        # completed, so a crash mid-step leads to a re-run instead of a
+        # permanently half-migrated version directory.
