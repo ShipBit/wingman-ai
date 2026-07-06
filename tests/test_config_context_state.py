@@ -117,6 +117,70 @@ def test_recreating_deleted_config_clears_tombstone(users_dir, boot_config_manag
     assert wingmen
 
 
+def test_manually_deleted_default_dir_falls_back_to_first(
+    users_dir, boot_config_manager
+):
+    """User deletes the default config dir in the file system (not via API):
+    the first existing config becomes the default and the state self-heals."""
+    import shutil
+
+    cm = boot_config_manager()
+    shutil.rmtree(path.join(cm.config_dir, "Star Citizen"))
+
+    default = cm.find_default_config()
+    assert default.name == "General"
+    assert cm.context_state.default_config == "General"
+
+    # No tombstone was set (the app didn't delete it), so a restart restores
+    # the template - the documented self-heal story for broken configs.
+    boot_config_manager()
+    assert config_names(users_dir) == ["General", "Star Citizen"]
+
+
+def test_manually_edited_default_to_unknown_name(boot_config_manager):
+    """User edits .context.yaml and sets default_config to a nonexistent name."""
+    cm = boot_config_manager()
+    cm.context_state.default_config = "Does Not Exist"
+    cm.save_context_state()
+
+    cm2 = boot_config_manager()
+    default = cm2.find_default_config()
+    assert default.name == "General"  # first existing dir (sorted)
+    assert cm2.context_state.default_config == "General"
+
+
+def test_manually_removed_tombstone_resurrects_template(
+    users_dir, boot_config_manager
+):
+    """User removes an entry from deleted_template_configs in .context.yaml:
+    the template is recreated on next start (= manual un-delete)."""
+    cm = boot_config_manager()
+    cm.delete_config(cm.get_config_dir("Star Citizen"))
+    assert config_names(users_dir) == ["General"]
+
+    cm.context_state.deleted_template_configs = []
+    cm.save_context_state()
+
+    boot_config_manager()
+    assert config_names(users_dir) == ["General", "Star Citizen"]
+
+
+def test_corrupt_context_file_does_not_crash(users_dir, boot_config_manager):
+    """A broken .context.yaml must not crash the app - it falls back to
+    defaults in memory without overwriting the file."""
+    cm = boot_config_manager()
+    with open(cm.context_state_path, "w", encoding="UTF-8") as f:
+        f.write("default_config: [this, is, not, a, string]\n")
+
+    cm2 = boot_config_manager()
+    assert cm2.context_state.default_config == "Star Citizen"
+    assert cm2.find_default_config().name == "Star Citizen"
+
+    # the broken file was preserved for the user to inspect/fix
+    with open(cm2.context_state_path, "r", encoding="UTF-8") as f:
+        assert "[this, is, not, a, string]" in f.read()
+
+
 def test_deleting_everything_self_heals(users_dir, boot_config_manager):
     cm = boot_config_manager()
     cm.delete_config(cm.get_config_dir("Star Citizen"))
