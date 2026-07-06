@@ -496,6 +496,9 @@ class AudioPlayer:
 
             self.raw_stream = stream
             self.is_playing = True
+            # stop_playback() reports "finished" with self.wingman_name, so it
+            # must track the raw-stream playback too, not just start_playback().
+            self.wingman_name = wingman_name
             await self.notify_playback_started(wingman_name)
 
             if config.play_beep:
