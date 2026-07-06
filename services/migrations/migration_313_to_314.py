@@ -1,19 +1,19 @@
 """Migration from version 3.1.3 to 3.1.4.
 
-Converts the legacy config state encoding into configs/.context.yaml:
+Converts the legacy config state encoding into configs/context.yaml:
 
 - Legacy encoded the default config as a "_" directory name prefix and
   logically deleted configs/wingmen as a "." prefix. Names and state constantly
   drifted apart, causing duplicated or resurrected configs on every restart or
   migration for years.
 - Now directory/file names are immutable identity and all state (default
-  config, deletion tombstones) lives in configs/.context.yaml.
+  config, deletion tombstones) lives in configs/context.yaml.
 
 Conversion rules (conservative - never deletes user data):
 - '.Star Citizen' (logically deleted): records a deletion tombstone and moves
   the directory to APPDATA/WingmanAI/archived_configs/ instead of deleting it.
 - '_Star Citizen' (default): renamed to 'Star Citizen' and recorded as the
-  default config in .context.yaml.
+  default config in context.yaml.
 - '_Star Citizen' AND 'Star Citizen' both present (the legacy duplication bug):
   both are kept; the prefixed one is renamed to 'Star Citizen (2)' etc. so the
   user can decide which one to delete - in a UI that works now.
@@ -35,7 +35,7 @@ ARCHIVE_SUBDIR = path.join("archived_configs", "pre_3_1_4")
 
 
 class Migration313To314(BaseMigration):
-    """Migration from 3.1.3 to 3.1.4: legacy prefix state -> .context.yaml."""
+    """Migration from 3.1.3 to 3.1.4: legacy prefix state -> context.yaml."""
 
     old_version = "3_1_3"
     new_version = "3_1_4"
@@ -49,12 +49,12 @@ class Migration313To314(BaseMigration):
     # Conversion
 
     def convert_to_context_state(self) -> None:
-        """Translate legacy prefix-encoded state into configs/.context.yaml."""
+        """Translate legacy prefix-encoded state into configs/context.yaml."""
         configs_path = self.service.latest_config_path
         config_manager = self.config_manager
         state = config_manager.context_state
 
-        self.log_highlight("Converting legacy config state to .context.yaml...")
+        self.log_highlight("Converting legacy config state to context.yaml...")
 
         # Start from a clean slate - the state file was created with defaults
         # by the ConfigManager on startup before this migration ran.

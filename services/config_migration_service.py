@@ -22,7 +22,7 @@ MINIMUM_SUPPORTED_VERSION = "1_7_0"  # Versions older than this require a fresh 
 
 # Legacy (pre-3.1.4) directory/file name prefixes that encoded config state.
 # Only used to interpret OLD version directories during migration.
-# Since 3.1.4, this state lives in configs/.context.yaml instead.
+# Since 3.1.4, this state lives in configs/context.yaml instead.
 LEGACY_DELETED_PREFIX = "."
 LEGACY_DEFAULT_PREFIX = "_"
 

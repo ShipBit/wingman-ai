@@ -37,7 +37,7 @@ SECRETS_FILE = "secrets.yaml"
 DEFAULT_WINGMAN_AVATAR = "default-wingman-avatar.png"
 DEFAULT_SKILLS_CONFIG = "default_config.yaml"
 
-CONTEXT_FILE = ".context.yaml"
+CONTEXT_FILE = "context.yaml"
 SHIPPED_DEFAULT_CONFIG = "Star Citizen"
 
 
@@ -45,7 +45,7 @@ _WINGMAN_NAME_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9 -]*$")
 
 
 class ConfigContextState(BaseModel):
-    """State of the user's config directories, stored in configs/.context.yaml.
+    """State of the user's config directories, stored in configs/context.yaml.
 
     Historically this state was encoded in directory/file name prefixes
     ("_" = default, "." = logically deleted), which caused sync bugs whenever
@@ -171,7 +171,7 @@ class ConfigManager:
             + "\n".join(lines)
         )
 
-    # Context state (configs/.context.yaml):
+    # Context state (configs/context.yaml):
 
     def load_context_state(self) -> ConfigContextState:
         """Load the config context state, creating it with defaults if missing."""
@@ -331,7 +331,7 @@ class ConfigManager:
         """Copy templates to the user's config directory.
 
         Config directories and wingman files that the user deleted (tracked in
-        configs/.context.yaml) are not recreated unless force is True.
+        configs/context.yaml) are not recreated unless force is True.
 
         Note: Skills are NOT copied from templates. Built-in skills are loaded
         directly from the bundled location (_internal/skills/ in release).

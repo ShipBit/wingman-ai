@@ -32,7 +32,7 @@ class WingmanConfigFileInfo(BaseModel):
     Examples: Board Computer.yaml"""
     is_deleted: bool
     """Deprecated - always False. Deleted wingman configs no longer exist in the
-    file system; deletion state is tracked in configs/.context.yaml.
+    file system; deletion state is tracked in configs/context.yaml.
     Kept for API client compatibility."""
 
     avatar: Annotated[str, Base64Str]
@@ -51,10 +51,10 @@ class ConfigDirInfo(BaseModel):
     Kept separate for API client compatibility."""
     is_default: bool
     """Whether this config is the default config that is used on launch
-    (as tracked in configs/.context.yaml)."""
+    (as tracked in configs/context.yaml)."""
     is_deleted: bool
     """Deprecated - always False. Deleted config dirs no longer exist in the
-    file system; deletion state is tracked in configs/.context.yaml.
+    file system; deletion state is tracked in configs/context.yaml.
     Kept for API client compatibility."""
     # TODO: icon(?)
 
