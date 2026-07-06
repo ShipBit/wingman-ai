@@ -1,7 +1,7 @@
 import base64
 from enum import Enum
 import json
-from os import makedirs, path, remove, walk
+from os import makedirs, path, remove, replace, walk
 import copy
 import shutil
 import re
@@ -174,16 +174,23 @@ class ConfigManager:
     # Context state (configs/context.yaml):
 
     def load_context_state(self) -> ConfigContextState:
-        """Load the config context state, creating it with defaults if missing."""
+        """Load the config context state, creating it with defaults if missing.
+
+        A broken state file is preserved as '<file>.broken' for inspection and
+        replaced with defaults, so the file on disk always matches the state
+        the app actually runs with.
+        """
         if not path.exists(self.context_state_path):
             state = ConfigContextState()
             self.write_config(self.context_state_path, state)
             return state
 
         parsed = self.read_config(self.context_state_path)
-        if parsed:
+        if parsed is not None:
             try:
-                return ConfigContextState(**parsed)
+                # model_validate (unlike **-unpacking) also rejects non-mapping
+                # YAML like a list or a plain string with a ValidationError.
+                return ConfigContextState.model_validate(parsed)
             except ValidationError as e:
                 self.printr.print(
                     f"Invalid context state '{self.context_state_path}', falling back to defaults:\n{str(e)}",
@@ -192,8 +199,28 @@ class ConfigManager:
                     source=LogSource.SYSTEM,
                     source_name=self.log_source_name,
                 )
-        # Don't overwrite a broken file with defaults - the user might want to fix it.
-        return ConfigContextState()
+
+        state = ConfigContextState()
+        try:
+            broken_path = f"{self.context_state_path}.broken"
+            replace(self.context_state_path, broken_path)
+            self.write_config(self.context_state_path, state)
+            self.printr.print(
+                f"Preserved the broken context state as '{broken_path}' and started over with defaults.",
+                color=LogType.WARNING,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+        except OSError as e:
+            self.printr.print(
+                f"Could not quarantine the broken context state '{self.context_state_path}':\n{str(e)}",
+                color=LogType.ERROR,
+                server_only=True,
+                source=LogSource.SYSTEM,
+                source_name=self.log_source_name,
+            )
+        return state
 
     def save_context_state(self) -> bool:
         return self.write_config(self.context_state_path, self.context_state)
@@ -201,10 +228,11 @@ class ConfigManager:
     def is_template_config_deleted(self, config_name: str) -> bool:
         return config_name in self.context_state.deleted_template_configs
 
-    def mark_template_config_deleted(self, config_name: str):
+    def mark_template_config_deleted(self, config_name: str, save: bool = True):
         if config_name not in self.context_state.deleted_template_configs:
             self.context_state.deleted_template_configs.append(config_name)
-            self.save_context_state()
+            if save:
+                self.save_context_state()
 
     def unmark_template_config_deleted(self, config_name: str):
         """Clear the deletion tombstone (and stale wingman tombstones) of a template config."""
@@ -258,6 +286,14 @@ class ConfigManager:
             self.copy_templates()
             config_dirs = self.get_config_dirs()
 
+        if not config_dirs:
+            # copy_templates() produced nothing - the installation is broken.
+            raise FileNotFoundError(
+                f"No Wingman configs found in '{self.config_dir}' and the shipped "
+                f"templates could not be restored from '{self.templates_dir}'. "
+                "Please reinstall Wingman AI."
+            )
+
         for config_dir in config_dirs:
             if config_dir.is_default:
                 return config_dir
@@ -276,7 +312,29 @@ class ConfigManager:
         fallback.is_default = True
         return fallback
 
+    def validate_config_dir_name(self, config_name: str) -> Optional[str]:
+        """Returns an error message if the given config directory name is invalid.
+
+        Directory names are identity (state lives in the context state), so
+        hidden/prefixed names and path separators must never reach the disk:
+        '.'-prefixed directories are invisible to get_config_dirs().
+        """
+        if not config_name or not config_name.strip():
+            return "The config name must not be empty."
+        if config_name.startswith(".") or config_name.startswith("_"):
+            return "The config name must not start with '.' or '_'."
+        if "/" in config_name or "\\" in config_name:
+            return "The config name must not contain path separators."
+        return None
+
     def create_config(self, config_name: str, template: Optional[ConfigDirInfo] = None):
+        name_error = self.validate_config_dir_name(config_name)
+        if name_error:
+            self.printr.toast_error(
+                f"Unable to create config '{config_name}'. {name_error}"
+            )
+            raise ValueError(name_error)
+
         new_dir = get_writable_dir(path.join(self.config_dir, config_name))
 
         if template:
@@ -289,8 +347,12 @@ class ConfigManager:
                         shutil.copyfile(path.join(root, filename), target)
                         self._stamp_created_with_version(target)
 
-        # The user explicitly (re)created this config, so clear any deletion tombstone.
-        self.unmark_template_config_deleted(config_name)
+        # Only an explicit re-creation from its own template clears the deletion
+        # tombstone. A config that merely shares a template's name (created empty
+        # or from another template) keeps it, so copy_templates() won't inject
+        # the template's wingmen into it on the next launch.
+        if template and template.name == config_name:
+            self.unmark_template_config_deleted(config_name)
 
         return ConfigDirInfo(
             name=config_name,
@@ -300,6 +362,13 @@ class ConfigManager:
         )
 
     def duplicate_config(self, source_config_dir: ConfigDirInfo, new_name: str) -> ConfigDirInfo:
+        name_error = self.validate_config_dir_name(new_name)
+        if name_error:
+            self.printr.toast_error(
+                f"Unable to duplicate '{source_config_dir.name}' as '{new_name}'. {name_error}"
+            )
+            raise ValueError(name_error)
+
         source_path = path.join(self.config_dir, source_config_dir.directory)
         if not path.isdir(source_path):
             raise FileNotFoundError(
@@ -312,8 +381,9 @@ class ConfigManager:
 
         shutil.copytree(source_path, dest_path)
 
-        # The user explicitly created a config under this name, so clear any tombstone.
-        self.unmark_template_config_deleted(new_name)
+        # NOTE: a deletion tombstone on new_name is deliberately kept - the
+        # duplicate is not the template config, so the template's wingmen must
+        # not be topped up into it by copy_templates() on the next launch.
 
         return ConfigDirInfo(
             name=new_name,
@@ -415,28 +485,25 @@ class ConfigManager:
 
     def get_config_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config dirs."""
-        return [
-            ConfigDirInfo(
-                directory=name,
-                name=name,
-                is_default=name == self.context_state.default_config,
-                is_deleted=False,
-            )
-            for name in self.__get_dir_names(self.config_dir)
-        ]
+        return self.__get_dirs_info(
+            self.config_dir, default_name=self.context_state.default_config
+        )
 
     def get_config_template_dirs(self) -> list[ConfigDirInfo]:
         """Gets all config template dirs."""
+        return self.__get_dirs_info(path.join(self.templates_dir, CONFIGS_DIR))
+
+    def __get_dirs_info(
+        self, configs_path: str, default_name: Optional[str] = None
+    ) -> list[ConfigDirInfo]:
         return [
             ConfigDirInfo(
                 directory=name,
                 name=name,
-                is_default=False,
+                is_default=name == default_name,
                 is_deleted=False,
             )
-            for name in self.__get_dir_names(
-                path.join(self.templates_dir, CONFIGS_DIR)
-            )
+            for name in self.__get_dir_names(configs_path)
         ]
 
     def has_template_config(self, config_name: str) -> bool:
@@ -562,9 +629,10 @@ class ConfigManager:
                 source_name=self.log_source_name,
             )
             return None
-        if new_name.startswith(".") or new_name.startswith("_"):
+        name_error = self.validate_config_dir_name(new_name)
+        if name_error:
             self.printr.toast_error(
-                f"Unable to rename '{config_dir.name}' to '{new_name}'. The name must not start with '.' or '_'."
+                f"Unable to rename '{config_dir.name}' to '{new_name}'. {name_error}"
             )
             return None
 
@@ -579,14 +647,20 @@ class ConfigManager:
 
         shutil.move(old_path, new_path)
 
-        # Prevent the template with the old name from being recreated on next launch
-        # and clear any tombstone on the new name (the user explicitly wants it).
+        # Prevent the template with the old name from being recreated on next
+        # launch. A tombstone on the new name is deliberately kept - the renamed
+        # config is not the template config, so the template's wingmen must not
+        # be topped up into it by copy_templates().
+        state_changed = False
         if self.has_template_config(config_dir.name):
-            self.mark_template_config_deleted(config_dir.name)
-        self.unmark_template_config_deleted(new_name)
+            self.mark_template_config_deleted(config_dir.name, save=False)
+            state_changed = True
 
         if self.context_state.default_config == config_dir.name:
             self.context_state.default_config = new_name
+            state_changed = True
+
+        if state_changed:
             self.save_context_state()
 
         self.printr.print(
@@ -1286,12 +1360,13 @@ class ConfigManager:
     def __get_dir_names(self, configs_path: str) -> list[str]:
         """List config directory names, sorted for deterministic order.
 
-        Dot-directories are skipped (hidden/legacy leftovers).
+        Dot-directories are skipped (hidden/legacy leftovers). A missing
+        configs_path yields an empty list instead of an error.
         """
         return sorted(
             (
                 name
-                for name in next(walk(configs_path))[1]
+                for name in next(walk(configs_path), (None, [], None))[1]
                 if not name.startswith(".")
             ),
             key=str.casefold,

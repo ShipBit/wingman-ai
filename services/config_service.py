@@ -1090,9 +1090,12 @@ class ConfigService:
     async def create_config(
         self, config_name: str, template: Optional[ConfigDirInfo] = None
     ):
-        new_dir = self.config_manager.create_config(
-            config_name=config_name, template=template
-        )
+        try:
+            new_dir = self.config_manager.create_config(
+                config_name=config_name, template=template
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         await self.load_config(new_dir)
 
     # POST config/duplicate
@@ -1102,6 +1105,8 @@ class ConfigService:
                 source_config_dir=request.source_config_dir,
                 new_name=request.new_name,
             )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail=str(e)) from e
         except FileExistsError as e:
