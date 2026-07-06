@@ -1041,10 +1041,14 @@ class Wingman:
                         error.error_type
                         != WingmanInitializationErrorType.MISSING_SECRET
                     ):
-                        # Roll back config on all services (validate() already
-                        # recreated the providers, so rebind them too)
+                        # Roll back config on all services. validate() already
+                        # recreated the providers from the failed config, so
+                        # rebinding _config isn't enough — the adapter instances
+                        # themselves (e.g. a switched TTS provider) must be
+                        # rebuilt from the old config too.
                         self.config = old_config
                         self._propagate_config(old_config)
+                        await self.validate()
                         return False
 
             return True
