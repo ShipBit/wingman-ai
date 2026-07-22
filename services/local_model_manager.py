@@ -1,8 +1,11 @@
 import asyncio
 import os
 import platform
+import shutil
 import stat
 import tarfile
+import threading
+import time
 import zipfile
 from os import path
 from typing import Optional
@@ -14,6 +17,19 @@ from api.interface import LlamaCppSettings
 from services.printr import Printr
 
 printr = Printr()
+
+# Retry policy for all downloads in this module — transient network failures
+# (blips, resets, mid-download aborts) must not leave the user without local AI.
+MAX_DOWNLOAD_ATTEMPTS = 3
+RETRY_BASE_DELAY_SECONDS = 2
+
+
+def _is_retryable_download_error(error: Exception) -> bool:
+    """Whether a download error is transient. 4xx (except 429) never heals on retry."""
+    status = getattr(getattr(error, "response", None), "status_code", None)
+    if status is not None and 400 <= status < 500 and status != 429:
+        return False
+    return True
 
 # Available support models — keyed by GGUF filename
 SUPPORT_MODELS: dict[str, dict] = {
@@ -89,6 +105,10 @@ class LocalModelManager:
         self.models_dir = self._get_models_dir()
         self._downloading = False
         self._download_progress: dict = {}  # {file, pct, downloaded_mb, total_mb}
+        # Serializes llama-server binary installs: download_models (executor)
+        # and _ensure_binary from load_support_model (another thread) can race
+        # for the same backend and must not extract into the same dir at once.
+        self._server_download_lock = threading.Lock()
 
     @staticmethod
     def _get_models_dir() -> str:
@@ -134,14 +154,35 @@ class LocalModelManager:
         repo = model_def["repo"]
         filename = model_def["filename"]
         target_path = path.join(self.models_dir, filename)
+        expected_size_mb = model_def.get("expected_size_mb")
 
         if path.exists(target_path):
-            printr.print(
-                f"Model already exists: {filename}",
-                color=LogType.INFO,
-                server_only=True,
-            )
-            return True
+            # Guard against a truncated file left behind by an earlier failed
+            # run: it would block re-downloading forever and only surface later
+            # as a cryptic llama-server startup failure.
+            actual_mb = os.path.getsize(target_path) // (1024 * 1024)
+            if expected_size_mb and actual_mb < expected_size_mb * 0.9:
+                printr.print(
+                    f"Existing model file looks incomplete ({actual_mb} MB, expected ~{expected_size_mb} MB) — re-downloading {filename}...",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                try:
+                    os.remove(target_path)
+                except OSError as e:
+                    printr.print(
+                        f"Could not remove incomplete model file {target_path}: {e}",
+                        color=LogType.ERROR,
+                        server_only=True,
+                    )
+                    return False
+            else:
+                printr.print(
+                    f"Model already exists: {filename}",
+                    color=LogType.INFO,
+                    server_only=True,
+                )
+                return True
 
         url = f"https://huggingface.co/{repo}/resolve/main/{filename}"
         temp_path = target_path + ".part"
@@ -152,73 +193,92 @@ class LocalModelManager:
             server_only=True,
         )
 
-        try:
-            response = requests.get(url, stream=True, timeout=30)
-            response.raise_for_status()
+        delay = RETRY_BASE_DELAY_SECONDS
+        last_error: Optional[Exception] = None
+        for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
+            try:
+                response = requests.get(url, stream=True, timeout=30)
+                response.raise_for_status()
 
-            total_size = int(response.headers.get("content-length", 0))
-            downloaded = 0
-            last_logged_pct = -10
-            last_callback_pct = -2
-            total_mb = total_size // (1024 * 1024) if total_size > 0 else 0
-            self._download_progress = {
-                "file": filename,
-                "pct": 0,
-                "downloaded_mb": 0,
-                "total_mb": total_mb,
-            }
+                total_size = int(response.headers.get("content-length", 0))
+                downloaded = 0
+                last_logged_pct = -10
+                last_callback_pct = -2
+                total_mb = total_size // (1024 * 1024) if total_size > 0 else 0
+                self._download_progress = {
+                    "file": filename,
+                    "pct": 0,
+                    "downloaded_mb": 0,
+                    "total_mb": total_mb,
+                }
 
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
-                    f.write(chunk)
-                    downloaded += len(chunk)
-                    if total_size > 0:
-                        pct = int(downloaded / total_size * 100)
-                        downloaded_mb = downloaded // (1024 * 1024)
-                        self._download_progress = {
-                            "file": filename,
-                            "pct": pct,
-                            "downloaded_mb": downloaded_mb,
-                            "total_mb": total_mb,
-                        }
-                        if pct - last_logged_pct >= 10:
-                            printr.print(
-                                f"  {filename}: {pct}% ({downloaded_mb} MB / {total_mb} MB)",
-                                color=LogType.INFO,
-                                server_only=True,
-                            )
-                            last_logged_pct = pct
-                        if on_progress and pct - last_callback_pct >= 2:
-                            on_progress(filename, pct, downloaded_mb, total_mb)
-                            last_callback_pct = pct
+                with open(temp_path, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8 * 1024 * 1024):
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        if total_size > 0:
+                            pct = int(downloaded / total_size * 100)
+                            downloaded_mb = downloaded // (1024 * 1024)
+                            self._download_progress = {
+                                "file": filename,
+                                "pct": pct,
+                                "downloaded_mb": downloaded_mb,
+                                "total_mb": total_mb,
+                            }
+                            if pct - last_logged_pct >= 10:
+                                printr.print(
+                                    f"  {filename}: {pct}% ({downloaded_mb} MB / {total_mb} MB)",
+                                    color=LogType.INFO,
+                                    server_only=True,
+                                )
+                                last_logged_pct = pct
+                            if on_progress and pct - last_callback_pct >= 2:
+                                on_progress(filename, pct, downloaded_mb, total_mb)
+                                last_callback_pct = pct
 
-            # Rename temp to final
-            if path.exists(target_path):
-                os.remove(target_path)
-            os.rename(temp_path, target_path)
+                # Never promote a truncated body to the final filename.
+                if downloaded == 0 or (total_size > 0 and downloaded != total_size):
+                    raise IOError(
+                        f"Incomplete download: got {downloaded} of {total_size} bytes"
+                    )
 
-            self._download_progress = {}
-            printr.print(
-                f"Download complete: {filename}",
-                color=LogType.INFO,
-                server_only=True,
-            )
-            return True
+                # Atomic rename: readers either see the old state or the
+                # complete new file, never a partial one.
+                os.replace(temp_path, target_path)
 
-        except Exception as e:
-            self._download_progress = {}
-            printr.print(
-                f"Failed to download {filename}: {e}",
-                color=LogType.ERROR,
-                server_only=True,
-            )
-            # Clean up partial download
-            if path.exists(temp_path):
-                try:
-                    os.remove(temp_path)
-                except OSError:
-                    pass
-            return False
+                self._download_progress = {}
+                printr.print(
+                    f"Download complete: {filename}",
+                    color=LogType.INFO,
+                    server_only=True,
+                )
+                return True
+
+            except Exception as e:
+                last_error = e
+                # Clean up partial download
+                if path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+                if not _is_retryable_download_error(e) or attempt >= MAX_DOWNLOAD_ATTEMPTS:
+                    break
+                printr.print(
+                    f"Download of {filename} failed (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {e} — retrying in {delay}s...",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                time.sleep(delay)
+                delay *= 2
+
+        self._download_progress = {}
+        printr.print(
+            f"Failed to download {filename}: {last_error}",
+            color=LogType.ERROR,
+            server_only=True,
+        )
+        return False
 
     async def download_models(
         self, cuda_available: bool = False, on_progress: callable = None
@@ -435,83 +495,141 @@ class LocalModelManager:
     def _download_llama_server(self, backend: Optional[str] = None) -> bool:
         """Download and extract the llama-server binary for a specific backend."""
         bk = backend or self._get_active_backend()
-        if self.llama_server_available(bk):
-            return True
+        with self._server_download_lock:
+            # Re-check inside the lock: another thread may have finished the
+            # install while we were waiting.
+            if self.llama_server_available(bk):
+                return True
 
-        asset_name = self._get_platform_asset_name(bk)
-        if not asset_name:
-            printr.print(
-                f"No llama-server binary available for {platform.system()} {platform.machine()} ({bk})",
-                color=LogType.ERROR,
-                server_only=True,
-            )
-            return False
-
-        url = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_SERVER_VERSION}/{asset_name}"
-        server_dir = self.get_llama_server_dir(bk)
-        temp_path = path.join(self.models_dir, asset_name + ".part")
-
-        printr.print(
-            f"Downloading llama-server {LLAMA_SERVER_VERSION} ({bk}) for {platform.system()} {platform.machine()}...",
-            color=LogType.INFO,
-            server_only=True,
-        )
-
-        try:
-            self._download_and_extract(
-                url, temp_path, server_dir, f"llama-server ({bk})"
-            )
-
-            # CUDA backend on Windows also needs the CUDA runtime DLLs
-            if bk == "cuda" and platform.system() == "Windows":
-                cudart_url = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_SERVER_VERSION}/{LLAMA_SERVER_CUDA_RUNTIME}"
-                cudart_temp = path.join(
-                    self.models_dir, LLAMA_SERVER_CUDA_RUNTIME + ".part"
-                )
+            asset_name = self._get_platform_asset_name(bk)
+            if not asset_name:
                 printr.print(
-                    "Downloading CUDA runtime libraries...",
-                    color=LogType.INFO,
+                    f"No llama-server binary available for {platform.system()} {platform.machine()} ({bk})",
+                    color=LogType.ERROR,
                     server_only=True,
                 )
-                self._download_and_extract(
-                    cudart_url, cudart_temp, server_dir, "CUDA runtime"
-                )
+                return False
 
-            # Make binary executable on Unix
-            binary_path = self.get_llama_server_path(bk)
-            if platform.system() != "Windows" and path.exists(binary_path):
-                os.chmod(
-                    binary_path,
-                    os.stat(binary_path).st_mode
-                    | stat.S_IEXEC
-                    | stat.S_IXGRP
-                    | stat.S_IXOTH,
-                )
+            url = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_SERVER_VERSION}/{asset_name}"
+            server_dir = self.get_llama_server_dir(bk)
+            # Stage into a sibling dir and swap it in only once everything
+            # (binary + CUDA runtime DLLs) is extracted — a failure or crash
+            # mid-way can't leave a half-installed server_dir that
+            # llama_server_available() mistakes for a working install.
+            staging_dir = server_dir + ".staging"
+            temp_path = path.join(self.models_dir, asset_name + ".part")
 
             printr.print(
-                f"llama-server {LLAMA_SERVER_VERSION} ({bk}) ready.",
+                f"Downloading llama-server {LLAMA_SERVER_VERSION} ({bk}) for {platform.system()} {platform.machine()}...",
                 color=LogType.INFO,
                 server_only=True,
             )
-            return True
 
-        except Exception as e:
-            printr.print(
-                f"Failed to download llama-server ({bk}): {e}",
-                color=LogType.ERROR,
-                server_only=True,
-            )
+            try:
+                if path.isdir(staging_dir):
+                    shutil.rmtree(staging_dir)
+
+                self._download_and_extract(
+                    url, temp_path, staging_dir, f"llama-server ({bk})"
+                )
+
+                # CUDA backend on Windows also needs the CUDA runtime DLLs
+                if bk == "cuda" and platform.system() == "Windows":
+                    cudart_url = f"https://github.com/ggml-org/llama.cpp/releases/download/{LLAMA_SERVER_VERSION}/{LLAMA_SERVER_CUDA_RUNTIME}"
+                    cudart_temp = path.join(
+                        self.models_dir, LLAMA_SERVER_CUDA_RUNTIME + ".part"
+                    )
+                    printr.print(
+                        "Downloading CUDA runtime libraries...",
+                        color=LogType.INFO,
+                        server_only=True,
+                    )
+                    self._download_and_extract(
+                        cudart_url, cudart_temp, staging_dir, "CUDA runtime"
+                    )
+
+                # Everything extracted — swap the staged install into place.
+                if path.isdir(server_dir):
+                    shutil.rmtree(server_dir)
+                os.rename(staging_dir, server_dir)
+
+                # Make binary executable on Unix
+                binary_path = self.get_llama_server_path(bk)
+                if platform.system() != "Windows" and path.exists(binary_path):
+                    os.chmod(
+                        binary_path,
+                        os.stat(binary_path).st_mode
+                        | stat.S_IEXEC
+                        | stat.S_IXGRP
+                        | stat.S_IXOTH,
+                    )
+
+                printr.print(
+                    f"llama-server {LLAMA_SERVER_VERSION} ({bk}) ready.",
+                    color=LogType.INFO,
+                    server_only=True,
+                )
+                return True
+
+            except Exception as e:
+                printr.print(
+                    f"Failed to download llama-server ({bk}): {e}",
+                    color=LogType.ERROR,
+                    server_only=True,
+                )
+                if path.isdir(staging_dir):
+                    try:
+                        shutil.rmtree(staging_dir)
+                    except OSError:
+                        pass
+                return False
+
+    def _download_and_extract(
+        self, url: str, temp_path: str, target_dir: str, label: str
+    ):
+        """Download a file (with retries) and extract it into target_dir."""
+        delay = RETRY_BASE_DELAY_SECONDS
+        for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
+            try:
+                self._stream_download_archive(url, temp_path, label)
+                break
+            except Exception as e:
+                if path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+                if (
+                    not _is_retryable_download_error(e)
+                    or attempt >= MAX_DOWNLOAD_ATTEMPTS
+                ):
+                    raise
+                printr.print(
+                    f"Download of {label} failed (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {e} — retrying in {delay}s...",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                time.sleep(delay)
+                delay *= 2
+
+        try:
+            # Extract archive
+            os.makedirs(target_dir, exist_ok=True)
+            archive_name = temp_path.removesuffix(".part")
+            if archive_name.endswith(".tar.gz"):
+                self._safe_extract_tar(temp_path, target_dir)
+            elif archive_name.endswith(".zip"):
+                self._safe_extract_zip(temp_path, target_dir)
+        finally:
+            # Clean up archive (also on a failed extraction — it's corrupt then)
             if path.exists(temp_path):
                 try:
                     os.remove(temp_path)
                 except OSError:
                     pass
-            return False
 
-    def _download_and_extract(
-        self, url: str, temp_path: str, target_dir: str, label: str
-    ):
-        """Download a file and extract it into target_dir."""
+    def _stream_download_archive(self, url: str, temp_path: str, label: str):
+        """Stream a single archive download to temp_path with size validation."""
         response = requests.get(url, stream=True, timeout=30, allow_redirects=True)
         response.raise_for_status()
 
@@ -546,16 +664,11 @@ class LocalModelManager:
                         )
                         last_logged_pct = pct
 
-        # Extract archive
-        os.makedirs(target_dir, exist_ok=True)
-        archive_name = temp_path.removesuffix(".part")
-        if archive_name.endswith(".tar.gz"):
-            self._safe_extract_tar(temp_path, target_dir)
-        elif archive_name.endswith(".zip"):
-            self._safe_extract_zip(temp_path, target_dir)
-
-        # Clean up archive
-        os.remove(temp_path)
+        # Never extract a truncated archive.
+        if downloaded == 0 or (total_size > 0 and downloaded != total_size):
+            raise IOError(
+                f"Incomplete download: got {downloaded} of {total_size} bytes"
+            )
 
     def download_llama_server_sync(self, backend: Optional[str] = None) -> bool:
         """Synchronous wrapper for downloading a llama-server binary."""

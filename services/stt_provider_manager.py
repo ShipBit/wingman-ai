@@ -89,6 +89,10 @@ class SttProviderManager:
         self.app_root_path = app_root_path
         self.printr = Printr()
         self.active_provider: VoiceActivationSttProvider | None = None
+        # Serializes initialize/switch_provider: a settings-triggered switch
+        # must not race the startup init (or another switch) into downloading
+        # and loading the same model twice concurrently.
+        self._init_lock = asyncio.Lock()
 
     async def initialize(
         self,
@@ -99,23 +103,24 @@ class SttProviderManager:
         Args:
             on_status: Async callback (message, progress_or_none) for UI updates.
         """
-        va_settings = self.settings_service.settings.voice_activation
-        provider = va_settings.stt_provider
+        async with self._init_lock:
+            va_settings = self.settings_service.settings.voice_activation
+            provider = va_settings.stt_provider
 
-        # Check if this is a local provider that needs download + init
-        if provider == VoiceActivationSttProvider.PARAKEET and va_settings.parakeet.run_locally:
-            await self._initialize_parakeet(on_status)
-        elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
-            await self._initialize_fasterwhisper(on_status)
-        else:
-            # Remote/cloud provider — nothing to download or init
-            self.printr.print(
-                f"STT provider '{provider.value}' is remote/cloud — skipping local init.",
-                server_only=True,
-                color=LogType.INFO,
-            )
+            # Check if this is a local provider that needs download + init
+            if provider == VoiceActivationSttProvider.PARAKEET and va_settings.parakeet.run_locally:
+                await self._initialize_parakeet(on_status)
+            elif provider == VoiceActivationSttProvider.FASTER_WHISPER:
+                await self._initialize_fasterwhisper(on_status)
+            else:
+                # Remote/cloud provider — nothing to download or init
+                self.printr.print(
+                    f"STT provider '{provider.value}' is remote/cloud — skipping local init.",
+                    server_only=True,
+                    color=LogType.INFO,
+                )
 
-        self.active_provider = provider
+            self.active_provider = provider
 
     async def _initialize_parakeet(
         self,
@@ -231,22 +236,23 @@ class SttProviderManager:
         triggered switches can surface download progress via the same
         LOADING_CONFIG indicator used at startup.
         """
-        old_provider = self.active_provider
+        async with self._init_lock:
+            old_provider = self.active_provider
 
-        # Unload current provider
-        if old_provider == VoiceActivationSttProvider.PARAKEET:
-            self.parakeet.unload()
-        elif old_provider == VoiceActivationSttProvider.FASTER_WHISPER:
-            self.fasterwhisper.unload()
+            # Unload current provider
+            if old_provider == VoiceActivationSttProvider.PARAKEET:
+                self.parakeet.unload()
+            elif old_provider == VoiceActivationSttProvider.FASTER_WHISPER:
+                self.fasterwhisper.unload()
 
-        # Initialize new provider
-        va_settings = self.settings_service.settings.voice_activation
-        if new_provider == VoiceActivationSttProvider.PARAKEET and va_settings.parakeet.run_locally:
-            await self._initialize_parakeet(on_status)
-        elif new_provider == VoiceActivationSttProvider.FASTER_WHISPER:
-            await self._initialize_fasterwhisper(on_status)
+            # Initialize new provider
+            va_settings = self.settings_service.settings.voice_activation
+            if new_provider == VoiceActivationSttProvider.PARAKEET and va_settings.parakeet.run_locally:
+                await self._initialize_parakeet(on_status)
+            elif new_provider == VoiceActivationSttProvider.FASTER_WHISPER:
+                await self._initialize_fasterwhisper(on_status)
 
-        self.active_provider = new_provider
+            self.active_provider = new_provider
 
     async def _health_check_parakeet(self):
         """Run a quick transcription test on the loaded Parakeet model."""

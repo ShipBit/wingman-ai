@@ -899,7 +899,12 @@ class WingmanCore(WebSocketUser):
                     )
                 await asyncio.sleep(0.5)
 
-            await download_task
+            if not await download_task:
+                self.printr.toast_error(
+                    "Could not download the Local AI models. "
+                    "Please check your internet connection and retry the download "
+                    "in Settings > Local AI, or restart Wingman AI."
+                )
 
         if llama_settings.run_locally and self.local_model_manager.models_available():
             await self.set_core_state(

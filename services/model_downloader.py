@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 from os import path
 from typing import Callable, Optional
 
@@ -9,6 +10,12 @@ from api.enums import LogType
 from services.printr import Printr
 
 printr = Printr()
+
+# Transient network failures (blips, resets, mid-download aborts) were the most
+# frequent failure source in the field — always retry with backoff before
+# surfacing an error.
+MAX_DOWNLOAD_ATTEMPTS = 3
+RETRY_BASE_DELAY_SECONDS = 2
 
 
 class ModelDownloader:
@@ -79,21 +86,61 @@ class ModelDownloader:
             server_only=True,
         )
 
+        # snapshot_download retries and resumes individual files internally, but
+        # its initial repo-info call and unlucky streaks still fail on flaky
+        # connections — retry the whole snapshot (completed files are skipped,
+        # partial files resume, so retries are cheap).
+        delay = RETRY_BASE_DELAY_SECONDS
+        last_error: Optional[Exception] = None
+        for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
+            try:
+                result_path = await loop.run_in_executor(None, _download)
+                printr.print(
+                    f"Download complete: {repo_id}",
+                    color=LogType.POSITIVE,
+                    server_only=True,
+                )
+                return result_path
+            except Exception as e:
+                last_error = e
+                if not self._is_retryable(e) or attempt >= MAX_DOWNLOAD_ATTEMPTS:
+                    break
+                printr.print(
+                    f"Download of {repo_id} failed (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {e} — retrying in {delay}s...",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                await asyncio.sleep(delay)
+                delay *= 2
+
+        printr.print(
+            f"Failed to download {repo_id}: {last_error}",
+            color=LogType.ERROR,
+            server_only=True,
+        )
+        raise last_error
+
+    @staticmethod
+    def _is_retryable(error: Exception) -> bool:
+        """Whether a download error is transient. Auth/gating/404 never heal on retry."""
         try:
-            result_path = await loop.run_in_executor(None, _download)
-            printr.print(
-                f"Download complete: {repo_id}",
-                color=LogType.POSITIVE,
-                server_only=True,
+            from huggingface_hub.errors import (
+                GatedRepoError,
+                RepositoryNotFoundError,
+                RevisionNotFoundError,
             )
-            return result_path
-        except Exception as e:
-            printr.print(
-                f"Failed to download {repo_id}: {e}",
-                color=LogType.ERROR,
-                server_only=True,
-            )
-            raise
+
+            if isinstance(
+                error,
+                (GatedRepoError, RepositoryNotFoundError, RevisionNotFoundError),
+            ):
+                return False
+        except ImportError:
+            pass
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        if status is not None and 400 <= status < 500 and status != 429:
+            return False
+        return True
 
     async def download_file(
         self,
@@ -127,7 +174,10 @@ class ModelDownloader:
         loop = asyncio.get_event_loop()
 
         def _download():
-            temp_path = target_path + ".part"
+            # Unique temp name: if two triggers race the same file, they never
+            # interleave writes into the same .part; the atomic replace below
+            # makes the last writer win with a complete file either way.
+            temp_path = f"{target_path}.{os.getpid()}-{threading.get_ident()}.part"
             try:
                 response = requests.get(url, stream=True, timeout=30)
                 response.raise_for_status()
@@ -148,9 +198,13 @@ class ModelDownloader:
                                 on_progress(filename, pct, downloaded_mb, total_mb)
                                 last_callback_pct = pct
 
-                if path.exists(target_path):
-                    os.remove(target_path)
-                os.rename(temp_path, target_path)
+                # Never promote a truncated body to the final filename.
+                if downloaded == 0 or (total_size > 0 and downloaded != total_size):
+                    raise IOError(
+                        f"Incomplete download: got {downloaded} of {total_size} bytes"
+                    )
+
+                os.replace(temp_path, target_path)
                 return target_path
 
             except Exception:
@@ -167,18 +221,32 @@ class ModelDownloader:
             server_only=True,
         )
 
-        try:
-            result = await loop.run_in_executor(None, _download)
-            printr.print(
-                f"Download complete: {filename}",
-                color=LogType.POSITIVE,
-                server_only=True,
-            )
-            return result
-        except Exception as e:
-            printr.print(
-                f"Failed to download {filename}: {e}",
-                color=LogType.ERROR,
-                server_only=True,
-            )
-            raise
+        delay = RETRY_BASE_DELAY_SECONDS
+        last_error: Optional[Exception] = None
+        for attempt in range(1, MAX_DOWNLOAD_ATTEMPTS + 1):
+            try:
+                result = await loop.run_in_executor(None, _download)
+                printr.print(
+                    f"Download complete: {filename}",
+                    color=LogType.POSITIVE,
+                    server_only=True,
+                )
+                return result
+            except Exception as e:
+                last_error = e
+                if not self._is_retryable(e) or attempt >= MAX_DOWNLOAD_ATTEMPTS:
+                    break
+                printr.print(
+                    f"Download of {filename} failed (attempt {attempt}/{MAX_DOWNLOAD_ATTEMPTS}): {e} — retrying in {delay}s...",
+                    color=LogType.WARNING,
+                    server_only=True,
+                )
+                await asyncio.sleep(delay)
+                delay *= 2
+
+        printr.print(
+            f"Failed to download {filename}: {last_error}",
+            color=LogType.ERROR,
+            server_only=True,
+        )
+        raise last_error
