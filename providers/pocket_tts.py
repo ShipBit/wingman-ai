@@ -19,6 +19,11 @@ from api.interface import (
     VoiceInfo,
 )
 from providers.interfaces import TtsInterface, tts_provider
+from providers.pocket_tts_r2 import (
+    build_r2_config,
+    prefetch_gated_weights,
+    use_r2_mirror,
+)
 from services.file import get_custom_voices_dir, get_pocket_tts_models_dir
 from services.audio_player import AudioPlayer
 from services.printr import Printr
@@ -243,9 +248,40 @@ class PocketTTS:
                 self.model = TTSModel.load_model(
                     config=model_path, quantize=quantize
                 )
+            elif use_r2_mirror():
+                # Redirect the gated voice-cloning weights to our R2 mirror so users
+                # without an HF token can clone voices (see providers/pocket_tts_r2.py).
+                config_path = build_r2_config(model_id, self.models_dir)
+                self.printr.print(
+                    f"Loading PocketTTS model: {model_id} from R2 mirror (quantize={quantize})...",
+                    color=LogType.INFO,
+                    server_only=True,
+                )
+                # Pre-populate pocket_tts's cache with retries + atomic writes so
+                # its own fragile download path (no timeout/retry/size check)
+                # never runs for the large cloning weights. On failure, warn and
+                # continue — the library falls back to the public non-cloning
+                # weights instead of silently breaking with no explanation.
+                try:
+                    prefetch_gated_weights(
+                        model_id,
+                        log=lambda msg: self.printr.print(
+                            msg, color=LogType.INFO, server_only=True
+                        ),
+                    )
+                except Exception as fetch_err:
+                    self.printr.toast_warning(
+                        "Could not download the PocketTTS voice-cloning weights. "
+                        "Voice cloning may be unavailable — check your internet "
+                        f"connection and restart Wingman AI.\nError: {fetch_err}"
+                    )
+                self.model = TTSModel.load_model(
+                    config=config_path,
+                    quantize=quantize,
+                )
             else:
                 self.printr.print(
-                    f"Loading PocketTTS model: {model_id} (quantize={quantize})...",
+                    f"Loading PocketTTS model: {model_id} from HuggingFace (quantize={quantize})...",
                     color=LogType.INFO,
                     server_only=True,
                 )
