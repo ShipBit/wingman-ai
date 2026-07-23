@@ -287,6 +287,25 @@ try:
 except Exception as e:
     print(f"Warning: Could not collect faster_whisper: {e}")
 
+# Config migration modules (services/migrations/migration_*.py) are discovered
+# from the filesystem and imported via importlib at runtime, so static analysis
+# never traces them — or anything only they import. 3.1.5 shipped without the
+# stdlib module 'filecmp' (imported only by migration_313_to_314), which broke
+# the 3.1.3 -> 3.1.5 upgrade chain in every packaged build while working fine
+# from source. Feed every migration module to the analysis so its imports are
+# bundled like normal code.
+migration_hidden = sorted(
+    f"services.migrations.{mig_file[:-3]}"
+    for mig_file in os.listdir(os.path.join('services', 'migrations'))
+    if mig_file.startswith('migration_') and mig_file.endswith('.py')
+)
+if len(migration_hidden) < 14:
+    raise SystemExit(
+        f"Migration module enumeration looks incomplete ({len(migration_hidden)} found, "
+        "expected at least 14) — refusing to ship a bundle that cannot migrate user configs."
+    )
+hiddenimports += migration_hidden
+
 # ============================================================================
 # ANALYSIS
 # ============================================================================
@@ -303,6 +322,20 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
+
+# Verify the analyzed module graph contains every migration module and the one
+# dependency that has already bitten us. A module missing here means the frozen
+# build would fail to load a migration at runtime and break the upgrade chain.
+pure_names = {entry[0] for entry in a.pure}
+missing_migration_modules = [
+    mod for mod in migration_hidden + ['filecmp'] if mod not in pure_names
+]
+if missing_migration_modules:
+    raise SystemExit(
+        "Migration modules/dependencies missing from the analyzed bundle: "
+        f"{', '.join(missing_migration_modules)} — refusing to ship a build "
+        "that cannot migrate user configs."
+    )
 
 # ============================================================================
 # PACKAGING
