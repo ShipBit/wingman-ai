@@ -74,6 +74,26 @@ def hf_uri_to_r2_url(hf_uri: str) -> str:
     return f"{POCKET_TTS_R2_BASE.rstrip('/')}/{body}"
 
 
+def hf_uri_to_https_url(hf_uri: str) -> str:
+    """Map ``hf://owner/repo/path/file.ext@revision`` to a direct
+    ``https://huggingface.co/owner/repo/resolve/<revision>/path/file.ext`` URL.
+
+    Unlike :func:`hf_uri_to_r2_url` this keeps the file on HuggingFace — used for
+    public (non-gated) files we deliberately don't mirror, so they can be fetched
+    with :func:`download_url_to_path` instead of the library's fragile downloader.
+    """
+    if not hf_uri.startswith("hf://"):
+        return hf_uri
+    body = hf_uri[len("hf://") :]
+    revision = "main"
+    if "@" in body:
+        body, revision = body.rsplit("@", 1)
+    parts = body.split("/")
+    repo = "/".join(parts[:2])
+    file_path = "/".join(parts[2:])
+    return f"https://huggingface.co/{repo}/resolve/{revision}/{file_path}"
+
+
 def is_gated_uri(hf_uri: str) -> bool:
     """Whether a URI points at the gated ``kyutai/pocket-tts`` repo.
 
@@ -216,6 +236,21 @@ def _download_to_cache(url: str, cache_path: Path, log: Optional[Callable[[str],
                 time.sleep(delay)
                 delay *= 2
     raise RuntimeError(f"Could not download {url}: {last_error}") from last_error
+
+
+def download_url_to_path(
+    url: str, dest_path: "str | Path", log: Optional[Callable[[str], None]] = None
+) -> None:
+    """Robustly download ``url`` to an exact destination path.
+
+    Same guarantees as the R2 weight prefetch (retries, timeouts, size check,
+    atomic rename) — shared with ``providers.pocket_tts`` for the per-language
+    built-in voice embeddings, which live in a public HF repo and are therefore
+    not mirrored to R2.
+    """
+    dest = Path(dest_path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    _download_to_cache(url, dest, log)
 
 
 def prefetch_gated_weights(
