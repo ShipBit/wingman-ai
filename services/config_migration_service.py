@@ -60,6 +60,20 @@ class ConfigMigrationService:
 
         # If we found an old version to migrate from, proceed with migration
         if start_version:
+            # Resolve the full migration chain BEFORE touching anything.
+            # A migration module that failed to load (e.g. a dependency
+            # missing from the packaged build, like filecmp in 3.1.5) must
+            # abort while all configs are still intact - never after
+            # deletions that count on the migration filling the gap.
+            migration_chain = self.build_migration_chain(start_version)
+            if migration_chain is None:
+                self.err(
+                    f"No complete migration path from version {start_version.replace('_', '.')} "
+                    f"to {self.latest_version.replace('_', '.')}. Migration aborted without "
+                    "touching any configs; it will be retried on the next launch."
+                )
+                return
+
             self.log_highlight(
                 f"Starting migration from version {start_version.replace('_', '.')} to {self.latest_version.replace('_', '.')}"
             )
@@ -86,17 +100,15 @@ class ConfigMigrationService:
             # Only check 1.8.1 and 1.8.2 (most users come from 1.8.1, 1.8.2 was dev-only)
             self.migrate_audio_library()
 
-            # Perform migrations
-            current_version = start_version
-            while current_version != self.latest_version:
-                next_version = self.find_next_version(current_version)
-                if next_version is None:
-                    self.err(
-                        f"No migration path found from version {current_version} to {self.latest_version}. Migration aborted."
-                    )
-                    break
-                self.perform_migration(current_version, next_version)
-                current_version = next_version
+            # Perform migrations along the pre-validated chain
+            for old_version, new_version in zip(
+                migration_chain, migration_chain[1:]
+            ):
+                try:
+                    self.perform_migration(old_version, new_version)
+                except Exception:
+                    self._cleanup_interrupted_step(new_version)
+                    raise
 
             # Warn about custom skills that need manual review
             if custom_skills:
@@ -145,6 +157,15 @@ class ConfigMigrationService:
         # Sort descending to get latest version first
         version_dirs.sort(key=lambda v: [int(n) for n in v.split("_")], reverse=True)
 
+        # Version dirs that are the target of a known migration step but never
+        # completed one (no .migration marker, written since 1.5.0) are partial
+        # artifacts of an interrupted or aborted migration - e.g. the
+        # template-only dir a broken update left behind. Never migrate FROM
+        # those while a completed version exists; the real data lives in an
+        # older dir. If they're all we have, use the newest one anyway.
+        migration_targets = {new for _, new, _ in self.migrations}
+        fallback = None
+
         for version in version_dirs:
             # Skip the target version
             if version == self.latest_version:
@@ -155,9 +176,22 @@ class ConfigMigrationService:
                     f"Ignoring legacy version {version.replace('_', '.')} (older than minimum supported {MINIMUM_SUPPORTED_VERSION.replace('_', '.')})"
                 )
                 continue
+            # Skip version dirs without configs - nothing to migrate from
+            if not path.exists(path.join(users_dir, version, CONFIGS_DIR)):
+                continue
+            if version in migration_targets and not path.exists(
+                path.join(users_dir, version, CONFIGS_DIR, MIGRATION_LOG)
+            ):
+                self.log_warning(
+                    f"Version {version.replace('_', '.')} never completed a migration - "
+                    "treating it as an interrupted-migration artifact, not as the migration source."
+                )
+                if fallback is None:
+                    fallback = version
+                continue
             return version
 
-        return None
+        return fallback
 
     def find_next_version(self, current_version):
         """Find the next version in the migration chain."""
@@ -165,6 +199,52 @@ class ConfigMigrationService:
             if old == current_version:
                 return new
         return None
+
+    def _cleanup_interrupted_step(self, new_version: str):
+        """Remove the partially-written configs of a crashed migration step.
+
+        The step's target configs only contain data copied from the previous
+        version (still fully intact), so deleting them is safe. Leaving them
+        behind would make find_latest_migratable_version pick the partial
+        version as the migration source on the next launch, silently skipping
+        the crashed step's conversion.
+        """
+        step_config_path = path.join(self.users_dir, new_version, CONFIGS_DIR)
+        if path.exists(step_config_path) and not path.exists(
+            path.join(step_config_path, MIGRATION_LOG)
+        ):
+            # An intermediate version dir is purely a product of the crashed
+            # step - remove it entirely so no empty shell survives. The latest
+            # version dir also holds templates/skills ConfigManager manages,
+            # so only its configs are removed (and restored on next launch).
+            if new_version == self.latest_version:
+                shutil.rmtree(step_config_path, ignore_errors=True)
+            else:
+                shutil.rmtree(
+                    path.join(self.users_dir, new_version), ignore_errors=True
+                )
+            self.err(
+                f"Migration step to {new_version.replace('_', '.')} was interrupted - "
+                "removed its partial configs so the next launch retries the step."
+            )
+
+    def build_migration_chain(self, start_version):
+        """Resolve the ordered list of versions from start_version to the latest.
+
+        Returns None if any link is missing, e.g. because a migration module
+        failed to load. Callers must not perform any destructive operations
+        before checking this.
+        """
+        chain = [start_version]
+        while chain[-1] != self.latest_version:
+            # a valid chain can't have more steps than there are migrations
+            if len(chain) > len(self.migrations):
+                return None
+            next_version = self.find_next_version(chain[-1])
+            if next_version is None:
+                return None
+            chain.append(next_version)
+        return chain
 
     def perform_migration(self, old_version, new_version):
         """Execute a single migration step."""
