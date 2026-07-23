@@ -821,6 +821,23 @@ class ConfigMigrationService:
                             f"Old config found: {item} (normalized: {normalized})"
                         )
 
+            # Post-conversion (>= 3.1.4), deleted configs have no directory
+            # anymore - their tombstones live in context.yaml. Include them so
+            # a mid-chain rebuild doesn't resurrect deleted configs from
+            # templates.
+            old_context_file = path.join(old_config_path, CONTEXT_FILE)
+            if path.exists(old_context_file):
+                old_context = (
+                    self.config_manager.read_config(old_context_file) or {}
+                )
+                for name in old_context.get("deleted_template_configs", []):
+                    normalized = self.normalize_config_name(name)
+                    if normalized:
+                        old_config_normalized.add(normalized)
+                        self.log(
+                            f"Deleted config tombstone found: {name} - template will not be recreated"
+                        )
+
             # Copy settings.yaml and defaults.yaml from old version
             # (they'll be transformed by migration callbacks)
             for config_file in ("settings.yaml", "defaults.yaml"):
