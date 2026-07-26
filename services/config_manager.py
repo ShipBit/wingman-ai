@@ -1029,6 +1029,38 @@ class ConfigManager:
                     stripped_skills.append(stripped_skill)
             wingman_config_dict["skills"] = stripped_skills if stripped_skills else None
 
+        # Preserve on-disk entries of skills that are not installed on this
+        # system: merge_configs skips them at load time, so a config that was
+        # loaded and saved back would silently drop them from the YAML. Skills
+        # the user deliberately removed are never affected - only installed
+        # skills show up in the UI and can be removed there.
+        existing_skills = []
+        if path.exists(config_path):
+            try:
+                existing_skills = (self.read_config(config_path) or {}).get(
+                    "skills"
+                ) or []
+            except Exception:
+                existing_skills = []
+        if existing_skills:
+            saved_modules = {
+                skill.get("module")
+                for skill in (wingman_config_dict.get("skills") or [])
+                if isinstance(skill, dict)
+            }
+            preserved_skills = [
+                entry
+                for entry in existing_skills
+                if isinstance(entry, dict)
+                and entry.get("module")
+                and entry["module"] not in saved_modules
+                and not self.find_skill_default_config_path(entry["module"])
+            ]
+            if preserved_skills:
+                wingman_config_dict["skills"] = (
+                    wingman_config_dict.get("skills") or []
+                ) + preserved_skills
+
         wingman_config_diff = self.deep_diff(default_config, wingman_config_dict)
 
         written = self.write_config(config_path, wingman_config_diff)
@@ -1766,6 +1798,39 @@ class ConfigManager:
         # Convert merged commands back to a list since that's the expected format
         return list(merged_commands.values())
 
+    @staticmethod
+    def _skill_dir_from_module(skill_module: str) -> str:
+        """Extract the skill directory name from a module path.
+
+        e.g. 'skills.vision_ai.main' -> 'vision_ai'
+        """
+        return skill_module.replace(".main", "").replace(".", "/").split("/")[-1]
+
+    def find_skill_default_config_path(self, skill_module: str) -> Optional[str]:
+        """Locate a skill's default_config.yaml, or None if the skill is not installed.
+
+        Searched in order:
+        1. Bundled skills directory (set by main.py)
+        2. Custom skills directory (non-versioned)
+        3. Legacy: versioned APPDATA skills directory
+        """
+        from services.module_manager import get_bundled_skills_dir
+
+        skill_dir = self._skill_dir_from_module(skill_module)
+
+        search_dirs = []
+        bundled_dir = get_bundled_skills_dir()
+        if bundled_dir:
+            search_dirs.append(bundled_dir)
+        search_dirs.append(get_custom_skills_dir())
+        search_dirs.append(self.skills_dir)
+
+        for base_dir in search_dirs:
+            candidate = path.join(base_dir, skill_dir, DEFAULT_SKILLS_CONFIG)
+            if path.exists(candidate):
+                return candidate
+        return None
+
     def merge_configs(self, default: Config, wingman):
         """Merge general settings with a specific wingman's overrides, including commands."""
         # Start with a copy of the wingman's specific config to keep it intact.
@@ -1816,49 +1881,12 @@ class ConfigManager:
         if "skills" in wingman:
             merged_skills = []
             for skill_config_wingman in wingman["skills"]:
-                skill_dir = (
+                skill_dir = self._skill_dir_from_module(
                     skill_config_wingman["module"]
-                    .replace(".main", "")
-                    .replace(".", "/")
-                    .split("/")[1]
                 )
-
-                # Look for skill default_config.yaml in multiple locations:
-                # 1. Bundled skills directory (set by main.py)
-                # 2. Custom skills directory (non-versioned)
-                # 3. Legacy: versioned APPDATA skills directory
-                from services.module_manager import get_bundled_skills_dir
-
-                skill_default_config_path = None
-                search_paths = []
-
-                # 1. Bundled skills
-                bundled_dir = get_bundled_skills_dir()
-                if bundled_dir:
-                    bundled_path = path.join(
-                        bundled_dir, skill_dir, DEFAULT_SKILLS_CONFIG
-                    )
-                    search_paths.append(bundled_path)
-                    if path.exists(bundled_path):
-                        skill_default_config_path = bundled_path
-
-                # 2. Custom skills (non-versioned)
-                if not skill_default_config_path:
-                    custom_path = path.join(
-                        get_custom_skills_dir(), skill_dir, DEFAULT_SKILLS_CONFIG
-                    )
-                    search_paths.append(custom_path)
-                    if path.exists(custom_path):
-                        skill_default_config_path = custom_path
-
-                # 3. Legacy: versioned APPDATA (for migration compatibility)
-                if not skill_default_config_path:
-                    legacy_path = path.join(
-                        self.skills_dir, skill_dir, DEFAULT_SKILLS_CONFIG
-                    )
-                    search_paths.append(legacy_path)
-                    if path.exists(legacy_path):
-                        skill_default_config_path = legacy_path
+                skill_default_config_path = self.find_skill_default_config_path(
+                    skill_config_wingman["module"]
+                )
 
                 if skill_default_config_path:
                     skill_config = self.read_config(skill_default_config_path)
