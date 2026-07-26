@@ -708,6 +708,38 @@ class ConfigMigrationService:
 
         return {}
 
+    def _deep_merge_over(self, base: dict, override: dict) -> dict:
+        """Recursively merge ``override`` into ``base``; override values win."""
+        merged = dict(base)
+        for key, value in override.items():
+            if (
+                key in merged
+                and isinstance(merged[key], dict)
+                and isinstance(value, dict)
+            ):
+                merged[key] = self._deep_merge_over(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
+
+    def backfill_from_template(self, template_filename: str, migrated: dict) -> dict:
+        """Deep-merge a migrated config over its current template.
+
+        Migration hooks only transform what they know about. A field that
+        became required in the models without a matching hook (hud_server,
+        pocket_tts, condense_max_messages, ...) would fail the final
+        validation and silently reset the user's whole file to the shipped
+        template. With the template as the base, every current field exists
+        while migrated user values always win.
+        """
+        template_file = path.join(self.templates_dir, CONFIGS_DIR, template_filename)
+        if not path.exists(template_file):
+            return migrated
+        template = self.config_manager.read_config(template_file) or {}
+        if not isinstance(template, dict):
+            return migrated
+        return self._deep_merge_over(template, migrated or {})
+
     def log(self, message: str):
         """Log a normal message."""
         self._log_with_color(message, LogType.SYSTEM)
@@ -925,15 +957,29 @@ class ConfigMigrationService:
                 # settings
                 elif filename == "settings.yaml":
                     self.log_highlight("Migrating settings.yaml...")
-                    migrated_settings = migrate_settings(
-                        old=self.config_manager.read_config(old_file),
+                    migrated_settings = (
+                        migrate_settings(
+                            old=self.config_manager.read_config(old_file),
+                        )
+                        or {}
                     )
                     try:
+                        # Only validate on final migration step (current schema may not match intermediate versions)
                         if new_config_path == self.latest_config_path:
+                            migrated_settings = self.backfill_from_template(
+                                "settings.yaml", migrated_settings
+                            )
                             self.config_manager.settings_config = SettingsConfig(
                                 **migrated_settings
                             )
-                        self.config_manager.save_settings_config()
+                            self.config_manager.save_settings_config()
+                        else:
+                            # Intermediate step - persist the migrated file so the
+                            # next chain step continues from it instead of the
+                            # untouched copy of the old version's file.
+                            self.config_manager.write_config(
+                                new_file, migrated_settings
+                            )
                     except ValidationError as e:
                         self.err(f"Unable to migrate settings.yaml:\n{str(e)}")
                 # defaults
@@ -945,6 +991,9 @@ class ConfigMigrationService:
                     try:
                         # Only validate on final migration step (current schema may not match intermediate versions)
                         if new_config_path == self.latest_config_path:
+                            migrated_defaults = self.backfill_from_template(
+                                "defaults.yaml", migrated_defaults
+                            )
                             self.config_manager.default_config = NestedConfig(
                                 **migrated_defaults
                             )
