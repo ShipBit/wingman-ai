@@ -731,6 +731,11 @@ class ConfigMigrationService:
         validation and silently reset the user's whole file to the shipped
         template. With the template as the base, every current field exists
         while migrated user values always win.
+
+        INVARIANT: a key that a migration hook deliberately deletes must also
+        be absent from the template, otherwise this merge resurrects it with
+        the template value. Holds for all current hooks; keep it that way when
+        deprecating fields.
         """
         template_file = path.join(self.templates_dir, CONFIGS_DIR, template_filename)
         if not path.exists(template_file):
@@ -985,8 +990,11 @@ class ConfigMigrationService:
                 # defaults
                 elif filename == "defaults.yaml":
                     self.log_highlight("Migrating defaults.yaml...")
-                    migrated_defaults = migrate_defaults(
-                        old=self.config_manager.read_config(old_file),
+                    migrated_defaults = (
+                        migrate_defaults(
+                            old=self.config_manager.read_config(old_file),
+                        )
+                        or {}
                     )
                     try:
                         # Only validate on final migration step (current schema may not match intermediate versions)
