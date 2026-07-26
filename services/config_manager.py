@@ -19,6 +19,7 @@ from api.interface import (
     NestedConfig,
     NewWingmanTemplate,
     SettingsConfig,
+    SkillConfig,
     WingmanConfig,
     WingmanConfigFileInfo,
 )
@@ -1863,7 +1864,24 @@ class ConfigManager:
                     skill_config = self.read_config(skill_default_config_path)
                     skill_config = self.__deep_merge(skill_config, skill_config_wingman)
                 else:
-                    # Custom skill without default_config.yaml - use wingman config as-is
+                    # Custom skill without default_config.yaml - the wingman
+                    # config alone is only usable if it carries the full skill
+                    # metadata itself (legacy configs did). Otherwise the skill
+                    # is not installed on this system: skip it so the wingman
+                    # still loads. The entry stays untouched in the YAML on
+                    # disk and comes back once the skill is (re)installed.
+                    try:
+                        SkillConfig(**skill_config_wingman)
+                    except ValidationError:
+                        self.printr.print(
+                            f"Custom skill '{skill_dir}' is not installed - skipping it. "
+                            f"Reinstall the skill to '{get_custom_skills_dir()}' to get it back.",
+                            color=LogType.WARNING,
+                            server_only=True,
+                            source=LogSource.SYSTEM,
+                            source_name=self.log_source_name,
+                        )
+                        continue
                     skill_config = skill_config_wingman
                     self.printr.print(
                         f"Custom skill '{skill_dir}' has no default_config.yaml, using wingman configuration only.",
