@@ -296,9 +296,12 @@ class SettingsService:
         # save the config file
         self.config_manager.save_settings_config()
 
-        # update running wingmen
-        for wingman in self.config_service.tower.wingmen:
-            await wingman.update_settings(settings=self.config_manager.settings_config)
+        # update running wingmen (tower is None while a config (re)loads or failed to load)
+        if self.config_service.tower:
+            for wingman in self.config_service.tower.wingmen:
+                await wingman.update_settings(
+                    settings=self.config_manager.settings_config
+                )
 
     def save_settings_to_disk(self):
         """Persist current settings to disk without triggering provider updates."""
